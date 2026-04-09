@@ -292,16 +292,13 @@ export class GlassModal extends PlatformElement {
             }
 
             .header-btn.header-save-btn--primary {
-                background: var(--crm-button-primary-bg, var(--platform-btn-primary-bg, #6366f1));
-                color: var(--crm-button-primary-text, var(--platform-btn-primary-text, #ffffff));
+                background: var(--accent);
+                color: var(--platform-btn-primary-text);
             }
 
             .header-btn.header-save-btn--primary:hover:not(:disabled) {
-                background: var(
-                    --crm-button-primary-hover,
-                    var(--platform-btn-primary-hover, #4f46e5)
-                );
-                color: var(--crm-button-primary-text, var(--platform-btn-primary-text, #ffffff));
+                background: var(--platform-btn-primary-hover);
+                color: var(--platform-btn-primary-text);
                 transform: scale(1.08);
             }
 
@@ -324,6 +321,8 @@ export class GlassModal extends PlatformElement {
                 padding: var(--space-4, 16px);
                 margin: 0 var(--modal-content-inset) var(--modal-content-inset);
                 border-radius: var(--modal-content-radius);
+                contain: paint style;
+                isolation: isolate;
             }
 
             .modal.fullscreen .modal-content,

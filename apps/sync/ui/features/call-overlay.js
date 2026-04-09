@@ -10,6 +10,7 @@
  */
 import { html, css } from 'lit';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
+import '@platform/lib/components/platform-icon.js';
 import { copyTextToClipboard } from '@platform/lib/utils/clipboard.js';
 import { nextModalLayerZIndex } from '@platform/lib/utils/modal-z-stack.js';
 import { SyncStore } from '../store/sync.store.js';
@@ -1437,8 +1438,8 @@ class CallOverlay extends PlatformElement {
                 @click=${this._onTileFullscreenClick}
             >
                 ${active
-                    ? html`<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3H5a2 2 0 00-2 2v3m18 0V5a2 2 0 00-2-2h-3m0 18h3a2 2 0 002-2v-3M3 16v3a2 2 0 002 2h3"/></svg>`
-                    : html`<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg>`
+                    ? html`<platform-icon name="minimize" size="18" aria-hidden="true"></platform-icon>`
+                    : html`<platform-icon name="fullscreen" size="18" aria-hidden="true"></platform-icon>`
                 }
             </button>
         `;
@@ -2145,9 +2146,7 @@ class CallOverlay extends PlatformElement {
                             @click=${this._requestMinimize}
                             title=${this._tp('call_overlay.minimize_title')}
                         >
-                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                                <polyline points="6 9 12 15 18 9"></polyline>
-                            </svg>
+                            <platform-icon name="chevron-down" size="18" aria-hidden="true"></platform-icon>
                         </button>
                     ` : ''}
                     ${this._recordingStatus !== 'idle' ? html`
@@ -2163,12 +2162,8 @@ class CallOverlay extends PlatformElement {
                     ${this.callId ? html`
                         <button class="ctrl-btn" style="width:36px;height:36px;font-size:14px;" @click=${this._copyLink} title=${this._tp('call_overlay.copy_link_title')}>
                             ${this._copyLinkFeedback
-                                ? html`<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#22c55e" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>`
-                                : html`
-                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                                <path d="M10 13a5 5 0 007.54.54l3-3a5 5 0 00-7.07-7.07l-1.72 1.71"/>
-                                <path d="M14 11a5 5 0 00-7.54-.54l-3 3a5 5 0 007.07 7.07l1.71-1.71"/>
-                            </svg>`}
+                                ? html`<span style="color:#22c55e"><platform-icon name="check" size="16" aria-hidden="true"></platform-icon></span>`
+                                : html`<platform-icon name="copy" size="16" aria-hidden="true"></platform-icon>`}
                         </button>
                     ` : ''}
                 </div>
@@ -2188,10 +2183,7 @@ class CallOverlay extends PlatformElement {
                             title=${this._tp('call_overlay.chat_hide')}
                             @click=${this._toggleChatPanel}
                         >
-                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round">
-                                <line x1="5" y1="5" x2="19" y2="19"></line>
-                                <line x1="19" y1="5" x2="5" y2="19"></line>
-                            </svg>
+                            <platform-icon name="close" size="14" aria-hidden="true"></platform-icon>
                         </button>
                     </div>
                     <div class="call-chat-list" @scroll=${this._onOverlayChatScroll}>
@@ -2263,10 +2255,7 @@ class CallOverlay extends PlatformElement {
                             title=${this._tp('call_overlay.devices_settings_title')}
                             @click=${this._toggleDevicesMenu}
                         >
-                            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                                <circle cx="12" cy="12" r="3"/>
-                                <path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-2 2 2 2 0 01-2-2v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83 0 2 2 0 010-2.83l.06-.06a1.65 1.65 0 00.33-1.82 1.65 1.65 0 00-1.51-1H3a2 2 0 01-2-2 2 2 0 012-2h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 010-2.83 2 2 0 012.83 0l.06.06A1.65 1.65 0 009 4.6a1.65 1.65 0 001-1.51V3a2 2 0 012-2 2 2 0 012 2v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 0 2 2 0 010 2.83l-.06.06a1.65 1.65 0 00-.33 1.82V9a1.65 1.65 0 001.51 1H21a2 2 0 012 2 2 2 0 01-2 2h-.09a1.65 1.65 0 00-1.51 1z"/>
-                            </svg>
+                            <platform-icon name="settings" size="22" aria-hidden="true"></platform-icon>
                         </button>
                         ${this._devicesMenuOpen ? html`
                             <div class="call-menu call-menu--left" @click=${(e) => e.stopPropagation()}>
@@ -2317,8 +2306,8 @@ class CallOverlay extends PlatformElement {
                 <div class="controls-slot controls-slot--center">
                     <button class="ctrl-btn ${this._micMuted ? '' : 'active'}" @click=${this._toggleMic} title=${this._micMuted ? this._tp('call_overlay.mic_enable') : this._tp('call_overlay.mic_disable')}>
                         ${this._micMuted
-                            ? html`<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="1" y1="1" x2="23" y2="23"/><path d="M9 9v3a3 3 0 005.12 2.12M15 9.34V4a3 3 0 00-5.94-.6"/><path d="M17 16.95A7 7 0 015 12v-2m14 0v2a7 7 0 01-.11 1.23"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>`
-                            : html`<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 1a3 3 0 00-3 3v8a3 3 0 006 0V4a3 3 0 00-3-3z"/><path d="M19 10v2a7 7 0 01-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>`
+                            ? html`<platform-icon name="mic-off" size="20" aria-hidden="true"></platform-icon>`
+                            : html`<platform-icon name="mic" size="20" aria-hidden="true"></platform-icon>`
                         }
                     </button>
                     <button
@@ -2328,17 +2317,13 @@ class CallOverlay extends PlatformElement {
                         title=${screenOn ? this._tp('call_overlay.cam_stop_screen_first') : (this._camOff ? this._tp('call_overlay.cam_enable') : this._tp('call_overlay.cam_disable'))}
                     >
                         ${this._camOff
-                            ? html`<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 16v1a2 2 0 01-2 2H3a2 2 0 01-2-2V7a2 2 0 012-2h2m5.66 0H14a2 2 0 012 2v3.34l1 1L23 7v10"/><line x1="1" y1="1" x2="23" y2="23"/></svg>`
-                            : html`<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2" ry="2"/></svg>`
+                            ? html`<platform-icon name="videocam-off" size="20" aria-hidden="true"></platform-icon>`
+                            : html`<platform-icon name="video-call" size="20" filled aria-hidden="true"></platform-icon>`
                         }
                     </button>
                     ${this._room && this._canScreenShare() ? html`
                         <button class="ctrl-btn ${screenOn ? 'active' : ''}" @click=${this._toggleScreenShare} title=${screenOn ? this._tp('call_overlay.screen_share_stop') : this._tp('call_overlay.screen_share_start')}>
-                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                                <rect x="2" y="3" width="20" height="14" rx="2" ry="2"/>
-                                <line x1="8" y1="21" x2="16" y2="21"/>
-                                <line x1="12" y1="17" x2="12" y2="21"/>
-                            </svg>
+                            <platform-icon name="screen-share" size="20" aria-hidden="true"></platform-icon>
                         </button>
                     ` : ''}
                     <button
@@ -2352,21 +2337,12 @@ class CallOverlay extends PlatformElement {
                                 : this._tp('call_overlay.recording_tooltip_start_denied'))}
                     >
                         ${this._recordingStatus === 'recording'
-                            ? html`
-                                <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-label="Stop recording">
-                                    <rect x="7" y="7" width="10" height="10" rx="2" fill="currentColor"></rect>
-                                </svg>
-                            `
-                            : html`
-                                <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
-                                    <circle cx="12" cy="12" r="6"></circle>
-                                </svg>
-                            `}
+                            ? html`<platform-icon name="stop" size="30" filled aria-hidden="true"></platform-icon>`
+                            : html`<platform-icon name="fiber-manual-record" size="24" filled aria-hidden="true"></platform-icon>`
+                        }
                     </button>
                     <button class="ctrl-btn hangup" @click=${this._hangup} title=${this._tp('call_overlay.hangup_title')}>
-                        <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
-                            <path d="M6.6 10.8c1.4 2.8 3.8 5.1 6.6 6.6l2.2-2.2c.3-.3.7-.4 1-.2 1.1.4 2.3.6 3.6.6.6 0 1 .4 1 1V20c0 .6-.4 1-1 1C9.6 21 3 14.4 3 6c0-.6.4-1 1-1h3.5c.6 0 1 .4 1 1 0 1.3.2 2.5.6 3.6.1.3 0 .7-.2 1L6.6 10.8z"/>
-                        </svg>
+                        <platform-icon name="phone-ended" size="24" filled aria-hidden="true"></platform-icon>
                     </button>
                 </div>
                 <div class="controls-slot controls-slot--right">
@@ -2377,9 +2353,7 @@ class CallOverlay extends PlatformElement {
                         title=${this._chatPanelOpen ? this._tp('call_overlay.chat_hide') : this._tp('call_overlay.chat_show')}
                         @click=${this._toggleChatPanel}
                     >
-                        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                            <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
-                        </svg>
+                        <platform-icon name="chat" size="22" aria-hidden="true"></platform-icon>
                     </button>
                     ${this._sfuMediaUiAvailable() ? html`
                         <button
@@ -2389,20 +2363,14 @@ class CallOverlay extends PlatformElement {
                             title=${this._tp('call_overlay.more_menu')}
                             @click=${this._toggleMoreMenu}
                         >
-                            <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor">
-                                <circle cx="5" cy="12" r="2"/>
-                                <circle cx="12" cy="12" r="2"/>
-                                <circle cx="19" cy="12" r="2"/>
-                            </svg>
+                            <platform-icon name="more-vert" size="22" filled aria-hidden="true"></platform-icon>
                         </button>
                         ${this._moreMenuOpen ? html`
                             <div class="call-menu call-menu--right" @click=${(e) => e.stopPropagation()}>
                                 <div class="call-menu-item--sub">
                                     <button type="button" class="call-menu-item" @click=${this._toggleAudioQualitySub}>
                                         ${this._tp('call_overlay.audio_quality')}
-                                        <svg class="call-menu-chevron" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                                            <path d="M9 18l6-6-6-6"/>
-                                        </svg>
+                                        <platform-icon class="call-menu-chevron" name="chevron-right" size="16" aria-hidden="true"></platform-icon>
                                     </button>
                                     ${this._audioQualitySubOpen ? html`
                                         <div class="call-menu-flyout" @click=${(e) => e.stopPropagation()}>
@@ -2484,11 +2452,7 @@ class CallOverlay extends PlatformElement {
                 title=${this._tp('call_overlay.participant_menu')}
                 @click=${(e) => this._toggleParticipantMenu(e, identity)}
             >
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-                    <circle cx="5" cy="12" r="2"></circle>
-                    <circle cx="12" cy="12" r="2"></circle>
-                    <circle cx="19" cy="12" r="2"></circle>
-                </svg>
+                <platform-icon name="more-vert" size="16" filled aria-hidden="true"></platform-icon>
             </button>
             ${menuOpen ? html`
                 <div class="tile-action-menu">

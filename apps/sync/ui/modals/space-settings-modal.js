@@ -74,38 +74,6 @@ export class SpaceSettingsModal extends PlatformModal {
                 gap: var(--space-2);
             }
 
-            .btn {
-                padding: var(--space-2) var(--space-4);
-                border-radius: var(--radius-lg);
-                border: 1px solid var(--glass-border-subtle);
-                background: var(--glass-solid-subtle);
-                color: var(--text-secondary);
-                font-size: var(--text-sm);
-                cursor: pointer;
-                transition: all var(--duration-fast);
-            }
-
-            .btn:hover {
-                background: var(--glass-solid-medium);
-                color: var(--text-primary);
-            }
-
-            .btn-primary {
-                background: var(--accent-subtle);
-                border-color: var(--accent);
-                color: var(--accent);
-                font-weight: var(--font-medium);
-            }
-
-            .btn-primary:hover:not(:disabled) {
-                background: var(--accent);
-                color: white;
-            }
-
-            .btn:disabled {
-                opacity: 0.5;
-                cursor: not-allowed;
-            }
 
             .file-input {
                 display: none;

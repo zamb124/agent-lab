@@ -583,132 +583,147 @@ class EntityRepository(BaseCRMRepository[CRMEntity]):
             logger.info(f"search_with_similarity('{query[:50]}...') -> {len(scored_entities)} entities")
             return scored_entities
 
-    # -- Convenience methods --
-
-    async def get_notes(
-        self,
-        note_subtype: Optional[str] = None,
-        namespace: Optional[str] = None,
-        filters: Optional[Dict] = None,
-        limit: int = 100,
-        company_id: Optional[str] = None,
-    ) -> List[CRMEntity]:
-        """Получает заметки."""
-        entities, _, _ = await self.list_all(
-            entity_type="note",
-            entity_subtype=note_subtype,
-            namespace=namespace,
-            filters=filters,
-            limit=limit,
-            company_id=company_id,
-        )
-        return entities
-
-    async def search_notes(
+    async def hybrid_search(
         self,
         query: str,
-        note_subtype: Optional[str] = None,
-        namespace: Optional[str] = None,
-        limit: int = 10,
-        company_id: Optional[str] = None,
-    ) -> List[CRMEntity]:
-        """Семантический поиск по заметкам."""
-        return await self.search(
-            query=query,
-            entity_type="note",
-            entity_subtype=note_subtype,
-            namespace=namespace,
-            limit=limit,
-            company_id=company_id,
-        )
-
-    async def get_tasks(
-        self,
-        namespace: Optional[str] = None,
-        filters: Optional[Dict] = None,
-        limit: int = 100,
-        company_id: Optional[str] = None,
-    ) -> List[CRMEntity]:
-        """Получает задачи."""
-        entities, _, _ = await self.list_all(
-            entity_type="task",
-            namespace=namespace,
-            filters=filters,
-            limit=limit,
-            company_id=company_id,
-        )
-        return entities
-
-    async def search_tasks(
-        self,
-        query: str,
-        namespace: Optional[str] = None,
-        limit: int = 10,
-        company_id: Optional[str] = None,
-    ) -> List[CRMEntity]:
-        """Семантический поиск по задачам."""
-        return await self.search(
-            query=query,
-            entity_type="task",
-            namespace=namespace,
-            limit=limit,
-            company_id=company_id,
-        )
-
-    async def get_by_type(
-        self,
-        entity_type: str,
-        entity_subtype: Optional[str] = None,
-        namespace: Optional[str] = None,
-        filters: Optional[Dict] = None,
-        limit: int = 100,
-        company_id: Optional[str] = None,
-    ) -> List[CRMEntity]:
-        """Получает entities по типу."""
-        entities, _, _ = await self.list_all(
-            entity_type=entity_type,
-            entity_subtype=entity_subtype,
-            namespace=namespace,
-            filters=filters,
-            limit=limit,
-            company_id=company_id,
-        )
-        return entities
-
-    async def search_by_type(
-        self,
-        query: str,
-        entity_type: str,
-        entity_subtype: Optional[str] = None,
-        namespace: Optional[str] = None,
-        limit: int = 10,
-        company_id: Optional[str] = None,
-    ) -> List[CRMEntity]:
-        """Семантический поиск по типу."""
-        return await self.search(
-            query=query,
-            entity_type=entity_type,
-            entity_subtype=entity_subtype,
-            namespace=namespace,
-            limit=limit,
-            company_id=company_id,
-        )
-
-    async def get_by_tag(
-        self,
-        tag: str,
         entity_type: Optional[str] = None,
+        entity_subtype: Optional[str] = None,
         namespace: Optional[str] = None,
-        limit: int = 100,
+        filters: Optional[Dict[str, Any]] = None,
+        limit: int = 10,
         company_id: Optional[str] = None,
-    ) -> List[CRMEntity]:
-        """Получает entities по тегу."""
-        filters = {"tags": {"$contains": tag}}
-        entities, _, _ = await self.list_all(
-            entity_type=entity_type,
-            namespace=namespace,
-            filters=filters,
-            limit=limit,
-            company_id=company_id,
+    ) -> List[Tuple[CRMEntity, float, str]]:
+        """
+        Гибридный поиск: RRF (Reciprocal Rank Fusion) по tsvector FTS + pgvector semantic.
+        Возвращает (entity, rrf_score, match_type).
+        match_type: "text" | "semantic" | "hybrid" (найдено обоими).
+        """
+        k = 60  # RRF константа
+
+        fts_entities = await self.fts_search_ranked(
+            query, entity_type, entity_subtype, namespace, filters, limit * 3, company_id,
         )
-        return entities
+        semantic_entities = await self.search_with_similarity(
+            query, entity_type, entity_subtype, namespace, filters, limit * 3, company_id,
+        )
+
+        fts_ranks: Dict[str, int] = {}
+        fts_map: Dict[str, CRMEntity] = {}
+        for rank, (entity, _) in enumerate(fts_entities, start=1):
+            fts_ranks[entity.entity_id] = rank
+            fts_map[entity.entity_id] = entity
+
+        sem_ranks: Dict[str, int] = {}
+        sem_map: Dict[str, CRMEntity] = {}
+        for rank, (entity, _) in enumerate(semantic_entities, start=1):
+            sem_ranks[entity.entity_id] = rank
+            sem_map[entity.entity_id] = entity
+
+        all_ids = set(fts_ranks.keys()) | set(sem_ranks.keys())
+        scored: List[Tuple[str, float, str]] = []
+        for eid in all_ids:
+            rrf_score = 0.0
+            in_fts = eid in fts_ranks
+            in_sem = eid in sem_ranks
+            if in_fts:
+                rrf_score += 1.0 / (k + fts_ranks[eid])
+            if in_sem:
+                rrf_score += 1.0 / (k + sem_ranks[eid])
+            match_type = "hybrid" if (in_fts and in_sem) else ("text" if in_fts else "semantic")
+            scored.append((eid, rrf_score, match_type))
+
+        scored.sort(key=lambda x: x[1], reverse=True)
+        entity_pool = {**fts_map, **sem_map}
+
+        results: List[Tuple[CRMEntity, float, str]] = []
+        for eid, rrf_score, match_type in scored[:limit]:
+            entity = entity_pool[eid]
+            results.append((entity, rrf_score, match_type))
+        return results
+
+    async def fts_search_ranked(
+        self,
+        query: str,
+        entity_type: Optional[str] = None,
+        entity_subtype: Optional[str] = None,
+        namespace: Optional[str] = None,
+        filters: Optional[Dict[str, Any]] = None,
+        limit: int = 30,
+        company_id: Optional[str] = None,
+    ) -> List[Tuple[CRMEntity, float]]:
+        """FTS поиск с ts_rank, отсортированный по релевантности."""
+        cid = company_id or self._get_company_id()
+        tsquery = func.plainto_tsquery("simple", query)
+        rank_expr = func.ts_rank(CRMEntity.search_vector, tsquery)
+
+        async with self._db.session() as session:
+            stmt = (
+                select(CRMEntity, rank_expr.label("fts_rank"))
+                .where(
+                    CRMEntity.company_id == cid,
+                    CRMEntity.search_vector.op("@@")(tsquery),
+                )
+                .order_by(rank_expr.desc())
+                .limit(limit)
+            )
+            if entity_type:
+                stmt = stmt.where(CRMEntity.entity_type == entity_type)
+            if entity_subtype:
+                stmt = stmt.where(CRMEntity.entity_subtype == entity_subtype)
+            if namespace:
+                stmt = stmt.where(CRMEntity.namespace == namespace)
+            if filters:
+                stmt = self._apply_filters(stmt, filters)
+
+            result = await session.execute(stmt)
+            rows = result.all()
+
+        return [(row[0], float(row[1])) for row in rows]
+
+    async def aggregate_facets(
+        self,
+        namespace: Optional[str] = None,
+        company_id: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """Фасетная агрегация: по entity_type, status, месяц создания."""
+        cid = company_id or self._get_company_id()
+        month_expr = func.to_char(CRMEntity.created_at, "YYYY-MM").label("month")
+
+        async with self._db.session() as session:
+            base = select(CRMEntity).where(CRMEntity.company_id == cid)
+            if namespace:
+                base = base.where(CRMEntity.namespace == namespace)
+
+            by_type_stmt = (
+                select(CRMEntity.entity_type, func.count().label("cnt"))
+                .where(CRMEntity.company_id == cid)
+            )
+            if namespace:
+                by_type_stmt = by_type_stmt.where(CRMEntity.namespace == namespace)
+            by_type_stmt = by_type_stmt.group_by(CRMEntity.entity_type)
+            type_rows = (await session.execute(by_type_stmt)).all()
+
+            by_status_stmt = (
+                select(CRMEntity.status, func.count().label("cnt"))
+                .where(CRMEntity.company_id == cid)
+            )
+            if namespace:
+                by_status_stmt = by_status_stmt.where(CRMEntity.namespace == namespace)
+            by_status_stmt = by_status_stmt.group_by(CRMEntity.status)
+            status_rows = (await session.execute(by_status_stmt)).all()
+
+            by_month_stmt = (
+                select(month_expr, func.count().label("cnt"))
+                .where(CRMEntity.company_id == cid)
+            )
+            if namespace:
+                by_month_stmt = by_month_stmt.where(CRMEntity.namespace == namespace)
+            by_month_stmt = by_month_stmt.group_by(month_expr).order_by(month_expr)
+            month_rows = (await session.execute(by_month_stmt)).all()
+
+        return {
+            "by_type": {row[0]: row[1] for row in type_rows},
+            "by_status": {row[0]: row[1] for row in status_rows},
+            "by_month": {row[0]: row[1] for row in month_rows},
+        }
+

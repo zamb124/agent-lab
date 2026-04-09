@@ -133,6 +133,8 @@ class A2AClient:
                 headers["X-User-Id"] = context.user.user_id
             if context.trace_id and "X-Trace-Id" not in headers:
                 headers["X-Trace-Id"] = context.trace_id
+            if context.language and "Accept-Language" not in headers:
+                headers["Accept-Language"] = context.language.value
         
         logger.debug(f"A2A send_task to {url}: {content[:100]}...")
 

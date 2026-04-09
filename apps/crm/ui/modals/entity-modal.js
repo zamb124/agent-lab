@@ -21,6 +21,7 @@ export class EntityModal extends PlatformModal {
         _selectedType: { state: true },
         _saving: { state: true },
         _attributeRows: { state: true },
+        _fieldErrors: { state: true },
     };
 
     static styles = [
@@ -28,17 +29,6 @@ export class EntityModal extends PlatformModal {
         formStyles,
         buttonStyles,
         css`
-            :host {
-                --accent: var(--crm-button-primary-bg);
-                --accent-hover: var(--crm-button-primary-hover);
-                --accent-active: var(--crm-button-primary-hover);
-                --accent-subtle: rgba(153, 166, 249, 0.18);
-                --accent-glow: 0 0 24px rgba(153, 166, 249, 0.35);
-                --accent-gradient: linear-gradient(135deg, #99A6F9 0%, #8794F0 100%);
-                --border-focus: var(--crm-button-primary-bg);
-                --focus-ring: 0 0 0 3px rgba(153, 166, 249, 0.4);
-            }
-
             .form-grid {
                 display: grid;
                 gap: var(--space-4);
@@ -92,10 +82,32 @@ export class EntityModal extends PlatformModal {
                 display: flex;
                 gap: var(--space-2);
                 margin-bottom: var(--space-2);
+                flex-wrap: wrap;
             }
 
             .attribute-row input {
                 flex: 1;
+            }
+
+            .field-error {
+                border-color: #ef4444 !important;
+                box-shadow: 0 0 0 2px rgba(239, 68, 68, 0.2);
+            }
+
+            .field-error-text {
+                width: 100%;
+                font-size: 11px;
+                color: #ef4444;
+                margin-top: -4px;
+            }
+
+            .required-fields-hint {
+                font-size: 12px;
+                color: var(--text-tertiary);
+                margin-bottom: var(--space-2);
+                padding: 6px 10px;
+                background: rgba(239, 68, 68, 0.08);
+                border-radius: var(--radius-sm);
             }
 
             .add-attribute-btn {
@@ -139,43 +151,6 @@ export class EntityModal extends PlatformModal {
                 width: 100%;
             }
 
-            .btn {
-                padding: var(--space-2) var(--space-4);
-                border-radius: var(--radius-lg);
-                font-size: var(--text-sm);
-                font-weight: 500;
-                cursor: pointer;
-                transition: all var(--duration-fast);
-            }
-
-            .btn-secondary {
-                background: var(--crm-button-secondary-bg);
-                border: 1px solid var(--crm-button-secondary-bg);
-                color: var(--crm-button-secondary-text);
-            }
-
-            .btn-secondary:hover {
-                background: var(--crm-button-secondary-hover);
-                border-color: var(--crm-button-secondary-hover);
-                color: var(--crm-button-secondary-text);
-            }
-
-            .btn-primary {
-                background: var(--crm-button-primary-bg);
-                border: 1px solid var(--crm-button-primary-bg);
-                color: var(--crm-button-primary-text);
-            }
-
-            .btn-primary:hover:not(:disabled) {
-                background: var(--crm-button-primary-hover);
-                border-color: var(--crm-button-primary-hover);
-            }
-
-            .btn-primary:disabled {
-                opacity: 0.5;
-                cursor: not-allowed;
-            }
-
             .no-types-message {
                 padding: var(--space-3);
                 background: var(--glass-solid-subtle);
@@ -214,6 +189,7 @@ export class EntityModal extends PlatformModal {
         this._selectedType = 'note';
         this._saving = false;
         this._attributeRows = [];
+        this._fieldErrors = {};
 
         this._unsubscribe = CRMStore.subscribe(state => {
             this._entityTypes = state.entities.entityTypes || [];
@@ -378,11 +354,46 @@ export class EntityModal extends PlatformModal {
             const message = error instanceof Error
                 ? error.message
                 : this.i18n.t('entity_modal.err_save');
+            this._fieldErrors = this._parseFieldErrors(message);
             this.error(message);
             throw error;
         } finally {
             this._saving = false;
         }
+    }
+
+    _parseFieldErrors(errorMessage) {
+        const errors = {};
+        const parts = errorMessage.split('; ');
+        for (const part of parts) {
+            const colonIdx = part.indexOf(':');
+            if (colonIdx > 0) {
+                const field = part.substring(0, colonIdx).trim();
+                errors[field] = part.substring(colonIdx + 1).trim();
+            }
+        }
+        return errors;
+    }
+
+    _getRequiredFieldNames() {
+        const typeId = this._formData.entity_subtype || this._formData.entity_type;
+        const entityType = this._entityTypes.find(t => t.type_id === typeId);
+        if (!entityType || !entityType.required_fields) return [];
+        return Object.keys(entityType.required_fields);
+    }
+
+    _renderRequiredFields() {
+        const requiredNames = this._getRequiredFieldNames();
+        if (requiredNames.length === 0) return '';
+        const existingKeys = new Set(this._attributeRows.map(r => r.key.trim()));
+        const missing = requiredNames.filter(f => !existingKeys.has(f));
+        if (missing.length === 0) return '';
+        return html`
+            <div class="required-fields-hint">
+                ${this.i18n.t('entity_modal.required_fields', { fields: missing.join(', ') },
+                    'crm', `Required: ${missing.join(', ')}`)}
+            </div>
+        `;
     }
 
     _resolveIconName(iconName) {
@@ -502,18 +513,19 @@ export class EntityModal extends PlatformModal {
 
                 <div class="attributes-section">
                     <label class="form-label">${this.i18n.t('entity_modal.label_extra_attributes')}</label>
+                    ${this._renderRequiredFields()}
                     ${this._attributeRows.map((row, index) => html`
                         <div class="attribute-row">
                             <input
                                 type="text"
-                                class="form-input"
+                                class="form-input ${this._fieldErrors[row.key] ? 'field-error' : ''}"
                                 placeholder=${this.i18n.t('ai_entity_card.attr_key_placeholder')}
                                 .value=${row.key}
                                 @input=${(e) => this._onAttributeKeyChange(index, e.target.value)}
                             />
                             <input
                                 type="text"
-                                class="form-input"
+                                class="form-input ${this._fieldErrors[row.key] ? 'field-error' : ''}"
                                 placeholder=${this.i18n.t('ai_entity_card.attr_value_placeholder')}
                                 .value=${row.value}
                                 @input=${(e) => this._onAttributeValueChange(index, e.target.value)}
@@ -525,6 +537,9 @@ export class EntityModal extends PlatformModal {
                             >
                                 <platform-icon name="close" size="14"></platform-icon>
                             </button>
+                            ${this._fieldErrors[row.key] ? html`
+                                <span class="field-error-text">${this._fieldErrors[row.key]}</span>
+                            ` : ''}
                         </div>
                     `)}
                     <button

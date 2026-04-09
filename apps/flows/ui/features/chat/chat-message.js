@@ -42,7 +42,7 @@ export class ChatMessage extends PlatformElement {
                 background: var(--accent-gradient);
                 border: none;
                 color: white;
-                box-shadow: 0 4px 12px rgba(16, 185, 129, 0.25);
+                box-shadow: 0 4px 12px rgba(153, 166, 249, 0.25);
             }
             
             .message.assistant .avatar {
@@ -84,7 +84,7 @@ export class ChatMessage extends PlatformElement {
                 border: none;
                 color: white;
                 border-bottom-right-radius: var(--radius-sm);
-                box-shadow: 0 4px 16px rgba(16, 185, 129, 0.2);
+                box-shadow: 0 4px 16px rgba(153, 166, 249, 0.2);
             }
             
             .message.assistant .content {

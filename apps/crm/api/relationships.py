@@ -6,6 +6,7 @@ import uuid
 from typing import List, Optional
 from datetime import datetime, timezone
 from fastapi import APIRouter, HTTPException, Query
+from sqlalchemy.exc import IntegrityError
 
 from apps.crm.models.api import RelationshipCreate, RelationshipResponse, RelationshipTypeCreate, RelationshipTypeResponse
 from apps.crm.models.graph import ShortestPathResponse
@@ -83,7 +84,12 @@ async def create_relationship(
         updated_at=datetime.now(timezone.utc)
     )
     
-    await container.relationship_repository.create(relationship)
+    try:
+        await container.relationship_repository.create(relationship)
+    except IntegrityError as exc:
+        if "uq_relationships_unique_edge" in str(exc):
+            raise HTTPException(status_code=409, detail="Relationship already exists")
+        raise
     return relationship
 
 

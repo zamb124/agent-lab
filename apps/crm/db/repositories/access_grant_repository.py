@@ -124,29 +124,4 @@ class AccessGrantRepository(BaseCRMRepository[AccessGrant]):
                 grants_map[key].append(grant)
         return grants_map
 
-    async def find_by_user(
-        self,
-        user_id: str
-    ) -> List[AccessGrant]:
-        """Найти все grants для user"""
-        async with self._db.session() as session:
-            result = await session.execute(
-                select(AccessGrant)
-                .where(AccessGrant.grant_type == "user")
-                .where(AccessGrant.target_user_id == user_id)
-            )
-            return list(result.scalars().all())
-    
-    async def find_by_company(
-        self,
-        company_id: str
-    ) -> List[AccessGrant]:
-        """Найти все grants для company"""
-        async with self._db.session() as session:
-            result = await session.execute(
-                select(AccessGrant)
-                .where(AccessGrant.grant_type == "company")
-                .where(AccessGrant.target_company_id == company_id)
-            )
-            return list(result.scalars().all())
 

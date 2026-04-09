@@ -380,12 +380,12 @@ export class GraphPage extends PlatformElement {
             }
 
             .graph-empty-import-cta button {
-                border: 1px solid var(--crm-button-primary-bg);
-                background: var(--crm-button-primary-bg);
-                color: var(--crm-button-primary-text);
-                border-radius: 8px;
-                padding: 8px 14px;
-                font-size: 13px;
+                border: 1px solid var(--platform-btn-primary-bg);
+                background: var(--platform-btn-primary-bg);
+                color: var(--platform-btn-primary-text);
+                border-radius: var(--btn-radius, 22px);
+                padding: var(--btn-padding, 8px 24px);
+                font-size: var(--btn-font-size, 16px);
                 cursor: pointer;
             }
 

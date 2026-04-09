@@ -30,12 +30,12 @@ export class TeamPage extends PlatformElement {
                 font-weight: var(--font-medium);
                 cursor: pointer;
                 transition: all var(--duration-fast);
-                box-shadow: 0 4px 12px rgba(16, 185, 129, 0.25);
+                box-shadow: 0 4px 12px rgba(153, 166, 249, 0.25);
             }
 
             .primary-button:hover {
                 transform: scale(1.05);
-                box-shadow: 0 8px 24px rgba(16, 185, 129, 0.4);
+                box-shadow: 0 8px 24px rgba(153, 166, 249, 0.4);
             }
 
             .members-grid {

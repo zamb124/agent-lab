@@ -52,7 +52,7 @@ export class FrontendSidebar extends PlatformElement {
                 border-color: var(--accent);
                 color: var(--accent);
                 font-weight: var(--font-semibold);
-                box-shadow: 0 4px 16px rgba(16, 185, 129, 0.15);
+                box-shadow: 0 4px 16px rgba(153, 166, 249, 0.15);
             }
 
             .nav-icon {

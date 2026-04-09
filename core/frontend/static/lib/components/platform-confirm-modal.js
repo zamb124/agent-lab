@@ -48,7 +48,7 @@ export class PlatformConfirmModal extends PlatformModal {
             }
 
             .modal-icon.info {
-                color: var(--accent, #10b981);
+                color: var(--accent);
             }
 
             .confirm-title-block {

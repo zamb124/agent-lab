@@ -32,10 +32,10 @@ class CRMEntity(Base):
     __tablename__ = "crm_entities"
 
     entity_id: Mapped[str] = mapped_column(String(100), primary_key=True)
-    company_id: Mapped[str] = mapped_column(String(100), nullable=False, index=True)
+    company_id: Mapped[str] = mapped_column(String(100), nullable=False)
     namespace: Mapped[str] = mapped_column(String(100), default="default", nullable=False)
 
-    entity_type: Mapped[str] = mapped_column(String(100), nullable=False, index=True)
+    entity_type: Mapped[str] = mapped_column(String(100), nullable=False)
     entity_subtype: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
 
     name: Mapped[str] = mapped_column(String(500), nullable=False)
@@ -72,6 +72,9 @@ class CRMEntity(Base):
 
     __table_args__ = (
         Index("ix_crm_entities_company_type", "company_id", "entity_type"),
+        Index("ix_crm_entities_company_ns_type", "company_id", "namespace", "entity_type"),
+        Index("ix_crm_entities_company_status", "company_id", "status"),
+        Index("ix_crm_entities_company_user", "company_id", "user_id"),
         Index("ix_crm_entities_tags", "tags", postgresql_using="gin"),
         Index("ix_crm_entities_due_date", "due_date"),
         Index("ix_crm_entities_note_date", "note_date"),
@@ -86,6 +89,8 @@ class CRMEntity(Base):
     @property
     def is_task(self) -> bool:
         return self.entity_type == "task"
+
+    access_level: str = "owner"
 
     @property
     def full_type(self) -> str:
@@ -266,13 +271,17 @@ class Relationship(Base):
     __tablename__ = "relationships"
     
     relationship_id: Mapped[str] = mapped_column(String(100), primary_key=True)
-    company_id: Mapped[str] = mapped_column(String(100), nullable=False, index=True)
-    namespace: Mapped[str] = mapped_column(String(100), nullable=False, default="default", index=True)
-    
-    source_entity_id: Mapped[str] = mapped_column(String(100), nullable=False, index=True)
-    target_entity_id: Mapped[str] = mapped_column(String(100), nullable=False, index=True)
-    
-    relationship_type: Mapped[str] = mapped_column(String(100), nullable=False, index=True)
+    company_id: Mapped[str] = mapped_column(String(100), nullable=False)
+    namespace: Mapped[str] = mapped_column(String(100), nullable=False, default="default")
+
+    source_entity_id: Mapped[str] = mapped_column(
+        String(100), ForeignKey("crm_entities.entity_id", ondelete="CASCADE"), nullable=False,
+    )
+    target_entity_id: Mapped[str] = mapped_column(
+        String(100), ForeignKey("crm_entities.entity_id", ondelete="CASCADE"), nullable=False,
+    )
+
+    relationship_type: Mapped[str] = mapped_column(String(100), nullable=False)
     
     weight: Mapped[float] = mapped_column(Float, default=1.0)
     attributes: Mapped[Dict[str, Any]] = mapped_column(JSONB, default=dict)
@@ -288,10 +297,13 @@ class Relationship(Base):
     )
     
     __table_args__ = (
+        UniqueConstraint(
+            "company_id", "namespace", "source_entity_id", "target_entity_id", "relationship_type",
+            name="uq_relationships_unique_edge",
+        ),
         Index("idx_relationships_source", "source_entity_id"),
         Index("idx_relationships_target", "target_entity_id"),
         Index("idx_relationships_source_target", "source_entity_id", "target_entity_id"),
-        Index("idx_relationships_type", "relationship_type"),
         Index("idx_relationships_namespace", "company_id", "namespace"),
     )
     

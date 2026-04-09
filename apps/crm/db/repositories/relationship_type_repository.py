@@ -54,13 +54,6 @@ class RelationshipTypeRepository(BaseCRMRepository[RelationshipType]):
             result = await session.execute(stmt)
             return list(result.scalars().all())
     
-    async def get_system_types(self) -> List[RelationshipType]:
-        """Получает системные типы (mentions, linked)"""
-        async with self._db.session() as session:
-            stmt = select(RelationshipType).where(RelationshipType.is_system == True)
-            result = await session.execute(stmt)
-            return list(result.scalars().all())
-    
     async def get_with_prompts(
         self
     ) -> List[RelationshipType]:

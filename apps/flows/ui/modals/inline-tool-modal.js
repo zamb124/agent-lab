@@ -4,6 +4,7 @@
  */
 import { html, css } from 'lit';
 import { PlatformModal } from '@platform/lib/components/glass-modal.js';
+import { buttonStyles } from '@platform/lib/styles/shared/button.styles.js';
 import { FlowsStore } from '../store/flows.store.js';
 import '../components/nodes/index.js';
 import { isValidLlmParametersSchema } from '../utils/flow-parameters-schema.js';
@@ -11,6 +12,7 @@ import { isValidLlmParametersSchema } from '../utils/flow-parameters-schema.js';
 export class InlineToolModal extends PlatformModal {
     static styles = [
         PlatformModal.styles,
+        buttonStyles,
         css`
             :host {
                 --modal-max-width: 900px;
@@ -36,34 +38,6 @@ export class InlineToolModal extends PlatformModal {
                 padding-top: var(--space-2);
             }
             
-            .btn {
-                padding: var(--space-2) var(--space-4);
-                font-size: var(--text-sm);
-                font-weight: var(--font-medium);
-                border-radius: var(--radius-md);
-                border: 1px solid var(--border-default);
-                cursor: pointer;
-                transition: all var(--duration-fast) var(--easing-default);
-            }
-            
-            .btn-primary {
-                color: white;
-                background: var(--accent);
-                border-color: var(--accent);
-            }
-            
-            .btn-primary:hover {
-                background: var(--accent-hover);
-            }
-            
-            .btn-secondary {
-                color: var(--text-primary);
-                background: var(--glass-tint-medium);
-            }
-            
-            .btn-secondary:hover {
-                background: var(--glass-tint-strong);
-            }
         `
     ];
 

@@ -55,14 +55,6 @@ class KnowledgeImportRepository(BaseCRMRepository[CRMKnowledgeImport]):
             result = await session.execute(stmt)
             return result.scalar_one_or_none()
 
-    async def save(self, row: CRMKnowledgeImport) -> CRMKnowledgeImport:
-        row.updated_at = datetime.now(timezone.utc)
-        async with self._db.session() as session:
-            merged = await session.merge(row)
-            await session.commit()
-            await session.refresh(merged)
-        return merged
-
     async def patch_progress(
         self,
         import_id: str,

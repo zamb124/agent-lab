@@ -77,6 +77,7 @@ if jq -e '.ingress.services | map(.path) | index("/documents") != null' "${CONF_
   fi
 fi
 
+REMOTE_DIR="$(jq -r '.selectel.remote_dir // "/opt/agent-lab"' "${CONF_LOCAL_JSON}")"
 SSH="ssh -o StrictHostKeyChecking=accept-new -o BatchMode=yes -o ConnectTimeout=10 -p ${SSH_PORT} ${LOGIN}@${IP}"
 
 # Получаем IP хоста на сервере
@@ -210,6 +211,19 @@ metadata:
       add_header Cache-Control "no-cache, must-revalidate" always;
       proxy_set_header Upgrade \$http_upgrade;
       proxy_set_header Connection "upgrade";
+    nginx.ingress.kubernetes.io/server-snippet: |
+      location = /api/i18n/ru {
+        alias /srv/i18n/ru.json;
+        default_type application/json;
+        add_header Cache-Control "public, max-age=3600" always;
+        add_header Access-Control-Allow-Origin "*" always;
+      }
+      location = /api/i18n/en {
+        alias /srv/i18n/en.json;
+        default_type application/json;
+        add_header Cache-Control "public, max-age=3600" always;
+        add_header Access-Control-Allow-Origin "*" always;
+      }
 spec:
   ingressClassName: public
 ${TLS_SPEC}
@@ -468,6 +482,30 @@ EOF
   fi
 else
   log "OnlyOffice DS: ingress.onlyoffice_port не задан — пропускаем субдомен ${ONLYOFFICE_SUBDOMAIN}"
+fi
+
+# ─── i18n: статическая отдача переводов через ingress (hostPath) ──────────────
+# Генерируем объединённые JSON переводов на хосте, монтируем в ingress-контроллер.
+# Браузеры получают /api/i18n/ru и /api/i18n/en напрямую от nginx, минуя Python.
+
+I18N_HOST_DIR="${REMOTE_DIR}/static/i18n"
+I18N_POD_MOUNT="/srv/i18n"
+
+log "i18n: генерация объединённых переводов в ${I18N_HOST_DIR}"
+${SSH} "cd ${REMOTE_DIR} && mkdir -p ${I18N_HOST_DIR} && docker run --rm -v ${REMOTE_DIR}:/app ghcr.io/zamb124/agent-lab:latest python -m scripts.build_i18n --output /app/static/i18n"
+
+log "i18n: проверяем hostPath volume в ingress-контроллере"
+_HAS_I18N_VOLUME="$(${SSH} "microk8s kubectl -n ingress get daemonset nginx-ingress-microk8s-controller -o jsonpath='{.spec.template.spec.volumes[?(@.name==\"i18n-static\")].name}' 2>/dev/null || true")"
+if [[ -z "${_HAS_I18N_VOLUME}" ]]; then
+  log "i18n: патчим DaemonSet — монтируем ${I18N_HOST_DIR} -> ${I18N_POD_MOUNT}"
+  ${SSH} "microk8s kubectl -n ingress patch daemonset nginx-ingress-microk8s-controller --type=json -p='[
+    {\"op\":\"add\",\"path\":\"/spec/template/spec/volumes/-\",\"value\":{\"name\":\"i18n-static\",\"hostPath\":{\"path\":\"${I18N_HOST_DIR}\",\"type\":\"DirectoryOrCreate\"}}},
+    {\"op\":\"add\",\"path\":\"/spec/template/spec/containers/0/volumeMounts/-\",\"value\":{\"name\":\"i18n-static\",\"mountPath\":\"${I18N_POD_MOUNT}\",\"readOnly\":true}}
+  ]'"
+  log "i18n: ожидаем перезапуск ingress-контроллера"
+  ${SSH} "microk8s kubectl -n ingress rollout status daemonset nginx-ingress-microk8s-controller --timeout=120s"
+else
+  log "i18n: hostPath volume уже смонтирован — пропускаем патч"
 fi
 
 echo

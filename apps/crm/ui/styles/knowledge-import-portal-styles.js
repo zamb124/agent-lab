@@ -49,7 +49,7 @@ const CRM_IMPORT_PORTAL_CSS = `
 }
 
 .crm-import-glass-content .ki-step1-settings-link {
-    color: var(--crm-button-primary-bg);
+    color: var(--accent);
     font-size: var(--text-sm, 14px);
     font-weight: 600;
     text-decoration: none;
@@ -112,12 +112,12 @@ const CRM_IMPORT_PORTAL_CSS = `
 }
 
 .crm-import-glass-content.import-wizard .type-card:focus-visible {
-    outline: 2px solid var(--crm-button-primary-bg);
+    outline: 2px solid var(--accent);
     outline-offset: 2px;
 }
 
 .crm-import-glass-content.import-wizard .type-card.selected {
-    border-color: var(--crm-button-primary-bg);
+    border-color: var(--accent);
     background: var(--crm-selected-bg);
     box-shadow: 0 4px 20px rgba(153, 166, 249, 0.22);
 }
@@ -135,8 +135,8 @@ const CRM_IMPORT_PORTAL_CSS = `
 }
 
 .crm-import-glass-content.import-wizard .type-card.selected .type-card-icon-wrap {
-    border-color: var(--crm-button-primary-bg);
-    color: var(--crm-button-primary-bg);
+    border-color: var(--accent);
+    color: var(--accent);
     background: var(--crm-surface-elevated);
 }
 
@@ -158,8 +158,8 @@ const CRM_IMPORT_PORTAL_CSS = `
     width: 24px;
     height: 24px;
     border-radius: var(--radius-full, 999px);
-    background: var(--crm-button-primary-bg);
-    color: var(--crm-button-primary-text);
+    background: var(--accent);
+    color: var(--platform-btn-primary-text);
     display: flex;
     align-items: center;
     justify-content: center;
@@ -360,7 +360,7 @@ const CRM_IMPORT_PORTAL_CSS = `
 
 .crm-import-glass-content .import-detail-entity-open:hover {
     background: var(--crm-selected-bg);
-    color: var(--crm-button-primary-bg);
+    color: var(--accent);
 }
 
 .crm-import-glass-content .form-label {

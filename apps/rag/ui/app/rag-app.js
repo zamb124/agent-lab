@@ -70,8 +70,6 @@ export class RagApp extends PlatformApp {
 
     async initServices() {
         await super.initServices();
-        
-        await this.services.registerCore('/rag');
         this.services.register('ragApi', new RAGAPIService('/rag/api/v1'));
         
         this._unsubscribe = RagStore.subscribe((state) => {
@@ -86,7 +84,8 @@ export class RagApp extends PlatformApp {
     }
 
     async checkAuth() {
-        return true;
+        const ok = await this.auth.validateToken();
+        return !!ok;
     }
 
     _renderContent() {

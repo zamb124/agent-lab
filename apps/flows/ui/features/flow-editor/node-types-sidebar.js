@@ -15,7 +15,7 @@ const TRIGGER_TYPES = {
 };
 
 const STATUS_COLORS = {
-    active: '#10b981',
+    active: '#99A6F9',
     inactive: '#6b7280',
     error: '#ef4444',
 };
@@ -45,7 +45,7 @@ const NODE_CATEGORIES = [
     {
         id: 'channels',
         items: [
-            { type: 'channel', paletteKey: 'channel', icon: 'send', color: '#10b981' },
+            { type: 'channel', paletteKey: 'channel', icon: 'send', color: '#99A6F9' },
             { type: 'hitl_node', paletteKey: 'hitl_node', icon: 'users', color: '#0ea5e9' },
         ]
     },
@@ -55,7 +55,7 @@ const NODE_CATEGORIES = [
             { type: 'code', paletteKey: 'resource_code', icon: 'code', color: '#8b5cf6', isResource: true },
             { type: 'rag', paletteKey: 'resource_rag', icon: 'search', color: '#3b82f6', isResource: true },
             { type: 'files', paletteKey: 'resource_files', icon: 'folder', color: '#f59e0b', isResource: true },
-            { type: 'prompt', paletteKey: 'resource_prompt', icon: 'chat', color: '#10b981', isResource: true },
+            { type: 'prompt', paletteKey: 'resource_prompt', icon: 'chat', color: '#99A6F9', isResource: true },
             { type: 'llm', paletteKey: 'resource_llm', icon: 'bot', color: '#ec4899', isResource: true },
             { type: 'secret', paletteKey: 'resource_secret', icon: 'key', color: '#ef4444', isResource: true },
             { type: 'http', paletteKey: 'resource_http', icon: 'globe', color: '#06b6d4', isResource: true },

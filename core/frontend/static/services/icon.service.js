@@ -583,7 +583,8 @@ export class IconService {
     }
 
     /**
-     * Нормализовать SVG - убрать width/height атрибуты
+     * Нормализовать SVG — убрать width/height, оставить viewBox для масштабирования.
+     * Material Icons: viewBox="0 -960 960 960", fill-based.
      */
     _normalizeSvg(svg) {
         return svg

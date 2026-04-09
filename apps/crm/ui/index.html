@@ -36,18 +36,7 @@
     <link rel="stylesheet" href="/static/core/assets/css/tokens.css">
     <link rel="stylesheet" href="/static/core/assets/css/reset.css">
 
-    <style id="crm-networkle-primary-buttons">
-        /* NetWorkle primary: токены CRM на body, чтобы portal-модалки (glass-modal) наследовали цвет кнопок. */
-        body.platform-shell {
-            --platform-btn-primary-text: var(--crm-button-primary-text);
-            --platform-btn-primary-bg: var(--crm-button-primary-bg);
-            --platform-btn-primary-border: var(--crm-button-primary-bg);
-            --platform-btn-primary-bg-hover: var(--crm-button-primary-hover);
-            --platform-btn-primary-border-hover: var(--crm-button-primary-hover);
-            --platform-btn-primary-shadow: 0 4px 12px rgba(153, 166, 249, 0.35);
-            --platform-btn-primary-shadow-hover: 0 6px 20px rgba(153, 166, 249, 0.45);
-        }
-    </style>
+    <!-- Platform button tokens inherited from tokens.css -->
 
     <script type="module">
         import '/static/core/lib/components/app-loader.js';
@@ -58,9 +47,39 @@
     </script>
     <script src="/crm/ui/vendor/3d-force-graph/3d-force-graph.min.js"></script>
     <script src="/static/core/assets/js/marked.min.js"></script>
+
+    <style>
+        crm-app:not(:defined) { opacity: 0; }
+
+        app-loader:not(:defined) {
+            position: fixed;
+            inset: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: var(--bg-gradient);
+            z-index: 9999;
+            color: rgba(255, 255, 255, 0.5);
+            font-family: 'SF Pro Display', -apple-system, BlinkMacSystemFont, sans-serif;
+        }
+
+        app-loader:not(:defined)::after {
+            content: 'CRM';
+        }
+    </style>
 </head>
 <body class="platform-shell">
+    <app-loader id="app-loader" fullscreen></app-loader>
     <crm-app></crm-app>
     <script type="module" src="/crm/ui/static/index.js"></script>
+    <script>
+        customElements.whenDefined('crm-app').then(() => {
+            const loader = document.getElementById('app-loader');
+            if (loader) {
+                loader.classList.add('hidden');
+                setTimeout(() => loader.remove(), 400);
+            }
+        });
+    </script>
 </body>
 </html>

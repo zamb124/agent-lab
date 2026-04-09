@@ -68,7 +68,7 @@ export const executionPanelStyles = css`
     }
 
     .context-persist-toggle.active {
-        background: var(--accent-gradient, linear-gradient(135deg, #10b981 0%, #059669 100%));
+        background: var(--accent-gradient);
     }
 
     .context-persist-toggle.active::after {
@@ -375,32 +375,16 @@ export const executionPanelStyles = css`
 
     .btn {
         width: 100%;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        gap: 6px;
-        padding: 10px 16px;
-        font-size: 14px;
-        font-weight: 600;
-        border: none;
-        border-radius: 8px;
-        cursor: pointer;
-        transition: all 0.2s ease;
     }
 
     .btn-run {
-        background: var(--accent, #6366f1);
+        background: var(--accent);
         color: #ffffff;
     }
 
     .btn-run:hover:not(:disabled) {
-        background: var(--accent-hover, #5558e3);
-        box-shadow: 0 4px 12px rgba(99, 102, 241, 0.4);
-    }
-
-    .btn-run:disabled {
-        opacity: 0.5;
-        cursor: not-allowed;
+        background: var(--accent-hover);
+        box-shadow: 0 4px 12px rgba(153, 166, 249, 0.4);
     }
 
     .btn-retry {

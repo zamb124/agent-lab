@@ -8,11 +8,12 @@
  * - Events: run-requested (detail.reuseContext), stop-requested, state-requested, tracing-requested, mocks-requested, close-requested
  */
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
+import { buttonStyles } from '@platform/lib/styles/shared/button.styles.js';
 import { executionPanelStyles } from './styles.js';
 import { renderPanel } from './templates.js';
 
 export class ExecutionPanel extends PlatformElement {
-    static styles = [PlatformElement.styles, executionPanelStyles];
+    static styles = [PlatformElement.styles, buttonStyles, executionPanelStyles];
 
     static properties = {
         runner: { type: Object },

@@ -138,18 +138,6 @@ function _formatFileSize(bytes, tp) {
     return tp('bubble.file_size_gb', { n: (bytes / (1024 * 1024 * 1024)).toFixed(1) });
 }
 
-const _svgImageDownload = html`
-    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-        <path d="M12 3v13M5 15l7 7 7-7" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
-        <path d="M3 21h18" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
-    </svg>`;
-
-const _svgCallBoundaryJoin = html`
-    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-        <polygon points="23 7 16 12 23 17 23 7"/>
-        <rect x="1" y="5" width="15" height="14" rx="2" ry="2"/>
-    </svg>`;
-
 /** file_id, которые уже вернули 404/ошибку загрузки, чтобы не дергать download повторно на каждом ререндере. */
 const _unavailableFileIds = new Set();
 
@@ -245,7 +233,7 @@ function renderContent(content, host, tp) {
                         target="_blank"
                         title=${tp('bubble.download_title')}
                         @click=${(e) => e.stopPropagation()}
-                    >${_svgImageDownload}</a>
+                    ><platform-icon name="import" size="14" filled aria-hidden="true"></platform-icon></a>
                 </div>
             </div>
         `;
@@ -278,7 +266,7 @@ function renderContent(content, host, tp) {
                         target="_blank"
                         title=${tp('bubble.download_title')}
                         @click=${(e) => e.stopPropagation()}
-                    >${_svgImageDownload}</a>
+                    ><platform-icon name="import" size="14" filled aria-hidden="true"></platform-icon></a>
                 </div>
                 ${filename ? html`<div class="file-image-caption">${filename}</div>` : ''}
             </div>
@@ -303,10 +291,7 @@ function renderContent(content, host, tp) {
                     ${sizeLabel ? html`<span class="file-card-size">${sizeLabel}</span>` : ''}
                 </div>
                 <div class="file-card-dl" title=${tp('bubble.download_title')}>
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
-                        <path d="M12 3v13M5 15l7 7 7-7" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
-                        <path d="M3 21h18" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
-                    </svg>
+                    <platform-icon name="import" size="14" filled aria-hidden="true"></platform-icon>
                 </div>
             </a>
         `;
@@ -380,10 +365,7 @@ function renderContent(content, host, tp) {
                             title=${tp('bubble.download_title')}
                             @click=${(e) => e.stopPropagation()}
                         >
-                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-                                <path d="M12 3v13M5 15l7 7 7-7" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-                                <path d="M3 21h18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
-                            </svg>
+                            <platform-icon name="import" size="16" filled aria-hidden="true"></platform-icon>
                         </a>
                         ${canRequest
                             ? html`
@@ -443,7 +425,7 @@ function renderContent(content, host, tp) {
                                     host._joinCallFromBoundary(callId);
                                 }}
                             >
-                                ${_svgCallBoundaryJoin}
+                                <platform-icon name="video-call" size="14" filled aria-hidden="true"></platform-icon>
                                 ${tp('bubble.call_boundary_join')}
                             </button>
                         `
@@ -547,12 +529,6 @@ function renderContent(content, host, tp) {
 const checkSingle = html`
     <svg class="check-icon" viewBox="0 0 16 10" width="14" height="9" fill="none" aria-hidden="true">
         <path d="M1.5 5L6 9L14.5 1" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
-    </svg>`;
-
-const checkDouble = html`
-    <svg class="check-icon check-icon--read" viewBox="0 0 21 10" width="18" height="9" fill="none" aria-hidden="true">
-        <path d="M1 5L5.5 9L14 1" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
-        <path d="M7 5L11.5 9L20 1" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
     </svg>`;
 
 export class MessageBubble extends PlatformElement {
@@ -727,7 +703,7 @@ export class MessageBubble extends PlatformElement {
                 width: fit-content;
                 max-width: min(720px, 90%);
                 border-radius: var(--sync-bubble-radius);
-                padding: var(--space-2) var(--space-3);
+                padding: 4px 10px;
                 border: 1px solid;
                 transition: transform var(--duration-fast) ease-out, box-shadow var(--duration-fast) ease-out;
             }
@@ -1111,7 +1087,7 @@ export class MessageBubble extends PlatformElement {
             }
 
             .bubble.bubble--call-boundary {
-                padding: var(--space-2) var(--space-3);
+                padding: 4px 10px;
             }
 
             .bubble.bubble--call-boundary .bubble-body {
@@ -1132,7 +1108,8 @@ export class MessageBubble extends PlatformElement {
                 align-items: center;
                 justify-content: space-between;
                 gap: var(--space-2);
-                margin-bottom: var(--space-1);
+                margin-bottom: 0;
+                line-height: 1.2;
             }
 
             .bubble-header-end {
@@ -1183,15 +1160,15 @@ export class MessageBubble extends PlatformElement {
             }
 
             .bubble.own .bubble-time {
-                color: rgba(6, 95, 70, 0.8);
+                color: var(--text-tertiary);
             }
 
             .sender-btn {
                 background: transparent;
                 border: none;
-                color: var(--text-primary);
+                color: var(--accent);
                 font-size: var(--text-sm);
-                font-weight: var(--font-medium);
+                font-weight: var(--font-semibold);
                 cursor: pointer;
                 padding: 0;
                 text-decoration: none;
@@ -1199,7 +1176,7 @@ export class MessageBubble extends PlatformElement {
 
             .sender-btn:hover {
                 text-decoration: underline;
-                text-underline-offset: 4px;
+                text-underline-offset: 3px;
             }
 
             .thread-btn {
@@ -1228,11 +1205,10 @@ export class MessageBubble extends PlatformElement {
             .msg-text {
                 font-size: var(--text-base);
                 color: var(--text-primary);
-                /* pre-wrap in flex column inflates height; pre-line keeps line breaks */
                 white-space: pre-line;
                 overflow-wrap: anywhere;
                 word-break: normal;
-                line-height: 1.45;
+                line-height: 1.35;
             }
 
             .msg-text .msg-mention {
@@ -1425,14 +1401,19 @@ export class MessageBubble extends PlatformElement {
             }
 
             .check-icon {
-                color: rgba(6, 95, 70, 0.65);
+                color: var(--accent);
                 flex-shrink: 0;
                 display: inline-block;
                 vertical-align: middle;
             }
 
             .check-icon--read {
-                color: rgb(5, 150, 105);
+                color: var(--accent);
+            }
+
+            platform-icon.check-icon.check-icon--read {
+                color: var(--accent);
+                vertical-align: middle;
             }
 
             .reply-quote {
@@ -1452,8 +1433,8 @@ export class MessageBubble extends PlatformElement {
             }
 
             .reply-quote--parent-own {
-                border-left-color: rgb(5, 150, 105);
-                background: rgba(16, 185, 129, 0.26);
+                border-left-color: rgb(153, 166, 249);
+                background: rgba(153, 166, 249, 0.26);
             }
 
             .reply-quote--parent-other {
@@ -1537,7 +1518,7 @@ export class MessageBubble extends PlatformElement {
             /* Grouping: tighter spacing */
             :host([group-position="middle"]),
             :host([group-position="last"]) {
-                margin-top: calc(-1 * var(--space-2));
+                margin-top: -2px;
             }
 
             /* Grouping: hide avatar for continuation messages */
@@ -2105,7 +2086,9 @@ export class MessageBubble extends PlatformElement {
         return html`
             <span class="bubble-time own-time">
                 ${timeStr}
-                ${isRead ? checkDouble : checkSingle}
+                ${isRead
+                    ? html`<platform-icon name="done-all" class="check-icon check-icon--read" size="18" filled aria-hidden="true"></platform-icon>`
+                    : checkSingle}
             </span>
         `;
     }

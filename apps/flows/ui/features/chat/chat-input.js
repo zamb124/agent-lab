@@ -126,13 +126,13 @@ export class ChatInput extends PlatformElement {
                 border: none;
                 color: white;
                 border-radius: var(--radius-xl);
-                box-shadow: 0 4px 12px rgba(16, 185, 129, 0.3);
+                box-shadow: 0 4px 12px rgba(153, 166, 249, 0.3);
                 transition: all var(--duration-normal) var(--easing-default);
             }
             
             .send-button:hover:not(:disabled) {
                 transform: translateY(-2px) scale(1.02);
-                box-shadow: 0 6px 20px rgba(16, 185, 129, 0.4);
+                box-shadow: 0 6px 20px rgba(153, 166, 249, 0.4);
             }
             
             .send-button:active:not(:disabled) {

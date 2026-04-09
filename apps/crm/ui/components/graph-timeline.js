@@ -1,5 +1,6 @@
 import { html, css } from 'lit';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
+import '@platform/lib/components/platform-icon.js';
 
 export class GraphTimeline extends PlatformElement {
     static properties = {
@@ -223,7 +224,7 @@ export class GraphTimeline extends PlatformElement {
             </div>
             <span class="date-label">${this._formatDate(this.minTimestamp)}</span>
             <button class="reset-btn" type="button" title=${this.i18n.t('graph.timeline_reset')} @click=${this._reset}>
-                <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 3-6.7"/><path d="M3 3v5h5"/></svg>
+                <platform-icon name="refresh" size="16"></platform-icon>
             </button>
         `;
     }

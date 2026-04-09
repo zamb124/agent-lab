@@ -148,7 +148,7 @@ export class MessageList extends PlatformElement {
                 padding: var(--space-4);
                 display: flex;
                 flex-direction: column;
-                gap: var(--space-3);
+                gap: 4px;
                 scroll-behavior: auto;
             }
 

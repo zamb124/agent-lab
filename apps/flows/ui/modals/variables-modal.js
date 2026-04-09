@@ -4,11 +4,13 @@
  */
 import { html, css } from 'lit';
 import { PlatformModal } from '@platform/lib/components/glass-modal.js';
+import { buttonStyles } from '@platform/lib/styles/shared/button.styles.js';
 import '@platform/lib/components/platform-icon.js';
 
 export class VariablesModal extends PlatformModal {
     static styles = [
         PlatformModal.styles,
+        buttonStyles,
         css`
             .modal-container {
                 width: 700px;
@@ -186,36 +188,6 @@ export class VariablesModal extends PlatformModal {
                 justify-content: flex-end;
                 gap: var(--space-2);
                 margin-top: var(--space-3);
-            }
-            
-            .btn {
-                padding: var(--space-2) var(--space-4);
-                border-radius: var(--radius-md);
-                border: none;
-                font-size: var(--text-sm);
-                cursor: pointer;
-                transition: all var(--duration-fast);
-                display: inline-flex;
-                align-items: center;
-                gap: var(--space-2);
-            }
-            
-            .btn-primary {
-                background: var(--accent);
-                color: white;
-            }
-            
-            .btn-primary:hover {
-                background: var(--accent-hover);
-            }
-            
-            .btn-secondary {
-                background: var(--glass-solid-subtle);
-                color: var(--text-secondary);
-            }
-            
-            .btn-secondary:hover {
-                background: var(--glass-solid-medium);
             }
             
             .info-block {

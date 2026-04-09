@@ -355,16 +355,13 @@ class TestAIAnalysis:
         assert custom_rel is not None
 
     @pytest.mark.asyncio
-    async def test_ai_analyze_requires_existing_namespace(self, crm_client, auth_headers_system):
+    async def test_entity_creation_rejects_missing_namespace(self, crm_client, auth_headers_system):
+        """422 при попытке создать entity в несуществующем namespace."""
         note_resp = await crm_client.post("/crm/api/v1/entities/", json={
             "entity_type": "note",
             "name": "Заметка в несуществующем namespace",
             "description": "Текст для анализа",
             "namespace": "missing_namespace_for_ai",
         }, headers=auth_headers_system)
-        note_id = note_resp.json()["entity_id"]
-        
-        response = await crm_client.post(f"/crm/api/v1/entities/notes/{note_id}/analyze", json={},
-                                         headers=auth_headers_system)
-        assert response.status_code == 422
+        assert note_resp.status_code == 422
 

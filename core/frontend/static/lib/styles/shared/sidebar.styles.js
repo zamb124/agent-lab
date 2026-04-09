@@ -170,7 +170,7 @@ export const sidebarStyles = css`
         flex-direction: column;
         padding: var(--space-4);
         overflow-y: auto;
-        overflow-x: hidden;
+        overflow-x: clip;
     }
 
     .sidebar-logo {
@@ -279,6 +279,8 @@ export const sidebarStyles = css`
         overflow-y: auto;
         overflow-x: hidden;
         min-height: 0;
+        padding: 0 var(--space-2);
+        margin: 0 calc(-1 * var(--space-2));
     }
 
     .sidebar-section {

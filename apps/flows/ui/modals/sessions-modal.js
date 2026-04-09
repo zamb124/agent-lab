@@ -74,7 +74,7 @@ export class SessionsModal extends PlatformModal {
             
             .session-item.active {
                 background: var(--accent-subtle);
-                box-shadow: 0 2px 8px rgba(16, 185, 129, 0.25);
+                box-shadow: 0 2px 8px rgba(153, 166, 249, 0.25);
             }
             
             .session-icon {

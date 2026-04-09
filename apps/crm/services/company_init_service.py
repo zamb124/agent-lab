@@ -207,11 +207,6 @@ class CompanyInitService:
                 )
         return created_count
     
-    async def is_company_initialized(self, company_id: str) -> bool:
-        """Проверяет инициализирована ли компания"""
-        types = await self._check_existing_types(company_id)
-        return len(types) > 0
-    
     async def _check_existing_types(self, company_id: str) -> List[EntityType]:
         """
         Проверяет существующие типы для компании (прямой запрос к БД).

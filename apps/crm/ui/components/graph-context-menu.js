@@ -2,10 +2,10 @@ import { html, css } from 'lit';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
 
 const CTX_ICONS = {
-    'open-entity': html`<svg viewBox="0 0 24 24"><path d="M15 3h6v6"/><path d="M10 14L21 3"/><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/></svg>`,
-    'focus': html`<svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4-4"/></svg>`,
-    'path-from': html`<svg viewBox="0 0 24 24"><circle cx="5" cy="18" r="2"/><circle cx="19" cy="6" r="2"/><path d="M7 17c4-6 5-9 10-10"/></svg>`,
-    'graph-from': html`<svg viewBox="0 0 24 24"><path d="M12 3v18"/><path d="M8 7l4-4 4 4"/></svg>`,
+    'open-entity': html`<platform-icon name="share" size="16"></platform-icon>`,
+    'focus': html`<platform-icon name="search" size="16"></platform-icon>`,
+    'path-from': html`<platform-icon name="workflow" size="16"></platform-icon>`,
+    'graph-from': html`<platform-icon name="expand" size="16"></platform-icon>`,
 };
 
 export class GraphContextMenu extends PlatformElement {

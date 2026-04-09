@@ -343,10 +343,6 @@ class AccessRequestService:
         """Алиас для get"""
         return await self.get(request_id)
     
-    async def list_pending_for_owner(self, owner_id: str) -> List[AccessRequest]:
-        """Список pending запросов для владельца"""
-        return await self._request_repo.list_by_owner_and_status(owner_id, "pending")
-    
     async def list_requests(
         self,
         company_id: str,

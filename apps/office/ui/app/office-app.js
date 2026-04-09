@@ -37,20 +37,7 @@ export class OfficeApp extends PlatformApp {
                 height: var(--app-vh, 100vh);
                 overflow: hidden;
                 background: var(--bg-gradient);
-                /* Service palette: gradient aligned with documents_logo.svg (#4adede -> #787ff6). */
-                --documents-title-gradient: linear-gradient(
-                    105deg,
-                    #3ec9d8 0%,
-                    #6cb1e1 42%,
-                    #737ce9 100%
-                );
-                --documents-selected-bg: #dff3f9;
-                --documents-selected-stroke: rgba(120, 127, 246, 0.38);
-                --documents-selected-text: #4659b8;
-                --documents-surface-muted: #eef8fc;
-                --documents-stroke: rgba(100, 170, 215, 0.45);
-                --documents-link-hover: #3585c4;
-                /* Primary text hue matches logo gradient tail #737ce9, darkened for contrast. */
+                --documents-title-gradient: var(--documents-gradient);
                 --text-primary: rgba(46, 58, 124, 0.94);
             }
 
@@ -199,7 +186,6 @@ export class OfficeApp extends PlatformApp {
 
     async initServices() {
         await super.initServices();
-        await this.services.registerCore('/documents');
         this.services.register(
             'officeApi',
             new OfficeAPIService('/documents/api/v1', () => {

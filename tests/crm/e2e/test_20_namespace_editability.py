@@ -28,7 +28,7 @@ async def _create_namespace_with_types(crm_client, headers, unique_id, type_ids)
         resp = await crm_client.post(f"/crm/api/v1/namespaces/templates/{template_id}/types", json={
             "type_id": tid,
             "name": f"Type {tid}",
-            "required_fields": {"field": {"type": "string"}},
+            "required_fields": {},
             "optional_fields": {},
             "namespace_ids": [],
         }, headers=headers)

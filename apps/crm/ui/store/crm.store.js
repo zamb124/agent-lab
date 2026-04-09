@@ -249,11 +249,13 @@ const baseStore = new BaseStore('crm', {
             date_to: null,
             tags: [],
             search: '',
+            search_mode: 'hybrid',
             user_id: null,
         },
         entitiesLoading: false,
         loadingMore: false,
         cardLoading: false,
+        aggregate: null,
     },
     grants: {
         currentEntityGrants: [],
@@ -331,7 +333,7 @@ export const CRMStore = {
         }
         
         const [, view, id] = match;
-        const validViews = ['notes', 'entities', 'graph', 'tasks', 'settings', 'templates', 'spaces', 'namespace_imports'];
+        const validViews = ['notes', 'entities', 'graph', 'tasks', 'settings', 'templates', 'spaces', 'namespace_imports', 'relationship_types'];
         
         if (!validViews.includes(view)) {
             history.replaceState({}, '', '/crm/notes');
@@ -417,10 +419,6 @@ export const CRMStore = {
         return getCurrentWeekRangeIso();
     },
 
-    todayIsoDate() {
-        return getTodayIsoDate();
-    },
-    
     toggleSidebar() {
         baseStore.setState((s) => ({
             ui: { ...s.ui, sidebarOpen: !s.ui.sidebarOpen }
@@ -1133,41 +1131,6 @@ export const CRMStore = {
         });
     },
 
-    async _clearNoteAnalysisDraft(crmApi, noteId) {
-        if (!crmApi) {
-            throw new Error('crmApi service is required');
-        }
-        if (!noteId) {
-            return;
-        }
-        const note = baseStore.state.entities.notes.find((item) => item.entity_id === noteId);
-        if (!note) {
-            throw new Error(`Note not found for draft cleanup: ${noteId}`);
-        }
-        const attributes = note.attributes && typeof note.attributes === 'object'
-            ? { ...note.attributes }
-            : {};
-        if (!Object.prototype.hasOwnProperty.call(attributes, 'ai_analysis_draft')) {
-            return;
-        }
-        delete attributes.ai_analysis_draft;
-        const updatedNote = await crmApi.updateEntity(noteId, { attributes });
-        baseStore.setState((s) => ({
-            entities: {
-                ...s.entities,
-                notes: s.entities.notes.map((item) => (
-                    item.entity_id === noteId ? updatedNote : item
-                )),
-            },
-            ai: {
-                ...s.ai,
-                draftByNoteId: Object.fromEntries(
-                    Object.entries(s.ai.draftByNoteId).filter(([key]) => key !== noteId)
-                ),
-            },
-        }));
-    },
-
     async confirmSuggestion(crmApi, index) {
         if (!crmApi) {
             throw new Error('crmApi service is required');
@@ -1462,6 +1425,15 @@ export const CRMStore = {
         }));
     },
 
+    setSearchMode(mode) {
+        baseStore.setState((s) => ({
+            entities: {
+                ...s.entities,
+                filters: { ...s.entities.filters, search_mode: mode },
+            }
+        }));
+    },
+
     setNotesPageSearchQuery(query) {
         if (typeof query !== 'string') {
             throw new Error('notesPageSearchQuery must be a string');
@@ -1480,16 +1452,6 @@ export const CRMStore = {
         }));
     },
     
-    setFilterTags(tags) {
-        baseStore.setState((s) => ({
-            ui: { ...s.ui, filterTags: tags }
-        }));
-    },
-    
-    clearError() {
-        baseStore.setState({ error: null });
-    },
-
     // === NAMESPACES ===
 
     async loadNamespaces(crmApi) {
@@ -1786,14 +1748,6 @@ export const CRMStore = {
         }
     },
 
-    getAllowedEntityTypesForCurrentNamespace() {
-        const namespace = this._getCurrentNamespaceName();
-        return (baseStore.state.entities.entityTypes || []).filter((type) => {
-            const namespaceIds = Array.isArray(type?.namespace_ids) ? type.namespace_ids : [];
-            return namespaceIds.includes(namespace);
-        });
-    },
-
     async loadNamespaceGrants(crmApi, namespace) {
         if (!crmApi) {
             throw new Error('crmApi service is required');
@@ -1945,7 +1899,8 @@ export const CRMStore = {
 
         let response;
         if (searchTrimmed) {
-            const searchParams = { ...queryParams, namespace: namespaceName };
+            const searchMode = filters.search_mode || 'semantic';
+            const searchParams = { ...queryParams, namespace: namespaceName, search_mode: searchMode };
             response = await crmApi.searchEntities(searchTrimmed, searchParams);
         } else {
             response = await crmApi.getEntities(queryParams);
@@ -1964,6 +1919,22 @@ export const CRMStore = {
         }));
 
         return list;
+    },
+
+    async loadAggregate(crmApi) {
+        if (!crmApi) {
+            throw new Error('crmApi service is required');
+        }
+        const ns = this._getCurrentNamespaceName();
+        const params = {};
+        if (ns) {
+            params.namespace = ns;
+        }
+        const aggregate = await crmApi.getAggregate(params);
+        baseStore.setState((s) => ({
+            entities: { ...s.entities, aggregate }
+        }));
+        return aggregate;
     },
 
     async loadMoreEntities(crmApi) {
@@ -1985,7 +1956,9 @@ export const CRMStore = {
 
         let response;
         if (searchTrimmed) {
-            response = await crmApi.searchEntities(searchTrimmed, queryParams);
+            const searchMode = filters.search_mode || 'hybrid';
+            const searchParams = { ...queryParams, search_mode: searchMode };
+            response = await crmApi.searchEntities(searchTrimmed, searchParams);
         } else {
             response = await crmApi.getEntities({ ...queryParams, cursor: nextCursor });
         }

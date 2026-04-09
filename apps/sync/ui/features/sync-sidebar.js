@@ -269,7 +269,7 @@ export class SyncSidebar extends PlatformElement {
             }
 
             .sidebar-adhoc-row {
-                padding: 0 var(--space-3) var(--space-3);
+                padding: 0 0 var(--space-3);
             }
 
             .sidebar-adhoc-btn {
@@ -296,13 +296,15 @@ export class SyncSidebar extends PlatformElement {
                 box-shadow: var(--glass-inner-glow-subtle);
             }
 
-            .sidebar-adhoc-btn svg {
+            .sidebar-adhoc-btn svg,
+            .sidebar-adhoc-btn platform-icon {
                 flex-shrink: 0;
                 color: var(--accent);
                 transition: transform var(--duration-fast) var(--easing-default);
             }
 
-            .sidebar-adhoc-btn:hover svg {
+            .sidebar-adhoc-btn:hover svg,
+            .sidebar-adhoc-btn:hover platform-icon {
                 transform: scale(1.08);
             }
 
@@ -364,10 +366,6 @@ export class SyncSidebar extends PlatformElement {
                 min-width: 0;
             }
 
-            .sync-sidebar-footer-row platform-notification-manager {
-                flex-shrink: 0;
-            }
-
             platform-service-sidebar[collapsed] .sync-sidebar-footer-row {
                 flex-direction: column;
                 gap: 8px;
@@ -386,9 +384,9 @@ export class SyncSidebar extends PlatformElement {
             }
 
             .direct-search {
-                width: calc(100% - 2 * var(--space-3));
+                width: 100%;
                 box-sizing: border-box;
-                margin: 0 var(--space-3) var(--space-2);
+                margin: 0 0 var(--space-2);
                 padding: var(--space-2) var(--space-3);
                 border-radius: var(--radius-lg);
                 border: 1px solid var(--glass-border-subtle);
@@ -437,10 +435,15 @@ export class SyncSidebar extends PlatformElement {
                 display: none !important;
             }
 
-            platform-service-sidebar[collapsed] .sync-sidebar-inner .section-header--toggle {
+            platform-service-sidebar[collapsed] .sync-sidebar-inner .section-header--toggle,
+            platform-service-sidebar[collapsed] .sync-sidebar-inner .section-header--static {
                 justify-content: center;
                 padding-left: var(--space-2);
                 padding-right: var(--space-2);
+            }
+
+            platform-service-sidebar[collapsed] .sidebar-adhoc-row {
+                padding: 0 var(--space-2) var(--space-2);
             }
 
             platform-service-sidebar[collapsed] .sync-sidebar-inner .space-filters-header,
@@ -465,6 +468,7 @@ export class SyncSidebar extends PlatformElement {
 
             platform-service-sidebar[collapsed] .sync-sidebar-inner .section-scroll {
                 max-height: none;
+                padding-right: 0;
             }
 
             .call-join-btn {
@@ -501,7 +505,7 @@ export class SyncSidebar extends PlatformElement {
                 color: #14532d;
             }
 
-            .call-join-btn svg {
+            .call-join-btn platform-icon {
                 flex-shrink: 0;
                 opacity: 0.9;
             }
@@ -653,10 +657,7 @@ export class SyncSidebar extends PlatformElement {
                             title=${ts('sidebar.create_sync_title')}
                             @click=${this._requestAdhocCall}
                         >
-                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                                <polygon points="23 7 16 12 23 17 23 7"/>
-                                <rect x="1" y="5" width="15" height="14" rx="2" ry="2"/>
-                            </svg>
+                            <platform-icon name="video-call" size="20" filled aria-hidden="true"></platform-icon>
                             <span class="sidebar-adhoc-label">${ts('sidebar.create_sync_label')}</span>
                         </button>
                     </div>
@@ -795,10 +796,7 @@ export class SyncSidebar extends PlatformElement {
                                                     }));
                                                 }}
                                             >
-                                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                                                    <polygon points="23 7 16 12 23 17 23 7"/>
-                                                    <rect x="1" y="5" width="15" height="14" rx="2" ry="2"/>
-                                                </svg>
+                                                <platform-icon name="video-call" size="14" filled aria-hidden="true"></platform-icon>
                                                 ${ts('sidebar.call_join')}
                                             </button>
                                         ` : ''}
@@ -825,8 +823,9 @@ export class SyncSidebar extends PlatformElement {
 
                 <div slot="footer" class="sync-sidebar-footer">
                     <div class="sync-sidebar-footer-row">
-                        <platform-user block></platform-user>
-                        <platform-notification-manager></platform-notification-manager>
+                        <platform-user block>
+                            <platform-notification-manager slot="user-toolbar"></platform-notification-manager>
+                        </platform-user>
                     </div>
                     <platform-deployment-version base-url="/sync" footer></platform-deployment-version>
                 </div>

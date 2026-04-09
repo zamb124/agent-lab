@@ -376,9 +376,22 @@ export class DailyNotesPage extends PlatformElement {
             }
 
             .analyze-btn.has-draft {
-                border-color: var(--crm-button-secondary-bg);
+                border-color: var(--accent-secondary);
                 background: rgba(255, 136, 92, 0.18);
-                color: var(--crm-button-secondary-bg);
+                color: var(--accent-secondary);
+            }
+
+            .analyze-btn.needs-ai {
+                border-color: rgba(139, 92, 246, 0.5);
+                background: rgba(139, 92, 246, 0.14);
+                color: #8b5cf6;
+                box-shadow: 0 0 8px rgba(139, 92, 246, 0.25);
+                animation: ai-pulse 2s ease-in-out infinite;
+            }
+
+            @keyframes ai-pulse {
+                0%, 100% { box-shadow: 0 0 6px rgba(139, 92, 246, 0.2); }
+                50% { box-shadow: 0 0 12px rgba(139, 92, 246, 0.4); }
             }
 
             .summary-panel {
@@ -1209,6 +1222,23 @@ export class DailyNotesPage extends PlatformElement {
             && typeof draft.draft_version === 'number';
     }
 
+    _noteNeedsAiProcessing(note) {
+        if (!note || typeof note !== 'object') {
+            throw new Error('Note object is required');
+        }
+        const attrs = note.attributes;
+        if (!attrs || typeof attrs !== 'object') {
+            return true;
+        }
+        if (attrs.ai_analysis_applied_at) {
+            return false;
+        }
+        if (attrs.ai_analysis_draft && typeof attrs.ai_analysis_draft === 'object') {
+            return false;
+        }
+        return true;
+    }
+
     _openNoteAnalysisDraftModal(note) {
         if (!note || typeof note !== 'object') {
             throw new Error('Note object is required');
@@ -1648,7 +1678,7 @@ export class DailyNotesPage extends PlatformElement {
                                             <div class="note-footer-right">
                                                 <span class="published-at">${this.i18n.t('daily_notes_page.published_at', { time: this._formatTime(this._getTextValue(note.updated_at, this._getTextValue(note.created_at, new Date().toISOString()))) })}</span>
                                                 <button
-                                                    class="analyze-btn ${this._hasNoteAnalysisDraft(note) ? 'has-draft' : ''}"
+                                                    class="analyze-btn ${this._hasNoteAnalysisDraft(note) ? 'has-draft' : this._noteNeedsAiProcessing(note) ? 'needs-ai' : ''}"
                                                     type="button"
                                                     @click=${(event) => { event.stopPropagation(); this._onAnalyzeNote(note); }}
                                                     title=${this._hasNoteAnalysisDraft(note) ? this.i18n.t('daily_notes_page.analysis_open_draft') : this.i18n.t('daily_notes_page.analysis_run')}

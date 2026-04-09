@@ -838,7 +838,7 @@ export class BaseNodeEditor extends PlatformElement {
             'code': '#8b5cf6',
             'rag': '#3b82f6',
             'files': '#f59e0b',
-            'prompt': '#10b981',
+            'prompt': '#99A6F9',
             'llm': '#ec4899',
             'secret': '#ef4444',
             'http': '#06b6d4',

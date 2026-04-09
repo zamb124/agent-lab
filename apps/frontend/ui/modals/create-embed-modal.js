@@ -57,7 +57,7 @@ export class CreateEmbedModal extends PlatformModal {
 
             .position-option.selected {
                 background: var(--accent-subtle);
-                border-color: rgba(16, 185, 129, 0.4);
+                border-color: rgba(153, 166, 249, 0.4);
             }
 
             .position-icon {

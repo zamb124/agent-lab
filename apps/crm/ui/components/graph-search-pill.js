@@ -173,10 +173,10 @@ export class GraphSearchPill extends PlatformElement {
                 />
                 ${hasQuery
                     ? html`<button class="pill-icon-btn" type="button" title=${this.i18n.t('graph.search_clear')} @click=${this._onClear}>
-                        <svg viewBox="0 0 24 24"><path d="M18 6L6 18"/><path d="M6 6l12 12"/></svg>
+                        <platform-icon name="close" size="16"></platform-icon>
                     </button>`
                     : html`<button class="pill-icon-btn" type="button" title=${this.i18n.t('graph.search_refresh_graph')} @click=${this._onRefresh}>
-                        <svg viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 3-6.7"/><path d="M3 3v5h5"/></svg>
+                        <platform-icon name="refresh" size="16"></platform-icon>
                     </button>`
                 }
             </div>

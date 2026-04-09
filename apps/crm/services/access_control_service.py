@@ -240,8 +240,10 @@ class AccessControlService:
         company_id: Optional[str],
     ) -> List[CRMEntity]:
         """
-        Batch фильтрация сущностей по правам доступа.
+        Batch фильтрация сущностей по правам доступа с проставлением access_level.
         Один SQL-запрос для всех грантов вместо 2*N запросов.
+
+        access_level = "owner" | "shared" | "public"
         """
         if not entities:
             return []
@@ -249,15 +251,16 @@ class AccessControlService:
         user_ns = await self._get_user_namespace(user_id) if user_id else None
         now = datetime.now(timezone.utc)
 
-        # Быстрый путь: owner или same company + namespace
         needs_grant_check: List[CRMEntity] = []
         readable: List[CRMEntity] = []
 
         for entity in entities:
             if user_id and entity.user_id == user_id:
+                entity.access_level = "owner"
                 readable.append(entity)
                 continue
             if user_id and company_id == entity.company_id and user_ns == entity.namespace:
+                entity.access_level = "owner"
                 readable.append(entity)
                 continue
             needs_grant_check.append(entity)
@@ -265,7 +268,6 @@ class AccessControlService:
         if not needs_grant_check:
             return readable
 
-        # Batch-загрузка грантов: (entity, entity_id) + (namespace, namespace)
         resource_keys: List[tuple[str, str]] = []
         for entity in needs_grant_check:
             resource_keys.append(("entity", entity.entity_id))
@@ -278,24 +280,39 @@ class AccessControlService:
             entity_grants = grants_map.get(("entity", entity.entity_id), [])
             namespace_grants = grants_map.get(("namespace", entity.namespace), [])
 
-            has_access = False
-            for grant in entity_grants:
-                if self._check_grant_sync(grant, user_id, company_id, now):
-                    has_access = True
-                    break
-
-            if not has_access:
-                for grant in namespace_grants:
-                    if grant.grant_type == "public":
-                        continue
-                    if self._check_grant_sync(grant, user_id, company_id, now):
-                        has_access = True
-                        break
-
-            if has_access:
+            access_level = self._resolve_access_level(
+                entity_grants, namespace_grants, user_id, company_id, now,
+            )
+            if access_level:
+                entity.access_level = access_level
                 readable.append(entity)
 
         return readable
+
+    def _resolve_access_level(
+        self,
+        entity_grants: List[AccessGrant],
+        namespace_grants: List[AccessGrant],
+        user_id: Optional[str],
+        company_id: Optional[str],
+        now: datetime,
+    ) -> Optional[str]:
+        """Определяет уровень доступа: shared > public > None."""
+        for grant in entity_grants:
+            if not self._check_grant_sync(grant, user_id, company_id, now):
+                continue
+            if grant.grant_type in ("user", "company"):
+                return "shared"
+            if grant.grant_type == "public":
+                return "public"
+
+        for grant in namespace_grants:
+            if grant.grant_type == "public":
+                continue
+            if self._check_grant_sync(grant, user_id, company_id, now):
+                return "shared"
+
+        return None
 
     def _check_grant_sync(
         self,

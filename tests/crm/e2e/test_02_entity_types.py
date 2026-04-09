@@ -383,6 +383,7 @@ class TestEntityTypes:
             "entity_type": type_lead,
             "name": f"Lead {unique_id}",
             "namespace": namespace_name,
+            "attributes": {"field": "test"},
         }, headers=auth_headers_system)
         assert create_entity_resp.status_code == 200
 

@@ -2,11 +2,12 @@ import { LitElement, html, css, nothing } from 'lit';
 import { embedChatLabelsForLang } from './embed-chat-default-labels.js';
 import { readEmbedChatUrlParams, applyEmbedChatDrawerSizeVars } from './embed-chat-url-params.js';
 import { resolveEmbedChatTheme } from './embed-chat-theme.js';
+import '@platform/lib/components/platform-icon.js';
 import './platform-embed-chat.js';
 
 /**
- * Панель + FAB: только Lit + platform-embed-chat. Без PlatformElement, без platform-icon;
- * иконка FAB — та же разметка, что в core/assets/icons/ai.svg (встроена, без отдельного fetch).
+ * Панель + FAB: только Lit + platform-embed-chat. Без PlatformElement;
+ * кнопки шапки — platform-icon; иконка FAB — та же разметка, что в core/assets/icons/ai.svg (встроена, без отдельного fetch).
  * Переключение: клик по FAB или CustomEvent `humanitec-embed-chat-toggle` на window.
  * Тема: атрибут theme="light"|"dark"|"auto" (по умолчанию auto — как data-theme на documentElement).
  * Параметры URL страницы: см. embed-chat-url-params.js (embed_theme, embed_lang, embed_width, embed_assistant_name, …).
@@ -258,7 +259,8 @@ export class PlatformEmbedChatDrawer extends LitElement {
             --embed-drawer-close-hover: rgba(28, 31, 46, 0.08);
         }
 
-        .close-btn svg {
+        .close-btn svg,
+        .close-btn platform-icon {
             width: 18px;
             height: 18px;
             display: block;
@@ -672,16 +674,7 @@ export class PlatformEmbedChatDrawer extends LitElement {
                             aria-label=${L.new_chat}
                             @click=${this._onNewChat}
                         >
-                            <svg viewBox="0 0 24 24" aria-hidden="true">
-                                <path
-                                    fill="none"
-                                    stroke="currentColor"
-                                    stroke-width="2"
-                                    stroke-linecap="round"
-                                    stroke-linejoin="round"
-                                    d="M12 20h9M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"
-                                />
-                            </svg>
+                            <platform-icon name="edit" size="18" aria-hidden="true"></platform-icon>
                         </button>
                         <button
                             type="button"
@@ -691,26 +684,8 @@ export class PlatformEmbedChatDrawer extends LitElement {
                             @click=${this._togglePanelFullscreen}
                         >
                             ${this.panelMaximized
-                                ? html`<svg viewBox="0 0 24 24" aria-hidden="true">
-                                      <path
-                                          fill="none"
-                                          stroke="currentColor"
-                                          stroke-width="2"
-                                          stroke-linecap="round"
-                                          stroke-linejoin="round"
-                                          d="M8 3v3a2 2 0 0 1-2 2H3m18 0h-3a2 2 0 0 1-2-2V3m0 18v-3a2 2 0 0 1 2-2h3M3 16h3a2 2 0 0 1 2 2v3"
-                                      />
-                                  </svg>`
-                                : html`<svg viewBox="0 0 24 24" aria-hidden="true">
-                                      <path
-                                          fill="none"
-                                          stroke="currentColor"
-                                          stroke-width="2"
-                                          stroke-linecap="round"
-                                          stroke-linejoin="round"
-                                          d="M3 10V3h7M14 3h7v7M3 14v7h7M21 14v7h-7"
-                                      />
-                                  </svg>`}
+                                ? html`<platform-icon name="minimize" size="18" aria-hidden="true"></platform-icon>`
+                                : html`<platform-icon name="fullscreen" size="18" aria-hidden="true"></platform-icon>`}
                         </button>
                         <button
                             type="button"
@@ -719,15 +694,7 @@ export class PlatformEmbedChatDrawer extends LitElement {
                             aria-label=${L.panel_close}
                             @click=${this._close}
                         >
-                            <svg viewBox="0 0 24 24" aria-hidden="true">
-                                <path
-                                    fill="none"
-                                    stroke="currentColor"
-                                    stroke-width="2"
-                                    stroke-linecap="round"
-                                    d="M6 6l12 12M18 6L6 18"
-                                />
-                            </svg>
+                            <platform-icon name="close" size="18" aria-hidden="true"></platform-icon>
                         </button>
                     </div>
                 </div>

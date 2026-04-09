@@ -34,42 +34,6 @@ export class OfficeNamespaceModal extends PlatformModal {
                 width: 100%;
             }
 
-            .btn {
-                padding: var(--space-2) var(--space-4);
-                border-radius: var(--radius-lg);
-                font-size: var(--text-sm);
-                font-weight: 500;
-                cursor: pointer;
-                transition: all var(--duration-fast);
-            }
-
-            .btn-secondary {
-                background: var(--crm-button-secondary-bg);
-                border: 1px solid var(--crm-button-secondary-bg);
-                color: var(--crm-button-secondary-text);
-            }
-
-            .btn-secondary:hover {
-                background: var(--crm-button-secondary-hover);
-                border-color: var(--crm-button-secondary-hover);
-                color: var(--crm-button-secondary-text);
-            }
-
-            .btn-primary {
-                background: var(--crm-button-primary-bg);
-                border: 1px solid var(--crm-button-primary-bg);
-                color: var(--crm-button-primary-text);
-            }
-
-            .btn-primary:hover:not(:disabled) {
-                background: var(--crm-button-primary-hover);
-                border-color: var(--crm-button-primary-hover);
-            }
-
-            .btn-primary:disabled {
-                opacity: 0.5;
-                cursor: not-allowed;
-            }
 
             .hint {
                 font-size: var(--text-xs);

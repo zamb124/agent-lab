@@ -24,18 +24,13 @@ export class PlatformIcon extends PlatformElement {
                 height: 100%;
             }
 
-            /* Не задавать fill на корне svg: fill наследуется, иначе точки в list.svg и др.
-               превращаются в «ободки», а обводка дублирует рамку слота в сайдбаре. */
+            /* Material Icons — fill-based по умолчанию */
             :host(:not([colored]):not([file-icon])) svg {
-                stroke: currentColor;
-                stroke-width: 2;
-                stroke-linecap: round;
-                stroke-linejoin: round;
+                fill: currentColor;
             }
 
-            :host([filled]:not([colored]):not([file-icon])) svg {
+            :host(:not([colored]):not([file-icon])) svg path {
                 fill: currentColor;
-                stroke: none;
             }
         `,
     ];

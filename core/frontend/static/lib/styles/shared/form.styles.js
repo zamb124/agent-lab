@@ -108,10 +108,10 @@ export const formStyles = css`
         background:
             linear-gradient(180deg, rgba(255, 255, 255, 0.1) 0%, rgba(255, 255, 255, 0.04) 100%),
             var(--glass-tint-medium, rgba(255, 255, 255, 0.05));
-        border-color: var(--border-focus, var(--accent, #10b981));
+        border-color: var(--border-focus, var(--accent));
         box-shadow:
             inset 0 1px 0 rgba(255, 255, 255, 0.16),
-            0 0 0 3px color-mix(in srgb, var(--accent, #10b981) 25%, transparent),
+            0 0 0 3px color-mix(in srgb, var(--accent) 25%, transparent),
             0 10px 28px rgba(0, 0, 0, 0.16);
     }
     
@@ -193,7 +193,7 @@ export const formStyles = css`
     }
     
     .toggle-switch.active {
-        background: var(--accent-gradient, linear-gradient(135deg, #10b981 0%, #059669 100%));
+        background: var(--accent-gradient);
     }
     
     .toggle-switch::after {
@@ -231,8 +231,8 @@ export const formStyles = css`
     }
 
     .form-item.selected {
-        background: var(--accent-subtle, rgba(16, 185, 129, 0.15));
-        border-color: rgba(16, 185, 129, 0.3);
+        background: var(--accent-subtle, rgba(153, 166, 249, 0.15));
+        border-color: rgba(153, 166, 249, 0.3);
     }
 
     .form-checkbox {
@@ -251,8 +251,8 @@ export const formStyles = css`
     }
 
     .form-item.selected .form-checkbox {
-        background: var(--accent, #10b981);
-        border-color: var(--accent, #10b981);
+        background: var(--accent);
+        border-color: var(--accent);
     }
 
     .form-item-content {

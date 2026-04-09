@@ -6,6 +6,7 @@ import { PlatformElement } from '@platform/lib/platform-element/index.js';
 import { glassStyles } from '@platform/lib/styles/shared/glass.styles.js';
 import { buttonStyles } from '@platform/lib/styles/shared/button.styles.js';
 import { SyncStore } from '../store/sync.store.js';
+import '@platform/lib/components/platform-icon.js';
 import './sync-channel-row.js';
 
 export class ChannelPicker extends PlatformElement {
@@ -50,12 +51,14 @@ export class ChannelPicker extends PlatformElement {
                 color: white;
             }
 
-            .adhoc-btn svg {
+            .adhoc-btn svg,
+            .adhoc-btn platform-icon {
                 flex-shrink: 0;
                 color: var(--accent);
             }
 
-            .adhoc-btn:hover svg {
+            .adhoc-btn:hover svg,
+            .adhoc-btn:hover platform-icon {
                 color: white;
             }
 
@@ -156,10 +159,7 @@ export class ChannelPicker extends PlatformElement {
             <div class="hint">${ts('chat_view.title_pick_channel')}</div>
             <div class="adhoc-row">
                 <button type="button" class="adhoc-btn" @click=${this._emitAdhocRequest}>
-                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                        <polygon points="23 7 16 12 23 17 23 7"/>
-                        <rect x="1" y="5" width="15" height="14" rx="2" ry="2"/>
-                    </svg>
+                    <platform-icon name="video-call" size="20" filled aria-hidden="true"></platform-icon>
                     ${ts('sidebar.create_sync_label')}
                 </button>
                 <div class="adhoc-hint">

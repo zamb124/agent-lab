@@ -273,6 +273,7 @@ UV: `uv add package`, `uv sync`, `uv run python file.py`, `uv run pytest`.
 | Sync: чат, каналы, Git-интеграция | `sync.mdc` |
 | WebRTC звонки (Sync), LiveKit, сигналинг | `calls.mdc` |
 | Frontend: Lit 3, Zustand, i18n | `frontend.mdc` |
+| UI Kit, Design System, палитра | `frontend.mdc` (секция «UI Kit и Design System») |
 | Тестирование, фикстуры | `testing.mdc` |
 | TaskIQ: воркеры, задачи | `taskiq.mdc` |
 | Streaming, events, Redis Pub/Sub | `streaming.mdc` |

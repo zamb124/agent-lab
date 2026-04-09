@@ -82,7 +82,7 @@ export class EntityMergeModal extends PlatformModal {
                 border-color: var(--accent);
             }
             .pick-card.selected {
-                border-color: var(--crm-button-primary-bg);
+                border-color: var(--accent);
                 box-shadow: var(--focus-ring);
             }
             .pick-card .name {
@@ -130,7 +130,7 @@ export class EntityMergeModal extends PlatformModal {
                 border-color: var(--accent);
             }
             .half.active {
-                border-color: var(--crm-button-primary-bg);
+                border-color: var(--accent);
                 background: var(--crm-selected-bg);
             }
             .err {

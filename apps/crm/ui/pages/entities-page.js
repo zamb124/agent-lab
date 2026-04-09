@@ -29,6 +29,10 @@ export class EntitiesPage extends PlatformElement {
         _debounceTimer: { state: true },
         _mergeDragSourceId: { state: true },
         _mergeDropHoverId: { state: true },
+        _selectedIds: { state: true },
+        _bulkOperating: { state: true },
+        _showExportMenu: { state: true },
+        _showBulkStatusMenu: { state: true },
     };
 
     static styles = [
@@ -263,7 +267,7 @@ export class EntitiesPage extends PlatformElement {
             }
 
             .entity-card-item.merge-drop-hover {
-                border-color: var(--crm-button-primary-bg);
+                border-color: var(--accent);
                 box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.35);
             }
 
@@ -343,6 +347,207 @@ export class EntitiesPage extends PlatformElement {
                 font-weight: 500;
                 border: none;
                 white-space: nowrap;
+            }
+
+            .export-dropdown {
+                position: relative;
+            }
+            .btn-icon {
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                width: 32px;
+                height: 32px;
+                border: 1px solid var(--glass-border-subtle);
+                border-radius: var(--radius-md);
+                background: transparent;
+                color: var(--text-secondary);
+                cursor: pointer;
+            }
+            .btn-icon:hover { background: var(--glass-bg-subtle); }
+            .export-menu {
+                position: absolute;
+                top: 100%;
+                right: 0;
+                z-index: 10;
+                display: flex;
+                flex-direction: column;
+                background: var(--bg-elevated);
+                border: 1px solid var(--glass-border-subtle);
+                border-radius: var(--radius-md);
+                overflow: hidden;
+                margin-top: 4px;
+                min-width: 80px;
+                box-shadow: var(--glass-shadow-subtle);
+            }
+            .export-menu button {
+                padding: 8px 12px;
+                border: none;
+                background: transparent;
+                color: var(--text-primary);
+                font-size: 13px;
+                cursor: pointer;
+                text-align: left;
+            }
+            .export-menu button:hover { background: var(--glass-bg-subtle); }
+
+            .entity-card-item.selected {
+                border-color: var(--accent, #3b82f6);
+                background: rgba(59, 130, 246, 0.06);
+                box-shadow: 0 0 0 1px var(--accent, #3b82f6);
+            }
+
+            .bulk-actions {
+                display: inline-flex;
+                align-items: center;
+                gap: 6px;
+                margin-left: auto;
+            }
+
+            .bulk-badge {
+                display: inline-flex;
+                align-items: center;
+                justify-content: center;
+                min-width: 22px;
+                height: 22px;
+                padding: 0 6px;
+                border-radius: var(--radius-full);
+                background: var(--accent, #3b82f6);
+                color: #fff;
+                font-size: 11px;
+                font-weight: 700;
+            }
+
+            .bulk-action-btn {
+                width: 32px;
+                height: 32px;
+                border-radius: var(--radius-full);
+                border: none;
+                display: inline-flex;
+                align-items: center;
+                justify-content: center;
+                cursor: pointer;
+                transition: transform 0.15s, box-shadow 0.15s, opacity 0.15s;
+            }
+
+            .bulk-action-btn:hover {
+                transform: scale(1.1);
+                box-shadow: 0 2px 8px rgba(0,0,0,0.18);
+            }
+
+            .bulk-action-btn:disabled {
+                opacity: 0.5;
+                cursor: not-allowed;
+                transform: none;
+                box-shadow: none;
+            }
+
+            .bulk-action-btn--status {
+                background: var(--accent, #3b82f6);
+                color: #fff;
+            }
+
+            .bulk-action-btn--delete {
+                background: var(--error, #f43f5e);
+                color: #fff;
+            }
+
+            .bulk-action-btn--clear {
+                background: var(--crm-surface-muted);
+                color: var(--text-secondary);
+                border: 1px solid var(--crm-stroke);
+            }
+
+            .bulk-status-wrapper {
+                position: relative;
+                display: inline-flex;
+            }
+
+            .bulk-status-menu {
+                position: absolute;
+                top: 100%;
+                right: 0;
+                z-index: 20;
+                min-width: 140px;
+                margin-top: 6px;
+                padding: 4px 0;
+                background: var(--bg-elevated);
+                border: 1px solid var(--glass-border-subtle);
+                border-radius: var(--radius-lg);
+                box-shadow: var(--glass-shadow-medium);
+            }
+
+            .bulk-status-item {
+                display: block;
+                width: 100%;
+                padding: 8px 14px;
+                font-size: 13px;
+                text-align: left;
+                color: var(--text-primary);
+                background: none;
+                border: none;
+                cursor: pointer;
+                transition: background 0.1s;
+            }
+
+            .bulk-status-item:hover {
+                background: var(--glass-bg-subtle);
+            }
+
+            .card-score {
+                display: flex;
+                align-items: center;
+                gap: 6px;
+                height: 16px;
+                position: relative;
+                background: var(--glass-bg-subtle, rgba(255,255,255,0.06));
+                border-radius: 8px;
+                overflow: hidden;
+                margin-bottom: 4px;
+            }
+            .score-bar {
+                position: absolute;
+                left: 0;
+                top: 0;
+                height: 100%;
+                background: linear-gradient(90deg, #3b82f6, #8b5cf6);
+                opacity: 0.25;
+                border-radius: 8px;
+            }
+            .score-label {
+                position: relative;
+                z-index: 1;
+                font-size: 10px;
+                font-weight: 600;
+                color: var(--text-secondary);
+                padding-left: 6px;
+            }
+            .match-type-badge {
+                position: relative;
+                z-index: 1;
+                font-size: 9px;
+                text-transform: uppercase;
+                color: var(--text-tertiary);
+                margin-left: auto;
+                padding-right: 6px;
+            }
+
+            .access-badge {
+                display: inline-flex;
+                align-items: center;
+                justify-content: center;
+                width: 22px;
+                height: 22px;
+                border-radius: 50%;
+                flex-shrink: 0;
+            }
+            .access-badge--shared {
+                background: rgba(59, 130, 246, 0.15);
+                color: #3b82f6;
+            }
+            .access-badge--public {
+                background: rgba(34, 197, 94, 0.15);
+                color: #22c55e;
             }
 
             .card-meta {
@@ -683,6 +888,10 @@ export class EntitiesPage extends PlatformElement {
         this._entitiesMergeFirstId = '';
         this._mergeDragSourceId = '';
         this._mergeDropHoverId = '';
+        this._selectedIds = new Set();
+        this._bulkOperating = false;
+        this._showExportMenu = false;
+        this._showBulkStatusMenu = false;
         this._goToImportWizard = this._goToImportWizard.bind(this);
         this._scrollObserver = null;
 
@@ -931,6 +1140,10 @@ export class EntitiesPage extends PlatformElement {
             this._entitiesMergeFirstId = '';
             return;
         }
+        if (event.ctrlKey || event.metaKey) {
+            this._onToggleSelect(entityId, !this._selectedIds.has(entityId));
+            return;
+        }
         this._onSelectEntity(entityId);
     }
 
@@ -1107,6 +1320,17 @@ export class EntitiesPage extends PlatformElement {
                                 @input=${this._onSearchInput}
                             />
                         </label>
+                        <div class="export-dropdown">
+                            <button class="btn-icon" type="button" title="Export" @click=${this._toggleExportMenu}>
+                                <platform-icon name="save" size="16"></platform-icon>
+                            </button>
+                            ${this._showExportMenu ? html`
+                                <div class="export-menu">
+                                    <button @click=${() => this._onExport('csv')}>CSV</button>
+                                    <button @click=${() => this._onExport('json')}>JSON</button>
+                                </div>
+                            ` : ''}
+                        </div>
                         <button class="cta-btn" type="button" @click=${this._onCreateEntity}>${this.i18n.t('create', {}, 'common')}</button>
                     </div>
                     <div class="filters-row">
@@ -1135,6 +1359,51 @@ export class EntitiesPage extends PlatformElement {
                                 <platform-icon name="close" size="12"></platform-icon>
                                 ${this.i18n.t('filters.clear')}
                             </button>
+                        ` : ''}
+
+                        ${this._selectedIds.size > 0 ? html`
+                            <div class="filter-divider"></div>
+                            <div class="bulk-actions">
+                                <span class="bulk-badge">${this._selectedIds.size}</span>
+                                <div class="bulk-status-wrapper">
+                                    <button
+                                        class="bulk-action-btn bulk-action-btn--status"
+                                        type="button"
+                                        ?disabled=${this._bulkOperating}
+                                        title=${this.i18n.t('entities.bulk.change_status')}
+                                        @click=${() => { this._showBulkStatusMenu = !this._showBulkStatusMenu; }}
+                                    >
+                                        <platform-icon name="edit" size="16"></platform-icon>
+                                    </button>
+                                    ${this._showBulkStatusMenu ? html`
+                                        <div class="bulk-status-menu">
+                                            ${['pending', 'approved', 'rejected'].map(status => html`
+                                                <button class="bulk-status-item"
+                                                    @click=${() => this._onBulkUpdateStatus(status)}>
+                                                    ${this.i18n.t(`entities.status.${status}`)}
+                                                </button>
+                                            `)}
+                                        </div>
+                                    ` : ''}
+                                </div>
+                                <button
+                                    class="bulk-action-btn bulk-action-btn--delete"
+                                    type="button"
+                                    ?disabled=${this._bulkOperating}
+                                    title=${this.i18n.t('entities.bulk.delete')}
+                                    @click=${this._onBulkDelete}
+                                >
+                                    <platform-icon name="trash" size="16"></platform-icon>
+                                </button>
+                                <button
+                                    class="bulk-action-btn bulk-action-btn--clear"
+                                    type="button"
+                                    title=${this.i18n.t('entities.bulk.cancel')}
+                                    @click=${this._onBulkClear}
+                                >
+                                    <platform-icon name="close" size="16"></platform-icon>
+                                </button>
+                            </div>
                         ` : ''}
                     </div>
                     ${this._entities.length >= 2 && !this._loading
@@ -1197,9 +1466,11 @@ export class EntitiesPage extends PlatformElement {
 
         const showHeaderEnd = !this._isMobile;
 
+        const isSelected = this._selectedIds.has(eid);
+
         return html`
             <article
-                class="entity-card-item ${isActive ? 'active' : ''} ${mergeSource ? 'merge-drag-source' : ''} ${mergeHover ? 'merge-drop-hover' : ''}"
+                class="entity-card-item ${isActive ? 'active' : ''} ${isSelected ? 'selected' : ''} ${mergeSource ? 'merge-drag-source' : ''} ${mergeHover ? 'merge-drop-hover' : ''}"
                 @dragover=${(e) => this._onMergeCardDragOver(e, eid)}
                 @dragleave=${(e) => this._onMergeCardDragLeave(e, eid)}
                 @drop=${(e) => this._onMergeCardDrop(e, eid)}
@@ -1230,6 +1501,13 @@ export class EntitiesPage extends PlatformElement {
                         `
                         : ''}
                 </div>
+                ${entity.score != null ? html`
+                    <div class="card-score">
+                        <div class="score-bar" style="width: ${Math.round(entity.score * 100)}%"></div>
+                        <span class="score-label">${(entity.score * 100).toFixed(0)}%</span>
+                        ${entity.match_type ? html`<span class="match-type-badge">${entity.match_type}</span>` : ''}
+                    </div>
+                ` : ''}
                 ${entity.description ? html`
                     <p class="card-description">${this._getLimitedText(entity.description)}</p>
                 ` : ''}
@@ -1240,6 +1518,7 @@ export class EntitiesPage extends PlatformElement {
                 ` : ''}
                 <div class="card-footer">
                     <span class="card-type-badge" style="background: ${bgColor}; color: ${typeConfig.color};">${typeConfig.label}</span>
+                    ${this._renderAccessBadge(entity.access_level)}
                     <div class="card-footer-end">
                         <span class="card-meta">${this._formatDate(entity.created_at)}</span>
                         ${showDelete
@@ -1259,6 +1538,96 @@ export class EntitiesPage extends PlatformElement {
                     </div>
                 </div>
             </article>
+        `;
+    }
+
+    _toggleExportMenu() {
+        this._showExportMenu = !this._showExportMenu;
+    }
+
+    async _onExport(format) {
+        this._showExportMenu = false;
+        try {
+            const crmApi = this.services.get('crmApi');
+            const blob = await crmApi.exportEntities({ format });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `entities.${format}`;
+            a.click();
+            URL.revokeObjectURL(url);
+        } catch (err) {
+            this.error(err instanceof Error ? err.message : String(err));
+        }
+    }
+
+    _onToggleSelect(entityId, checked) {
+        const ids = new Set(this._selectedIds);
+        if (checked) {
+            ids.add(entityId);
+        } else {
+            ids.delete(entityId);
+        }
+        this._selectedIds = ids;
+    }
+
+    _onBulkClear() {
+        this._selectedIds = new Set();
+    }
+
+    async _onBulkDelete() {
+        if (this._selectedIds.size === 0) return;
+        this._bulkOperating = true;
+        try {
+            const crmApi = this.services.get('crmApi');
+            const result = await crmApi.bulkDeleteEntities([...this._selectedIds]);
+            if (result.errors && result.errors.length > 0) {
+                this.error(`${result.errors.length} entities failed`);
+            }
+            this._selectedIds = new Set();
+            await CRMStore.loadEntities(crmApi);
+        } catch (err) {
+            this.error(err instanceof Error ? err.message : String(err));
+        } finally {
+            this._bulkOperating = false;
+        }
+    }
+
+    async _onBulkUpdateStatus(status) {
+        this._showBulkStatusMenu = false;
+        if (this._selectedIds.size === 0) return;
+        this._bulkOperating = true;
+        try {
+            const crmApi = this.services.get('crmApi');
+            const items = [...this._selectedIds].map((id) => ({
+                entity_id: id,
+                updates: { status },
+            }));
+            const result = await crmApi.bulkUpdateEntities(items);
+            if (result.errors && result.errors.length > 0) {
+                this.error(`${result.errors.length} entities failed`);
+            }
+            this._selectedIds = new Set();
+            await CRMStore.loadEntities(crmApi);
+        } catch (err) {
+            this.error(err instanceof Error ? err.message : String(err));
+        } finally {
+            this._bulkOperating = false;
+        }
+    }
+
+    _renderAccessBadge(accessLevel) {
+        if (!accessLevel || accessLevel === 'owner') return '';
+        const config = {
+            shared: { icon: 'share', cls: 'access-badge--shared' },
+            public: { icon: 'globe', cls: 'access-badge--public' },
+        };
+        const badge = config[accessLevel];
+        if (!badge) return '';
+        return html`
+            <span class="access-badge ${badge.cls}" title="${accessLevel}">
+                <platform-icon name="${badge.icon}" size="12"></platform-icon>
+            </span>
         `;
     }
 }

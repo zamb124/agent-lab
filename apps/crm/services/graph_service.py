@@ -269,19 +269,19 @@ class GraphService:
         edges_dict: Dict[str, Relationship] = {}
 
         seed_entities = await self._entity_repo.get_by_ids(entity_ids)
-        seeds_by_id = {e.entity_id: e for e in seed_entities}
+        readable_seeds = await self._access_control.batch_filter_readable(
+            seed_entities, user_id, company_id
+        )
+        readable_seeds_by_id = {e.entity_id: e for e in readable_seeds}
 
         initial_wave: list[str] = []
         for seed_id in entity_ids:
             if seed_id in visited:
                 continue
-            seed_entity = seeds_by_id.get(seed_id)
+            seed_entity = readable_seeds_by_id.get(seed_id)
             if not seed_entity:
                 continue
             if not self._is_entity_in_time_window(seed_entity, timeline_from, timeline_to):
-                continue
-            can_read = await self._access_control.can_read_entity(seed_entity, user_id, company_id)
-            if not can_read:
                 continue
             visited.add(seed_id)
             entity_levels[seed_id] = 0
@@ -591,15 +591,16 @@ class GraphService:
         company_id: Optional[str]
     ) -> List[GraphNode]:
         """Применяет access control к entities, возвращая placeholder для скрытых."""
+        readable = await self._access_control.batch_filter_readable(
+            list(entities_dict.values()), user_id, company_id
+        )
+        readable_ids: Set[str] = {e.entity_id for e in readable}
+
         nodes = []
         for entity_id, entity in entities_dict.items():
             level = entity_levels.get(entity_id, 0)
-            
-            can_read = await self._access_control.can_read_entity(
-                entity, user_id, company_id
-            )
-            
-            if can_read:
+
+            if entity_id in readable_ids:
                 nodes.append(GraphNode(
                     entity_id=entity.entity_id,
                     entity_type=entity.entity_type,
@@ -619,7 +620,7 @@ class GraphService:
                     created_at=None,
                     attributes=None
                 ))
-        
+
         return nodes
     
     def _build_edges(

@@ -68,19 +68,19 @@ export class JoinPage extends PlatformElement {
             }
 
             .company-name {
-                color: var(--accent, #10B981);
+                color: var(--accent);
                 font-weight: 600;
             }
 
             .role-badge {
                 display: inline-block;
                 padding: 4px 12px;
-                background: var(--accent-subtle, rgba(16,185,129,0.15));
-                border: 1px solid var(--accent, #10B981);
+                background: var(--accent-subtle, rgba(153,166,249,0.15));
+                border: 1px solid var(--accent);
                 border-radius: 999px;
                 font-size: 13px;
                 font-weight: 600;
-                color: var(--accent, #10B981);
+                color: var(--accent);
                 text-transform: uppercase;
                 letter-spacing: 0.5px;
                 margin-bottom: 32px;
@@ -90,7 +90,7 @@ export class JoinPage extends PlatformElement {
                 display: block;
                 width: 100%;
                 padding: 14px 24px;
-                background: var(--accent, #10B981);
+                background: var(--accent);
                 color: white;
                 border: none;
                 border-radius: 12px;
@@ -150,10 +150,10 @@ export class JoinPage extends PlatformElement {
 
             .success-box {
                 padding: 12px 16px;
-                background: rgba(16,185,129,0.1);
-                border: 1px solid rgba(16,185,129,0.3);
+                background: rgba(153,166,249,0.1);
+                border: 1px solid rgba(153,166,249,0.3);
                 border-radius: 10px;
-                color: var(--accent, #10B981);
+                color: var(--accent);
                 font-size: 15px;
                 margin-bottom: 16px;
             }
@@ -161,7 +161,7 @@ export class JoinPage extends PlatformElement {
             .dashboard-link {
                 display: block;
                 margin-top: 16px;
-                color: var(--accent, #10B981);
+                color: var(--accent);
                 text-decoration: none;
                 font-size: 14px;
             }
@@ -174,7 +174,7 @@ export class JoinPage extends PlatformElement {
                 width: 40px;
                 height: 40px;
                 border: 3px solid var(--glass-border-subtle, rgba(255,255,255,0.1));
-                border-top: 3px solid var(--accent, #10B981);
+                border-top: 3px solid var(--accent);
                 border-radius: 50%;
                 animation: spin 0.8s linear infinite;
                 margin: 0 auto 16px;

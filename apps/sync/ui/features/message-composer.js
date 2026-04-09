@@ -174,7 +174,13 @@ export class MessageComposer extends PlatformElement {
                 font-family: inherit;
                 outline: none;
                 overflow-wrap: anywhere;
+                overflow-y: auto;
+                scrollbar-width: none;
                 transition: border-color var(--duration-normal), box-shadow var(--duration-normal);
+            }
+
+            .textarea::-webkit-scrollbar {
+                display: none;
             }
 
             .textarea:focus {
@@ -307,9 +313,9 @@ export class MessageComposer extends PlatformElement {
 
             .draft-bar.reply-draft--parent-own {
                 align-items: flex-start;
-                border-left: 4px solid rgb(5, 150, 105);
-                background: rgba(16, 185, 129, 0.26);
-                border-color: rgba(16, 185, 129, 0.35);
+                border-left: 4px solid rgb(153, 166, 249);
+                background: rgba(153, 166, 249, 0.26);
+                border-color: rgba(153, 166, 249, 0.35);
             }
 
             .draft-bar.reply-draft--parent-other {
@@ -1474,9 +1480,7 @@ export class MessageComposer extends PlatformElement {
                 ` : ''}
                 <div class="row">
                     <button class="icon-btn" title=${ts('composer.attach_file_title')} @click=${() => { this._attachMenuOpen = !this._attachMenuOpen; this._emojiOpen = false; }}>
-                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
-                            <path d="M12.5 6.5L6.4 12.6a4 4 0 105.7 5.7l7.1-7.1a6 6 0 10-8.5-8.5l-7.1 7.1" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
-                        </svg>
+                        <platform-icon name="paperclip" size="18"></platform-icon>
                     </button>
 
                     <textarea
@@ -1495,11 +1499,7 @@ export class MessageComposer extends PlatformElement {
                         title=${ts('composer.emoji_title')}
                         @click=${() => { this._emojiOpen = !this._emojiOpen; this._attachMenuOpen = false; }}
                     >
-                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
-                            <path d="M12 22a10 10 0 110-20 10 10 0 010 20z" stroke="currentColor" stroke-width="1.8"/>
-                            <path d="M8.5 10.2h.01M15.5 10.2h.01" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"/>
-                            <path d="M8.2 14.2c1.1 1.3 2.4 2 3.8 2s2.7-.7 3.8-2" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
-                        </svg>
+                        <platform-icon name="sentiment-satisfied" size="18"></platform-icon>
                     </button>
 
                     ${!this._isMobile ? html`
@@ -1511,10 +1511,7 @@ export class MessageComposer extends PlatformElement {
                             @pointercancel=${this._onMicPointerUp}
                             @pointerleave=${this._onMicPointerUp}
                         >
-                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
-                                <rect x="9" y="3" width="6" height="12" rx="3" stroke="currentColor" stroke-width="1.8"></rect>
-                                <path d="M5 11a7 7 0 0014 0M12 18v3M9 21h6" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"></path>
-                            </svg>
+                            <platform-icon name="mic" size="18"></platform-icon>
                         </button>
                     ` : ''}
 
@@ -1527,14 +1524,9 @@ export class MessageComposer extends PlatformElement {
                         @pointercancel=${this._onSendPointerCancel}
                     >
                         ${this._isMobile && this._isRecording ? html`
-                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
-                                <rect x="7" y="7" width="10" height="10" rx="2.2" fill="currentColor"></rect>
-                            </svg>
+                            <platform-icon name="stop" size="18"></platform-icon>
                         ` : html`
-                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
-                                <path d="M21.2 3.6L10.1 14.7" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
-                                <path d="M21.2 3.6l-7.2 19.2-3.3-7.7-7.7-3.3 18.2-8.2z" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
-                            </svg>
+                            <platform-icon name="send" size="18"></platform-icon>
                         `}
                     </button>
 
@@ -1542,19 +1534,12 @@ export class MessageComposer extends PlatformElement {
                         <div class="attach-popup">
                             <label class="attach-item">
                                 <input type="file" accept=${this.services.fileTypes.acceptStringFor('image', 'video')} multiple @change=${e => this._pickAttachments('file/image', e)}>
-                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
-                                    <rect x="3" y="3" width="18" height="18" rx="3" stroke="currentColor" stroke-width="1.8"/>
-                                    <circle cx="8.5" cy="8.5" r="1.5" stroke="currentColor" stroke-width="1.5"/>
-                                    <path d="M3 16l5-5 4 4 3-3 6 6" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
-                                </svg>
+                                <platform-icon name="image" size="16"></platform-icon>
                                 ${ts('composer.attach_photo_video')}
                             </label>
                             <label class="attach-item">
                                 <input type="file" accept=${this.services.fileTypes.acceptStringFor(...this.services.fileTypes.categories)} multiple @change=${e => this._pickAttachments('file/document', e)}>
-                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
-                                    <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8l-6-6z" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
-                                    <path d="M14 2v6h6M9 13h6M9 17h4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
-                                </svg>
+                                <platform-icon name="import" size="16"></platform-icon>
                                 ${ts('composer.attach_file')}
                             </label>
                         </div>

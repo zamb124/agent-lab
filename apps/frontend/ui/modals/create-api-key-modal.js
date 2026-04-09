@@ -70,7 +70,7 @@ export class CreateApiKeyModal extends PlatformModal {
             }
 
             .scope-label:has(.scope-checkbox:focus-visible) .form-item {
-                box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.25);
+                box-shadow: 0 0 0 3px rgba(153, 166, 249, 0.25);
             }
 
             .scope-checkbox {
@@ -106,14 +106,14 @@ export class CreateApiKeyModal extends PlatformModal {
                 width: 64px;
                 height: 64px;
                 margin: 0 auto 16px;
-                background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+                background: var(--accent-gradient);
                 border-radius: 50%;
                 display: flex;
                 align-items: center;
                 justify-content: center;
                 font-size: 28px;
                 color: white;
-                box-shadow: 0 8px 24px rgba(16, 185, 129, 0.3);
+                box-shadow: 0 8px 24px rgba(153, 166, 249, 0.3);
             }
 
             .success-title {

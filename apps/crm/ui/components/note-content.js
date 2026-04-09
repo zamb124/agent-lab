@@ -119,7 +119,7 @@ export class NoteContent extends PlatformElement {
                 margin: 0;
                 font-size: 16px;
                 line-height: 20px;
-                color: rgba(34, 34, 34, 0.3);
+                color: var(--text-tertiary);
             }
 
             .note-subtype {
@@ -129,27 +129,33 @@ export class NoteContent extends PlatformElement {
                 gap: 6px;
                 font-size: 13px;
                 line-height: 16px;
-                color: rgba(34, 34, 34, 0.55);
+                color: var(--text-secondary);
+            }
+
+            .note-edit-meta-group {
+                display: flex;
+                flex-direction: column;
+                gap: 16px;
+                padding: 16px 20px;
+                margin-top: 12px;
+                border-radius: var(--radius-lg);
+                background: var(--glass-tint-subtle);
+                border: 1px solid var(--border-subtle);
             }
 
             .note-edit-meta {
-                margin-top: 8px;
                 display: grid;
                 gap: 12px;
                 align-items: center;
             }
 
             .note-edit-meta.note-meta-subtype-date {
-                grid-template-columns: minmax(0, 240px) minmax(0, 220px);
-                max-width: 520px;
-                margin-top: 6px;
-                gap: 10px;
+                grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+                gap: 12px;
             }
 
             .note-edit-meta.voice-context-row {
                 grid-template-columns: 1fr;
-                max-width: 100%;
-                margin-top: 4px;
                 gap: 8px;
             }
 
@@ -233,8 +239,8 @@ export class NoteContent extends PlatformElement {
 
             .note-date-picker {
                 min-width: 0;
-                --platform-date-picker-labeled-bg: rgba(34, 34, 34, 0.04);
-                --platform-date-picker-labeled-border: rgba(34, 34, 34, 0.06);
+                --platform-date-picker-labeled-bg: var(--glass-tint-subtle);
+                --platform-date-picker-labeled-border: var(--border-subtle);
                 --platform-date-picker-labeled-height: 44px;
                 --platform-date-picker-labeled-padding: 0 12px;
                 --platform-date-picker-label-size: var(--text-xs);
@@ -253,6 +259,32 @@ export class NoteContent extends PlatformElement {
                 gap: 8px;
             }
 
+            .entity-search-input {
+                width: 100%;
+                padding: 10px 14px;
+                font-size: 14px;
+                line-height: 20px;
+                font-family: inherit;
+                color: var(--text-primary);
+                background: var(--glass-tint-subtle);
+                border: 1px solid var(--border-subtle);
+                border-radius: var(--radius-md);
+                outline: none;
+                box-shadow: none;
+                -webkit-backdrop-filter: none;
+                backdrop-filter: none;
+                transition: border-color var(--duration-fast), box-shadow var(--duration-fast);
+            }
+
+            .entity-search-input:focus {
+                border-color: var(--accent);
+                box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 15%, transparent);
+            }
+
+            .entity-search-input::placeholder {
+                color: var(--text-disabled);
+            }
+
             .entity-search-input-row .entity-search-input {
                 flex: 1;
                 min-width: 0;
@@ -262,19 +294,21 @@ export class NoteContent extends PlatformElement {
                 flex-shrink: 0;
                 width: 44px;
                 height: 44px;
-                border: 1px solid var(--crm-stroke);
-                border-radius: 12px;
+                border: 1px solid var(--border-subtle);
+                border-radius: var(--radius-md);
                 padding: 0;
                 display: inline-flex;
                 align-items: center;
                 justify-content: center;
                 cursor: pointer;
-                background: var(--crm-surface-muted);
-                color: rgba(34, 34, 34, 0.45);
+                background: var(--glass-tint-medium);
+                color: var(--text-tertiary);
+                transition: background var(--duration-fast), border-color var(--duration-fast), color var(--duration-fast);
             }
 
             .entity-search-clear:hover {
-                border-color: var(--crm-stroke-strong);
+                border-color: var(--border-strong);
+                background: var(--glass-tint-strong);
                 color: var(--text-primary);
             }
 
@@ -287,10 +321,12 @@ export class NoteContent extends PlatformElement {
                 max-height: 220px;
                 overflow-y: auto;
                 padding: 8px;
-                border-radius: 12px;
-                background: var(--crm-surface-elevated);
-                border: 1px solid var(--crm-stroke);
-                box-shadow: 0 8px 24px rgba(34, 34, 34, 0.12);
+                border-radius: var(--radius-md);
+                background: var(--glass-solid-strong);
+                border: 1px solid var(--border-default);
+                box-shadow: var(--glass-shadow-medium);
+                -webkit-backdrop-filter: blur(var(--glass-blur-subtle));
+                backdrop-filter: blur(var(--glass-blur-subtle));
                 z-index: 50;
                 opacity: 0;
                 visibility: hidden;
@@ -310,7 +346,7 @@ export class NoteContent extends PlatformElement {
                 padding: 8px 10px;
                 font-size: 13px;
                 line-height: 18px;
-                color: rgba(34, 34, 34, 0.45);
+                color: var(--text-tertiary);
             }
 
             .entity-search-row-btn {
@@ -331,13 +367,13 @@ export class NoteContent extends PlatformElement {
             }
 
             .entity-search-row-btn:hover {
-                background: rgba(34, 34, 34, 0.05);
+                background: var(--glass-tint-medium);
             }
 
             .entity-search-row-secondary {
                 font-size: 12px;
                 line-height: 16px;
-                color: rgba(34, 34, 34, 0.45);
+                color: var(--text-tertiary);
             }
 
             .note-actions {
@@ -388,8 +424,8 @@ export class NoteContent extends PlatformElement {
             }
 
             .round-btn.danger {
-                background: rgba(255, 136, 92, 0.15);
-                color: #ff885c;
+                background: var(--error-bg);
+                color: var(--error);
             }
 
             .attach-dropdown {
@@ -408,8 +444,8 @@ export class NoteContent extends PlatformElement {
                 height: 18px;
                 padding: 0 5px;
                 border-radius: 9px;
-                background: #99a6f9;
-                color: #222222;
+                background: var(--accent);
+                color: var(--text-inverse);
                 font-size: 11px;
                 font-weight: 600;
                 line-height: 18px;
@@ -428,10 +464,12 @@ export class NoteContent extends PlatformElement {
                 max-height: 240px;
                 overflow-y: auto;
                 padding: 8px;
-                border-radius: 12px;
-                background: var(--crm-surface-elevated);
-                border: 1px solid var(--crm-stroke);
-                box-shadow: 0 8px 24px rgba(34, 34, 34, 0.12);
+                border-radius: var(--radius-md);
+                background: var(--glass-solid-strong);
+                border: 1px solid var(--border-default);
+                box-shadow: var(--glass-shadow-medium);
+                -webkit-backdrop-filter: blur(var(--glass-blur-subtle));
+                backdrop-filter: blur(var(--glass-blur-subtle));
                 z-index: 40;
                 opacity: 0;
                 visibility: hidden;
@@ -451,7 +489,7 @@ export class NoteContent extends PlatformElement {
                 padding: 8px 10px;
                 font-size: 13px;
                 line-height: 18px;
-                color: rgba(34, 34, 34, 0.45);
+                color: var(--text-tertiary);
             }
 
             .attach-dropdown-row {
@@ -465,7 +503,7 @@ export class NoteContent extends PlatformElement {
             }
 
             .attach-dropdown-row:hover {
-                background: rgba(34, 34, 34, 0.05);
+                background: var(--glass-tint-medium);
             }
 
             .attach-dropdown-name {
@@ -491,12 +529,12 @@ export class NoteContent extends PlatformElement {
                 justify-content: center;
                 cursor: pointer;
                 background: transparent;
-                color: rgba(34, 34, 34, 0.35);
+                color: var(--text-tertiary);
             }
 
             .attach-dropdown-remove:hover {
-                background: rgba(255, 136, 92, 0.15);
-                color: #ff885c;
+                background: var(--accent-secondary-subtle);
+                color: var(--accent-secondary);
             }
 
             .attach-dropdown-remove:disabled {
@@ -505,9 +543,9 @@ export class NoteContent extends PlatformElement {
             }
 
             .round-btn.analysis-draft {
-                background: rgba(255, 136, 92, 0.18);
-                color: var(--crm-button-secondary-bg);
-                border: 1px solid rgba(255, 136, 92, 0.45);
+                background: var(--accent-secondary-subtle);
+                color: var(--accent-secondary);
+                border: 1px solid color-mix(in srgb, var(--accent-secondary) 45%, transparent);
             }
 
             .edit-btn {
@@ -515,11 +553,17 @@ export class NoteContent extends PlatformElement {
                 border: none;
                 border-radius: 22px;
                 padding: 0 24px;
-                background: #99a6f9;
-                color: #ffffff;
+                background: var(--crm-button-primary-bg);
+                color: var(--crm-button-primary-text);
                 font-size: 16px;
                 line-height: 20px;
                 cursor: pointer;
+                transition: background var(--duration-fast), box-shadow var(--duration-fast);
+            }
+
+            .edit-btn:hover:not(:disabled) {
+                background: var(--crm-button-primary-hover);
+                box-shadow: var(--platform-btn-primary-shadow-hover);
             }
 
             .edit-btn:disabled {
@@ -529,11 +573,11 @@ export class NoteContent extends PlatformElement {
 
             .cancel-btn {
                 height: 44px;
-                border: 1px solid var(--crm-button-secondary-bg);
+                border: 1px solid var(--border-default);
                 border-radius: 22px;
                 padding: 0 18px;
-                background: var(--crm-button-secondary-bg);
-                color: var(--crm-button-secondary-text);
+                background: var(--glass-tint-medium);
+                color: var(--text-primary);
                 font-size: 14px;
                 line-height: 18px;
                 cursor: pointer;
@@ -541,8 +585,8 @@ export class NoteContent extends PlatformElement {
             }
 
             .cancel-btn:hover {
-                background: var(--crm-button-secondary-hover);
-                border-color: var(--crm-button-secondary-hover);
+                background: var(--glass-tint-strong);
+                border-color: var(--border-strong);
             }
 
             .cancel-btn:disabled {
@@ -596,14 +640,14 @@ export class NoteContent extends PlatformElement {
             }
 
             .note-markdown code {
-                background: rgba(34, 34, 34, 0.06);
+                background: var(--glass-tint-medium);
                 border-radius: 6px;
                 padding: 1px 6px;
                 font-size: 0.92em;
             }
 
             .note-markdown pre {
-                background: rgba(34, 34, 34, 0.06);
+                background: var(--glass-tint-medium);
                 border-radius: 10px;
                 padding: 12px;
                 overflow: auto;
@@ -616,32 +660,59 @@ export class NoteContent extends PlatformElement {
             }
 
             .note-title-input {
-                width: min(560px, 100%);
-                padding: 8px 12px;
-                font-size: 28px;
-                line-height: 34px;
+                width: 100%;
+                padding: 6px 2px;
+                font-size: 26px;
+                line-height: 32px;
                 font-weight: 700;
+                color: var(--text-primary);
+                background: transparent;
+                border: none;
+                border-bottom: 2px solid var(--border-subtle);
+                border-radius: 0;
+                outline: none;
+                box-shadow: none;
+                -webkit-backdrop-filter: none;
+                backdrop-filter: none;
+                font-family: inherit;
+                transition: border-color var(--duration-fast);
             }
 
-            @media (min-width: 768px) {
-                .note-main.is-editing .note-title-input {
-                    font-size: 22px;
-                    line-height: 28px;
-                    padding: 6px 10px;
-                }
+            .note-title-input:focus {
+                border-bottom-color: var(--accent);
+            }
+
+            .note-title-input::placeholder {
+                color: var(--text-disabled);
             }
 
             .note-text-input {
                 width: 100%;
                 min-height: 180px;
-                resize: vertical;
+                resize: none;
                 font-size: 16px;
-                line-height: 20px;
-                white-space: pre-wrap;
-                overflow-x: hidden;
+                line-height: 24px;
+                color: var(--text-primary);
+                background: var(--glass-tint-subtle);
+                border: 1px solid var(--border-subtle);
+                border-radius: var(--radius-lg);
+                padding: 20px;
+                outline: none;
+                font-family: inherit;
+                box-shadow: none;
+                -webkit-backdrop-filter: none;
+                backdrop-filter: none;
+                transition: border-color var(--duration-fast), box-shadow var(--duration-fast);
                 overflow-y: auto;
-                overflow-wrap: anywhere;
-                word-break: break-word;
+            }
+
+            .note-text-input:focus {
+                border-color: var(--accent);
+                box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 15%, transparent);
+            }
+
+            .note-text-input::placeholder {
+                color: var(--text-disabled);
             }
 
             .note-main.is-editing .note-text-input {
@@ -669,11 +740,11 @@ export class NoteContent extends PlatformElement {
 
             .summary-card {
                 background: var(--crm-surface-elevated);
-                border: 1px solid rgba(153, 166, 249, 0.4);
+                border: 1px solid color-mix(in srgb, var(--accent) 40%, transparent);
             }
 
             .tasks-card {
-                background: rgba(34, 34, 34, 0.05);
+                background: var(--glass-tint-medium);
             }
 
             .entities-section {
@@ -719,7 +790,7 @@ export class NoteContent extends PlatformElement {
                 font-size: 20px;
                 line-height: 26px;
                 font-weight: 700;
-                background: linear-gradient(80.46deg, #fad17a 9.08%, #ff9a76 44.12%, #99a6f9 85.61%);
+                background: var(--accent-gradient);
                 -webkit-background-clip: text;
                 background-clip: text;
                 -webkit-text-fill-color: transparent;
@@ -727,7 +798,7 @@ export class NoteContent extends PlatformElement {
 
             .summary-meta {
                 margin: 0;
-                color: rgba(34, 34, 34, 0.3);
+                color: var(--text-tertiary);
                 font-size: 12px;
                 line-height: 15px;
             }
@@ -756,8 +827,8 @@ export class NoteContent extends PlatformElement {
                 border-radius: 14px;
                 font-size: 12px;
                 line-height: 15px;
-                background: #99a6f9;
-                color: rgba(34, 34, 34, 0.95);
+                background: var(--accent);
+                color: var(--text-inverse);
             }
 
             .tasks-title,
@@ -797,16 +868,16 @@ export class NoteContent extends PlatformElement {
                 height: 24px;
                 border-radius: 4px;
                 flex-shrink: 0;
-                border: 2px solid rgba(34, 34, 34, 0.05);
+                border: 2px solid var(--border-subtle);
                 display: inline-flex;
                 align-items: center;
                 justify-content: center;
             }
 
             .checkbox.checked {
-                background: #99a6f9;
-                border-color: #99a6f9;
-                color: #ffffff;
+                background: var(--accent);
+                border-color: var(--accent);
+                color: var(--crm-button-primary-text);
             }
 
             .task-text {
@@ -820,7 +891,7 @@ export class NoteContent extends PlatformElement {
             }
 
             .task-text.completed {
-                color: rgba(34, 34, 34, 0.2);
+                color: var(--text-disabled);
                 text-decoration: line-through;
             }
 
@@ -830,7 +901,7 @@ export class NoteContent extends PlatformElement {
                 border: none;
                 border-radius: 12px;
                 background: transparent;
-                color: rgba(34, 34, 34, 0.2);
+                color: var(--text-disabled);
                 flex-shrink: 0;
             }
 
@@ -844,7 +915,7 @@ export class NoteContent extends PlatformElement {
                 padding: 12px;
                 border-radius: 16px;
                 cursor: pointer;
-                background: rgba(153, 166, 249, 0.2);
+                background: var(--accent-subtle);
                 transition: transform var(--duration-fast), filter var(--duration-fast);
             }
 
@@ -854,11 +925,11 @@ export class NoteContent extends PlatformElement {
             }
 
             .entity-link.tone-yellow {
-                background: rgba(250, 209, 122, 0.3);
+                background: color-mix(in srgb, var(--accent-quaternary) 30%, transparent);
             }
 
             .entity-link.tone-orange {
-                background: rgba(255, 136, 92, 0.2);
+                background: color-mix(in srgb, var(--accent-secondary) 20%, transparent);
             }
 
             .entity-avatar {
@@ -870,8 +941,8 @@ export class NoteContent extends PlatformElement {
                 display: inline-flex;
                 align-items: center;
                 justify-content: center;
-                background: linear-gradient(312.35deg, #fad17a 18.71%, #ff9a76 82.25%, #99a6f9 157.48%);
-                color: #222222;
+                background: var(--accent-gradient);
+                color: var(--text-inverse);
             }
 
             .entity-avatar img {
@@ -904,28 +975,28 @@ export class NoteContent extends PlatformElement {
                 margin: 0;
                 font-size: 12px;
                 line-height: 12px;
-                color: rgba(34, 34, 34, 0.2);
+                color: var(--text-disabled);
             }
 
             .entity-score {
                 height: 16px;
                 border-radius: 8px;
-                background: rgba(34, 34, 34, 0.05);
+                background: var(--glass-tint-medium);
                 overflow: hidden;
                 position: relative;
             }
 
             .entity-score-fill {
                 height: 100%;
-                background: #99a6f9;
+                background: var(--accent);
             }
 
             .entity-score-fill.tone-yellow {
-                background: #fad17a;
+                background: var(--accent-quaternary);
             }
 
             .entity-score-fill.tone-orange {
-                background: #ff885c;
+                background: var(--accent-secondary);
             }
 
             .relationship-link {
@@ -938,7 +1009,7 @@ export class NoteContent extends PlatformElement {
                 padding: 12px;
                 border-radius: 16px;
                 cursor: pointer;
-                background: rgba(153, 166, 249, 0.2);
+                background: var(--accent-subtle);
                 transition: transform var(--duration-fast), filter var(--duration-fast);
             }
 
@@ -955,8 +1026,8 @@ export class NoteContent extends PlatformElement {
                 display: inline-flex;
                 align-items: center;
                 justify-content: center;
-                background: rgba(255, 255, 255, 0.65);
-                color: #222222;
+                background: var(--glass-tint-strong);
+                color: var(--text-primary);
             }
 
             .relationship-data {
@@ -981,7 +1052,7 @@ export class NoteContent extends PlatformElement {
                 margin: 0;
                 font-size: 12px;
                 line-height: 16px;
-                color: rgba(34, 34, 34, 0.55);
+                color: var(--text-secondary);
                 overflow-wrap: anywhere;
                 word-break: break-word;
             }
@@ -996,12 +1067,17 @@ export class NoteContent extends PlatformElement {
             .relationship-entity-btn {
                 border: none;
                 border-radius: 10px;
-                background: rgba(255, 255, 255, 0.75);
+                background: var(--glass-tint-strong);
                 color: var(--text-primary);
                 padding: 4px 8px;
                 font-size: 12px;
                 line-height: 16px;
                 cursor: pointer;
+                transition: background var(--duration-fast);
+            }
+
+            .relationship-entity-btn:hover:not(:disabled) {
+                background: var(--glass-tint-medium);
             }
 
             .relationship-entity-btn:disabled {
@@ -1013,7 +1089,7 @@ export class NoteContent extends PlatformElement {
                 margin-left: auto;
                 font-size: 12px;
                 line-height: 16px;
-                color: rgba(34, 34, 34, 0.55);
+                color: var(--text-secondary);
             }
 
             .relationship-actions {
@@ -1026,11 +1102,16 @@ export class NoteContent extends PlatformElement {
                 border: none;
                 border-radius: 12px;
                 padding: 0 10px;
-                background: rgba(255, 136, 92, 0.18);
-                color: #ff885c;
+                background: var(--accent-secondary-subtle);
+                color: var(--accent-secondary);
                 font-size: 12px;
                 line-height: 14px;
                 cursor: pointer;
+                transition: background var(--duration-fast);
+            }
+
+            .relationship-delete-btn:hover:not(:disabled) {
+                background: color-mix(in srgb, var(--accent-secondary) 25%, transparent);
             }
 
             .relationship-delete-btn:disabled {
@@ -1130,9 +1211,12 @@ export class NoteContent extends PlatformElement {
                     line-height: 24px;
                 }
 
+                .note-edit-meta-group {
+                    padding: 12px 14px;
+                }
+
                 .note-edit-meta.note-meta-subtype-date {
                     grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-                    max-width: 100%;
                 }
 
                 .note-meta-subtype-date .note-date-picker {
@@ -1143,7 +1227,6 @@ export class NoteContent extends PlatformElement {
 
                 .note-edit-meta.voice-context-row {
                     grid-template-columns: 1fr;
-                    max-width: 100%;
                 }
 
                 .summary-text,
@@ -1730,7 +1813,7 @@ export class NoteContent extends PlatformElement {
 
     _hexToRgba(hexColor, alpha) {
         if (typeof hexColor !== 'string' || !hexColor.startsWith('#') || hexColor.length !== 7) {
-            return `rgba(153, 166, 249, ${alpha})`;
+            return `color-mix(in srgb, var(--accent) ${Math.round(alpha * 100)}%, transparent)`;
         }
         const red = parseInt(hexColor.slice(1, 3), 16);
         const green = parseInt(hexColor.slice(3, 5), 16);
@@ -1744,12 +1827,12 @@ export class NoteContent extends PlatformElement {
             return `background: ${this._hexToRgba(typeConfig.color, 0.2)}; color: ${typeConfig.color};`;
         }
         if (tone === 'yellow') {
-            return 'background: rgba(250, 209, 122, 0.45); color: #222222;';
+            return 'background: color-mix(in srgb, var(--accent-quaternary) 45%, transparent); color: var(--text-primary);';
         }
         if (tone === 'orange') {
-            return 'background: rgba(255, 136, 92, 0.4); color: #222222;';
+            return 'background: color-mix(in srgb, var(--accent-secondary) 40%, transparent); color: var(--text-primary);';
         }
-        return 'background: rgba(153, 166, 249, 0.4); color: #222222;';
+        return 'background: color-mix(in srgb, var(--accent) 40%, transparent); color: var(--text-primary);';
     }
 
     _getEntityScorePercent(entity) {
@@ -1946,7 +2029,7 @@ export class NoteContent extends PlatformElement {
             <div class="entity-search-wrap">
                 <div class="entity-search-input-row">
                     <input
-                        class="form-input entity-search-input"
+                        class="entity-search-input"
                         type="text"
                         autocomplete="off"
                         placeholder=${placeholder}
@@ -2008,7 +2091,7 @@ export class NoteContent extends PlatformElement {
             <div class="entity-search-wrap">
                 <div class="entity-search-input-row">
                     <input
-                        class="form-input entity-search-input"
+                        class="entity-search-input"
                         type="text"
                         autocomplete="off"
                         placeholder=${placeholder}
@@ -2172,50 +2255,57 @@ export class NoteContent extends PlatformElement {
                         <div class="note-title-wrap">
                             ${this.editable ? html`
                                 <input
-                                    class="form-input note-title-input"
+                                    class="note-title-input"
                                     type="text"
                                     .value=${noteTitle}
                                     @input=${this._onTitleInput}
                                     placeholder=${this.i18n.t('note_content.title_placeholder')}
                                 />
-                                <div class="note-edit-meta note-meta-subtype-date">
-                                    <select
-                                        class="form-select note-subtype-select"
-                                        .value=${this._draftSubtype}
-                                        @change=${this._onSubtypeChange}
-                                    >
-                                        <option value="">${this.i18n.t('note_content.no_subtype')}</option>
-                                        ${noteSubtypeOptions.map((item) => html`
-                                            <option value=${item.type_id}>${this._getText(item.name, item.type_id)}</option>
-                                        `)}
-                                    </select>
-                                    <platform-date-picker
-                                        class="note-date-picker"
-                                        mode="date"
-                                        value-format="iso"
-                                        label=${this.i18n.t('notes.date')}
-                                        .value=${this._draftNoteDate}
-                                        @change=${this._onNoteDateChange}
-                                    ></platform-date-picker>
-                                </div>
-                                <div class="note-edit-meta voice-context-row">
-                                    <div class="note-voice-stack">
-                                        <label class="note-field-label">${this.i18n.t('note_content.note_voice')}</label>
-                                        <select
-                                            class="form-select"
-                                            .value=${this._draftVoiceMode}
-                                            @change=${this._onVoiceModeChange}
-                                        >
-                                            <option value="default">${this.i18n.t('note_content.voice_default')}</option>
-                                            <option value="self">${this.i18n.t('note_content.voice_self')}</option>
-                                            <option value="none">${this.i18n.t('note_content.voice_none')}</option>
-                                            <option value="manual">${this.i18n.t('note_content.voice_manual')}</option>
-                                        </select>
-                                        ${this._draftVoiceMode === 'manual' ? this._renderVoiceEntityPick() : ''}
+                                <div class="note-edit-meta-group">
+                                    <div class="note-edit-meta note-meta-subtype-date">
+                                        <div class="note-voice-stack">
+                                            <label class="note-field-label">${this.i18n.t('note_content.no_subtype')}</label>
+                                            <select
+                                                class="form-select note-subtype-select"
+                                                .value=${this._draftSubtype}
+                                                @change=${this._onSubtypeChange}
+                                            >
+                                                <option value="">${this.i18n.t('note_content.no_subtype')}</option>
+                                                ${noteSubtypeOptions.map((item) => html`
+                                                    <option value=${item.type_id}>${this._getText(item.name, item.type_id)}</option>
+                                                `)}
+                                            </select>
+                                        </div>
+                                        <div class="note-voice-stack">
+                                            <label class="note-field-label">${this.i18n.t('notes.date')}</label>
+                                            <platform-date-picker
+                                                class="note-date-picker"
+                                                mode="date"
+                                                value-format="iso"
+                                                .value=${this._draftNoteDate}
+                                                @change=${this._onNoteDateChange}
+                                            ></platform-date-picker>
+                                        </div>
                                     </div>
-                                    <div class="note-context-stack">
-                                        <label class="note-field-label">${this.i18n.t('note_content.context_anchor')}</label>
-                                        ${this._renderCtxEntityPick()}
+                                    <div class="note-edit-meta voice-context-row">
+                                        <div class="note-voice-stack">
+                                            <label class="note-field-label">${this.i18n.t('note_content.note_voice')}</label>
+                                            <select
+                                                class="form-select"
+                                                .value=${this._draftVoiceMode}
+                                                @change=${this._onVoiceModeChange}
+                                            >
+                                                <option value="default">${this.i18n.t('note_content.voice_default')}</option>
+                                                <option value="self">${this.i18n.t('note_content.voice_self')}</option>
+                                                <option value="none">${this.i18n.t('note_content.voice_none')}</option>
+                                                <option value="manual">${this.i18n.t('note_content.voice_manual')}</option>
+                                            </select>
+                                            ${this._draftVoiceMode === 'manual' ? this._renderVoiceEntityPick() : ''}
+                                        </div>
+                                        <div class="note-context-stack">
+                                            <label class="note-field-label">${this.i18n.t('note_content.context_anchor')}</label>
+                                            ${this._renderCtxEntityPick()}
+                                        </div>
                                     </div>
                                 </div>
                             ` : html`<h2 class="note-title">${noteTitle}</h2>`}
@@ -2317,7 +2407,7 @@ export class NoteContent extends PlatformElement {
                     </div>
                     ${this.editable ? html`
                         <textarea
-                            class="form-textarea note-text-input"
+                            class="note-text-input"
                             .value=${noteText}
                             @input=${this._onTextInput}
                             placeholder=${this.i18n.t('notes.placeholder')}

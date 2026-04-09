@@ -1,0 +1,479 @@
+/*
+ * Humanitec UI Kit
+ * Утилитарные CSS-классы на основе дизайн-токенов из tokens.css.
+ * Подключается после tokens.css.
+ *
+ * Палитра: primary = violet (#99A6F9), accent = orange (#FF885C)
+ * Шрифт: Onest
+ * Кнопки: pill (border-radius: 22px)
+ */
+
+/* ========== КНОПКИ ========== */
+
+.kit-btn {
+    display: inline-flex;
+    flex-direction: row;
+    justify-content: center;
+    align-items: center;
+    padding: var(--btn-padding, 8px 24px);
+    font-family: var(--font-sans);
+    font-style: normal;
+    font-weight: var(--btn-font-weight, 400);
+    font-size: var(--btn-font-size, 16px);
+    line-height: var(--btn-line-height, 20px);
+    border-radius: var(--btn-radius, 22px);
+    border: none;
+    cursor: pointer;
+    transition: background var(--duration-fast, 150ms) ease,
+                box-shadow var(--duration-fast, 150ms) ease;
+    text-decoration: none;
+    user-select: none;
+    white-space: nowrap;
+    box-sizing: border-box;
+}
+
+.kit-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+    pointer-events: none;
+}
+
+/* Primary Default (violet) */
+.kit-btn-primary {
+    background: var(--platform-btn-primary-bg);
+    color: var(--platform-btn-primary-text);
+}
+
+.kit-btn-primary:hover:not(:disabled),
+.kit-btn-primary:focus-visible:not(:disabled) {
+    background: rgba(153, 166, 249, 0.9);
+    box-shadow: 0 0 10px rgba(153, 166, 249, 0.6);
+}
+
+/* Primary Accent (orange) */
+.kit-btn-primary-accent {
+    background: var(--platform-btn-accent-bg);
+    color: var(--platform-btn-accent-text);
+}
+
+.kit-btn-primary-accent:hover:not(:disabled),
+.kit-btn-primary-accent:focus-visible:not(:disabled) {
+    background: rgba(255, 136, 92, 0.9);
+    box-shadow: 0 0 10px rgba(255, 136, 92, 0.6);
+}
+
+/* Secondary Default (violet text, transparent bg) */
+.kit-btn-secondary {
+    background: var(--platform-btn-secondary-bg);
+    color: var(--platform-btn-secondary-text);
+}
+
+.kit-btn-secondary:hover:not(:disabled),
+.kit-btn-secondary:focus-visible:not(:disabled) {
+    background: var(--platform-btn-secondary-bg-hover);
+    box-shadow: 0 0 10px rgba(153, 166, 249, 0.2);
+}
+
+/* Secondary Accent (orange text, transparent bg) */
+.kit-btn-secondary-accent {
+    background: var(--platform-btn-accent-secondary-bg);
+    color: var(--platform-btn-accent-secondary-text);
+}
+
+.kit-btn-secondary-accent:hover:not(:disabled),
+.kit-btn-secondary-accent:focus-visible:not(:disabled) {
+    background: var(--platform-btn-accent-secondary-bg-hover);
+    box-shadow: var(--platform-btn-accent-secondary-shadow-hover);
+}
+
+/* Danger */
+.kit-btn-danger {
+    background: var(--error);
+    color: #ffffff;
+}
+
+.kit-btn-danger:hover:not(:disabled),
+.kit-btn-danger:focus-visible:not(:disabled) {
+    background: #e11d48;
+    box-shadow: 0 0 10px rgba(244, 63, 94, 0.4);
+}
+
+/* Ghost */
+.kit-btn-ghost {
+    background: transparent;
+    color: var(--text-secondary);
+}
+
+.kit-btn-ghost:hover:not(:disabled) {
+    color: var(--text-primary);
+    background: var(--glass-tint-subtle);
+}
+
+/* Кнопка-группа */
+.kit-btn-group {
+    display: flex;
+    gap: var(--space-3, 12px);
+}
+
+/* ========== ТЕКСТОВЫЕ ИНПУТЫ ========== */
+
+.kit-input {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    padding: 10px 20px;
+    gap: 8px;
+    width: 100%;
+    height: 44px;
+    background: rgba(34, 34, 34, 0.05);
+    border-radius: var(--btn-radius, 22px);
+    border: 1px solid transparent;
+    font-family: var(--font-sans);
+    font-weight: var(--font-normal, 400);
+    font-size: var(--btn-font-size, 16px);
+    line-height: var(--btn-line-height, 20px);
+    color: var(--text-primary);
+    transition: border-color var(--duration-fast, 150ms) ease,
+                box-shadow var(--duration-fast, 150ms) ease;
+    box-sizing: border-box;
+    outline: none;
+}
+
+.kit-input::placeholder {
+    color: rgba(34, 34, 34, 0.3);
+}
+
+.kit-input:focus,
+.kit-input-focused {
+    border-color: var(--accent);
+    box-shadow: 0 0 8px rgba(153, 166, 249, 0.3);
+}
+
+.kit-input-error {
+    background: rgba(255, 136, 92, 0.15);
+    border-color: var(--accent-secondary);
+}
+
+.kit-input-error-text {
+    font-family: var(--font-sans);
+    font-size: 12px;
+    line-height: 12px;
+    color: var(--accent-secondary);
+    padding: 0 20px;
+}
+
+/* Label над инпутом */
+.kit-input-label {
+    font-family: var(--font-sans);
+    font-size: 12px;
+    line-height: 12px;
+    color: rgba(34, 34, 34, 0.3);
+}
+
+/* Dark theme overrides */
+:root .kit-input,
+[data-theme="dark"] .kit-input {
+    background: var(--glass-tint-medium, rgba(255, 255, 255, 0.05));
+    color: var(--text-primary);
+}
+
+:root .kit-input::placeholder,
+[data-theme="dark"] .kit-input::placeholder {
+    color: var(--text-tertiary);
+}
+
+:root .kit-input-label,
+[data-theme="dark"] .kit-input-label {
+    color: var(--text-tertiary);
+}
+
+:root .kit-input-error,
+[data-theme="dark"] .kit-input-error {
+    background: rgba(255, 136, 92, 0.1);
+}
+
+/* ========== ТИПОГРАФИКА ========== */
+
+.kit-heading-1 {
+    font-family: var(--font-sans);
+    font-weight: var(--font-bold, 700);
+    font-size: var(--text-3xl, 2rem);
+    line-height: var(--leading-tight, 1.25);
+    color: var(--text-primary);
+}
+
+.kit-heading-2 {
+    font-family: var(--font-sans);
+    font-weight: var(--font-semibold, 600);
+    font-size: var(--text-2xl, 1.5rem);
+    line-height: var(--leading-tight, 1.25);
+    color: var(--text-primary);
+}
+
+.kit-heading-3 {
+    font-family: var(--font-sans);
+    font-weight: var(--font-medium, 500);
+    font-size: var(--text-xl, 1.25rem);
+    line-height: var(--leading-tight, 1.25);
+    color: var(--text-primary);
+}
+
+.kit-body {
+    font-family: var(--font-sans);
+    font-weight: var(--font-normal, 400);
+    font-size: var(--text-base, 0.9375rem);
+    line-height: var(--leading-normal, 1.5);
+    color: var(--text-primary);
+}
+
+.kit-caption {
+    font-family: var(--font-sans);
+    font-weight: var(--font-normal, 400);
+    font-size: var(--text-xs, 0.75rem);
+    line-height: 1;
+    color: var(--text-tertiary);
+}
+
+/* ========== КАРТОЧКИ ========== */
+
+.kit-card {
+    background: var(--glass-solid-medium);
+    backdrop-filter: blur(var(--glass-blur-medium, 40px));
+    -webkit-backdrop-filter: blur(var(--glass-blur-medium, 40px));
+    border: 1px solid var(--glass-border-subtle);
+    border-radius: var(--radius-lg, 16px);
+    box-shadow: var(--glass-shadow-subtle);
+    padding: var(--space-4, 16px);
+}
+
+.kit-card-elevated {
+    background: var(--glass-solid-strong);
+    border: 1px solid var(--glass-border-medium);
+    border-radius: var(--radius-xl, 20px);
+    box-shadow: var(--glass-shadow-medium);
+    padding: var(--space-6, 24px);
+}
+
+/* ========== ГРАДИЕНТНЫЕ ЭЛЕМЕНТЫ ========== */
+
+.kit-gradient-title {
+    background: var(--accent-gradient);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+}
+
+.kit-gradient-border {
+    border: 1px solid transparent;
+    background-clip: padding-box;
+    position: relative;
+}
+
+.kit-gradient-border::before {
+    content: '';
+    position: absolute;
+    inset: -1px;
+    border-radius: inherit;
+    background: var(--accent-gradient);
+    z-index: -1;
+    mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+    -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+    mask-composite: xor;
+    -webkit-mask-composite: xor;
+    padding: 1px;
+}
+
+/* ========== ЧИПЫ / ТЕГИ ========== */
+
+.kit-chip {
+    display: inline-flex;
+    align-items: center;
+    padding: 4px 12px;
+    border-radius: var(--radius-full, 9999px);
+    font-family: var(--font-sans);
+    font-size: var(--text-xs, 0.75rem);
+    font-weight: var(--font-medium, 500);
+    line-height: 1.4;
+}
+
+.kit-chip-violet {
+    background: rgba(153, 166, 249, 0.15);
+    color: var(--accent);
+}
+
+.kit-chip-orange {
+    background: rgba(255, 136, 92, 0.15);
+    color: var(--accent-secondary);
+}
+
+.kit-chip-blue {
+    background: var(--crm-summary-chip-blue-bg);
+    color: #60a5fa;
+}
+
+.kit-chip-cyan {
+    background: var(--crm-summary-chip-cyan-bg);
+    color: #67e8f9;
+}
+
+/* ========== ИКОНКИ (размеры) ========== */
+
+.kit-icon-sm {
+    width: var(--icon-size-sm, 18px);
+    height: var(--icon-size-sm, 18px);
+}
+
+.kit-icon-md {
+    width: var(--icon-size-md, 22px);
+    height: var(--icon-size-md, 22px);
+}
+
+.kit-icon-lg {
+    width: var(--icon-size-lg, 28px);
+    height: var(--icon-size-lg, 28px);
+}
+
+/* ========== БОКОВОЕ МЕНЮ ========== */
+
+.kit-sidebar-item {
+    display: flex;
+    align-items: center;
+    gap: var(--space-3, 12px);
+    padding: var(--space-3, 12px) var(--space-4, 16px);
+    border-radius: var(--radius-md, 12px);
+    color: var(--text-secondary);
+    cursor: pointer;
+    transition: all var(--duration-fast, 150ms) ease;
+}
+
+.kit-sidebar-item:hover {
+    background: var(--glass-tint-medium);
+    color: var(--text-primary);
+}
+
+.kit-sidebar-item-active {
+    background: var(--accent-subtle);
+    color: var(--accent);
+}
+
+/* ========== АВАТАР ========== */
+
+.kit-avatar {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: var(--radius-full, 9999px);
+    background: var(--accent-gradient);
+    color: #ffffff;
+    font-family: var(--font-sans);
+    font-weight: var(--font-semibold, 600);
+    overflow: hidden;
+}
+
+.kit-avatar-sm {
+    width: 32px;
+    height: 32px;
+    font-size: var(--text-xs, 0.75rem);
+}
+
+.kit-avatar-md {
+    width: 40px;
+    height: 40px;
+    font-size: var(--text-sm, 0.8125rem);
+}
+
+.kit-avatar-lg {
+    width: 48px;
+    height: 48px;
+    font-size: var(--text-base, 0.9375rem);
+}
+
+/* ========== AI BUBBLE ========== */
+
+.kit-ai-bubble {
+    background: var(--glass-solid-medium);
+    border: 1px solid var(--glass-border-subtle);
+    border-radius: var(--radius-xl, 20px);
+    padding: var(--space-4, 16px);
+    font-family: var(--font-sans);
+    font-size: var(--text-base, 0.9375rem);
+    line-height: var(--leading-normal, 1.5);
+    color: var(--text-primary);
+}
+
+.kit-ai-bubble-accent {
+    border-color: rgba(153, 166, 249, 0.2);
+    box-shadow: 0 0 16px rgba(153, 166, 249, 0.1);
+}
+
+/* ========== КАЛЕНДАРЬ ========== */
+
+.kit-calendar-day {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 36px;
+    height: 36px;
+    border-radius: var(--radius-full, 9999px);
+    font-family: var(--font-sans);
+    font-size: var(--text-sm, 0.8125rem);
+    color: var(--text-primary);
+    cursor: pointer;
+    transition: background var(--duration-fast, 150ms) ease;
+}
+
+.kit-calendar-day:hover {
+    background: var(--glass-tint-medium);
+}
+
+.kit-calendar-day-selected {
+    background: var(--accent);
+    color: #ffffff;
+}
+
+.kit-calendar-day-today {
+    border: 1px solid var(--accent);
+    color: var(--accent);
+}
+
+.kit-calendar-day-range {
+    background: var(--accent-subtle);
+    color: var(--accent);
+    border-radius: 0;
+}
+
+/* ========== SUMMARY CARD ========== */
+
+.kit-summary-card {
+    background: var(--crm-summary-bg);
+    border: 1px solid var(--crm-summary-stroke);
+    border-radius: var(--radius-xl, 20px);
+    padding: var(--space-6, 24px);
+}
+
+.kit-summary-title {
+    background: var(--accent-gradient);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+    font-family: var(--font-sans);
+    font-weight: var(--font-semibold, 600);
+    font-size: var(--text-lg, 1.0625rem);
+}
+
+.kit-summary-meta {
+    color: var(--crm-summary-meta);
+    font-family: var(--font-sans);
+    font-size: var(--text-xs, 0.75rem);
+}
+
+/* ========== LOGO ========== */
+
+.kit-logo-gradient {
+    background: var(--accent-gradient);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+    font-family: var(--font-sans);
+    font-weight: var(--font-bold, 700);
+}

@@ -47,14 +47,14 @@ export class FlowsSidebar extends PlatformElement {
                 background: var(--accent);
                 border: none;
                 cursor: pointer;
-                box-shadow: 0 2px 6px rgba(16, 185, 129, 0.2);
+                box-shadow: 0 2px 6px rgba(153, 166, 249, 0.2);
                 transition: all var(--duration-normal) var(--easing-default);
             }
 
             .create-btn:hover {
                 background: var(--accent-hover);
                 transform: scale(1.1);
-                box-shadow: 0 3px 8px rgba(16, 185, 129, 0.3);
+                box-shadow: 0 3px 8px rgba(153, 166, 249, 0.3);
             }
 
             sidebar-section {

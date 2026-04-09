@@ -55,9 +55,39 @@
     <script type="module">
         import '/static/core/lib/components/app-loader.js';
     </script>
+
+    <style>
+        sync-app:not(:defined) { opacity: 0; }
+
+        app-loader:not(:defined) {
+            position: fixed;
+            inset: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: var(--bg-gradient);
+            z-index: 9999;
+            color: rgba(255, 255, 255, 0.5);
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+        }
+
+        app-loader:not(:defined)::after {
+            content: 'Sync';
+        }
+    </style>
 </head>
 <body class="platform-shell">
+    <app-loader id="app-loader" fullscreen></app-loader>
     <sync-app></sync-app>
     <script type="module" src="/sync/ui/static/index.js"></script>
+    <script>
+        customElements.whenDefined('sync-app').then(() => {
+            const loader = document.getElementById('app-loader');
+            if (loader) {
+                loader.classList.add('hidden');
+                setTimeout(() => loader.remove(), 400);
+            }
+        });
+    </script>
 </body>
 </html>

@@ -40,7 +40,10 @@ def _analyzed_note() -> SimpleNamespace:
 def _build_service() -> EntityService:
     entity_type_repo = AsyncMock()
     entity_type_repo.get_by_type_id = AsyncMock(
-        return_value=SimpleNamespace(namespace_ids=["default", "sales", "support"])
+        return_value=SimpleNamespace(
+            namespace_ids=["default", "sales", "support"],
+            required_fields={},
+        )
     )
     namespace_repo = AsyncMock()
     namespace_repo.get = AsyncMock(return_value=SimpleNamespace(name="default"))
@@ -574,6 +577,7 @@ async def test_update_entity_note_date_triggers_both_dates(monkeypatch):
         namespace="sales",
         updated_at=None,
         description="old",
+        attributes={},
     )
     service._entity_repo.get = AsyncMock(return_value=existing)
     service._entity_repo.update = AsyncMock()

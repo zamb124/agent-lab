@@ -189,7 +189,7 @@ export class OfficeSidebar extends PlatformElement {
                 width: 24px;
                 height: 24px;
                 border: none;
-                background: var(--crm-button-primary-bg);
+                background: var(--accent);
                 color: var(--text-inverse);
                 border-radius: var(--radius-md);
                 cursor: pointer;
@@ -198,7 +198,7 @@ export class OfficeSidebar extends PlatformElement {
             }
 
             .namespace-add-btn:hover {
-                background: var(--crm-button-primary-hover);
+                background: var(--platform-btn-primary-hover);
                 transform: scale(1.05);
             }
 

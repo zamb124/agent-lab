@@ -7,6 +7,7 @@ import { t } from '@platform/services/i18n/i18n.service.js';
 export class SyncAPIService extends BaseService {
     constructor(baseURL = '/sync/api/v1') {
         super(baseURL);
+        this._crmApi = new BaseService('/crm/api/v1');
     }
 
     async getSpaces(limit = 50) {
@@ -50,11 +51,7 @@ export class SyncAPIService extends BaseService {
     }
 
     async getCrmNamespaces() {
-        const response = await fetch('/crm/api/v1/namespaces', { credentials: 'include' });
-        if (!response.ok) {
-            throw new Error(t('sync_api.err_crm_ns_http', { status: response.status }));
-        }
-        const payload = await response.json();
+        const payload = await this._crmApi.get('/namespaces');
         if (!payload || !Array.isArray(payload.namespaces)) {
             throw new Error(t('sync_api.err_crm_ns_payload', {}));
         }
@@ -306,48 +303,20 @@ export class SyncAPIService extends BaseService {
         if (typeof typeId !== 'string' || typeId === '') {
             throw new Error('typeId is required');
         }
-        const response = await fetch(
-            `/crm/api/v1/entity-types/${encodeURIComponent(typeId)}`,
-            { credentials: 'include' },
-        );
-        if (response.status === 404) return null;
-        if (!response.ok) {
-            throw new Error(`CRM entity-types GET failed: ${response.status}`);
-        }
-        return response.json();
+        return this._crmApi.get(`/entity-types/${encodeURIComponent(typeId)}`);
     }
 
     /**
      * @param {object} data
      */
     async createCrmEntityType(data) {
-        const response = await fetch('/crm/api/v1/entity-types', {
-            method: 'POST',
-            credentials: 'include',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(data),
-        });
-        if (!response.ok) {
-            const detail = await response.text().catch(() => '');
-            throw new Error(`CRM entity-types POST failed: ${response.status} ${detail}`);
-        }
-        return response.json();
+        return this._crmApi.post('/entity-types', data);
     }
 
     /**
      * @param {object} data
      */
     async createCrmEntity(data) {
-        const response = await fetch('/crm/api/v1/entities', {
-            method: 'POST',
-            credentials: 'include',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(data),
-        });
-        if (!response.ok) {
-            const detail = await response.text().catch(() => '');
-            throw new Error(`CRM entities POST failed: ${response.status} ${detail}`);
-        }
-        return response.json();
+        return this._crmApi.post('/entities', data);
     }
 }

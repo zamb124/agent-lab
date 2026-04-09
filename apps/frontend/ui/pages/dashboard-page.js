@@ -346,9 +346,7 @@ export class DashboardPage extends PlatformElement {
                     <span class="service-icon">
                         <img src="${service.logo}" alt="${service.name}">
                     </span>
-                    <svg class="service-go-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <polyline points="9 18 15 12 9 6"></polyline>
-                    </svg>
+                    <platform-icon class="service-go-icon" name="chevron-right" size="20"></platform-icon>
                 </div>
                 <h3 class="service-name">${service.name}</h3>
                 <p class="service-description">${service.description}</p>

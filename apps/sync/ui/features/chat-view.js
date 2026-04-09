@@ -172,9 +172,9 @@ export class ChatView extends PlatformElement {
                 padding: 8px 10px 8px 12px;
                 border-radius: var(--radius-lg);
                 border: 1px solid rgba(255, 255, 255, 0.22);
-                background: linear-gradient(135deg, #0d9488 0%, #059669 48%, #047857 100%);
+                background: var(--accent-gradient);
                 box-shadow:
-                    0 4px 18px rgba(5, 150, 105, 0.32),
+                    0 4px 18px rgba(153, 166, 249, 0.32),
                     inset 0 1px 0 rgba(255, 255, 255, 0.2);
                 color: rgba(255, 255, 255, 0.98);
             }
@@ -182,7 +182,7 @@ export class ChatView extends PlatformElement {
             :host-context([data-theme="light"]) .header-call-banner--integrated {
                 border-color: rgba(255, 255, 255, 0.35);
                 box-shadow:
-                    0 4px 16px rgba(5, 150, 105, 0.22),
+                    0 4px 16px rgba(153, 166, 249, 0.22),
                     inset 0 1px 0 rgba(255, 255, 255, 0.35);
             }
 
@@ -652,9 +652,9 @@ export class ChatView extends PlatformElement {
             }
 
             .ws-badge.open {
-                background: rgba(16, 185, 129, 0.1);
-                border-color: rgba(16, 185, 129, 0.4);
-                color: rgb(16, 185, 129);
+                background: rgba(153, 166, 249, 0.1);
+                border-color: rgba(153, 166, 249, 0.4);
+                color: var(--success);
             }
 
             .ws-badge.connecting {
@@ -1333,11 +1333,7 @@ export class ChatView extends PlatformElement {
                                         aria-haspopup="true"
                                         @click=${this._toggleHeaderMoreMenu}
                                     >
-                                        <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-                                            <circle cx="5" cy="12" r="2"/>
-                                            <circle cx="12" cy="12" r="2"/>
-                                            <circle cx="19" cy="12" r="2"/>
-                                        </svg>
+                                        <platform-icon name="more-vert" size="18" filled aria-hidden="true"></platform-icon>
                                     </button>
                                     ${this._headerMoreOpen ? html`
                                         <div class="header-more-menu" @pointerdown=${(e) => e.stopPropagation()}>
@@ -1378,9 +1374,7 @@ export class ChatView extends PlatformElement {
                                 aria-label=${ts('chat_view.call_banner_hangup_aria')}
                                 @click=${this._hangupCallFromBanner}
                             >
-                                <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-                                    <path d="M6.6 10.8c1.4 2.8 3.8 5.1 6.6 6.6l2.2-2.2c.3-.3.7-.4 1-.2 1.1.4 2.3.6 3.6.6.6 0 1 .4 1 1V20c0 .6-.4 1-1 1C9.6 21 3 14.4 3 6c0-.6.4-1 1-1h3.5c.6 0 1 .4 1 1 0 1.3.2 2.5.6 3.6.1.3 0 .7-.2 1L6.6 10.8z"/>
-                                </svg>
+                                <platform-icon name="phone-ended" size="20" filled aria-hidden="true"></platform-icon>
                             </button>
                         </div>
                     </div>
@@ -1414,11 +1408,7 @@ export class ChatView extends PlatformElement {
                                     aria-haspopup="true"
                                     @click=${this._toggleHeaderMoreMenu}
                                 >
-                                    <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-                                        <circle cx="5" cy="12" r="2"/>
-                                        <circle cx="12" cy="12" r="2"/>
-                                        <circle cx="19" cy="12" r="2"/>
-                                    </svg>
+                                    <platform-icon name="more-vert" size="18" filled aria-hidden="true"></platform-icon>
                                 </button>
                                 ${this._headerMoreOpen ? html`
                                     <div class="header-more-menu" @pointerdown=${(e) => e.stopPropagation()}>
@@ -1434,10 +1424,7 @@ export class ChatView extends PlatformElement {
         this._startCall();
     }}
                                             >
-                                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                                                    <polygon points="23 7 16 12 23 17 23 7"/>
-                                                    <rect x="1" y="5" width="15" height="14" rx="2" ry="2"/>
-                                                </svg>
+                                                <platform-icon name="video-call" size="16" filled aria-hidden="true"></platform-icon>
                                                 <span>${ts('chat_view.call')}</span>
                                             </button>
                                         ` : ''}
@@ -1475,10 +1462,7 @@ export class ChatView extends PlatformElement {
 
                             ${selectedChannelId && !callBanner ? html`
                             <button type="button" class="icon-btn" title=${ts('chat_view.call_in_channel_title')} aria-label=${ts('chat_view.call_in_channel_aria')} @click=${this._startCall}>
-                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                                    <polygon points="23 7 16 12 23 17 23 7"/>
-                                    <rect x="1" y="5" width="15" height="14" rx="2" ry="2"/>
-                                </svg>
+                                <platform-icon name="video-call" size="16" filled aria-hidden="true"></platform-icon>
                             </button>
                         ` : ''}
 

@@ -205,8 +205,8 @@ export class SpanDetailsModal extends PlatformModal {
             }
             
             .chat-message.assistant {
-                background: rgba(16, 185, 129, 0.1);
-                border-left: 3px solid #10b981;
+                background: rgba(153, 166, 249, 0.1);
+                border-left: 3px solid var(--accent);
             }
             
             .chat-message.tool {

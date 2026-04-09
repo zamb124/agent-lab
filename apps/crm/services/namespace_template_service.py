@@ -80,6 +80,23 @@ class NamespaceTemplateService:
                 )
                 runtime_type = await self._entity_type_repo.create(runtime_type)
                 existing_types_map[runtime_type.type_id] = runtime_type
+            else:
+                await self._entity_type_repo.update_metadata(
+                    runtime_type.type_id,
+                    company_id=company_id,
+                    parent_type_id=item.parent_type_id,
+                    name=item.name,
+                    description=item.description,
+                    prompt=item.prompt,
+                    required_fields=item.required_fields,
+                    optional_fields=item.optional_fields,
+                    icon=item.icon,
+                    color=item.color,
+                    is_event=item.is_event,
+                    check_duplicates=item.check_duplicates,
+                    weight_coefficient=item.weight_coefficient,
+                    is_context_anchor=item.is_context_anchor,
+                )
 
             current_namespaces = runtime_type.namespace_ids or []
             if namespace_name not in current_namespaces:

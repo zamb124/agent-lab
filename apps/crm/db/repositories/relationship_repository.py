@@ -131,21 +131,6 @@ class RelationshipRepository(BaseCRMRepository[Relationship]):
             logger.info(f"Deleted {result.rowcount} relationships for entity:{entity_id}")
             return result.rowcount
     
-    async def get_by_type(
-        self,
-        relationship_type: str,
-        limit: int = 100
-    ) -> List[Relationship]:
-        """Получает связи по типу"""
-        company_id = self._get_company_id()
-        async with self._db.session() as session:
-            stmt = select(Relationship).where(
-                Relationship.company_id == company_id,
-                Relationship.relationship_type == relationship_type
-            ).limit(limit)
-            result = await session.execute(stmt)
-            return list(result.scalars().all())
-    
     async def get_outgoing(
         self,
         source_entity_id: str,
@@ -157,25 +142,6 @@ class RelationshipRepository(BaseCRMRepository[Relationship]):
             stmt = select(Relationship).where(
                 Relationship.company_id == company_id,
                 Relationship.source_entity_id == source_entity_id
-            )
-            
-            if relationship_type:
-                stmt = stmt.where(Relationship.relationship_type == relationship_type)
-            
-            result = await session.execute(stmt)
-            return list(result.scalars().all())
-    
-    async def get_incoming(
-        self,
-        target_entity_id: str,
-        relationship_type: Optional[str] = None
-    ) -> List[Relationship]:
-        """Получает входящие связи к сущности"""
-        company_id = self._get_company_id()
-        async with self._db.session() as session:
-            stmt = select(Relationship).where(
-                Relationship.company_id == company_id,
-                Relationship.target_entity_id == target_entity_id
             )
             
             if relationship_type:

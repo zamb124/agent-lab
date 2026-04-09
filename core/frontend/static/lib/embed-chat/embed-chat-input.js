@@ -1,4 +1,5 @@
 import { LitElement, html, css } from 'lit';
+import '@platform/lib/components/platform-icon.js';
 
 export class EmbedChatInput extends LitElement {
     static properties = {
@@ -300,14 +301,7 @@ export class EmbedChatInput extends LitElement {
                     @click=${this._openFilePicker}
                     title=${this._label('attach', 'Attachments')}
                 >
-                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-                        <path
-                            d="M12 5v14M5 12h14"
-                            stroke="currentColor"
-                            stroke-width="2"
-                            stroke-linecap="round"
-                        />
-                    </svg>
+                    <platform-icon name="plus" size="20" aria-hidden="true"></platform-icon>
                 </button>
                 <div class="grow">
                     <textarea

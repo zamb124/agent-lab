@@ -50,7 +50,7 @@ export class RawJsonModal extends PlatformModal {
             
             .download-json-btn:hover {
                 background: var(--accent-hover);
-                box-shadow: 0 2px 6px rgba(16, 185, 129, 0.3);
+                box-shadow: 0 2px 6px rgba(153, 166, 249, 0.3);
                 transform: translateY(-1px);
             }
         `

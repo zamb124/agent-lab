@@ -97,6 +97,12 @@ export class SettingsHubPage extends PlatformElement {
                 title: this.i18n.t('settings_hub.card_imports_title'),
                 description: this.i18n.t('settings_hub.card_imports_description'),
             },
+            {
+                id: 'relationship_types',
+                icon: 'link',
+                title: this.i18n.t('settings_hub.card_rel_types_title'),
+                description: this.i18n.t('settings_hub.card_rel_types_description'),
+            },
         ];
     }
 

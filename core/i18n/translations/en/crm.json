@@ -140,7 +140,12 @@
         "empty_description": "Entities are created from notes",
         "list_create_tooltip": "Create entity",
         "list_empty_cta": "Create your first entity",
-        "search_placeholder": "Semantic entity search...",
+        "search_placeholder": "Search entities...",
+        "search_modes": {
+            "text": "Text",
+            "semantic": "Semantic",
+            "hybrid": "Hybrid"
+        },
         "name": "Name",
         "type": "Type",
         "attributes": "Attributes",
@@ -156,7 +161,13 @@
             "merge": "Merge",
             "ignore": "Ignore"
         },
-        "merge_first_marked": "First entity marked. Shift+click another row to merge."
+        "merge_first_marked": "First entity marked. Shift+click another row to merge.",
+        "bulk": {
+            "selected": "selected",
+            "change_status": "Change status",
+            "delete": "Delete",
+            "cancel": "Cancel"
+        }
     },
     "tasks": {
         "title": "Tasks",
@@ -853,7 +864,7 @@
         "delete_entity_confirm": "Delete \"{{name}}\"? Relationships and attachments will be removed permanently.",
         "delete_entity_tooltip": "Delete entity",
         "delete_entity_failed": "Could not delete entity",
-        "merge_dnd_hint": "Drag a card by the handle on the right onto another card to merge. Or Shift+click two cards in turn.",
+        "merge_dnd_hint": "Drag a card by the handle onto another to merge. Shift+click — merge, Ctrl+click — select.",
         "drag_merge_handle": "Drag onto another card to merge"
     },
     "import_wizard_cta": {
@@ -870,7 +881,9 @@
         "card_spaces_title": "Space settings",
         "card_spaces_description": "Manage types and descriptions of your company spaces. Safe to add and edit metadata.",
         "card_imports_title": "Imports",
-        "card_imports_description": "Knowledge base import log per space: status, rollback, and created entities."
+        "card_imports_description": "Knowledge base import log per space: status, rollback, and created entities.",
+        "card_rel_types_title": "Relationship types",
+        "card_rel_types_description": "Manage relationship types between entities: direction, inverse types, weights, and visual styling."
     },
     "daily_notes_page": {
         "summary_need_single_day": "Summary is built for a single day. Narrow the range to one date.",
@@ -1097,5 +1110,32 @@
         "err_text_too_long": "Text exceeds {{max}} characters: shorten it or import from file without edits in preview",
         "err_upload": "Invalid file upload response",
         "confirm_rollback": "Delete all entities and relationships created by this import?"
+    },
+    "relationship_types_page": {
+        "back": "Settings",
+        "hero_title": "Relationship types",
+        "hero_subtitle": "Manage relationship types between entities",
+        "add": "Add type",
+        "loading": "Loading...",
+        "empty": "No relationship types yet",
+        "system": "System",
+        "directed": "Directed",
+        "undirected": "Undirected",
+        "weight": "Weight",
+        "form_title": "New relationship type",
+        "label_type_id": "type_id",
+        "label_name": "Name",
+        "label_description": "Description",
+        "label_inverse": "Inverse type",
+        "label_weight": "Default weight",
+        "label_color": "Color",
+        "label_directed": "Directed relationship",
+        "create": "Create",
+        "cancel": "Cancel",
+        "saving": "Saving...",
+        "success_created": "Relationship type created",
+        "err_type_id_required": "type_id is required",
+        "err_name_required": "Name is required",
+        "err_create": "Failed to create relationship type"
     }
 }

@@ -612,9 +612,7 @@ export class LandingHeader extends PlatformElement {
                     <div class=${classMap({ 'nav-dropdown': true, 'open': this.productsDropdownOpen })}>
                         <button class="nav-dropdown-trigger" @click=${this._toggleProductsDropdown}>
                             ${h('solutions')}
-                            <svg viewBox="0 0 12 12" fill="currentColor">
-                                <path d="M2.5 4.5L6 8L9.5 4.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
-                            </svg>
+                            <platform-icon name="arrow-down" size="12"></platform-icon>
                         </button>
                         <div class="nav-dropdown-menu">
                             <a href="/products/agents" class="nav-dropdown-item" @click=${this._handleNavClick}>

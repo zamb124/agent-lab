@@ -5,10 +5,10 @@ import { html, css } from 'lit';
 import { PlatformModal } from '@platform/lib/components/glass-modal.js';
 
 const TEMPLATE_IDS = [
-    { id: 'react', icon: 'ai', color: 'linear-gradient(135deg, #10b981 0%, #06b6d4 100%)' },
+    { id: 'react', icon: 'ai', color: 'linear-gradient(135deg, #99A6F9 0%, #FF885C 100%)' },
     { id: 'graph', icon: 'workflow', color: 'linear-gradient(135deg, #8b5cf6 0%, #ec4899 100%)' },
     { id: 'multi_agent', icon: 'agent', color: 'linear-gradient(135deg, #06b6d4 0%, #3b82f6 100%)' },
-    { id: 'code', icon: 'code', color: 'linear-gradient(135deg, #84cc16 0%, #10b981 100%)' },
+    { id: 'code', icon: 'code', color: 'linear-gradient(135deg, #84cc16 0%, #99A6F9 100%)' },
     { id: 'external', icon: 'cloud', color: 'linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%)' },
 ];
 

@@ -12,6 +12,8 @@ import { html, css } from 'lit';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
 import { PlatformServices } from '@platform/lib/services/platform-services-bootstrap.js';
 import { i18nDefaultNamespaceForBaseUrl } from '@platform/services/i18n/i18n.service.js';
+import { buttonStyles } from '@platform/lib/styles/shared/button.styles.js';
+import '@platform/lib/components/platform-icon.js';
 import { hueFromString } from '../utils/sync-hue.js';
 
 const token = window.location.pathname.split('/').at(-1);
@@ -29,6 +31,7 @@ class CallJoinPage extends PlatformElement {
 
     static styles = [
         PlatformElement.styles,
+        buttonStyles,
         css`
         :host {
             display: flex;
@@ -156,39 +159,8 @@ class CallJoinPage extends PlatformElement {
         input::placeholder { color: var(--text-tertiary, rgba(255,255,255,0.35)); }
 
         .btn {
-            padding: 13px 24px;
-            font-size: 15px;
-            font-weight: 600;
-            border-radius: var(--radius-lg, 12px);
-            border: none;
-            cursor: pointer;
-            transition: all 0.15s;
             width: 100%;
         }
-
-        .btn-primary {
-            background: var(--accent-primary, #6366f1);
-            color: #fff;
-        }
-
-        .btn-primary:hover:not(:disabled) {
-            background: var(--accent-primary-hover, #4f52cc);
-        }
-
-        .btn-primary:disabled {
-            opacity: 0.5;
-            cursor: not-allowed;
-        }
-
-        .btn-ghost {
-            background: transparent;
-            color: var(--text-secondary, rgba(255,255,255,0.6));
-            border: 1px solid var(--glass-border-medium, rgba(255,255,255,0.16));
-            font-size: 13px;
-            padding: 10px 16px;
-        }
-
-        .btn-ghost:hover { background: var(--glass-solid-subtle, rgba(255,255,255,0.06)); }
 
         .error {
             color: var(--color-error, #f87171);
@@ -409,9 +381,7 @@ class CallJoinPage extends PlatformElement {
         return html`
             <div class="title-row">
                 <div class="call-icon" aria-hidden="true">
-                    <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                        <path d="M22 16.92v3a2 2 0 01-2.18 2 19.79 19.79 0 01-8.63-3.07 19.5 19.5 0 01-6-6 19.79 19.79 0 01-3.07-8.67A2 2 0 014.11 2h3a2 2 0 012 1.72 12.84 12.84 0 00.7 2.81 2 2 0 01-.45 2.11L8.09 9.91a16 16 0 006 6l1.27-1.27a2 2 0 012.11-.45 12.84 12.84 0 002.81.7A2 2 0 0122 16.92z"/>
-                    </svg>
+                    <platform-icon name="phone-call" size="28" filled aria-hidden="true"></platform-icon>
                 </div>
                 <h1>${this._tp('call_join.title')}</h1>
             </div>

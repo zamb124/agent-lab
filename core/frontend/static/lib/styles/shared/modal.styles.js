@@ -313,10 +313,10 @@ export const modalUtilityStyles = css`
     }
     
     .modal-icon.success {
-        background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+        background: var(--accent-gradient);
         color: white;
         box-shadow: 
-            0 8px 24px rgba(16, 185, 129, 0.35),
+            0 8px 24px rgba(153, 166, 249, 0.35),
             inset 0 1px 0 rgba(255, 255, 255, 0.3);
     }
     

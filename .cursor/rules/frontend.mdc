@@ -40,7 +40,7 @@ LitElement (Lit)
 
 ## Embed-чат и AI UI-блоки
 
-- **Пакет:** `core/frontend/static/lib/embed-chat/` — автономный слой без импортов из `apps/*`: `streamEmbedA2A`, `<platform-embed-chat>`, **`<platform-embed-chat-drawer>`** (FAB + панель, `LitElement`, без `platform-icon`; иконка FAB = встроенная копия **`core/frontend/static/assets/icons/ai.svg`**; FAB **не рендерится**, пока панель открыта; при закрытии панели **`<platform-embed-chat>`** остаётся в DOM (**`panel--collapsed`**: `visibility` / `opacity` / `pointer-events`, **`inert`**), история и **`contextId`** не сбрасываются; сброс — кнопка **«новый чат»** или перезагрузка страницы; панель с отступами от краёв, **`border-radius: 25px`**; расширение (**`panel--maximized`**): viewport **≥768px** — поля **24px** от краёв (крупное окно, без нативного Fullscreen API); **max-width: 767px** — как раньше на весь экран + **`requestFullscreen`** на **`.panel`** при поддержке; выход — повторный клик, **Esc** или закрытие панели; **`fullscreenchange`** и **`_panelNativeFullscreen`** только для нативного FS; строки **`panel_fullscreen`** / **`panel_exit_fullscreen`**, **`fab_aria_open_unread`** в **`embed-chat-default-labels.js`**; при закрытой панели после завершения ответа на сообщение пользователя — **`humanitec-embed-chat-assistant-reply-completed`** (bubbles, composed) с **`<platform-embed-chat>`**, на FAB бейдж (**`fabUnreadCount`**, до **9+** на значке, точное число в **`aria-label`**); атрибут **`theme`**: `light` | `dark` | **`auto`** — при `auto` тема как у приложения: **`document.documentElement[data-theme]`** + событие **`theme-change`**; **`resolveEmbedChatTheme`** в **`embed-chat-theme.js`**), единый **`--embed-radius: 25px`** в чате и блоках тулов, `embed-chat-default-labels.js`, `reduceEmbedStreamEvent`, `tool-result-blocks.js`, реестр блоков.
+- **Пакет:** `core/frontend/static/lib/embed-chat/` — автономный слой без импортов из `apps/*`: `streamEmbedA2A`, `<platform-embed-chat>`, **`<platform-embed-chat-drawer>`** (FAB + панель, `LitElement`; кнопки шапки — **`platform-icon`**; иконка FAB = встроенная копия **`core/frontend/static/assets/icons/ai.svg`**; FAB **не рендерится**, пока панель открыта; при закрытии панели **`<platform-embed-chat>`** остаётся в DOM (**`panel--collapsed`**: `visibility` / `opacity` / `pointer-events`, **`inert`**), история и **`contextId`** не сбрасываются; сброс — кнопка **«новый чат»** или перезагрузка страницы; панель с отступами от краёв, **`border-radius: 25px`**; расширение (**`panel--maximized`**): viewport **≥768px** — поля **24px** от краёв (крупное окно, без нативного Fullscreen API); **max-width: 767px** — как раньше на весь экран + **`requestFullscreen`** на **`.panel`** при поддержке; выход — повторный клик, **Esc** или закрытие панели; **`fullscreenchange`** и **`_panelNativeFullscreen`** только для нативного FS; строки **`panel_fullscreen`** / **`panel_exit_fullscreen`**, **`fab_aria_open_unread`** в **`embed-chat-default-labels.js`**; при закрытой панели после завершения ответа на сообщение пользователя — **`humanitec-embed-chat-assistant-reply-completed`** (bubbles, composed) с **`<platform-embed-chat>`**, на FAB бейдж (**`fabUnreadCount`**, до **9+** на значке, точное число в **`aria-label`**); атрибут **`theme`**: `light` | `dark` | **`auto`** — при `auto` тема как у приложения: **`document.documentElement[data-theme]`** + событие **`theme-change`**; **`resolveEmbedChatTheme`** в **`embed-chat-theme.js`**), единый **`--embed-radius: 25px`** в чате и блоках тулов, `embed-chat-default-labels.js`, `reduceEmbedStreamEvent`, `tool-result-blocks.js`, реестр блоков.
 - **Import map:** префикс `"@platform/lib/embed-chat/"` → `/static/core/lib/embed-chat/` (как в `apps/crm/ui/index.html`); в коде приложений импорт только через `@platform/lib/embed-chat/...`, не через голый `/static/core/lib/...`.
 - **Переключение drawer с хоста:** `window.dispatchEvent(new CustomEvent('humanitec-embed-chat-toggle', { bubbles: true }))` (имя переопределяется атрибутом **`toggle-event-name`** на drawer).
 - **Параметры URL** (drawer при **`connectedCallback`** и **`popstate`**): **`embed-chat-url-params.js`** — **`embed_theme`** | **`embed-theme`**, **`embed_lang`** | **`embed_locale`** (`ru`|`en`|`auto`), **`embed_width`** | **`embed-panel-width`** (число → `px` или CSS), **`embed_max_height`** | **`embed-panel-max-height`**, **`embed_locale_control`**=`1`|`0` (переключатель языка в композере), **`embed_assistant_name`** | **`embed-assistant-name`** | **`embed_chat_title`** | **`embed-chat-title`** (имя в шапке панели, до 120 символов; внешняя встраивка без правки HTML), **`embed_skill`** | **`embed-skill`** | **`embed_skill_id`** | **`embed-skill-id`** (id skill для A2A **`metadata.skill`**, например **`crm`** у flow **`lara`**; валидные id: буква в начале, далее буквы/цифры/`_`/`-`, до 64 символов). Задают **`--embed-panel-width`** / **`--embed-panel-max-height`** на элементе drawer. Атрибут **`skill-id`** на drawer задаёт skill по умолчанию; при наличии параметра URL skill из query перезаписывает.
@@ -134,7 +134,7 @@ apps/{service}/ui/
 └── services/                    # API сервисы
 ```
 
-**Документы (`apps/office/ui`):** канон как у RAG/Sync — **`PlatformApp`**, **`registerCore('/documents')`**, бандл **`documents.json`**. См. **`office.mdc`**.
+**Документы (`apps/office/ui`):** канон как у RAG/Sync — **`PlatformApp`**, бандл **`documents.json`**, палитра через `--documents-*` токены в `tokens.css`. См. **`office.mdc`**.
 
 **Сервис frontend (shell):** сайдбар [`apps/frontend/ui/components/frontend-sidebar.js`](../../apps/frontend/ui/components/frontend-sidebar.js) на `<platform-service-sidebar>`; блок «Быстрые действия» на dashboard использует `<platform-icon>` и токены `--text-primary` / `--accent` для контраста. Каталог flows для UI (модалка создания embed) — `FlowsCatalogService` в `apps/frontend/ui/services/flows-catalog.service.js`, регистрация `this.services.register('flowsCatalog', ...)` в `FrontendApp`; HTTP `GET /flows/api/v1/flows/` (тот же origin, `super('')` у `BaseService`).
 
@@ -443,10 +443,14 @@ export class MyApiService extends BaseService {
     async createItem(data) {
         return this.post('/api/items', data);
     }
+
+    async exportItems(params) {
+        return this.getBlob('/api/items/export', params);
+    }
 }
 ```
 
-`_fetch` после `response.ok`: статусы `204`/`205` и пустое тело ответа дают `{}` без `JSON.parse`, иначе `Content-Type: application/json` с пустым телом ломает клиент (`Unexpected end of JSON input`).
+**Методы:** `get(path, params)`, `post(path, data, options)`, `put(path, data, options)`, `patch(path, data, options)`, `delete(path, options)`, `getBlob(path, params)` (возвращает `Blob`), `postStream(url, data, onEvent, { signal })`. `_fetch` после `response.ok`: статусы `204`/`205` и пустое тело ответа дают `{}` без `JSON.parse`, иначе `Content-Type: application/json` с пустым телом ломает клиент (`Unexpected end of JSON input`). **Cross-service:** для вызовов к API другого сервиса — отдельный экземпляр `new BaseService('/other-service/api/v1')` как приватное поле.
 
 ---
 
@@ -725,6 +729,11 @@ _toggleDropdown() {
 6. **Модалки:** Создавать через `createElement` + `showModal()`
 7. **Импорты:** Только `@platform/` алиасы
 8. **DRY:** Не дублировать методы, использовать наследование
+9. **`registerCore` не дублировать:** `PlatformApp.initServices()` уже вызывает `registerCore(this.getBaseUrl())`. В наследнике после `super.initServices()` — только `this.services.register(...)` для доменных сервисов
+10. **`checkAuth` обязателен:** каждый `*App` обязан вызывать `this.auth.validateToken()` в `checkAuth()` и возвращать `!!ok`. Исключение: публичные страницы frontend (лендинг, `/join`, `/products/*`)
+11. **`<app-loader>` в DOM:** каждый `index.html` обязан иметь `<app-loader id="app-loader" fullscreen>` перед root-компонентом, CSS для `app-loader:not(:defined)` (фон + текст сервиса) и скрипт `customElements.whenDefined('*-app').then(...)` для fade-удаления
+12. **BaseService — без обхода:** прямой `fetch` в `*-api.service.js` запрещён. Для JSON — `this.get/post/put/patch/delete`. Для blob — `this.getBlob(path, params)`. Для FormData — `this.post(path, formData)`. Для cross-service вызовов — отдельный экземпляр `BaseService('/other-service/api/v1')`
+13. **Инлайновые SVG:** допустимы только для специализированных кастомных иконок без Material-аналога (корона, граф, canvas элементы). Все стандартные иконки — через `<platform-icon>`
 
 ---
 
@@ -979,3 +988,47 @@ static styles = css`
 - [ ] Светлая тема поддерживается через `:host-context([data-theme="light"])`
 - [ ] Используются shared стили где возможно
 - [ ] Нет дублирования .btn, .form-input и т.д.
+
+---
+
+## UI Kit и Design System
+
+### Файлы дизайн-системы
+
+| Файл | Назначение |
+|------|-----------|
+| `core/frontend/static/assets/css/tokens.css` | **Дизайн-токены** — CSS custom properties: палитра, glass, типографика, пространство, радиусы, анимации, платформенные кнопочные токены (`--platform-btn-*`), CRM/Sync семантические токены |
+| `core/frontend/static/assets/kit.css` | **UI Kit** — утилитарные CSS-классы (`.kit-btn-*`, `.kit-input`, `.kit-card`, `.kit-chip-*`, `.kit-calendar-*`, `.kit-summary-*`), подключается после `tokens.css`, справочная реализация из Figma |
+| `core/frontend/static/lib/styles/shared/button.styles.js` | **Shared Button Styles** — Lit `css` (`.btn-primary`, `.btn-secondary`, `.btn-accent`, `.btn-danger`, `.btn-ghost`), единственный источник кнопочных стилей для компонентов |
+| `core/frontend/static/lib/components/platform-button.js` | **`<platform-button>`** — веб-компонент с `variant`: `primary` (violet), `accent` (orange), `secondary`, `danger`, `ghost` |
+
+### Палитра
+
+| Роль | Цвет | Переменная |
+|------|------|-----------|
+| Primary (accent) | `#99A6F9` (violet) | `--accent`, `--platform-btn-primary-bg` |
+| Accent Secondary | `#FF885C` (orange) | `--accent-secondary`, `--platform-btn-accent-bg` |
+| Gradient | violet → orange | `--accent-gradient` |
+| Success | `#10b981` (emerald) | `--success` (только для состояний, НЕ для акцента) |
+
+### Кнопки — геометрия (из Figma)
+
+```css
+--btn-radius: 22px;       /* pill */
+--btn-padding: 8px 24px;
+--btn-font-size: 16px;
+--btn-line-height: 20px;
+--btn-font-weight: 400;
+```
+
+### Шрифт
+
+`--font-sans: 'Onest', 'Inter', 'SF Pro Display', ...;` — Onest первым, как в Figma.
+
+### Правила
+
+1. **Кнопки**: только через `buttonStyles` (`import { buttonStyles } from '@platform/lib/styles/shared/button.styles.js'`) или `<platform-button>`. Дублирование `.btn-primary` / `.btn-secondary` в компонентах — **запрещено**.
+2. **Hardcoded цвета**: запрещены. Все цвета — из `tokens.css` (`var(--accent)`, `var(--text-primary)` и т.д.). Устаревший зелёный `#10b981` как accent — **запрещён** (допустим только как `--success`).
+3. **CRM-токены**: `--crm-button-primary-bg` ссылается на `--platform-btn-primary-bg`. CRM НЕ переопределяет `--accent` в `:host` — платформенные токены уже violet.
+4. **Иконки**: только Material Icons через `<platform-icon>` или `IconService`. Инлайновые SVG в template literals — **запрещены** (исключение: специализированные иконки без аналога в Material, напр. call overlay).
+5. **Fill-based SVG**: Material Icons используют `fill`, не `stroke`. `platform-icon.js` применяет `fill: currentColor` по умолчанию.

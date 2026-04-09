@@ -200,7 +200,6 @@ export class SyncApp extends PlatformApp {
 
     async initServices() {
         await super.initServices();
-        await this.services.registerCore('/sync');
         this.services.register('syncApi', new SyncAPIService('/sync/api/v1'));
 
         this._unsubscribe = SyncStore.subscribe((state) => {

@@ -70,36 +70,6 @@ class EntityTypeRepository(BaseCRMRepository[EntityType]):
         """Возвращает типы, разрешенные в конкретном namespace."""
         return await self.get_all_for_company(namespace=namespace)
     
-    async def get_subtypes(
-        self,
-        parent_type_id: str,
-        company_id: Optional[str] = None
-    ) -> List[EntityType]:
-        """
-        Получает подтипы для базового типа.
-        
-        Args:
-            parent_type_id: ID базового типа (например "note")
-            company_id: Фильтр по компании (None = все)
-        """
-        async with self._db.session() as session:
-            stmt = select(EntityType).where(
-                EntityType.parent_type_id == parent_type_id
-            )
-            
-            if company_id:
-                stmt = stmt.where(EntityType.company_id == company_id)
-            
-            result = await session.execute(stmt)
-            return list(result.scalars().all())
-    
-    async def get_system_types(self) -> List[EntityType]:
-        """Получает системные типы (note, task)"""
-        async with self._db.session() as session:
-            stmt = select(EntityType).where(EntityType.is_system == True)
-            result = await session.execute(stmt)
-            return list(result.scalars().all())
-    
     async def update_metadata(
         self,
         type_id: str,

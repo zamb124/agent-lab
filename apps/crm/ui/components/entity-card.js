@@ -106,30 +106,30 @@ export class EntityCard extends PlatformElement {
 
             .action-btn {
                 padding: var(--space-2) var(--space-3);
-                background: var(--crm-button-secondary-bg);
-                border: 1px solid var(--crm-button-secondary-bg);
+                background: var(--accent-secondary);
+                border: 1px solid var(--accent-secondary);
                 border-radius: var(--radius-lg);
-                color: var(--crm-button-secondary-text);
+                color: var(--platform-btn-secondary-text);
                 font-size: var(--text-sm);
                 cursor: pointer;
                 transition: all var(--duration-fast);
             }
 
             .action-btn:hover {
-                background: var(--crm-button-secondary-hover);
-                border-color: var(--crm-button-secondary-hover);
-                color: var(--crm-button-secondary-text);
+                background: var(--platform-btn-secondary-hover);
+                border-color: var(--platform-btn-secondary-hover);
+                color: var(--platform-btn-secondary-text);
             }
 
             .action-btn.primary {
-                background: var(--crm-button-primary-bg);
-                border-color: var(--crm-button-primary-bg);
-                color: var(--crm-button-primary-text);
+                background: var(--accent);
+                border-color: var(--accent);
+                color: var(--platform-btn-primary-text);
             }
 
             .action-btn.primary:hover {
-                background: var(--crm-button-primary-hover);
-                border-color: var(--crm-button-primary-hover);
+                background: var(--platform-btn-primary-hover);
+                border-color: var(--platform-btn-primary-hover);
             }
 
             .icon-btn {
@@ -404,8 +404,8 @@ export class EntityCard extends PlatformElement {
             }
 
             .request-btn.approve {
-                background: var(--crm-button-primary-bg);
-                color: var(--crm-button-primary-text);
+                background: var(--accent);
+                color: var(--platform-btn-primary-text);
             }
 
             .request-btn.reject {

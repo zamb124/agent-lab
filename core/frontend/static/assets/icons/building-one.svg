@@ -1,9 +1,1 @@
-<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-    <path d="M3 21h18"></path>
-    <path d="M5 21V7l8-4v18"></path>
-    <path d="M13 13h6v8"></path>
-    <line x1="8" y1="9" x2="10" y2="9"></line>
-    <line x1="8" y1="13" x2="10" y2="13"></line>
-    <line x1="8" y1="17" x2="10" y2="17"></line>
-    <line x1="16" y1="17" x2="16" y2="17.01"></line>
-</svg>
+<svg xmlns="http://www.w3.org/2000/svg" height="24" viewBox="0 -960 960 960" width="24"><path d="M120-120v-560h160v-160h400v320h160v400H520v-160h-80v160H120Zm80-80h80v-80h-80v80Zm0-160h80v-80h-80v80Zm0-160h80v-80h-80v80Zm160 160h80v-80h-80v80Zm0-160h80v-80h-80v80Zm0-160h80v-80h-80v80Zm160 320h80v-80h-80v80Zm0-160h80v-80h-80v80Zm0-160h80v-80h-80v80Zm160 480h80v-80h-80v80Zm0-160h80v-80h-80v80Z"/></svg>

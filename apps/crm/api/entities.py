@@ -22,11 +22,18 @@ from apps.crm.models.api import (
     NoteProcessingConfig,
     NoteProcessingResult,
     SearchMentionsRequest,
+    BulkCreateRequest,
+    BulkCreateResponse,
+    BulkUpdateRequest,
+    BulkUpdateResponse,
+    BulkDeleteRequest,
+    BulkDeleteResponse,
+    BulkErrorItem,
 )
 from apps.crm.db.models import CRMEntity
 from apps.crm.config import get_crm_settings
 from apps.crm.taskiq_analyze_errors import parse_validation_from_task_message
-from apps.crm.services.entity_service import DraftVersionConflictError
+from apps.crm.services.entity_service import DraftVersionConflictError, SchemaValidationError
 from apps.crm.dependencies import ContainerDep
 from apps.crm_worker.tasks.analysis_tasks import process_note_task
 from core.files.media.transcriber import MediaTranscriber
@@ -122,9 +129,87 @@ async def create_entity(
             voice_entity_in_payload="voice_entity_id" in data.model_fields_set,
             context_entity_in_payload="context_entity_id" in data.model_fields_set,
         )
+    except SchemaValidationError as exc:
+        raise HTTPException(status_code=422, detail=exc.field_errors)
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc))
     return EntityResponse.model_validate(entity)
+
+
+@router.post("/bulk", response_model=BulkCreateResponse)
+async def bulk_create_entities(
+    body: BulkCreateRequest,
+    container: ContainerDep,
+):
+    """Batch создание сущностей (до 200)."""
+    if len(body.items) > 200:
+        raise HTTPException(status_code=422, detail="Maximum 200 items per batch")
+
+    created = []
+    errors = []
+    for idx, item in enumerate(body.items):
+        try:
+            entity = await container.entity_service.create_entity(
+                entity_type=item.entity_type,
+                name=item.name,
+                description=item.description,
+                entity_subtype=item.entity_subtype,
+                namespace=item.namespace,
+                attributes=item.attributes,
+                tags=item.tags,
+                user_id=item.user_id,
+                note_date=item.note_date,
+                due_date=item.due_date,
+                priority=item.priority,
+                assignees=item.assignees,
+            )
+            created.append(EntityResponse.model_validate(entity))
+        except (ValueError, SchemaValidationError) as exc:
+            errors.append(BulkErrorItem(index=idx, error=str(exc)))
+    return BulkCreateResponse(created=created, errors=errors)
+
+
+@router.put("/bulk", response_model=BulkUpdateResponse)
+async def bulk_update_entities(
+    body: BulkUpdateRequest,
+    container: ContainerDep,
+):
+    """Batch обновление сущностей (до 200)."""
+    if len(body.items) > 200:
+        raise HTTPException(status_code=422, detail="Maximum 200 items per batch")
+
+    updated = []
+    errors = []
+    for idx, item in enumerate(body.items):
+        try:
+            entity = await container.entity_service.update_entity(item.entity_id, item.updates)
+            updated.append(EntityResponse.model_validate(entity))
+        except ValueError as exc:
+            errors.append(BulkErrorItem(index=idx, entity_id=item.entity_id, error=str(exc)))
+    return BulkUpdateResponse(updated=updated, errors=errors)
+
+
+@router.post("/bulk-delete", response_model=BulkDeleteResponse)
+async def bulk_delete_entities(
+    body: BulkDeleteRequest,
+    container: ContainerDep,
+):
+    """Batch удаление сущностей (до 200)."""
+    if len(body.entity_ids) > 200:
+        raise HTTPException(status_code=422, detail="Maximum 200 items per batch")
+
+    deleted = []
+    errors = []
+    for idx, entity_id in enumerate(body.entity_ids):
+        try:
+            success = await container.entity_service.delete_entity(entity_id)
+            if success:
+                deleted.append(entity_id)
+            else:
+                errors.append(BulkErrorItem(index=idx, entity_id=entity_id, error="Entity not found"))
+        except ValueError as exc:
+            errors.append(BulkErrorItem(index=idx, entity_id=entity_id, error=str(exc)))
+    return BulkDeleteResponse(deleted=deleted, errors=errors)
 
 
 @router.post("/merge", response_model=EntityMergeResponse)
@@ -163,6 +248,67 @@ async def merge_entities(
     )
 
 
+@router.get("/aggregate")
+async def aggregate_entities(
+    container: ContainerDep,
+    namespace: Optional[str] = Query(None),
+):
+    """Фасетная агрегация: количество по типам, статусам, месяцам создания."""
+    facets = await container.entity_service.aggregate_facets(namespace=namespace)
+    return facets
+
+
+@router.get("/export")
+async def export_entities(
+    container: ContainerDep,
+    format: str = Query("json", description="csv | json"),
+    entity_type: Optional[str] = Query(None),
+    entity_subtype: Optional[str] = Query(None),
+    namespace: Optional[str] = Query(None),
+    status: Optional[str] = Query(None),
+    limit: int = Query(10000, le=100000),
+):
+    """Streaming export сущностей в CSV или JSON."""
+    import csv
+    import io
+    import json as json_lib
+
+    filters = build_crm_entity_filters_from_query(status=status)
+    entities, _, _ = await container.entity_service.list_entities(
+        entity_type=entity_type,
+        entity_subtype=entity_subtype,
+        namespace=namespace,
+        filters=filters if filters else None,
+        limit=limit,
+    )
+
+    if format == "csv":
+        output = io.StringIO()
+        writer = csv.writer(output)
+        writer.writerow(["entity_id", "entity_type", "name", "description", "status", "tags", "created_at"])
+        for e in entities:
+            writer.writerow([
+                e.entity_id, e.entity_type, e.name, e.description or "",
+                e.status, ",".join(e.tags or []),
+                e.created_at.isoformat() if e.created_at else "",
+            ])
+        from fastapi.responses import StreamingResponse
+        return StreamingResponse(
+            iter([output.getvalue()]),
+            media_type="text/csv",
+            headers={"Content-Disposition": "attachment; filename=entities.csv"},
+        )
+
+    items = [EntityResponse.model_validate(e).model_dump(mode="json") for e in entities]
+    content = json_lib.dumps(items, ensure_ascii=False, indent=2)
+    from fastapi.responses import StreamingResponse
+    return StreamingResponse(
+        iter([content]),
+        media_type="application/json",
+        headers={"Content-Disposition": "attachment; filename=entities.json"},
+    )
+
+
 @router.get("/search", response_model=PaginatedEntityResponse)
 async def search_entities(
     container: ContainerDep,
@@ -170,6 +316,7 @@ async def search_entities(
     entity_type: Optional[str] = Query(None),
     entity_subtype: Optional[str] = Query(None),
     namespace: Optional[str] = Query(None, description="Фильтр по namespace"),
+    search_mode: str = Query("semantic", description="text | semantic | hybrid"),
     status: Optional[str] = Query(None, description="Как у списка: статус"),
     priority: Optional[str] = Query(None, description="Как у списка: приоритет"),
     tags: Optional[str] = Query(None),
@@ -180,7 +327,7 @@ async def search_entities(
     created_at_to: Optional[datetime] = Query(None, description="Фильтр created_at <= value"),
     limit: int = Query(100, le=1000),
 ):
-    """Семантический поиск entities (RAG + вектор); те же доп. фильтры, что у GET /entities (кроме подстроки ILIKE)."""
+    """Поиск entities: text (FTS), semantic (RAG vector), hybrid (RRF)."""
     filters = build_crm_entity_filters_from_query(
         status=status,
         priority=priority,
@@ -192,6 +339,41 @@ async def search_entities(
         created_at_from=created_at_from,
         created_at_to=created_at_to,
     )
+
+    if search_mode == "hybrid":
+        results = await container.entity_service.hybrid_search(
+            query=query,
+            entity_type=entity_type,
+            entity_subtype=entity_subtype,
+            namespace=namespace,
+            filters=filters if filters else None,
+            limit=limit,
+        )
+        items = []
+        for entity, score, match_type in results:
+            resp = EntityResponse.model_validate(entity)
+            resp.score = score
+            resp.match_type = match_type
+            items.append(resp)
+        return PaginatedEntityResponse(items=items, next_cursor=None, has_more=len(items) >= limit)
+
+    if search_mode == "text":
+        results = await container.entity_service.text_search(
+            query=query,
+            entity_type=entity_type,
+            entity_subtype=entity_subtype,
+            namespace=namespace,
+            filters=filters if filters else None,
+            limit=limit,
+        )
+        items = []
+        for entity, score in results:
+            resp = EntityResponse.model_validate(entity)
+            resp.score = score
+            resp.match_type = "text"
+            items.append(resp)
+        return PaginatedEntityResponse(items=items, next_cursor=None, has_more=len(items) >= limit)
+
     entities = await container.entity_service.search_entities(
         query=query,
         entity_type=entity_type,
@@ -395,6 +577,8 @@ async def update_entity(
             context_entity_id=data.context_entity_id,
             context_entity_in_payload="context_entity_id" in data.model_fields_set,
         )
+    except SchemaValidationError as exc:
+        raise HTTPException(status_code=422, detail=exc.field_errors)
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc))
     return EntityResponse.model_validate(updated)

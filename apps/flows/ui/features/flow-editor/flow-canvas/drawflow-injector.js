@@ -75,8 +75,8 @@ flow-canvas #drawflow-area {
 }
 
 .drawflow .drawflow-node.selected {
-    border-color: #10b981 !important;
-    box-shadow: 0 0 0 2px rgba(16, 185, 129, 0.3), 0 8px 32px rgba(0, 0, 0, 0.4) !important;
+    border-color: var(--accent) !important;
+    box-shadow: 0 0 0 2px rgba(153, 166, 249, 0.3), 0 8px 32px rgba(0, 0, 0, 0.4) !important;
 }
 
 .drawflow .drawflow_content_node {
@@ -117,8 +117,8 @@ flow-canvas #drawflow-area {
 
 .drawflow .drawflow-node .input:hover,
 .drawflow .drawflow-node .output:hover {
-    background: rgba(16, 185, 129, 0.3) !important;
-    border-color: #10b981 !important;
+    background: rgba(153, 166, 249, 0.3) !important;
+    border-color: var(--accent) !important;
     transform: scale(1.2) !important;
 }
 
@@ -146,8 +146,8 @@ flow-canvas #drawflow-area {
         rgba(91, 33, 182, 0.48) 55%,
         rgba(30, 27, 55, 0.95) 100%
     ) !important;
-    border-color: #34d399 !important;
-    box-shadow: 0 0 0 2px rgba(16, 185, 129, 0.35) !important;
+    border-color: #b4bffc !important;
+    box-shadow: 0 0 0 2px rgba(153, 166, 249, 0.35) !important;
 }
 
 .drawflow .drawflow-node.fan-in-active.fan-in-policy-all .inputs .input {
@@ -181,12 +181,12 @@ flow-canvas #drawflow-area {
 }
 
 .drawflow .connection .main-path:hover {
-    stroke: #10b981 !important;
+    stroke: var(--accent) !important;
     stroke-width: 3px !important;
 }
 
 .drawflow .connection.selected .main-path {
-    stroke: #10b981 !important;
+    stroke: var(--accent) !important;
 }
 
 .drawflow .drawflow-node .virtual-end-bundle {
@@ -303,7 +303,7 @@ flow-canvas .context-menu-item.danger:hover {
 }
 
 flow-canvas .context-menu-item.active {
-    color: #10b981;
+    color: var(--accent);
 }
 
 flow-canvas .context-menu-item.disabled {
@@ -481,14 +481,14 @@ flow-canvas .context-menu-separator {
     right: -8px !important;
     width: 20px !important;
     height: 20px !important;
-    background: #10b981 !important;
+    background: var(--accent) !important;
     border-radius: 50% !important;
     display: flex !important;
     align-items: center !important;
     justify-content: center !important;
     font-size: 10px !important;
     color: white !important;
-    box-shadow: 0 2px 8px rgba(16, 185, 129, 0.4) !important;
+    box-shadow: 0 2px 8px rgba(153, 166, 249, 0.4) !important;
 }
 
 /* Inherited from base badge */
@@ -534,7 +534,7 @@ flow-canvas .context-menu-separator {
 }
 
 .drawflow .drawflow-node.is-entry-node {
-    border-color: #10b981;
+    border-color: var(--accent);
 }
 
 .drawflow .drawflow-node.node-running {
@@ -546,8 +546,8 @@ flow-canvas .context-menu-separator {
 }
 
 .drawflow .drawflow-node.node-completed {
-    border: 3px solid #10b981 !important;
-    box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.3), 0 0 20px rgba(16, 185, 129, 0.8) !important;
+    border: 3px solid var(--accent) !important;
+    box-shadow: 0 0 0 3px rgba(153, 166, 249, 0.3), 0 0 20px rgba(153, 166, 249, 0.8) !important;
     z-index: 100 !important;
     transition: none !important;
 }
@@ -610,8 +610,8 @@ flow-canvas .context-menu-separator {
 }
 
 [data-theme="light"] .drawflow .drawflow-node.node-completed {
-    border: 3px solid #10b981 !important;
-    box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.3), 0 0 20px rgba(16, 185, 129, 0.5) !important;
+    border: 3px solid var(--accent) !important;
+    box-shadow: 0 0 0 3px rgba(153, 166, 249, 0.3), 0 0 20px rgba(153, 166, 249, 0.5) !important;
     z-index: 100 !important;
     transition: none !important;
 }
@@ -642,8 +642,8 @@ flow-canvas .context-menu-separator {
 }
 
 [data-theme="light"] .drawflow .drawflow-node.selected {
-    border-color: #10b981 !important;
-    box-shadow: 0 0 0 2px rgba(16, 185, 129, 0.2), 0 8px 24px rgba(0, 0, 0, 0.1) !important;
+    border-color: var(--accent) !important;
+    box-shadow: 0 0 0 2px rgba(153, 166, 249, 0.2), 0 8px 24px rgba(0, 0, 0, 0.1) !important;
 }
 
 [data-theme="light"] .drawflow .agent-node-name {
@@ -684,8 +684,8 @@ flow-canvas .context-menu-separator {
         rgba(167, 139, 250, 0.55) 45%,
         rgba(139, 92, 246, 0.38) 100%
     ) !important;
-    border-color: #10b981 !important;
-    box-shadow: 0 0 0 2px rgba(16, 185, 129, 0.25) !important;
+    border-color: var(--accent) !important;
+    box-shadow: 0 0 0 2px rgba(153, 166, 249, 0.25) !important;
 }
 
 [data-theme="light"] .drawflow .drawflow-node.fan-in-active.fan-in-policy-all .inputs .input {
@@ -709,8 +709,8 @@ flow-canvas .context-menu-separator {
 
 [data-theme="light"] .drawflow .drawflow-node .input:hover,
 [data-theme="light"] .drawflow .drawflow-node .output:hover {
-    background: rgba(16, 185, 129, 0.15) !important;
-    border-color: #10b981 !important;
+    background: rgba(153, 166, 249, 0.15) !important;
+    border-color: var(--accent) !important;
 }
 
 [data-theme="light"] .drawflow .connection .main-path {
@@ -718,7 +718,7 @@ flow-canvas .context-menu-separator {
 }
 
 [data-theme="light"] .drawflow .connection .main-path:hover {
-    stroke: #10b981 !important;
+    stroke: var(--accent) !important;
 }
 
 [data-theme="light"] .drawflow .drawflow-node .virtual-end-line {
@@ -758,7 +758,7 @@ flow-canvas .context-menu-separator {
 
 .edge-label:hover {
     background: var(--glass-solid-medium, rgba(35, 35, 55, 0.85));
-    border-color: var(--accent, #10b981);
+    border-color: var(--accent, var(--accent));
     box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
     transform: translate(-50%, -50%) scale(1.05);
 }
@@ -772,7 +772,7 @@ flow-canvas .context-menu-separator {
 
 [data-theme="light"] .edge-label:hover {
     background: #ffffff;
-    border-color: #10b981;
+    border-color: var(--accent);
     box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
 }
 

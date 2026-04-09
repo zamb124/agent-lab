@@ -46,7 +46,7 @@ export class EditTeamMemberModal extends PlatformModal {
                 flex-shrink: 0;
                 margin: 0;
                 cursor: pointer;
-                accent-color: var(--accent, #10b981);
+                accent-color: var(--accent);
             }
 
             .role-input:disabled {

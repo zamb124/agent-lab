@@ -40,7 +40,7 @@ export class EntityTypeForm extends PlatformElement {
             .form-textarea { min-height: 88px; resize: vertical; }
             .form-input:disabled { opacity: 0.6; cursor: not-allowed; }
             .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace; font-size: var(--text-xs); }
-            .save-btn { display: inline-flex; align-items: center; justify-content: center; gap: var(--space-2); border: 1px solid var(--crm-button-primary-bg); background: var(--crm-button-primary-bg); color: var(--crm-button-primary-text); border-radius: var(--radius-md); padding: var(--space-2) var(--space-4); cursor: pointer; width: fit-content; }
+            .save-btn { display: inline-flex; align-items: center; justify-content: center; gap: var(--space-2); border: 1px solid var(--accent); background: var(--accent); color: var(--platform-btn-primary-text); border-radius: var(--radius-md); padding: var(--space-2) var(--space-4); cursor: pointer; width: fit-content; }
             .save-btn:disabled { opacity: 0.5; cursor: not-allowed; }
             .soft-btn { border-color: var(--crm-stroke); background: var(--crm-surface-elevated); color: var(--text-primary); }
             .hint { color: var(--text-tertiary); font-size: var(--text-xs); }

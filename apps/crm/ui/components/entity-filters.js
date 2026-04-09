@@ -16,6 +16,7 @@ export class EntityFilters extends CRMPanel {
         _entityTypes: { state: true },
         _selectedType: { state: true },
         _currentNamespace: { state: true },
+        _aggregate: { state: true },
     };
 
     static styles = [
@@ -59,6 +60,32 @@ export class EntityFilters extends CRMPanel {
                 background: var(--crm-surface);
             }
 
+            .search-mode-toggle {
+                display: flex;
+                gap: 2px;
+                margin-top: var(--space-2);
+                background: var(--crm-surface-muted);
+                border-radius: var(--radius-md);
+                padding: 2px;
+            }
+            .search-mode-btn {
+                flex: 1;
+                padding: 4px 8px;
+                border: none;
+                background: transparent;
+                color: var(--text-tertiary);
+                font-size: 11px;
+                border-radius: var(--radius-sm);
+                cursor: pointer;
+                transition: all 0.15s;
+                text-transform: capitalize;
+            }
+            .search-mode-btn.active {
+                background: var(--crm-surface);
+                color: var(--text-primary);
+                box-shadow: 0 1px 3px rgba(0,0,0,0.12);
+            }
+
             .type-chips {
                 display: flex;
                 flex-wrap: wrap;
@@ -92,6 +119,22 @@ export class EntityFilters extends CRMPanel {
 
             .type-chip .chip-icon {
                 font-size: var(--text-base);
+            }
+
+            .type-chip .chip-count {
+                font-size: 10px;
+                color: var(--text-tertiary);
+                font-weight: 600;
+                min-width: 16px;
+                text-align: center;
+                padding: 0 4px;
+                background: var(--crm-surface);
+                border-radius: var(--radius-full);
+            }
+
+            .type-chip.active .chip-count {
+                background: var(--crm-selected-stroke);
+                color: var(--crm-selected-text);
             }
 
             .date-row {
@@ -173,6 +216,7 @@ export class EntityFilters extends CRMPanel {
         this._entityTypes = [];
         this._selectedType = null;
         this._currentNamespace = null;
+        this._aggregate = null;
         this._applyFiltersTimer = null;
 
         this._filtersUnsubscribe = CRMStore.subscribe(state => {
@@ -180,12 +224,19 @@ export class EntityFilters extends CRMPanel {
             this._entityTypes = state.entities.entityTypes || [];
             this._selectedType = state.entities.filters.entity_type;
             this._currentNamespace = state.namespaces.current;
+            this._aggregate = state.entities.aggregate || null;
         });
     }
 
     connectedCallback() {
         super.connectedCallback();
         this.panelTitle = this.i18n.t('entity_filters.panel_title');
+        this._loadAggregate();
+    }
+
+    async _loadAggregate() {
+        const crmApi = this.services.get('crmApi');
+        await CRMStore.loadAggregate(crmApi);
     }
 
     disconnectedCallback() {
@@ -199,6 +250,11 @@ export class EntityFilters extends CRMPanel {
 
     _onSearchInput(e) {
         CRMStore.setEntityFilters({ search: e.target.value });
+        this._applyFiltersDebounced();
+    }
+
+    _onSearchModeChange(mode) {
+        CRMStore.setSearchMode(mode);
         this._applyFiltersDebounced();
     }
 
@@ -236,7 +292,10 @@ export class EntityFilters extends CRMPanel {
 
     async _applyFilters() {
         const crmApi = this.services.get('crmApi');
-        await CRMStore.loadEntities(crmApi);
+        await Promise.all([
+            CRMStore.loadEntities(crmApi),
+            CRMStore.loadAggregate(crmApi),
+        ]);
     }
 
     _applyFiltersDebounced() {
@@ -309,22 +368,35 @@ export class EntityFilters extends CRMPanel {
                         .value=${this._filters.search || ''}
                         @input=${this._onSearchInput}
                     />
+                    <div class="search-mode-toggle">
+                        ${['text', 'semantic', 'hybrid'].map(mode => html`
+                            <button
+                                type="button"
+                                class="search-mode-btn ${(this._filters.search_mode || 'hybrid') === mode ? 'active' : ''}"
+                                @click=${() => this._onSearchModeChange(mode)}
+                            >${this.i18n.t(`entities.search_modes.${mode}`)}</button>
+                        `)}
+                    </div>
                 </div>
 
                 <div class="filter-group">
                     <label class="filter-label">${this.i18n.t('entity_filters.type_label')}</label>
                     <div class="type-chips">
-                        ${baseTypes.map(type => html`
-                            <button
-                                class="type-chip ${this._selectedType === type.type_id ? 'active' : ''}"
-                                @click=${() => this._onTypeSelect(type.type_id)}
-                            >
-                                <span class="chip-icon">
-                                    <platform-icon name="${this._resolveIconName(type.icon)}" size="15"></platform-icon>
-                                </span>
-                                <span>${type.name}</span>
-                            </button>
-                        `)}
+                        ${baseTypes.map(type => {
+                            const count = this._aggregate?.by_type?.[type.type_id];
+                            return html`
+                                <button
+                                    class="type-chip ${this._selectedType === type.type_id ? 'active' : ''}"
+                                    @click=${() => this._onTypeSelect(type.type_id)}
+                                >
+                                    <span class="chip-icon">
+                                        <platform-icon name="${this._resolveIconName(type.icon)}" size="15"></platform-icon>
+                                    </span>
+                                    <span>${type.name}</span>
+                                    ${count != null ? html`<span class="chip-count">${count}</span>` : ''}
+                                </button>
+                            `;
+                        })}
                     </div>
                 </div>
 

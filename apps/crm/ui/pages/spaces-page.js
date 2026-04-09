@@ -2,6 +2,7 @@ import { html, css } from 'lit';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
 import { CRMStore } from '../store/crm.store.js';
 import { EntityTypeForm } from '../components/entity-type-form.js';
+import '../components/namespace-grants-panel.js';
 import '@platform/lib/components/platform-icon.js';
 import '@platform/lib/components/platform-help-hint.js';
 import '@platform/lib/components/platform-switch.js';
@@ -62,7 +63,7 @@ export class SpacesPage extends PlatformElement {
             .label-with-hint { display: inline-flex; align-items: center; gap: var(--space-2); }
             .form-input, .form-textarea { border: 1px solid var(--crm-stroke); border-radius: var(--radius-md); background: var(--crm-surface-elevated); color: var(--text-primary); padding: var(--space-2) var(--space-3); font-size: var(--text-sm); }
             .form-textarea { min-height: 88px; resize: vertical; }
-            .save-btn { display: inline-flex; align-items: center; justify-content: center; gap: var(--space-2); border: 1px solid var(--crm-button-primary-bg); background: var(--crm-button-primary-bg); color: var(--crm-button-primary-text); border-radius: var(--radius-md); padding: var(--space-2) var(--space-4); cursor: pointer; width: fit-content; }
+            .save-btn { display: inline-flex; align-items: center; justify-content: center; gap: var(--space-2); border: 1px solid var(--accent); background: var(--accent); color: var(--platform-btn-primary-text); border-radius: var(--radius-md); padding: var(--space-2) var(--space-4); cursor: pointer; width: fit-content; }
             .save-btn:disabled { opacity: 0.5; cursor: not-allowed; }
             .soft-btn { border-color: var(--crm-stroke); background: var(--crm-surface-elevated); color: var(--text-primary); }
             .namespace-card-grid { display: grid; gap: var(--space-3); grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr)); }
@@ -588,6 +589,13 @@ export class SpacesPage extends PlatformElement {
                         ${this._renderCreateForm()}
                         ${this._renderAllowedTypeCards()}
                         ${this._renderTypeEditor()}
+                    </div>
+                    <div class="section">
+                        <div class="section-header">
+                            <platform-icon name="lock" size="16"></platform-icon>
+                            ${this.i18n.t('grants.namespace_section_title', { name: this._selectedNamespaceName })}
+                        </div>
+                        <namespace-grants-panel namespace=${this._selectedNamespaceName}></namespace-grants-panel>
                     </div>
                 ` : html`<div class="section"><div class="card-text">${this.i18n.t('spaces_page.pick_space')}</div></div>`}
             </div>

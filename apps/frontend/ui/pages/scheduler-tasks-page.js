@@ -95,8 +95,8 @@ export class SchedulerTasksPage extends PlatformElement {
             }
 
             .status.executed {
-                background: rgba(16, 185, 129, 0.12);
-                color: #047857;
+                background: rgba(153, 166, 249, 0.12);
+                color: #7c8af4;
             }
 
             .status.cancelled {
@@ -473,42 +473,28 @@ export class SchedulerTasksPage extends PlatformElement {
                                                                 ? html`
                                                                       <div class="actions-dropdown actions-dropdown-inline" @click=${(event) => event.stopPropagation()}>
                                                                           <button class="menu-item" @click=${() => this._executeAction('run-now', task.id)}>
-                                                                              <svg class="play-icon" viewBox="0 0 24 24" aria-hidden="true">
-                                                                                  <polygon points="8 5 19 12 8 19 8 5"></polygon>
-                                                                              </svg>
+                                                                              <platform-icon name="play" size="16" aria-hidden="true"></platform-icon>
                                                                               Run now
                                                                           </button>
                                                                           <button class="menu-item" @click=${() => this._openRedisSnapshot(task.id)}>
-                                                                              <svg viewBox="0 0 24 24" aria-hidden="true">
-                                                                                  <ellipse cx="12" cy="6" rx="7" ry="3"></ellipse>
-                                                                                  <path d="M5 6v6c0 1.7 3.1 3 7 3s7-1.3 7-3V6"></path>
-                                                                                  <path d="M5 12v6c0 1.7 3.1 3 7 3s7-1.3 7-3v-6"></path>
-                                                                              </svg>
+                                                                              <platform-icon name="database" size="16" aria-hidden="true"></platform-icon>
                                                                               Redis snapshot
                                                                           </button>
                                                                           ${task.status === 'paused'
                                                                               ? html`
                                                                                     <button class="menu-item" @click=${() => this._executeAction('resume', task.id)}>
-                                                                                        <svg class="play-icon" viewBox="0 0 24 24" aria-hidden="true">
-                                                                                            <polygon points="8 5 19 12 8 19 8 5"></polygon>
-                                                                                        </svg>
+                                                                                        <platform-icon name="play" size="16" aria-hidden="true"></platform-icon>
                                                                                         Resume
                                                                                     </button>
                                                                                 `
                                                                               : html`
                                                                                     <button class="menu-item" @click=${() => this._executeAction('pause', task.id)}>
-                                                                                        <svg viewBox="0 0 24 24" aria-hidden="true">
-                                                                                            <rect x="6" y="5" width="4" height="14"></rect>
-                                                                                            <rect x="14" y="5" width="4" height="14"></rect>
-                                                                                        </svg>
+                                                                                        <platform-icon name="stop" size="16" aria-hidden="true"></platform-icon>
                                                                                         Pause
                                                                                     </button>
                                                                                 `}
                                                                           <button class="menu-item" @click=${() => this._executeAction('cancel', task.id)}>
-                                                                              <svg viewBox="0 0 24 24" aria-hidden="true">
-                                                                                  <line x1="18" y1="6" x2="6" y2="18"></line>
-                                                                                  <line x1="6" y1="6" x2="18" y2="18"></line>
-                                                                              </svg>
+                                                                              <platform-icon name="close" size="16" aria-hidden="true"></platform-icon>
                                                                               Cancel
                                                                           </button>
                                                                       </div>

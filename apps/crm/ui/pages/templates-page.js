@@ -59,12 +59,6 @@ class TemplateCreateModal extends PlatformModal {
             .icon-input-wrap { display: grid; grid-template-columns: 40px minmax(0, 1fr); gap: var(--space-2); align-items: center; }
             .icon-preview { width: 36px; height: 36px; border-radius: var(--radius-md); border: 1px solid var(--crm-stroke); background: var(--crm-surface-elevated); display: flex; align-items: center; justify-content: center; color: var(--text-secondary); }
             .footer-actions { display: flex; gap: var(--space-3); justify-content: flex-end; width: 100%; }
-            .btn { padding: var(--space-2) var(--space-4); border-radius: var(--radius-lg); font-size: var(--text-sm); font-weight: 500; cursor: pointer; transition: all var(--duration-fast); }
-            .btn-secondary { background: var(--crm-button-secondary-bg); border: 1px solid var(--crm-button-secondary-bg); color: var(--crm-button-secondary-text); }
-            .btn-secondary:hover { background: var(--crm-button-secondary-hover); border-color: var(--crm-button-secondary-hover); color: var(--crm-button-secondary-text); }
-            .btn-primary { background: var(--crm-button-primary-bg); border: 1px solid var(--crm-button-primary-bg); color: var(--crm-button-primary-text); }
-            .btn-primary:hover:not(:disabled) { background: var(--crm-button-primary-hover); border-color: var(--crm-button-primary-hover); }
-            .btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }
         `,
     ];
 
@@ -249,7 +243,7 @@ export class TemplatesPage extends PlatformElement {
             .label-with-hint { display: inline-flex; align-items: center; gap: var(--space-2); }
             .form-input, .form-select, .form-textarea { border: 1px solid var(--crm-stroke); border-radius: var(--radius-md); background: var(--crm-surface-elevated); color: var(--text-primary); padding: var(--space-2) var(--space-3); font-size: var(--text-sm); }
             .form-textarea { min-height: 88px; resize: vertical; }
-            .save-btn { display: inline-flex; align-items: center; justify-content: center; gap: var(--space-2); border: 1px solid var(--crm-button-primary-bg); background: var(--crm-button-primary-bg); color: var(--crm-button-primary-text); border-radius: var(--radius-md); padding: var(--space-2) var(--space-4); cursor: pointer; width: fit-content; }
+            .save-btn { display: inline-flex; align-items: center; justify-content: center; gap: var(--space-2); border: 1px solid var(--accent); background: var(--accent); color: var(--platform-btn-primary-text); border-radius: var(--radius-md); padding: var(--space-2) var(--space-4); cursor: pointer; width: fit-content; }
             .save-btn:disabled { opacity: 0.5; cursor: not-allowed; }
             .soft-btn { border-color: var(--crm-stroke); background: var(--crm-surface-elevated); color: var(--text-primary); }
             .danger-btn { border-color: #B91C1C; background: #7F1D1D; color: #FEE2E2; }

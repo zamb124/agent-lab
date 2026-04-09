@@ -15,6 +15,7 @@ import '../pages/settings-hub-page.js';
 import '../pages/templates-page.js';
 import '../pages/spaces-page.js';
 import '../pages/namespace-imports-page.js';
+import '../pages/relationship-types-page.js';
 import '../modals/entity-modal.js';
 import '../modals/note-view-modal.js';
 import '../modals/ai-analysis-modal.js';
@@ -53,25 +54,6 @@ export class CRMApp extends PlatformApp {
                 height: var(--app-vh, 100vh);
                 overflow: hidden;
                 background: var(--bg-gradient);
-                --accent: var(--crm-button-primary-bg);
-                --accent-hover: var(--crm-button-primary-hover);
-                --accent-active: var(--crm-button-primary-hover);
-                --accent-subtle: rgba(153, 166, 249, 0.18);
-                --accent-glow: 0 0 24px rgba(153, 166, 249, 0.35);
-                --accent-gradient: linear-gradient(135deg, #99A6F9 0%, #8794F0 100%);
-                --border-focus: var(--crm-button-primary-bg);
-                --focus-ring: 0 0 0 3px rgba(153, 166, 249, 0.4);
-                --btn-primary-bg: var(--crm-button-primary-bg);
-                --btn-primary-hover-bg: var(--crm-button-primary-hover);
-                --btn-primary-text: var(--crm-button-primary-text);
-                --btn-primary-shadow: 0 4px 12px rgba(153, 166, 249, 0.35);
-                --btn-primary-hover-shadow: 0 6px 20px rgba(153, 166, 249, 0.45);
-                --btn-secondary-bg: var(--crm-button-secondary-bg);
-                --btn-secondary-border: var(--crm-button-secondary-bg);
-                --btn-secondary-text: var(--crm-button-secondary-text);
-                --btn-secondary-hover-bg: var(--crm-button-secondary-hover);
-                --btn-secondary-hover-border: var(--crm-button-secondary-hover);
-                --btn-secondary-hover-text: var(--crm-button-secondary-text);
             }
 
             .sidebar {
@@ -234,8 +216,6 @@ export class CRMApp extends PlatformApp {
 
     async initServices() {
         await super.initServices();
-
-        await this.services.registerCore('/crm');
         this.services.register('crmApi', new CRMAPIService('/crm/api/v1'));
 
         CRMStore.initFromUrl();
@@ -458,6 +438,10 @@ export class CRMApp extends PlatformApp {
 
         if (this._currentView === 'namespace_imports') {
             return html`<namespace-imports-page></namespace-imports-page>`;
+        }
+
+        if (this._currentView === 'relationship_types') {
+            return html`<relationship-types-page></relationship-types-page>`;
         }
 
         return this._renderPlaceholder(this._currentView);

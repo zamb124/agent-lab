@@ -88,9 +88,9 @@ export class NamespaceImportsPage extends PlatformElement {
                 display: inline-flex;
                 align-items: center;
                 gap: var(--space-2);
-                border: 1px solid var(--crm-button-primary-bg);
-                background: var(--crm-button-primary-bg);
-                color: var(--crm-button-primary-text);
+                border: 1px solid var(--accent);
+                background: var(--accent);
+                color: var(--platform-btn-primary-text);
                 border-radius: var(--radius-md);
                 padding: var(--space-2) var(--space-4);
                 cursor: pointer;
@@ -248,10 +248,8 @@ export class NamespaceImportsPage extends PlatformElement {
                 color: inherit;
             }
 
-            .import-cancel-glyph svg {
+            .import-cancel-glyph platform-icon {
                 display: block;
-                width: 100%;
-                height: 100%;
             }
             .import-icon-btn--rollback {
                 border-color: rgba(248, 113, 113, 0.65);
@@ -1102,9 +1100,7 @@ export class NamespaceImportsPage extends PlatformElement {
                                                               @click=${() => this._cancelRow(row.import_id)}
                                                           >
                                                               <span class="import-cancel-glyph" aria-hidden="true">
-                                                                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none">
-                                                                      <rect x="5" y="5" width="14" height="14" rx="2" fill="currentColor" />
-                                                                  </svg>
+                                                                  <platform-icon name="stop" size="16"></platform-icon>
                                                               </span>
                                                           </button>`
                                                         : null}

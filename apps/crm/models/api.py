@@ -78,7 +78,10 @@ class EntityResponse(BaseModel):
     source_company_id: Optional[str]
     external_relationships: List[Dict[str, Any]] = []
     relevance: float
-    
+    access_level: Optional[str] = None
+    score: Optional[float] = None
+    match_type: Optional[str] = None
+
     created_at: datetime
     updated_at: datetime
 
@@ -88,6 +91,38 @@ class PaginatedEntityResponse(BaseModel):
     items: List[EntityResponse]
     next_cursor: Optional[str] = None
     has_more: bool = False
+
+
+class BulkCreateRequest(BaseModel):
+    """Batch создание сущностей (до 200)."""
+    items: List["EntityCreate"]
+
+class BulkUpdateItem(BaseModel):
+    entity_id: str
+    updates: Dict[str, Any]
+
+class BulkUpdateRequest(BaseModel):
+    items: List[BulkUpdateItem]
+
+class BulkDeleteRequest(BaseModel):
+    entity_ids: List[str]
+
+class BulkErrorItem(BaseModel):
+    index: int
+    entity_id: Optional[str] = None
+    error: str
+
+class BulkCreateResponse(BaseModel):
+    created: List[EntityResponse]
+    errors: List[BulkErrorItem]
+
+class BulkUpdateResponse(BaseModel):
+    updated: List[EntityResponse]
+    errors: List[BulkErrorItem]
+
+class BulkDeleteResponse(BaseModel):
+    deleted: List[str]
+    errors: List[BulkErrorItem]
 
 
 class EntityTimelineBoundsResponse(BaseModel):

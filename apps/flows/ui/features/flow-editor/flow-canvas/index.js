@@ -50,7 +50,7 @@ const RESOURCE_TYPE_COLORS = {
     'code': '#8b5cf6',
     'rag': '#3b82f6',
     'files': '#f59e0b',
-    'prompt': '#10b981',
+    'prompt': '#99A6F9',
     'llm': '#ec4899',
     'secret': '#ef4444',
     'http': '#06b6d4',
@@ -1210,7 +1210,7 @@ export class FlowCanvas extends PlatformElement {
             'remote_flow': '#3b82f6',
             'flow': '#ec4899',
             'mcp': '#14b8a6',
-            'channel': '#10b981',
+            'channel': '#99A6F9',
             'hitl_node': '#0ea5e9',
         };
         

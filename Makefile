@@ -1,6 +1,6 @@
 .PHONY: build up rebuild down logs clean help docker-build docker-push deploy conf deploy-agents deploy-frontend deploy-crm deploy-worker deploy-rag base stats
 .PHONY: dev-up dev-down dev-logs dev-minio-restart dev-bootstrap-postgres test-runner test-runner-down test-runner-unit test-integration prod-up prod-down prod-logs
-.PHONY: test-frontend test-rag run-rag check-ui-canon check-i18n
+.PHONY: test-frontend test-rag run-rag check-ui-canon check-i18n build-i18n
 
 # Docker Registry
 DOCKER_REGISTRY ?= zambas/repo
@@ -12,6 +12,9 @@ DOCKER_PLATFORM ?= linux/amd64
 AGENT_LAB_SSH_USER ?= root
 AGENT_LAB_SSH_HOST ?= 84.38.184.105
 AGENT_LAB_REMOTE_DIR ?= /opt/agent-lab
+
+# Сборка объединённых JSON переводов на удалённом сервере (stdlib-only скрипт, python:3.13-slim)
+_REMOTE_BUILD_I18N = mkdir -p static/i18n && docker run --rm -v $(AGENT_LAB_REMOTE_DIR):/work -w /work python:3.13-slim python scripts/build_i18n.py --output static/i18n
 
 # ============================================================================
 # Изолированные окружения (dev/test/prod)
@@ -85,6 +88,10 @@ check-ui-canon:
 # JSON переводы ru/en: парсинг и парность имён файлов в корне locales
 check-i18n:
 	@./scripts/check_i18n.sh
+
+# Сборка объединённых JSON переводов для статической отдачи (dev)
+build-i18n:
+	uv run python -m scripts.build_i18n
 
 # RAG тесты (с pgvector и MinIO)
 test-rag:
@@ -160,31 +167,31 @@ deploy-agents:
 	@echo "Building and deploying agents..."
 	docker buildx build --platform $(DOCKER_PLATFORM) --target agents -t $(DOCKER_REGISTRY):agents --load .
 	docker push $(DOCKER_REGISTRY):agents
-	ssh $(AGENT_LAB_SSH_USER)@$(AGENT_LAB_SSH_HOST) "cd $(AGENT_LAB_REMOTE_DIR) && git pull && sudo docker compose pull agents && sudo docker compose up -d agents"
+	ssh $(AGENT_LAB_SSH_USER)@$(AGENT_LAB_SSH_HOST) "cd $(AGENT_LAB_REMOTE_DIR) && git pull && $(_REMOTE_BUILD_I18N) && sudo docker compose pull agents && sudo docker compose up -d agents"
 
 deploy-frontend:
 	@echo "Building and deploying frontend..."
 	docker buildx build --platform $(DOCKER_PLATFORM) --target frontend -t $(DOCKER_REGISTRY):frontend --load .
 	docker push $(DOCKER_REGISTRY):frontend
-	ssh $(AGENT_LAB_SSH_USER)@$(AGENT_LAB_SSH_HOST) "cd $(AGENT_LAB_REMOTE_DIR) && git pull && sudo docker compose pull frontend && sudo docker compose up -d frontend"
+	ssh $(AGENT_LAB_SSH_USER)@$(AGENT_LAB_SSH_HOST) "cd $(AGENT_LAB_REMOTE_DIR) && git pull && $(_REMOTE_BUILD_I18N) && sudo docker compose pull frontend && sudo docker compose up -d frontend"
 
 deploy-crm:
 	@echo "Building and deploying crm..."
 	docker buildx build --platform $(DOCKER_PLATFORM) --target crm -t $(DOCKER_REGISTRY):crm --load .
 	docker push $(DOCKER_REGISTRY):crm
-	ssh $(AGENT_LAB_SSH_USER)@$(AGENT_LAB_SSH_HOST) "cd $(AGENT_LAB_REMOTE_DIR) && git pull && sudo docker compose pull crm && sudo docker compose up -d crm"
+	ssh $(AGENT_LAB_SSH_USER)@$(AGENT_LAB_SSH_HOST) "cd $(AGENT_LAB_REMOTE_DIR) && git pull && $(_REMOTE_BUILD_I18N) && sudo docker compose pull crm && sudo docker compose up -d crm"
 
 deploy-worker:
 	@echo "Building and deploying worker..."
 	docker buildx build --platform $(DOCKER_PLATFORM) --target worker -t $(DOCKER_REGISTRY):worker --load .
 	docker push $(DOCKER_REGISTRY):worker
-	ssh $(AGENT_LAB_SSH_USER)@$(AGENT_LAB_SSH_HOST) "cd $(AGENT_LAB_REMOTE_DIR) && git pull && sudo docker compose pull taskiq-worker taskiq-scheduler && sudo docker compose up -d taskiq-worker taskiq-scheduler"
+	ssh $(AGENT_LAB_SSH_USER)@$(AGENT_LAB_SSH_HOST) "cd $(AGENT_LAB_REMOTE_DIR) && git pull && $(_REMOTE_BUILD_I18N) && sudo docker compose pull taskiq-worker taskiq-scheduler && sudo docker compose up -d taskiq-worker taskiq-scheduler"
 
 deploy-rag:
 	@echo "Building and deploying rag..."
 	docker buildx build --platform $(DOCKER_PLATFORM) --target rag -t $(DOCKER_REGISTRY):rag --load .
 	docker push $(DOCKER_REGISTRY):rag
-	ssh $(AGENT_LAB_SSH_USER)@$(AGENT_LAB_SSH_HOST) "cd $(AGENT_LAB_REMOTE_DIR) && git pull && sudo docker compose pull rag && sudo docker compose up -d rag"
+	ssh $(AGENT_LAB_SSH_USER)@$(AGENT_LAB_SSH_HOST) "cd $(AGENT_LAB_REMOTE_DIR) && git pull && $(_REMOTE_BUILD_I18N) && sudo docker compose pull rag && sudo docker compose up -d rag"
 
 conf:
 	@echo "Копирование conf.json на продакшен..."

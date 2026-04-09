@@ -21,7 +21,7 @@ export class PromptResourceEditor extends BaseResourceEditor {
     }
 
     getColor() {
-        return '#10b981';
+        return '#99A6F9';
     }
 
     getTypeName() {

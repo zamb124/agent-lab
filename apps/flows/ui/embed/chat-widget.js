@@ -12,6 +12,8 @@
  * </script>
  */
 
+import '@platform/lib/components/platform-icon.js';
+
 (function() {
     'use strict';
     
@@ -159,10 +161,8 @@
                         box-shadow: 0 6px 20px rgba(0, 0, 0, 0.2);
                     }
                     
-                    .hc-toggle-button svg {
-                        width: 28px;
-                        height: 28px;
-                        fill: white;
+                    .hc-toggle-button platform-icon {
+                        color: white;
                     }
                     
                     .hc-chat-window {
@@ -308,10 +308,8 @@
                         cursor: not-allowed;
                     }
                     
-                    .hc-send-btn svg {
-                        width: 20px;
-                        height: 20px;
-                        fill: white;
+                    .hc-send-btn platform-icon {
+                        color: white;
                     }
                     
                     .hc-typing-indicator {
@@ -373,10 +371,7 @@
                 </style>
                 
                 <button class="hc-toggle-button" id="hc-toggle">
-                    <svg viewBox="0 0 24 24">
-                        <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10h10V12c0-5.52-4.48-10-10-10zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8z"/>
-                        <path d="M8.5 11c.83 0 1.5-.67 1.5-1.5S9.33 8 8.5 8 7 8.67 7 9.5 7.67 11 8.5 11zm7 0c.83 0 1.5-.67 1.5-1.5S16.33 8 15.5 8 14 8.67 14 9.5s.67 1.5 1.5 1.5zm-3.5 6.5c2.33 0 4.31-1.46 5.11-3.5H6.89c.8 2.04 2.78 3.5 5.11 3.5z"/>
-                    </svg>
+                    <platform-icon name="chat" size="28"></platform-icon>
                 </button>
                 
                 <div class="hc-chat-window" id="hc-window">
@@ -401,9 +396,7 @@
                             placeholder="${this.escapeHtml(this.settings.placeholder)}"
                         />
                         <button class="hc-send-btn" id="hc-send">
-                            <svg viewBox="0 0 24 24">
-                                <path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/>
-                            </svg>
+                            <platform-icon name="send" size="20"></platform-icon>
                         </button>
                     </div>
                     

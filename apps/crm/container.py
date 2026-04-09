@@ -157,13 +157,7 @@ class CRMContainer(BaseContainer):
             access_request_repo=self.access_request_repository,
             company_mapping_repo=self.company_mapping_repository,
             company_repo=self.company_repository,
-        )
-    
-    @lazy
-    def entity_type_service(self):
-        from apps.crm.services.entity_type_service import EntityTypeService
-        return EntityTypeService(
-            entity_type_repository=self.entity_type_repository
+            access_control=self.access_control_service,
         )
     
     @lazy
@@ -251,7 +245,7 @@ def get_crm_container() -> CRMContainer:
 
         _crm_container = CRMContainer(
             db_url=settings.database.crm_url,
-            shared_db_url=settings.database.shared_url
+            shared_db_url=settings.database.shared_url,
         )
         logger.info(f"CRMContainer инициализирован с БД: {settings.database.crm_url[:50]}...")
     return _crm_container

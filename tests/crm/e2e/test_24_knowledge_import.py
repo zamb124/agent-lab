@@ -520,7 +520,8 @@ class TestKnowledgeImportE2E:
             headers=auth_headers_system,
         )
         assert list_r.status_code == 200, list_r.text
-        items = list_r.json()
+        payload = list_r.json()
+        items = payload.get("items", payload) if isinstance(payload, dict) else payload
         assert any(
             (e.get("name") or "") == meeting_name and e.get("entity_type") == "note"
             for e in items

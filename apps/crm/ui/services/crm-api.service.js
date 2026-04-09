@@ -58,6 +58,26 @@ export class CRMAPIService extends BaseService {
         return this.delete(`/entities/${entityId}`);
     }
     
+    async bulkUpdateEntities(items) {
+        return this.put('/entities/bulk', { items });
+    }
+
+    async bulkDeleteEntities(entityIds) {
+        return this.post('/entities/bulk-delete', { entity_ids: entityIds });
+    }
+
+    async exportEntities(params = {}) {
+        const format = params.format || 'json';
+        const exportParams = Object.fromEntries(
+            Object.entries({ ...params, format }).filter(([, v]) => v != null)
+        );
+        return this.getBlob('/entities/export', exportParams);
+    }
+
+    async getAggregate(params = {}) {
+        return this.get('/entities/aggregate', params);
+    }
+
     async searchEntities(query, params = {}) {
         if (!query) {
             throw new Error('Search query is required');

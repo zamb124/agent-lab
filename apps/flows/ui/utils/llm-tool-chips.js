@@ -100,7 +100,7 @@ const CANVAS_NODE_HEX_BY_TYPE = {
     remote_flow: '#3b82f6',
     flow: '#ec4899',
     mcp: '#14b8a6',
-    channel: '#10b981',
+    channel: '#99A6F9',
 };
 
 const TOOL_REF_HEX = '#64748b';

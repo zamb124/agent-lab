@@ -869,7 +869,7 @@ export class PlatformUser extends PlatformElement {
                 color: white;
                 font-weight: var(--font-bold);
                 font-size: var(--text-sm);
-                box-shadow: 0 4px 12px rgba(16, 185, 129, 0.25);
+                box-shadow: 0 4px 12px rgba(153, 166, 249, 0.25);
                 flex-shrink: 0;
                 overflow: hidden;
             }

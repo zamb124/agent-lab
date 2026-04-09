@@ -356,12 +356,12 @@ export class LlmNodeEditor extends BaseNodeEditor {
             }
 
             .messages-filter-control:has(.messages-filter-input:checked) .messages-filter-box {
-                background: var(--accent, #10b981);
-                border-color: var(--accent, #10b981);
+                background: var(--accent, #99A6F9);
+                border-color: var(--accent, #99A6F9);
             }
 
             .messages-filter-input:focus-visible + .messages-filter-box {
-                outline: 2px solid var(--accent, #10b981);
+                outline: 2px solid var(--accent, #99A6F9);
                 outline-offset: 2px;
             }
 

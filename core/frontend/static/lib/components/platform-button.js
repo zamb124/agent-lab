@@ -1,5 +1,6 @@
 /**
- * PlatformButton - унифицированная кнопка платформы
+ * PlatformButton — унифицированная кнопка платформы
+ * Варианты: primary (violet), accent (orange), secondary, danger, ghost
  */
 import { html, css, LitElement } from 'lit';
 
@@ -14,13 +15,13 @@ export class PlatformButton extends LitElement {
             align-items: center;
             justify-content: center;
             gap: var(--space-2, 8px);
-            padding: var(--space-2, 8px) var(--space-4, 16px);
-            font-size: var(--text-sm, 14px);
-            font-weight: var(--font-medium, 500);
+            padding: var(--btn-padding, 8px 24px);
+            font-size: var(--btn-font-size, 16px);
+            font-weight: var(--btn-font-weight, 400);
             font-family: inherit;
-            line-height: 1.4;
-            border-radius: var(--radius-md, 8px);
-            border: 1px solid transparent;
+            line-height: var(--btn-line-height, 20px);
+            border-radius: var(--btn-radius, 22px);
+            border: none;
             cursor: pointer;
             transition: all var(--duration-fast, 0.15s) var(--easing-default, ease);
             white-space: nowrap;
@@ -31,58 +32,57 @@ export class PlatformButton extends LitElement {
             cursor: not-allowed;
         }
         
-        /* Primary: сервис может задать --platform-btn-primary-* (см. documents index.html) */
+        /* Primary — violet */
         button.primary {
-            color: var(--platform-btn-primary-text, white);
-            background: var(--platform-btn-primary-bg, var(--accent, #10b981));
-            border-color: var(--platform-btn-primary-border, var(--accent, #10b981));
+            color: var(--platform-btn-primary-text, #ffffff);
+            background: var(--platform-btn-primary-bg, #99A6F9);
             box-shadow: var(--platform-btn-primary-shadow, none);
         }
 
         button.primary:hover:not(:disabled) {
-            background: var(
-                --platform-btn-primary-bg-hover,
-                var(--accent-hover, #059669)
-            );
-            border-color: var(
-                --platform-btn-primary-border-hover,
-                var(--accent-hover, #059669)
-            );
-            box-shadow: var(
-                --platform-btn-primary-shadow-hover,
-                var(--platform-btn-primary-shadow, none)
-            );
+            background: var(--platform-btn-primary-bg-hover, #8794F0);
+            box-shadow: var(--platform-btn-primary-shadow-hover, 0 0 10px rgba(153, 166, 249, 0.6));
+        }
+
+        /* Accent — orange */
+        button.accent {
+            color: var(--platform-btn-accent-text, #ffffff);
+            background: var(--platform-btn-accent-bg, #FF885C);
+            box-shadow: var(--platform-btn-accent-shadow, none);
+        }
+
+        button.accent:hover:not(:disabled) {
+            background: var(--platform-btn-accent-bg-hover, #F2784A);
+            box-shadow: var(--platform-btn-accent-shadow-hover, 0 0 10px rgba(255, 136, 92, 0.6));
         }
         
         /* Secondary */
         button.secondary {
-            color: var(--text-primary, rgba(255, 255, 255, 0.95));
-            background: var(--glass-tint-medium, rgba(255, 255, 255, 0.08));
-            border-color: var(--border-default, rgba(255, 255, 255, 0.1));
+            color: var(--platform-btn-secondary-text, #99A6F9);
+            background: var(--platform-btn-secondary-bg, rgba(153, 166, 249, 0.15));
+            border: none;
         }
         
         button.secondary:hover:not(:disabled) {
-            background: var(--glass-tint-strong, rgba(255, 255, 255, 0.12));
-            border-color: var(--border-strong, rgba(255, 255, 255, 0.15));
+            background: var(--platform-btn-secondary-bg-hover, rgba(153, 166, 249, 0.1));
+            box-shadow: var(--platform-btn-secondary-shadow-hover, 0 0 10px rgba(153, 166, 249, 0.2));
         }
         
         /* Danger */
         button.danger {
             color: white;
             background: var(--error, #f43f5e);
-            border-color: var(--error, #f43f5e);
         }
         
         button.danger:hover:not(:disabled) {
-            background: var(--error-hover, #e11d48);
-            border-color: var(--error-hover, #e11d48);
+            background: #e11d48;
+            box-shadow: 0 0 10px rgba(244, 63, 94, 0.4);
         }
         
         /* Ghost */
         button.ghost {
             color: var(--text-secondary, rgba(255, 255, 255, 0.65));
             background: transparent;
-            border-color: transparent;
         }
         
         button.ghost:hover:not(:disabled) {
@@ -92,13 +92,12 @@ export class PlatformButton extends LitElement {
         
         /* Light theme */
         :host-context([data-theme="light"]) button.secondary {
-            color: var(--text-primary, #1e293b);
-            background: var(--glass-tint-medium, rgba(0, 0, 0, 0.04));
-            border-color: var(--border-default, rgba(0, 0, 0, 0.08));
+            color: var(--platform-btn-secondary-text, #8794F0);
+            background: var(--platform-btn-secondary-bg, rgba(135, 148, 240, 0.12));
         }
         
         :host-context([data-theme="light"]) button.secondary:hover:not(:disabled) {
-            background: var(--glass-tint-strong, rgba(0, 0, 0, 0.06));
+            background: var(--platform-btn-secondary-bg-hover, rgba(135, 148, 240, 0.08));
         }
         
         :host-context([data-theme="light"]) button.ghost {
@@ -141,4 +140,3 @@ export class PlatformButton extends LitElement {
 }
 
 customElements.define('platform-button', PlatformButton);
-

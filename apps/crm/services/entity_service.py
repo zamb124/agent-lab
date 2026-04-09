@@ -146,6 +146,15 @@ class ApplyAnalysisDraftEntityFailuresError(Exception):
         super().__init__("Не удалось применить строки черновика: " + "; ".join(parts))
 
 
+class SchemaValidationError(ValueError):
+    """Атрибуты сущности не соответствуют required_fields / типам из EntityType."""
+
+    def __init__(self, field_errors: List[Dict[str, str]]) -> None:
+        self.field_errors = field_errors
+        parts = [f"{e['field']}: {e['error']}" for e in field_errors]
+        super().__init__("Schema validation failed: " + ", ".join(parts))
+
+
 class _AnalyzePipelineState(BaseModel):
     """Промежуточное состояние analyze до выдачи draft-id связям (только сервис)."""
 
@@ -183,6 +192,7 @@ class EntityService:
         access_request_repo: AccessRequestRepository,
         company_mapping_repo: CompanyMappingRepository,
         company_repo: "CompanyRepository" = None,
+        access_control: "AccessControlService" = None,
     ):
         self._entity_repo = entity_repo
         self._entity_type_repo = entity_type_repo
@@ -198,6 +208,7 @@ class EntityService:
         self._access_request_repo = access_request_repo
         self._company_mapping_repo = company_mapping_repo
         self._company_repo = company_repo
+        self._access_control = access_control
     
     def _get_company_id(self) -> str:
         context = get_context()
@@ -257,6 +268,52 @@ class EntityService:
             subtype_namespaces = subtype_model.namespace_ids or []
             if namespace not in subtype_namespaces:
                 raise ValueError(f"Entity subtype '{entity_subtype}' is not allowed in namespace '{namespace}'")
+
+    async def _validate_entity_attributes(
+        self,
+        entity_type: str,
+        attributes: Dict[str, Any],
+        entity_subtype: Optional[str] = None,
+    ) -> None:
+        """Проверяет attributes сущности на соответствие required_fields / optional_fields типа."""
+        type_id = entity_subtype or entity_type
+        entity_type_model = await self._entity_type_repo.get_by_type_id(type_id)
+        if entity_type_model is None:
+            raise ValueError(f"Entity type not found: {type_id}")
+
+        required = entity_type_model.required_fields or {}
+        if not required:
+            return
+
+        errors: List[Dict[str, str]] = []
+        for field_name, field_spec in required.items():
+            if field_name not in attributes or attributes[field_name] is None:
+                errors.append({"field": field_name, "error": "required"})
+                continue
+            expected_type = field_spec.get("type") if isinstance(field_spec, dict) else None
+            if expected_type:
+                value = attributes[field_name]
+                type_valid = self._check_field_type(value, expected_type)
+                if not type_valid:
+                    errors.append({"field": field_name, "error": f"expected type {expected_type}"})
+
+        if errors:
+            raise SchemaValidationError(errors)
+
+    @staticmethod
+    def _check_field_type(value: Any, expected_type: str) -> bool:
+        type_map = {
+            "string": str,
+            "integer": int,
+            "number": (int, float),
+            "boolean": bool,
+            "array": list,
+            "object": dict,
+        }
+        python_type = type_map.get(expected_type)
+        if python_type is None:
+            return True
+        return isinstance(value, python_type)
 
     async def _load_namespace_crm_settings(self, namespace: str) -> NamespaceCRMSettings:
         ns = await self._namespace_repo.get(namespace)
@@ -446,7 +503,12 @@ class EntityService:
             namespace=namespace,
             entity_subtype=entity_subtype,
         )
-        
+        await self._validate_entity_attributes(
+            entity_type=entity_type,
+            attributes=attributes or {},
+            entity_subtype=entity_subtype,
+        )
+
         entity = CRMEntity(
             user_id=user_id,
             entity_id=str(uuid.uuid4()),
@@ -459,7 +521,7 @@ class EntityService:
             company_id=self._get_company_id(),
             **kwargs
         )
-        
+
         await self._entity_repo.create(entity)
         logger.info(f"Created entity: {entity.entity_id}, type={entity.full_type}")
 
@@ -714,7 +776,13 @@ class EntityService:
             namespace=next_namespace,
             entity_subtype=next_entity_subtype,
         )
-        
+        merged_attributes = {**(entity.attributes or {}), **(updates.get("attributes") or {})}
+        await self._validate_entity_attributes(
+            entity_type=next_entity_type,
+            attributes=merged_attributes,
+            entity_subtype=next_entity_subtype,
+        )
+
         for key, value in updates.items():
             if hasattr(entity, key) and value is not None:
                 setattr(entity, key, value)
@@ -803,15 +871,52 @@ class EntityService:
         limit: int = 100,
         cursor: Optional[str] = None,
     ) -> tuple[list[CRMEntity], Optional[str], bool]:
-        """Получает список entities с cursor-пагинацией."""
-        return await self._entity_repo.list_all(
-            entity_type=entity_type,
-            entity_subtype=entity_subtype,
-            namespace=namespace,
-            filters=filters,
-            limit=limit,
-            cursor=cursor,
-        )
+        """
+        Получает список entities с cursor-пагинацией и фильтрацией по грантам.
+
+        Oversample стратегия: запрашиваем кратно больше строк из БД,
+        фильтруем по ACL и дозагружаем при нехватке, чтобы клиент
+        всегда получал ровно ``limit`` читаемых записей (или меньше,
+        если данных в БД не осталось).
+        """
+        context = get_context()
+        user_id = str(context.user.user_id) if context and context.user else None
+        company_id = self._get_company_id()
+
+        oversample_factor = 3
+        max_iterations = 3
+        readable: list[CRMEntity] = []
+        current_cursor = cursor
+        db_has_more = True
+
+        for _ in range(max_iterations):
+            entities, repo_cursor, repo_has_more = await self._entity_repo.list_all(
+                entity_type=entity_type,
+                entity_subtype=entity_subtype,
+                namespace=namespace,
+                filters=filters,
+                limit=limit * oversample_factor,
+                cursor=current_cursor,
+            )
+            filtered = await self._access_control.batch_filter_readable(
+                entities, user_id, company_id,
+            )
+            readable.extend(filtered)
+            db_has_more = repo_has_more
+
+            if len(readable) >= limit or not repo_has_more:
+                break
+            current_cursor = repo_cursor
+
+        result = readable[:limit]
+        has_more = len(readable) > limit or db_has_more
+
+        next_cursor = None
+        if result and has_more:
+            last = result[-1]
+            next_cursor = self._entity_repo.encode_cursor(last.created_at, last.entity_id)
+
+        return result, next_cursor, has_more
 
     async def get_timeline_bounds(
         self,
@@ -1007,20 +1112,80 @@ class EntityService:
         namespace: Optional[str] = None,
         filters: Optional[Dict[str, Any]] = None,
         limit: int = 100,
-        
     ) -> List[CRMEntity]:
-        """Семантический поиск entities с поддержкой всех фильтров"""
-        
-        return await self._entity_repo.search(
+        """Семантический поиск entities с фильтрацией по грантам."""
+        entities = await self._entity_repo.search(
             query=query,
             entity_type=entity_type,
             entity_subtype=entity_subtype,
             namespace=namespace,
             filters=filters,
             limit=limit,
-            
         )
-    
+        context = get_context()
+        user_id = str(context.user.user_id) if context and context.user else None
+        company_id = self._get_company_id()
+        return await self._access_control.batch_filter_readable(entities, user_id, company_id)
+
+    async def hybrid_search(
+        self,
+        query: str,
+        entity_type: Optional[str] = None,
+        entity_subtype: Optional[str] = None,
+        namespace: Optional[str] = None,
+        filters: Optional[Dict[str, Any]] = None,
+        limit: int = 100,
+    ) -> List[Tuple[CRMEntity, float, str]]:
+        """Гибридный поиск RRF (tsvector + pgvector) с фильтрацией по грантам."""
+        results = await self._entity_repo.hybrid_search(
+            query=query,
+            entity_type=entity_type,
+            entity_subtype=entity_subtype,
+            namespace=namespace,
+            filters=filters,
+            limit=limit,
+        )
+        entities = [entity for entity, _, _ in results]
+        context = get_context()
+        user_id = str(context.user.user_id) if context and context.user else None
+        company_id = self._get_company_id()
+        readable = await self._access_control.batch_filter_readable(entities, user_id, company_id)
+        readable_ids = {e.entity_id for e in readable}
+        return [(e, score, mt) for e, score, mt in results if e.entity_id in readable_ids]
+
+    async def text_search(
+        self,
+        query: str,
+        entity_type: Optional[str] = None,
+        entity_subtype: Optional[str] = None,
+        namespace: Optional[str] = None,
+        filters: Optional[Dict[str, Any]] = None,
+        limit: int = 100,
+    ) -> List[Tuple[CRMEntity, float]]:
+        """FTS поиск с ранжированием по ts_rank и фильтрацией по грантам."""
+        results = await self._entity_repo.fts_search_ranked(
+            query=query,
+            entity_type=entity_type,
+            entity_subtype=entity_subtype,
+            namespace=namespace,
+            filters=filters,
+            limit=limit,
+        )
+        entities = [entity for entity, _ in results]
+        context = get_context()
+        user_id = str(context.user.user_id) if context and context.user else None
+        company_id = self._get_company_id()
+        readable = await self._access_control.batch_filter_readable(entities, user_id, company_id)
+        readable_ids = {e.entity_id for e in readable}
+        return [(e, score) for e, score in results if e.entity_id in readable_ids]
+
+    async def aggregate_facets(
+        self,
+        namespace: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """Фасетная агрегация: по entity_type, status, месяц создания."""
+        return await self._entity_repo.aggregate_facets(namespace=namespace)
+
     async def search_mentions(
         self,
         text: str,
@@ -1045,27 +1210,27 @@ class EntityService:
         unique_phrases = list(set(search_phrases))[:5]
         
         combined_query = " ".join(unique_phrases)
-        
-        try:
-            entities = await self._entity_repo.search(
-                query=combined_query,
-                limit=limit
-            )
-            
-            entities_with_keyword_match = []
-            for entity in entities:
-                name_lower = entity.name.lower()
-                if any(phrase in name_lower for phrase in unique_phrases):
-                    entities_with_keyword_match.append(entity)
-            
-            if entities_with_keyword_match:
-                return entities_with_keyword_match
-            
-            return entities[:10]
-            
-        except Exception as e:
-            logger.error(f"Failed to search mentions: {e}")
-            return []
+
+        entities = await self._entity_repo.search(
+            query=combined_query,
+            limit=limit,
+        )
+
+        context = get_context()
+        user_id = str(context.user.user_id) if context and context.user else None
+        company_id = self._get_company_id()
+        entities = await self._access_control.batch_filter_readable(entities, user_id, company_id)
+
+        entities_with_keyword_match = []
+        for entity in entities:
+            name_lower = entity.name.lower()
+            if any(phrase in name_lower for phrase in unique_phrases):
+                entities_with_keyword_match.append(entity)
+
+        if entities_with_keyword_match:
+            return entities_with_keyword_match
+
+        return entities[:10]
     
     @staticmethod
     def _normalize_name_for_relationship_key(name: str) -> str:
@@ -1797,6 +1962,7 @@ class EntityService:
         settings = get_settings()
 
         variables = {
+            **_crm_llm_interface_language_vars(),
             "text": text,
             "entity_types": [
                 {"type": et.type_id, "prompt": et.prompt or ""}
@@ -2567,14 +2733,6 @@ class EntityService:
         )
         return True
 
-    async def mark_daily_summary_dirty(
-        self,
-        date_str: str,
-        namespace: Optional[str] = None,
-    ) -> bool:
-        """Публичный alias для event-driven invalidation."""
-        return await self.enqueue_daily_summary_rebuild(date_str=date_str, namespace=namespace)
-
     @staticmethod
     def _normalize_summary_entity_list(cached_entities: Any) -> list[str]:
         normalized_entities: list[str] = []
@@ -3096,12 +3254,8 @@ class EntityService:
                 related_entity_ids.add(rel.target_entity_id)
             else:
                 related_entity_ids.add(rel.source_entity_id)
-        
-        related_entities = []
-        for rel_entity_id in related_entity_ids:
-            rel_entity = await self._entity_repo.get(rel_entity_id)
-            if rel_entity:
-                related_entities.append(rel_entity)
+
+        related_entities = await self._entity_repo.get_by_ids(list(related_entity_ids))
         
         attachments = await self._attachment_service.get_attachments(entity_id)
         

@@ -1,5 +1,6 @@
 import { html, css } from 'lit';
 import { PlatformModal } from '@platform/lib/components/glass-modal.js';
+import { buttonStyles } from '@platform/lib/styles/shared/button.styles.js';
 import { CRMStore, isRelationshipSuggestion } from '../store/crm.store.js';
 import '@platform/lib/components/platform-icon.js';
 import './entity-modal.js';
@@ -26,6 +27,7 @@ export class AIAnalysisModal extends PlatformModal {
 
     static styles = [
         PlatformModal.styles,
+        buttonStyles,
         css`
             :host {
                 --modal-max-width: 1120px;
@@ -424,7 +426,7 @@ export class AIAnalysisModal extends PlatformModal {
             }
 
             .existing-link:hover {
-                color: var(--crm-button-primary-hover);
+                color: var(--platform-btn-primary-hover);
             }
 
             .remove-connection {
@@ -584,38 +586,6 @@ export class AIAnalysisModal extends PlatformModal {
                 gap: var(--space-2);
                 justify-content: flex-end;
                 width: 100%;
-            }
-
-            .btn {
-                border: none;
-                border-radius: var(--radius-full);
-                min-height: 40px;
-                padding: 0 var(--space-4);
-                font-size: var(--text-base);
-                cursor: pointer;
-            }
-
-            .btn-secondary {
-                background: var(--crm-button-secondary-bg);
-                color: var(--crm-button-secondary-text);
-            }
-
-            .btn-secondary:hover:not(:disabled) {
-                background: var(--crm-button-secondary-hover);
-            }
-
-            .btn-primary {
-                background: var(--crm-button-primary-bg);
-                color: var(--crm-button-primary-text);
-            }
-
-            .btn-primary:hover:not(:disabled) {
-                background: var(--crm-button-primary-hover);
-            }
-
-            .btn-primary:disabled {
-                opacity: 0.6;
-                cursor: not-allowed;
             }
 
             .btn-disabled {

@@ -13,6 +13,17 @@ export class BaseService {
         return this._fetch('GET', url, null, {});
     }
 
+    async getBlob(path, params = {}) {
+        const pathWithParams = this._buildUrlWithParams(path, params);
+        const url = `${this.baseUrl}${pathWithParams}`;
+        const response = await fetch(url, { method: 'GET', credentials: 'include' });
+        if (!response.ok) {
+            const errorData = await response.json().catch(() => null);
+            throw new Error(this._formatError(errorData, response.status));
+        }
+        return response.blob();
+    }
+
     _buildUrlWithParams(path, params) {
         const entries = Object.entries(params).filter(([_, v]) => v != null);
         if (entries.length === 0) {
@@ -26,20 +37,21 @@ export class BaseService {
 
     _formatError(errorData, status) {
         if (!errorData) return `HTTP ${status}`;
-        
-        // Pydantic validation errors (422) - detail is array
+
         if (Array.isArray(errorData.detail)) {
             const messages = errorData.detail.map(err => {
+                if (err.field && err.error) {
+                    return `${err.field}: ${err.error}`;
+                }
                 const field = err.loc?.slice(1).join('.') || 'field';
                 return `${field}: ${err.msg}`;
             });
             return messages.join('; ');
         }
-        
-        // String detail or message
+
         if (typeof errorData.detail === 'string') return errorData.detail;
         if (typeof errorData.message === 'string') return errorData.message;
-        
+
         return `HTTP ${status}`;
     }
 

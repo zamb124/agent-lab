@@ -1,20 +1,22 @@
 import { html, css } from 'lit';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
+import '@platform/lib/components/platform-icon.js';
 
 const TOOLBAR_ICONS = {
-    fit: html`<svg viewBox="0 0 24 24"><path d="M8 3H3v5"/><path d="M3 3l6 6"/><path d="M16 3h5v5"/><path d="M21 3l-6 6"/><path d="M8 21H3v-5"/><path d="M3 21l6-6"/><path d="M16 21h5v-5"/><path d="M21 21l-6-6"/></svg>`,
+    fit: html`<platform-icon name="fullscreen" size="14"></platform-icon>`,
     path_mode: html`<svg viewBox="0 0 24 24"><circle cx="5" cy="18" r="2"/><circle cx="19" cy="6" r="2"/><path d="M7 17c4-6 5-9 10-10"/></svg>`,
-    swap_path: html`<svg viewBox="0 0 24 24"><path d="M4 7h14"/><path d="M14 3l4 4-4 4"/><path d="M20 17H6"/><path d="M10 13l-4 4 4 4"/></svg>`,
-    reset_path: html`<svg viewBox="0 0 24 24"><path d="M3 6h18"/><path d="M8 6V4h8v2"/><path d="M7 6l1 14h8l1-14"/></svg>`,
-    depth_plus: html`<svg viewBox="0 0 24 24"><path d="M4 12h16"/><path d="M12 4v16"/></svg>`,
+    swap_path: html`<platform-icon name="swap-horiz" size="14"></platform-icon>`,
+    reset_path: html`<platform-icon name="trash" size="14"></platform-icon>`,
+    depth_plus: html`<platform-icon name="plus" size="14"></platform-icon>`,
     depth_minus: html`<svg viewBox="0 0 24 24"><path d="M4 12h16"/></svg>`,
-    filter_rel_type: html`<svg viewBox="0 0 24 24"><path d="M4 5h16"/><path d="M7 12h10"/><path d="M10 19h4"/></svg>`,
-    labels_mode: html`<svg viewBox="0 0 24 24"><path d="M4 18l4-12h2l4 12"/><path d="M6 13h6"/><path d="M16 8h4"/><path d="M18 8v10"/></svg>`,
-    reset_view: html`<svg viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 3-6.7"/><path d="M3 3v5h5"/></svg>`,
-    toggle_search: html`<svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4-4"/></svg>`,
+    filter_rel_type: html`<platform-icon name="filter" size="14"></platform-icon>`,
+    labels_mode: html`<platform-icon name="text-fields" size="14"></platform-icon>`,
+    reset_view: html`<platform-icon name="refresh" size="14"></platform-icon>`,
+    toggle_search: html`<platform-icon name="search" size="14"></platform-icon>`,
     toggle_timeline: html`<svg viewBox="0 0 24 24"><path d="M12 3v18"/><path d="M8 7l4-4 4 4"/><path d="M8 17l4 4 4-4"/></svg>`,
-    toggle_legend: html`<svg viewBox="0 0 24 24"><path d="M4 6h16"/><path d="M4 12h10"/><path d="M4 18h6"/></svg>`,
-    toggle_meta: html`<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 8h.01"/><path d="M12 12v4"/></svg>`,
+    toggle_legend: html`<platform-icon name="list" size="14"></platform-icon>`,
+    toggle_meta: html`<platform-icon name="info" size="14"></platform-icon>`,
+    merge_entities: html`<platform-icon name="circular-connection" size="14"></platform-icon>`,
 };
 
 export class GraphToolbar extends PlatformElement {

@@ -178,7 +178,7 @@ export class PromptEditor extends PlatformElement {
             }
             
             .cm-variable-default {
-                color: #10b981;
+                color: var(--accent);
             }
             
             .cm-for-keyword {
@@ -253,7 +253,7 @@ export class PromptEditor extends PlatformElement {
             }
             
             :host-context([data-theme="light"]) .cm-variable-default {
-                color: #059669;
+                color: #7c8af4;
             }
             
             :host-context([data-theme="light"]) .cm-for-keyword {
@@ -558,8 +558,8 @@ export class PromptEditor extends PlatformElement {
                 cm.syntaxHighlighting(cm.defaultHighlightStyle, { fallback: true }),
                 cm.EditorView.theme({
                     "&": { backgroundColor: "transparent", color: "#383a42" },
-                    ".cm-content": { caretColor: "#059669" },
-                    ".cm-cursor": { borderLeftColor: "#059669" },
+                    ".cm-content": { caretColor: "#7c8af4" },
+                    ".cm-cursor": { borderLeftColor: "#7c8af4" },
                 }, { dark: false })
             ];
 
