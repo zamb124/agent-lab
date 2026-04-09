@@ -102,7 +102,7 @@ class FlowContainer(BaseContainer):
 
     @lazy
     def evaluation_service(self):
-        from apps.flows.src.evaluation import EvaluationService
+        from apps.flows.src.evaluation.service import EvaluationService
         return EvaluationService(evaluation_repository=self.evaluation_repository)
 
     # push сервис перенесен в core/push/service.py и инициализируется в factory.py
