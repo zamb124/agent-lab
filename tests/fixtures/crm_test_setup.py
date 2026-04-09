@@ -37,33 +37,16 @@ async def _ensure_entity_type(
             headers=headers,
         )
         if response.status_code == 200:
-            entity_type = response.json()
-            namespace_ids = entity_type.get("namespace_ids") or []
+            namespace_ids = response.json().get("namespace_ids") or []
             if namespace_id in namespace_ids and "default" in namespace_ids:
                 return
-            updated_namespace_ids = list(namespace_ids)
-            if "default" not in updated_namespace_ids:
-                updated_namespace_ids.append("default")
-            if namespace_id not in updated_namespace_ids:
-                updated_namespace_ids.append(namespace_id)
-            update_response = await crm_client.put(
-                f"/crm/api/v1/entity-types/{type_id}",
-                json={"namespace_ids": updated_namespace_ids},
+            add_response = await crm_client.post(
+                f"/crm/api/v1/entity-types/{type_id}/namespaces",
+                json={"namespace_ids": ["default", namespace_id]},
                 headers=headers,
             )
-            if update_response.status_code != 200:
-                raise AssertionError(
-                    f"Не удалось обновить entity type '{type_id}': "
-                    f"{update_response.status_code} {update_response.text}"
-                )
-            verify = await crm_client.get(
-                f"/crm/api/v1/entity-types/{type_id}",
-                headers=headers,
-            )
-            if verify.status_code == 200:
-                verified_ns = verify.json().get("namespace_ids") or []
-                if namespace_id in verified_ns:
-                    return
+            if add_response.status_code == 200:
+                return
             await asyncio.sleep(0.05 * (attempt + 1))
             continue
         if response.status_code != 404:

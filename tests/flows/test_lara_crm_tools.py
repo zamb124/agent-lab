@@ -19,7 +19,10 @@ from apps.flows.tools.lara_crm import (
 )
 from core.state import ExecutionState
 
-pytestmark = pytest.mark.timeout(120, func_only=True)
+pytestmark = [
+    pytest.mark.timeout(120, func_only=True),
+    pytest.mark.xdist_group("real_taskiq"),
+]
 
 
 @pytest_asyncio.fixture
@@ -69,7 +72,7 @@ async def test_crm_create_note_tool_returns_blocks_for_chat(
         state,
     )
     data = json.loads(raw)
-    assert data["success"] is True
+    assert data["success"] is True, f"crm_create_note failed: {data}"
     assert isinstance(data.get("entity_id"), str) and data["entity_id"]
     assert isinstance(data["blocks"], list)
     types = {b.get("type") for b in data["blocks"]}
@@ -116,7 +119,7 @@ async def test_crm_search_entities_tool(
         state,
     )
     data = json.loads(raw)
-    assert data["success"] is True
+    assert data["success"] is True, f"crm_search_entities failed: {data}"
     assert len(data["hits"]) >= 1
     hit = data["hits"][0]
     assert hit.get("entity_id")

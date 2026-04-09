@@ -76,9 +76,50 @@ async def rag_client(rag_app, rag_worker):
         yield client
 
 
+@pytest_asyncio.fixture(scope="session")
+async def crm_companies_initialized(app):
+    """
+    Инициализирует компании system и company2 один раз за сессию.
+    
+    initialize_company идемпотентна — при повторном вызове проверяет существование
+    и пропускает уже созданные типы. Session scope убирает ~240 лишних вызовов
+    initialize_company при 60 CRM тестах * 4 xdist workers.
+    
+    Контекст устанавливается вручную: test_context — function-scoped,
+    а эта фикстура — session-scoped, поэтому test_context ещё не существует.
+    """
+    from apps.crm.container import get_crm_container
+    from core.context import set_context, clear_context
+    from core.models.context_models import Context
+    from core.models.identity_models import User, Company
+
+    set_context(Context(
+        user=User(user_id="test_user", name="Test User"),
+        active_company=Company(company_id="system", name="System"),
+        session_id="test_session",
+        channel="test",
+        metadata={"user_id": "test_user", "email": "test@example.com", "grps": []},
+    ))
+
+    container = get_crm_container()
+    await container.company_init_service.initialize_company("system")
+
+    set_context(Context(
+        user=User(user_id="test_user", name="Test User"),
+        active_company=Company(company_id="company2", name="Company2"),
+        session_id="test_session",
+        channel="test",
+        metadata={"user_id": "test_user", "email": "test@example.com", "grps": []},
+    ))
+
+    await container.company_init_service.initialize_company("company2")
+
+    clear_context()
+
+
 @pytest_asyncio.fixture
 async def crm_client(
-    app,
+    crm_companies_initialized,
     rag_app,
     rag_service,
     flows_service,
@@ -94,21 +135,15 @@ async def crm_client(
     Таблицы создаются через миграции в setup_database_before_tests.
     
     Зависимости:
-    - app: Agents service (из tests/conftest.py)
+    - crm_companies_initialized: session-scoped, system/company2 компании
     - rag_app: для инициализации RAG таблиц
     - rag_service: реальный HTTP сервер для inter-service communication (attachments)
     - rag_worker: для обработки загруженных документов
     """
     from apps.crm.main import create_app
-    from apps.crm.container import get_crm_container
-
     from tests.fixtures.crm_test_setup import ensure_crm_per_test_namespace_and_types
 
     crm_app = create_app()
-
-    container = get_crm_container()
-    await container.company_init_service.initialize_company("system")
-    await container.company_init_service.initialize_company("company2")
 
     transport = ASGITransport(app=crm_app)
     async with AsyncClient(transport=transport, base_url="http://testserver", follow_redirects=True) as client:
@@ -200,7 +235,7 @@ async def rag_client_http(rag_service):
 
 
 @pytest_asyncio.fixture
-async def crm_client_http(crm_service, rag_service):
+async def crm_client_http(crm_service, crm_companies_initialized, rag_service):
     """
     HTTP клиент для CRM API (реальный HTTP).
     
@@ -209,14 +244,9 @@ async def crm_client_http(crm_service, rag_service):
     Таблицы создаются через миграции в setup_database_before_tests.
     
     Зависимости:
+    - crm_companies_initialized: session-scoped, system/company2 компании
     - rag_service: для attachments через inter-service communication
     """
-    from apps.crm.container import get_crm_container
-    
-    container = get_crm_container()
-    await container.company_init_service.initialize_company("system")
-    await container.company_init_service.initialize_company("company2")
-    
     async with AsyncClient(base_url="http://localhost:8003") as client:
         yield client
 

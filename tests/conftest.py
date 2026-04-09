@@ -461,7 +461,7 @@ async def setup_database_before_tests():
     from sqlalchemy import text
     from filelock import FileLock
 
-    test_ports = [9001, 9002, 9003, 9004]
+    test_ports = [9001, 9002, 9003, 9004, 9005]
     print(f"\n Освобождаем тестовые порты: {test_ports}...")
     for port in test_ports:
         try:
@@ -537,18 +537,9 @@ async def setup_database_before_tests():
                     print("Миграции применены!\n")
                     yield
 
-    print(f"\nФинальная очистка портов...")
-    for port in test_ports:
-        try:
-            subprocess.run(
-                f"lsof -ti:{port} | xargs kill -9 2>/dev/null",
-                shell=True,
-                capture_output=True,
-                timeout=5
-            )
-        except Exception:
-            pass
-    print("Все порты очищены после тестов\n")
+    # Teardown: НЕ убиваем порты. При xdist каждый gw-worker имеет свою session,
+    # и teardown первого завершившего worker'а убивал серверы, нужные остальным.
+    # Стейл от текущего прогона очистится в startup следующего.
 
 
 @pytest_asyncio.fixture(scope="session", autouse=True)
@@ -589,8 +580,17 @@ def pytest_configure(config):
         _APP_INIT_DONE,
         _TASKIQ_WORKER_LOCK,
         _TASKIQ_WORKER_PID,
+        f"{_TASKIQ_WORKER_PID}.refs",
         _RAG_WORKER_LOCK,
         _RAG_WORKER_PID,
+        f"{_RAG_WORKER_PID}.refs",
+        "/tmp/platform_test_sync_taskiq_worker.pid.refs",
+        "/tmp/platform_test_crm_taskiq_worker.pid.refs",
+        "/tmp/platform_test_flows_server.pid.ref_count",
+        "/tmp/platform_test_rag_server.pid.ref_count",
+        "/tmp/platform_test_crm_server.pid.ref_count",
+        "/tmp/platform_test_frontend_server.pid.ref_count",
+        "/tmp/platform_test_sync_server.pid.ref_count",
     ]:
         path = pathlib.Path(marker)
         if path.exists():

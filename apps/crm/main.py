@@ -14,6 +14,9 @@ from fastapi.staticfiles import StaticFiles
 
 from core.app import create_service_app
 from core.config import get_settings
+from core.context import set_context, clear_context
+from core.models.context_models import Context
+from core.models.identity_models import User, Company
 from apps.crm.config import CRMSettings
 from apps.crm.container import get_crm_container
 
@@ -22,8 +25,16 @@ logger = logging.getLogger(__name__)
 
 async def on_startup(app: FastAPI, container, settings):
     """Кастомная логика при старте"""
-    await container.company_init_service.initialize_company("system")
-    logger.info("Системные типы entities инициализированы для компании 'system'")
+    set_context(Context(
+        user=User(user_id="system", name="System"),
+        active_company=Company(company_id="system", name="System"),
+        channel="lifespan",
+    ))
+    try:
+        await container.company_init_service.initialize_company("system")
+        logger.info("Системные типы entities инициализированы для компании 'system'")
+    finally:
+        clear_context()
 
 
 # Импорт роутера

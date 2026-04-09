@@ -157,11 +157,7 @@ class TestPushNotificationConfig:
 
     @pytest.fixture
     async def flow_id(self, client):
-        resp = await client.get("/flows/api/v1/registry/flows")
-        agents = resp.json()
-        if not agents:
-            pytest.skip("No flows")
-        return agents[0]["url"].split("/flows/")[-1]
+        return "example_react"
 
     @pytest.mark.asyncio
     async def test_set_config_valid_structure(self, client, flow_id, webhook_server):
@@ -369,11 +365,7 @@ class TestPushNotificationWebhooks:
 
     @pytest.fixture
     async def flow_id(self, client):
-        resp = await client.get("/flows/api/v1/registry/flows")
-        agents = resp.json()
-        if not agents:
-            pytest.skip("No flows")
-        return agents[0]["url"].split("/flows/")[-1]
+        return "example_react"
 
     @pytest.mark.asyncio
     async def test_webhook_on_completed_has_valid_structure(
@@ -566,11 +558,7 @@ class TestPushNotificationRetries:
 
     @pytest.fixture
     async def flow_id(self, client):
-        resp = await client.get("/flows/api/v1/registry/flows")
-        agents = resp.json()
-        if not agents:
-            pytest.skip("No flows")
-        return agents[0]["url"].split("/flows/")[-1]
+        return "example_react"
 
     @pytest.mark.asyncio
     async def test_task_completes_even_if_webhook_unavailable(
@@ -623,11 +611,7 @@ class TestPushNotificationEdgeCases:
 
     @pytest.fixture
     async def flow_id(self, client):
-        resp = await client.get("/flows/api/v1/registry/flows")
-        agents = resp.json()
-        if not agents:
-            pytest.skip("No flows")
-        return agents[0]["url"].split("/flows/")[-1]
+        return "example_react"
 
     @pytest.mark.asyncio
     async def test_get_nonexistent_config_returns_null(self, client, flow_id):

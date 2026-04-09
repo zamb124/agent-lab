@@ -16,6 +16,11 @@ from core.context import get_context
 router = APIRouter(prefix="/entity-types", tags=["EntityTypes"])
 
 
+class AddNamespaceIdsRequest(BaseModel):
+    """Атомарное добавление namespace_ids к entity type."""
+    namespace_ids: List[str]
+
+
 class UpdatePublicFieldsRequest(BaseModel):
     """Запрос на обновление публичных полей"""
     public_fields: List[str]
@@ -35,9 +40,8 @@ async def _backfill_missing_colors(
         if isinstance(entity_type.color, str) and entity_type.color.strip():
             continue
         assigned_color = assign_color_from_palette(used_colors)
-        entity_type.color = assigned_color
         used_colors.add(assigned_color)
-        await repo.update(entity_type)
+        await repo.update_color(entity_type.type_id, assigned_color)
         updated = True
     return updated
 
@@ -82,8 +86,9 @@ async def get_entity_type(
     if not entity_type:
         raise HTTPException(status_code=404, detail="EntityType not found")
     if not entity_type.color or not entity_type.color.strip():
-        entity_type.color = assign_color_from_palette(set())
-        await repo.update(entity_type)
+        assigned_color = assign_color_from_palette(set())
+        await repo.update_color(type_id, assigned_color)
+        entity_type.color = assigned_color
     return entity_type
 
 
@@ -142,34 +147,58 @@ async def update_entity_type(
     entity_type = await repo.get_by_type_id(type_id)
     if not entity_type:
         raise HTTPException(status_code=404, detail="EntityType not found")
-    
+
+    fields: dict = {}
     if data.name is not None:
-        entity_type.name = data.name
+        fields["name"] = data.name
     if data.description is not None:
-        entity_type.description = data.description
+        fields["description"] = data.description
     if data.parent_type_id is not None:
-        entity_type.parent_type_id = data.parent_type_id
+        fields["parent_type_id"] = data.parent_type_id
     if data.prompt is not None:
-        entity_type.prompt = data.prompt
+        fields["prompt"] = data.prompt
     if data.required_fields is not None:
-        entity_type.required_fields = data.required_fields
+        fields["required_fields"] = data.required_fields
     if data.optional_fields is not None:
-        entity_type.optional_fields = data.optional_fields
+        fields["optional_fields"] = data.optional_fields
     if data.icon is not None:
-        entity_type.icon = data.icon
+        fields["icon"] = data.icon
     if data.color is not None:
-        entity_type.color = data.color
+        fields["color"] = data.color
+    if data.is_context_anchor is not None:
+        fields["is_context_anchor"] = data.is_context_anchor
+
+    resolved_color = fields.get("color") or entity_type.color
+    if not resolved_color or not resolved_color.strip():
+        fields["color"] = assign_color_from_palette(set())
+
+    if fields:
+        await repo.update_metadata(type_id, **fields)
+
     if data.namespace_ids is not None:
         if len(data.namespace_ids) == 0:
             raise HTTPException(status_code=422, detail="namespace_ids must not be empty")
-        entity_type.namespace_ids = data.namespace_ids
-    if data.is_context_anchor is not None:
-        entity_type.is_context_anchor = data.is_context_anchor
-    if not entity_type.color or not entity_type.color.strip():
-        entity_type.color = assign_color_from_palette(set())
-    
-    await repo.update(entity_type)
+        entity_type = await repo.set_namespace_ids(type_id, data.namespace_ids)
+    elif fields:
+        entity_type = await repo.get_by_type_id(type_id)
+
     return entity_type
+
+
+@router.post("/{type_id}/namespaces", response_model=EntityTypeResponse)
+async def add_namespace_ids(
+    type_id: str,
+    data: AddNamespaceIdsRequest,
+    container: ContainerDep,
+):
+    """Атомарно добавляет namespace_ids к entity type (SELECT FOR UPDATE)."""
+    if not data.namespace_ids:
+        raise HTTPException(status_code=422, detail="namespace_ids must not be empty")
+    repo = container.entity_type_repository
+    try:
+        return await repo.add_namespace_ids(type_id, data.namespace_ids)
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc))
 
 
 @router.put("/{type_id}/public-fields", response_model=EntityTypeResponse)
@@ -183,8 +212,7 @@ async def update_public_fields(
     entity_type = await repo.get_by_type_id(type_id)
     if not entity_type:
         raise HTTPException(status_code=404, detail="EntityType not found")
-    
-    entity_type.public_fields = data.public_fields
-    await repo.update(entity_type)
-    
-    return entity_type
+
+    await repo.update_metadata(type_id, public_fields=data.public_fields)
+
+    return await repo.get_by_type_id(type_id)

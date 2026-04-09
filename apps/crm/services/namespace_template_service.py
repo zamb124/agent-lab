@@ -81,11 +81,11 @@ class NamespaceTemplateService:
                 runtime_type = await self._entity_type_repo.create(runtime_type)
                 existing_types_map[runtime_type.type_id] = runtime_type
 
-            current_namespaces = list(runtime_type.namespace_ids or [])
+            current_namespaces = runtime_type.namespace_ids or []
             if namespace_name not in current_namespaces:
-                current_namespaces.append(namespace_name)
-                runtime_type.namespace_ids = current_namespaces
-                await self._entity_type_repo.update(runtime_type)
+                await self._entity_type_repo.add_namespace_ids(
+                    runtime_type.type_id, [namespace_name],
+                )
 
         return namespace
 
@@ -144,19 +144,20 @@ class NamespaceTemplateService:
             if requested_set != current_allowed_type_ids:
                 all_types = await self._entity_type_repo.get_all_for_company()
                 for item in all_types:
-                    namespace_ids = list(item.namespace_ids or [])
-                    has_namespace = namespace_name in namespace_ids
+                    current_ns = set(item.namespace_ids or [])
+                    has_namespace = namespace_name in current_ns
                     should_have_namespace = item.type_id in requested_set
                     if has_namespace == should_have_namespace:
                         continue
 
                     if should_have_namespace:
-                        namespace_ids.append(namespace_name)
+                        await self._entity_type_repo.add_namespace_ids(
+                            item.type_id, [namespace_name],
+                        )
                     else:
-                        namespace_ids = [value for value in namespace_ids if value != namespace_name]
-
-                    item.namespace_ids = namespace_ids
-                    await self._entity_type_repo.update(item)
+                        await self._entity_type_repo.remove_namespace_ids(
+                            item.type_id, [namespace_name],
+                        )
 
         if description_is_set:
             namespace.description = description

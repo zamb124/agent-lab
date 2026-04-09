@@ -1168,12 +1168,12 @@ class TestA2ASkills:
         assert resp.status_code == 404
 
     @pytest.mark.asyncio
-    async def test_create_skill_valid(self, client, flow_id, unique_id):
+    async def test_create_skill_valid(self, client, mutable_flow_id, unique_id):
         """POST /flows/{id}/skills создаёт новый skill."""
         skill_id = f"test_skill_{unique_id}"
         
         resp = await client.post(
-            f"/flows/api/v1/{flow_id}/skills",
+            f"/flows/api/v1/{mutable_flow_id}/skills",
             json={
                 "skill_id": skill_id,
                 "name": "Test Skill",
@@ -1191,24 +1191,21 @@ class TestA2ASkills:
         assert data["status"] == "success"
         assert data["skill_id"] == skill_id
         
-        # Проверяем что skill создан
-        get_resp = await client.get(f"/flows/api/v1/{flow_id}/skills/{skill_id}")
+        get_resp = await client.get(f"/flows/api/v1/{mutable_flow_id}/skills/{skill_id}")
         assert get_resp.status_code == 200
         skill = get_resp.json()
         assert skill["id"] == skill_id
         assert skill["name"] == "Test Skill"
         
-        # Cleanup
-        await client.delete(f"/flows/api/v1/{flow_id}/skills/{skill_id}")
+        await client.delete(f"/flows/api/v1/{mutable_flow_id}/skills/{skill_id}")
 
     @pytest.mark.asyncio
-    async def test_create_skill_duplicate(self, client, flow_id, unique_id):
+    async def test_create_skill_duplicate(self, client, mutable_flow_id, unique_id):
         """POST /flows/{id}/skills возвращает 409 для существующего skill."""
         skill_id = f"test_skill_dup_{unique_id}"
         
-        # Создаём первый раз
         resp1 = await client.post(
-            f"/flows/api/v1/{flow_id}/skills",
+            f"/flows/api/v1/{mutable_flow_id}/skills",
             json={
                 "skill_id": skill_id,
                 "name": "Test Skill",
@@ -1216,9 +1213,8 @@ class TestA2ASkills:
         )
         assert resp1.status_code == 201
         
-        # Пытаемся создать второй раз
         resp2 = await client.post(
-            f"/flows/api/v1/{flow_id}/skills",
+            f"/flows/api/v1/{mutable_flow_id}/skills",
             json={
                 "skill_id": skill_id,
                 "name": "Test Skill",
@@ -1226,8 +1222,7 @@ class TestA2ASkills:
         )
         assert resp2.status_code == 409
         
-        # Cleanup
-        await client.delete(f"/flows/api/v1/{flow_id}/skills/{skill_id}")
+        await client.delete(f"/flows/api/v1/{mutable_flow_id}/skills/{skill_id}")
 
     @pytest.mark.asyncio
     async def test_create_skill_missing_skill_id(self, client, flow_id):
@@ -1253,13 +1248,12 @@ class TestA2ASkills:
         assert resp.status_code == 404
 
     @pytest.mark.asyncio
-    async def test_update_skill_valid(self, client, flow_id, unique_id):
+    async def test_update_skill_valid(self, client, mutable_flow_id, unique_id):
         """PUT /flows/{id}/skills/{skill_id} обновляет существующий skill."""
         skill_id = f"test_skill_update_{unique_id}"
         
-        # Создаём skill
         create_resp = await client.post(
-            f"/flows/api/v1/{flow_id}/skills",
+            f"/flows/api/v1/{mutable_flow_id}/skills",
             json={
                 "skill_id": skill_id,
                 "name": "Original Name",
@@ -1268,9 +1262,8 @@ class TestA2ASkills:
         )
         assert create_resp.status_code == 201
         
-        # Обновляем skill
         update_resp = await client.put(
-            f"/flows/api/v1/{flow_id}/skills/{skill_id}",
+            f"/flows/api/v1/{mutable_flow_id}/skills/{skill_id}",
             json={
                 "skill_id": skill_id,
                 "name": "Updated Name",
@@ -1286,16 +1279,14 @@ class TestA2ASkills:
         assert data["status"] == "success"
         assert data["skill_id"] == skill_id
         
-        # Проверяем что skill обновлён
-        get_resp = await client.get(f"/flows/api/v1/{flow_id}/skills/{skill_id}")
+        get_resp = await client.get(f"/flows/api/v1/{mutable_flow_id}/skills/{skill_id}")
         assert get_resp.status_code == 200
         skill = get_resp.json()
         assert skill["name"] == "Updated Name"
         assert skill["description"] == "Updated description"
         assert "updated" in skill["tags"]
         
-        # Cleanup
-        await client.delete(f"/flows/api/v1/{flow_id}/skills/{skill_id}")
+        await client.delete(f"/flows/api/v1/{mutable_flow_id}/skills/{skill_id}")
 
     @pytest.mark.asyncio
     async def test_update_skill_404_for_nonexistent_skill(self, client, flow_id, unique_id):
@@ -1322,13 +1313,12 @@ class TestA2ASkills:
         assert resp.status_code == 404
 
     @pytest.mark.asyncio
-    async def test_delete_skill_valid(self, client, flow_id, unique_id):
+    async def test_delete_skill_valid(self, client, mutable_flow_id, unique_id):
         """DELETE /flows/{id}/skills/{skill_id} удаляет skill."""
         skill_id = f"test_skill_delete_{unique_id}"
         
-        # Создаём skill
         create_resp = await client.post(
-            f"/flows/api/v1/{flow_id}/skills",
+            f"/flows/api/v1/{mutable_flow_id}/skills",
             json={
                 "skill_id": skill_id,
                 "name": "To Delete",
@@ -1336,15 +1326,13 @@ class TestA2ASkills:
         )
         assert create_resp.status_code == 201
         
-        # Удаляем skill
-        delete_resp = await client.delete(f"/flows/api/v1/{flow_id}/skills/{skill_id}")
+        delete_resp = await client.delete(f"/flows/api/v1/{mutable_flow_id}/skills/{skill_id}")
         assert delete_resp.status_code == 200
         data = delete_resp.json()
         assert data["status"] == "success"
         assert data["skill_id"] == skill_id
         
-        # Проверяем что skill удалён
-        get_resp = await client.get(f"/flows/api/v1/{flow_id}/skills/{skill_id}")
+        get_resp = await client.get(f"/flows/api/v1/{mutable_flow_id}/skills/{skill_id}")
         assert get_resp.status_code == 404
 
     @pytest.mark.asyncio

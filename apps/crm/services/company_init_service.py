@@ -103,22 +103,27 @@ class CompanyInitService:
                 await self._entity_type_repo.create(entity_type)
                 created_count += 1
                 continue
-            existing.parent_type_id = template.get("parent_type_id")
-            existing.name = template["name"]
-            existing.description = template.get("description")
-            existing.prompt = template.get("prompt")
-            existing.required_fields = template.get("required_fields", {})
-            existing.optional_fields = template.get("optional_fields", {})
-            existing.icon = template.get("icon")
-            existing.color = template.get("color")
-            existing.is_system = True
-            existing.is_event = template.get("is_event", False)
-            existing.check_duplicates = template.get("check_duplicates", True)
-            existing.weight_coefficient = template.get("weight_coefficient", 1.0)
-            existing.is_context_anchor = template.get("is_context_anchor", False)
-            if "default" not in existing.namespace_ids:
-                existing.namespace_ids = list(existing.namespace_ids) + ["default"]
-            await self._entity_type_repo.update(existing)
+            await self._entity_type_repo.update_metadata(
+                existing.type_id,
+                company_id=company_id,
+                parent_type_id=template.get("parent_type_id"),
+                name=template["name"],
+                description=template.get("description"),
+                prompt=template.get("prompt"),
+                required_fields=template.get("required_fields", {}),
+                optional_fields=template.get("optional_fields", {}),
+                icon=template.get("icon"),
+                color=template.get("color"),
+                is_system=True,
+                is_event=template.get("is_event", False),
+                check_duplicates=template.get("check_duplicates", True),
+                weight_coefficient=template.get("weight_coefficient", 1.0),
+                is_context_anchor=template.get("is_context_anchor", False),
+            )
+            if "default" not in (existing.namespace_ids or []):
+                await self._entity_type_repo.add_namespace_ids(
+                    existing.type_id, ["default"], company_id=company_id,
+                )
         
         return created_count
 
