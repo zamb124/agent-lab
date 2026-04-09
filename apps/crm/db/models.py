@@ -16,7 +16,7 @@ from typing import Optional, Dict, Any, List
 
 from sqlalchemy import String, Text, Boolean, Float, Date, DateTime, Index, UniqueConstraint, ForeignKey, Integer
 from sqlalchemy.orm import Mapped, mapped_column
-from sqlalchemy.dialects.postgresql import JSONB, ARRAY
+from sqlalchemy.dialects.postgresql import JSONB, ARRAY, TSVECTOR
 
 from core.db.models import Base
 
@@ -68,12 +68,15 @@ class CRMEntity(Base):
         onupdate=lambda: datetime.now(timezone.utc),
     )
 
+    search_vector: Mapped[Optional[str]] = mapped_column(TSVECTOR, nullable=True)
+
     __table_args__ = (
         Index("ix_crm_entities_company_type", "company_id", "entity_type"),
         Index("ix_crm_entities_tags", "tags", postgresql_using="gin"),
         Index("ix_crm_entities_due_date", "due_date"),
         Index("ix_crm_entities_note_date", "note_date"),
         Index("ix_crm_entities_namespace", "company_id", "namespace"),
+        Index("ix_crm_entities_fts", "search_vector", postgresql_using="gin"),
     )
 
     @property

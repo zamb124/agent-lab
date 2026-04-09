@@ -1184,7 +1184,7 @@ export class DailyNotesPage extends PlatformElement {
             const mentionedEntityIds = relatedEntities
                 .map((entity) => entity?.entity_id)
                 .filter((entityId) => typeof entityId === 'string' && entityId.trim().length > 0);
-            await CRMStore.analyzeText(crmApi, noteText, note.entity_id, {
+            await CRMStore.analyzeNote(crmApi, note.entity_id, {
                 mentionedEntityIds,
                 extractEntityTypes: ['note', 'task', 'person', 'organization'],
                 extractRelationshipTypes: ['mentions'],

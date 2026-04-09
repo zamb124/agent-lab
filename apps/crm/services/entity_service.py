@@ -382,12 +382,13 @@ class EntityService:
 
     async def _list_notes_for_date(self, date_str: str, namespace: Optional[str] = None) -> List[CRMEntity]:
         query_filters: dict[str, Any] = {"note_date": date_str}
-        return await self._entity_repo.list_all(
+        entities, _, _ = await self._entity_repo.list_all(
             entity_type="note",
             namespace=self._normalize_namespace(namespace),
             filters=query_filters,
             limit=1000,
         )
+        return entities
 
     @staticmethod
     def _build_source_version(notes: List[CRMEntity]) -> dict[str, Any]:
@@ -800,14 +801,16 @@ class EntityService:
         namespace: Optional[str] = None,
         filters: Optional[Dict[str, Any]] = None,
         limit: int = 100,
-    ) -> List[CRMEntity]:
-        """Получает список entities БЕЗ семантического поиска"""
+        cursor: Optional[str] = None,
+    ) -> tuple[list[CRMEntity], Optional[str], bool]:
+        """Получает список entities с cursor-пагинацией."""
         return await self._entity_repo.list_all(
             entity_type=entity_type,
             entity_subtype=entity_subtype,
             namespace=namespace,
             filters=filters,
             limit=limit,
+            cursor=cursor,
         )
 
     async def get_timeline_bounds(

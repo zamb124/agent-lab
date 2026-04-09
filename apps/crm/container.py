@@ -202,6 +202,11 @@ class CRMContainer(BaseContainer):
         )
 
     @lazy
+    def note_processing_service(self):
+        from apps.crm.services.note_processing_service import NoteProcessingService
+        return NoteProcessingService(entity_service=self.entity_service)
+
+    @lazy
     def knowledge_import_repository(self):
         from apps.crm.db.repositories.knowledge_import_repository import KnowledgeImportRepository
 

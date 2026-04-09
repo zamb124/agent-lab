@@ -2,7 +2,7 @@
 Сервис проверки доступа через AccessGrants.
 """
 
-from typing import Optional, Dict, Any, List, Union
+from typing import Optional, Dict, Any, List, Union, Set
 from datetime import datetime, timezone
 
 from apps.crm.db.models import CRMEntity
@@ -233,7 +233,89 @@ class AccessControlService:
             obj = obj[key]
         obj[keys[-1]] = value
     
-    async def _get_user_namespace(self, user_id: str) -> str:
+    async def batch_filter_readable(
+        self,
+        entities: List[CRMEntity],
+        user_id: Optional[str],
+        company_id: Optional[str],
+    ) -> List[CRMEntity]:
+        """
+        Batch фильтрация сущностей по правам доступа.
+        Один SQL-запрос для всех грантов вместо 2*N запросов.
+        """
+        if not entities:
+            return []
+
+        user_ns = await self._get_user_namespace(user_id) if user_id else None
+        now = datetime.now(timezone.utc)
+
+        # Быстрый путь: owner или same company + namespace
+        needs_grant_check: List[CRMEntity] = []
+        readable: List[CRMEntity] = []
+
+        for entity in entities:
+            if user_id and entity.user_id == user_id:
+                readable.append(entity)
+                continue
+            if user_id and company_id == entity.company_id and user_ns == entity.namespace:
+                readable.append(entity)
+                continue
+            needs_grant_check.append(entity)
+
+        if not needs_grant_check:
+            return readable
+
+        # Batch-загрузка грантов: (entity, entity_id) + (namespace, namespace)
+        resource_keys: List[tuple[str, str]] = []
+        for entity in needs_grant_check:
+            resource_keys.append(("entity", entity.entity_id))
+            resource_keys.append(("namespace", entity.namespace))
+
+        unique_keys = list(set(resource_keys))
+        grants_map = await self._grant_repo.find_by_resources_batch(unique_keys)
+
+        for entity in needs_grant_check:
+            entity_grants = grants_map.get(("entity", entity.entity_id), [])
+            namespace_grants = grants_map.get(("namespace", entity.namespace), [])
+
+            has_access = False
+            for grant in entity_grants:
+                if self._check_grant_sync(grant, user_id, company_id, now):
+                    has_access = True
+                    break
+
+            if not has_access:
+                for grant in namespace_grants:
+                    if grant.grant_type == "public":
+                        continue
+                    if self._check_grant_sync(grant, user_id, company_id, now):
+                        has_access = True
+                        break
+
+            if has_access:
+                readable.append(entity)
+
+        return readable
+
+    def _check_grant_sync(
+        self,
+        grant: AccessGrant,
+        user_id: Optional[str],
+        company_id: Optional[str],
+        now: datetime,
+    ) -> bool:
+        """Синхронная проверка гранта (для batch-операций)."""
+        if grant.expires_at and grant.expires_at < now:
+            return False
+        if grant.grant_type == "public":
+            return True
+        if grant.grant_type == "user" and user_id:
+            return user_id == grant.target_user_id
+        if grant.grant_type == "company" and company_id:
+            return company_id == grant.target_company_id
+        return False
+
+    async def _get_user_namespace(self, user_id: Optional[str]) -> str:
         """Получить namespace пользователя (по умолчанию 'default')"""
         # TODO: из UserProfile
         return "default"

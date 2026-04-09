@@ -12,8 +12,8 @@ from datetime import datetime, timezone
 from typing import Any, Optional
 
 from apps.crm.container import get_crm_container
-from apps.crm.models.api import AIAnalyzeRequest
-from apps.crm.services.knowledge_import_source_loader import load_text_from_stored_file_id
+from apps.crm.models.api import NoteProcessingConfig
+from apps.crm.services.file_text_reader import load_text_from_stored_file_id
 from apps.crm.services.knowledge_import_text_redis import (
     delete_pending_import_text,
     get_pending_import_text,
@@ -190,6 +190,11 @@ async def run_knowledge_import_task(
                 )
 
             if row.mode == "graph":
+                pipeline = container.note_processing_service
+                graph_config = NoteProcessingConfig(
+                    extract_entity_types=row.extract_entity_types,
+                )
+
                 for idx, note_id in enumerate(import_note_ids):
                     last_chunk_index = idx
                     fresh = await repo.get_for_worker(import_id, company_id)
@@ -217,32 +222,16 @@ async def run_knowledge_import_task(
                         )
                         return {"status": "cancelled", "import_id": import_id}
 
-                    note_row = await entity_service.get_entity(note_id)
-                    if note_row is None:
-                        raise RuntimeError(f"Заметка импорта не найдена после создания: {note_id}")
-                    analyze_text = note_row.description if note_row.description else ""
+                    result = await pipeline.process(note_id, graph_config)
 
-                    req = AIAnalyzeRequest(
-                        text=analyze_text,
-                        extract_entity_types=row.extract_entity_types,
-                        extract_relationship_types=None,
-                        mentioned_entity_ids=None,
-                        namespace=row.namespace,
-                    )
-                    await entity_service.analyze_text_with_ai(
-                        req,
-                        check_duplicates=True,
-                        note_id=note_id,
-                    )
-                    apply_result = await entity_service.apply_analysis_draft(note_id)
-                    for eid in apply_result.created_entity_ids:
+                    for eid in result.created_entity_ids:
                         if eid not in created_entity_ids:
                             created_entity_ids.append(eid)
-                    entities_from_graph += len(apply_result.created_entity_ids)
-                    for rid in apply_result.created_relationship_ids:
+                    entities_from_graph += len(result.created_entity_ids)
+                    for rid in result.created_relationship_ids:
                         if rid not in created_relationship_ids:
                             created_relationship_ids.append(rid)
-                    relationships_created += len(apply_result.created_relationship_ids)
+                    relationships_created += len(result.created_relationship_ids)
 
                     await repo.patch_progress(
                         import_id,

@@ -38,9 +38,18 @@ class TestAICorrection:
             })
         }])
         
-        analyze_resp = await crm_client.post("/crm/api/v1/entities/analyze", json={
-            "text": "Встретился с Иваном"
+        note_resp = await crm_client.post("/crm/api/v1/entities/", json={
+            "entity_type": "note",
+            "name": f"Встреча {unique_id}",
+            "description": "Встретился с Иваном",
         }, headers=auth_headers_system)
+        note_id = note_resp.json()["entity_id"]
+
+        analyze_resp = await crm_client.post(
+            f"/crm/api/v1/entities/notes/{note_id}/analyze",
+            json={},
+            headers=auth_headers_system,
+        )
         entities = analyze_resp.json()["entities"]
         
         # Сначала создаём entity на основе AI анализа
@@ -123,9 +132,18 @@ class TestAICorrection:
             })
         }])
         
-        analyze_resp = await crm_client.post("/crm/api/v1/entities/analyze", json={
-            "text": "Встретился с контактом"
+        note_resp = await crm_client.post("/crm/api/v1/entities/", json={
+            "entity_type": "note",
+            "name": f"Встреча {unique_id}",
+            "description": "Встретился с контактом",
         }, headers=auth_headers_system)
+        note_id = note_resp.json()["entity_id"]
+
+        analyze_resp = await crm_client.post(
+            f"/crm/api/v1/entities/notes/{note_id}/analyze",
+            json={},
+            headers=auth_headers_system,
+        )
         entities = analyze_resp.json()["entities"]
         
         incorrect_entity_id = None
@@ -196,9 +214,18 @@ class TestAICorrection:
             })
         }])
         
-        analyze_resp = await crm_client.post("/crm/api/v1/entities/analyze", json={
-            "text": "Встреча прошла"
+        note_resp = await crm_client.post("/crm/api/v1/entities/", json={
+            "entity_type": "note",
+            "name": f"Встреча {unique_id}",
+            "description": "Встреча прошла",
         }, headers=auth_headers_system)
+        note_id = note_resp.json()["entity_id"]
+
+        analyze_resp = await crm_client.post(
+            f"/crm/api/v1/entities/notes/{note_id}/analyze",
+            json={},
+            headers=auth_headers_system,
+        )
         note_data = analyze_resp.json()["note"]
         
         # Создаём note на основе AI анализа

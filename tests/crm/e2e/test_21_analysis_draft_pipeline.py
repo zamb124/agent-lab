@@ -102,8 +102,8 @@ class TestAnalysisDraftPipeline:
         )
 
         analyze = await crm_client.post(
-            f"/crm/api/v1/entities/analyze?note_id={note_id}",
-            json={"text": "Встретились с Иваном и Петром, обсудили проект.", "namespace": "default"},
+            f"/crm/api/v1/entities/notes/{note_id}/analyze",
+            json={},
             headers=auth_headers_system,
         )
         assert analyze.status_code == 200, analyze.text
@@ -173,8 +173,8 @@ class TestAnalysisDraftPipeline:
         )
 
         analyze = await crm_client.post(
-            f"/crm/api/v1/entities/analyze?note_id={note_id}",
-            json={"text": "Текст для анализа", "namespace": "default"},
+            f"/crm/api/v1/entities/notes/{note_id}/analyze",
+            json={},
             headers=auth_headers_system,
         )
         assert analyze.status_code == 200, analyze.text
@@ -246,8 +246,8 @@ class TestAnalysisDraftPipeline:
         )
 
         await crm_client.post(
-            f"/crm/api/v1/entities/analyze?note_id={note_id}",
-            json={"text": "Две сущности", "namespace": "default"},
+            f"/crm/api/v1/entities/notes/{note_id}/analyze",
+            json={},
             headers=auth_headers_system,
         )
 
@@ -331,14 +331,14 @@ class TestAnalysisDraftPipeline:
         )
 
         an = await crm_client.post(
-            f"/crm/api/v1/entities/analyze?note_id={note_id}&check_duplicates=false",
-            json={"text": f"Познакомился с {contact}", "namespace": "default"},
+            f"/crm/api/v1/entities/notes/{note_id}/analyze",
+            json={"check_duplicates": False},
             headers=auth_headers_system,
         )
         assert an.status_code == 200, an.text
 
         apply_resp = await crm_client.post(
-            f"/crm/api/v1/entities/notes/{note_id}/analysis-draft/apply",
+            f"/crm/api/v1/entities/notes/{note_id}/apply",
             headers=auth_headers_system,
         )
         assert apply_resp.status_code == 200, apply_resp.text
@@ -404,19 +404,19 @@ class TestAnalysisDraftPipeline:
         )
 
         await crm_client.post(
-            f"/crm/api/v1/entities/analyze?note_id={note_id}",
-            json={"text": "Создать задачу", "namespace": "default"},
+            f"/crm/api/v1/entities/notes/{note_id}/analyze",
+            json={},
             headers=auth_headers_system,
         )
 
         first = await crm_client.post(
-            f"/crm/api/v1/entities/notes/{note_id}/analysis-draft/apply",
+            f"/crm/api/v1/entities/notes/{note_id}/apply",
             headers=auth_headers_system,
         )
         assert first.status_code == 200, first.text
 
         second = await crm_client.post(
-            f"/crm/api/v1/entities/notes/{note_id}/analysis-draft/apply",
+            f"/crm/api/v1/entities/notes/{note_id}/apply",
             headers=auth_headers_system,
         )
         assert second.status_code == 422, second.text
@@ -515,7 +515,7 @@ class TestAnalysisDraftApplyPartialFailureCompensation:
         assert isinstance(draft_raw, dict)
         assert draft_raw.get("draft_version") == 1
 
-        ok_tasks = await entity_service.list_entities(
+        ok_tasks, _, _ = await entity_service.list_entities(
             entity_type="task",
             namespace="default",
             filters={"name": ok_name},
@@ -523,7 +523,7 @@ class TestAnalysisDraftApplyPartialFailureCompensation:
         )
         assert ok_tasks == []
 
-        fail_contacts = await entity_service.list_entities(
+        fail_contacts, _, _ = await entity_service.list_entities(
             entity_type="contact",
             namespace="default",
             filters={"name": fail_name},

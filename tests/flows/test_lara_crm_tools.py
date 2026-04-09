@@ -185,7 +185,7 @@ async def test_crm_analyze_note_text_tool_returns_blocks_for_chat(
     assert isinstance(note_id, str) and note_id
 
     raw = await crm_analyze_note_text._run_impl(
-        {"text": "Текст заметки для AI-анализа.", "note_id": note_id},
+        {"note_id": note_id},
         state,
     )
     data = json.loads(raw)

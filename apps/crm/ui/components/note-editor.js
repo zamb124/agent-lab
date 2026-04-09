@@ -401,7 +401,7 @@ export class NoteEditor extends PlatformElement {
         if (!this._noteText || !this._currentNoteId) return;
         
         const crmApi = this.services.get('crmApi');
-        await CRMStore.analyzeText(crmApi, this._noteText, this._currentNoteId);
+        await CRMStore.analyzeNote(crmApi, this._currentNoteId);
         this.emit('analysis-ready', { noteId: this._currentNoteId });
         this.success(this.i18n.t('note_editor.analysis_complete'));
     }

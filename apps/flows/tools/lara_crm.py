@@ -107,7 +107,6 @@ class CrmCreateNoteArgs(BaseModel):
 class CrmAnalyzeNoteTextArgs(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    text: str = Field(..., min_length=1, description="Текст для AI-анализа (обычно тот же, что в заметке).")
     note_id: str = Field(..., min_length=1, description="entity_id созданной или существующей заметки.")
     extract_entity_types: Optional[List[str]] = Field(
         None,
@@ -117,18 +116,12 @@ class CrmAnalyzeNoteTextArgs(BaseModel):
         None,
         description="Уже известные id сущностей для контекста анализа; опционально.",
     )
-    namespace: Optional[str] = Field(
-        None,
-        description="Обычно не передавать — берётся из сессии; непустая строка переопределяет.",
-    )
 
-    @field_validator("namespace", mode="before")
+    @field_validator("note_id", mode="before")
     @classmethod
-    def _optional_str_ns(cls, v: Any) -> Any:
-        if v is None:
-            return None
-        if isinstance(v, str) and not v.strip():
-            return None
+    def _strip_note_id(cls, v: Any) -> Any:
+        if isinstance(v, str):
+            return v.strip() or None
         return v
 
 
@@ -391,7 +384,7 @@ async def crm_create_note_and_analyze(
     if not eid or not isinstance(eid, str):
         return json.dumps({"success": False, "error": "create_note: missing entity_id"}, ensure_ascii=False)
 
-    analyze_args: Dict[str, Any] = {"text": description, "note_id": eid}
+    analyze_args: Dict[str, Any] = {"note_id": eid}
     if extract_entity_types:
         analyze_args["extract_entity_types"] = extract_entity_types
     if mentioned_entity_ids:
@@ -434,34 +427,28 @@ async def crm_create_note_and_analyze(
 @tool(
     name="crm_analyze_note_text",
     description=(
-        "Запускает AI-анализ текста заметки в CRM (извлечение сущностей). "
-        "Обязательно: text и note_id. Параметр namespace обычно не передавай — берётся из сессии CRM; "
-        "если всё же передан непустой, используется он. Возвращает JSON с кратким summary и blocks для чата."
+        "Запускает AI-анализ заметки в CRM (извлечение сущностей). "
+        "Обязательно: note_id. Текст берётся из заметки автоматически. "
+        "Возвращает JSON с кратким summary и blocks для чата."
     ),
     tags=["crm", "lara", "ai"],
     args_schema=CrmAnalyzeNoteTextArgs,
     mock_response=_analyze_mock,
 )
 async def crm_analyze_note_text(
-    text: str,
     note_id: str,
     extract_entity_types: Optional[List[str]] = None,
     mentioned_entity_ids: Optional[List[str]] = None,
-    namespace: Optional[str] = None,
     state: Optional[dict] = None,
 ) -> str:
-    ns = namespace if namespace and str(namespace).strip() else _require_context_namespace()
-    body: Dict[str, Any] = {
-        "text": text,
-        "namespace": ns,
-    }
+    body: Dict[str, Any] = {}
     if extract_entity_types:
         body["extract_entity_types"] = extract_entity_types
     if mentioned_entity_ids:
         body["mentioned_entity_ids"] = mentioned_entity_ids
 
     client = ServiceClient()
-    path = f"/crm/api/v1/entities/analyze?note_id={quote(str(note_id), safe='')}"
+    path = f"/crm/api/v1/entities/notes/{quote(str(note_id), safe='')}/analyze"
     try:
         result = await client.post("crm", path, json=body)
     except ServiceClientError as exc:

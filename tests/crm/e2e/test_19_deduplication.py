@@ -42,9 +42,18 @@ class TestEntityDeduplication:
             })
         }])
         
-        response = await crm_client.post("/crm/api/v1/entities/analyze", json={
-            "text": f"Сегодня познакомился с Уникальный контакт {unique_id}. Он менеджер проекта."
+        note_resp = await crm_client.post("/crm/api/v1/entities/", json={
+            "entity_type": "note",
+            "name": f"Знакомство {unique_id}",
+            "description": f"Сегодня познакомился с Уникальный контакт {unique_id}. Он менеджер проекта.",
         }, headers=auth_headers_system)
+        note_id = note_resp.json()["entity_id"]
+
+        response = await crm_client.post(
+            f"/crm/api/v1/entities/notes/{note_id}/analyze",
+            json={},
+            headers=auth_headers_system,
+        )
         
         assert response.status_code == 200
         result = response.json()
@@ -114,10 +123,19 @@ class TestEntityDeduplication:
             })
         }])
         
-        response = await crm_client.post("/crm/api/v1/entities/analyze", json={
-            "text": f"Созвонился с Иваном Петровым {unique_id}. Он CTO в ABC.",
+        note_resp = await crm_client.post("/crm/api/v1/entities/", json={
+            "entity_type": "note",
+            "name": f"Звонок {unique_id}",
+            "description": f"Созвонился с Иваном Петровым {unique_id}. Он CTO в ABC.",
             "namespace": "default",
         }, headers=auth_headers_system)
+        note_id = note_resp.json()["entity_id"]
+
+        response = await crm_client.post(
+            f"/crm/api/v1/entities/notes/{note_id}/analyze",
+            json={},
+            headers=auth_headers_system,
+        )
         
         assert response.status_code == 200
         result = response.json()
@@ -187,10 +205,19 @@ class TestEntityDeduplication:
             }
         ])
         
-        response = await crm_client.post("/crm/api/v1/entities/analyze", json={
-            "text": f"Провел встречу с Компания Альфа {unique_id}. Они занимаются разработкой.",
+        note_resp = await crm_client.post("/crm/api/v1/entities/", json={
+            "entity_type": "note",
+            "name": f"Встреча {unique_id}",
+            "description": f"Провел встречу с Компания Альфа {unique_id}. Они занимаются разработкой.",
             "namespace": "default",
         }, headers=auth_headers_system)
+        note_id = note_resp.json()["entity_id"]
+
+        response = await crm_client.post(
+            f"/crm/api/v1/entities/notes/{note_id}/analyze",
+            json={},
+            headers=auth_headers_system,
+        )
         
         assert response.status_code == 200
         result = response.json()
@@ -256,9 +283,18 @@ class TestEntityDeduplication:
             }
         ])
         
-        response = await crm_client.post("/crm/api/v1/entities/analyze", json={
-            "text": f"Провел собеседование с Алексеем Кузнецовым {unique_id}. Хороший backend разработчик."
+        note_resp = await crm_client.post("/crm/api/v1/entities/", json={
+            "entity_type": "note",
+            "name": f"Собеседование {unique_id}",
+            "description": f"Провел собеседование с Алексеем Кузнецовым {unique_id}. Хороший backend разработчик.",
         }, headers=auth_headers_system)
+        note_id = note_resp.json()["entity_id"]
+
+        response = await crm_client.post(
+            f"/crm/api/v1/entities/notes/{note_id}/analyze",
+            json={},
+            headers=auth_headers_system,
+        )
         
         assert response.status_code == 200
         result = response.json()
@@ -348,10 +384,19 @@ class TestEntityDeduplication:
             }
         ])
         
-        response = await crm_client.post("/crm/api/v1/entities/analyze", json={
-            "text": f"На планерке был Петр Иванов {unique_id} и новая дизайнер Анна Новикова {unique_id}.",
+        note_resp = await crm_client.post("/crm/api/v1/entities/", json={
+            "entity_type": "note",
+            "name": f"Планерка {unique_id}",
+            "description": f"На планерке был Петр Иванов {unique_id} и новая дизайнер Анна Новикова {unique_id}.",
             "namespace": "default",
         }, headers=auth_headers_system)
+        note_id = note_resp.json()["entity_id"]
+
+        response = await crm_client.post(
+            f"/crm/api/v1/entities/notes/{note_id}/analyze",
+            json={},
+            headers=auth_headers_system,
+        )
         
         assert response.status_code == 200
         result = response.json()
@@ -397,10 +442,17 @@ class TestEntityDeduplication:
             })
         }])
         
+        note_resp = await crm_client.post("/crm/api/v1/entities/", json={
+            "entity_type": "note",
+            "name": f"Статус {unique_id}",
+            "description": f"Обсудили статус Проекта Омега {unique_id}. Все идет по плану.",
+        }, headers=auth_headers_system)
+        note_id = note_resp.json()["entity_id"]
+
         response = await crm_client.post(
-            "/crm/api/v1/entities/analyze?check_duplicates=false",
-            json={"text": f"Обсудили статус Проекта Омега {unique_id}. Все идет по плану."},
-            headers=auth_headers_system
+            f"/crm/api/v1/entities/notes/{note_id}/analyze",
+            json={"check_duplicates": False},
+            headers=auth_headers_system,
         )
         
         assert response.status_code == 200
@@ -477,10 +529,19 @@ class TestDeduplicateSkill:
             }
         ])
         
-        response = await crm_client.post("/crm/api/v1/entities/analyze", json={
-            "text": f"Встреча с ООО Рога и Копыта {unique_id}. Обсудили поставки.",
+        note_resp = await crm_client.post("/crm/api/v1/entities/", json={
+            "entity_type": "note",
+            "name": f"Встреча {unique_id}",
+            "description": f"Встреча с ООО Рога и Копыта {unique_id}. Обсудили поставки.",
             "namespace": "default",
         }, headers=auth_headers_system)
+        note_id = note_resp.json()["entity_id"]
+
+        response = await crm_client.post(
+            f"/crm/api/v1/entities/notes/{note_id}/analyze",
+            json={},
+            headers=auth_headers_system,
+        )
         
         assert response.status_code == 200
         result = response.json()
@@ -520,9 +581,16 @@ class TestDeduplicateSkill:
             }
         ])
         
+        note_resp = await crm_client.post("/crm/api/v1/entities/", json={
+            "entity_type": "note",
+            "name": f"Знакомство {unique_id}",
+            "description": f"Познакомился с новым контактом {unique_id}, инженер.",
+        }, headers=auth_headers_system)
+        note_id = note_resp.json()["entity_id"]
+
         response = await crm_client.post(
-            "/crm/api/v1/entities/analyze?check_duplicates=false",
-            json={"text": f"Познакомился с новым контактом {unique_id}, инженер."},
+            f"/crm/api/v1/entities/notes/{note_id}/analyze",
+            json={"check_duplicates": False},
             headers=auth_headers_system,
         )
         

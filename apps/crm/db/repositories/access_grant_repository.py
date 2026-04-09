@@ -2,8 +2,8 @@
 Репозиторий для AccessGrants.
 """
 
-from typing import List, Optional, Type, Tuple
-from sqlalchemy import select, update, delete
+from typing import List, Optional, Type, Tuple, Dict
+from sqlalchemy import select, update, delete, or_, and_, tuple_
 
 from apps.crm.db.models import AccessGrant
 from apps.crm.db.base import BaseCRMRepository, CRMDatabase
@@ -95,6 +95,35 @@ class AccessGrantRepository(BaseCRMRepository[AccessGrant]):
                 await session.execute(delete(AccessGrant).where(AccessGrant.grant_id == gid))
             await session.commit()
     
+    async def find_by_resources_batch(
+        self,
+        resource_keys: list[tuple[str, str]],
+    ) -> Dict[tuple[str, str], list[AccessGrant]]:
+        """
+        Batch загрузка грантов для набора (resource_type, resource_id).
+        Возвращает dict {(resource_type, resource_id): [grants]}.
+        """
+        if not resource_keys:
+            return {}
+        async with self._db.session() as session:
+            conditions = [
+                and_(
+                    AccessGrant.resource_type == rtype,
+                    AccessGrant.resource_id == rid,
+                )
+                for rtype, rid in resource_keys
+            ]
+            stmt = select(AccessGrant).where(or_(*conditions))
+            result = await session.execute(stmt)
+            grants = list(result.scalars().all())
+
+        grants_map: Dict[tuple[str, str], list[AccessGrant]] = {k: [] for k in resource_keys}
+        for grant in grants:
+            key = (grant.resource_type, grant.resource_id)
+            if key in grants_map:
+                grants_map[key].append(grant)
+        return grants_map
+
     async def find_by_user(
         self,
         user_id: str

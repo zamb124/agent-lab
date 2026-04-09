@@ -2,8 +2,8 @@
 Проигрывает сценарий пользователя CRM по JSON из generate_crm_sales_demo.py:
 
   1) создаёт заметку (текст из полей записи в JSON);
-  2) POST /entities/analyze?note_id=... — анализ и сохранение черновика на заметке;
-  3) POST /entities/notes/{note_id}/analysis-draft/apply — применение черновика.
+  2) POST /entities/notes/{note_id}/analyze — анализ (текст берётся из заметки);
+  3) POST /entities/notes/{note_id}/apply — применение черновика.
 
 Связи, контакты и прочий граф из файла не создаются: импортируются только записи-встречи
 (`entity_type` note и `entity_subtype` meeting), по одной заметке на каждую такую запись.
@@ -164,10 +164,8 @@ async def _pipeline_one_note(
         if not note_id:
             raise RuntimeError(f"{prefix} в ответе нет entity_id")
 
-        analyze_body = {"text": text, "namespace": ns}
-        analyze_url = (
-            f"{root}/entities/analyze?note_id={note_id}&check_duplicates=false"
-        )
+        analyze_body = {"check_duplicates": False}
+        analyze_url = f"{root}/entities/notes/{note_id}/analyze"
         await _post(
             client,
             "POST",
@@ -181,7 +179,7 @@ async def _pipeline_one_note(
             print(f"[import] {prefix} apply пропущен (--skip-apply)", flush=True)
             return
 
-        apply_url = f"{root}/entities/notes/{note_id}/analysis-draft/apply"
+        apply_url = f"{root}/entities/notes/{note_id}/apply"
         await _post(
             client,
             "POST",

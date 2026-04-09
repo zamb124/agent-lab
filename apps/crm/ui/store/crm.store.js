@@ -629,12 +629,12 @@ export const CRMStore = {
         return entities;
     },
     
-    async analyzeText(crmApi, text, noteId = null, options = {}) {
+    async analyzeNote(crmApi, noteId, options = {}) {
         if (!crmApi) {
             throw new Error('crmApi service is required');
         }
-        if (!text) {
-            throw new Error('Text is required');
+        if (!noteId) {
+            throw new Error('Note ID is required');
         }
         if (options !== null && typeof options !== 'object') {
             throw new Error('Analyze options must be object');
@@ -651,11 +651,8 @@ export const CRMStore = {
             const analyzeOptions = {
                 ...options,
                 ...(Array.isArray(options.mentionedEntityIds) ? {} : { mentionedEntityIds: fallbackMentionedEntityIds }),
-                ...(typeof options.namespace === 'string'
-                    ? {}
-                    : { namespace: this._getCurrentNamespaceName() }),
             };
-            const analyzeResponse = await crmApi.analyzeText(text, noteId, analyzeOptions);
+            const analyzeResponse = await crmApi.analyzeNote(noteId, analyzeOptions);
             const analysis = normalizeAnalyzeResponse(analyzeResponse);
 
             const suggestions = [

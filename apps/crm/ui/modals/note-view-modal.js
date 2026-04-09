@@ -264,7 +264,7 @@ export class NoteViewModal extends PlatformModal {
             const mentionedEntityIds = this._relatedEntities
                 .map((entity) => entity?.entity_id)
                 .filter((entityId) => typeof entityId === 'string' && entityId.trim().length > 0);
-            await CRMStore.analyzeText(crmApi, noteText, this.note.entity_id, {
+            await CRMStore.analyzeNote(crmApi, this.note.entity_id, {
                 checkDuplicates: true,
                 extractEntityTypes,
                 extractRelationshipTypes,

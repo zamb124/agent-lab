@@ -1947,7 +1947,7 @@ export class GraphPage extends PlatformElement {
             { id: 'deleteEntity', label: 'Entities: delete', method: 'deleteEntity', args: '["entity_id"]' },
             { id: 'searchEntities', label: 'Entities: search', method: 'searchEntities', args: '["query",{"limit":20}]' },
             { id: 'findEntitiesByText', label: 'Entities: find by text', method: 'findEntitiesByText', args: '["Any text with mentions"]' },
-            { id: 'analyzeText', label: 'Entities: analyze text', method: 'analyzeText', args: '["Call John about project",null,{"checkDuplicates":true}]' },
+            { id: 'analyzeNote', label: 'Entities: analyze note', method: 'analyzeNote', args: '["<note_id>",{"checkDuplicates":true}]' },
             { id: 'getEntityTypes', label: 'Entities: list types', method: 'getEntityTypes', args: '[]' },
             { id: 'getEntityTypesByNamespace', label: 'Entities: list types by namespace', method: 'getEntityTypesByNamespace', args: '["default"]' },
             { id: 'createEntityType', label: 'Entities: create type', method: 'createEntityType', args: '[{"type_id":"custom_type","name":"Custom Type","description":"Custom"}]' },

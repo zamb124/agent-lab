@@ -6,21 +6,21 @@ API для работы с entities.
 
 from typing import Any, Dict, List, Optional
 from datetime import datetime
-from fastapi import APIRouter, File, HTTPException, Query, UploadFile
-from pydantic import ValidationError
-
+from fastapi import APIRouter, Body, File, HTTPException, Query, UploadFile
 from apps.crm.models.api import (
     EntityCreate,
     EntityUpdate,
     EntityResponse,
+    PaginatedEntityResponse,
     EntityTimelineBoundsResponse,
     EntityMergeRequest,
     EntityMergeResponse,
-    AIAnalyzeRequest,
     AIAnalyzeResponse,
     AIAnalysisDraftApplyResult,
     AIAnalysisDraftPatchRequest,
     AIAnalysisDraftStored,
+    NoteProcessingConfig,
+    NoteProcessingResult,
     SearchMentionsRequest,
     RelationshipResponse,
 )
@@ -29,10 +29,7 @@ from apps.crm.config import get_crm_settings
 from apps.crm.taskiq_analyze_errors import parse_validation_from_task_message
 from apps.crm.services.entity_service import DraftVersionConflictError
 from apps.crm.dependencies import ContainerDep
-from apps.crm_worker.tasks.analysis_tasks import (
-    analyze_text_with_ai_task,
-    apply_analysis_draft_task,
-)
+from apps.crm_worker.tasks.analysis_tasks import process_note_task
 from core.files.media.transcriber import MediaTranscriber
 from core.context import get_context
 from core.i18n.service import t
@@ -245,14 +242,60 @@ async def patch_note_analysis_draft(
         raise HTTPException(status_code=422, detail=str(exc)) from exc
 
 
-@router.post("/notes/{note_id}/analysis-draft/apply", response_model=AIAnalysisDraftApplyResult)
-async def apply_note_analysis_draft(
+@router.post("/notes/{note_id}/analyze", response_model=AIAnalyzeResponse)
+async def analyze_note(
+    note_id: str,
+    container: ContainerDep,
+    config: NoteProcessingConfig = Body(default_factory=NoteProcessingConfig),
+):
+    """AI-анализ заметки: текст берётся из note.description + attachment_ids."""
+    result = await _dispatch_note_task(note_id, container, mode="analyze", config=config)
+    ctx = get_context()
+    if ctx and ctx.user:
+        suggestions_count = len(result.get("entities") or []) + len(result.get("relationships") or [])
+        await notify_user(
+            user_id=ctx.user.user_id,
+            notification=Notification(
+                type=NotificationType.TASK_COMPLETED,
+                title="Анализ завершён",
+                message=f"Найдено {suggestions_count} предложений",
+                service="crm",
+                data={"note_id": note_id, "analysis": result},
+            ),
+        )
+    return AIAnalyzeResponse.model_validate(result)
+
+
+@router.post("/notes/{note_id}/apply", response_model=AIAnalysisDraftApplyResult)
+async def apply_note(
     note_id: str,
     container: ContainerDep,
 ):
+    """Применить черновик анализа заметки."""
+    return await _dispatch_note_task(note_id, container, mode="apply")
+
+
+@router.post("/notes/{note_id}/process", response_model=NoteProcessingResult)
+async def process_note(
+    note_id: str,
+    container: ContainerDep,
+    config: NoteProcessingConfig = Body(default_factory=NoteProcessingConfig),
+):
+    """Полный конвейер: analyze + apply."""
+    return await _dispatch_note_task(note_id, container, mode="process", config=config)
+
+
+async def _dispatch_note_task(
+    note_id: str,
+    container: ContainerDep,
+    *,
+    mode: str,
+    config: NoteProcessingConfig | None = None,
+) -> dict:
+    """Общая логика отправки process_note_task в worker и ожидания результата."""
     note = await container.entity_service.get_entity(note_id)
     if not note:
-        raise HTTPException(status_code=404, detail="Entity not found")
+        raise HTTPException(status_code=404, detail="Note not found")
     ctx = get_context()
     user_id = ctx.user.user_id if ctx and ctx.user else None
     company_id = ctx.active_company.company_id if ctx and ctx.active_company else None
@@ -261,25 +304,36 @@ async def apply_note_analysis_draft(
         raise HTTPException(status_code=403, detail="Access denied")
     if not user_id or not company_id:
         raise HTTPException(status_code=500, detail="Контекст пользователя или компании отсутствует")
+
+    effective_config = config if config is not None else NoteProcessingConfig()
     settings = get_crm_settings()
     ns = note.namespace or "default"
+
     try:
-        task = await apply_analysis_draft_task.kiq(
+        task = await process_note_task.kiq(
             note_id=note_id,
             company_id=company_id,
             namespace=ns,
             auth_token=auth_token,
             user_id=user_id,
+            interface_language=ctx.language.value,
+            config_payload=effective_config.model_dump(mode="json"),
+            mode=mode,
         )
         res = await task.wait_result(timeout=settings.taskiq_sync_timeout_seconds)
     except TaskiqResultTimeoutError as exc:
         raise HTTPException(
             status_code=504,
-            detail="Таймаут применения черновика analyze в worker",
+            detail=f"Таймаут {mode} заметки в worker",
         ) from exc
     if res.is_err:
-        raise HTTPException(status_code=422, detail=str(res.error))
-    return AIAnalysisDraftApplyResult.model_validate(res.return_value)
+        err = res.error
+        err_msg = str(err) if err else ""
+        parsed = parse_validation_from_task_message(err_msg)
+        if parsed is not None:
+            raise HTTPException(status_code=422, detail=parsed)
+        raise HTTPException(status_code=422, detail=err_msg or repr(err))
+    return res.return_value
 
 
 @router.get("/{entity_id}")
@@ -366,7 +420,7 @@ async def delete_entity(
     return {"success": True}
 
 
-@router.get("", response_model=List[EntityResponse])
+@router.get("", response_model=PaginatedEntityResponse)
 async def list_entities(
     container: ContainerDep,
     entity_type: Optional[str] = Query(None),
@@ -376,14 +430,15 @@ async def list_entities(
     priority: Optional[str] = Query(None, description="Фильтр по приоритету (low, medium, high, urgent)"),
     tags: Optional[str] = Query(None),
     user_id: Optional[str] = Query(None),
-    search: Optional[str] = Query(None, description="Подстрока для поиска по name/description"),
+    search: Optional[str] = Query(None, description="Полнотекстовый поиск по name/description/attributes"),
     date_from: Optional[str] = Query(None),
     date_to: Optional[str] = Query(None),
     created_at_from: Optional[datetime] = Query(None, description="Фильтр created_at >= value"),
     created_at_to: Optional[datetime] = Query(None, description="Фильтр created_at <= value"),
+    cursor: Optional[str] = Query(None, description="Cursor для пагинации (из предыдущего ответа)"),
     limit: int = Query(100, le=1000),
 ):
-    """Получить список entities с фильтрацией"""
+    """Получить список entities с cursor-пагинацией и фильтрацией."""
     filters = build_crm_entity_filters_from_query(
         status=status,
         priority=priority,
@@ -396,85 +451,19 @@ async def list_entities(
         created_at_to=created_at_to,
     )
 
-    entities = await container.entity_service.list_entities(
+    entities, next_cursor, has_more = await container.entity_service.list_entities(
         entity_type=entity_type,
         entity_subtype=entity_subtype,
         namespace=namespace,
         filters=filters if filters else None,
-        limit=limit
+        limit=limit,
+        cursor=cursor,
     )
-    return [EntityResponse.model_validate(e) for e in entities]
-
-
-@router.post("/analyze", response_model=AIAnalyzeResponse)
-async def analyze_text(
-    request: AIAnalyzeRequest,
-    container: ContainerDep,
-    note_id: Optional[str] = Query(None, description="ID заметки для нотификации"),
-    check_duplicates: bool = Query(True, description="Проверять дубликаты entities"),
-):
-    """AI анализ текста с извлечением entities и relationships"""
-    _ = container
-    context = get_context()
-    auth_token = context.auth_token if context else None
-    user_id_ctx = context.user.user_id if context and context.user else None
-    company_id_ctx = context.active_company.company_id if context and context.active_company else None
-    active_ns = context.active_namespace if context else "default"
-    if not user_id_ctx or not company_id_ctx:
-        raise HTTPException(status_code=500, detail="Контекст пользователя или компании отсутствует")
-    settings = get_crm_settings()
-    try:
-        task = await analyze_text_with_ai_task.kiq(
-            request_payload=request.model_dump(mode="json"),
-            note_id=note_id,
-            check_duplicates=check_duplicates,
-            company_id=company_id_ctx,
-            namespace=active_ns or "default",
-            auth_token=auth_token,
-            user_id=user_id_ctx,
-            interface_language=context.language.value,
-        )
-        res = await task.wait_result(timeout=settings.taskiq_sync_timeout_seconds)
-    except TaskiqResultTimeoutError as exc:
-        raise HTTPException(
-            status_code=504,
-            detail="Таймаут analyze в worker",
-        ) from exc
-    if res.is_err:
-        err = res.error
-        if isinstance(err, ValidationError):
-            raise HTTPException(status_code=422, detail=err.errors())
-        err_msg = str(err) if err else ""
-        parsed = parse_validation_from_task_message(err_msg)
-        if parsed is not None:
-            raise HTTPException(status_code=422, detail=parsed)
-        errors_fn = getattr(err, "errors", None)
-        if callable(errors_fn):
-            try:
-                out = errors_fn()
-            except Exception:
-                out = None
-            if out:
-                raise HTTPException(status_code=422, detail=out)
-        raise HTTPException(status_code=422, detail=err_msg or repr(err))
-    try:
-        result = AIAnalyzeResponse.model_validate(res.return_value)
-    except ValidationError as exc:
-        raise HTTPException(status_code=422, detail=exc.errors()) from exc
-    if note_id and context and context.user:
-        suggestions_count = len(result.entities or []) + len(result.relationships or [])
-        await notify_user(
-            user_id=context.user.user_id,
-            notification=Notification(
-                type=NotificationType.TASK_COMPLETED,
-                title="Анализ завершён",
-                message=f"Найдено {suggestions_count} предложений",
-                service="crm",
-                data={"note_id": note_id, "analysis": result.model_dump()}
-            )
-        )
-    
-    return result
+    return PaginatedEntityResponse(
+        items=[EntityResponse.model_validate(e) for e in entities],
+        next_cursor=next_cursor,
+        has_more=has_more,
+    )
 
 
 @router.post("/daily-summary")

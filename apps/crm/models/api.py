@@ -83,6 +83,13 @@ class EntityResponse(BaseModel):
     updated_at: datetime
 
 
+class PaginatedEntityResponse(BaseModel):
+    """Ответ со списком entities и курсором для пагинации."""
+    items: List[EntityResponse]
+    next_cursor: Optional[str] = None
+    has_more: bool = False
+
+
 class EntityTimelineBoundsResponse(BaseModel):
     """Границы timeline по created_at."""
     min_created_at: Optional[datetime]
@@ -498,6 +505,38 @@ class AIAnalysisDraftPatchRequest(BaseModel):
 
 
 class AIAnalysisDraftApplyResult(BaseModel):
+    created_entity_ids: List[str] = Field(default_factory=list)
+    updated_entity_ids: List[str] = Field(default_factory=list)
+    created_relationship_ids: List[str] = Field(default_factory=list)
+
+
+class NoteProcessingConfig(BaseModel):
+    """Конфигурация конвейера обработки заметки (analyze + apply)."""
+    extract_entity_types: Optional[List[str]] = Field(
+        default=None,
+        description="Типы сущностей для извлечения (None = все типы namespace)",
+    )
+    extract_relationship_types: Optional[List[str]] = Field(
+        default=None,
+        description="Типы связей для извлечения (None = все с prompt)",
+    )
+    mentioned_entity_ids: Optional[List[str]] = Field(
+        default=None,
+        description="ID entities, упомянутых через @",
+    )
+    check_duplicates: bool = Field(
+        default=True,
+        description="Проверять дубликаты при анализе",
+    )
+    include_attachments: bool = Field(
+        default=True,
+        description="Включать текст из attachment_ids заметки",
+    )
+
+
+class NoteProcessingResult(BaseModel):
+    """Результат полного конвейера обработки заметки (analyze + apply)."""
+    note_id: str
     created_entity_ids: List[str] = Field(default_factory=list)
     updated_entity_ids: List[str] = Field(default_factory=list)
     created_relationship_ids: List[str] = Field(default_factory=list)

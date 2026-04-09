@@ -63,9 +63,16 @@ class TestAIAnalysis:
             })
         }])
         
-        response = await crm_client.post("/crm/api/v1/entities/analyze", json={
-            "text": "Сегодня встретился с Иваном. Обсудили проект X. Иван предложил нанять Петра."
+        note_resp = await crm_client.post("/crm/api/v1/entities/", json={
+            "entity_type": "note",
+            "name": "Анализ встречи",
+            "description": "Сегодня встретился с Иваном. Обсудили проект X. Иван предложил нанять Петра.",
+            "namespace": "default",
         }, headers=auth_headers_system)
+        note_id = note_resp.json()["entity_id"]
+        
+        response = await crm_client.post(f"/crm/api/v1/entities/notes/{note_id}/analyze", json={},
+                                         headers=auth_headers_system)
         
         assert response.status_code == 200
         result = response.json()
@@ -124,9 +131,16 @@ class TestAIAnalysis:
             })
         }])
         
-        response = await crm_client.post("/crm/api/v1/entities/analyze", json={
-            "text": "Нужно подготовить отчет к 10 января (срочно, Иван). Также созвониться с клиентом до 8 января. Обновить документацию к 15 числу."
+        note_resp = await crm_client.post("/crm/api/v1/entities/", json={
+            "entity_type": "note",
+            "name": "План задач",
+            "description": "Нужно подготовить отчет к 10 января (срочно, Иван). Также созвониться с клиентом до 8 января. Обновить документацию к 15 числу.",
+            "namespace": "default",
         }, headers=auth_headers_system)
+        note_id = note_resp.json()["entity_id"]
+        
+        response = await crm_client.post(f"/crm/api/v1/entities/notes/{note_id}/analyze", json={},
+                                         headers=auth_headers_system)
         
         assert response.status_code == 200
         result = response.json()
@@ -168,9 +182,16 @@ class TestAIAnalysis:
             })
         }])
         
-        response = await crm_client.post("/crm/api/v1/entities/analyze", json={
-            "text": long_text
+        note_resp = await crm_client.post("/crm/api/v1/entities/", json={
+            "entity_type": "note",
+            "name": "Встреча команды (исходный)",
+            "description": long_text,
+            "namespace": "default",
         }, headers=auth_headers_system)
+        note_id = note_resp.json()["entity_id"]
+        
+        response = await crm_client.post(f"/crm/api/v1/entities/notes/{note_id}/analyze", json={},
+                                         headers=auth_headers_system)
         
         assert response.status_code == 200
         result = response.json()
@@ -217,9 +238,16 @@ class TestAIAnalysis:
             })
         }])
         
-        response = await crm_client.post("/crm/api/v1/entities/analyze", json={
-            "text": "Созвонился с клиентом. Обсудили условия.",
-            "mentioned_entity_ids": [existing_id]
+        note_resp = await crm_client.post("/crm/api/v1/entities/", json={
+            "entity_type": "note",
+            "name": "Звонок",
+            "description": "Созвонился с клиентом. Обсудили условия.",
+            "namespace": "default",
+        }, headers=auth_headers_system)
+        note_id = note_resp.json()["entity_id"]
+        
+        response = await crm_client.post(f"/crm/api/v1/entities/notes/{note_id}/analyze", json={
+            "mentioned_entity_ids": [existing_id],
         }, headers=auth_headers_system)
         
         assert response.status_code == 200
@@ -251,9 +279,16 @@ class TestAIAnalysis:
             })
         }])
         
-        response = await crm_client.post("/crm/api/v1/entities/analyze", json={
-            "text": "Встретились с Иваном и Петром. Обсудили проект X.",
-            "extract_entity_types": ["task"]
+        note_resp = await crm_client.post("/crm/api/v1/entities/", json={
+            "entity_type": "note",
+            "name": "Встреча (типы)",
+            "description": "Встретились с Иваном и Петром. Обсудили проект X.",
+            "namespace": "default",
+        }, headers=auth_headers_system)
+        note_id = note_resp.json()["entity_id"]
+        
+        response = await crm_client.post(f"/crm/api/v1/entities/notes/{note_id}/analyze", json={
+            "extract_entity_types": ["task"],
         }, headers=auth_headers_system)
         
         assert response.status_code == 200
@@ -298,9 +333,16 @@ class TestAIAnalysis:
             })
         }])
         
-        response = await crm_client.post("/crm/api/v1/entities/analyze", json={
-            "text": "Иван работает над проектом A.",
-            "extract_relationship_types": [f"works_on_{unique_id}"]
+        note_resp = await crm_client.post("/crm/api/v1/entities/", json={
+            "entity_type": "note",
+            "name": "Распределение",
+            "description": "Иван работает над проектом A.",
+            "namespace": "default",
+        }, headers=auth_headers_system)
+        note_id = note_resp.json()["entity_id"]
+        
+        response = await crm_client.post(f"/crm/api/v1/entities/notes/{note_id}/analyze", json={
+            "extract_relationship_types": [f"works_on_{unique_id}"],
         }, headers=auth_headers_system)
         
         assert response.status_code == 200
@@ -314,9 +356,15 @@ class TestAIAnalysis:
 
     @pytest.mark.asyncio
     async def test_ai_analyze_requires_existing_namespace(self, crm_client, auth_headers_system):
-        response = await crm_client.post("/crm/api/v1/entities/analyze", json={
-            "text": "Текст для анализа",
+        note_resp = await crm_client.post("/crm/api/v1/entities/", json={
+            "entity_type": "note",
+            "name": "Заметка в несуществующем namespace",
+            "description": "Текст для анализа",
             "namespace": "missing_namespace_for_ai",
         }, headers=auth_headers_system)
+        note_id = note_resp.json()["entity_id"]
+        
+        response = await crm_client.post(f"/crm/api/v1/entities/notes/{note_id}/analyze", json={},
+                                         headers=auth_headers_system)
         assert response.status_code == 422
 

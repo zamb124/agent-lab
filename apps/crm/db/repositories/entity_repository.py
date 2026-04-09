@@ -5,11 +5,13 @@
 Семантический поиск -- через JOIN с vector_documents (shared DB).
 """
 
+import base64
+import json
 import logging
 from datetime import date, datetime, timezone
 from typing import Any, Dict, List, Optional, Tuple, Type
 
-from sqlalchemy import delete, func, or_, select, update
+from sqlalchemy import delete, func, or_, select, update, text, tuple_
 
 from apps.crm.db.base import BaseCRMRepository, CRMDatabase
 from apps.crm.db.models import CRMEntity
@@ -135,6 +137,16 @@ class EntityRepository(BaseCRMRepository[CRMEntity]):
         by_id = {e.entity_id: e for e in rows}
         return [by_id[eid] for eid in normalized if eid in by_id]
 
+    async def get_by_ids(self, entity_ids: list[str]) -> list[CRMEntity]:
+        """Batch загрузка сущностей по списку ID без фильтра по company (для cross-company графов)."""
+        normalized = [str(eid).strip() for eid in entity_ids if str(eid).strip()]
+        if not normalized:
+            return []
+        async with self._db.session() as session:
+            stmt = select(CRMEntity).where(CRMEntity.entity_id.in_(normalized))
+            result = await session.execute(stmt)
+            return list(result.scalars().all())
+
     async def update(self, entity: CRMEntity) -> CRMEntity:
         """Обновляет entity в crm_entities + переиндексирует в vector_documents."""
         async with self._db.session() as session:
@@ -196,6 +208,19 @@ class EntityRepository(BaseCRMRepository[CRMEntity]):
 
     # -- List / Filter --
 
+    @staticmethod
+    def encode_cursor(created_at: datetime, entity_id: str) -> str:
+        payload = json.dumps({"ts": created_at.isoformat(), "id": entity_id})
+        return base64.urlsafe_b64encode(payload.encode()).decode()
+
+    @staticmethod
+    def decode_cursor(cursor: str) -> Tuple[datetime, str]:
+        payload = json.loads(base64.urlsafe_b64decode(cursor.encode()).decode())
+        ts = datetime.fromisoformat(payload["ts"])
+        if ts.tzinfo is None:
+            ts = ts.replace(tzinfo=timezone.utc)
+        return ts, payload["id"]
+
     async def list_all(
         self,
         entity_type: Optional[str] = None,
@@ -204,8 +229,14 @@ class EntityRepository(BaseCRMRepository[CRMEntity]):
         filters: Optional[Dict[str, Any]] = None,
         limit: int = 100,
         company_id: Optional[str] = None,
-    ) -> List[CRMEntity]:
-        """Получает список entities c SQL-фильтрами."""
+        cursor: Optional[str] = None,
+    ) -> Tuple[List[CRMEntity], Optional[str], bool]:
+        """
+        Получает список entities c SQL-фильтрами и cursor-пагинацией.
+
+        Returns:
+            (entities, next_cursor, has_more)
+        """
         cid = company_id or self._get_company_id()
 
         async with self._db.session() as session:
@@ -221,10 +252,29 @@ class EntityRepository(BaseCRMRepository[CRMEntity]):
             if filters:
                 stmt = self._apply_filters(stmt, filters)
 
-            stmt = stmt.order_by(CRMEntity.created_at.desc()).limit(limit)
+            if cursor:
+                cursor_ts, cursor_id = self.decode_cursor(cursor)
+                stmt = stmt.where(
+                    tuple_(CRMEntity.created_at, CRMEntity.entity_id) < tuple_(cursor_ts, cursor_id)
+                )
+
+            stmt = stmt.order_by(
+                CRMEntity.created_at.desc(),
+                CRMEntity.entity_id.desc(),
+            ).limit(limit + 1)
 
             result = await session.execute(stmt)
-            return list(result.scalars().all())
+            rows = list(result.scalars().all())
+
+        has_more = len(rows) > limit
+        entities = rows[:limit]
+
+        next_cursor = None
+        if has_more and entities:
+            last = entities[-1]
+            next_cursor = self.encode_cursor(last.created_at, last.entity_id)
+
+        return entities, next_cursor, has_more
 
     async def count_all(
         self,
@@ -309,13 +359,8 @@ class EntityRepository(BaseCRMRepository[CRMEntity]):
         """Применяет фильтры к SQL-запросу."""
         for key, value in filters.items():
             if key == "search":
-                pattern = f"%{value}%"
-                stmt = stmt.where(
-                    or_(
-                        CRMEntity.name.ilike(pattern),
-                        CRMEntity.description.ilike(pattern),
-                    )
-                )
+                tsquery = func.plainto_tsquery("simple", value)
+                stmt = stmt.where(CRMEntity.search_vector.op("@@")(tsquery))
             elif key == "tags":
                 if isinstance(value, dict) and "$contains" in value:
                     tag = value["$contains"]
@@ -549,7 +594,7 @@ class EntityRepository(BaseCRMRepository[CRMEntity]):
         company_id: Optional[str] = None,
     ) -> List[CRMEntity]:
         """Получает заметки."""
-        return await self.list_all(
+        entities, _, _ = await self.list_all(
             entity_type="note",
             entity_subtype=note_subtype,
             namespace=namespace,
@@ -557,6 +602,7 @@ class EntityRepository(BaseCRMRepository[CRMEntity]):
             limit=limit,
             company_id=company_id,
         )
+        return entities
 
     async def search_notes(
         self,
@@ -584,13 +630,14 @@ class EntityRepository(BaseCRMRepository[CRMEntity]):
         company_id: Optional[str] = None,
     ) -> List[CRMEntity]:
         """Получает задачи."""
-        return await self.list_all(
+        entities, _, _ = await self.list_all(
             entity_type="task",
             namespace=namespace,
             filters=filters,
             limit=limit,
             company_id=company_id,
         )
+        return entities
 
     async def search_tasks(
         self,
@@ -618,7 +665,7 @@ class EntityRepository(BaseCRMRepository[CRMEntity]):
         company_id: Optional[str] = None,
     ) -> List[CRMEntity]:
         """Получает entities по типу."""
-        return await self.list_all(
+        entities, _, _ = await self.list_all(
             entity_type=entity_type,
             entity_subtype=entity_subtype,
             namespace=namespace,
@@ -626,6 +673,7 @@ class EntityRepository(BaseCRMRepository[CRMEntity]):
             limit=limit,
             company_id=company_id,
         )
+        return entities
 
     async def search_by_type(
         self,
@@ -656,10 +704,11 @@ class EntityRepository(BaseCRMRepository[CRMEntity]):
     ) -> List[CRMEntity]:
         """Получает entities по тегу."""
         filters = {"tags": {"$contains": tag}}
-        return await self.list_all(
+        entities, _, _ = await self.list_all(
             entity_type=entity_type,
             namespace=namespace,
             filters=filters,
             limit=limit,
             company_id=company_id,
         )
+        return entities

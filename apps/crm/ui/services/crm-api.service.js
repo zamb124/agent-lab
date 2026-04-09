@@ -79,20 +79,12 @@ export class CRMAPIService extends BaseService {
         return this.post('/entities/search/mentions', { text });
     }
     
-    async analyzeText(text, noteId = null, options = {}) {
-        if (!text) {
-            throw new Error('Text is required');
+    async analyzeNote(noteId, options = {}) {
+        if (!noteId) {
+            throw new Error('Note ID is required');
         }
         if (options !== null && typeof options !== 'object') {
             throw new Error('Analyze options must be object');
-        }
-
-        const query = new URLSearchParams();
-        if (noteId) {
-            query.set('note_id', noteId);
-        }
-        if (typeof options.checkDuplicates === 'boolean') {
-            query.set('check_duplicates', options.checkDuplicates ? 'true' : 'false');
         }
 
         const mentionedEntityIds = Array.isArray(options.mentionedEntityIds)
@@ -105,7 +97,7 @@ export class CRMAPIService extends BaseService {
             ? options.extractRelationshipTypes
             : null;
 
-        const body = { text };
+        const body = {};
         if (mentionedEntityIds && mentionedEntityIds.length > 0) {
             body.mentioned_entity_ids = mentionedEntityIds;
         }
@@ -115,12 +107,11 @@ export class CRMAPIService extends BaseService {
         if (extractRelationshipTypes && extractRelationshipTypes.length > 0) {
             body.extract_relationship_types = extractRelationshipTypes;
         }
-        if (typeof options.namespace === 'string' && options.namespace.trim().length > 0) {
-            body.namespace = options.namespace.trim();
+        if (typeof options.checkDuplicates === 'boolean') {
+            body.check_duplicates = options.checkDuplicates;
         }
 
-        const params = query.size > 0 ? `?${query.toString()}` : '';
-        return this.post(`/entities/analyze${params}`, body);
+        return this.post(`/entities/notes/${encodeURIComponent(noteId)}/analyze`, body);
     }
 
     async patchNoteAnalysisDraft(noteId, body) {
@@ -137,7 +128,7 @@ export class CRMAPIService extends BaseService {
         if (!noteId) {
             throw new Error('Note ID is required');
         }
-        return this.post(`/entities/notes/${encodeURIComponent(noteId)}/analysis-draft/apply`, {});
+        return this.post(`/entities/notes/${encodeURIComponent(noteId)}/apply`, {});
     }
     
     async getEntityTypes() {

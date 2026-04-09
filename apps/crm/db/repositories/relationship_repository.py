@@ -187,7 +187,8 @@ class RelationshipRepository(BaseCRMRepository[Relationship]):
     async def get_neighbors(
         self,
         entity_ids: List[str],
-        relationship_types: Optional[List[str]] = None
+        relationship_types: Optional[List[str]] = None,
+        cross_company: bool = False,
     ) -> Dict[str, List[Relationship]]:
         """
         Batch получение соседей для списка entities.
@@ -195,6 +196,7 @@ class RelationshipRepository(BaseCRMRepository[Relationship]):
         Args:
             entity_ids: Список ID entities
             relationship_types: Фильтр по типам связей (опционально)
+            cross_company: Если True — без фильтра по company_id (для cross-company графов)
         
         Returns:
             Dict где ключ - entity_id, значение - список relationships
@@ -202,15 +204,17 @@ class RelationshipRepository(BaseCRMRepository[Relationship]):
         if not entity_ids:
             return {}
         
-        company_id = self._get_company_id()
         async with self._db.session() as session:
             stmt = select(Relationship).where(
-                Relationship.company_id == company_id,
                 or_(
                     Relationship.source_entity_id.in_(entity_ids),
                     Relationship.target_entity_id.in_(entity_ids)
                 )
             )
+            
+            if not cross_company:
+                company_id = self._get_company_id()
+                stmt = stmt.where(Relationship.company_id == company_id)
             
             if relationship_types:
                 stmt = stmt.where(Relationship.relationship_type.in_(relationship_types))

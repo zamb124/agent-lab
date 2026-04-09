@@ -8,6 +8,7 @@ from typing import Any, Dict, List, Optional
 from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel
 
+from apps.flows.src.container import FlowContainer
 from apps.flows.src.dependencies import ContainerDep
 from apps.flows.src.services.flows_loader import FlowsLoader
 from core.logging import get_logger
