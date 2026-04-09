@@ -165,10 +165,17 @@ services:
     depends_on:
       migrations:
         condition: service_completed_successfully
+      postgres:
+        condition: service_healthy
       redis:
         condition: service_healthy
+      scheduler-api:
+        condition: service_healthy
     healthcheck:
-      <<: *healthcheck
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 180s
       test: ["CMD", "curl", "-f", "http://localhost:8001/health"]
     restart: unless-stopped
     networks:
