@@ -470,8 +470,9 @@ async def get_skill_tools(flow_id: str, skill_id: str, container: ContainerDep) 
 
 
 @router.get("/{flow_id}/schema")
-async def get_skill_schema(flow_id: str) -> Dict[str, Any]:
+async def get_skill_schema(flow_id: str, container: ContainerDep) -> Dict[str, Any]:
     """Получить JSON Schema для создания навыка в формате ISchema."""
+    _ = container
     context = get_context()
     channel = A2AChannel(flow_id, context=context)
     try:

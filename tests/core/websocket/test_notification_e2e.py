@@ -277,10 +277,13 @@ async def test_ws_stats_endpoint(crm_client, auth_headers_system, ws_cookie_syst
         # Важно: используем follow_redirects=False чтобы увидеть редирект
         import httpx
         async with httpx.AsyncClient(follow_redirects=True) as http_client:
+            http_client.cookies.set(
+                "auth_token",
+                auth_headers_system["Authorization"].replace("Bearer ", ""),
+            )
             stats_resp = await http_client.get(
-                "http://localhost:9003/crm/ws/stats", 
+                "http://localhost:9003/crm/ws/stats",
                 headers=auth_headers_system,
-                cookies={"auth_token": auth_headers_system["Authorization"].replace("Bearer ", "")}
             )
             
             # Если получили редирект - значит нужна авторизация через cookie

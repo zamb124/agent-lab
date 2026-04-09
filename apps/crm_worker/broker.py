@@ -56,6 +56,7 @@ async def crm_worker_startup(state: TaskiqState) -> None:
     setup_logging(service_name="crm_worker")
     settings = get_settings()
     container = get_crm_container()
+    state.container = container
     initialize_default_processors(container.file_repository)
     logger.info("CRM Worker: FileReader/processors для file_id и S3 (knowledge import, вложения)")
     set_billing_service(container.billing_service)

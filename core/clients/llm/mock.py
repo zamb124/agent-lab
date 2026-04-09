@@ -4,6 +4,7 @@ Mock LLM для тестов.
 
 import asyncio
 import json
+import os
 import uuid
 from typing import Any, AsyncGenerator, Dict, List, Optional, Type, TypeVar, Union, overload
 
@@ -40,7 +41,12 @@ MessageInput = Union[
 # A2A событие от LLM
 StreamEvent = TaskArtifactUpdateEvent | TaskStatusUpdateEvent
 
-MOCK_REDIS_KEY = "mock_llm:responses"
+def _mock_redis_key() -> str:
+    """Ключ Redis для mock LLM ответов, уникальный для каждого xdist воркера."""
+    worker = os.environ.get("PYTEST_XDIST_WORKER", "")
+    if worker:
+        return f"mock_llm:responses:{worker}"
+    return "mock_llm:responses"
 
 _global_mock_registry: Dict[str, "MockLLM"] = {}
 
@@ -105,15 +111,15 @@ class MockLLM:
             return None
         
         try:
-            data = await self._redis_client.get(MOCK_REDIS_KEY)
+            data = await self._redis_client.get(_mock_redis_key())
             if data:
                 responses = json.loads(data)
                 if responses:
                     response = responses.pop(0)
                     if responses:
-                        await self._redis_client.set(MOCK_REDIS_KEY, json.dumps(responses))
+                        await self._redis_client.set(_mock_redis_key(), json.dumps(responses))
                     else:
-                        await self._redis_client.delete(MOCK_REDIS_KEY)
+                        await self._redis_client.delete(_mock_redis_key())
                     logger.info(f"MockLLM: ответ из Redis (осталось {len(responses)})")
                     return response
         except Exception as e:
@@ -574,11 +580,11 @@ async def setup_mock_responses_redis(
     Это позволяет тестам контролировать ответы даже когда Worker
     в отдельном subprocess.
     """
-    await redis_client.set(MOCK_REDIS_KEY, json.dumps(response_queue))
+    await redis_client.set(_mock_redis_key(), json.dumps(response_queue))
     logger.info(f"MockLLM: записано {len(response_queue)} ответов в Redis")
 
 
 async def clear_mock_responses_redis(redis_client) -> None:
     """Очищает mock ответы из Redis."""
-    await redis_client.delete(MOCK_REDIS_KEY)
+    await redis_client.delete(_mock_redis_key())
 

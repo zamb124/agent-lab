@@ -39,8 +39,9 @@ async def list_threads(
 
 
 @router.post("/", status_code=201)
-async def create_thread(channel_id: str, body: ThreadCreate) -> ThreadRead:
+async def create_thread(container: ContainerDep, channel_id: str, body: ThreadCreate) -> ThreadRead:
     """Создание треда через TaskIQ."""
+    _ = container
     context = get_context()
     cmd = CommandEnvelope(
         id=__import__("uuid").uuid4().hex,

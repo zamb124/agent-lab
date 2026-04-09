@@ -304,18 +304,37 @@ class BaseContainer:
         )
 
     @lazy
+    def calendar_event_repository(self):
+        """Репозиторий событий календаря."""
+        from core.calendar.repositories import CalendarEventSqlRepository
+        return CalendarEventSqlRepository(db_url=self.shared_db_url)
+
+    @lazy
     def calendar_service(self):
         """CalendarService для платформенного календаря"""
-        from core.calendar.repositories import CalendarEventSqlRepository
         from core.calendar.service import CalendarService
         return CalendarService(
-            event_repository=CalendarEventSqlRepository(db_url=self.shared_db_url),
+            event_repository=self.calendar_event_repository,
             oauth_service=self.oauth_service,
             user_repository=self.user_repository,
             company_repository=self.company_repository,
             service_client=self.service_client,
         )
-    
+
+    @lazy
+    def short_link_repository(self):
+        """Репозиторий коротких ссылок."""
+        from core.short_links.repository import ShortLinkRepository
+        if not self.shared_db_url:
+            raise ValueError("shared_db_url не задан для ShortLinkRepository")
+        return ShortLinkRepository(db_url=self.shared_db_url)
+
+    @lazy
+    def short_link_service(self):
+        """Сервис коротких ссылок."""
+        from core.short_links import ShortLinkService
+        return ShortLinkService(repository=self.short_link_repository)
+
     @lazy
     def span_repository(self):
         """SpanRepository для platform_tracing (отдельная БД)."""

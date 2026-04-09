@@ -5,9 +5,11 @@
 
 from __future__ import annotations
 
-from typing import Optional
+from typing import Optional, TYPE_CHECKING
 
-from apps.crm.container import get_crm_container
+if TYPE_CHECKING:
+    from core.db.repositories import CompanyRepository
+    from apps.crm.db.repositories.access_grant_repository import AccessGrantRepository
 
 
 def normalize_namespace_for_broadcast(namespace: Optional[str]) -> str:
@@ -21,9 +23,11 @@ def normalize_namespace_for_broadcast(namespace: Optional[str]) -> str:
 async def resolve_user_ids_for_namespace_broadcast(
     company_id: str,
     namespace: Optional[str],
+    *,
+    company_repository: "CompanyRepository",
+    access_grant_repository: "AccessGrantRepository",
 ) -> list[str]:
-    container = get_crm_container()
-    company = await container.company_repository.get(company_id)
+    company = await company_repository.get(company_id)
     if company is None:
         raise ValueError(f"Company not found for namespace broadcast: {company_id}")
 
@@ -38,7 +42,7 @@ async def resolve_user_ids_for_namespace_broadcast(
     if normalized_namespace in {"all", "default"}:
         return sorted(recipients)
 
-    grants = await container.access_grant_repository.find_by_resource(
+    grants = await access_grant_repository.find_by_resource(
         resource_type="namespace",
         resource_id=normalized_namespace,
         resource_company_id=company_id,
@@ -54,7 +58,7 @@ async def resolve_user_ids_for_namespace_broadcast(
         if grant.grant_type == "company":
             if not grant.target_company_id:
                 raise ValueError("Namespace company grant must contain target_company_id")
-            target_company = await container.company_repository.get(grant.target_company_id)
+            target_company = await company_repository.get(grant.target_company_id)
             if target_company is None:
                 raise ValueError(
                     f"Target company not found for namespace grant: {grant.target_company_id}"

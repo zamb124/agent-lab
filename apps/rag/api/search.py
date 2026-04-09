@@ -3,7 +3,7 @@ API для семантического поиска.
 """
 
 from typing import List, Optional, Dict, Any
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel
 
 from core.logging import get_logger
@@ -11,8 +11,7 @@ from core.rag.models import RAGSearchResult
 from core.context import get_context
 from core.rag.factory import get_rag_provider
 from core.config import get_settings
-from ..container import RAGContainer
-from ..dependencies import get_container
+from ..dependencies import ContainerDep
 from .namespace_access import require_registered_rag_namespace
 
 logger = get_logger(__name__)
@@ -39,8 +38,8 @@ class SearchResponse(BaseModel):
 async def search_in_namespace(
     namespace_id: str,
     request: SearchRequest,
+    container: ContainerDep,
     provider: Optional[str] = Query(None, description="RAG provider"),
-    container: RAGContainer = Depends(get_container)
 ) -> SearchResponse:
     """
     Выполняет семантический поиск в namespace.
@@ -100,8 +99,8 @@ class GlobalSearchResponse(BaseModel):
 @router.post("/search", response_model=GlobalSearchResponse)
 async def global_search(
     request: GlobalSearchRequest,
+    container: ContainerDep,
     provider: Optional[str] = Query(None, description="RAG provider"),
-    container: RAGContainer = Depends(get_container)
 ) -> GlobalSearchResponse:
     """
     Выполняет поиск по нескольким namespace текущей компании.

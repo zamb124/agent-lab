@@ -37,6 +37,18 @@ async def list_items(container: ContainerDep):
     return await container.some_service.list()
 ```
 
+### Имя параметра
+
+Строго `container` — не `c`, не `cont`, не `svc`. Единое имя упрощает grep и автодополнение.
+
+### ContainerDep обязателен для ВСЕХ HTTP-хендлеров
+
+Включая utility-эндпоинты (health, metadata, certificate и т.д.). Если хендлер не использует контейнер: `_ = container` в теле. Цель — единообразие сигнатур и возможность добавить зависимость без рефакторинга.
+
+### Никаких гранулярных get_*_service() фабрик
+
+Запрещены обёртки типа `get_entity_service()`, `get_graph_service()` в `dependencies.py`. Один хендлер — один `container: ContainerDep`, доступ через `container.entity_service`, `container.graph_service`.
+
 ### Запрещено в HTTP-слое
 
 - Прямой вызов `get_*_container()` в теле хендлера
@@ -50,6 +62,15 @@ async def list_items(container: ContainerDep):
 - В `core/api/*.py` — `request.app.state.container` (core не знает конкретный тип контейнера)
 - В TaskIQ задачах — `get_*_container()` напрямую (нет FastAPI request scope)
 - В каналах/триггерах flows — `get_container()` (не HTTP-контекст)
+- `core/push/delivery.py` — `PushSubscriptionRepository(db_url=...)` (вызывается из HTTP, WebSocket, workers — единый контейнер недоступен)
+- `apps/frontend/api/embed_configs.py` — допустимо использует flows container напрямую (монолит, все сервисы в одном процессе)
+- WebSocket-эндпоинты (`apps/sync/main.py:ws_endpoint`) — FastAPI `Depends()` не работает с WebSocket route handlers в том же виде, контейнер берётся через `get_*_container()`
+
+### Известные нарушения `core/ → apps/` (требуют архитектурной проработки)
+
+- `core/scheduler/scheduler.py` — импортирует брокеры всех воркеров (`apps.*_worker`)
+- `core/api/integrations.py` — `_resume_flow` импортирует `process_flow_task` из flows
+- `core/clients/llm/factory.py` — `get_mock_for_llm` из flows (тестовый путь)
 
 ## Database-First
 

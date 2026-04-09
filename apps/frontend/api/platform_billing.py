@@ -6,12 +6,15 @@ from __future__ import annotations
 
 import json
 from datetime import datetime
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, TYPE_CHECKING
 
 from fastapi import APIRouter, Body, HTTPException, Query, Request
 from pydantic import ValidationError
 
 from apps.frontend.dependencies import ContainerDep
+
+if TYPE_CHECKING:
+    from apps.frontend.container import FrontendContainer
 from apps.frontend.models import (
     PlatformBillingCompaniesOverviewResponse,
     PlatformBillingCompanyOverviewItem,
@@ -45,7 +48,7 @@ def _billing_company_facet_label(co: Company) -> str:
     return f"{co.name} ({co.company_id})"
 
 
-async def _resolve_company_for_billing_admin(container: ContainerDep, raw: str) -> Company:
+async def _resolve_company_for_billing_admin(container: "FrontendContainer", raw: str) -> Company:
     q = raw.strip()
     if not q:
         raise HTTPException(status_code=422, detail="Пустой запрос")
@@ -253,9 +256,11 @@ async def put_billing_prices(
     response_model=PlatformBillingSettlementRulesResponse,
 )
 async def get_default_settlement_rules_template(
+    container: ContainerDep,
     request: Request,
 ) -> PlatformBillingSettlementRulesResponse:
     """Кодовый дефолт правил (без сохранения) — для подстановки в админке."""
+    _ = container
     _require_system(request)
     doc = default_settlement_rules_document()
     return PlatformBillingSettlementRulesResponse(document=doc.model_dump(mode="json"))

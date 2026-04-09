@@ -131,8 +131,9 @@ async def _reconcile_calendar_meeting_channel_members(
 # ─── Авторизованные эндпоинты ────────────────────────────────────────────────
 
 @router.get("/turn-credentials")
-async def get_turn_credentials() -> TurnCredentials:
+async def get_turn_credentials(container: ContainerDep) -> TurnCredentials:
     """Временные TURN credentials для WebRTC ICE (coturn HMAC-SHA1)."""
+    _ = container
     settings = get_settings()
     context = get_context()
     return generate_turn_credentials(

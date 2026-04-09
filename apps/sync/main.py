@@ -15,6 +15,7 @@ from core.app import create_service_app
 from core.config import get_settings
 from apps.sync.config import SyncSettings
 from apps.sync.container import get_sync_container
+from apps.sync.dependencies import ContainerDep
 from apps.sync.ws import fanout, websocket_endpoint
 from apps.sync.api import get_api_router
 
@@ -60,8 +61,9 @@ if sync_ui_path.exists():
 
 
 @app.get("/sync/join/{token}")
-async def serve_call_join(token: str):
+async def serve_call_join(container: ContainerDep, token: str):
     """Публичная страница входа в звонок по ссылке (без auth)."""
+    _ = container
     join_file = Path(__file__).parent / "ui" / "call-join.html"
     if not join_file.exists():
         raise HTTPException(status_code=404, detail="Call join page not found")
@@ -71,8 +73,9 @@ async def serve_call_join(token: str):
 @app.get("/sync")
 @app.get("/sync/")
 @app.get("/sync/{path:path}")
-async def serve_sync_ui(path: str = ""):
+async def serve_sync_ui(container: ContainerDep, path: str = ""):
     """SPA fallback для Sync UI."""
+    _ = container
     if (
         path.startswith("api/")
         or path.startswith("ui/static/")

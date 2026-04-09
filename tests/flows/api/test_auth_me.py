@@ -17,10 +17,8 @@ class TestAuthMeAgents:
     @pytest.mark.asyncio
     async def test_auth_me_success_agents(self, flows_client, auth_token):
         """Успешный запрос к agents сервису с валидным токеном"""
-        response = await flows_client.get(
-            "/flows/api/auth/me",
-            cookies={"auth_token": auth_token}
-        )
+        flows_client.cookies.set("auth_token", auth_token)
+        response = await flows_client.get("/flows/api/auth/me")
         
         assert response.status_code == 200
         data = response.json()
@@ -46,10 +44,8 @@ class TestAuthMeAgents:
     @pytest.mark.asyncio
     async def test_auth_me_invalid_token_agents(self, flows_client):
         """Невалидный токен на agents возвращает 401"""
-        response = await flows_client.get(
-            "/flows/api/auth/me",
-            cookies={"auth_token": "invalid.token.here"}
-        )
+        flows_client.cookies.set("auth_token", "invalid.token.here")
+        response = await flows_client.get("/flows/api/auth/me")
         
         assert response.status_code == 401
         print("✅ Agents: /api/auth/me с невалидным токеном корректно возвращает 401")
@@ -70,10 +66,8 @@ class TestAuthMeAgents:
             algorithm="HS256"
         )
         
-        response = await flows_client.get(
-            "/flows/api/auth/me",
-            cookies={"auth_token": expired_token}
-        )
+        flows_client.cookies.set("auth_token", expired_token)
+        response = await flows_client.get("/flows/api/auth/me")
         
         assert response.status_code == 401
         print("✅ Agents: /api/auth/me с истекшим токеном корректно возвращает 401")
@@ -81,10 +75,8 @@ class TestAuthMeAgents:
     @pytest.mark.asyncio
     async def test_auth_me_response_structure_agents(self, flows_client, auth_token):
         """Проверка структуры ответа на agents сервисе"""
-        response = await flows_client.get(
-            "/flows/api/auth/me",
-            cookies={"auth_token": auth_token}
-        )
+        flows_client.cookies.set("auth_token", auth_token)
+        response = await flows_client.get("/flows/api/auth/me")
         
         assert response.status_code == 200
         data = response.json()
@@ -105,15 +97,11 @@ class TestAuthMeAgents:
         auth_token
     ):
         """Единый контракт ответа между frontend и agents сервисами"""
-        agents_response = await flows_client.get(
-            "/flows/api/auth/me",
-            cookies={"auth_token": auth_token}
-        )
-        
-        frontend_response = await frontend_client.get(
-            "/frontend/api/auth/me",
-            cookies={"auth_token": auth_token}
-        )
+        flows_client.cookies.set("auth_token", auth_token)
+        agents_response = await flows_client.get("/flows/api/auth/me")
+
+        frontend_client.cookies.set("auth_token", auth_token)
+        frontend_response = await frontend_client.get("/frontend/api/auth/me")
         
         assert agents_response.status_code == 200
         assert frontend_response.status_code == 200

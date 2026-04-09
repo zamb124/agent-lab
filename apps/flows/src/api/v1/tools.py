@@ -126,8 +126,10 @@ class DraftParametersSchemaResponse(BaseModel):
     response_model=DraftParametersSchemaResponse,
 )
 async def draft_parameters_schema(
+    container: ContainerDep,
     request: DraftParametersSchemaRequest,
 ) -> DraftParametersSchemaResponse:
+    _ = container
     if not request.args_schema:
         raise HTTPException(
             status_code=422,

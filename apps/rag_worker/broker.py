@@ -29,7 +29,6 @@ async def rag_worker_startup(state: TaskiqState) -> None:
     """Инициализация RAG Worker при старте."""
     from apps.rag.container import get_rag_container
     from apps.rag_worker.config import get_settings
-    from core.rag.factory import get_default_rag_provider
 
     setup_logging(service_name="rag_worker")
 
@@ -51,7 +50,7 @@ async def rag_worker_startup(state: TaskiqState) -> None:
             set_tracing_service_name("rag_worker")
             set_span_repository(container.span_repository)
         logger.info("RAG Worker: трейсинг инициализирован")
-    provider = get_default_rag_provider()
+    provider = container.rag_provider
     state.rag_provider = provider
 
     logger.info("RAG Worker: RAG provider инициализирован")

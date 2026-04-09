@@ -4,7 +4,7 @@
 
 from __future__ import annotations
 
-from typing import Literal, Optional
+from typing import Literal, Optional, TYPE_CHECKING
 
 from apps.crm.services.namespace_notification_recipients import (
     normalize_namespace_for_broadcast,
@@ -12,6 +12,10 @@ from apps.crm.services.namespace_notification_recipients import (
 )
 from core.logging import get_logger
 from core.websocket.publisher import Notification, NotificationType, notify_user
+
+if TYPE_CHECKING:
+    from core.db.repositories import CompanyRepository
+    from apps.crm.db.repositories.access_grant_repository import AccessGrantRepository
 
 logger = get_logger(__name__)
 
@@ -24,11 +28,16 @@ async def broadcast_crm_note_event(
     note_id: str,
     note_date_iso: Optional[str],
     action: CrmNoteWsAction,
+    *,
+    company_repository: "CompanyRepository",
+    access_grant_repository: "AccessGrantRepository",
 ) -> None:
     normalized_namespace = normalize_namespace_for_broadcast(namespace)
     recipient_user_ids = await resolve_user_ids_for_namespace_broadcast(
         company_id=company_id,
         namespace=normalized_namespace,
+        company_repository=company_repository,
+        access_grant_repository=access_grant_repository,
     )
     notification_data = {
         "event": "crm.note.updated",

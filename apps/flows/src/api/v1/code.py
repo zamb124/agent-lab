@@ -31,7 +31,6 @@ from apps.flows.src.api.v1.flows import _inline_tools_list
 from apps.flows.src.container import FlowContainer
 from apps.flows.src.dependencies import ContainerDep
 from apps.flows.src.services.platform_tool_docs import collect_platform_tool_docs
-from apps.flows.src.runners import PythonCodeRunner
 from apps.flows.src.state import collect_flow_node_files, create_initial_state
 
 router = APIRouter(tags=["code"])
@@ -51,6 +50,7 @@ class CodeCompletionsResponse(BaseModel):
 
 @router.get("/completions", response_model=CodeCompletionsResponse)
 async def get_code_completions(
+    container: ContainerDep,
     language: str = "python",
     perspective: str = "editor",
 ) -> CodeCompletionsResponse:
@@ -70,7 +70,7 @@ async def get_code_completions(
         templates: шаблоны кода
     """
     service = get_documentation_service()
-    platform_tools = await collect_platform_tool_docs()
+    platform_tools = await collect_platform_tool_docs(container)
 
     query = DocumentationQuery(
         language=language,
@@ -99,6 +99,7 @@ async def get_code_completions(
 
 @router.get("/documentation")
 async def get_code_documentation(
+    container: ContainerDep,
     language: str = "python",
     perspective: str = "editor",
 ) -> Response:
@@ -107,7 +108,7 @@ async def get_code_documentation(
     (тот же состав данных, что у /completions).
     """
     service = get_documentation_service()
-    platform_tools = await collect_platform_tool_docs()
+    platform_tools = await collect_platform_tool_docs(container)
     query = DocumentationQuery(
         language=language,
         perspective=perspective,
@@ -127,6 +128,7 @@ class TemplatesResponse(BaseModel):
 
 @router.get("/templates", response_model=TemplatesResponse)
 async def get_code_templates(
+    container: ContainerDep,
     language: str = "python",
     category: Optional[str] = None,
     node_type: Optional[str] = None,
@@ -141,6 +143,7 @@ async def get_code_templates(
         node_type: Тип ноды (code, llm_node и др., см. документацию)
         tags: Теги через запятую (http,api)
     """
+    _ = container
     service = get_documentation_service()
     
     categories = [category] if category else None
@@ -213,12 +216,13 @@ class SourceResponse(BaseModel):
 
 
 @router.get("/source")
-async def get_function_source(function_path: str) -> SourceResponse:
+async def get_function_source(container: ContainerDep, function_path: str) -> SourceResponse:
     """
     Возвращает исходный код функции по её пути.
     
     Пример: apps.flows.bundles.<flow_id>.functions.my_function
     """
+    _ = container
     if not function_path:
         raise HTTPException(status_code=400, detail="function_path is required")
 
@@ -240,10 +244,11 @@ class FlowFunctionsResponse(BaseModel):
 
 
 @router.get("/flow-functions")
-async def get_flow_functions(flow_id: str) -> FlowFunctionsResponse:
+async def get_flow_functions(container: ContainerDep, flow_id: str) -> FlowFunctionsResponse:
     """
     Возвращает список функций из ``apps/flows/bundles/<flow_id>/functions.py``.
     """
+    _ = container
     if not flow_id:
         return FlowFunctionsResponse(
             flow_id=flow_id,
@@ -286,12 +291,13 @@ async def get_flow_functions(flow_id: str) -> FlowFunctionsResponse:
 
 
 @router.get("/tool-source")
-async def get_tool_source(tool_path: str) -> SourceResponse:
+async def get_tool_source(container: ContainerDep, tool_path: str) -> SourceResponse:
     """
     Возвращает исходный код tool класса по его пути.
     
     Пример: apps.flows.tools.math_tools.calculator
     """
+    _ = container
     if not tool_path:
         raise HTTPException(status_code=400, detail="tool_path is required")
 
@@ -479,10 +485,11 @@ def _parse_function_signature(code: str, func_name: Optional[str] = None) -> Dic
 
 
 @router.post("/parse-signature", response_model=ParseSignatureResponse)
-async def parse_signature(request: ParseSignatureRequest) -> ParseSignatureResponse:
+async def parse_signature(container: ContainerDep, request: ParseSignatureRequest) -> ParseSignatureResponse:
     """
     Парсит сигнатуру функции и генерирует args_schema.
     """
+    _ = container
     if not request.code or not request.code.strip():
         return ParseSignatureResponse(success=False, error="Код пустой")
     
@@ -638,7 +645,7 @@ async def _merge_execute_state_with_flow(
 
 
 @router.post("/validate", response_model=ValidateResponse)
-async def validate_code(request: ValidateRequest) -> ValidateResponse:
+async def validate_code(container: ContainerDep, request: ValidateRequest) -> ValidateResponse:
     """
     Валидирует код без выполнения.
     """
@@ -649,7 +656,7 @@ async def validate_code(request: ValidateRequest) -> ValidateResponse:
     if not code or not code.strip():
         return ValidateResponse(valid=False, error="Код пустой")
 
-    runner = PythonCodeRunner()
+    runner = container.python_code_runner
     valid, error = runner.validate(code)
     
     if not valid:
@@ -664,7 +671,7 @@ async def validate_code(request: ValidateRequest) -> ValidateResponse:
 
 
 @router.post("/execute", response_model=ExecuteResponse)
-async def execute_code(request: ExecuteRequest, container: ContainerDep) -> ExecuteResponse:
+async def execute_code(container: ContainerDep, request: ExecuteRequest) -> ExecuteResponse:
     """
     Выполняет ноду с переданным state.
     """

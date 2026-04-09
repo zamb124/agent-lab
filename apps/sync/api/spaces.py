@@ -41,8 +41,9 @@ async def list_spaces(container: ContainerDep, pagination: PaginationRequest = D
 
 
 @router.post("/", status_code=201)
-async def create_space(body: SpaceCreate) -> SpaceRead:
+async def create_space(container: ContainerDep, body: SpaceCreate) -> SpaceRead:
     """Создание пространства через TaskIQ."""
+    _ = container
     context = get_context()
     cmd = CommandEnvelope(
         id=__import__("uuid").uuid4().hex,
@@ -61,8 +62,9 @@ async def create_space(body: SpaceCreate) -> SpaceRead:
 
 
 @router.patch("/{space_id}")
-async def update_space(space_id: str, body: SpaceUpdate) -> SpaceRead:
+async def update_space(container: ContainerDep, space_id: str, body: SpaceUpdate) -> SpaceRead:
     """Обновление пространства (команда в процессе API)."""
+    _ = container
     context = get_context()
     cmd = CommandEnvelope(
         id=uuid.uuid4().hex,

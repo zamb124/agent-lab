@@ -225,19 +225,19 @@ def _integration_configured() -> tuple[bool, str]:
 
 
 @router.get("/integration/status", response_model=OfficeIntegrationStatusResponse)
-async def integration_status() -> OfficeIntegrationStatusResponse:
+async def integration_status(container: ContainerDep) -> OfficeIntegrationStatusResponse:
     ok, detail = _integration_configured()
     return OfficeIntegrationStatusResponse(configured=ok, detail=detail)
 
 
 @router.get("/namespaces", response_model=OfficeNamespacesResponse)
-async def list_namespaces(c: ContainerDep) -> OfficeNamespacesResponse:
+async def list_namespaces(container: ContainerDep) -> OfficeNamespacesResponse:
     ctx = get_context()
     if not ctx.active_company:
         raise HTTPException(status_code=403, detail="Компания не выбрана")
     if not ctx.user:
         raise HTTPException(status_code=403, detail="Пользователь не авторизован")
-    rows = await c.namespace_repository.list_all()
+    rows = await container.namespace_repository.list_all()
     items: list[OfficeNamespaceItem] = [
         OfficeNamespaceItem(name=ns.name.strip(), is_default=bool(ns.is_default))
         for ns in rows
@@ -248,7 +248,7 @@ async def list_namespaces(c: ContainerDep) -> OfficeNamespacesResponse:
 
 @router.get("/namespaces/templates", response_model=list[OfficeNamespaceTemplateItem])
 async def list_namespace_templates_proxy(
-    c: ContainerDep,
+    container: ContainerDep,
 ) -> list[OfficeNamespaceTemplateItem]:
     ctx = get_context()
     if not ctx.active_company:
@@ -257,7 +257,7 @@ async def list_namespace_templates_proxy(
         raise HTTPException(status_code=403, detail="Пользователь не авторизован")
     path = f"{_CRM_API_V1_PREFIX}/namespaces/templates"
     try:
-        raw = await c.service_client.get("crm", path)
+        raw = await container.service_client.get("crm", path)
     except ServiceClientError as e:
         raise _http_exception_from_service_client("crm", e) from e
     if not isinstance(raw, list):
@@ -295,7 +295,7 @@ async def list_namespace_templates_proxy(
 @router.post("/namespaces", response_model=OfficeNamespaceCreateResponse, status_code=201)
 async def create_namespace_proxy(
     body: OfficeNamespaceCreateRequest,
-    c: ContainerDep,
+    container: ContainerDep,
 ) -> OfficeNamespaceCreateResponse:
     ctx = get_context()
     if not ctx.active_company:
@@ -309,7 +309,7 @@ async def create_namespace_proxy(
         "template_id": body.template_id.strip(),
     }
     try:
-        raw = await c.service_client.post("crm", path, json=payload)
+        raw = await container.service_client.post("crm", path, json=payload)
     except ServiceClientError as e:
         raise _http_exception_from_service_client("crm", e) from e
     if not isinstance(raw, dict):
@@ -331,19 +331,19 @@ async def create_namespace_proxy(
 
 @router.get("/company-members")
 async def list_company_members_for_catalogs(
-    c: ContainerDep,
+    container: ContainerDep,
 ) -> list[dict[str, object]]:
     ctx = get_context()
     if not ctx.active_company:
         raise HTTPException(status_code=403, detail="Компания не выбрана")
     if not ctx.user:
         raise HTTPException(status_code=403, detail="Пользователь не авторизован")
-    company = await c.company_repository.get(ctx.active_company.company_id)
+    company = await container.company_repository.get(ctx.active_company.company_id)
     if company is None:
         raise HTTPException(status_code=404, detail="Компания не найдена")
     out: list[dict[str, object]] = []
     for member_user_id, roles in company.members.items():
-        u = await c.user_repository.get(member_user_id)
+        u = await container.user_repository.get(member_user_id)
         if u is None:
             continue
         member_email = u.emails[0] if u.emails else None
@@ -363,20 +363,20 @@ async def list_company_members_for_catalogs(
 
 
 @router.get("/catalogs", response_model=OfficeCatalogListResponse)
-async def list_catalogs(c: ContainerDep) -> OfficeCatalogListResponse:
+async def list_catalogs(container: ContainerDep) -> OfficeCatalogListResponse:
     ctx = get_context()
     if not ctx.active_company:
         raise HTTPException(status_code=403, detail="Компания не выбрана")
     if not ctx.user:
         raise HTTPException(status_code=403, detail="Пользователь не авторизован")
-    rows = await c.catalog_repository.list_accessible_with_file_counts(
+    rows = await container.catalog_repository.list_accessible_with_file_counts(
         company_id=ctx.active_company.company_id,
         namespace=ctx.active_namespace,
         user_id=ctx.user.user_id,
     )
     out: list[OfficeCatalogListItem] = []
     for cat, file_count in rows:
-        display_name, avatar_url = await _user_display(c, cat.owner_user_id)
+        display_name, avatar_url = await _user_display(container, cat.owner_user_id)
         out.append(
             OfficeCatalogListItem(
                 catalog_id=cat.catalog_id,
@@ -395,21 +395,21 @@ async def list_catalogs(c: ContainerDep) -> OfficeCatalogListResponse:
 @router.post("/catalogs", response_model=OfficeCatalogDetailResponse)
 async def create_catalog(
     body: OfficeCatalogCreateRequest,
-    c: ContainerDep,
+    container: ContainerDep,
 ) -> OfficeCatalogDetailResponse:
     ctx = get_context()
     if not ctx.active_company:
         raise HTTPException(status_code=403, detail="Компания не выбрана")
     if not ctx.user:
         raise HTTPException(status_code=403, detail="Пользователь не авторизован")
-    cat = await c.catalog_repository.create(
+    cat = await container.catalog_repository.create(
         company_id=ctx.active_company.company_id,
         namespace=ctx.active_namespace,
         title=body.title,
         owner_user_id=ctx.user.user_id,
         is_public=body.is_public,
     )
-    display_name, avatar_url = await _user_display(c, cat.owner_user_id)
+    display_name, avatar_url = await _user_display(container, cat.owner_user_id)
     return OfficeCatalogDetailResponse(
         catalog_id=cat.catalog_id,
         title=cat.title,
@@ -424,14 +424,14 @@ async def create_catalog(
 @router.get("/catalogs/{catalog_id}", response_model=OfficeCatalogDetailResponse)
 async def get_catalog(
     catalog_id: str,
-    c: ContainerDep,
+    container: ContainerDep,
 ) -> OfficeCatalogDetailResponse:
     ctx = get_context()
     if not ctx.active_company:
         raise HTTPException(status_code=403, detail="Компания не выбрана")
     if not ctx.user:
         raise HTTPException(status_code=403, detail="Пользователь не авторизован")
-    allowed = await c.catalog_repository.user_can_access_catalog(
+    allowed = await container.catalog_repository.user_can_access_catalog(
         catalog_id,
         ctx.active_company.company_id,
         ctx.active_namespace,
@@ -439,14 +439,14 @@ async def get_catalog(
     )
     if not allowed:
         raise HTTPException(status_code=404, detail="Каталог не найден")
-    cat = await c.catalog_repository.get(
+    cat = await container.catalog_repository.get(
         catalog_id,
         ctx.active_company.company_id,
         ctx.active_namespace,
     )
     if cat is None:
         raise HTTPException(status_code=404, detail="Каталог не найден")
-    display_name, avatar_url = await _user_display(c, cat.owner_user_id)
+    display_name, avatar_url = await _user_display(container, cat.owner_user_id)
     return OfficeCatalogDetailResponse(
         catalog_id=cat.catalog_id,
         title=cat.title,
@@ -462,14 +462,14 @@ async def get_catalog(
 async def patch_catalog(
     catalog_id: str,
     body: OfficeCatalogPatchRequest,
-    c: ContainerDep,
+    container: ContainerDep,
 ) -> OfficeCatalogDetailResponse:
     ctx = get_context()
     if not ctx.active_company:
         raise HTTPException(status_code=403, detail="Компания не выбрана")
     if not ctx.user:
         raise HTTPException(status_code=403, detail="Пользователь не авторизован")
-    is_owner = await c.catalog_repository.user_is_owner(
+    is_owner = await container.catalog_repository.user_is_owner(
         catalog_id,
         ctx.active_company.company_id,
         ctx.active_namespace,
@@ -480,7 +480,7 @@ async def patch_catalog(
             status_code=403,
             detail="Только владелец может изменять каталог",
         )
-    updated = await c.catalog_repository.update_catalog(
+    updated = await container.catalog_repository.update_catalog(
         catalog_id,
         ctx.active_company.company_id,
         ctx.active_namespace,
@@ -489,7 +489,7 @@ async def patch_catalog(
     )
     if updated is None:
         raise HTTPException(status_code=404, detail="Каталог не найден")
-    display_name, avatar_url = await _user_display(c, updated.owner_user_id)
+    display_name, avatar_url = await _user_display(container, updated.owner_user_id)
     return OfficeCatalogDetailResponse(
         catalog_id=updated.catalog_id,
         title=updated.title,
@@ -504,14 +504,14 @@ async def patch_catalog(
 @router.delete("/catalogs/{catalog_id}", status_code=204)
 async def delete_catalog_endpoint(
     catalog_id: str,
-    c: ContainerDep,
+    container: ContainerDep,
 ) -> Response:
     ctx = get_context()
     if not ctx.active_company:
         raise HTTPException(status_code=403, detail="Компания не выбрана")
     if not ctx.user:
         raise HTTPException(status_code=403, detail="Пользователь не авторизован")
-    is_owner = await c.catalog_repository.user_is_owner(
+    is_owner = await container.catalog_repository.user_is_owner(
         catalog_id,
         ctx.active_company.company_id,
         ctx.active_namespace,
@@ -520,7 +520,7 @@ async def delete_catalog_endpoint(
     if not is_owner:
         raise HTTPException(status_code=403, detail="Только владелец может удалить каталог")
     try:
-        ok = await c.catalog_repository.delete_catalog(
+        ok = await container.catalog_repository.delete_catalog(
             catalog_id,
             ctx.active_company.company_id,
             ctx.active_namespace,
@@ -535,14 +535,14 @@ async def delete_catalog_endpoint(
 @router.get("/catalogs/{catalog_id}/members", response_model=OfficeCatalogMembersResponse)
 async def list_catalog_members(
     catalog_id: str,
-    c: ContainerDep,
+    container: ContainerDep,
 ) -> OfficeCatalogMembersResponse:
     ctx = get_context()
     if not ctx.active_company:
         raise HTTPException(status_code=403, detail="Компания не выбрана")
     if not ctx.user:
         raise HTTPException(status_code=403, detail="Пользователь не авторизован")
-    allowed = await c.catalog_repository.user_can_access_catalog(
+    allowed = await container.catalog_repository.user_can_access_catalog(
         catalog_id,
         ctx.active_company.company_id,
         ctx.active_namespace,
@@ -550,19 +550,19 @@ async def list_catalog_members(
     )
     if not allowed:
         raise HTTPException(status_code=404, detail="Каталог не найден")
-    cat = await c.catalog_repository.get(
+    cat = await container.catalog_repository.get(
         catalog_id,
         ctx.active_company.company_id,
         ctx.active_namespace,
     )
     if cat is None:
         raise HTTPException(status_code=404, detail="Каталог не найден")
-    member_rows = await c.catalog_repository.list_members(catalog_id)
+    member_rows = await container.catalog_repository.list_members(catalog_id)
     member_ids = {m.user_id for m in member_rows}
     member_ids.add(cat.owner_user_id)
     items: list[OfficeCatalogMemberItem] = []
     for uid in sorted(member_ids):
-        display_name, avatar_url = await _user_display(c, uid)
+        display_name, avatar_url = await _user_display(container, uid)
         items.append(
             OfficeCatalogMemberItem(
                 user_id=uid,
@@ -577,14 +577,14 @@ async def list_catalog_members(
 async def add_catalog_member(
     catalog_id: str,
     body: OfficeCatalogMemberAddRequest,
-    c: ContainerDep,
+    container: ContainerDep,
 ) -> OfficeCatalogMembersResponse:
     ctx = get_context()
     if not ctx.active_company:
         raise HTTPException(status_code=403, detail="Компания не выбрана")
     if not ctx.user:
         raise HTTPException(status_code=403, detail="Пользователь не авторизован")
-    is_owner = await c.catalog_repository.user_is_owner(
+    is_owner = await container.catalog_repository.user_is_owner(
         catalog_id,
         ctx.active_company.company_id,
         ctx.active_namespace,
@@ -593,7 +593,7 @@ async def add_catalog_member(
     if not is_owner:
         raise HTTPException(status_code=403, detail="Только владелец может добавлять участников")
     try:
-        await c.catalog_repository.add_member(
+        await container.catalog_repository.add_member(
             catalog_id,
             body.user_id.strip(),
             company_id=ctx.active_company.company_id,
@@ -601,21 +601,21 @@ async def add_catalog_member(
         )
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e)) from e
-    return await list_catalog_members(catalog_id, c)
+    return await list_catalog_members(catalog_id, container)
 
 
 @router.delete("/catalogs/{catalog_id}/members/{member_user_id}", status_code=204)
 async def remove_catalog_member(
     catalog_id: str,
     member_user_id: str,
-    c: ContainerDep,
+    container: ContainerDep,
 ) -> Response:
     ctx = get_context()
     if not ctx.active_company:
         raise HTTPException(status_code=403, detail="Компания не выбрана")
     if not ctx.user:
         raise HTTPException(status_code=403, detail="Пользователь не авторизован")
-    is_owner = await c.catalog_repository.user_is_owner(
+    is_owner = await container.catalog_repository.user_is_owner(
         catalog_id,
         ctx.active_company.company_id,
         ctx.active_namespace,
@@ -623,7 +623,7 @@ async def remove_catalog_member(
     )
     if not is_owner:
         raise HTTPException(status_code=403, detail="Только владелец может удалять участников")
-    cat = await c.catalog_repository.get(
+    cat = await container.catalog_repository.get(
         catalog_id,
         ctx.active_company.company_id,
         ctx.active_namespace,
@@ -632,7 +632,7 @@ async def remove_catalog_member(
         raise HTTPException(status_code=404, detail="Каталог не найден")
     if member_user_id == cat.owner_user_id:
         raise HTTPException(status_code=400, detail="Нельзя удалить владельца каталога")
-    ok = await c.catalog_repository.remove_member(catalog_id, member_user_id)
+    ok = await container.catalog_repository.remove_member(catalog_id, member_user_id)
     if not ok:
         raise HTTPException(status_code=404, detail="Участник не найден")
     return Response(status_code=204)
@@ -640,7 +640,7 @@ async def remove_catalog_member(
 
 @router.get("/documents", response_model=OfficeDocumentListResponse)
 async def list_documents(
-    c: ContainerDep,
+    container: ContainerDep,
     catalog_id: str | None = Query(None, min_length=1),
     catalog_ids: list[str] | None = Query(None),
 ) -> OfficeDocumentListResponse:
@@ -668,7 +668,7 @@ async def list_documents(
             detail="Укажите catalog_id или хотя бы одно значение catalog_ids",
         )
     for cid in resolved_ids:
-        allowed = await c.catalog_repository.user_can_access_catalog(
+        allowed = await container.catalog_repository.user_can_access_catalog(
             cid,
             ctx.active_company.company_id,
             ctx.active_namespace,
@@ -676,7 +676,7 @@ async def list_documents(
         )
         if not allowed:
             raise HTTPException(status_code=403, detail="Нет доступа к каталогу")
-    rows = await c.document_binding_repository.list_by_company_namespace_and_catalogs(
+    rows = await container.document_binding_repository.list_by_company_namespace_and_catalogs(
         ctx.active_company.company_id,
         ctx.active_namespace,
         resolved_ids,
@@ -684,7 +684,7 @@ async def list_documents(
     user_ids = {r.created_by_user_id for r in rows}
     users_by_id: dict[str, User] = {}
     for uid in user_ids:
-        loaded = await c.user_repository.get(uid)
+        loaded = await container.user_repository.get(uid)
         if loaded is not None:
             users_by_id[uid] = loaded
 
@@ -715,7 +715,7 @@ async def list_documents(
 
 @router.post("/documents", response_model=OfficeDocumentCreateResponse)
 async def upload_document(
-    c: ContainerDep,
+    container: ContainerDep,
     file: UploadFile = File(...),
     title: str | None = Form(None),
     catalog_id: str | None = Form(None),
@@ -744,7 +744,7 @@ async def upload_document(
         )
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e)) from e
-    fp = c.file_processor
+    fp = container.file_processor
     prefix = "/documents/api/v1/files/download"
     meta = await fp.persist_uploaded_file(
         data=data,
@@ -756,13 +756,13 @@ async def upload_document(
         download_url_prefix=prefix,
     )
     resolved_catalog_id = await _resolve_catalog_for_create(
-        c,
+        container,
         company_id=ctx.active_company.company_id,
         namespace=ctx.active_namespace,
         user_id=ctx.user.user_id,
         catalog_id=catalog_id,
     )
-    row = await c.document_binding_repository.create(
+    row = await container.document_binding_repository.create(
         company_id=ctx.active_company.company_id,
         namespace=ctx.active_namespace,
         catalog_id=resolved_catalog_id,
@@ -781,7 +781,7 @@ async def upload_document(
 @router.post("/documents/empty", response_model=OfficeDocumentCreateResponse)
 async def create_empty_document(
     body: OfficeEmptyCreateRequest,
-    c: ContainerDep,
+    container: ContainerDep,
 ) -> OfficeDocumentCreateResponse:
     ctx = get_context()
     if not ctx.active_company:
@@ -824,7 +824,7 @@ async def create_empty_document(
         )
         document_type = "slide"
 
-    fp = c.file_processor
+    fp = container.file_processor
     prefix = "/documents/api/v1/files/download"
     meta = await fp.persist_uploaded_file(
         data=data,
@@ -836,13 +836,13 @@ async def create_empty_document(
         download_url_prefix=prefix,
     )
     resolved_catalog_id = await _resolve_catalog_for_create(
-        c,
+        container,
         company_id=ctx.active_company.company_id,
         namespace=ctx.active_namespace,
         user_id=ctx.user.user_id,
         catalog_id=body.catalog_id,
     )
-    row = await c.document_binding_repository.create(
+    row = await container.document_binding_repository.create(
         company_id=ctx.active_company.company_id,
         namespace=ctx.active_namespace,
         catalog_id=resolved_catalog_id,
@@ -865,22 +865,22 @@ async def create_empty_document(
 async def rename_document(
     binding_id: str,
     body: OfficeDocumentRenameRequest,
-    c: ContainerDep,
+    container: ContainerDep,
 ) -> OfficeDocumentRenameResponse:
     ctx = get_context()
     if not ctx.active_company:
         raise HTTPException(status_code=403, detail="Компания не выбрана")
     if not ctx.user:
         raise HTTPException(status_code=403, detail="Пользователь не авторизован")
-    row = await c.document_binding_repository.get_for_company(
+    row = await container.document_binding_repository.get_for_company(
         binding_id,
         ctx.active_company.company_id,
         ctx.active_namespace,
     )
     if row is None:
         raise HTTPException(status_code=404, detail="Привязка не найдена")
-    await _require_binding_catalog_access(c, row, ctx.user.user_id)
-    updated = await c.document_binding_repository.update_title(
+    await _require_binding_catalog_access(container, row, ctx.user.user_id)
+    updated = await container.document_binding_repository.update_title(
         binding_id,
         ctx.active_company.company_id,
         ctx.active_namespace,
@@ -895,21 +895,21 @@ async def rename_document(
 
 
 @router.delete("/documents/{binding_id}", status_code=204)
-async def delete_document(binding_id: str, c: ContainerDep) -> Response:
+async def delete_document(binding_id: str, container: ContainerDep) -> Response:
     ctx = get_context()
     if not ctx.active_company:
         raise HTTPException(status_code=403, detail="Компания не выбрана")
     if not ctx.user:
         raise HTTPException(status_code=403, detail="Пользователь не авторизован")
-    row = await c.document_binding_repository.get_for_company(
+    row = await container.document_binding_repository.get_for_company(
         binding_id,
         ctx.active_company.company_id,
         ctx.active_namespace,
     )
     if row is None:
         raise HTTPException(status_code=404, detail="Привязка не найдена")
-    await _require_binding_catalog_access(c, row, ctx.user.user_id)
-    ok = await c.document_binding_repository.delete_binding(
+    await _require_binding_catalog_access(container, row, ctx.user.user_id)
+    ok = await container.document_binding_repository.delete_binding(
         binding_id,
         ctx.active_company.company_id,
         ctx.active_namespace,
@@ -925,7 +925,7 @@ async def delete_document(binding_id: str, c: ContainerDep) -> Response:
 )
 async def editor_config(
     binding_id: str,
-    c: ContainerDep,
+    container: ContainerDep,
 ) -> OfficeEditorConfigResponse:
     ctx = get_context()
     if not ctx.active_company:
@@ -936,15 +936,15 @@ async def editor_config(
     if not ok:
         raise HTTPException(status_code=503, detail=detail)
     integ = get_office_settings().office
-    row = await c.document_binding_repository.get_for_company(
+    row = await container.document_binding_repository.get_for_company(
         binding_id,
         ctx.active_company.company_id,
         ctx.active_namespace,
     )
     if row is None:
         raise HTTPException(status_code=404, detail="Привязка не найдена")
-    await _require_binding_catalog_access(c, row, ctx.user.user_id)
-    meta = await c.file_processor.get_file_record(row.file_id)
+    await _require_binding_catalog_access(container, row, ctx.user.user_id)
+    meta = await container.file_processor.get_file_record(row.file_id)
     if meta is None:
         raise HTTPException(status_code=404, detail="Файл не найден в хранилище")
     if meta.company_id != ctx.active_company.company_id:
@@ -1016,7 +1016,7 @@ async def editor_config(
 
 @router.get("/office-download")
 async def office_download(
-    c: ContainerDep,
+    container: ContainerDep,
     token: str = Query(..., description="JWT office_dl"),
 ) -> Response:
     integ = get_office_settings().office
@@ -1029,13 +1029,13 @@ async def office_download(
     file_id = claims["file_id"]
     company_id = claims["company_id"]
     binding_id = claims["binding_id"]
-    binding_row = await c.document_binding_repository.get_by_binding_and_company(
+    binding_row = await container.document_binding_repository.get_by_binding_and_company(
         binding_id,
         company_id,
     )
     if binding_row is None or binding_row.file_id != file_id:
         raise HTTPException(status_code=403, detail="Доступ запрещён")
-    meta = await c.file_processor.get_file_record(file_id)
+    meta = await container.file_processor.get_file_record(file_id)
     if meta is None:
         raise HTTPException(status_code=404, detail="Файл не найден")
     if meta.company_id != company_id:
@@ -1073,7 +1073,7 @@ async def office_download(
 )
 async def onlyoffice_callback(
     request: Request,
-    c: ContainerDep,
+    container: ContainerDep,
     token: str = Query(..., description="JWT office_cb"),
 ) -> OnlyOfficeCallbackResponse:
     integ = get_office_settings().office
@@ -1117,7 +1117,7 @@ async def onlyoffice_callback(
             )
             return OnlyOfficeCallbackResponse(error=0)
 
-        row = await c.document_binding_repository.get_for_company(
+        row = await container.document_binding_repository.get_for_company(
             binding_id,
             company_id,
             namespace,
@@ -1131,7 +1131,7 @@ async def onlyoffice_callback(
             )
             raise HTTPException(status_code=404, detail="Привязка не найдена")
 
-        meta = await c.file_processor.get_file_record(row.file_id)
+        meta = await container.file_processor.get_file_record(row.file_id)
         if meta is None:
             raise HTTPException(status_code=404, detail="Файл не найден")
 
@@ -1139,7 +1139,7 @@ async def onlyoffice_callback(
             r = await client.get(url)
             r.raise_for_status()
             new_bytes = r.content
-        s3 = await c.file_processor._get_s3_client()
+        s3 = await container.file_processor._get_s3_client()
         await s3.upload_bytes(
             data=new_bytes,
             key=meta.s3_key,
@@ -1149,7 +1149,7 @@ async def onlyoffice_callback(
         updated = meta.model_copy(
             update={"file_size": len(new_bytes), "checksum": digest},
         )
-        await c.file_processor.file_repository.set(updated)
+        await container.file_processor.file_repository.set(updated)
 
         await notify_user(
             row.created_by_user_id,

@@ -3,11 +3,10 @@ API для управления грантами доступа к entities.
 """
 
 from typing import List
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, HTTPException
 
-from apps.crm.services.access_grant_service import AccessGrantService
 from apps.crm.models.grant_models import GrantToUserRequest, GrantToCompanyRequest, AccessGrantResponse
-from apps.crm.dependencies import get_access_grant_service
+from apps.crm.dependencies import ContainerDep
 from core.context import get_context
 
 router = APIRouter(prefix="/entities/{entity_id}/grants", tags=["Entity Grants"])
@@ -16,7 +15,7 @@ router = APIRouter(prefix="/entities/{entity_id}/grants", tags=["Entity Grants"]
 @router.post("/public", response_model=AccessGrantResponse)
 async def make_entity_public(
     entity_id: str,
-    service: AccessGrantService = Depends(get_access_grant_service)
+    container: ContainerDep,
 ):
     """Сделать entity публичной"""
     ctx = get_context()
@@ -24,7 +23,7 @@ async def make_entity_public(
         raise HTTPException(status_code=401, detail="Authentication required")
     
     try:
-        grant = await service.grant_entity_public(
+        grant = await container.access_grant_service.grant_entity_public(
             entity_id=entity_id,
             created_by=ctx.user.user_id
         )
@@ -39,7 +38,7 @@ async def make_entity_public(
 async def grant_to_user(
     entity_id: str,
     request: GrantToUserRequest,
-    service: AccessGrantService = Depends(get_access_grant_service)
+    container: ContainerDep,
 ):
     """Пошерить entity конкретному user"""
     ctx = get_context()
@@ -47,7 +46,7 @@ async def grant_to_user(
         raise HTTPException(status_code=401, detail="Authentication required")
     
     try:
-        grant = await service.grant_entity_to_user(
+        grant = await container.access_grant_service.grant_entity_to_user(
             entity_id=entity_id,
             target_user_id=request.user_id,
             role=request.role,
@@ -64,7 +63,7 @@ async def grant_to_user(
 async def grant_to_company(
     entity_id: str,
     request: GrantToCompanyRequest,
-    service: AccessGrantService = Depends(get_access_grant_service)
+    container: ContainerDep,
 ):
     """Пошерить entity целой компании"""
     ctx = get_context()
@@ -72,7 +71,7 @@ async def grant_to_company(
         raise HTTPException(status_code=401, detail="Authentication required")
     
     try:
-        grant = await service.grant_entity_to_company(
+        grant = await container.access_grant_service.grant_entity_to_company(
             entity_id=entity_id,
             target_company_id=request.company_id,
             role=request.role,
@@ -88,9 +87,8 @@ async def grant_to_company(
 @router.get("", response_model=List[AccessGrantResponse])
 async def list_grants(
     entity_id: str,
-    service: AccessGrantService = Depends(get_access_grant_service)
+    container: ContainerDep,
 ):
     """Список всех grants для entity"""
-    grants = await service.list_grants("entity", entity_id)
+    grants = await container.access_grant_service.list_grants("entity", entity_id)
     return [AccessGrantResponse.model_validate(g) for g in grants]
-

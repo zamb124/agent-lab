@@ -20,8 +20,9 @@ from apps.frontend.api.scheduler import router as scheduler_router
 from apps.frontend.api.leads import leads_router, lead_requests_router
 from apps.frontend.api.platform_tracing import router as platform_tracing_router
 from apps.frontend.api.platform_billing import router as platform_billing_router
-from apps.frontend.container import get_frontend_container
 from apps.frontend.config import FrontendSettings, get_frontend_settings
+from apps.frontend.container import get_frontend_container
+from apps.frontend.dependencies import ContainerDep
 from core.app.factory import create_service_app
 from core.identity.demo_bootstrap import ensure_demo_company_and_user
 from core.identity.system_bootstrap import ensure_system_admin_membership
@@ -96,13 +97,13 @@ for route in list(app.routes):
 
 
 @app.get("/api/health")
-async def health():
+async def health(container: ContainerDep):
+    _ = container
     return {"status": "ok", "service": "frontend"}
 
 
 @app.get("/l/{code}")
-async def resolve_short_link(code: str):
-    container = get_frontend_container()
+async def resolve_short_link(container: ContainerDep, code: str):
     target = await container.short_link_service.resolve_absolute_redirect_url(code.strip())
     if target is None:
         raise HTTPException(status_code=404, detail="Ссылка не найдена или истекла")
@@ -111,8 +112,9 @@ async def resolve_short_link(code: str):
 
 @app.get("/api/public/legal")
 @app.get("/frontend/api/public/legal")
-async def get_public_legal() -> JSONResponse:
+async def get_public_legal(container: ContainerDep) -> JSONResponse:
     """Публичные юридические реквизиты для страниц policy/terms."""
+    _ = container
     legal = get_frontend_settings().legal.model_dump()
     return JSONResponse(content=legal)
 
@@ -120,7 +122,8 @@ async def get_public_legal() -> JSONResponse:
 # SPA fallback (все неизвестные пути → index.html)
 @app.get("/")
 @app.get("/{full_path:path}")
-async def serve_spa(full_path: str = ""):
+async def serve_spa(container: ContainerDep, full_path: str = ""):
+    _ = container
     # Исключаем API, статику, WebSocket и PWA файлы
     # full_path может начинаться с frontend/ из-за префикса сервиса
     excluded = (

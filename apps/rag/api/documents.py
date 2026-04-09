@@ -5,7 +5,7 @@ API для управления документами RAG.
 import json
 from typing import List, Optional, Dict, Any
 
-from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, File, Form
+from fastapi import APIRouter, HTTPException, Query, UploadFile, File, Form
 from pydantic import BaseModel, ConfigDict, Field
 
 from apps.rag_worker.tasks.indexing_tasks import upload_document_task
@@ -15,8 +15,7 @@ from core.files.processors import FileProcessor
 from core.logging import get_logger
 from core.rag.factory import get_rag_provider
 from core.rag.models import RAGDocument
-from ..container import RAGContainer
-from ..dependencies import get_container
+from ..dependencies import ContainerDep
 from .namespace_access import (
     require_registered_rag_namespace,
     validate_ingest_text_body,
@@ -62,8 +61,8 @@ class IngestTextResponse(BaseModel):
 async def ingest_text(
     namespace_id: str,
     request: IngestTextRequest,
+    container: ContainerDep,
     provider: Optional[str] = Query(None),
-    container: RAGContainer = Depends(get_container),
 ) -> IngestTextResponse:
     """
     Синхронная индексация произвольного текста в namespace (без файла и S3).
@@ -108,9 +107,9 @@ async def ingest_text(
 @router.get("/namespaces/{namespace_id}/documents", response_model=DocumentListResponse)
 async def list_documents(
     namespace_id: str,
+    container: ContainerDep,
     limit: int = Query(100, ge=1, le=1000),
     provider: Optional[str] = Query(None),
-    container: RAGContainer = Depends(get_container),
 ) -> DocumentListResponse:
     """Список документов в namespace (completed + in-progress)."""
     from core.config import get_settings
@@ -151,10 +150,10 @@ async def list_documents(
 @router.post("/namespaces/{namespace_id}/documents", status_code=202, response_model=DocumentUploadResponse)
 async def upload_document(
     namespace_id: str,
+    container: ContainerDep,
     file: UploadFile = File(...),
     metadata: str = Form(default="{}"),
     provider: Optional[str] = Query(None),
-    container: RAGContainer = Depends(get_container),
 ) -> DocumentUploadResponse:
     """
     Принимает документ, сохраняет через FileProcessor (FileRecord в shared DB),
@@ -221,8 +220,8 @@ async def upload_document(
 async def delete_document(
     namespace_id: str,
     document_id: str,
+    container: ContainerDep,
     provider: Optional[str] = Query(None),
-    container: RAGContainer = Depends(get_container),
 ):
     """Удаляет документ из S3, shared DB и векторного индекса."""
     status_repo = container.document_status_repository
@@ -249,7 +248,7 @@ async def delete_document(
 @router.get("/documents/{document_id}/status")
 async def get_document_status(
     document_id: str,
-    container: RAGContainer = Depends(get_container),
+    container: ContainerDep,
 ):
     """Статус обработки документа."""
     status_repo = container.document_status_repository

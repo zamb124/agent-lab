@@ -59,6 +59,11 @@ export class ChannelSettingsModal extends PlatformModal {
                 align-items: center;
                 justify-content: space-between;
                 gap: var(--space-3);
+                margin-bottom: var(--space-2);
+            }
+
+            .switch-row:last-child {
+                margin-bottom: 0;
             }
 
             .switch-label {

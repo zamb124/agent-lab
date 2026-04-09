@@ -157,8 +157,9 @@ async def list_messages(
 
 
 @router.post("/{channel_id}/messages", status_code=201)
-async def send_message(channel_id: str, body: MessageCreate) -> dict:
+async def send_message(container: ContainerDep, channel_id: str, body: MessageCreate) -> dict:
     """Отправка сообщения через TaskIQ."""
+    _ = container
     context = get_context()
     cmd = CommandEnvelope(
         id=uuid.uuid4().hex,
@@ -215,7 +216,13 @@ async def _run_cmd_allow_null_result(cmd_type: str, payload: dict) -> None:
 
 
 @router.patch("/{channel_id}/messages/{message_id}")
-async def edit_message(channel_id: str, message_id: str, body: MessageEdit) -> dict:
+async def edit_message(
+    container: ContainerDep,
+    channel_id: str,
+    message_id: str,
+    body: MessageEdit,
+) -> dict:
+    _ = container
     return await _run_cmd(
         "messages.edit",
         {"channel_id": channel_id, "message_id": message_id, "body": body.model_dump(mode="json")},
@@ -223,7 +230,8 @@ async def edit_message(channel_id: str, message_id: str, body: MessageEdit) -> d
 
 
 @router.delete("/{channel_id}/messages/{message_id}")
-async def delete_message(channel_id: str, message_id: str) -> dict:
+async def delete_message(container: ContainerDep, channel_id: str, message_id: str) -> dict:
+    _ = container
     return await _run_cmd(
         "messages.delete",
         {"channel_id": channel_id, "message_id": message_id},
@@ -231,7 +239,13 @@ async def delete_message(channel_id: str, message_id: str) -> dict:
 
 
 @router.post("/{channel_id}/messages/{message_id}/forward", status_code=201)
-async def forward_message(channel_id: str, message_id: str, body: MessageForwardBody) -> dict:
+async def forward_message(
+    container: ContainerDep,
+    channel_id: str,
+    message_id: str,
+    body: MessageForwardBody,
+) -> dict:
+    _ = container
     return await _run_cmd(
         "messages.forward",
         {
@@ -244,7 +258,13 @@ async def forward_message(channel_id: str, message_id: str, body: MessageForward
 
 
 @router.post("/{channel_id}/messages/{message_id}/react")
-async def react_message(channel_id: str, message_id: str, body: MessageReactBody) -> dict:
+async def react_message(
+    container: ContainerDep,
+    channel_id: str,
+    message_id: str,
+    body: MessageReactBody,
+) -> dict:
+    _ = container
     return await _run_cmd(
         "messages.react",
         {"channel_id": channel_id, "message_id": message_id, "emoji": body.emoji},
@@ -252,7 +272,8 @@ async def react_message(channel_id: str, message_id: str, body: MessageReactBody
 
 
 @router.post("/{channel_id}/pins")
-async def pin_message(channel_id: str, body: MessagePinBody) -> dict:
+async def pin_message(container: ContainerDep, channel_id: str, body: MessagePinBody) -> dict:
+    _ = container
     return await _run_cmd(
         "messages.pin",
         {"channel_id": channel_id, "message_id": body.message_id, "action": body.action},
@@ -260,7 +281,12 @@ async def pin_message(channel_id: str, body: MessagePinBody) -> dict:
 
 
 @router.post("/{channel_id}/messages/{message_id}/transcribe")
-async def transcribe_audio_message(channel_id: str, message_id: str) -> MessageRead:
+async def transcribe_audio_message(
+    container: ContainerDep,
+    channel_id: str,
+    message_id: str,
+) -> MessageRead:
+    _ = container
     out = await _run_cmd(
         "messages.transcribe_audio",
         {"channel_id": channel_id, "message_id": message_id},
@@ -269,7 +295,12 @@ async def transcribe_audio_message(channel_id: str, message_id: str) -> MessageR
 
 
 @router.post("/{channel_id}/messages/{message_id}/transcribe-video")
-async def transcribe_video_message(channel_id: str, message_id: str) -> MessageRead:
+async def transcribe_video_message(
+    container: ContainerDep,
+    channel_id: str,
+    message_id: str,
+) -> MessageRead:
+    _ = container
     out = await _run_cmd(
         "messages.transcribe_video",
         {"channel_id": channel_id, "message_id": message_id},
@@ -278,7 +309,12 @@ async def transcribe_video_message(channel_id: str, message_id: str) -> MessageR
 
 
 @router.post("/{channel_id}/calls/{call_id}/transcribe", status_code=202)
-async def transcribe_call_session(channel_id: str, call_id: str) -> dict[str, str]:
+async def transcribe_call_session(
+    container: ContainerDep,
+    channel_id: str,
+    call_id: str,
+) -> dict[str, str]:
+    _ = container
     await _run_cmd_allow_null_result(
         "messages.transcribe_call",
         {"channel_id": channel_id, "call_id": call_id},

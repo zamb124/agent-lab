@@ -7,7 +7,7 @@ Endpoints:
 """
 
 from typing import List, Optional
-from fastapi import APIRouter, Body, Depends, HTTPException, Query
+from fastapi import APIRouter, HTTPException, Query
 from datetime import datetime
 from pydantic import BaseModel, Field
 
@@ -15,8 +15,8 @@ from apps.crm.models.graph import (
     InfluenceGraphResponse,
     RelatedEntitiesResponse
 )
-from apps.crm.services.graph_service import GraphEntityLimitExceededError, GraphService
-from apps.crm.dependencies import get_graph_service
+from apps.crm.services.graph_service import GraphEntityLimitExceededError
+from apps.crm.dependencies import ContainerDep
 from core.logging import get_logger
 
 logger = get_logger(__name__)
@@ -36,7 +36,7 @@ class OverviewGraphRequest(BaseModel):
 @router.post("/overview-graph", response_model=InfluenceGraphResponse)
 async def get_overview_graph(
     request: OverviewGraphRequest,
-    service: GraphService = Depends(get_graph_service),
+    container: ContainerDep,
 ):
     """Объединённый граф влияния по нескольким seed-сущностям за один запрос."""
     if not request.entity_ids:
@@ -47,7 +47,7 @@ async def get_overview_graph(
         rel_types_list = [rt.strip() for rt in request.relationship_types.split(",")]
 
     try:
-        graph = await service.build_overview_graph(
+        graph = await container.graph_service.build_overview_graph(
             entity_ids=request.entity_ids,
             max_depth=request.max_depth,
             relationship_types=rel_types_list,
@@ -70,12 +70,12 @@ async def get_overview_graph(
 @router.get("/{entity_id}/influence-graph", response_model=InfluenceGraphResponse)
 async def get_influence_graph(
     entity_id: str,
+    container: ContainerDep,
     max_depth: int = Query(3, ge=1, le=5, description="Максимальная глубина обхода"),
     relationship_types: Optional[str] = Query(None, description="Comma-separated типы связей"),
     created_at_from: Optional[datetime] = Query(None, description="Фильтр created_at >= value"),
     created_at_to: Optional[datetime] = Query(None, description="Фильтр created_at <= value"),
     namespace: Optional[str] = Query(None, description="Namespace для проверки лимита сущностей в БД"),
-    service: GraphService = Depends(get_graph_service)
 ):
     """
     Построение графа влияния от entity.
@@ -102,7 +102,7 @@ async def get_influence_graph(
         rel_types_list = [rt.strip() for rt in relationship_types.split(",")]
     
     try:
-        graph = await service.build_influence_graph(
+        graph = await container.graph_service.build_influence_graph(
             entity_id=entity_id,
             max_depth=max_depth,
             relationship_types=rel_types_list,
@@ -125,12 +125,12 @@ async def get_influence_graph(
 @router.get("/{entity_id}/related", response_model=RelatedEntitiesResponse)
 async def get_related_entities(
     entity_id: str,
-    direction: str = Query("both", regex="^(incoming|outgoing|both)$"),
+    container: ContainerDep,
+    direction: str = Query("both", pattern="^(incoming|outgoing|both)$"),
     relationship_type: Optional[str] = Query(None),
     created_at_from: Optional[datetime] = Query(None, description="Фильтр created_at >= value"),
     created_at_to: Optional[datetime] = Query(None, description="Фильтр created_at <= value"),
     namespace: Optional[str] = Query(None, description="Namespace для проверки лимита сущностей в БД"),
-    service: GraphService = Depends(get_graph_service)
 ):
     """
     Получить прямо связанные entities (1 уровень).
@@ -147,7 +147,7 @@ async def get_related_entities(
         404: Entity не найдена
     """
     try:
-        related = await service.get_related_entities(
+        related = await container.graph_service.get_related_entities(
             entity_id=entity_id,
             direction=direction,
             relationship_type=relationship_type,
@@ -163,4 +163,3 @@ async def get_related_entities(
     except Exception as e:
         logger.error(f"Error getting related entities: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"Internal error: {str(e)}")
-

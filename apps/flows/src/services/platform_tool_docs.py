@@ -12,7 +12,7 @@ from typing import List
 
 from core.context import get_context
 from core.docs.models import PlatformToolDoc
-from apps.flows.src.container import get_container
+from apps.flows.src.container import FlowContainer
 
 _MAX_CODE_PREVIEW_CHARS = 4000
 
@@ -23,12 +23,11 @@ def _code_mode_str(value: object) -> str:
     return str(value)
 
 
-async def collect_platform_tool_docs() -> List[PlatformToolDoc]:
+async def collect_platform_tool_docs(container: FlowContainer) -> List[PlatformToolDoc]:
     """
     Все динамические / зарегистрированные tools: сначала из tool_repository текущей компании,
     затем дополняются экземплярами из ToolRegistry, которых нет в БД.
     """
-    container = get_container()
     registry = container.tool_registry
     registry.register_builtin_tools()
 

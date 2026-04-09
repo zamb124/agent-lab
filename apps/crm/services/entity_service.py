@@ -182,6 +182,7 @@ class EntityService:
         access_grant_repo: AccessGrantRepository,
         access_request_repo: AccessRequestRepository,
         company_mapping_repo: CompanyMappingRepository,
+        company_repo: "CompanyRepository" = None,
     ):
         self._entity_repo = entity_repo
         self._entity_type_repo = entity_type_repo
@@ -196,6 +197,7 @@ class EntityService:
         self._access_grant_repo = access_grant_repo
         self._access_request_repo = access_request_repo
         self._company_mapping_repo = company_mapping_repo
+        self._company_repo = company_repo
     
     def _get_company_id(self) -> str:
         context = get_context()
@@ -497,6 +499,8 @@ class EntityService:
                 note_id=entity.entity_id,
                 note_date_iso=note_date_iso,
                 action="created",
+                company_repository=self._company_repo,
+                access_grant_repository=self._access_grant_repo,
             )
 
         return entity
@@ -747,6 +751,8 @@ class EntityService:
                 note_id=entity.entity_id,
                 note_date_iso=note_date_iso,
                 action="updated",
+                company_repository=self._company_repo,
+                access_grant_repository=self._access_grant_repo,
             )
 
             company_id = self._get_company_id()
@@ -984,6 +990,8 @@ class EntityService:
                 note_id=entity_id,
                 note_date_iso=note_date_iso,
                 action="deleted",
+                company_repository=self._company_repo,
+                access_grant_repository=self._access_grant_repo,
             )
 
         return True

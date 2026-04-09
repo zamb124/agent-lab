@@ -38,14 +38,6 @@ packages = ["apps", "core"]
 asyncio_mode = "auto"
 asyncio_default_fixture_loop_scope = "session"
 asyncio_default_test_loop_scope = "session"
-filterwarnings = [
-    "ignore:.*HTTP_413_REQUEST_ENTITY_TOO_LARGE.*:DeprecationWarning",
-    "ignore:.*SwigPy.*has no __module__ attribute:DeprecationWarning",
-    "ignore:.*swigvar.*has no __module__ attribute:DeprecationWarning",
-    "ignore::DeprecationWarning:starlette.templating:",
-    "ignore::DeprecationWarning:httpx._models:",
-    "ignore::DeprecationWarning:httpx._client:",
-]
 markers = [
     "unit: unit tests",
     "integration: integration tests that require external services",

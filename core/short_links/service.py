@@ -27,8 +27,12 @@ def require_platform_public_base_url() -> str:
 
 
 class ShortLinkService:
-    def __init__(self, db_url: Optional[str] = None) -> None:
-        self._repo = ShortLinkRepository(db_url=db_url)
+    def __init__(
+        self,
+        db_url: Optional[str] = None,
+        repository: Optional[ShortLinkRepository] = None,
+    ) -> None:
+        self._repo = repository if repository is not None else ShortLinkRepository(db_url=db_url)
 
     def public_short_url(self, code: str) -> str:
         base = require_platform_public_base_url()

@@ -3,14 +3,13 @@ API для управления RAG провайдерами.
 """
 
 from typing import List
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
 from core.logging import get_logger
 from core.config import get_settings
 from core.rag.factory import get_rag_provider
-from ..container import RAGContainer
-from ..dependencies import get_container
+from ..dependencies import ContainerDep
 
 logger = get_logger(__name__)
 
@@ -38,7 +37,7 @@ class ProviderSwitchRequest(BaseModel):
 
 @router.get("/providers", response_model=ProviderListResponse)
 async def list_providers(
-    container: RAGContainer = Depends(get_container)
+    container: ContainerDep,
 ) -> ProviderListResponse:
     """
     Возвращает список доступных RAG провайдеров.
@@ -72,7 +71,7 @@ async def list_providers(
 @router.post("/providers/switch")
 async def switch_provider(
     request: ProviderSwitchRequest,
-    container: RAGContainer = Depends(get_container)
+    container: ContainerDep,
 ):
     """
     Переключает активный RAG провайдер.

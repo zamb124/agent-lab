@@ -5,7 +5,7 @@ Tasks для семантического поиска через pgvector.
 from typing import Dict, Any, List, Optional
 
 from apps.rag_worker.broker import broker
-from core.rag.factory import get_default_rag_provider
+from apps.rag.container import get_rag_container
 from core.logging import get_logger
 
 logger = get_logger(__name__)
@@ -32,7 +32,7 @@ async def search_task(
     """
     logger.info(f"RAG Worker: поиск в namespace {namespace_id}, query='{query[:50]}'")
 
-    provider = get_default_rag_provider()
+    provider = get_rag_container().rag_provider
     results = await provider.search(namespace_id, query, limit, filters)
 
     logger.info(f"RAG Worker: найдено {len(results)} результатов")

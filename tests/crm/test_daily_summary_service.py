@@ -63,6 +63,7 @@ def _build_service() -> EntityService:
         access_grant_repo=AsyncMock(),
         access_request_repo=AsyncMock(),
         company_mapping_repo=AsyncMock(),
+        company_repo=AsyncMock(),
     )
 
 

@@ -4,7 +4,7 @@ API для управления namespaces.
 
 from typing import List, Optional
 import traceback
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel
 
 from core.logging import get_logger
@@ -13,8 +13,7 @@ from core.context import get_context
 from core.models.identity_models import Namespace
 from core.rag.factory import get_rag_provider
 from core.config import get_settings
-from ..container import RAGContainer
-from ..dependencies import get_container
+from ..dependencies import ContainerDep
 
 logger = get_logger(__name__)
 
@@ -35,8 +34,8 @@ class NamespaceListResponse(BaseModel):
 
 @router.get("/namespaces", response_model=NamespaceListResponse)
 async def list_namespaces(
+    container: ContainerDep,
     provider: Optional[str] = Query(None, description="RAG provider (pgvector, agentset)"),
-    container: RAGContainer = Depends(get_container)
 ) -> NamespaceListResponse:
     """
     Получает список namespaces текущей компании.
@@ -72,8 +71,8 @@ async def list_namespaces(
 @router.post("/namespaces", response_model=Namespace, status_code=201)
 async def create_namespace(
     request: NamespaceCreateRequest,
+    container: ContainerDep,
     provider: Optional[str] = Query(None, description="RAG provider"),
-    container: RAGContainer = Depends(get_container)
 ) -> Namespace:
     """
     Создает новый namespace для текущей компании.
@@ -118,8 +117,8 @@ async def create_namespace(
 @router.delete("/namespaces/{namespace_id}")
 async def delete_namespace(
     namespace_id: str,
+    container: ContainerDep,
     provider: Optional[str] = Query(None, description="RAG provider"),
-    container: RAGContainer = Depends(get_container)
 ):
     """
     Удаляет namespace и все его документы.

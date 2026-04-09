@@ -13,8 +13,9 @@ router = APIRouter()
 
 
 @router.post("/resources", status_code=201)
-async def upsert_git_resource(body: GitResourceRefCreate) -> GitResourceRefRead:
+async def upsert_git_resource(container: ContainerDep, body: GitResourceRefCreate) -> GitResourceRefRead:
     """Создание/обновление Git-ресурса через TaskIQ."""
+    _ = container
     context = get_context()
     cmd = CommandEnvelope(
         id=__import__("uuid").uuid4().hex,

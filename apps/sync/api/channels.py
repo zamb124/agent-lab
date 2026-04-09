@@ -65,8 +65,9 @@ async def list_channels(
 
 
 @router.patch("/{channel_id}")
-async def update_channel(channel_id: str, body: ChannelUpdate) -> ChannelRead:
+async def update_channel(container: ContainerDep, channel_id: str, body: ChannelUpdate) -> ChannelRead:
     """Обновление канала (команда в процессе API)."""
+    _ = container
     context = get_context()
     cmd = CommandEnvelope(
         id=uuid.uuid4().hex,
@@ -118,8 +119,9 @@ async def patch_channel_notification_settings(
 
 
 @router.post("/{channel_id}/read", status_code=204)
-async def mark_channel_read(channel_id: str) -> None:
+async def mark_channel_read(container: ContainerDep, channel_id: str) -> None:
     """Отмечает основную ленту канала прочитанной для текущего пользователя."""
+    _ = container
     context = get_context()
     cmd = CommandEnvelope(
         id=uuid.uuid4().hex,
@@ -134,8 +136,9 @@ async def mark_channel_read(channel_id: str) -> None:
 
 
 @router.post("/", status_code=201)
-async def create_channel(body: ChannelCreate) -> ChannelRead:
+async def create_channel(container: ContainerDep, body: ChannelCreate) -> ChannelRead:
     """Создание канала через TaskIQ."""
+    _ = container
     context = get_context()
     cmd = CommandEnvelope(
         id=__import__("uuid").uuid4().hex,

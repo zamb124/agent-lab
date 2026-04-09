@@ -6,7 +6,7 @@ API для работы с entities.
 
 from typing import Any, Dict, List, Optional
 from datetime import datetime
-from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
+from fastapi import APIRouter, File, HTTPException, Query, UploadFile
 from pydantic import ValidationError
 
 from apps.crm.models.api import (
@@ -27,10 +27,8 @@ from apps.crm.models.api import (
 from apps.crm.db.models import CRMEntity
 from apps.crm.config import get_crm_settings
 from apps.crm.taskiq_analyze_errors import parse_validation_from_task_message
-from apps.crm.services.entity_service import DraftVersionConflictError, EntityService
-from apps.crm.services.access_control_service import AccessControlService
-from apps.crm.dependencies import get_entity_service, get_access_control_service, get_container_dep
-from apps.crm.container import CRMContainer
+from apps.crm.services.entity_service import DraftVersionConflictError
+from apps.crm.dependencies import ContainerDep
 from apps.crm_worker.tasks.analysis_tasks import (
     analyze_text_with_ai_task,
     apply_analysis_draft_task,
@@ -87,7 +85,7 @@ def build_crm_entity_filters_from_query(
 
 @router.get("/person-entity/self", response_model=EntityResponse)
 async def get_person_entity_for_current_user(
-    container: CRMContainer = Depends(get_container_dep),
+    container: ContainerDep,
 ):
     """Сущность contact, соответствующая текущему пользователю (для голоса «Я»)."""
     ctx = get_context()
@@ -106,11 +104,11 @@ async def get_person_entity_for_current_user(
 @router.post("", response_model=EntityResponse)
 async def create_entity(
     data: EntityCreate,
-    service: EntityService = Depends(get_entity_service)
+    container: ContainerDep,
 ):
     """Создать новую entity"""
     try:
-        entity = await service.create_entity(
+        entity = await container.entity_service.create_entity(
             entity_type=data.entity_type,
             name=data.name,
             description=data.description,
@@ -136,12 +134,11 @@ async def create_entity(
 @router.post("/merge", response_model=EntityMergeResponse)
 async def merge_entities(
     body: EntityMergeRequest,
-    service: EntityService = Depends(get_entity_service),
-    access_control: AccessControlService = Depends(get_access_control_service),
+    container: ContainerDep,
 ):
     """Слияние двух сущностей: survivor сохраняет id, source удаляется, связи переносятся."""
-    survivor = await service.get_entity(body.survivor_entity_id.strip())
-    source = await service.get_entity(body.source_entity_id.strip())
+    survivor = await container.entity_service.get_entity(body.survivor_entity_id.strip())
+    source = await container.entity_service.get_entity(body.source_entity_id.strip())
     if survivor is None:
         raise HTTPException(status_code=404, detail="Survivor entity not found")
     if source is None:
@@ -150,18 +147,18 @@ async def merge_entities(
     ctx = get_context()
     user_id = ctx.user.user_id if ctx and ctx.user else None
     company_id = ctx.active_company.company_id if ctx and ctx.active_company else None
-    if not user_id or not await access_control.can_write_entity(survivor, user_id, company_id):
+    if not user_id or not await container.access_control_service.can_write_entity(survivor, user_id, company_id):
         raise HTTPException(status_code=403, detail="Access denied")
-    if not user_id or not await access_control.can_write_entity(source, user_id, company_id):
+    if not user_id or not await container.access_control_service.can_write_entity(source, user_id, company_id):
         raise HTTPException(status_code=403, detail="Access denied")
 
     try:
-        merged, merged_from_id = await service.merge_entities(body)
+        merged, merged_from_id = await container.entity_service.merge_entities(body)
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
 
     try:
-        filtered = await access_control.filter_fields(merged, user_id, company_id)
+        filtered = await container.access_control_service.filter_fields(merged, user_id, company_id)
     except PermissionError:
         raise HTTPException(status_code=403, detail="Access denied")
     return EntityMergeResponse(
@@ -172,6 +169,7 @@ async def merge_entities(
 
 @router.get("/search", response_model=List[EntityResponse])
 async def search_entities(
+    container: ContainerDep,
     query: str = Query(...),
     entity_type: Optional[str] = Query(None),
     entity_subtype: Optional[str] = Query(None),
@@ -185,7 +183,6 @@ async def search_entities(
     created_at_from: Optional[datetime] = Query(None, description="Фильтр created_at >= value"),
     created_at_to: Optional[datetime] = Query(None, description="Фильтр created_at <= value"),
     limit: int = Query(100, le=1000),
-    service: EntityService = Depends(get_entity_service)
 ):
     """Семантический поиск entities (RAG + вектор); те же доп. фильтры, что у GET /entities (кроме подстроки ILIKE)."""
     filters = build_crm_entity_filters_from_query(
@@ -199,7 +196,7 @@ async def search_entities(
         created_at_from=created_at_from,
         created_at_to=created_at_to,
     )
-    entities = await service.search_entities(
+    entities = await container.entity_service.search_entities(
         query=query,
         entity_type=entity_type,
         entity_subtype=entity_subtype,
@@ -212,13 +209,13 @@ async def search_entities(
 
 @router.get("/timeline/bounds", response_model=EntityTimelineBoundsResponse)
 async def get_entities_timeline_bounds(
+    container: ContainerDep,
     entity_type: Optional[str] = Query(None),
     entity_subtype: Optional[str] = Query(None),
     namespace: Optional[str] = Query(None, description="Фильтр по namespace"),
-    service: EntityService = Depends(get_entity_service),
 ):
     """Получить границы timeline по created_at."""
-    bounds = await service.get_timeline_bounds(
+    bounds = await container.entity_service.get_timeline_bounds(
         entity_type=entity_type,
         entity_subtype=entity_subtype,
         namespace=namespace,
@@ -230,19 +227,18 @@ async def get_entities_timeline_bounds(
 async def patch_note_analysis_draft(
     note_id: str,
     body: AIAnalysisDraftPatchRequest,
-    service: EntityService = Depends(get_entity_service),
-    access_control: AccessControlService = Depends(get_access_control_service),
+    container: ContainerDep,
 ):
-    note = await service.get_entity(note_id)
+    note = await container.entity_service.get_entity(note_id)
     if not note:
         raise HTTPException(status_code=404, detail="Entity not found")
     ctx = get_context()
     user_id = ctx.user.user_id if ctx and ctx.user else None
     company_id = ctx.active_company.company_id if ctx and ctx.active_company else None
-    if not user_id or not await access_control.can_write_entity(note, user_id, company_id):
+    if not user_id or not await container.access_control_service.can_write_entity(note, user_id, company_id):
         raise HTTPException(status_code=403, detail="Access denied")
     try:
-        return await service.patch_analysis_draft(note_id, body)
+        return await container.entity_service.patch_analysis_draft(note_id, body)
     except DraftVersionConflictError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
     except ValueError as exc:
@@ -252,17 +248,16 @@ async def patch_note_analysis_draft(
 @router.post("/notes/{note_id}/analysis-draft/apply", response_model=AIAnalysisDraftApplyResult)
 async def apply_note_analysis_draft(
     note_id: str,
-    service: EntityService = Depends(get_entity_service),
-    access_control: AccessControlService = Depends(get_access_control_service),
+    container: ContainerDep,
 ):
-    note = await service.get_entity(note_id)
+    note = await container.entity_service.get_entity(note_id)
     if not note:
         raise HTTPException(status_code=404, detail="Entity not found")
     ctx = get_context()
     user_id = ctx.user.user_id if ctx and ctx.user else None
     company_id = ctx.active_company.company_id if ctx and ctx.active_company else None
     auth_token = ctx.auth_token if ctx else None
-    if not user_id or not await access_control.can_write_entity(note, user_id, company_id):
+    if not user_id or not await container.access_control_service.can_write_entity(note, user_id, company_id):
         raise HTTPException(status_code=403, detail="Access denied")
     if not user_id or not company_id:
         raise HTTPException(status_code=500, detail="Контекст пользователя или компании отсутствует")
@@ -290,25 +285,22 @@ async def apply_note_analysis_draft(
 @router.get("/{entity_id}")
 async def get_entity(
     entity_id: str,
-    service: EntityService = Depends(get_entity_service),
-    access_control: AccessControlService = Depends(get_access_control_service)
+    container: ContainerDep,
 ):
     """Получить entity по ID с проверкой доступа"""
-    entity = await service.get_entity(entity_id)
+    entity = await container.entity_service.get_entity(entity_id)
     if not entity:
         raise HTTPException(status_code=404, detail="Entity not found")
-    
-    # Проверка доступа через AccessGrants
+
     ctx = get_context()
     user_id = ctx.user.user_id if ctx and ctx.user else None
     company_id = ctx.active_company.company_id if ctx and ctx.active_company else None
-    
-    if not await access_control.can_read_entity(entity, user_id, company_id):
+
+    if not await container.access_control_service.can_read_entity(entity, user_id, company_id):
         raise HTTPException(status_code=403, detail="Access denied")
-    
-    # Фильтрация полей (полный доступ → entity, публичный → dict с ограниченными полями)
+
     try:
-        filtered = await access_control.filter_fields(entity, user_id, company_id)
+        filtered = await container.access_control_service.filter_fields(entity, user_id, company_id)
         if isinstance(filtered, CRMEntity):
             return EntityResponse.model_validate(filtered)
         return filtered
@@ -320,27 +312,25 @@ async def get_entity(
 async def update_entity(
     entity_id: str,
     data: EntityUpdate,
-    service: EntityService = Depends(get_entity_service),
-    access_control: AccessControlService = Depends(get_access_control_service)
+    container: ContainerDep,
 ):
     """Обновить entity с проверкой прав"""
-    entity = await service.get_entity(entity_id)
+    entity = await container.entity_service.get_entity(entity_id)
     if not entity:
         raise HTTPException(status_code=404, detail="Entity not found")
-    
-    # Проверка прав на запись
+
     ctx = get_context()
     user_id = ctx.user.user_id if ctx and ctx.user else None
     company_id = ctx.active_company.company_id if ctx and ctx.active_company else None
-    
-    if not user_id or not await access_control.can_write_entity(entity, user_id, company_id):
+
+    if not user_id or not await container.access_control_service.can_write_entity(entity, user_id, company_id):
         raise HTTPException(status_code=403, detail="Access denied")
-    
+
     updates = data.model_dump(exclude_none=True)
     updates.pop("voice_entity_id", None)
     updates.pop("context_entity_id", None)
     try:
-        updated = await service.update_entity(
+        updated = await container.entity_service.update_entity(
             entity_id,
             updates,
             voice_entity_id=data.voice_entity_id,
@@ -356,11 +346,10 @@ async def update_entity(
 @router.delete("/{entity_id}")
 async def delete_entity(
     entity_id: str,
-    service: EntityService = Depends(get_entity_service),
-    access_control: AccessControlService = Depends(get_access_control_service),
+    container: ContainerDep,
 ):
     """Каскадное удаление entity"""
-    entity = await service.get_entity(entity_id)
+    entity = await container.entity_service.get_entity(entity_id)
     if not entity:
         raise HTTPException(status_code=404, detail="Entity not found")
 
@@ -368,10 +357,10 @@ async def delete_entity(
     user_id = ctx.user.user_id if ctx and ctx.user else None
     company_id = ctx.active_company.company_id if ctx and ctx.active_company else None
 
-    if not user_id or not await access_control.can_write_entity(entity, user_id, company_id):
+    if not user_id or not await container.access_control_service.can_write_entity(entity, user_id, company_id):
         raise HTTPException(status_code=403, detail="Access denied")
 
-    success = await service.delete_entity(entity_id)
+    success = await container.entity_service.delete_entity(entity_id)
     if not success:
         raise HTTPException(status_code=404, detail="Entity not found")
     return {"success": True}
@@ -379,6 +368,7 @@ async def delete_entity(
 
 @router.get("", response_model=List[EntityResponse])
 async def list_entities(
+    container: ContainerDep,
     entity_type: Optional[str] = Query(None),
     entity_subtype: Optional[str] = Query(None),
     namespace: Optional[str] = Query(None, description="Фильтр по namespace"),
@@ -392,7 +382,6 @@ async def list_entities(
     created_at_from: Optional[datetime] = Query(None, description="Фильтр created_at >= value"),
     created_at_to: Optional[datetime] = Query(None, description="Фильтр created_at <= value"),
     limit: int = Query(100, le=1000),
-    service: EntityService = Depends(get_entity_service)
 ):
     """Получить список entities с фильтрацией"""
     filters = build_crm_entity_filters_from_query(
@@ -407,7 +396,7 @@ async def list_entities(
         created_at_to=created_at_to,
     )
 
-    entities = await service.list_entities(
+    entities = await container.entity_service.list_entities(
         entity_type=entity_type,
         entity_subtype=entity_subtype,
         namespace=namespace,
@@ -420,10 +409,12 @@ async def list_entities(
 @router.post("/analyze", response_model=AIAnalyzeResponse)
 async def analyze_text(
     request: AIAnalyzeRequest,
+    container: ContainerDep,
     note_id: Optional[str] = Query(None, description="ID заметки для нотификации"),
     check_duplicates: bool = Query(True, description="Проверять дубликаты entities"),
 ):
     """AI анализ текста с извлечением entities и relationships"""
+    _ = container
     context = get_context()
     auth_token = context.auth_token if context else None
     user_id_ctx = context.user.user_id if context and context.user else None
@@ -489,7 +480,7 @@ async def analyze_text(
 @router.post("/daily-summary")
 async def get_daily_summary(
     request: Dict[str, Any],
-    service: EntityService = Depends(get_entity_service)
+    container: ContainerDep,
 ):
     """Получить AI саммари заметок за день"""
     date_str = request.get("date")
@@ -497,7 +488,7 @@ async def get_daily_summary(
         raise HTTPException(status_code=400, detail="date is required")
     namespace = request.get("namespace")
     force_rebuild = request.get("force_rebuild") is True
-    summary = await service.get_daily_summary_cached(
+    summary = await container.entity_service.get_daily_summary_cached(
         date_str=date_str,
         namespace=namespace,
         force_rebuild=force_rebuild,
@@ -508,7 +499,7 @@ async def get_daily_summary(
 @router.post("/period-summary")
 async def get_period_summary(
     request: Dict[str, Any],
-    service: EntityService = Depends(get_entity_service),
+    container: ContainerDep,
 ):
     """Сводка заметок за диапазон дат (merge дневных сводок)."""
     date_from = request.get("date_from")
@@ -517,7 +508,7 @@ async def get_period_summary(
         raise HTTPException(status_code=400, detail="date_from and date_to are required")
     namespace = request.get("namespace")
     force_rebuild = request.get("force_rebuild") is True
-    summary = await service.get_period_summary_cached(
+    summary = await container.entity_service.get_period_summary_cached(
         date_from=date_from,
         date_to=date_to,
         namespace=namespace,
@@ -555,8 +546,7 @@ async def get_period_summary(
 @router.get("/{entity_id}/card")
 async def get_entity_card(
     entity_id: str,
-    service: EntityService = Depends(get_entity_service),
-    access_control: AccessControlService = Depends(get_access_control_service)
+    container: ContainerDep,
 ):
     """
     Получить полную карточку entity с контекстом:
@@ -566,15 +556,15 @@ async def get_entity_card(
     - Attachments
     """
     try:
-        entity = await service.get_entity(entity_id)
+        entity = await container.entity_service.get_entity(entity_id)
         if not entity:
             raise HTTPException(status_code=404, detail="Entity not found")
         ctx = get_context()
         user_id = ctx.user.user_id if ctx and ctx.user else None
         company_id = ctx.active_company.company_id if ctx and ctx.active_company else None
-        if not await access_control.can_read_entity(entity, user_id, company_id):
+        if not await container.access_control_service.can_read_entity(entity, user_id, company_id):
             raise HTTPException(status_code=403, detail="Access denied")
-        card = await service.get_entity_card(entity_id)
+        card = await container.entity_service.get_entity_card(entity_id)
         return card
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
@@ -582,10 +572,12 @@ async def get_entity_card(
 
 @router.post("/voice-input")
 async def voice_input(
+    container: ContainerDep,
     file: UploadFile = File(...),
     language: str | None = Query(default=None),
 ):
     """Голосовой ввод заметок с единым STT-контрактом."""
+    _ = container
     file_name = file.filename or "voice-input"
     mime_type = file.content_type or "application/octet-stream"
     audio_bytes = await file.read()
@@ -608,14 +600,14 @@ async def voice_input(
 @router.post("/search/mentions", response_model=Dict)
 async def search_mentions(
     request: SearchMentionsRequest,
-    service: EntityService = Depends(get_entity_service)
+    container: ContainerDep,
 ):
     """Real-time поиск упоминаний entities в тексте для подсветки"""
     text = request.text
     if not text or len(text) < 3:
         return {"entities": []}
     
-    entities = await service.search_mentions(text, limit=20)
+    entities = await container.entity_service.search_mentions(text, limit=20)
     return {
         "entities": [
             {
@@ -633,20 +625,18 @@ async def search_mentions(
 @router.get("/{entity_id}/relationships")
 async def get_entity_relationships(
     entity_id: str,
-    service: EntityService = Depends(get_entity_service),
-    access_control: AccessControlService = Depends(get_access_control_service),
-    container: CRMContainer = Depends(get_container_dep),
+    container: ContainerDep,
 ):
     """Получить все relationships для entity"""
     repo = container.relationship_repository
 
-    entity = await service.get_entity(entity_id)
+    entity = await container.entity_service.get_entity(entity_id)
     if not entity:
         raise HTTPException(status_code=404, detail="Entity not found")
     ctx = get_context()
     user_id = ctx.user.user_id if ctx and ctx.user else None
     company_id = ctx.active_company.company_id if ctx and ctx.active_company else None
-    if not await access_control.can_read_entity(entity, user_id, company_id):
+    if not await container.access_control_service.can_read_entity(entity, user_id, company_id):
         raise HTTPException(status_code=403, detail="Access denied")
 
     relationships = await repo.get_by_entity(entity_id)
@@ -665,4 +655,3 @@ async def get_entity_relationships(
         }
         for r in relationships
     ]}
-

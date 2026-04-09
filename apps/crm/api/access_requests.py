@@ -5,15 +5,14 @@ User Story: Запрос доступа к чужим entities с указани
 """
 
 from typing import List, Optional
-from fastapi import APIRouter, HTTPException, Depends, Query
+from fastapi import APIRouter, HTTPException, Query
 
-from apps.crm.services.access_request_service import AccessRequestService
 from apps.crm.models.access_request_models import (
     AccessRequestCreate,
     AccessRequestUpdate,
     AccessRequestResponse
 )
-from apps.crm.dependencies import get_access_request_service
+from apps.crm.dependencies import ContainerDep
 from core.context import get_context
 
 router = APIRouter(prefix="/access-requests", tags=["Access Requests"])
@@ -22,7 +21,7 @@ router = APIRouter(prefix="/access-requests", tags=["Access Requests"])
 @router.post("", response_model=AccessRequestResponse)
 async def request_access(
     data: AccessRequestCreate,
-    service: AccessRequestService = Depends(get_access_request_service)
+    container: ContainerDep,
 ):
     """Создать запрос на доступ к entity"""
     ctx = get_context()
@@ -30,7 +29,7 @@ async def request_access(
         raise HTTPException(status_code=401, detail="Authentication required")
     
     try:
-        request = await service.create_request(
+        request = await container.access_request_service.create_request(
             entity_id=data.resource_id,
             requester_user_id=ctx.user.user_id,
             requester_company_id=ctx.active_company.company_id if ctx.active_company else "system",
@@ -48,10 +47,10 @@ async def request_access(
 @router.get("/{request_id}", response_model=AccessRequestResponse)
 async def get_access_request(
     request_id: str,
-    service: AccessRequestService = Depends(get_access_request_service)
+    container: ContainerDep,
 ):
     """Получить статус запроса на доступ"""
-    request = await service.get_request(request_id)
+    request = await container.access_request_service.get_request(request_id)
     if not request:
         raise HTTPException(status_code=404, detail="Request not found")
     
@@ -62,7 +61,7 @@ async def get_access_request(
 async def update_access_request(
     request_id: str,
     data: AccessRequestUpdate,
-    service: AccessRequestService = Depends(get_access_request_service)
+    container: ContainerDep,
 ):
     """Одобрить/отклонить запрос на доступ"""
     ctx = get_context()
@@ -71,13 +70,13 @@ async def update_access_request(
     
     try:
         if data.status == "approved":
-            await service.approve_request(request_id, ctx.user.user_id)
+            await container.access_request_service.approve_request(request_id, ctx.user.user_id)
         elif data.status == "rejected":
-            await service.reject_request(request_id, ctx.user.user_id)
+            await container.access_request_service.reject_request(request_id, ctx.user.user_id)
         else:
             raise HTTPException(status_code=400, detail="Invalid status")
         
-        request = await service.get_request(request_id)
+        request = await container.access_request_service.get_request(request_id)
         return AccessRequestResponse.model_validate(request)
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
@@ -87,8 +86,8 @@ async def update_access_request(
 
 @router.get("", response_model=List[AccessRequestResponse])
 async def list_pending_requests(
+    container: ContainerDep,
     status: Optional[str] = Query(None),
-    service: AccessRequestService = Depends(get_access_request_service)
 ):
     """Получить список ожидающих запросов"""
     ctx = get_context()
@@ -97,10 +96,9 @@ async def list_pending_requests(
     
     company_id = ctx.active_company.company_id if ctx.active_company else "system"
     
-    requests = await service.list_requests(
+    requests = await container.access_request_service.list_requests(
         company_id=company_id,
         status=status
     )
     
     return [AccessRequestResponse.model_validate(r) for r in requests]
-

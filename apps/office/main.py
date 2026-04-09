@@ -12,6 +12,7 @@ from fastapi.staticfiles import StaticFiles
 from apps.office.api.bff import router as bff_router
 from apps.office.config import OfficeSettings
 from apps.office.container import get_office_container
+from apps.office.dependencies import ContainerDep
 from core.app import create_service_app
 from core.app.health_payload import build_health_payload
 from apps.office.config import get_office_settings
@@ -51,15 +52,17 @@ if office_ui_path.exists():
 
 
 @app.get("/documents/health")
-async def documents_health():
+async def documents_health(container: ContainerDep):
     """Тот же JSON, что /health и /office/health; публичный префикс UI — /documents."""
+    _ = container
     return build_health_payload(get_office_settings())
 
 
 @app.get("/documents")
 @app.get("/documents/")
 @app.get("/documents/{path:path}")
-async def serve_documents_ui(path: str = "") -> FileResponse:
+async def serve_documents_ui(container: ContainerDep, path: str = "") -> FileResponse:
+    _ = container
     if (
         path.startswith("api/")
         or path.startswith("ui/static/")

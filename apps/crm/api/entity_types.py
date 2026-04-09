@@ -3,12 +3,12 @@ API для работы с типами entities.
 """
 
 from typing import List, Optional
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel
 
 from apps.crm.models.api import EntityTypeCreate, EntityTypeUpdate, EntityTypeResponse
 from apps.crm.db.repositories.entity_type_repository import EntityTypeRepository
-from apps.crm.container import get_crm_container
+from apps.crm.dependencies import ContainerDep
 from apps.crm.db.models import EntityType
 from apps.crm.color_palette import ENTITY_COLOR_PALETTE, assign_color_from_palette
 from core.context import get_context
@@ -19,12 +19,6 @@ router = APIRouter(prefix="/entity-types", tags=["EntityTypes"])
 class UpdatePublicFieldsRequest(BaseModel):
     """Запрос на обновление публичных полей"""
     public_fields: List[str]
-
-
-def get_entity_type_repo() -> EntityTypeRepository:
-    """Получить репозиторий типов entities"""
-    container = get_crm_container()
-    return container.entity_type_repository
 
 
 async def _backfill_missing_colors(
@@ -50,10 +44,11 @@ async def _backfill_missing_colors(
 
 @router.get("", response_model=List[EntityTypeResponse])
 async def list_entity_types(
+    container: ContainerDep,
     namespace: Optional[str] = Query(default=None, description="Фильтр разрешенных типов по namespace"),
-    repo: EntityTypeRepository = Depends(get_entity_type_repo)
 ):
     """Получить все типы entities для компании"""
+    repo = container.entity_type_repository
     types = await repo.get_all_for_company(namespace=namespace)
     if await _backfill_missing_colors(types, repo):
         types = await repo.get_all_for_company(namespace=namespace)
@@ -63,12 +58,13 @@ async def list_entity_types(
 @router.get("/by-namespace/{namespace}", response_model=List[EntityTypeResponse])
 async def list_entity_types_by_namespace(
     namespace: str,
-    repo: EntityTypeRepository = Depends(get_entity_type_repo)
+    container: ContainerDep,
 ):
     """Получить типы сущностей, разрешенные в namespace."""
     normalized_namespace = namespace.strip()
     if not normalized_namespace:
         raise HTTPException(status_code=422, detail="namespace is required")
+    repo = container.entity_type_repository
     types = await repo.list_allowed_for_namespace(normalized_namespace)
     if await _backfill_missing_colors(types, repo):
         return await repo.list_allowed_for_namespace(normalized_namespace)
@@ -78,9 +74,10 @@ async def list_entity_types_by_namespace(
 @router.get("/{type_id}", response_model=EntityTypeResponse)
 async def get_entity_type(
     type_id: str,
-    repo: EntityTypeRepository = Depends(get_entity_type_repo)
+    container: ContainerDep,
 ):
     """Получить тип entity по ID"""
+    repo = container.entity_type_repository
     entity_type = await repo.get_by_type_id(type_id)
     if not entity_type:
         raise HTTPException(status_code=404, detail="EntityType not found")
@@ -93,9 +90,10 @@ async def get_entity_type(
 @router.post("", response_model=EntityTypeResponse)
 async def create_entity_type(
     data: EntityTypeCreate,
-    repo: EntityTypeRepository = Depends(get_entity_type_repo)
+    container: ContainerDep,
 ):
     """Создать новый тип entity"""
+    repo = container.entity_type_repository
     context = get_context()
     company_id = context.active_company.company_id
     namespace_ids = data.namespace_ids or ["default"]
@@ -137,9 +135,10 @@ async def create_entity_type(
 async def update_entity_type(
     type_id: str,
     data: EntityTypeUpdate,
-    repo: EntityTypeRepository = Depends(get_entity_type_repo)
+    container: ContainerDep,
 ):
     """Обновить тип entity"""
+    repo = container.entity_type_repository
     entity_type = await repo.get_by_type_id(type_id)
     if not entity_type:
         raise HTTPException(status_code=404, detail="EntityType not found")
@@ -177,9 +176,10 @@ async def update_entity_type(
 async def update_public_fields(
     type_id: str,
     data: UpdatePublicFieldsRequest,
-    repo: EntityTypeRepository = Depends(get_entity_type_repo)
+    container: ContainerDep,
 ):
     """Обновить список публичных полей для типа"""
+    repo = container.entity_type_repository
     entity_type = await repo.get_by_type_id(type_id)
     if not entity_type:
         raise HTTPException(status_code=404, detail="EntityType not found")

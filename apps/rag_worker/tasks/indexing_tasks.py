@@ -5,7 +5,6 @@ Tasks для индексации документов через pgvector.
 from typing import Dict, Any
 
 from apps.rag_worker.broker import broker
-from core.rag.factory import get_default_rag_provider
 from core.logging import get_logger
 from apps.rag.container import get_rag_container
 from core.tracing import attributes as trace_attributes
@@ -59,7 +58,7 @@ async def upload_document_task(
             "platform.rag.s3_key": s3_key,
         },
     ):
-        provider = get_default_rag_provider()
+        provider = container.rag_provider
         document = await provider.upload_document_from_s3(
             namespace_id=namespace_id,
             s3_key=s3_key,
@@ -104,6 +103,7 @@ async def delete_document_task(
         Результат удаления
     """
     logger.info(f"RAG Worker: удаление документа {document_id} из namespace {namespace_id}")
+    container = get_rag_container()
 
     if company_id.strip() == "" or user_id.strip() == "":
         raise ValueError("company_id и user_id обязательны для rag.worker.index.delete.")
@@ -120,7 +120,7 @@ async def delete_document_task(
             "platform.rag.namespace_id": namespace_id,
         },
     ):
-        provider = get_default_rag_provider()
+        provider = container.rag_provider
         success = await provider.delete_document(namespace_id, document_id)
 
         if success:
@@ -153,7 +153,8 @@ async def process_document_upload(
     """
     logger.info(f"RAG Worker: обработка документа {document_name} (doc_id={document_id})")
 
-    status_repo = get_rag_container().document_status_repository
+    container = get_rag_container()
+    status_repo = container.document_status_repository
 
     await status_repo.update_status(document_id, "processing")
     logger.info(f"RAG Worker: статус -> processing для {document_id}")
@@ -180,7 +181,7 @@ async def process_document_upload(
             "platform.rag.file_bytes": len(file_data),
         },
     ):
-        provider = get_default_rag_provider()
+        provider = container.rag_provider
 
         s3_key, bucket = await provider._upload_bytes_to_s3(file_data, namespace_id, document_name)
         logger.info(f"RAG Worker: файл загружен в S3: {s3_key}")

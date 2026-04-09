@@ -17,7 +17,6 @@ from apps.flows.config import get_settings
 from apps.flows.src.container import get_container
 from core.calendar.service import CalendarReauthRequiredError, _credential_to_calendar_integration
 from core.integrations.models import IntegrationProvider
-from core.calendar.repositories import CalendarEventSqlRepository
 from core.logging import get_logger
 from core.models import CalendarEventSource, CalendarProvider
 from core.websocket.publisher import Notification, NotificationType, notify_user
@@ -333,13 +332,12 @@ async def calendar_sync_meeting_reminder_tick(
     window_start = now + timedelta(minutes=14)
     window_end = now + timedelta(minutes=16)
 
-    repo = CalendarEventSqlRepository(db_url=settings.database.shared_url)
-    events = await repo.list_platform_sync_meeting_reminder_window(
+    container = get_container()
+    events = await container.calendar_event_repository.list_platform_sync_meeting_reminder_window(
         window_start=window_start,
         window_end=window_end,
         limit=config.sync_meeting_reminder_limit,
     )
-    container = get_container()
     calendar_service = container.calendar_service
     sent = 0
     for event in events:
@@ -348,10 +346,7 @@ async def calendar_sync_meeting_reminder_tick(
             token = event.metadata.get("sync_link_token")
             if not token:
                 raise ValueError(f"У события {event.event_id} нет sync_link_token в metadata.")
-            from core.short_links import ShortLinkService
-
-            short = ShortLinkService(db_url=settings.database.shared_url)
-            action_url = await short.mint_sync_call_join(token, event.end_at)
+            action_url = await container.short_link_service.mint_sync_call_join(token, event.end_at)
         recipients = await calendar_service.sync_meeting_reminder_recipient_user_ids(event)
         for user_id in recipients:
             await notify_user(

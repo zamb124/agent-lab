@@ -5,7 +5,7 @@ TaskIQ задачи пересчета Daily Summary для CRM.
 from __future__ import annotations
 
 from datetime import date, timedelta
-from typing import Any, Optional
+from typing import Any, Optional, TYPE_CHECKING
 
 from sqlalchemy import and_, select
 
@@ -24,6 +24,9 @@ from core.tracing import attributes as trace_attributes
 from core.tracing.operation_span import traced_operation
 from core.utils.tokens import TokenType, get_token_service
 from core.websocket.publisher import Notification, NotificationType, notify_user
+
+if TYPE_CHECKING:
+    from apps.crm.container import CRMContainer
 
 logger = get_logger(__name__)
 
@@ -90,11 +93,15 @@ async def _notify_daily_summary_updated(
     date_str: str,
     namespace: Optional[str],
     summary_state: dict[str, Any],
+    *,
+    container: "CRMContainer",
 ) -> None:
     normalized_namespace = normalize_namespace_for_broadcast(namespace)
     recipient_user_ids = await resolve_user_ids_for_namespace_broadcast(
         company_id=company_id,
         namespace=normalized_namespace,
+        company_repository=container.company_repository,
+        access_grant_repository=container.access_grant_repository,
     )
 
     notification_data = {
@@ -157,6 +164,7 @@ async def rebuild_daily_summary_task(
             date_str=date_str,
             namespace=namespace,
             summary_state=state,
+            container=container,
         )
     logger.info(
         "CRM daily summary rebuilt: "
@@ -214,6 +222,7 @@ async def rebuild_period_summary_task(
                 "entities": state.get("entities", []),
                 "generated_at": state.get("generated_at"),
             },
+            container=container,
         )
     logger.info(
         "CRM period summary rebuilt: "

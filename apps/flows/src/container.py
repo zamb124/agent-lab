@@ -51,11 +51,6 @@ class FlowContainer(BaseContainer):
         return client
 
     @lazy
-    def variable_repository(self):
-        from core.db.repositories import VariableRepository
-        return VariableRepository(storage=self.shared_storage)
-
-    @lazy
     def evaluation_repository(self):
         from apps.flows.src.db import EvaluationRepository
         return EvaluationRepository(storage=self.storage)
@@ -171,6 +166,12 @@ class FlowContainer(BaseContainer):
     def base_tool_class(self):
         from apps.flows.src.tools.base import BaseTool
         return BaseTool
+
+    @lazy
+    def python_code_runner(self):
+        """Stateless PythonCodeRunner для валидации кода."""
+        from apps.flows.src.runners.python import PythonCodeRunner
+        return PythonCodeRunner()
 
     def get_code_runner(self, language: str = "python", resources: dict = None):
         """Возвращает runner для указанного языка."""
