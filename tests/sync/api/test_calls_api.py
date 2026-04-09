@@ -29,11 +29,11 @@ async def test_turn_credentials_requires_auth(
 @pytest.mark.asyncio
 async def test_turn_credentials_returns_structure(
     sync_client,
-    auth_headers_system,
+    sync_auth_headers,
     sync_db_clean: None,
 ) -> None:
     """TURN credentials возвращают корректную структуру — turn_host задан в conf.json."""
-    r = await sync_client.get("/sync/api/v1/calls/turn-credentials", headers=auth_headers_system)
+    r = await sync_client.get("/sync/api/v1/calls/turn-credentials", headers=sync_auth_headers)
     assert r.status_code == 200
     data = r.json()
     assert "username" in data
@@ -57,13 +57,13 @@ async def test_create_call_link_requires_auth(
 @pytest.mark.asyncio
 async def test_create_call_link_invalid_channel(
     sync_client,
-    auth_headers_system,
+    sync_auth_headers,
     sync_db_clean: None,
 ) -> None:
     """Несуществующий канал → 403 (нет доступа)."""
     r = await sync_client.post(
         "/sync/api/v1/calls/links",
-        headers=auth_headers_system,
+        headers=sync_auth_headers,
         json={"channel_id": "nonexistent_channel_id", "call_type": "video"},
     )
     assert r.status_code == 403
@@ -92,13 +92,13 @@ async def test_join_link_post_without_guest_name_returns_error(
 @pytest.mark.asyncio
 async def test_get_call_not_found(
     sync_client,
-    auth_headers_system,
+    sync_auth_headers,
     sync_db_clean: None,
 ) -> None:
     """Несуществующий call_id → 404."""
     r = await sync_client.get(
         "/sync/api/v1/calls/nonexistent_call_id",
-        headers=auth_headers_system,
+        headers=sync_auth_headers,
     )
     assert r.status_code == 404
 
@@ -106,7 +106,7 @@ async def test_get_call_not_found(
 @pytest.mark.asyncio
 async def test_full_link_flow(
     sync_client,
-    auth_headers_system,
+    sync_auth_headers,
     sync_db_clean: None,
 ) -> None:
     """
@@ -114,7 +114,7 @@ async def test_full_link_flow(
     """
     space_r = await sync_client.post(
         "/sync/api/v1/spaces/",
-        headers=auth_headers_system,
+        headers=sync_auth_headers,
         json={"name": "CallTestSpace", "description": None},
     )
     assert space_r.status_code == 201
@@ -122,7 +122,7 @@ async def test_full_link_flow(
 
     ch_r = await sync_client.post(
         "/sync/api/v1/channels/",
-        headers=auth_headers_system,
+        headers=sync_auth_headers,
         json={"name": "CallTestChannel", "type": "topic", "space_id": space_id},
     )
     assert ch_r.status_code == 201
@@ -130,7 +130,7 @@ async def test_full_link_flow(
 
     link_r = await sync_client.post(
         "/sync/api/v1/calls/links",
-        headers=auth_headers_system,
+        headers=sync_auth_headers,
         json={"channel_id": channel_id, "call_type": "video", "ttl_hours": 1},
     )
     assert link_r.status_code == 201
@@ -154,7 +154,7 @@ async def test_full_link_flow(
 @pytest.mark.asyncio
 async def test_join_link_flow_registered_and_guest(
     sync_client,
-    auth_headers_system,
+    sync_auth_headers,
     sync_db_clean: None,
 ) -> None:
     """
@@ -165,14 +165,14 @@ async def test_join_link_flow_registered_and_guest(
     """
     space_r = await sync_client.post(
         "/sync/api/v1/spaces/",
-        headers=auth_headers_system,
+        headers=sync_auth_headers,
         json={"name": "JoinFlowSpace", "description": None},
     )
     assert space_r.status_code == 201
 
     ch_r = await sync_client.post(
         "/sync/api/v1/channels/",
-        headers=auth_headers_system,
+        headers=sync_auth_headers,
         json={"name": "JoinFlowChannel", "type": "topic", "space_id": space_r.json()["id"]},
     )
     assert ch_r.status_code == 201
@@ -180,7 +180,7 @@ async def test_join_link_flow_registered_and_guest(
 
     link_r = await sync_client.post(
         "/sync/api/v1/calls/links",
-        headers=auth_headers_system,
+        headers=sync_auth_headers,
         json={"channel_id": channel_id, "call_type": "video", "ttl_hours": 1},
     )
     assert link_r.status_code == 201
@@ -189,7 +189,7 @@ async def test_join_link_flow_registered_and_guest(
     # Зарегистрированный пользователь
     join_reg = await sync_client.post(
         f"/sync/api/v1/calls/join/{token}",
-        headers=auth_headers_system,
+        headers=sync_auth_headers,
     )
     assert join_reg.status_code == 200
     reg_data = join_reg.json()
@@ -214,7 +214,7 @@ async def test_join_link_flow_registered_and_guest(
     # GET token через authenticated endpoint
     token_r = await sync_client.get(
         f"/sync/api/v1/calls/{call_id}/token",
-        headers=auth_headers_system,
+        headers=sync_auth_headers,
     )
     assert token_r.status_code == 200
     assert "token" in token_r.json()
@@ -223,7 +223,7 @@ async def test_join_link_flow_registered_and_guest(
     # Статус звонка
     call_r = await sync_client.get(
         f"/sync/api/v1/calls/{call_id}",
-        headers=auth_headers_system,
+        headers=sync_auth_headers,
     )
     assert call_r.status_code == 200
     assert call_r.json()["status"] == "active"
@@ -232,22 +232,23 @@ async def test_join_link_flow_registered_and_guest(
 @pytest.mark.asyncio
 async def test_create_link_with_call_id_guest_joins_same_livekit_call(
     sync_client,
-    auth_headers_system,
+    sync_auth_headers,
     sync_db_clean: None,
     call_repo: CallRepository,
-    system_user_id: str,
+    sync_user_id: str,
+    company_id: str,
 ) -> None:
     """Ссылка с call_id (как из оверлея) — гость попадает в тот же звонок, без комнаты link-*."""
     space_r = await sync_client.post(
         "/sync/api/v1/spaces/",
-        headers=auth_headers_system,
+        headers=sync_auth_headers,
         json={"name": "LinkAttachSpace", "description": None},
     )
     assert space_r.status_code == 201
 
     ch_r = await sync_client.post(
         "/sync/api/v1/channels/",
-        headers=auth_headers_system,
+        headers=sync_auth_headers,
         json={"name": "LinkAttachCh", "type": "topic", "space_id": space_r.json()["id"]},
     )
     assert ch_r.status_code == 201
@@ -258,20 +259,20 @@ async def test_create_link_with_call_id_guest_joins_same_livekit_call(
     await call_repo.create_call(
         SyncCall(
             call_id=existing_call_id,
-            company_id="system",
+            company_id=company_id,
             channel_id=channel_id,
             mode="sfu",
             call_type="video",
             status="active",
             livekit_room_name=room_name,
             started_at=datetime.now(UTC),
-            created_by_user_id=system_user_id,
+            created_by_user_id=sync_user_id,
         )
     )
 
     link_r = await sync_client.post(
         "/sync/api/v1/calls/links",
-        headers=auth_headers_system,
+        headers=sync_auth_headers,
         json={
             "channel_id": channel_id,
             "call_type": "video",
@@ -294,14 +295,15 @@ async def test_create_link_with_call_id_guest_joins_same_livekit_call(
 @pytest.mark.asyncio
 async def test_create_link_call_id_wrong_channel_returns_400(
     sync_client,
-    auth_headers_system,
+    sync_auth_headers,
     sync_db_clean: None,
     call_repo: CallRepository,
-    system_user_id: str,
+    sync_user_id: str,
+    company_id: str,
 ) -> None:
     space_r = await sync_client.post(
         "/sync/api/v1/spaces/",
-        headers=auth_headers_system,
+        headers=sync_auth_headers,
         json={"name": "LinkWrongChSpace", "description": None},
     )
     assert space_r.status_code == 201
@@ -309,12 +311,12 @@ async def test_create_link_call_id_wrong_channel_returns_400(
 
     ch1 = await sync_client.post(
         "/sync/api/v1/channels/",
-        headers=auth_headers_system,
+        headers=sync_auth_headers,
         json={"name": "ChOne", "type": "topic", "space_id": space_id},
     )
     ch2 = await sync_client.post(
         "/sync/api/v1/channels/",
-        headers=auth_headers_system,
+        headers=sync_auth_headers,
         json={"name": "ChTwo", "type": "topic", "space_id": space_id},
     )
     assert ch1.status_code == 201 and ch2.status_code == 201
@@ -325,20 +327,20 @@ async def test_create_link_call_id_wrong_channel_returns_400(
     await call_repo.create_call(
         SyncCall(
             call_id=call_id,
-            company_id="system",
+            company_id=company_id,
             channel_id=channel_a,
             mode="sfu",
             call_type="video",
             status="active",
             livekit_room_name=f"call-{uuid4().hex[:16]}",
             started_at=datetime.now(UTC),
-            created_by_user_id=system_user_id,
+            created_by_user_id=sync_user_id,
         )
     )
 
     bad = await sync_client.post(
         "/sync/api/v1/calls/links",
-        headers=auth_headers_system,
+        headers=sync_auth_headers,
         json={"channel_id": channel_b, "call_type": "video", "ttl_hours": 1, "call_id": call_id},
     )
     assert bad.status_code == 400
@@ -348,25 +350,25 @@ async def test_create_link_call_id_wrong_channel_returns_400(
 async def test_short_join_url_redirects_to_sync_join(
     sync_client,
     frontend_app,
-    auth_headers_system,
+    sync_auth_headers,
     sync_db_clean: None,
 ) -> None:
     """GET /l/{code} на frontend (shared БД) отдаёт 303 на /sync/join/{link_token}."""
     space_r = await sync_client.post(
         "/sync/api/v1/spaces/",
-        headers=auth_headers_system,
+        headers=sync_auth_headers,
         json={"name": "ShortLinkSpace", "description": None},
     )
     assert space_r.status_code == 201
     ch_r = await sync_client.post(
         "/sync/api/v1/channels/",
-        headers=auth_headers_system,
+        headers=sync_auth_headers,
         json={"name": "ShortLinkCh", "type": "topic", "space_id": space_r.json()["id"]},
     )
     assert ch_r.status_code == 201
     link_r = await sync_client.post(
         "/sync/api/v1/calls/links",
-        headers=auth_headers_system,
+        headers=sync_auth_headers,
         json={"channel_id": ch_r.json()["id"], "call_type": "video", "ttl_hours": 1},
     )
     assert link_r.status_code == 201

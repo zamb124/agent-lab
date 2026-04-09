@@ -36,13 +36,6 @@ _CRM_WORKER_LOCK = "/tmp/platform_test_crm_taskiq_worker.lock"
 _CRM_WORKER_PID = "/tmp/platform_test_crm_taskiq_worker.pid"
 
 
-def _force_restart_sync_worker() -> None:
-    subprocess.run(["pkill", "-f", "apps.sync_worker.worker:worker_app"], capture_output=True, text=True)
-    Path(_SYNC_WORKER_PID).unlink(missing_ok=True)
-    Path(f"{_SYNC_WORKER_PID}.refs").unlink(missing_ok=True)
-    print("🔄 Принудительный перезапуск sync worker: старые процессы и PID-файлы очищены")
-
-
 def _clear_taskiq_stream(stream_name: str, redis_url: str) -> None:
     parsed = urlparse(redis_url)
     if parsed.hostname is None or parsed.port is None:
@@ -469,9 +462,6 @@ def sync_worker():
     if os.environ.get("EXTERNAL_AGENT_TEST_URL"):
         yield None
         return
-
-    _force_restart_sync_worker()
-    _clear_taskiq_stream("sync", "redis://localhost:63792/1")
 
     manager = SessionWorkerManager(
         name="SyncTaskIQ",

@@ -52,21 +52,21 @@ def _audio_content_block(file_payload: dict[str, Any]) -> dict[str, Any]:
 @pytest.mark.asyncio
 async def test_voice_message_without_channel_flag_stays_idle(
     sync_client,
-    auth_headers_system,
+    sync_auth_headers,
     sync_db_clean: None,
 ) -> None:
-    channel_id = await _create_topic_channel(sync_client, auth_headers_system)
+    channel_id = await _create_topic_channel(sync_client, sync_auth_headers)
     wav = minimal_wav_silence(duration_sec=0.05)
     up = await sync_client.post(
         "/sync/api/v1/files/",
-        headers=auth_headers_system,
+        headers=sync_auth_headers,
         files={"file": ("note.wav", io.BytesIO(wav), "audio/wav")},
     )
     assert up.status_code == 200
     f = up.json()
     sr = await sync_client.post(
         f"/sync/api/v1/channels/{channel_id}/messages",
-        headers=auth_headers_system,
+        headers=sync_auth_headers,
         json={
             "thread_id": None,
             "parent_message_id": None,
@@ -85,28 +85,28 @@ async def test_voice_message_without_channel_flag_stays_idle(
 async def test_voice_message_with_channel_flag_processing_then_done_via_worker(
     sync_service,
     sync_worker,
-    auth_headers_system,
+    sync_auth_headers,
     sync_db_clean: None,
 ) -> None:
     async with AsyncClient(base_url="http://127.0.0.1:9005", timeout=120.0) as client:
-        channel_id = await _create_topic_channel(client, auth_headers_system)
+        channel_id = await _create_topic_channel(client, sync_auth_headers)
         patch = await client.patch(
             f"/sync/api/v1/channels/{channel_id}",
-            headers=auth_headers_system,
+            headers=sync_auth_headers,
             json={"transcribe_voice_messages": True},
         )
         assert patch.status_code == 200
         wav = minimal_wav_silence(duration_sec=0.05)
         up = await client.post(
             "/sync/api/v1/files/",
-            headers=auth_headers_system,
+            headers=sync_auth_headers,
             files={"file": ("note.wav", io.BytesIO(wav), "audio/wav")},
         )
         assert up.status_code == 200
         f = up.json()
         sr = await client.post(
             f"/sync/api/v1/channels/{channel_id}/messages",
-            headers=auth_headers_system,
+            headers=sync_auth_headers,
             json={
                 "thread_id": None,
                 "parent_message_id": None,
@@ -124,7 +124,7 @@ async def test_voice_message_with_channel_flag_processing_then_done_via_worker(
         while time.monotonic() < deadline:
             lr = await client.get(
                 f"/sync/api/v1/channels/{channel_id}/messages",
-                headers=auth_headers_system,
+                headers=sync_auth_headers,
             )
             assert lr.status_code == 200
             for m in lr.json()["items"]:

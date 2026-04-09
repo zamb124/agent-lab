@@ -30,7 +30,6 @@ from apps.sync.realtime.commands import CommandEnvelope
 from apps.sync.realtime.handlers import execute_command
 from apps.sync.realtime.tasks import handle_command
 from apps.sync.container import get_sync_container
-from core.billing import set_billing_service
 from core.clients.stt_client import STTTranscriptionResult
 from core.models.identity_models import Company, User
 
@@ -92,9 +91,11 @@ async def test_spaces_update_empty_body_raises(
     sync_user_repository,
     sync_db_clean: None,
     company_id: str,
+    unique_id: str,
 ) -> None:
+    space_id = f"{unique_id}_sp1"
     sp = SyncSpace(
-        space_id="sp1",
+        space_id=space_id,
         company_id=company_id,
         name="Old",
         description=None,
@@ -106,7 +107,7 @@ async def test_spaces_update_empty_body_raises(
         actor="u1",
         company_id=company_id,
         typ="spaces.update",
-        payload={"space_id": "sp1", "body": {}},
+        payload={"space_id": space_id, "body": {}},
     )
     with pytest.raises(ValueError, match="Нет полей"):
         await execute_command(
@@ -130,9 +131,11 @@ async def test_spaces_update_wrong_company(
     sync_user_repository,
     sync_db_clean: None,
     company_id: str,
+    unique_id: str,
 ) -> None:
+    space_id = f"{unique_id}_sp2"
     sp = SyncSpace(
-        space_id="sp2",
+        space_id=space_id,
         company_id=company_id,
         name="N",
         description=None,
@@ -144,7 +147,7 @@ async def test_spaces_update_wrong_company(
         actor="u1",
         company_id=f"{company_id}_other",
         typ="spaces.update",
-        payload={"space_id": "sp2", "body": {"name": "X"}},
+        payload={"space_id": space_id, "body": {"name": "X"}},
     )
     with pytest.raises(PermissionError, match="другой компании"):
         await execute_command(
@@ -168,9 +171,11 @@ async def test_channels_create_topic(
     sync_user_repository,
     sync_db_clean: None,
     company_id: str,
+    unique_id: str,
 ) -> None:
+    space_id = f"{unique_id}_spt"
     sp = SyncSpace(
-        space_id="spt",
+        space_id=space_id,
         company_id=company_id,
         name="S",
         description=None,
@@ -179,7 +184,7 @@ async def test_channels_create_topic(
     )
     await space_repo.create(sp)
     body = ChannelCreate(
-        space_id="spt",
+        space_id=space_id,
         type=ChannelType.TOPIC,
         name="general",
         is_private=False,
@@ -214,9 +219,10 @@ async def test_channels_create_can_override_space_transcribe_and_speech_flags(
     sync_user_repository,
     sync_db_clean: None,
     company_id: str,
+    unique_id: str,
 ) -> None:
     sp = SyncSpace(
-        space_id="sp_ov",
+        space_id=f"{unique_id}_sp_ov",
         company_id=company_id,
         name="S",
         description=None,
@@ -227,7 +233,7 @@ async def test_channels_create_can_override_space_transcribe_and_speech_flags(
     )
     await space_repo.create(sp)
     body = ChannelCreate(
-        space_id="sp_ov",
+        space_id=f"{unique_id}_sp_ov",
         type=ChannelType.TOPIC,
         name="general",
         is_private=False,
@@ -265,9 +271,12 @@ async def test_channels_update_member_forbidden(
     sync_user_repository,
     sync_db_clean: None,
     company_id: str,
+    unique_id: str,
 ) -> None:
+    space_id = f"{unique_id}_spc"
+    channel_id = f"{unique_id}_ch_u"
     sp = SyncSpace(
-        space_id="spc",
+        space_id=space_id,
         company_id=company_id,
         name="S",
         description=None,
@@ -276,9 +285,9 @@ async def test_channels_update_member_forbidden(
     )
     await space_repo.create(sp)
     ch = SyncChannel(
-        channel_id="ch_u",
+        channel_id=channel_id,
         company_id=company_id,
-        space_id="spc",
+        space_id=space_id,
         type=ChannelType.TOPIC.value,
         name="n",
         is_private=False,
@@ -286,14 +295,14 @@ async def test_channels_update_member_forbidden(
         created_by_user_id="owner",
     )
     await channel_repo.create(ch)
-    await channel_repo.upsert_member("ch_u", "owner", "owner", company_id=company_id)
-    await channel_repo.upsert_member("ch_u", "member1", "member", company_id=company_id)
+    await channel_repo.upsert_member(channel_id, "owner", "owner", company_id=company_id)
+    await channel_repo.upsert_member(channel_id, "member1", "member", company_id=company_id)
     body = ChannelUpdate(name="newname")
     cmd = _cmd(
         actor="member1",
         company_id=company_id,
         typ="channels.update",
-        payload={"channel_id": "ch_u", "body": body.model_dump(exclude_unset=True)},
+        payload={"channel_id": channel_id, "body": body.model_dump(exclude_unset=True)},
     )
     with pytest.raises(PermissionError, match="owner и admin"):
         await execute_command(
@@ -317,9 +326,11 @@ async def test_channels_mark_read_not_member(
     sync_user_repository,
     sync_db_clean: None,
     company_id: str,
+    unique_id: str,
 ) -> None:
+    channel_id = f"{unique_id}_ch_nr"
     ch = SyncChannel(
-        channel_id="ch_nr",
+        channel_id=channel_id,
         company_id=company_id,
         space_id=None,
         type=ChannelType.GROUP.value,
@@ -333,7 +344,7 @@ async def test_channels_mark_read_not_member(
         actor="stranger",
         company_id=company_id,
         typ="channels.mark_read",
-        payload={"channel_id": "ch_nr"},
+        payload={"channel_id": channel_id},
     )
     with pytest.raises(PermissionError, match="не состоит"):
         await execute_command(
@@ -357,9 +368,11 @@ async def test_channels_typing_member_ok(
     sync_user_repository,
     sync_db_clean: None,
     company_id: str,
+    unique_id: str,
 ) -> None:
+    channel_id = f"{unique_id}_ch_typ"
     ch = SyncChannel(
-        channel_id="ch_typ",
+        channel_id=channel_id,
         company_id=company_id,
         space_id=None,
         type=ChannelType.GROUP.value,
@@ -369,12 +382,12 @@ async def test_channels_typing_member_ok(
         created_by_user_id="u1",
     )
     await channel_repo.create(ch)
-    await channel_repo.upsert_member("ch_typ", "u1", "owner", company_id=company_id)
+    await channel_repo.upsert_member(channel_id, "u1", "owner", company_id=company_id)
     cmd = _cmd(
         actor="u1",
         company_id=company_id,
         typ="channels.typing",
-        payload={"channel_id": "ch_typ", "typing": True, "thread_id": None},
+        payload={"channel_id": channel_id, "typing": True, "thread_id": None},
     )
     res = await execute_command(
         cmd,
@@ -389,7 +402,7 @@ async def test_channels_typing_member_ok(
     assert res.result is None
     assert len(res.events) == 1
     assert res.events[0].type == "channel.typing"
-    assert res.events[0].payload["channel_id"] == "ch_typ"
+    assert res.events[0].payload["channel_id"] == channel_id
     assert res.events[0].payload["typing"] is True
     assert res.events[0].payload["user"]["user_id"] == "u1"
 
@@ -404,9 +417,11 @@ async def test_channels_typing_not_member(
     sync_user_repository,
     sync_db_clean: None,
     company_id: str,
+    unique_id: str,
 ) -> None:
+    channel_id = f"{unique_id}_ch_typ2"
     ch = SyncChannel(
-        channel_id="ch_typ2",
+        channel_id=channel_id,
         company_id=company_id,
         space_id=None,
         type=ChannelType.GROUP.value,
@@ -420,7 +435,7 @@ async def test_channels_typing_not_member(
         actor="stranger",
         company_id=company_id,
         typ="channels.typing",
-        payload={"channel_id": "ch_typ2", "typing": True},
+        payload={"channel_id": channel_id, "typing": True},
     )
     with pytest.raises(PermissionError, match="не состоит"):
         await execute_command(
@@ -444,9 +459,11 @@ async def test_channels_typing_thread_not_found(
     sync_user_repository,
     sync_db_clean: None,
     company_id: str,
+    unique_id: str,
 ) -> None:
+    channel_id = f"{unique_id}_ch_tthr"
     ch = SyncChannel(
-        channel_id="ch_tthr",
+        channel_id=channel_id,
         company_id=company_id,
         space_id=None,
         type=ChannelType.GROUP.value,
@@ -456,12 +473,12 @@ async def test_channels_typing_thread_not_found(
         created_by_user_id="u1",
     )
     await channel_repo.create(ch)
-    await channel_repo.upsert_member("ch_tthr", "u1", "owner", company_id=company_id)
+    await channel_repo.upsert_member(channel_id, "u1", "owner", company_id=company_id)
     cmd = _cmd(
         actor="u1",
         company_id=company_id,
         typ="channels.typing",
-        payload={"channel_id": "ch_tthr", "typing": True, "thread_id": "missing_thread"},
+        payload={"channel_id": channel_id, "typing": True, "thread_id": "missing_thread"},
     )
     with pytest.raises(ValueError, match="не найден"):
         await execute_command(
@@ -485,9 +502,11 @@ async def test_messages_send_and_mark_read(
     sync_user_repository,
     sync_db_clean: None,
     company_id: str,
+    unique_id: str,
 ) -> None:
+    channel_id = f"{unique_id}_ch_m"
     ch = SyncChannel(
-        channel_id="ch_m",
+        channel_id=channel_id,
         company_id=company_id,
         space_id=None,
         type=ChannelType.GROUP.value,
@@ -497,7 +516,7 @@ async def test_messages_send_and_mark_read(
         created_by_user_id="u1",
     )
     await channel_repo.create(ch)
-    await channel_repo.upsert_member("ch_m", "u1", "owner", company_id=company_id)
+    await channel_repo.upsert_member(channel_id, "u1", "owner", company_id=company_id)
     body = MessageCreate(
         thread_id=None,
         parent_message_id=None,
@@ -513,7 +532,7 @@ async def test_messages_send_and_mark_read(
         actor="u1",
         company_id=company_id,
         typ="messages.send",
-        payload={"channel_id": "ch_m", "body": body.model_dump()},
+        payload={"channel_id": channel_id, "body": body.model_dump()},
     )
     res = await execute_command(
         cmd_send,
@@ -530,7 +549,7 @@ async def test_messages_send_and_mark_read(
         actor="u1",
         company_id=company_id,
         typ="messages.mark_read",
-        payload={"channel_id": "ch_m", "message_id": mid},
+        payload={"channel_id": channel_id, "message_id": mid},
     )
     res2 = await execute_command(
         cmd_mr,
@@ -555,9 +574,11 @@ async def test_messages_send_saves_mentions_in_content(
     sync_user_repository,
     sync_db_clean: None,
     company_id: str,
+    unique_id: str,
 ) -> None:
+    channel_id = f"{unique_id}_ch_ment"
     ch = SyncChannel(
-        channel_id="ch_ment",
+        channel_id=channel_id,
         company_id=company_id,
         space_id=None,
         type=ChannelType.GROUP.value,
@@ -567,9 +588,9 @@ async def test_messages_send_saves_mentions_in_content(
         created_by_user_id="u1",
     )
     await channel_repo.create(ch)
-    await channel_repo.upsert_member("ch_ment", "u1", "owner", company_id=company_id)
+    await channel_repo.upsert_member(channel_id, "u1", "owner", company_id=company_id)
     bob = "00000000-0000-4000-8000-0000000000b2"
-    await channel_repo.upsert_member("ch_ment", bob, "member", company_id=company_id)
+    await channel_repo.upsert_member(channel_id, bob, "member", company_id=company_id)
     text_body = f"hey @{bob} check this"
     body = MessageCreate(
         thread_id=None,
@@ -588,7 +609,7 @@ async def test_messages_send_saves_mentions_in_content(
             actor="u1",
             company_id=company_id,
             typ="messages.send",
-            payload={"channel_id": "ch_ment", "body": body.model_dump()},
+            payload={"channel_id": channel_id, "body": body.model_dump()},
         ),
         spaces=space_repo,
         channels=channel_repo,
@@ -617,9 +638,12 @@ async def test_messages_edit_delete_react_pin_forward(
     sync_user_repository,
     sync_db_clean: None,
     company_id: str,
+    unique_id: str,
 ) -> None:
+    ch_a_id = f"{unique_id}_ch_a"
+    ch_b_id = f"{unique_id}_ch_b"
     ch_a = SyncChannel(
-        channel_id="ch_a",
+        channel_id=ch_a_id,
         company_id=company_id,
         space_id=None,
         type=ChannelType.GROUP.value,
@@ -629,7 +653,7 @@ async def test_messages_edit_delete_react_pin_forward(
         created_by_user_id="u1",
     )
     ch_b = SyncChannel(
-        channel_id="ch_b",
+        channel_id=ch_b_id,
         company_id=company_id,
         space_id=None,
         type=ChannelType.GROUP.value,
@@ -640,8 +664,8 @@ async def test_messages_edit_delete_react_pin_forward(
     )
     await channel_repo.create(ch_a)
     await channel_repo.create(ch_b)
-    await channel_repo.upsert_member("ch_a", "u1", "owner", company_id=company_id)
-    await channel_repo.upsert_member("ch_b", "u1", "owner", company_id=company_id)
+    await channel_repo.upsert_member(ch_a_id, "u1", "owner", company_id=company_id)
+    await channel_repo.upsert_member(ch_b_id, "u1", "owner", company_id=company_id)
 
     body = MessageCreate(
         thread_id=None,
@@ -659,7 +683,7 @@ async def test_messages_edit_delete_react_pin_forward(
             actor="u1",
             company_id=company_id,
             typ="messages.send",
-            payload={"channel_id": "ch_a", "body": body.model_dump()},
+            payload={"channel_id": ch_a_id, "body": body.model_dump()},
         ),
         spaces=space_repo,
         channels=channel_repo,
@@ -685,7 +709,7 @@ async def test_messages_edit_delete_react_pin_forward(
             company_id=company_id,
             typ="messages.edit",
             payload={
-                "channel_id": "ch_a",
+                "channel_id": ch_a_id,
                 "message_id": mid,
                 "body": edit_body.model_dump(),
             },
@@ -704,7 +728,7 @@ async def test_messages_edit_delete_react_pin_forward(
             actor="u1",
             company_id=company_id,
             typ="messages.delete",
-            payload={"channel_id": "ch_a", "message_id": mid},
+            payload={"channel_id": ch_a_id, "message_id": mid},
         ),
         spaces=space_repo,
         channels=channel_repo,
@@ -720,7 +744,7 @@ async def test_messages_edit_delete_react_pin_forward(
             actor="u1",
             company_id=company_id,
             typ="messages.send",
-            payload={"channel_id": "ch_a", "body": body.model_dump()},
+            payload={"channel_id": ch_a_id, "body": body.model_dump()},
         ),
         spaces=space_repo,
         channels=channel_repo,
@@ -736,7 +760,7 @@ async def test_messages_edit_delete_react_pin_forward(
             actor="u1",
             company_id=company_id,
             typ="messages.react",
-            payload={"channel_id": "ch_a", "message_id": mid2, "emoji": "👍"},
+            payload={"channel_id": ch_a_id, "message_id": mid2, "emoji": "👍"},
         ),
         spaces=space_repo,
         channels=channel_repo,
@@ -752,7 +776,7 @@ async def test_messages_edit_delete_react_pin_forward(
             actor="u1",
             company_id=company_id,
             typ="messages.pin",
-            payload={"channel_id": "ch_a", "message_id": mid2, "action": "add"},
+            payload={"channel_id": ch_a_id, "message_id": mid2, "action": "add"},
         ),
         spaces=space_repo,
         channels=channel_repo,
@@ -769,8 +793,8 @@ async def test_messages_edit_delete_react_pin_forward(
             company_id=company_id,
             typ="messages.forward",
             payload={
-                "from_channel_id": "ch_a",
-                "to_channel_id": "ch_b",
+                "from_channel_id": ch_a_id,
+                "to_channel_id": ch_b_id,
                 "message_id": mid2,
                 "thread_id": None,
             },
@@ -795,9 +819,12 @@ async def test_threads_create(
     sync_user_repository,
     sync_db_clean: None,
     company_id: str,
+    unique_id: str,
 ) -> None:
+    channel_id = f"{unique_id}_ch_t"
+    root_msg_id = f"{unique_id}_root_t"
     ch = SyncChannel(
-        channel_id="ch_t",
+        channel_id=channel_id,
         company_id=company_id,
         space_id=None,
         type=ChannelType.GROUP.value,
@@ -807,11 +834,11 @@ async def test_threads_create(
         created_by_user_id="u1",
     )
     await channel_repo.create(ch)
-    await channel_repo.upsert_member("ch_t", "u1", "owner", company_id=company_id)
+    await channel_repo.upsert_member(channel_id, "u1", "owner", company_id=company_id)
     await message_repo.create_message(
-        message_id="root_t",
+        message_id=root_msg_id,
         company_id=company_id,
-        channel_id="ch_t",
+        channel_id=channel_id,
         thread_id=None,
         parent_message_id=None,
         sender_user_id="u1",
@@ -825,7 +852,7 @@ async def test_threads_create(
             ),
         ],
     )
-    tc = ThreadCreate(root_message_id="root_t", title="T1")
+    tc = ThreadCreate(root_message_id=root_msg_id, title="T1")
     res = await execute_command(
         _cmd(
             actor="u1",
@@ -841,7 +868,7 @@ async def test_threads_create(
         user_repository=sync_user_repository,
     )
     assert res.ok
-    assert res.result.root_message_id == "root_t"
+    assert res.result.root_message_id == root_msg_id
 
 
 @pytest.mark.asyncio
@@ -895,13 +922,14 @@ async def test_call_hangup_auto_stops_recording_for_recording_owner(
     monkeypatch,
     sync_db_clean: None,
     company_id: str,
+    unique_id: str,
 ) -> None:
     from apps.sync.realtime import handlers as handlers_module
 
     actor_user_id = "u1"
     other_user_id = "u2"
     space = SyncSpace(
-        space_id="sp_hangup_owner",
+        space_id=f"{unique_id}_sp_hangup_owner",
         company_id=company_id,
         name="Hangup Owner Space",
         description=None,
@@ -910,7 +938,7 @@ async def test_call_hangup_auto_stops_recording_for_recording_owner(
     )
     await space_repo.create(space)
     channel = SyncChannel(
-        channel_id="ch_hangup_owner",
+        channel_id=f"{unique_id}_ch_hangup_owner",
         company_id=company_id,
         space_id=space.space_id,
         type=ChannelType.TOPIC.value,
@@ -921,7 +949,7 @@ async def test_call_hangup_auto_stops_recording_for_recording_owner(
     )
     await channel_repo.create(channel)
     call = SyncCall(
-        call_id="call_hangup_owner",
+        call_id=f"{unique_id}_call_hangup_owner",
         company_id=company_id,
         channel_id=channel.channel_id,
         mode="p2p",
@@ -950,8 +978,9 @@ async def test_call_hangup_auto_stops_recording_for_recording_owner(
             joined_at=datetime.now(tz=UTC),
         )
     )
+    rec_id = f"{unique_id}_rec_hangup_owner"
     recording = SyncCallRecording(
-        recording_id="rec_hangup_owner",
+        recording_id=rec_id,
         call_id=call.call_id,
         company_id=company_id,
         channel_id=call.channel_id,
@@ -1000,7 +1029,7 @@ async def test_call_hangup_auto_stops_recording_for_recording_owner(
         user_repository=sync_user_repository,
     )
     assert result.ok
-    assert helper_calls == ["rec_hangup_owner"]
+    assert helper_calls == [rec_id]
     assert any(event.type == "call.recording.stopped" for event in result.events)
 
 
@@ -1017,13 +1046,14 @@ async def test_call_hangup_does_not_stop_recording_for_non_owner(
     monkeypatch,
     sync_db_clean: None,
     company_id: str,
+    unique_id: str,
 ) -> None:
     from apps.sync.realtime import handlers as handlers_module
 
     owner_user_id = "u1"
     actor_user_id = "u2"
     space = SyncSpace(
-        space_id="sp_hangup_non_owner",
+        space_id=f"{unique_id}_sp_hangup_non_owner",
         company_id=company_id,
         name="Hangup Non Owner Space",
         description=None,
@@ -1032,7 +1062,7 @@ async def test_call_hangup_does_not_stop_recording_for_non_owner(
     )
     await space_repo.create(space)
     channel = SyncChannel(
-        channel_id="ch_hangup_non_owner",
+        channel_id=f"{unique_id}_ch_hangup_non_owner",
         company_id=company_id,
         space_id=space.space_id,
         type=ChannelType.TOPIC.value,
@@ -1043,7 +1073,7 @@ async def test_call_hangup_does_not_stop_recording_for_non_owner(
     )
     await channel_repo.create(channel)
     call = SyncCall(
-        call_id="call_hangup_non_owner",
+        call_id=f"{unique_id}_call_hangup_non_owner",
         company_id=company_id,
         channel_id=channel.channel_id,
         mode="p2p",
@@ -1073,7 +1103,7 @@ async def test_call_hangup_does_not_stop_recording_for_non_owner(
         )
     )
     recording = SyncCallRecording(
-        recording_id="rec_hangup_non_owner",
+        recording_id=f"{unique_id}_rec_hangup_non_owner",
         call_id=call.call_id,
         company_id=company_id,
         channel_id=call.channel_id,
@@ -1138,11 +1168,12 @@ async def test_call_recording_start_forbidden_for_non_admin(
     sync_user_repository,
     sync_db_clean: None,
     company_id: str,
+    unique_id: str,
 ) -> None:
     owner_user_id = "owner_recording"
     actor_user_id = "member_recording"
     space = SyncSpace(
-        space_id="sp_recording_admin_only",
+        space_id=f"{unique_id}_sp_recording_admin_only",
         company_id=company_id,
         name="Recording Admin Only",
         description=None,
@@ -1151,7 +1182,7 @@ async def test_call_recording_start_forbidden_for_non_admin(
     )
     await space_repo.create(space)
     channel = SyncChannel(
-        channel_id="ch_recording_admin_only",
+        channel_id=f"{unique_id}_ch_recording_admin_only",
         company_id=company_id,
         space_id=space.space_id,
         type=ChannelType.TOPIC.value,
@@ -1164,13 +1195,13 @@ async def test_call_recording_start_forbidden_for_non_admin(
     await channel_repo.upsert_member(channel.channel_id, owner_user_id, "owner", company_id=company_id)
     await channel_repo.upsert_member(channel.channel_id, actor_user_id, "member", company_id=company_id)
     call = SyncCall(
-        call_id="call_recording_admin_only",
+        call_id=f"{unique_id}_call_recording_admin_only",
         company_id=company_id,
         channel_id=channel.channel_id,
         mode="sfu",
         call_type="video",
         status="active",
-        livekit_room_name="room-recording-admin-only",
+        livekit_room_name=f"room-recording-admin-only-{unique_id}",
         created_at=datetime.now(tz=UTC),
         created_by_user_id=owner_user_id,
     )
@@ -1208,13 +1239,14 @@ async def test_call_recording_stop_allowed_for_recording_starter_non_admin(
     monkeypatch,
     sync_db_clean: None,
     company_id: str,
+    unique_id: str,
 ) -> None:
     from apps.sync.realtime import handlers as handlers_module
 
     owner_user_id = "owner_recording_stop"
     actor_user_id = "member_recording_stop"
     space = SyncSpace(
-        space_id="sp_recording_stop_starter",
+        space_id=f"{unique_id}_sp_recording_stop_starter",
         company_id=company_id,
         name="Recording Stop Starter",
         description=None,
@@ -1223,7 +1255,7 @@ async def test_call_recording_stop_allowed_for_recording_starter_non_admin(
     )
     await space_repo.create(space)
     channel = SyncChannel(
-        channel_id="ch_recording_stop_starter",
+        channel_id=f"{unique_id}_ch_recording_stop_starter",
         company_id=company_id,
         space_id=space.space_id,
         type=ChannelType.TOPIC.value,
@@ -1236,26 +1268,26 @@ async def test_call_recording_stop_allowed_for_recording_starter_non_admin(
     await channel_repo.upsert_member(channel.channel_id, owner_user_id, "owner", company_id=company_id)
     await channel_repo.upsert_member(channel.channel_id, actor_user_id, "member", company_id=company_id)
     call = SyncCall(
-        call_id="call_recording_stop_starter",
+        call_id=f"{unique_id}_call_recording_stop_starter",
         company_id=company_id,
         channel_id=channel.channel_id,
         mode="sfu",
         call_type="video",
         status="active",
-        livekit_room_name="room-recording-stop-starter",
+        livekit_room_name=f"room-recording-stop-starter-{unique_id}",
         created_at=datetime.now(tz=UTC),
         created_by_user_id=owner_user_id,
     )
     await call_repo.create_call(call)
     recording = SyncCallRecording(
-        recording_id="rec_recording_stop_starter",
+        recording_id=f"{unique_id}_rec_recording_stop_starter",
         call_id=call.call_id,
         company_id=company_id,
         channel_id=call.channel_id,
         space_id=space.space_id,
         status="recording",
         started_by_user_id=actor_user_id,
-        provider_job_id="egress-recording-stop-starter",
+        provider_job_id=f"egress-recording-stop-starter-{unique_id}",
         started_at=datetime.now(tz=UTC),
     )
     await call_recording_repo.create(recording)
@@ -1312,11 +1344,12 @@ async def test_call_admin_transfer_updates_call_admin(
     sync_user_repository,
     sync_db_clean: None,
     company_id: str,
+    unique_id: str,
 ) -> None:
     owner_user_id = "owner_transfer"
     target_user_id = "target_transfer"
     space = SyncSpace(
-        space_id="sp_transfer_admin",
+        space_id=f"{unique_id}_sp_transfer_admin",
         company_id=company_id,
         name="Transfer Admin Space",
         description=None,
@@ -1325,7 +1358,7 @@ async def test_call_admin_transfer_updates_call_admin(
     )
     await space_repo.create(space)
     channel = SyncChannel(
-        channel_id="ch_transfer_admin",
+        channel_id=f"{unique_id}_ch_transfer_admin",
         company_id=company_id,
         space_id=space.space_id,
         type=ChannelType.TOPIC.value,
@@ -1338,13 +1371,13 @@ async def test_call_admin_transfer_updates_call_admin(
     await channel_repo.upsert_member(channel.channel_id, owner_user_id, "owner", company_id=company_id)
     await channel_repo.upsert_member(channel.channel_id, target_user_id, "member", company_id=company_id)
     call = SyncCall(
-        call_id="call_transfer_admin",
+        call_id=f"{unique_id}_call_transfer_admin",
         company_id=company_id,
         channel_id=channel.channel_id,
         mode="sfu",
         call_type="video",
         status="active",
-        livekit_room_name="room-transfer-admin",
+        livekit_room_name=f"room-transfer-admin-{unique_id}",
         created_at=datetime.now(tz=UTC),
         created_by_user_id=owner_user_id,
     )
@@ -1405,11 +1438,11 @@ async def test_call_recording_start_stop_flow(
     call_recording_repo,
     sync_user_repository,
     sync_db_clean: None,
-    system_user_id: str,
+    company_id: str,
+    sync_user_id: str,
     unique_id: str,
 ) -> None:
-    company_id = "system"
-    actor_user_id = system_user_id
+    actor_user_id = sync_user_id
     space_id = f"sp_call_rec_{unique_id}"
     channel_id = f"ch_call_rec_{unique_id}"
     call_id = f"call_recording_test_{unique_id}"
@@ -1418,7 +1451,7 @@ async def test_call_recording_start_stop_flow(
         User(
             user_id=actor_user_id,
             name="Recording Start Stop User",
-            emails=[f"{actor_user_id}@system.local"],
+            emails=[f"{actor_user_id}@test.local"],
             companies={company_id: ["owner", "admin"]},
             active_company_id=company_id,
         )
@@ -1552,17 +1585,17 @@ async def test_call_recording_pipeline_via_real_queue_worker(
     call_recording_repo,
     sync_user_repository,
     sync_db_clean: None,
-    system_user_id: str,
+    company_id: str,
+    sync_user_id: str,
 ) -> None:
     """Полный pipeline через настоящий queue worker без monkeypatch .kiq."""
-    company_id = "system"
-    actor_user_id = system_user_id
+    actor_user_id = sync_user_id
 
     await sync_user_repository.set(
         User(
             user_id=actor_user_id,
             name="Queue Pipeline User",
-            emails=[f"{actor_user_id}@system.local"],
+            emails=[f"{actor_user_id}@test.local"],
             companies={company_id: ["owner", "admin"]},
             active_company_id=company_id,
         )
@@ -1694,10 +1727,13 @@ async def test_messages_transcribe_audio_sets_processing_and_emits_event(
     sync_user_repository,
     sync_db_clean: None,
     company_id: str,
+    unique_id: str,
     monkeypatch,
 ) -> None:
+    channel_id = f"{unique_id}_ch_audio_tx"
+    msg_id = f"{unique_id}_msg_audio_tx"
     ch = SyncChannel(
-        channel_id="ch_audio_tx",
+        channel_id=channel_id,
         company_id=company_id,
         space_id=None,
         type=ChannelType.GROUP.value,
@@ -1707,11 +1743,11 @@ async def test_messages_transcribe_audio_sets_processing_and_emits_event(
         created_by_user_id="u1",
     )
     await channel_repo.create(ch)
-    await channel_repo.upsert_member("ch_audio_tx", "u1", "owner", company_id=company_id)
+    await channel_repo.upsert_member(channel_id, "u1", "owner", company_id=company_id)
     await message_repo.create_message(
-        message_id="msg_audio_tx",
+        message_id=msg_id,
         company_id=company_id,
-        channel_id="ch_audio_tx",
+        channel_id=channel_id,
         thread_id=None,
         parent_message_id=None,
         sender_user_id="u1",
@@ -1743,7 +1779,7 @@ async def test_messages_transcribe_audio_sets_processing_and_emits_event(
         actor="u1",
         company_id=company_id,
         typ="messages.transcribe_audio",
-        payload={"channel_id": "ch_audio_tx", "message_id": "msg_audio_tx"},
+        payload={"channel_id": channel_id, "message_id": msg_id},
     )
     res = await execute_command(
         cmd,
@@ -1762,8 +1798,8 @@ async def test_messages_transcribe_audio_sets_processing_and_emits_event(
     assert updated_audio.data.transcription_status == AudioTranscriptionStatus.PROCESSING
     assert updated_audio.data.transcription_text is None
     assert len(queued) == 1
-    assert queued[0]["channel_id"] == "ch_audio_tx"
-    assert queued[0]["message_id"] == "msg_audio_tx"
+    assert queued[0]["channel_id"] == channel_id
+    assert queued[0]["message_id"] == msg_id
 
 
 @pytest.mark.asyncio
@@ -1773,17 +1809,21 @@ async def test_sync_transcribe_audio_message_task_marks_done(
     sync_user_repository,
     sync_db_clean: None,
     company_id: str,
+    unique_id: str,
     monkeypatch,
 ) -> None:
     from apps.sync.realtime import tasks as sync_tasks
     import core.config.base as config_base
+
+    channel_id = f"{unique_id}_ch_audio_task"
+    msg_id = f"{unique_id}_msg_audio_task"
+    file_id = f"{unique_id}_file_audio_task"
 
     monkeypatch.setenv("STT__PROVIDER", "mock")
     monkeypatch.setenv("STT__MOCK_TRANSCRIPT_TEXT", "Привет из аудио")
     config_base._settings_instance = None
 
     sync_container = get_sync_container()
-    set_billing_service(sync_container.billing_service)
     co = await sync_container.company_repository.get(company_id)
     if co is None:
         await sync_container.company_repository.set(
@@ -1806,7 +1846,7 @@ async def test_sync_transcribe_audio_message_task_marks_done(
     )
 
     ch = SyncChannel(
-        channel_id="ch_audio_task",
+        channel_id=channel_id,
         company_id=company_id,
         space_id=None,
         type=ChannelType.GROUP.value,
@@ -1816,11 +1856,11 @@ async def test_sync_transcribe_audio_message_task_marks_done(
         created_by_user_id="u1",
     )
     await channel_repo.create(ch)
-    await channel_repo.upsert_member("ch_audio_task", "u1", "owner", company_id=company_id)
+    await channel_repo.upsert_member(channel_id, "u1", "owner", company_id=company_id)
     await message_repo.create_message(
-        message_id="msg_audio_task",
+        message_id=msg_id,
         company_id=company_id,
-        channel_id="ch_audio_task",
+        channel_id=channel_id,
         thread_id=None,
         parent_message_id=None,
         sender_user_id="u1",
@@ -1830,7 +1870,7 @@ async def test_sync_transcribe_audio_message_task_marks_done(
             MessageContentModel(
                 type=MessageContentType.FILE_AUDIO,
                 data=AudioAttachmentContent(
-                    file_id="file_audio_task",
+                    file_id=file_id,
                     filename="voice.webm",
                     mime_type="audio/webm",
                     size=123,
@@ -1842,7 +1882,7 @@ async def test_sync_transcribe_audio_message_task_marks_done(
     )
 
     sync_base = os.environ["SERVER__SYNC_SERVICE_URL"].rstrip("/")
-    expected_download_url = f"{sync_base}/sync/api/v1/files/download/file_audio_task"
+    expected_download_url = f"{sync_base}/sync/api/v1/files/download/{file_id}"
 
     class _Resp:
         status_code = 200
@@ -1872,13 +1912,13 @@ async def test_sync_transcribe_audio_message_task_marks_done(
     monkeypatch.setattr(sync_tasks, "publish_realtime_events", _fake_publish)
 
     await sync_tasks.sync_transcribe_audio_message_task(
-        channel_id="ch_audio_task",
-        message_id="msg_audio_task",
+        channel_id=channel_id,
+        message_id=msg_id,
         company_id=company_id,
         actor_user_id="u1",
     )
 
-    rows = await message_repo.list_contents("msg_audio_task")
+    rows = await message_repo.list_contents(msg_id)
     content = MessageContentModel.model_validate(
         {"type": rows[0].type, "data": rows[0].data, "order": rows[0].order}
     )
@@ -1890,7 +1930,7 @@ async def test_sync_transcribe_audio_message_task_marks_done(
 
 @pytest.mark.asyncio
 async def test_transcribe_audio_with_chunking_on_413(monkeypatch) -> None:
-    from apps.sync.realtime import tasks as sync_tasks
+    import core.files.media.chunked_stt as chunked_stt_mod
 
     settings = SimpleNamespace(
         stt=SimpleNamespace(
@@ -1905,7 +1945,7 @@ async def test_transcribe_audio_with_chunking_on_413(monkeypatch) -> None:
             ),
         )
     )
-    monkeypatch.setattr(sync_tasks, "get_settings", lambda: settings)
+    monkeypatch.setattr(chunked_stt_mod, "get_settings", lambda: settings)
 
     class _MockSttClient:
         def __init__(self) -> None:
@@ -1945,22 +1985,22 @@ async def test_transcribe_audio_with_chunking_on_413(monkeypatch) -> None:
                 language=language,
             )
 
-    monkeypatch.setattr(sync_tasks.STTClientFactory, "create_client", staticmethod(lambda: _MockSttClient()))
     monkeypatch.setattr(
-        sync_tasks,
-        "_split_audio_for_stt_chunks",
+        chunked_stt_mod,
+        "split_audio_for_stt_chunks",
         lambda **kwargs: [
             ("recording-part-0001.mp3", b"chunk-1", "audio/mpeg"),
             ("recording-part-0002.mp3", b"chunk-2", "audio/mpeg"),
         ],
     )
 
-    transcript = await sync_tasks._transcribe_audio_with_chunking(
+    transcript = await chunked_stt_mod.transcribe_audio_with_chunking(
         job_id="stt_job_413",
         audio_bytes=b"source",
         file_name="recording.mp4",
         mime_type="video/mp4",
         language="ru",
+        stt_client=_MockSttClient(),
     )
 
     assert transcript == "Первый чанк\nВторой чанк"
@@ -1968,7 +2008,7 @@ async def test_transcribe_audio_with_chunking_on_413(monkeypatch) -> None:
 
 @pytest.mark.asyncio
 async def test_transcribe_audio_with_chunking_on_format_error(monkeypatch) -> None:
-    from apps.sync.realtime import tasks as sync_tasks
+    import core.files.media.chunked_stt as chunked_stt_mod
 
     settings = SimpleNamespace(
         stt=SimpleNamespace(
@@ -1983,7 +2023,7 @@ async def test_transcribe_audio_with_chunking_on_format_error(monkeypatch) -> No
             ),
         )
     )
-    monkeypatch.setattr(sync_tasks, "get_settings", lambda: settings)
+    monkeypatch.setattr(chunked_stt_mod, "get_settings", lambda: settings)
 
     class _MockSttClient:
         def __init__(self) -> None:
@@ -2025,22 +2065,22 @@ async def test_transcribe_audio_with_chunking_on_format_error(monkeypatch) -> No
                 language=language,
             )
 
-    monkeypatch.setattr(sync_tasks.STTClientFactory, "create_client", staticmethod(lambda: _MockSttClient()))
     monkeypatch.setattr(
-        sync_tasks,
-        "_split_audio_for_stt_chunks",
+        chunked_stt_mod,
+        "split_audio_for_stt_chunks",
         lambda **kwargs: [
             ("recording-part-0001.mp3", b"chunk-1", "audio/mpeg"),
             ("recording-part-0002.mp3", b"chunk-2", "audio/mpeg"),
         ],
     )
 
-    transcript = await sync_tasks._transcribe_audio_with_chunking(
+    transcript = await chunked_stt_mod.transcribe_audio_with_chunking(
         job_id="stt_job_format_error",
         audio_bytes=b"source",
         file_name="recording.mp4",
         mime_type="video/mp4",
         language="ru",
+        stt_client=_MockSttClient(),
     )
 
     assert transcript == "Первый чанк\nВторой чанк"

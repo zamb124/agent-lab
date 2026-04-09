@@ -15,8 +15,8 @@ import pytest
 async def test_two_ws_clients_receive_message_created(
     sync_service,
     sync_worker,
-    auth_token_system,
-    auth_token_system_user2,
+    sync_auth_token,
+    sync_auth_token_user2,
     sync_db_clean: None,
 ) -> None:
     import websockets
@@ -26,14 +26,14 @@ async def test_two_ws_clients_receive_message_created(
     async with AsyncClient(base_url="http://127.0.0.1:9005", timeout=60.0) as http:
         pr = await http.post(
             "/sync/api/v1/spaces/",
-            headers={"Authorization": f"Bearer {auth_token_system}"},
+            headers={"Authorization": f"Bearer {sync_auth_token}"},
             json={"name": "WsBroadcastSpace", "description": None},
         )
         assert pr.status_code == 201
         space_id = pr.json()["id"]
         cr = await http.post(
             "/sync/api/v1/channels/",
-            headers={"Authorization": f"Bearer {auth_token_system}"},
+            headers={"Authorization": f"Bearer {sync_auth_token}"},
             json={
                 "space_id": space_id,
                 "type": "topic",
@@ -45,14 +45,14 @@ async def test_two_ws_clients_receive_message_created(
         channel_id = cr.json()["id"]
 
         token_service = get_token_service()
-        u2_data = token_service.validate_token(auth_token_system_user2)
+        u2_data = token_service.validate_token(sync_auth_token_user2)
         if u2_data is None:
             raise ValueError("Невалидный токен user2")
         u2_id = u2_data.user_id
 
         mr = await http.post(
             f"/sync/api/v1/channels/{channel_id}/members",
-            headers={"Authorization": f"Bearer {auth_token_system}"},
+            headers={"Authorization": f"Bearer {sync_auth_token}"},
             json={"user_id": u2_id, "role": "member"},
         )
         assert mr.status_code in (200, 201)
@@ -72,11 +72,11 @@ async def test_two_ws_clients_receive_message_created(
 
     async with websockets.connect(
         uri,
-        additional_headers=[("Cookie", f"auth_token={auth_token_system}")],
+        additional_headers=[("Cookie", f"auth_token={sync_auth_token}")],
     ) as ws1:
         async with websockets.connect(
             uri,
-            additional_headers=[("Cookie", f"auth_token={auth_token_system_user2}")],
+            additional_headers=[("Cookie", f"auth_token={sync_auth_token_user2}")],
         ) as ws2:
             t1 = asyncio.create_task(_wait_message_created(ws1, channel_id))
             t2 = asyncio.create_task(_wait_message_created(ws2, channel_id))
@@ -85,7 +85,7 @@ async def test_two_ws_clients_receive_message_created(
             async with AsyncClient(base_url="http://127.0.0.1:9005", timeout=60.0) as http_post:
                 tr = await http_post.post(
                     f"/sync/api/v1/channels/{channel_id}/messages",
-                    headers={"Authorization": f"Bearer {auth_token_system}"},
+                    headers={"Authorization": f"Bearer {sync_auth_token}"},
                     json={
                         "thread_id": None,
                         "parent_message_id": None,

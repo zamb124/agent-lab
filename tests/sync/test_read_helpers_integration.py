@@ -26,9 +26,11 @@ async def test_channel_read_direct_peer_without_user_repo(
     channel_repo: ChannelRepository,
     sync_db_clean: None,
     company_id: str,
+    unique_id: str,
 ) -> None:
+    ch_dir = f"{unique_id}_ch_dir"
     ch = SyncChannel(
-        channel_id="ch_dir",
+        channel_id=ch_dir,
         company_id=company_id,
         space_id=None,
         type="direct",
@@ -38,8 +40,8 @@ async def test_channel_read_direct_peer_without_user_repo(
         created_by_user_id="alice",
     )
     await channel_repo.create(ch)
-    await channel_repo.upsert_member("ch_dir", "alice", "member", company_id=company_id)
-    await channel_repo.upsert_member("ch_dir", "bob", "member", company_id=company_id)
+    await channel_repo.upsert_member(ch_dir, "alice", "member", company_id=company_id)
+    await channel_repo.upsert_member(ch_dir, "bob", "member", company_id=company_id)
 
     read = await channel_read_from_entity(
         ch,
@@ -59,6 +61,7 @@ async def test_channel_read_direct_peer_with_user_repository(
     sync_user_repository,
     sync_db_clean: None,
     company_id: str,
+    unique_id: str,
 ) -> None:
     peer_id = f"sync_peer_{company_id}"
     await sync_user_repository.set(
@@ -70,8 +73,9 @@ async def test_channel_read_direct_peer_with_user_repository(
             active_company_id=company_id,
         )
     )
+    ch_dir2 = f"{unique_id}_ch_dir2"
     ch = SyncChannel(
-        channel_id="ch_dir2",
+        channel_id=ch_dir2,
         company_id=company_id,
         space_id=None,
         type="direct",
@@ -81,8 +85,8 @@ async def test_channel_read_direct_peer_with_user_repository(
         created_by_user_id="viewer_x",
     )
     await channel_repo.create(ch)
-    await channel_repo.upsert_member("ch_dir2", "viewer_x", "member", company_id=company_id)
-    await channel_repo.upsert_member("ch_dir2", peer_id, "member", company_id=company_id)
+    await channel_repo.upsert_member(ch_dir2, "viewer_x", "member", company_id=company_id)
+    await channel_repo.upsert_member(ch_dir2, peer_id, "member", company_id=company_id)
 
     read = await channel_read_from_entity(
         ch,
@@ -101,9 +105,11 @@ async def test_channel_read_topic_no_peer_lane_summary(
     channel_repo: ChannelRepository,
     sync_db_clean: None,
     company_id: str,
+    unique_id: str,
 ) -> None:
+    ch_top = f"{unique_id}_ch_top"
     ch = SyncChannel(
-        channel_id="ch_top",
+        channel_id=ch_top,
         company_id=company_id,
         space_id=None,
         type="topic",
@@ -113,7 +119,7 @@ async def test_channel_read_topic_no_peer_lane_summary(
         created_by_user_id="u1",
     )
     await channel_repo.create(ch)
-    await channel_repo.upsert_member("ch_top", "u1", "owner", company_id=company_id)
+    await channel_repo.upsert_member(ch_top, "u1", "owner", company_id=company_id)
     summ = ChannelLaneSummary(
         unread_count=3,
         last_message_preview="hi",

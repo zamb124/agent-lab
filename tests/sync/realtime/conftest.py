@@ -6,7 +6,7 @@ import pytest
 import pytest_asyncio
 
 from apps.sync.container import get_sync_container
-from core.billing import set_billing_service
+from apps.sync.db.base import SyncDatabase
 from core.context import clear_context, set_context
 from core.models.context_models import Context
 from core.models.i18n_models import Language
@@ -14,19 +14,25 @@ from core.models.identity_models import Company, User
 
 
 @pytest_asyncio.fixture(autouse=True)
-async def _ensure_billing_company_for_realtime(
+async def _ensure_company_for_realtime(
     company_id: str,
-    sync_db_clean: None,
+    sync_database: SyncDatabase,
+    sync_user_id: str,
 ) -> None:
-    """LiveKit create_room вызывает billing: компания должна быть в shared-хранилище."""
+    """Компания в shared-хранилище для биллинга (баланс) и membership-проверок в хендлерах."""
     container = get_sync_container()
-    set_billing_service(container.billing_service)
+    members: dict[str, list[str]] = {
+        "u1": ["owner"],
+        "member1": ["member"],
+        "u_other": ["member"],
+        sync_user_id: ["owner", "admin"],
+    }
     await container.company_repository.set(
         Company(
             company_id=company_id,
             name=company_id,
             owner_user_id="u1",
-            members={"u1": ["owner"], "member1": ["member"], "u_other": ["member"]},
+            members=members,
             balance=1000.0,
         )
     )

@@ -281,7 +281,7 @@ class MessageRepository(BaseSyncRepository[SyncMessage]):
                     message_id=message_id,
                     type=content.type.value,
                     order=content.order,
-                    data=content.data.model_dump(),
+                    data=content.data.model_dump(mode="json"),
                 )
                 session.add(content_row)
 
@@ -316,7 +316,7 @@ class MessageRepository(BaseSyncRepository[SyncMessage]):
                         message_id=message_id,
                         type=content.type.value,
                         order=content.order,
-                        data=content.data.model_dump(),
+                        data=content.data.model_dump(mode="json"),
                     )
                 )
             await session.execute(

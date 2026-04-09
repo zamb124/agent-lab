@@ -53,9 +53,11 @@ export class ChatView extends PlatformElement {
                 align-items: stretch;
                 gap: 0;
                 padding: var(--space-2) var(--space-4);
-                border-bottom: 1px solid var(--glass-border-subtle);
+                border-bottom: 1px solid var(--glass-border-medium);
                 background: var(--glass-solid-subtle);
-                backdrop-filter: blur(var(--glass-blur-medium));
+                backdrop-filter: blur(var(--sync-header-blur));
+                -webkit-backdrop-filter: blur(var(--sync-header-blur));
+                box-shadow: var(--glass-shadow-subtle);
                 flex-shrink: 0;
             }
 
@@ -481,10 +483,27 @@ export class ChatView extends PlatformElement {
                 font-size: var(--text-xs);
                 color: var(--text-tertiary);
                 margin-top: 2px;
+                display: flex;
+                align-items: center;
+                gap: var(--space-1);
             }
 
             .header-subtitle.is-typing {
                 color: var(--accent);
+            }
+
+            .header-online-dot {
+                width: 7px;
+                height: 7px;
+                border-radius: 50%;
+                background: var(--success);
+                flex-shrink: 0;
+                animation: header-online-pulse 2.5s ease-in-out infinite;
+            }
+
+            @keyframes header-online-pulse {
+                0%, 100% { opacity: 0.75; transform: scale(1); }
+                50% { opacity: 1; transform: scale(1.3); }
             }
 
             .header-actions {
@@ -890,6 +909,13 @@ export class ChatView extends PlatformElement {
         return ch.name ?? selectedChannelId;
     }
 
+    _isPeerOnline() {
+        const ch = this._selectedChannel();
+        if (!ch || ch.type !== 'direct' || !ch.peer?.user_id) return false;
+        const row = (this._peerPresenceByUserId ?? {})[ch.peer.user_id];
+        return !!(row && row.online);
+    }
+
     _getSubtitle() {
         const { focusedThreadId } = this._chat;
         const ch = this._selectedChannel();
@@ -1201,6 +1227,7 @@ export class ChatView extends PlatformElement {
         const subtitleFallback = this._getSubtitle();
         const headerSubtitleText = typingLine || subtitleFallback;
         const showHeaderSubtitle = typeof headerSubtitleText === 'string' && headerSubtitleText !== '';
+        const peerOnline = !typingLine && this._isPeerOnline();
 
         const callBanner = this._callBannerActive();
 
@@ -1220,7 +1247,10 @@ export class ChatView extends PlatformElement {
                         <div class="header-channel-text">
                             <div class="header-title">${this._getTitle()}</div>
                             ${showHeaderSubtitle ? html`
-                                <div class="header-subtitle ${typingLine ? 'is-typing' : ''}">${headerSubtitleText}</div>
+                                <div class="header-subtitle ${typingLine ? 'is-typing' : ''}">
+                                    ${peerOnline ? html`<span class="header-online-dot" aria-hidden="true"></span>` : ''}
+                                    <span>${headerSubtitleText}</span>
+                                </div>
                             ` : ''}
                         </div>
                         <platform-icon class="header-settings-ic" name="settings" size="20"></platform-icon>
@@ -1231,7 +1261,10 @@ export class ChatView extends PlatformElement {
                         <div class="header-channel-text">
                             <div class="header-title">${this._getTitle()}</div>
                             ${showHeaderSubtitle ? html`
-                                <div class="header-subtitle ${typingLine ? 'is-typing' : ''}">${headerSubtitleText}</div>
+                                <div class="header-subtitle ${typingLine ? 'is-typing' : ''}">
+                                    ${peerOnline ? html`<span class="header-online-dot" aria-hidden="true"></span>` : ''}
+                                    <span>${headerSubtitleText}</span>
+                                </div>
                             ` : ''}
                         </div>
                     </div>

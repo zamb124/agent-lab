@@ -18,6 +18,7 @@ from apps.flows.src.container import get_container
 from core.calendar.service import CalendarReauthRequiredError, _credential_to_calendar_integration
 from core.integrations.models import IntegrationProvider
 from core.integrations.repository import IntegrationCredentialRepository
+from core.calendar.repositories import CalendarEventSqlRepository
 from core.logging import get_logger
 from core.models import CalendarEventSource, CalendarProvider
 from core.websocket.publisher import Notification, NotificationType, notify_user

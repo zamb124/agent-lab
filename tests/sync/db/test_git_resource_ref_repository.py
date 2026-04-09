@@ -13,9 +13,11 @@ async def test_git_ref_create_get(
     git_ref_repo: GitResourceRefRepository,
     sync_db_clean: None,
     company_id: str,
+    unique_id: str,
 ) -> None:
+    gid = f"{unique_id}_gitlab:repo:acme:42"
     entity = SyncGitResourceRef(
-        git_ref_id="gitlab:repo:acme:42",
+        git_ref_id=gid,
         company_id=company_id,
         provider="gitlab",
         kind="repo",
@@ -25,7 +27,7 @@ async def test_git_ref_create_get(
         extra={"branch": "main"},
     )
     await git_ref_repo.create(entity)
-    loaded = await git_ref_repo.get("gitlab:repo:acme:42")
+    loaded = await git_ref_repo.get(gid)
     assert loaded is not None
     assert loaded.company_id == company_id
     assert loaded.url == "https://gitlab.example/acme/42"
@@ -36,10 +38,14 @@ async def test_git_ref_company_isolation(
     git_ref_repo: GitResourceRefRepository,
     sync_db_clean: None,
     company_id: str,
+    unique_id: str,
 ) -> None:
+    g1 = f"{unique_id}_gitlab:repo:x:1"
+    g2 = f"{unique_id}_gitlab:repo:y:2"
+    other_co = f"{unique_id}_other_co"
     await git_ref_repo.create(
         SyncGitResourceRef(
-            git_ref_id="gitlab:repo:x:1",
+            git_ref_id=g1,
             company_id=company_id,
             provider="gitlab",
             kind="repo",
@@ -51,8 +57,8 @@ async def test_git_ref_company_isolation(
     )
     await git_ref_repo.create(
         SyncGitResourceRef(
-            git_ref_id="gitlab:repo:y:2",
-            company_id="other_co",
+            git_ref_id=g2,
+            company_id=other_co,
             provider="gitlab",
             kind="repo",
             project_key="y",
@@ -63,4 +69,4 @@ async def test_git_ref_company_isolation(
     )
     rows = await git_ref_repo.list_all(company_id=company_id)
     ids = {r.git_ref_id for r in rows}
-    assert ids == {"gitlab:repo:x:1"}
+    assert ids == {g1}

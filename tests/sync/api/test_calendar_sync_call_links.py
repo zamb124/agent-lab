@@ -17,7 +17,7 @@ from apps.sync.constants import CHANNEL_TYPE_CALENDAR_MEETING
 @pytest.mark.timeout(120)
 async def test_calendar_call_link_create_list_meetings_scheduled_detail_and_duplicate(
     sync_client,
-    auth_headers_system,
+    sync_auth_headers,
     sync_db_clean: None,
     unique_id: str,
 ) -> None:
@@ -34,7 +34,7 @@ async def test_calendar_call_link_create_list_meetings_scheduled_detail_and_dupl
     }
     create = await sync_client.post(
         "/sync/api/v1/calls/links",
-        headers=auth_headers_system,
+        headers=sync_auth_headers,
         json=body,
     )
     assert create.status_code == 201, create.text
@@ -46,7 +46,7 @@ async def test_calendar_call_link_create_list_meetings_scheduled_detail_and_dupl
 
     dup = await sync_client.post(
         "/sync/api/v1/calls/links",
-        headers=auth_headers_system,
+        headers=sync_auth_headers,
         json=body,
     )
     assert dup.status_code == 409
@@ -57,7 +57,7 @@ async def test_calendar_call_link_create_list_meetings_scheduled_detail_and_dupl
 
     scheduled_list = await sync_client.get(
         "/sync/api/v1/calls/links/scheduled",
-        headers=auth_headers_system,
+        headers=sync_auth_headers,
         params={
             "start_at": (start - timedelta(hours=1)).isoformat(),
             "end_at": (end + timedelta(hours=1)).isoformat(),
@@ -75,7 +75,7 @@ async def test_calendar_call_link_create_list_meetings_scheduled_detail_and_dupl
 @pytest.mark.timeout(120)
 async def test_calendar_call_link_patch_updates_window(
     sync_client,
-    auth_headers_system,
+    sync_auth_headers,
     sync_db_clean: None,
     unique_id: str,
 ) -> None:
@@ -84,7 +84,7 @@ async def test_calendar_call_link_patch_updates_window(
     end = start + timedelta(hours=1)
     create = await sync_client.post(
         "/sync/api/v1/calls/links",
-        headers=auth_headers_system,
+        headers=sync_auth_headers,
         json={
             "calendar_event_id": event_id,
             "scheduled_title": f"Before {unique_id}",
@@ -100,7 +100,7 @@ async def test_calendar_call_link_patch_updates_window(
     new_end = new_start + timedelta(hours=2)
     patch = await sync_client.patch(
         f"/sync/api/v1/calls/links/{token}",
-        headers=auth_headers_system,
+        headers=sync_auth_headers,
         json={
             "scheduled_title": f"After {unique_id}",
             "scheduled_start_at": new_start.isoformat(),
@@ -117,7 +117,7 @@ async def test_calendar_call_link_patch_updates_window(
 @pytest.mark.timeout(120)
 async def test_calendar_call_link_delete_removes_join_and_channel(
     sync_client,
-    auth_headers_system,
+    sync_auth_headers,
     sync_db_clean: None,
     unique_id: str,
 ) -> None:
@@ -126,7 +126,7 @@ async def test_calendar_call_link_delete_removes_join_and_channel(
     end = start + timedelta(hours=1)
     create = await sync_client.post(
         "/sync/api/v1/calls/links",
-        headers=auth_headers_system,
+        headers=sync_auth_headers,
         json={
             "calendar_event_id": event_id,
             "scheduled_title": f"Del {unique_id}",
@@ -141,14 +141,14 @@ async def test_calendar_call_link_delete_removes_join_and_channel(
 
     delete = await sync_client.delete(
         f"/sync/api/v1/calls/links/{token}",
-        headers=auth_headers_system,
+        headers=sync_auth_headers,
     )
     assert delete.status_code == 204
 
     gone = await sync_client.get(f"/sync/api/v1/calls/join/{token}")
     assert gone.status_code == 404
 
-    listed = await sync_client.get("/sync/api/v1/channels/", headers=auth_headers_system)
+    listed = await sync_client.get("/sync/api/v1/channels/", headers=sync_auth_headers)
     assert listed.status_code == 200
     channel_ids = {item["id"] for item in listed.json()}
     assert channel_id not in channel_ids
@@ -158,8 +158,8 @@ async def test_calendar_call_link_delete_removes_join_and_channel(
 @pytest.mark.timeout(120)
 async def test_calendar_call_link_patch_syncs_channel_members(
     sync_client,
-    auth_headers_system,
-    system_user2_id: str,
+    sync_auth_headers,
+    sync_user2_id: str,
     sync_db_clean: None,
     unique_id: str,
 ) -> None:
@@ -168,7 +168,7 @@ async def test_calendar_call_link_patch_syncs_channel_members(
     end = start + timedelta(hours=1)
     create = await sync_client.post(
         "/sync/api/v1/calls/links",
-        headers=auth_headers_system,
+        headers=sync_auth_headers,
         json={
             "calendar_event_id": event_id,
             "scheduled_title": f"Members {unique_id}",
@@ -183,7 +183,7 @@ async def test_calendar_call_link_patch_syncs_channel_members(
 
     mem0 = await sync_client.get(
         f"/sync/api/v1/channels/{channel_id}/members",
-        headers=auth_headers_system,
+        headers=sync_auth_headers,
     )
     assert mem0.status_code == 200
     ids0 = {row["user_id"] for row in mem0.json()}
@@ -191,32 +191,32 @@ async def test_calendar_call_link_patch_syncs_channel_members(
 
     patch_add = await sync_client.patch(
         f"/sync/api/v1/calls/links/{token}",
-        headers=auth_headers_system,
-        json={"calendar_member_user_ids": [system_user2_id]},
+        headers=sync_auth_headers,
+        json={"calendar_member_user_ids": [sync_user2_id]},
     )
     assert patch_add.status_code == 200, patch_add.text
     mem1 = await sync_client.get(
         f"/sync/api/v1/channels/{channel_id}/members",
-        headers=auth_headers_system,
+        headers=sync_auth_headers,
     )
     assert mem1.status_code == 200
     ids1 = {row["user_id"] for row in mem1.json()}
-    assert system_user2_id in ids1
+    assert sync_user2_id in ids1
     assert len(ids1) == 2
 
     patch_clear = await sync_client.patch(
         f"/sync/api/v1/calls/links/{token}",
-        headers=auth_headers_system,
+        headers=sync_auth_headers,
         json={"calendar_member_user_ids": []},
     )
     assert patch_clear.status_code == 200, patch_clear.text
     mem2 = await sync_client.get(
         f"/sync/api/v1/channels/{channel_id}/members",
-        headers=auth_headers_system,
+        headers=sync_auth_headers,
     )
     assert mem2.status_code == 200
     ids2 = {row["user_id"] for row in mem2.json()}
-    assert system_user2_id not in ids2
+    assert sync_user2_id not in ids2
     assert len(ids2) == 1
 
 
@@ -224,7 +224,7 @@ async def test_calendar_call_link_patch_syncs_channel_members(
 @pytest.mark.timeout(120)
 async def test_calendar_channel_type_is_calendar_meeting(
     sync_client,
-    auth_headers_system,
+    sync_auth_headers,
     sync_db_clean: None,
     unique_id: str,
 ) -> None:
@@ -233,7 +233,7 @@ async def test_calendar_channel_type_is_calendar_meeting(
     end = start + timedelta(hours=1)
     create = await sync_client.post(
         "/sync/api/v1/calls/links",
-        headers=auth_headers_system,
+        headers=sync_auth_headers,
         json={
             "calendar_event_id": event_id,
             "scheduled_title": f"Ch {unique_id}",
@@ -245,7 +245,7 @@ async def test_calendar_channel_type_is_calendar_meeting(
     assert create.status_code == 201
     channel_id = create.json()["channel_id"]
 
-    listed = await sync_client.get("/sync/api/v1/channels/", headers=auth_headers_system)
+    listed = await sync_client.get("/sync/api/v1/channels/", headers=sync_auth_headers)
     assert listed.status_code == 200
     row = next((c for c in listed.json() if c["id"] == channel_id), None)
     assert row is not None

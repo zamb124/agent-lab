@@ -55,7 +55,8 @@ from apps.sync.db.repositories.meeting_repository import CallRecordingRepository
 from apps.sync.db.repositories.call_speech_egress_repository import CallSpeechEgressTrackRepository
 from apps.sync.db.repositories.space_repository import SpaceRepository
 from apps.sync.db.repositories.thread_repository import ThreadRepository
-from sqlalchemy import text
+from core.models.identity_models import Company, User
+from core.utils.tokens import get_token_service
 
 _SYNC_REPO_ROOT = Path(__file__).resolve().parents[2]
 
@@ -117,51 +118,98 @@ async def sync_database(sync_db_url: str) -> AsyncIterator[SyncDatabase]:
     await run_migrations_async(service="sync")
 
     db = SyncDatabase(sync_db_url)
+
+    from apps.sync.container import get_sync_container
+    from core.billing import set_billing_service
+
+    container = get_sync_container()
+    set_billing_service(container.billing_service)
+
     yield db
-
-
-_SYNC_DELETE_ORDER = (
-    # Дочерние таблицы первыми; без TRUNCATE — меньше AccessExclusiveLock и deadlock с xdist.
-    "sync_call_links",
-    "sync_call_recordings",
-    "sync_call_participants",
-    "sync_call_speech_egress_tracks",
-    "sync_calls",
-    "sync_message_files",
-    "sync_message_contents",
-    "sync_messages",
-    "sync_threads",
-    "sync_git_resource_refs",
-    "sync_files",
-    "sync_channel_members",
-    "sync_channels",
-    "sync_spaces",
-)
 
 
 @pytest_asyncio.fixture()
 async def sync_db_clean(sync_database: SyncDatabase) -> None:
-    """Полная очистка данных sync перед тестом: DELETE по порядку FK (без TRUNCATE)."""
-    async with sync_database.session() as session:
-        for table in _SYNC_DELETE_ORDER:
-            await session.execute(text(f'DELETE FROM "{table}"'))
-        seq_row = await session.execute(
-            text("SELECT pg_get_serial_sequence('sync_message_contents', 'id')")
-        )
-        seq_name = seq_row.scalar_one_or_none()
-        if seq_name:
-            await session.execute(text(f"SELECT setval('{seq_name}', 1, false)"))
-        await session.commit()
+    """No-op: тесты изолированы по company_id и уникальным entity ID (параллельный xdist)."""
+    pass
 
-    from core.config import get_settings
-    from core.db.database import get_session_factory
 
-    shared_url = get_settings().database.shared_url
-    if shared_url:
-        factory = await get_session_factory(shared_url)
-        async with factory() as sh:
-            await sh.execute(text("DELETE FROM platform_short_links WHERE kind = 'sync_call_join'"))
-            await sh.commit()
+@pytest.fixture()
+def sync_user_id(unique_id: str) -> str:
+    return f"sync_user_{unique_id}"
+
+
+@pytest.fixture()
+def sync_user2_id(unique_id: str) -> str:
+    return f"sync_user2_{unique_id}"
+
+
+@pytest_asyncio.fixture()
+async def sync_auth_token(
+    sync_database: SyncDatabase,
+    company_id: str,
+    sync_user_id: str,
+    sync_user2_id: str,
+) -> str:
+    """JWT для уникальной компании и пользователя (shared БД)."""
+    from apps.sync.container import get_sync_container
+
+    container = get_sync_container()
+    company = Company(
+        company_id=company_id,
+        name=f"Sync test {company_id}",
+        owner_user_id=sync_user_id,
+        members={sync_user_id: ["owner", "admin"], sync_user2_id: ["member"]},
+        balance=1000.0,
+    )
+    await container.company_repository.set(company)
+    user = User(
+        user_id=sync_user_id,
+        name="Sync test user",
+        emails=[f"{sync_user_id}@test.local"],
+        companies={company_id: ["owner", "admin"]},
+        active_company_id=company_id,
+    )
+    await container.user_repository.set(user)
+    user2 = User(
+        user_id=sync_user2_id,
+        name="Sync test user2",
+        emails=[f"{sync_user2_id}@test.local"],
+        companies={company_id: ["member"]},
+        active_company_id=company_id,
+    )
+    await container.user_repository.set(user2)
+    token_service = get_token_service()
+    return token_service.create_token(sync_user_id, company_id=company_id)
+
+
+@pytest_asyncio.fixture()
+async def sync_auth_token_user2(
+    sync_auth_token: str,
+    company_id: str,
+    sync_user2_id: str,
+    sync_database: SyncDatabase,
+) -> str:
+    from apps.sync.container import get_sync_container
+
+    container = get_sync_container()
+    token_service = get_token_service()
+    return token_service.create_token(sync_user2_id, company_id=company_id)
+
+
+@pytest_asyncio.fixture()
+async def sync_auth_headers(sync_auth_token: str) -> dict[str, str]:
+    return {"Authorization": f"Bearer {sync_auth_token}"}
+
+
+@pytest_asyncio.fixture()
+async def sync_auth_headers_user2(sync_auth_token_user2: str) -> dict[str, str]:
+    return {"Authorization": f"Bearer {sync_auth_token_user2}"}
+
+
+@pytest_asyncio.fixture()
+async def sync_ws_cookie(sync_auth_token: str, sync_user_id: str) -> dict[str, str]:
+    return {"Cookie": f"auth_token={sync_auth_token}; session_id={sync_user_id}"}
 
 
 @pytest.fixture()

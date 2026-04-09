@@ -2,6 +2,11 @@
  * Редирект на страницу входа (общий для PlatformApp и обработки 401).
  */
 export function redirectToLogin() {
+    const currentPath = window.location.pathname;
+    if (currentPath === '/login' || currentPath === '/frontend/login') {
+        return;
+    }
+
     const currentUrl = window.location.href;
     const currentHost = window.location.host;
     const protocol = window.location.protocol;

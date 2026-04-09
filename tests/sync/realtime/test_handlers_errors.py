@@ -131,9 +131,11 @@ async def test_channels_create_topic_missing_name(
     sync_user_repository,
     sync_db_clean: None,
     company_id: str,
+    unique_id: str,
 ) -> None:
+    sp_nm = f"{unique_id}_sp_nm"
     sp = SyncSpace(
-        space_id="sp_nm",
+        space_id=sp_nm,
         company_id=company_id,
         name="S",
         description=None,
@@ -142,7 +144,7 @@ async def test_channels_create_topic_missing_name(
     )
     await space_repo.create(sp)
     body = ChannelCreate(
-        space_id="sp_nm",
+        space_id=sp_nm,
         type=ChannelType.TOPIC,
         name=None,
         is_private=False,
@@ -169,9 +171,11 @@ async def test_channels_update_empty_body(
     sync_user_repository,
     sync_db_clean: None,
     company_id: str,
+    unique_id: str,
 ) -> None:
+    ch_empty_u = f"{unique_id}_ch_empty_u"
     ch = SyncChannel(
-        channel_id="ch_empty_u",
+        channel_id=ch_empty_u,
         company_id=company_id,
         space_id=None,
         type=ChannelType.GROUP.value,
@@ -181,14 +185,14 @@ async def test_channels_update_empty_body(
         created_by_user_id="u1",
     )
     await channel_repo.create(ch)
-    await channel_repo.upsert_member("ch_empty_u", "u1", "owner", company_id=company_id)
+    await channel_repo.upsert_member(ch_empty_u, "u1", "owner", company_id=company_id)
     with pytest.raises(ValueError, match="Нет полей"):
         await execute_command(
             _cmd(
                 actor="u1",
                 company_id=company_id,
                 typ="channels.update",
-                payload={"channel_id": "ch_empty_u", "body": {}},
+                payload={"channel_id": ch_empty_u, "body": {}},
             ),
             spaces=space_repo,
             channels=channel_repo,
@@ -209,9 +213,12 @@ async def test_messages_edit_not_author(
     sync_user_repository,
     sync_db_clean: None,
     company_id: str,
+    unique_id: str,
 ) -> None:
+    ch_ed = f"{unique_id}_ch_ed"
+    msg_ed = f"{unique_id}_msg_ed"
     ch = SyncChannel(
-        channel_id="ch_ed",
+        channel_id=ch_ed,
         company_id=company_id,
         space_id=None,
         type=ChannelType.GROUP.value,
@@ -221,12 +228,12 @@ async def test_messages_edit_not_author(
         created_by_user_id="u_other",
     )
     await channel_repo.create(ch)
-    await channel_repo.upsert_member("ch_ed", "u_other", "owner", company_id=company_id)
-    await channel_repo.upsert_member("ch_ed", "u1", "member", company_id=company_id)
+    await channel_repo.upsert_member(ch_ed, "u_other", "owner", company_id=company_id)
+    await channel_repo.upsert_member(ch_ed, "u1", "member", company_id=company_id)
     await message_repo.create_message(
-        message_id="msg_ed",
+        message_id=msg_ed,
         company_id=company_id,
-        channel_id="ch_ed",
+        channel_id=ch_ed,
         thread_id=None,
         parent_message_id=None,
         sender_user_id="u_other",
@@ -256,8 +263,8 @@ async def test_messages_edit_not_author(
                 company_id=company_id,
                 typ="messages.edit",
                 payload={
-                    "channel_id": "ch_ed",
-                    "message_id": "msg_ed",
+                    "channel_id": ch_ed,
+                    "message_id": msg_ed,
                     "body": edit_body.model_dump(),
                 },
             ),
@@ -280,9 +287,12 @@ async def test_messages_delete_other_as_member(
     sync_user_repository,
     sync_db_clean: None,
     company_id: str,
+    unique_id: str,
 ) -> None:
+    ch_del = f"{unique_id}_ch_del"
+    msg_del = f"{unique_id}_msg_del"
     ch = SyncChannel(
-        channel_id="ch_del",
+        channel_id=ch_del,
         company_id=company_id,
         space_id=None,
         type=ChannelType.GROUP.value,
@@ -292,12 +302,12 @@ async def test_messages_delete_other_as_member(
         created_by_user_id="u_other",
     )
     await channel_repo.create(ch)
-    await channel_repo.upsert_member("ch_del", "u_other", "owner", company_id=company_id)
-    await channel_repo.upsert_member("ch_del", "u1", "member", company_id=company_id)
+    await channel_repo.upsert_member(ch_del, "u_other", "owner", company_id=company_id)
+    await channel_repo.upsert_member(ch_del, "u1", "member", company_id=company_id)
     await message_repo.create_message(
-        message_id="msg_del",
+        message_id=msg_del,
         company_id=company_id,
-        channel_id="ch_del",
+        channel_id=ch_del,
         thread_id=None,
         parent_message_id=None,
         sender_user_id="u_other",
@@ -317,7 +327,7 @@ async def test_messages_delete_other_as_member(
                 actor="u1",
                 company_id=company_id,
                 typ="messages.delete",
-                payload={"channel_id": "ch_del", "message_id": "msg_del"},
+                payload={"channel_id": ch_del, "message_id": msg_del},
             ),
             spaces=space_repo,
             channels=channel_repo,
@@ -338,9 +348,12 @@ async def test_messages_forward_deleted(
     sync_user_repository,
     sync_db_clean: None,
     company_id: str,
+    unique_id: str,
 ) -> None:
+    ch_f = f"{unique_id}_ch_f"
+    msg_f = f"{unique_id}_msg_f"
     ch = SyncChannel(
-        channel_id="ch_f",
+        channel_id=ch_f,
         company_id=company_id,
         space_id=None,
         type=ChannelType.GROUP.value,
@@ -350,11 +363,11 @@ async def test_messages_forward_deleted(
         created_by_user_id="u1",
     )
     await channel_repo.create(ch)
-    await channel_repo.upsert_member("ch_f", "u1", "owner", company_id=company_id)
+    await channel_repo.upsert_member(ch_f, "u1", "owner", company_id=company_id)
     await message_repo.create_message(
-        message_id="msg_f",
+        message_id=msg_f,
         company_id=company_id,
-        channel_id="ch_f",
+        channel_id=ch_f,
         thread_id=None,
         parent_message_id=None,
         sender_user_id="u1",
@@ -368,7 +381,7 @@ async def test_messages_forward_deleted(
             ),
         ],
     )
-    await message_repo.soft_delete_message("msg_f", datetime.now(tz=UTC))
+    await message_repo.soft_delete_message(msg_f, datetime.now(tz=UTC))
     with pytest.raises(ValueError, match="удалённое"):
         await execute_command(
             _cmd(
@@ -376,9 +389,9 @@ async def test_messages_forward_deleted(
                 company_id=company_id,
                 typ="messages.forward",
                 payload={
-                    "from_channel_id": "ch_f",
-                    "to_channel_id": "ch_f",
-                    "message_id": "msg_f",
+                    "from_channel_id": ch_f,
+                    "to_channel_id": ch_f,
+                    "message_id": msg_f,
                     "thread_id": None,
                 },
             ),
@@ -401,9 +414,12 @@ async def test_messages_react_deleted(
     sync_user_repository,
     sync_db_clean: None,
     company_id: str,
+    unique_id: str,
 ) -> None:
+    ch_rx = f"{unique_id}_ch_rx"
+    msg_rx = f"{unique_id}_msg_rx"
     ch = SyncChannel(
-        channel_id="ch_rx",
+        channel_id=ch_rx,
         company_id=company_id,
         space_id=None,
         type=ChannelType.GROUP.value,
@@ -413,11 +429,11 @@ async def test_messages_react_deleted(
         created_by_user_id="u1",
     )
     await channel_repo.create(ch)
-    await channel_repo.upsert_member("ch_rx", "u1", "owner", company_id=company_id)
+    await channel_repo.upsert_member(ch_rx, "u1", "owner", company_id=company_id)
     await message_repo.create_message(
-        message_id="msg_rx",
+        message_id=msg_rx,
         company_id=company_id,
-        channel_id="ch_rx",
+        channel_id=ch_rx,
         thread_id=None,
         parent_message_id=None,
         sender_user_id="u1",
@@ -431,14 +447,14 @@ async def test_messages_react_deleted(
             ),
         ],
     )
-    await message_repo.soft_delete_message("msg_rx", datetime.now(tz=UTC))
+    await message_repo.soft_delete_message(msg_rx, datetime.now(tz=UTC))
     with pytest.raises(ValueError, match="удалено"):
         await execute_command(
             _cmd(
                 actor="u1",
                 company_id=company_id,
                 typ="messages.react",
-                payload={"channel_id": "ch_rx", "message_id": "msg_rx", "emoji": "ok"},
+                payload={"channel_id": ch_rx, "message_id": msg_rx, "emoji": "ok"},
             ),
             spaces=space_repo,
             channels=channel_repo,
@@ -459,9 +475,12 @@ async def test_messages_pin_not_owner(
     sync_user_repository,
     sync_db_clean: None,
     company_id: str,
+    unique_id: str,
 ) -> None:
+    ch_pin = f"{unique_id}_ch_pin"
+    msg_pin = f"{unique_id}_msg_pin"
     ch = SyncChannel(
-        channel_id="ch_pin",
+        channel_id=ch_pin,
         company_id=company_id,
         space_id=None,
         type=ChannelType.GROUP.value,
@@ -471,12 +490,12 @@ async def test_messages_pin_not_owner(
         created_by_user_id="u_other",
     )
     await channel_repo.create(ch)
-    await channel_repo.upsert_member("ch_pin", "u_other", "owner", company_id=company_id)
-    await channel_repo.upsert_member("ch_pin", "u1", "member", company_id=company_id)
+    await channel_repo.upsert_member(ch_pin, "u_other", "owner", company_id=company_id)
+    await channel_repo.upsert_member(ch_pin, "u1", "member", company_id=company_id)
     await message_repo.create_message(
-        message_id="msg_pin",
+        message_id=msg_pin,
         company_id=company_id,
-        channel_id="ch_pin",
+        channel_id=ch_pin,
         thread_id=None,
         parent_message_id=None,
         sender_user_id="u_other",
@@ -496,7 +515,7 @@ async def test_messages_pin_not_owner(
                 actor="u1",
                 company_id=company_id,
                 typ="messages.pin",
-                payload={"channel_id": "ch_pin", "message_id": "msg_pin", "action": "add"},
+                payload={"channel_id": ch_pin, "message_id": msg_pin, "action": "add"},
             ),
             spaces=space_repo,
             channels=channel_repo,
@@ -517,9 +536,12 @@ async def test_messages_pin_deleted(
     sync_user_repository,
     sync_db_clean: None,
     company_id: str,
+    unique_id: str,
 ) -> None:
+    ch_pd = f"{unique_id}_ch_pd"
+    msg_pd = f"{unique_id}_msg_pd"
     ch = SyncChannel(
-        channel_id="ch_pd",
+        channel_id=ch_pd,
         company_id=company_id,
         space_id=None,
         type=ChannelType.GROUP.value,
@@ -529,11 +551,11 @@ async def test_messages_pin_deleted(
         created_by_user_id="u1",
     )
     await channel_repo.create(ch)
-    await channel_repo.upsert_member("ch_pd", "u1", "owner", company_id=company_id)
+    await channel_repo.upsert_member(ch_pd, "u1", "owner", company_id=company_id)
     await message_repo.create_message(
-        message_id="msg_pd",
+        message_id=msg_pd,
         company_id=company_id,
-        channel_id="ch_pd",
+        channel_id=ch_pd,
         thread_id=None,
         parent_message_id=None,
         sender_user_id="u1",
@@ -547,14 +569,14 @@ async def test_messages_pin_deleted(
             ),
         ],
     )
-    await message_repo.soft_delete_message("msg_pd", datetime.now(tz=UTC))
+    await message_repo.soft_delete_message(msg_pd, datetime.now(tz=UTC))
     with pytest.raises(ValueError, match="удалённое"):
         await execute_command(
             _cmd(
                 actor="u1",
                 company_id=company_id,
                 typ="messages.pin",
-                payload={"channel_id": "ch_pd", "message_id": "msg_pd", "action": "add"},
+                payload={"channel_id": ch_pd, "message_id": msg_pd, "action": "add"},
             ),
             spaces=space_repo,
             channels=channel_repo,
@@ -575,8 +597,12 @@ async def test_messages_edit_channel_mismatch(
     sync_user_repository,
     sync_db_clean: None,
     company_id: str,
+    unique_id: str,
 ) -> None:
-    for cid in ("ch_m1", "ch_m2"):
+    ch_m1 = f"{unique_id}_ch_m1"
+    ch_m2 = f"{unique_id}_ch_m2"
+    msg_mm = f"{unique_id}_msg_mm"
+    for cid in (ch_m1, ch_m2):
         ch = SyncChannel(
             channel_id=cid,
             company_id=company_id,
@@ -590,9 +616,9 @@ async def test_messages_edit_channel_mismatch(
         await channel_repo.create(ch)
         await channel_repo.upsert_member(cid, "u1", "owner", company_id=company_id)
     await message_repo.create_message(
-        message_id="msg_mm",
+        message_id=msg_mm,
         company_id=company_id,
-        channel_id="ch_m1",
+        channel_id=ch_m1,
         thread_id=None,
         parent_message_id=None,
         sender_user_id="u1",
@@ -622,8 +648,8 @@ async def test_messages_edit_channel_mismatch(
                 company_id=company_id,
                 typ="messages.edit",
                 payload={
-                    "channel_id": "ch_m2",
-                    "message_id": "msg_mm",
+                    "channel_id": ch_m2,
+                    "message_id": msg_mm,
                     "body": edit_body.model_dump(),
                 },
             ),
@@ -646,8 +672,9 @@ async def test_threads_create_missing_root(
     sync_user_repository,
     sync_db_clean: None,
     company_id: str,
+    unique_id: str,
 ) -> None:
-    tc = ThreadCreate(root_message_id="no_such_root", title=None)
+    tc = ThreadCreate(root_message_id=f"{unique_id}_no_such_root", title=None)
     with pytest.raises(ValueError, match="не найден"):
         await execute_command(
             _cmd(
@@ -675,12 +702,13 @@ async def test_git_resources_upsert_idempotent(
     sync_user_repository,
     sync_db_clean: None,
     company_id: str,
+    unique_id: str,
 ) -> None:
     gc = GitResourceRefCreate(
         provider=GitProvider.GITLAB,
         kind=GitResourceKind.REPO,
-        project_key="pk",
-        external_id="ext1",
+        project_key=f"{unique_id}_pk",
+        external_id=f"{unique_id}_ext1",
         url="https://gitlab.example/x",
         extra={"a": 1},
     )
@@ -697,8 +725,8 @@ async def test_git_resources_upsert_idempotent(
     gc2 = GitResourceRefCreate(
         provider=GitProvider.GITLAB,
         kind=GitResourceKind.REPO,
-        project_key="pk",
-        external_id="ext1",
+        project_key=f"{unique_id}_pk",
+        external_id=f"{unique_id}_ext1",
         url="https://gitlab.example/y",
         extra={"b": 2},
     )

@@ -61,6 +61,19 @@ function localDayKey(iso) {
     return `${t.getFullYear()}-${t.getMonth()}-${t.getDate()}`;
 }
 
+const GROUP_WINDOW_MS = 2 * 60 * 1000;
+
+function sameGroupSender(a, b) {
+    const sa = senderUserId(a.sender);
+    const sb = senderUserId(b.sender);
+    if (!sa || !sb) return false;
+    if (sa !== sb) return false;
+    const ta = new Date(a.sent_at).getTime();
+    const tb = new Date(b.sent_at).getTime();
+    if (Number.isNaN(ta) || Number.isNaN(tb)) return false;
+    return Math.abs(tb - ta) < GROUP_WINDOW_MS;
+}
+
 function buildListItems(messages) {
     const items = [];
     let prevDayKey = null;
@@ -72,6 +85,25 @@ function buildListItems(messages) {
         }
         items.push({ kind: 'msg', msg });
     }
+
+    const msgItems = items.filter(it => it.kind === 'msg');
+    for (let i = 0; i < msgItems.length; i++) {
+        const prev = i > 0 ? msgItems[i - 1].msg : null;
+        const cur = msgItems[i].msg;
+        const next = i < msgItems.length - 1 ? msgItems[i + 1].msg : null;
+        const linkedPrev = prev && sameGroupSender(prev, cur);
+        const linkedNext = next && sameGroupSender(cur, next);
+        if (linkedPrev && linkedNext) {
+            msgItems[i].groupPosition = 'middle';
+        } else if (linkedPrev) {
+            msgItems[i].groupPosition = 'last';
+        } else if (linkedNext) {
+            msgItems[i].groupPosition = 'first';
+        } else {
+            msgItems[i].groupPosition = 'single';
+        }
+    }
+
     return items;
 }
 
@@ -582,6 +614,7 @@ export class MessageList extends PlatformElement {
                     const flashActive = this._flashMessageId === msg.id;
                     const flashSeq = flashActive ? this._flashMessageSeq : 0;
                     const deleting = this._deletingMessageIds.includes(msg.id);
+                    const groupPosition = item.groupPosition ?? 'single';
                     return html`
                         <message-bubble
                             data-msg-id=${msg.id}
@@ -598,6 +631,7 @@ export class MessageList extends PlatformElement {
                             .peerReadAt=${peerReadAt}
                             .channelType=${this._selectedChannelType}
                             .canFocusThread=${this._focusedThreadId === null && msg.thread_id !== null}
+                            .groupPosition=${groupPosition}
                             @focus-thread=${(e) => SyncStore.setFocusedThread(e.detail.threadId)}
                         ></message-bubble>
                     `;

@@ -136,6 +136,7 @@ ROUTE_RULES: List[RouteRule] = [
     RouteRule("/api/public/legal", auth_required=False, context_type="anonymous"),
     RouteRule("/frontend/api/public/legal", auth_required=False, context_type="anonymous"),
     RouteRule("/api/health", auth_required=False, context_type="anonymous"),
+    RouteRule("/api/platform/file-types", auth_required=False, context_type="anonymous"),
     
     # Документация
     RouteRule("/docs*", auth_required=False, context_type="anonymous"),

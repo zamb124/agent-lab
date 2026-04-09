@@ -26,11 +26,11 @@ def _skip_if_s3_unavailable() -> None:
 async def test_call_recording_register_platform_file_then_download_ok(
     sync_app,
     unique_id: str,
-    auth_headers_system: dict[str, str],
+    company_id: str,
+    sync_user_id: str,
+    sync_auth_headers: dict[str, str],
 ) -> None:
     _skip_if_s3_unavailable()
-
-    company_id = f"rec_co_{unique_id}"
     call_id = uuid.uuid4().hex
     recording_id = uuid.uuid4().hex
     s3_key = _call_recording_s3_object_key(
@@ -52,7 +52,7 @@ async def test_call_recording_register_platform_file_then_download_ok(
             company_id=company_id,
             call_id=call_id,
             recording_id=recording_id,
-            started_by_user_id=f"user_{unique_id}",
+            started_by_user_id=sync_user_id,
             raw_original_name=f"{recording_id}.mp4",
             raw_storage_url="https://example.invalid/egress-location",
         )
@@ -62,7 +62,7 @@ async def test_call_recording_register_platform_file_then_download_ok(
         async with AsyncClient(transport=transport, base_url="http://testserver") as http:
             dl = await http.get(
                 f"/sync/api/v1/files/download/{recording_id}",
-                headers=auth_headers_system,
+                headers=sync_auth_headers,
             )
         assert dl.status_code == 200, dl.text
         assert dl.content == payload

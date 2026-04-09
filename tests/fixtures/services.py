@@ -213,7 +213,7 @@ def sync_service():
         pid_file=_SYNC_SERVER_PID,
         app_path="apps.sync.main:app",
         port=9005,
-        startup_wait=3.0,
+        startup_wait=10.0,
         env=_COMMON_TEST_ENV,
     )
 

@@ -145,9 +145,15 @@ export class SyncDirectMemberRow extends PlatformElement {
                 width: 9px;
                 height: 9px;
                 border-radius: 50%;
-                background: #22c55e;
+                background: var(--success);
                 border: 2px solid var(--glass-solid-strong);
                 box-sizing: border-box;
+                animation: subtle-pulse 2.5s ease-in-out infinite;
+            }
+
+            @keyframes subtle-pulse {
+                0%, 100% { opacity: 0.75; transform: scale(1); }
+                50% { opacity: 1; transform: scale(1.15); }
             }
 
             .peer-avatar {

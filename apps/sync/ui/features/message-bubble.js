@@ -570,6 +570,7 @@ export class MessageBubble extends PlatformElement {
         deleting: { type: Boolean },
         peerReadAt: { type: String },
         channelType: { type: String },
+        groupPosition: { type: String, attribute: 'group-position', reflect: true },
         _profileOpen: { state: true },
         _profileUser: { state: true },
         _menuOpen: { state: true },
@@ -725,10 +726,15 @@ export class MessageBubble extends PlatformElement {
                 min-width: 0;
                 width: fit-content;
                 max-width: min(720px, 90%);
-                border-radius: var(--radius-2xl);
+                border-radius: var(--sync-bubble-radius);
                 padding: var(--space-2) var(--space-3);
                 border: 1px solid;
-                transition: transform 0.14s ease-out, box-shadow 0.14s ease-out;
+                transition: transform var(--duration-fast) ease-out, box-shadow var(--duration-fast) ease-out;
+            }
+
+            .bubble:hover {
+                transform: translateY(-1px);
+                box-shadow: var(--glass-shadow-subtle);
             }
 
             .bubble--forwarded .bubble-header {
@@ -753,13 +759,13 @@ export class MessageBubble extends PlatformElement {
             }
 
             .bubble.own {
-                border-color: rgba(16, 185, 129, 0.35);
-                background: rgba(16, 185, 129, 0.16);
+                border-color: var(--sync-bubble-own-border);
+                background: var(--sync-bubble-own-bg);
             }
 
             .bubble.own.bubble--media {
-                border-color: rgba(16, 185, 129, 0.35);
-                background: rgba(16, 185, 129, 0.16);
+                border-color: var(--sync-bubble-own-border);
+                background: var(--sync-bubble-own-bg);
             }
 
             :host-context([data-theme="dark"]) .bubble.own.bubble--media {
@@ -818,13 +824,15 @@ export class MessageBubble extends PlatformElement {
                 position: relative;
                 display: block;
                 line-height: 0;
+                overflow: hidden;
+                border-radius: var(--sync-video-radius);
             }
 
             .video-attachment-player {
                 width: 100%;
                 max-height: 360px;
-                border-radius: var(--radius-lg);
-                background: #000;
+                border-radius: var(--sync-video-radius);
+                background: var(--bg-secondary);
             }
 
             .video-overlay-actions {
@@ -1115,8 +1123,8 @@ export class MessageBubble extends PlatformElement {
             }
 
             .bubble.other {
-                border-color: rgba(56, 189, 248, 0.28);
-                background: rgba(147, 197, 253, 0.35);
+                border-color: var(--sync-bubble-other-border);
+                background: var(--sync-bubble-other-bg);
             }
 
             .bubble-header {
@@ -1513,10 +1521,53 @@ export class MessageBubble extends PlatformElement {
 
             .reaction-chip {
                 font-size: 13px;
-                padding: 2px 6px;
+                padding: 3px 8px;
                 border-radius: var(--radius-full);
                 background: var(--glass-solid-subtle);
                 border: 1px solid var(--glass-border-subtle);
+                cursor: pointer;
+                transition: transform var(--duration-fast) var(--easing-default), background var(--duration-fast);
+            }
+
+            .reaction-chip:hover {
+                transform: scale(1.12);
+                background: var(--glass-solid-medium);
+            }
+
+            /* Grouping: tighter spacing */
+            :host([group-position="middle"]),
+            :host([group-position="last"]) {
+                margin-top: calc(-1 * var(--space-2));
+            }
+
+            /* Grouping: hide avatar for continuation messages */
+            :host([group-position="middle"]) .avatar-slot,
+            :host([group-position="last"]) .avatar-slot {
+                visibility: hidden;
+            }
+
+            /* Grouping: adjust border-radius for own bubbles */
+            :host([group-position="first"]) .bubble.own {
+                border-bottom-right-radius: var(--sync-bubble-radius-grouped);
+            }
+            :host([group-position="middle"]) .bubble.own {
+                border-top-right-radius: var(--sync-bubble-radius-grouped);
+                border-bottom-right-radius: var(--sync-bubble-radius-grouped);
+            }
+            :host([group-position="last"]) .bubble.own {
+                border-top-right-radius: var(--sync-bubble-radius-grouped);
+            }
+
+            /* Grouping: adjust border-radius for other bubbles */
+            :host([group-position="first"]) .bubble.other {
+                border-bottom-left-radius: var(--sync-bubble-radius-grouped);
+            }
+            :host([group-position="middle"]) .bubble.other {
+                border-top-left-radius: var(--sync-bubble-radius-grouped);
+                border-bottom-left-radius: var(--sync-bubble-radius-grouped);
+            }
+            :host([group-position="last"]) .bubble.other {
+                border-top-left-radius: var(--sync-bubble-radius-grouped);
             }
 
             .select-wrap {
@@ -1546,6 +1597,7 @@ export class MessageBubble extends PlatformElement {
         this.deleting = false;
         this.peerReadAt = null;
         this.channelType = null;
+        this.groupPosition = 'single';
         this._avatarRetry = createAvatarRetry(() => this.requestUpdate());
         this._profileOpen = false;
         this._profileUser = null;

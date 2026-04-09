@@ -7,17 +7,17 @@ import io
 import pytest
 
 
-async def _create_topic_channel(sync_client, auth_headers_system) -> str:
+async def _create_topic_channel(sync_client, sync_auth_headers) -> str:
     pr = await sync_client.post(
         "/sync/api/v1/spaces/",
-        headers=auth_headers_system,
+        headers=sync_auth_headers,
         json={"name": "AttachSpace", "description": None},
     )
     assert pr.status_code == 201
     space_id = pr.json()["id"]
     cr = await sync_client.post(
         "/sync/api/v1/channels/",
-        headers=auth_headers_system,
+        headers=sync_auth_headers,
         json={
             "space_id": space_id,
             "type": "topic",
@@ -32,15 +32,15 @@ async def _create_topic_channel(sync_client, auth_headers_system) -> str:
 @pytest.mark.asyncio
 async def test_http_send_message_file_document_list_round_trip(
     sync_client,
-    auth_headers_system,
+    sync_auth_headers,
     sync_db_clean: None,
 ) -> None:
-    channel_id = await _create_topic_channel(sync_client, auth_headers_system)
+    channel_id = await _create_topic_channel(sync_client, sync_auth_headers)
 
     pdf_bytes = b"%PDF-1.4\n1 0 obj<<>>endobj\ntrailer<<>>\n%%EOF"
     up = await sync_client.post(
         "/sync/api/v1/files/",
-        headers=auth_headers_system,
+        headers=sync_auth_headers,
         files={"file": ("report.pdf", io.BytesIO(pdf_bytes), "application/pdf")},
     )
     assert up.status_code == 200, up.text
@@ -49,7 +49,7 @@ async def test_http_send_message_file_document_list_round_trip(
 
     sr = await sync_client.post(
         f"/sync/api/v1/channels/{channel_id}/messages",
-        headers=auth_headers_system,
+        headers=sync_auth_headers,
         json={
             "thread_id": None,
             "parent_message_id": None,
@@ -71,7 +71,7 @@ async def test_http_send_message_file_document_list_round_trip(
 
     lr = await sync_client.get(
         f"/sync/api/v1/channels/{channel_id}/messages",
-        headers=auth_headers_system,
+        headers=sync_auth_headers,
     )
     assert lr.status_code == 200
     msgs = lr.json()["items"]
@@ -89,10 +89,10 @@ async def test_http_send_message_file_document_list_round_trip(
 @pytest.mark.asyncio
 async def test_http_send_message_file_image_with_text_plain(
     sync_client,
-    auth_headers_system,
+    sync_auth_headers,
     sync_db_clean: None,
 ) -> None:
-    channel_id = await _create_topic_channel(sync_client, auth_headers_system)
+    channel_id = await _create_topic_channel(sync_client, sync_auth_headers)
 
     jpeg_bytes = (
         b"\xff\xd8\xff\xe0\x00\x10JFIF\x00\x01\x01\x00\x00\x01\x00\x01\x00\x00"
@@ -101,7 +101,7 @@ async def test_http_send_message_file_image_with_text_plain(
     )
     up = await sync_client.post(
         "/sync/api/v1/files/",
-        headers=auth_headers_system,
+        headers=sync_auth_headers,
         files={"file": ("photo.jpg", io.BytesIO(jpeg_bytes), "image/jpeg")},
     )
     assert up.status_code == 200, up.text
@@ -110,7 +110,7 @@ async def test_http_send_message_file_image_with_text_plain(
 
     sr = await sync_client.post(
         f"/sync/api/v1/channels/{channel_id}/messages",
-        headers=auth_headers_system,
+        headers=sync_auth_headers,
         json={
             "thread_id": None,
             "parent_message_id": None,
@@ -137,7 +137,7 @@ async def test_http_send_message_file_image_with_text_plain(
 
     lr = await sync_client.get(
         f"/sync/api/v1/channels/{channel_id}/messages",
-        headers=auth_headers_system,
+        headers=sync_auth_headers,
     )
     assert lr.status_code == 200
     msgs = lr.json()["items"]
@@ -156,14 +156,14 @@ async def test_http_send_message_file_image_with_text_plain(
 @pytest.mark.asyncio
 async def test_http_send_message_two_file_attachments_one_message(
     sync_client,
-    auth_headers_system,
+    sync_auth_headers,
     sync_db_clean: None,
 ) -> None:
-    channel_id = await _create_topic_channel(sync_client, auth_headers_system)
+    channel_id = await _create_topic_channel(sync_client, sync_auth_headers)
 
     up1 = await sync_client.post(
         "/sync/api/v1/files/",
-        headers=auth_headers_system,
+        headers=sync_auth_headers,
         files={"file": ("a.txt", io.BytesIO(b"alpha"), "text/plain")},
     )
     assert up1.status_code == 200, up1.text
@@ -171,7 +171,7 @@ async def test_http_send_message_two_file_attachments_one_message(
 
     up2 = await sync_client.post(
         "/sync/api/v1/files/",
-        headers=auth_headers_system,
+        headers=sync_auth_headers,
         files={"file": ("b.txt", io.BytesIO(b"beta-longer"), "text/plain")},
     )
     assert up2.status_code == 200, up2.text
@@ -179,7 +179,7 @@ async def test_http_send_message_two_file_attachments_one_message(
 
     sr = await sync_client.post(
         f"/sync/api/v1/channels/{channel_id}/messages",
-        headers=auth_headers_system,
+        headers=sync_auth_headers,
         json={
             "thread_id": None,
             "parent_message_id": None,
@@ -211,7 +211,7 @@ async def test_http_send_message_two_file_attachments_one_message(
 
     lr = await sync_client.get(
         f"/sync/api/v1/channels/{channel_id}/messages",
-        headers=auth_headers_system,
+        headers=sync_auth_headers,
     )
     assert lr.status_code == 200
     msgs = lr.json()["items"]

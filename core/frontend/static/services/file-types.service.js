@@ -16,7 +16,11 @@ export class FileTypesService extends BaseService {
     }
 
     async init() {
-        const data = await this.get('/api/platform/file-types');
+        const resp = await fetch('/api/platform/file-types', { credentials: 'include' });
+        if (!resp.ok) {
+            throw new Error(`FileTypesService: HTTP ${resp.status}`);
+        }
+        const data = await resp.json();
         this._categories = data.categories;
         this._registry = data.registry;
         this._loaded = true;

@@ -100,6 +100,7 @@ export class MessageComposer extends PlatformElement {
             .composer {
                 border-top: 1px solid var(--glass-border-subtle);
                 padding: var(--space-3);
+                background: var(--sync-composer-bg);
             }
 
             @media (max-width: 767px) {
@@ -165,7 +166,7 @@ export class MessageComposer extends PlatformElement {
                 max-height: 200px;
                 resize: none;
                 padding: var(--space-3);
-                border-radius: var(--radius-lg);
+                border-radius: var(--radius-xl);
                 border: 1px solid var(--glass-border-subtle);
                 background: var(--glass-solid-subtle);
                 color: var(--text-primary);
@@ -173,11 +174,12 @@ export class MessageComposer extends PlatformElement {
                 font-family: inherit;
                 outline: none;
                 overflow-wrap: anywhere;
-                transition: border-color var(--duration-fast);
+                transition: border-color var(--duration-normal), box-shadow var(--duration-normal);
             }
 
             .textarea:focus {
                 border-color: var(--accent);
+                box-shadow: var(--focus-ring);
             }
 
             .attach-popup {
@@ -1026,11 +1028,17 @@ export class MessageComposer extends PlatformElement {
         e.target.value = '';
         this._attachMenuOpen = false;
 
-        const staged = files.map(file => ({
-            file,
-            contentType,
-            localUrl: file.type.startsWith('image/') ? URL.createObjectURL(file) : null,
-        }));
+        const staged = files.map(file => {
+            let resolvedType = contentType;
+            if (contentType === 'file/image' && file.type.startsWith('video/')) {
+                resolvedType = 'file/video';
+            }
+            return {
+                file,
+                contentType: resolvedType,
+                localUrl: file.type.startsWith('image/') ? URL.createObjectURL(file) : null,
+            };
+        });
         this._pendingAttachments = [...this._pendingAttachments, ...staged];
     }
 

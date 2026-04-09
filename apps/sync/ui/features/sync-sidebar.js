@@ -123,7 +123,8 @@ export class SyncSidebar extends PlatformElement {
 
             .space-chip.active {
                 border-color: var(--accent);
-                background: var(--accent-subtle);
+                background: var(--sync-active-row-bg);
+                box-shadow: var(--glass-inner-glow-subtle);
             }
 
             .space-chip-main {
@@ -217,17 +218,19 @@ export class SyncSidebar extends PlatformElement {
                 border-radius: var(--radius-lg);
                 border: 1px solid transparent;
                 background: transparent;
-                transition: all var(--duration-fast);
+                transition: all var(--duration-normal) var(--easing-default);
             }
 
             .nav-row-wrap:hover {
                 background: var(--glass-solid-subtle);
                 border-color: var(--glass-border-subtle);
+                box-shadow: var(--glass-inner-glow-subtle);
             }
 
             .nav-row-wrap.active {
-                background: var(--accent-subtle);
+                background: var(--sync-active-row-bg);
                 border-color: var(--accent);
+                box-shadow: var(--glass-inner-glow-subtle);
             }
 
             .nav-row-wrap.active .row-gear {
@@ -235,7 +238,7 @@ export class SyncSidebar extends PlatformElement {
             }
 
             .nav-row-wrap.active:hover {
-                background: var(--accent-subtle);
+                background: var(--sync-active-row-bg);
                 border-color: var(--accent);
             }
 
@@ -287,14 +290,20 @@ export class SyncSidebar extends PlatformElement {
             }
 
             .sidebar-adhoc-btn:hover {
-                background: var(--glass-solid-medium);
+                background: var(--sync-active-row-bg);
                 border-color: var(--accent);
                 color: var(--accent);
+                box-shadow: var(--glass-inner-glow-subtle);
             }
 
             .sidebar-adhoc-btn svg {
                 flex-shrink: 0;
                 color: var(--accent);
+                transition: transform var(--duration-fast) var(--easing-default);
+            }
+
+            .sidebar-adhoc-btn:hover svg {
+                transform: scale(1.08);
             }
 
             platform-service-sidebar[collapsed] .sidebar-adhoc-label {
