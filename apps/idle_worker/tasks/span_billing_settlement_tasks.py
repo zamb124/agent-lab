@@ -11,7 +11,9 @@ from apps.flows.src.container import get_container
 from apps.idle_worker.broker import broker as idle_broker
 from core.billing.settlement_rules import SettlementRulesDocument
 from core.billing.span_billing_settlement import SpanBillingSettlement
+from core.context import Context, set_context
 from core.logging import get_logger
+from core.models.identity_models import Company, User
 
 logger = get_logger(__name__)
 
@@ -49,6 +51,7 @@ async def span_billing_settlement_tick(
 
     settled = 0
     errors = 0
+    prev_company_id: str | None = None
     for span_dict in spans:
         company_id = span_dict.get("company_id")
         if not company_id or not isinstance(company_id, str):
@@ -58,6 +61,16 @@ async def span_billing_settlement_tick(
                 span_dict.get("span_id"),
             )
             continue
+
+        if company_id != prev_company_id:
+            set_context(Context(
+                user=User(user_id="billing-worker", name="Billing Worker"),
+                active_company=Company(company_id=company_id, name=company_id),
+                session_id=f"billing-settlement:{company_id}",
+                channel="taskiq",
+            ))
+            prev_company_id = company_id
+
         rules_doc = rules_by_company.get(company_id)
         if rules_doc is None:
             rules_doc = await billing.load_settlement_rules_document_for_company(company_id)

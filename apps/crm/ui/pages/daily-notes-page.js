@@ -459,23 +459,27 @@ export class DailyNotesPage extends PlatformElement {
                 height: 32px;
                 border-radius: var(--radius-full);
                 border: none;
-                background: transparent;
-                color: var(--text-tertiary);
+                background: var(--crm-summary-title-gradient);
+                color: var(--text-inverse);
                 display: inline-flex;
                 align-items: center;
                 justify-content: center;
                 cursor: pointer;
                 flex-shrink: 0;
                 margin-top: 2px;
+                box-shadow: var(--glass-shadow-subtle);
+                transition: opacity var(--duration-fast), transform var(--duration-fast);
             }
 
             .summary-refresh-btn:hover {
-                color: var(--accent-tertiary);
+                opacity: 0.85;
+                transform: scale(1.06);
             }
 
             .summary-refresh-btn:disabled {
                 opacity: 0.45;
                 cursor: not-allowed;
+                transform: none;
             }
 
             .summary-refresh-icon.spinning {
@@ -1537,9 +1541,8 @@ export class DailyNotesPage extends PlatformElement {
                 <button class="summary-refresh-btn" type="button" title=${this.i18n.t('daily_notes_page.summary_rebuild_tooltip')} @click=${this._onRefreshSummary} ?disabled=${this._loadingSummary}>
                     <platform-icon
                         class=${this._loadingSummary ? 'summary-refresh-icon spinning' : 'summary-refresh-icon'}
-                        name="ai"
-                        size="20"
-                        colored
+                        name="refresh"
+                        size="18"
                     ></platform-icon>
                 </button>
             </div>

@@ -473,12 +473,6 @@ class BaseChannel(ABC):
             identity_vars = flow_variables_from_request_context(self.context)
             if identity_vars:
                 runtime_flow.variables = {**runtime_flow.variables, **identity_vars}
-            logger.info(
-                "[process_task] language debug: context.language=%s, identity_vars.interface_language_code=%s, final=%s",
-                self.context.language if self.context else "no-ctx",
-                identity_vars.get("interface_language_code", "N/A") if identity_vars else "no-vars",
-                runtime_flow.variables.get("interface_language_code", "N/A"),
-            )
 
             user_id = self.context.user.user_id if self.context.user else params.user_id
             user_groups = self.context.metadata.get("grps", []) or []

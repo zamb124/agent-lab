@@ -239,21 +239,18 @@ export class ChatView extends PlatformElement {
             }
 
             .header-call-banner-ws.ws-badge.open {
-                background: rgba(255, 255, 255, 0.18);
-                border-color: rgba(255, 255, 255, 0.45);
-                color: #fff;
+                background: #4ade80;
+                box-shadow: 0 0 6px rgba(74, 222, 128, 0.6);
             }
 
             .header-call-banner-ws.ws-badge.connecting {
-                background: rgba(253, 224, 71, 0.22);
-                border-color: rgba(253, 224, 71, 0.5);
-                color: #fffbeb;
+                background: #fbbf24;
+                box-shadow: 0 0 6px rgba(251, 191, 36, 0.6);
             }
 
             .header-call-banner-ws.ws-badge.closed {
-                background: rgba(248, 113, 113, 0.28);
-                border-color: rgba(252, 165, 165, 0.5);
-                color: #fff;
+                background: #f87171;
+                box-shadow: 0 0 6px rgba(248, 113, 113, 0.6);
             }
 
             .header-call-banner-icon-btn {
@@ -645,28 +642,35 @@ export class ChatView extends PlatformElement {
             }
 
             .ws-badge {
-                font-size: 10px;
-                padding: 2px 8px;
+                width: 8px;
+                height: 8px;
                 border-radius: var(--radius-full);
-                border: 1px solid;
+                border: none;
+                font-size: 0;
+                line-height: 0;
+                overflow: hidden;
+                flex-shrink: 0;
             }
 
             .ws-badge.open {
-                background: rgba(153, 166, 249, 0.1);
-                border-color: rgba(153, 166, 249, 0.4);
-                color: var(--success);
+                background: var(--success);
+                box-shadow: 0 0 6px rgba(34, 197, 94, 0.5);
             }
 
             .ws-badge.connecting {
-                background: rgba(245, 158, 11, 0.1);
-                border-color: rgba(245, 158, 11, 0.4);
-                color: rgb(245, 158, 11);
+                background: rgb(245, 158, 11);
+                box-shadow: 0 0 6px rgba(245, 158, 11, 0.5);
+                animation: ws-pulse 1.2s ease-in-out infinite;
             }
 
             .ws-badge.closed {
-                background: rgba(239, 68, 68, 0.1);
-                border-color: rgba(239, 68, 68, 0.4);
-                color: rgb(239, 68, 68);
+                background: rgb(239, 68, 68);
+                box-shadow: 0 0 6px rgba(239, 68, 68, 0.5);
+            }
+
+            @keyframes ws-pulse {
+                0%, 100% { opacity: 1; }
+                50% { opacity: 0.4; }
             }
 
             .pin-strip {

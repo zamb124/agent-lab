@@ -882,9 +882,9 @@ export class MessageBubble extends PlatformElement {
                 padding: 4px 12px;
                 box-sizing: border-box;
                 border-radius: var(--radius-md);
-                border: 1px solid rgba(22, 163, 74, 0.45);
-                background: rgba(22, 163, 74, 0.1);
-                color: #15803d;
+                border: 1px solid var(--accent);
+                background: var(--accent-subtle);
+                color: var(--accent);
                 font-size: var(--text-xs);
                 font-weight: var(--font-semibold);
                 cursor: pointer;
@@ -893,21 +893,9 @@ export class MessageBubble extends PlatformElement {
             }
 
             .call-boundary-join-btn:hover {
-                background: rgba(22, 163, 74, 0.16);
-                border-color: rgba(21, 128, 61, 0.55);
-                color: #166534;
-            }
-
-            .bubble.other .call-boundary-join-btn {
-                border-color: rgba(3, 105, 161, 0.4);
-                background: rgba(56, 189, 248, 0.12);
-                color: rgb(2, 92, 145);
-            }
-
-            .bubble.other .call-boundary-join-btn:hover {
-                border-color: rgba(2, 92, 145, 0.55);
-                background: rgba(56, 189, 248, 0.2);
-                color: rgb(1, 75, 115);
+                background: rgba(153, 166, 249, 0.25);
+                border-color: var(--accent-hover);
+                color: var(--accent-hover);
             }
 
             .call-boundary-icon {
@@ -921,14 +909,10 @@ export class MessageBubble extends PlatformElement {
                 box-sizing: border-box;
             }
 
-            .bubble.own .call-boundary--ended .call-boundary-icon {
-                background: rgba(255, 255, 255, 0.36);
-                color: rgb(4, 85, 62);
-            }
-
+            .bubble.own .call-boundary--ended .call-boundary-icon,
             .bubble.other .call-boundary--ended .call-boundary-icon {
-                background: rgba(255, 255, 255, 0.42);
-                color: rgb(2, 92, 145);
+                background: var(--accent-subtle);
+                color: var(--accent);
             }
 
             .call-boundary-transcribe {
@@ -947,12 +931,9 @@ export class MessageBubble extends PlatformElement {
                 transition: background var(--duration-fast), border-color var(--duration-fast);
             }
 
-            .bubble.own .call-boundary-transcribe {
-                color: rgb(6, 95, 70);
-            }
-
+            .bubble.own .call-boundary-transcribe,
             .bubble.other .call-boundary-transcribe {
-                color: rgb(3, 105, 161);
+                color: var(--accent);
             }
 
             .call-boundary-transcribe:hover {
@@ -981,12 +962,9 @@ export class MessageBubble extends PlatformElement {
                 transition: background var(--duration-fast), border-color var(--duration-fast);
             }
 
-            .bubble.own .call-boundary-crm-export {
-                color: rgb(6, 95, 70);
-            }
-
+            .bubble.own .call-boundary-crm-export,
             .bubble.other .call-boundary-crm-export {
-                color: rgb(3, 105, 161);
+                color: var(--accent);
             }
 
             .call-boundary-crm-export:hover {
@@ -1466,12 +1444,9 @@ export class MessageBubble extends PlatformElement {
                 white-space: nowrap;
             }
 
-            .reply-quote--parent-own .reply-quote__author {
-                color: rgb(4, 120, 87);
-            }
-
+            .reply-quote--parent-own .reply-quote__author,
             .reply-quote--parent-other .reply-quote__author {
-                color: rgb(3, 105, 161);
+                color: var(--accent);
             }
 
             .reply-quote--unknown .reply-quote__author {
