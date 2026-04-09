@@ -215,6 +215,17 @@ export class EntitiesPage extends PlatformElement {
                 align-content: start;
             }
 
+            .loading-more {
+                text-align: center;
+                padding: var(--space-3);
+                color: var(--text-secondary);
+                font-size: var(--text-sm);
+            }
+
+            .scroll-sentinel {
+                height: 1px;
+            }
+
             .detail-panel {
                 display: flex;
                 flex-direction: column;
@@ -660,6 +671,8 @@ export class EntitiesPage extends PlatformElement {
         this._entityTypes = [];
         this._currentEntityId = null;
         this._loading = false;
+        this._loadingMore = false;
+        this._hasMore = false;
         this._query = '';
         this._selectedType = null;
         this._selectedStatus = null;
@@ -671,12 +684,15 @@ export class EntitiesPage extends PlatformElement {
         this._mergeDragSourceId = '';
         this._mergeDropHoverId = '';
         this._goToImportWizard = this._goToImportWizard.bind(this);
+        this._scrollObserver = null;
 
         this._unsubscribe = CRMStore.subscribe((state) => {
             this._entities = state.entities.list;
             this._entityTypes = state.entities.entityTypes;
             this._currentEntityId = state.entities.currentEntityId;
             this._loading = state.entities.entitiesLoading;
+            this._loadingMore = state.entities.loadingMore;
+            this._hasMore = state.entities.hasMore;
             this._selectedType = state.entities.filters.entity_type;
             this._selectedStatus = state.entities.filters.status;
             this._isMobile = state.ui.isMobile;
@@ -699,9 +715,45 @@ export class EntitiesPage extends PlatformElement {
     disconnectedCallback() {
         super.disconnectedCallback();
         this._unsubscribe?.();
+        this._disconnectScrollObserver();
         if (this._debounceTimer) {
             clearTimeout(this._debounceTimer);
         }
+    }
+
+    updated(changedProperties) {
+        super.updated(changedProperties);
+        this._setupScrollObserver();
+    }
+
+    _setupScrollObserver() {
+        this._disconnectScrollObserver();
+        const sentinel = this.renderRoot?.querySelector('.scroll-sentinel');
+        if (!sentinel) return;
+
+        const scrollContainer = this.renderRoot?.querySelector('.cards-scroll');
+        this._scrollObserver = new IntersectionObserver(
+            (entries) => {
+                const entry = entries[0];
+                if (entry.isIntersecting && this._hasMore && !this._loadingMore && !this._loading) {
+                    this._onLoadMore();
+                }
+            },
+            { root: scrollContainer, rootMargin: '200px' },
+        );
+        this._scrollObserver.observe(sentinel);
+    }
+
+    _disconnectScrollObserver() {
+        if (this._scrollObserver) {
+            this._scrollObserver.disconnect();
+            this._scrollObserver = null;
+        }
+    }
+
+    async _onLoadMore() {
+        const crmApi = this.services.get('crmApi');
+        await CRMStore.loadMoreEntities(crmApi);
     }
 
     _resolveNamespaceName(ns) {
@@ -1114,6 +1166,10 @@ export class EntitiesPage extends PlatformElement {
                             <div class="cards-grid">
                                 ${this._entities.map((entity) => this._renderEntityCard(entity))}
                             </div>
+                            ${this._loadingMore ? html`
+                                <div class="loading-more">${this.i18n.t('loading', {}, 'common')}</div>
+                            ` : ''}
+                            <div class="scroll-sentinel"></div>
                         `}
                     </div>
                 </section>

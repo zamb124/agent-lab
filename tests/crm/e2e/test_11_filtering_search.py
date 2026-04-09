@@ -28,7 +28,7 @@ class TestFilteringSearch:
         resp = await crm_client.get(
             f"/crm/api/v1/entities/?entity_type=note&user_id={test_user_id}&date_from={today.isoformat()}&date_to={today.isoformat()}"
         , headers=auth_headers_system)
-        entities = resp.json()
+        entities = resp.json()["items"]
         assert len(entities) >= 1
         for e in entities:
             assert e["user_id"] == test_user_id
@@ -43,7 +43,7 @@ class TestFilteringSearch:
         }, headers=auth_headers_system)
         
         resp = await crm_client.get(f"/crm/api/v1/entities/?tags=важно", headers=auth_headers_system)
-        entities = resp.json()
+        entities = resp.json()["items"]
         tagged = [e for e in entities if unique_id in e.get("tags", [])]
         assert len(tagged) >= 1
     
@@ -61,9 +61,10 @@ class TestFilteringSearch:
         search_resp = await crm_client.get(f"/crm/api/v1/entities/search?query={unique_id}", headers=auth_headers_system)
         assert search_resp.status_code == 200
         
-        results = search_resp.json()
-        # Проверяем что хоть что-то вернулось
-        assert isinstance(results, list)
+        payload = search_resp.json()
+        assert isinstance(payload, dict)
+        assert "items" in payload
+        assert isinstance(payload["items"], list)
 
     @pytest.mark.asyncio
     async def test_semantic_search_with_list_filters(self, crm_client, unique_id, auth_headers_system):
@@ -89,7 +90,9 @@ class TestFilteringSearch:
             headers=auth_headers_system,
         )
         assert r.status_code == 200
-        assert isinstance(r.json(), list)
+        payload = r.json()
+        assert isinstance(payload, dict)
+        assert isinstance(payload["items"], list)
     
     @pytest.mark.asyncio
     async def test_combined_filters(self, crm_client, unique_id, auth_headers_system):
@@ -104,7 +107,7 @@ class TestFilteringSearch:
         resp = await crm_client.get(
             f"/crm/api/v1/entities/?entity_type=note&entity_subtype=meeting&tags=фильтр"
         , headers=auth_headers_system)
-        entities = resp.json()
+        entities = resp.json()["items"]
         found = [e for e in entities if unique_id in e.get("tags", [])]
         assert len(found) >= 1
     
@@ -123,6 +126,6 @@ class TestFilteringSearch:
             headers=auth_headers_system,
         )
         assert list_resp.status_code == 200
-        found = [r for r in list_resp.json() if r["name"] == unique_name]
+        found = [r for r in list_resp.json()["items"] if r["name"] == unique_name]
         assert len(found) >= 1
 

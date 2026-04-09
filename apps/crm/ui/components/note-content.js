@@ -1427,8 +1427,8 @@ export class NoteContent extends PlatformElement {
             throw new Error('crmApi is required');
         }
         const namespace = this._readNamespaceForSearch();
-        const raw = await crmApi.searchEntities(trimmed, { namespace, limit: 20 });
-        const list = Array.isArray(raw) ? raw : [];
+        const response = await crmApi.searchEntities(trimmed, { namespace, limit: 20 });
+        const list = Array.isArray(response.items) ? response.items : [];
         let filtered;
         if (isVoice) {
             filtered = list.filter((e) => e && e.entity_type === 'contact');

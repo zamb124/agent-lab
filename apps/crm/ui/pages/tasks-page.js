@@ -643,12 +643,12 @@ export class TasksPage extends PlatformElement {
         }
         const crmApi = this.crmApi;
         const namespaceName = resolveObjectName(CRMStore.state.namespaces.current, null);
-        const tasks = await crmApi.getEntities({
+        const response = await crmApi.getEntities({
             entity_type: 'task',
             namespace: namespaceName,
             limit: 200,
         });
-        this._tasks = Array.isArray(tasks) ? tasks : [];
+        this._tasks = Array.isArray(response.items) ? response.items : [];
         if (!silent) {
             this._loading = false;
         }

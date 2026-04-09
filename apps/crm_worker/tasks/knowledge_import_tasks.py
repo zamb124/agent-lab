@@ -2,8 +2,8 @@
 TaskIQ: импорт базы знаний.
 
 Пайплайн: (1) нарезка текста → создание сущностей note (как при ручной заметке);
-(2) при mode=graph — для каждой такой note тот же путь, что у analyze заметки:
-analyze_text_with_ai + apply_analysis_draft. Режим notes_only — только фаза 1.
+(2) при mode=graph — для каждой note вызывается NoteProcessingService.process()
+(analyze + apply через единый конвейер). Режим notes_only — только фаза 1.
 """
 
 from __future__ import annotations

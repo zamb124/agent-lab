@@ -234,14 +234,14 @@ async def crm_search_entities(
 
     client = ServiceClient()
     try:
-        raw_list = await client.get("crm", "/crm/api/v1/entities/search", params=params)
+        raw_response = await client.get("crm", "/crm/api/v1/entities/search", params=params)
     except ServiceClientError as exc:
         return json.dumps({"success": False, "error": str(exc)}, ensure_ascii=False)
 
-    if not isinstance(raw_list, list):
+    if not isinstance(raw_response, dict) or "items" not in raw_response:
         return json.dumps({"success": False, "error": "CRM search: invalid response"}, ensure_ascii=False)
 
-    hits = [_compact_entity_hit(x) for x in raw_list if isinstance(x, dict)]
+    hits = [_compact_entity_hit(x) for x in raw_response["items"] if isinstance(x, dict)]
     summary = f"Найдено сущностей: {len(hits)}."
     blocks: List[Dict[str, Any]] = [{"type": "text", "text": summary}]
     if hits:

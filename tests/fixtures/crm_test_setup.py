@@ -153,7 +153,8 @@ async def wait_for_crm_semantic_search_hit(
                 f"search: {response.status_code} {response.text} (attempt {attempt})"
             )
         payload = response.json()
-        if isinstance(payload, list) and len(payload) > 0:
+        items = payload.get("items", []) if isinstance(payload, dict) else []
+        if len(items) > 0:
             return
         await asyncio.sleep(delay_sec)
     raise AssertionError(

@@ -44,14 +44,18 @@ def upgrade() -> None:
         $$ LANGUAGE plpgsql;
     """)
 
-    op.execute("""
-        DROP TRIGGER IF EXISTS trg_crm_entities_search_vector ON crm_entities;
+    op.execute(
+        "DROP TRIGGER IF EXISTS trg_crm_entities_search_vector ON crm_entities;"
+    )
+    op.execute(
+        """
         CREATE TRIGGER trg_crm_entities_search_vector
         BEFORE INSERT OR UPDATE OF name, description, attributes
         ON crm_entities
         FOR EACH ROW
         EXECUTE FUNCTION crm_entities_search_vector_update();
-    """)
+        """
+    )
 
     op.execute("""
         UPDATE crm_entities SET search_vector =

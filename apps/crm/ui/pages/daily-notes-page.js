@@ -1122,13 +1122,13 @@ export class DailyNotesPage extends PlatformElement {
         const crmApi = this.services.get('crmApi');
         const raw = this._getCurrentNamespaceName();
         const namespace = typeof raw === 'string' && raw.trim().length > 0 ? raw.trim() : 'default';
-        const list = await crmApi.getEntities({ namespace, limit: 1 });
+        const response = await crmApi.getEntities({ namespace, limit: 1 });
         const currentRaw = this._getCurrentNamespaceName();
         const currentNs = typeof currentRaw === 'string' && currentRaw.trim().length > 0 ? currentRaw.trim() : 'default';
         if (currentNs !== namespace) {
             return;
         }
-        this._namespaceHasAnyEntity = Array.isArray(list) && list.length > 0;
+        this._namespaceHasAnyEntity = Array.isArray(response.items) && response.items.length > 0;
         this._namespaceProbeValid = true;
         this.requestUpdate();
     }

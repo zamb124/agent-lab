@@ -135,7 +135,7 @@ describe('crm graph page', () => {
       getEntityAttachments: async () => ([]),
       getEntity: async () => ({ entity_id: 'entity-1' }),
       findEntitiesByText: async () => ([]),
-      analyzeText: async () => ({}),
+      analyzeNote: async () => ({}),
       getEntityTypes: async () => ([
         { type_id: 'contact', name: 'Contact', color: '#7ac7ff', namespace_ids: ['default'] },
         { type_id: 'note', name: 'Note', color: '#ffb457', namespace_ids: ['default'] },

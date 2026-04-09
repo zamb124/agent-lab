@@ -51,6 +51,8 @@ alwaysApply: false
 
 Нужен сервер с установленным pgvector: образ **`pgvector/pgvector:pg17`** (`docker-compose-dev.yaml`, `docker-compose-prod.yaml`, `docker-compose-test.yaml`) или сборка Postgres с пакетом pgvector на хосте. Обычный `postgres:17` без pgvector миграции shared/crm/rag не пройдут. В `init.sql` расширение `vector` подключается к `platform_shared`, `platform_crm`, `platform_rag` (см. `services.json` → `postgres.vector_extensions`).
 
+**asyncpg + `op.execute`:** миграции идут через SQLAlchemy async + asyncpg. В одном вызове `op.execute(...)` допустима **ровно одна** SQL-команда (один prepared statement). Несколько выражений через `;` в одной строке даёт `cannot insert multiple commands into a prepared statement` — делить на отдельные `op.execute`.
+
 ## Структура папки migrations/
 
 ```

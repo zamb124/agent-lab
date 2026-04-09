@@ -22,7 +22,6 @@ from apps.crm.models.api import (
     NoteProcessingConfig,
     NoteProcessingResult,
     SearchMentionsRequest,
-    RelationshipResponse,
 )
 from apps.crm.db.models import CRMEntity
 from apps.crm.config import get_crm_settings
@@ -164,7 +163,7 @@ async def merge_entities(
     )
 
 
-@router.get("/search", response_model=List[EntityResponse])
+@router.get("/search", response_model=PaginatedEntityResponse)
 async def search_entities(
     container: ContainerDep,
     query: str = Query(...),
@@ -201,7 +200,11 @@ async def search_entities(
         filters=filters if filters else None,
         limit=limit,
     )
-    return [EntityResponse.model_validate(e) for e in entities]
+    return PaginatedEntityResponse(
+        items=[EntityResponse.model_validate(e) for e in entities],
+        next_cursor=None,
+        has_more=len(entities) >= limit,
+    )
 
 
 @router.get("/timeline/bounds", response_model=EntityTimelineBoundsResponse)

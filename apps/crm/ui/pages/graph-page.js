@@ -1625,16 +1625,16 @@ export class GraphPage extends PlatformElement {
             this._applyTimelineBounds(timelineBounds);
             this._applyDefaultTimelineTodayIfNeeded();
             const timelineParams = this._getTimelineQueryParams();
-            const entities = await crmApi.getEntities({ namespace: namespaceName, limit: 120, ...timelineParams });
-            const noteEntities = await crmApi.getEntities({
+            const entitiesResponse = await crmApi.getEntities({ namespace: namespaceName, limit: 120, ...timelineParams });
+            const noteResponse = await crmApi.getEntities({
                 namespace: namespaceName,
                 entity_type: 'note',
                 limit: 20,
                 ...timelineParams,
             });
-            this._entities = Array.isArray(entities) ? entities : [];
-            this._overviewSeedEntityIds = Array.isArray(noteEntities)
-                ? noteEntities.map((item) => item.entity_id)
+            this._entities = Array.isArray(entitiesResponse.items) ? entitiesResponse.items : [];
+            this._overviewSeedEntityIds = Array.isArray(noteResponse.items)
+                ? noteResponse.items.map((item) => item.entity_id)
                 : [];
             if (!this._selectedRootId && this._entities.length > 0) {
                 this._selectedRootId = CRMStore.state.entities.currentEntityId || this._entities[0].entity_id;

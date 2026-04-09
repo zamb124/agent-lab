@@ -52,7 +52,7 @@ class TestTasksManagement:
         list_resp = await crm_client.get(
             f"/crm/api/v1/entities/?entity_type=task&user_id={test_user_id}&sort=priority&order=desc"
         , headers=auth_headers_system)
-        tasks = list_resp.json()
+        tasks = list_resp.json()["items"]
         
         assert len(tasks) >= 4
         for t in tasks:
@@ -101,7 +101,7 @@ class TestTasksManagement:
         today_tasks_resp = await crm_client.get(
             f"/crm/api/v1/entities/?entity_type=task&user_id={test_user_id}&due_date={today.isoformat()}"
         , headers=auth_headers_system)
-        today_tasks = today_tasks_resp.json()
+        today_tasks = today_tasks_resp.json()["items"]
         assert len(today_tasks) >= 1
         for t in today_tasks:
             assert t["user_id"] == test_user_id
@@ -128,7 +128,7 @@ class TestTasksManagement:
         ivan_tasks_resp = await crm_client.get(
             f"/crm/api/v1/entities/?entity_type=task&user_id={test_user_id}&assignee=ivan"
         , headers=auth_headers_system)
-        ivan_tasks = ivan_tasks_resp.json()
+        ivan_tasks = ivan_tasks_resp.json()["items"]
         assert len(ivan_tasks) >= 1
         for t in ivan_tasks:
             assert t["user_id"] == test_user_id
@@ -151,7 +151,7 @@ class TestTasksManagement:
         overdue_resp = await crm_client.get(
             f"/crm/api/v1/entities/?entity_type=task&user_id={test_user_id}&overdue=true"
         , headers=auth_headers_system)
-        overdue_tasks = overdue_resp.json()
+        overdue_tasks = overdue_resp.json()["items"]
         assert len(overdue_tasks) >= 1
         for t in overdue_tasks:
             assert t["user_id"] == test_user_id

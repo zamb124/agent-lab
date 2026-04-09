@@ -107,11 +107,11 @@ class TestEntityLifecycle:
         list_resp = await crm_client.get(f"/crm/api/v1/entities/?user_id={test_user_id}", headers=auth_headers_system)
         assert list_resp.status_code == 200
         
-        entities = list_resp.json()
+        payload = list_resp.json()
+        entities = payload["items"]
         assert isinstance(entities, list)
         assert len(entities) >= 3
         
-        # Проверяем что все entities принадлежат нашему user_id
         for entity in entities:
             assert entity["user_id"] == test_user_id
     
@@ -137,7 +137,7 @@ class TestEntityLifecycle:
         }, headers=auth_headers_system)
         
         list_resp = await crm_client.get(f"/crm/api/v1/entities/?entity_type=note&user_id={test_user_id}", headers=auth_headers_system)
-        entities = list_resp.json()
+        entities = list_resp.json()["items"]
         
         assert len(entities) >= 2
         
@@ -172,7 +172,7 @@ class TestEntityLifecycle:
         }, headers=auth_headers_system)
 
         list_resp = await crm_client.get(f"/crm/api/v1/entities/?entity_type=note&entity_subtype=meeting_{unique_id}&user_id={test_user_id}", headers=auth_headers_system)
-        entities = list_resp.json()
+        entities = list_resp.json()["items"]
         
         assert len(entities) >= 2
         

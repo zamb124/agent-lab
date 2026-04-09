@@ -231,6 +231,8 @@ const baseStore = new BaseStore('crm', {
         noteText: '',
         noteRelatedEntities: [],
         list: [],
+        nextCursor: null,
+        hasMore: false,
         entityTypes: [],
         relationshipTypes: [],
         currentEntityId: null,
@@ -250,6 +252,7 @@ const baseStore = new BaseStore('crm', {
             user_id: null,
         },
         entitiesLoading: false,
+        loadingMore: false,
         cardLoading: false,
     },
     grants: {
@@ -469,10 +472,11 @@ export const CRMStore = {
             params.date_to = options.dateTo.trim();
         }
         
-        const notes = await crmApi.getEntities(params);
-        
+        const response = await crmApi.getEntities(params);
+        const notes = Array.isArray(response.items) ? response.items : [];
+
         baseStore.setState((s) => ({
-            entities: { ...s.entities, notes: Array.isArray(notes) ? notes : [] },
+            entities: { ...s.entities, notes },
             loading: false
         }));
         return notes;
@@ -669,71 +673,59 @@ export const CRMStore = {
                 : [];
             const noteSummaryGeneratedAt = new Date().toISOString();
 
-            if (noteId) {
-                const state = baseStore.state;
-                const note = state.entities.notes.find((item) => item.entity_id === noteId);
-                if (!note) {
-                    throw new Error(`Note not found for summary update: ${noteId}`);
-                }
+            const state = baseStore.state;
+            const note = state.entities.notes.find((item) => item.entity_id === noteId);
+            if (!note) {
+                throw new Error(`Note not found for summary update: ${noteId}`);
+            }
 
-                let noteRow = await crmApi.getEntity(noteId);
-                const serverDraft = noteRow.attributes?.ai_analysis_draft;
-                if (!serverDraft || typeof serverDraft.draft_version !== 'number') {
-                    throw new Error('Server did not persist analyze draft: expected attributes.ai_analysis_draft with draft_version');
-                }
+            let noteRow = await crmApi.getEntity(noteId);
+            const serverDraft = noteRow.attributes?.ai_analysis_draft;
+            if (!serverDraft || typeof serverDraft.draft_version !== 'number') {
+                throw new Error('Server did not persist analyze draft: expected attributes.ai_analysis_draft with draft_version');
+            }
 
-                if (noteSummaryText.length > 0) {
-                    const attrs = { ...(noteRow.attributes && typeof noteRow.attributes === 'object' ? noteRow.attributes : {}) };
-                    attrs.ai_summary = noteSummaryText;
-                    attrs.ai_summary_entities = noteSummaryEntities;
-                    attrs.ai_summary_generated_at = noteSummaryGeneratedAt;
-                    noteRow = await crmApi.updateEntity(noteId, { attributes: attrs });
-                }
+            if (noteSummaryText.length > 0) {
+                const attrs = { ...(noteRow.attributes && typeof noteRow.attributes === 'object' ? noteRow.attributes : {}) };
+                attrs.ai_summary = noteSummaryText;
+                attrs.ai_summary_entities = noteSummaryEntities;
+                attrs.ai_summary_generated_at = noteSummaryGeneratedAt;
+                noteRow = await crmApi.updateEntity(noteId, { attributes: attrs });
+            }
 
-                const draftSnapshot = noteRow.attributes?.ai_analysis_draft;
-                if (!draftSnapshot || typeof draftSnapshot.draft_version !== 'number') {
-                    throw new Error('ai_analysis_draft missing after note update');
-                }
-
-                baseStore.setState((s) => ({
-                    entities: {
-                        ...s.entities,
-                        notes: s.entities.notes.map((item) => (
-                            item.entity_id === noteId ? noteRow : item
-                        )),
-                    },
-                    ai: {
-                        ...s.ai,
-                        suggestions,
-                        analyzeContextNote: analysis.note || null,
-                        resolvedDraftEntityIds: {},
-                        noteSummaries: {
-                            ...s.ai.noteSummaries,
-                            ...(noteSummaryText.length > 0
-                                ? {
-                                    [noteId]: {
-                                        summary: noteSummaryText,
-                                        entities: noteSummaryEntities,
-                                        generated_at: noteSummaryGeneratedAt,
-                                    },
-                                }
-                                : {}),
-                        },
-                        draftByNoteId: {
-                            ...s.ai.draftByNoteId,
-                            [noteId]: draftSnapshot,
-                        },
-                    },
-                }));
-                return analysis;
+            const draftSnapshot = noteRow.attributes?.ai_analysis_draft;
+            if (!draftSnapshot || typeof draftSnapshot.draft_version !== 'number') {
+                throw new Error('ai_analysis_draft missing after note update');
             }
 
             baseStore.setState((s) => ({
+                entities: {
+                    ...s.entities,
+                    notes: s.entities.notes.map((item) => (
+                        item.entity_id === noteId ? noteRow : item
+                    )),
+                },
                 ai: {
                     ...s.ai,
                     suggestions,
                     analyzeContextNote: analysis.note || null,
                     resolvedDraftEntityIds: {},
+                    noteSummaries: {
+                        ...s.ai.noteSummaries,
+                        ...(noteSummaryText.length > 0
+                            ? {
+                                [noteId]: {
+                                    summary: noteSummaryText,
+                                    entities: noteSummaryEntities,
+                                    generated_at: noteSummaryGeneratedAt,
+                                },
+                            }
+                            : {}),
+                    },
+                    draftByNoteId: {
+                        ...s.ai.draftByNoteId,
+                        [noteId]: draftSnapshot,
+                    },
                 },
             }));
 
@@ -1911,6 +1903,33 @@ export const CRMStore = {
         }));
     },
 
+    _buildEntityQueryParams(params = {}) {
+        const filters = baseStore.state.entities.filters;
+        const currentNamespace = baseStore.state.namespaces.current;
+        const namespaceName = getNamespaceName(currentNamespace);
+
+        const queryParams = {
+            entity_type: params.entity_type || filters.entity_type,
+            entity_subtype: params.entity_subtype || filters.entity_subtype,
+            namespace: namespaceName,
+            status: filters.status,
+            priority: filters.priority,
+            date_from: filters.date_from,
+            date_to: filters.date_to,
+            tags: filters.tags.length > 0 ? filters.tags.join(',') : undefined,
+            user_id: filters.user_id,
+            limit: params.limit || 100,
+        };
+
+        Object.keys(queryParams).forEach(key => {
+            if (queryParams[key] === null || queryParams[key] === undefined) {
+                delete queryParams[key];
+            }
+        });
+
+        return { queryParams, namespaceName };
+    },
+
     async loadEntities(crmApi, params = {}) {
         if (!crmApi) {
             throw new Error('crmApi service is required');
@@ -1921,63 +1940,67 @@ export const CRMStore = {
         }));
 
         const filters = baseStore.state.entities.filters;
-        const currentNamespace = baseStore.state.namespaces.current;
-        const namespaceName = getNamespaceName(currentNamespace);
         const searchTrimmed = typeof filters.search === 'string' ? filters.search.trim() : '';
+        const { queryParams, namespaceName } = this._buildEntityQueryParams(params);
 
-        let entities;
+        let response;
         if (searchTrimmed) {
-            const searchParams = {
-                namespace: namespaceName,
-                entity_type: params.entity_type || filters.entity_type,
-                entity_subtype: params.entity_subtype || filters.entity_subtype,
-                status: filters.status,
-                priority: filters.priority,
-                date_from: filters.date_from,
-                date_to: filters.date_to,
-                tags: filters.tags.length > 0 ? filters.tags.join(',') : undefined,
-                user_id: filters.user_id,
-                limit: params.limit || 100,
-            };
-            Object.keys(searchParams).forEach((key) => {
-                if (searchParams[key] === null || searchParams[key] === undefined) {
-                    delete searchParams[key];
-                }
-            });
-            entities = await crmApi.searchEntities(searchTrimmed, searchParams);
+            const searchParams = { ...queryParams, namespace: namespaceName };
+            response = await crmApi.searchEntities(searchTrimmed, searchParams);
         } else {
-            const queryParams = {
-                entity_type: params.entity_type || filters.entity_type,
-                entity_subtype: params.entity_subtype || filters.entity_subtype,
-                namespace: namespaceName,
-                status: filters.status,
-                priority: filters.priority,
-                date_from: filters.date_from,
-                date_to: filters.date_to,
-                tags: filters.tags.length > 0 ? filters.tags.join(',') : undefined,
-                user_id: filters.user_id,
-                limit: params.limit || 100,
-            };
-
-            Object.keys(queryParams).forEach(key => {
-                if (queryParams[key] === null || queryParams[key] === undefined) {
-                    delete queryParams[key];
-                }
-            });
-
-            entities = await crmApi.getEntities(queryParams);
+            response = await crmApi.getEntities(queryParams);
         }
-        const list = Array.isArray(entities) ? entities : [];
+
+        const list = Array.isArray(response.items) ? response.items : [];
 
         baseStore.setState((s) => ({
             entities: {
                 ...s.entities,
                 list,
-                entitiesLoading: false
+                nextCursor: response.next_cursor || null,
+                hasMore: response.has_more === true,
+                entitiesLoading: false,
             }
         }));
 
         return list;
+    },
+
+    async loadMoreEntities(crmApi) {
+        if (!crmApi) {
+            throw new Error('crmApi service is required');
+        }
+        const { nextCursor, hasMore, loadingMore } = baseStore.state.entities;
+        if (!hasMore || !nextCursor || loadingMore) {
+            return;
+        }
+
+        baseStore.setState((s) => ({
+            entities: { ...s.entities, loadingMore: true }
+        }));
+
+        const filters = baseStore.state.entities.filters;
+        const searchTrimmed = typeof filters.search === 'string' ? filters.search.trim() : '';
+        const { queryParams } = this._buildEntityQueryParams();
+
+        let response;
+        if (searchTrimmed) {
+            response = await crmApi.searchEntities(searchTrimmed, queryParams);
+        } else {
+            response = await crmApi.getEntities({ ...queryParams, cursor: nextCursor });
+        }
+
+        const page = Array.isArray(response.items) ? response.items : [];
+
+        baseStore.setState((s) => ({
+            entities: {
+                ...s.entities,
+                list: [...s.entities.list, ...page],
+                nextCursor: response.next_cursor || null,
+                hasMore: response.has_more === true,
+                loadingMore: false,
+            }
+        }));
     },
 
     setCurrentEntity(entityId, options = {}) {
