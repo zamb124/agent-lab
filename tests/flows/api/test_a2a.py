@@ -1359,13 +1359,29 @@ class TestA2ASkills:
         resp = await client.delete(f"/flows/api/v1/nonexistent_flow/skills/test_skill_{unique_id}")
         assert resp.status_code == 404
 
+    @pytest.fixture
+    async def mutable_flow_id(self, container, unique_id):
+        """Уникальный flow для тестов, мутирующих skills (изоляция от xdist)."""
+        from apps.flows.src.models import FlowConfig
+        fid = f"skill_test_{unique_id}"
+        fc = FlowConfig(
+            flow_id=fid,
+            name="Skill mutation test",
+            entry="main",
+            nodes={"main": {"type": "llm_node", "prompt": "Test"}},
+            edges=[{"from": "main", "to": None}],
+        )
+        await container.flow_repository.set(fc)
+        yield fid
+        await container.flow_repository.delete(fid)
+
     @pytest.mark.asyncio
-    async def test_create_skill_with_edges(self, client, flow_id, unique_id):
+    async def test_create_skill_with_edges(self, client, mutable_flow_id, unique_id):
         """POST /flows/{id}/skills создаёт skill с edges."""
         skill_id = f"test_skill_edges_{unique_id}"
         
         resp = await client.post(
-            f"/flows/api/v1/{flow_id}/skills",
+            f"/flows/api/v1/{mutable_flow_id}/skills",
             json={
                 "skill_id": skill_id,
                 "name": "Test Skill with Edges",
@@ -1387,12 +1403,10 @@ class TestA2ASkills:
         data = resp.json()
         assert data["status"] == "success"
         
-        # Проверяем что skill создан с edges
-        get_resp = await client.get(f"/flows/api/v1/{flow_id}/skills/{skill_id}")
+        get_resp = await client.get(f"/flows/api/v1/{mutable_flow_id}/skills/{skill_id}")
         assert get_resp.status_code == 200
         
-        # Cleanup
-        await client.delete(f"/flows/api/v1/{flow_id}/skills/{skill_id}")
+        await client.delete(f"/flows/api/v1/{mutable_flow_id}/skills/{skill_id}")
 
 
 class TestA2AConversation:

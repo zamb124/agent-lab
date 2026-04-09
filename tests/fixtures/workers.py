@@ -227,12 +227,14 @@ class SessionWorkerManager:
         worker_log = open(self.log_file, "w", buffering=1, encoding="utf-8", errors="replace")
         worker_err = open(self.err_file, "w", buffering=1, encoding="utf-8", errors="replace")
         
-        # Запускаем worker
+        worker_env = {**os.environ, **self.env}
+        worker_env.pop("PYTEST_XDIST_WORKER", None)
+        worker_env.pop("PYTEST_XDIST_WORKER_COUNT", None)
         worker_process = subprocess.Popen(
             self.command,
             stdout=worker_log,
             stderr=worker_err,
-            env={**os.environ, **self.env},
+            env=worker_env,
         )
         
         # Живой процесс без немедленного exit достаточен; дальше taskiq поднимется сам.

@@ -572,19 +572,31 @@ def configure_mock_llm_redis(redis_client, model_name: str = "mock-gpt-4") -> Op
 async def setup_mock_responses_redis(
     redis_client,
     response_queue: List[Any],
+    *,
+    key_override: Optional[str] = None,
 ) -> None:
     """
     Записывает mock ответы в Redis для межпроцессного обмена.
-    
+
     Тест вызывает эту функцию, Worker читает ответы из Redis.
     Это позволяет тестам контролировать ответы даже когда Worker
     в отдельном subprocess.
+
+    key_override: если задан, используется вместо автоматического ключа.
+    Для real_taskiq тестов передаётся базовый ключ, т.к. worker subprocess
+    не имеет PYTEST_XDIST_WORKER.
     """
-    await redis_client.set(_mock_redis_key(), json.dumps(response_queue))
-    logger.info(f"MockLLM: записано {len(response_queue)} ответов в Redis")
+    key = key_override or _mock_redis_key()
+    await redis_client.set(key, json.dumps(response_queue))
+    logger.info(f"MockLLM: записано {len(response_queue)} ответов в Redis (key={key})")
 
 
-async def clear_mock_responses_redis(redis_client) -> None:
+async def clear_mock_responses_redis(
+    redis_client,
+    *,
+    key_override: Optional[str] = None,
+) -> None:
     """Очищает mock ответы из Redis."""
-    await redis_client.delete(_mock_redis_key())
+    key = key_override or _mock_redis_key()
+    await redis_client.delete(key)
 

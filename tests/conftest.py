@@ -756,13 +756,17 @@ def mock_llm_with_queue():
 
 
 @pytest_asyncio.fixture
-async def mock_llm_redis(container):
+async def mock_llm_redis(container, request):
     """
     Фабрика для создания MockLLM через Redis.
     Для интеграционных тестов с реальным worker.
-    
+
     НЕ использовать с sync_tools!
-    
+
+    Для real_taskiq тестов используется базовый ключ (без суффикса xdist worker),
+    т.к. TaskIQ worker subprocess не имеет PYTEST_XDIST_WORKER в env.
+    Все real_taskiq тесты сгруппированы в одну xdist_group, поэтому race невозможен.
+
     Usage:
         async def test_integration(mock_llm_redis):
             await mock_llm_redis([
@@ -771,13 +775,16 @@ async def mock_llm_redis(container):
     """
     from core.clients.llm.mock import setup_mock_responses_redis, clear_mock_responses_redis
 
+    is_real_taskiq = request.node.get_closest_marker("real_taskiq") is not None
+    key_override = "mock_llm:responses" if is_real_taskiq else None
+
     async def _factory(responses: List[Any]) -> None:
-        await clear_mock_responses_redis(container.redis_client)
-        await setup_mock_responses_redis(container.redis_client, responses)
-    
+        await clear_mock_responses_redis(container.redis_client, key_override=key_override)
+        await setup_mock_responses_redis(container.redis_client, responses, key_override=key_override)
+
     yield _factory
-    
-    await clear_mock_responses_redis(container.redis_client)
+
+    await clear_mock_responses_redis(container.redis_client, key_override=key_override)
 
 
 
