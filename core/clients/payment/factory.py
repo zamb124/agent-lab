@@ -58,13 +58,16 @@ class PaymentProviderFactory:
             logger.warning("Не инициализировано ни одного платежного провайдера")
     
     @classmethod
-    def _create_config_object(cls, config_dict: dict):
-        """Создает объект конфигурации из словаря"""
+    def _create_config_object(cls, config_dict):
+        """Создает объект конфигурации из словаря или Pydantic-модели"""
+        if hasattr(config_dict, "model_dump"):
+            config_dict = config_dict.model_dump(exclude_none=False)
+
         provider_type = config_dict.get("provider_type")
-        
+
         if not provider_type:
             raise ValueError("provider_type не указан в конфигурации")
-        
+
         if provider_type == "yoomoney":
             return YooMoneyConfig(**config_dict)
         elif provider_type == "yukassa":

@@ -6,7 +6,7 @@ from __future__ import annotations
 
 from typing import Any, Dict, List, Optional
 
-from pydantic import AliasChoices, BaseModel, Field, PrivateAttr, model_validator
+from pydantic import AliasChoices, BaseModel, ConfigDict, Field, PrivateAttr, model_validator
 
 
 class DemoAuthConfig(BaseModel):
@@ -278,13 +278,26 @@ class ProxyConfig(BaseModel):
             self._current_index = 0
 
 
+class PaymentProviderConfigEntry(BaseModel):
+    """Конфигурация одного платежного провайдера (для env-override через Pydantic)"""
+    model_config = ConfigDict(extra="allow")
+
+    provider_type: str = "yoomoney"
+    enabled: bool = True
+    account_number: Optional[str] = None
+    notification_secret: Optional[str] = None
+    quickpay_url: str = "https://yoomoney.ru/quickpay/confirm.xml"
+    client_id: Optional[str] = None
+    client_secret: Optional[str] = None
+
+
 class PaymentProvidersConfig(BaseModel):
     """Конфигурация платежных провайдеров"""
 
     default_provider: Optional[str] = None
     sync_enabled: bool = Field(default=False, description="Включена ли периодическая сверка транзакций")
-    sync_cron: str = Field(default="*/5 * * * *", description="Cron-расписание для сверки транзакций")
-    providers: Dict[str, Any] = Field(
+    sync_cron: str = Field(default="*/30 * * * *", description="Cron-расписание для сверки транзакций")
+    providers: Dict[str, PaymentProviderConfigEntry] = Field(
         default_factory=dict, description="Платежные провайдеры (yoomoney_main, yukassa_main, etc.)"
     )
 
