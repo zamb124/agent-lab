@@ -33,5 +33,10 @@
   "last_updated": "Updated",
   "no_data": "No data",
   "not_found": "Not found",
-  "actions": "Actions"
+  "actions": "Actions",
+  "voice": {
+    "audio_https_only": "Voice recording requires HTTPS.",
+    "audio_no_recorder": "Audio recording API is not available in this browser.",
+    "audio_start_failed": "Failed to start recording. Check microphone access."
+  }
 }

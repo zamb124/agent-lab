@@ -139,6 +139,7 @@ class TestSchemaValidation:
         assert len(email_errors) == 1
 
 
+@pytest.mark.timeout(30)
 class TestBulkOperations:
     """Batch create / update / delete через /entities/bulk."""
 
@@ -479,6 +480,7 @@ class TestSearchModes:
         assert found[0]["status"] == "archived"
 
 
+@pytest.mark.timeout(30)
 class TestAggregateFacets:
     """Фасетная агрегация по типам, статусам, месяцам."""
 
@@ -554,6 +556,7 @@ class TestAggregateFacets:
         assert body["by_type"].get("contact", 0) >= 1
 
 
+@pytest.mark.timeout(30)
 class TestRelationshipIntegrity:
     """FK constraints и unique constraint на relationships."""
 

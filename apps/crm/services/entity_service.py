@@ -261,7 +261,7 @@ class EntityService:
         if entity_type_model is None:
             raise ValueError(f"Entity type not found: {entity_type}")
         allowed_namespaces = entity_type_model.namespace_ids or []
-        if namespace not in allowed_namespaces:
+        if "*" not in allowed_namespaces and namespace not in allowed_namespaces:
             raise ValueError(f"Entity type '{entity_type}' is not allowed in namespace '{namespace}'")
 
         if entity_subtype:
@@ -269,7 +269,7 @@ class EntityService:
             if subtype_model is None:
                 raise ValueError(f"Entity subtype not found: {entity_subtype}")
             subtype_namespaces = subtype_model.namespace_ids or []
-            if namespace not in subtype_namespaces:
+            if "*" not in subtype_namespaces and namespace not in subtype_namespaces:
                 raise ValueError(f"Entity subtype '{entity_subtype}' is not allowed in namespace '{namespace}'")
 
     async def _validate_entity_attributes(

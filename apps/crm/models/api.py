@@ -202,6 +202,7 @@ class EntityTypeResponse(BaseModel):
     prompt: Optional[str]
     required_fields: Dict[str, Any]
     optional_fields: Dict[str, Any]
+    public_fields: List[str]
     icon: Optional[str]
     color: Optional[str]
     is_system: bool

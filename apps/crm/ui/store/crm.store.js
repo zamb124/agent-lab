@@ -271,7 +271,6 @@ const baseStore = new BaseStore('crm', {
         sidebarOpen: false,
         isMobile: false,
         filterTags: [],
-        searchQuery: '',
         notesPageSearchQuery: '',
         tasksListSearchQuery: '',
         collapsedPanels: {},
@@ -774,18 +773,6 @@ export const CRMStore = {
         return draft;
     },
     
-    clearAISuggestions() {
-        baseStore.setState((s) => ({
-            ai: {
-                ...s.ai,
-                suggestions: [],
-                analyzeContextNote: null,
-                resolvedDraftEntityIds: {},
-                importReview: null,
-            },
-        }));
-    },
-
     clearKnowledgeImportReview() {
         baseStore.setState((s) => ({
             ai: {
@@ -1420,12 +1407,6 @@ export const CRMStore = {
         return types;
     },
     
-    setSearchQuery(query) {
-        baseStore.setState((s) => ({
-            ui: { ...s.ui, searchQuery: query }
-        }));
-    },
-
     setSearchMode(mode) {
         baseStore.setState((s) => ({
             entities: {
@@ -1852,6 +1833,7 @@ export const CRMStore = {
                     date_to: null,
                     tags: [],
                     search: '',
+                    search_mode: 'hybrid',
                     user_id: null,
                 }
             }
@@ -1900,7 +1882,7 @@ export const CRMStore = {
 
         let response;
         if (searchTrimmed) {
-            const searchMode = filters.search_mode || 'semantic';
+            const searchMode = filters.search_mode || 'hybrid';
             const searchParams = { ...queryParams, namespace: namespaceName, search_mode: searchMode };
             response = await crmApi.searchEntities(searchTrimmed, searchParams);
         } else {

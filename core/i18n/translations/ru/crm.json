@@ -567,6 +567,8 @@
         "search_placeholder": "Имя, описание...",
         "type_label": "Тип",
         "subtype_label": "Подтип",
+        "tags_label": "Теги",
+        "tags_placeholder": "Введите тег...",
         "date_label": "Дата",
         "reset": "Сбросить фильтры"
     },
@@ -585,7 +587,10 @@
         "empty_pick_subtitle": "из списка слева",
         "request_access_tooltip": "Запросить доступ",
         "delete_entity_tooltip": "Удалить сущность",
-        "actions_menu_tooltip": "Дополнительные действия"
+        "actions_menu_tooltip": "Дополнительные действия",
+        "badge_required": "обязательное",
+        "badge_optional": "дополнительное",
+        "badge_public": "публичное"
     },
     "grants": {
         "success_entity_public": "Сущность стала публичной",
@@ -745,12 +750,16 @@
         "label_due": "Дедлайн",
         "label_priority": "Приоритет",
         "label_extra_attributes": "Дополнительные атрибуты",
+        "label_required_fields": "Обязательные поля",
+        "label_optional_fields": "Дополнительные поля",
+        "label_custom_fields": "Произвольные атрибуты",
         "loading_types": "Загрузка типов...",
         "placeholder_name": "Введите название",
         "placeholder_description": "Введите описание",
         "priority_unset": "Не указан",
         "add_attribute": "+ Добавить атрибут",
-        "saving": "Сохранение..."
+        "saving": "Сохранение...",
+        "required_fields": "Обязательные: {{fields}}"
     },
     "entity_merge": {
         "heading": "Слияние сущностей",
@@ -789,14 +798,15 @@
         "submit": "Создать"
     },
     "share_modal": {
-        "err_enter_user_id": "Введите ID пользователя",
+        "err_enter_user_id": "Введите email или имя пользователя",
         "err_enter_company_id": "Введите ID компании",
+        "err_user_not_found": "Пользователь не найден",
         "success_user": "Доступ предоставлен пользователю",
         "success_company": "Доступ предоставлен компании",
         "err_share": "Ошибка предоставления доступа",
-        "label_user_id": "ID пользователя *",
+        "label_user_id": "Пользователь *",
         "label_company_id": "ID компании *",
-        "placeholder_user_id": "Введите user_id",
+        "placeholder_user_id": "Email или имя пользователя",
         "placeholder_company_id": "Введите company_id",
         "label_access_level": "Уровень доступа",
         "role_viewer_desc": "Только чтение",
@@ -804,7 +814,9 @@
         "role_admin_desc": "Полный доступ",
         "label_expires_optional": "Срок действия (опционально)",
         "saving": "Сохранение...",
-        "submit_grant": "Предоставить доступ"
+        "submit_grant": "Предоставить доступ",
+        "searching": "Поиск...",
+        "no_results": "Пользователи не найдены"
     },
     "note_view_modal": {
         "header_edit": "Редактирование заметки",
@@ -1141,5 +1153,11 @@
         "err_type_id_required": "type_id обязателен",
         "err_name_required": "Название обязательно",
         "err_create": "Не удалось создать тип связи"
+    },
+    "voice_input": {
+        "btn_idle": "Записать голосовую заметку",
+        "btn_recording": "Остановить запись",
+        "btn_processing": "Распознавание...",
+        "empty_result": "Не удалось распознать речь. Попробуйте ещё раз."
     }
 }

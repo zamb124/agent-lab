@@ -13,6 +13,45 @@ alwaysApply: false
 
 Запрещено мокать: `StateRepository`, `FlowFactory`, `ToolRegistry`, `BaseChannel`, `S3Client`, любые внутренние компоненты.
 
+## Архитектурные запреты
+
+### Глобальное состояние — только через фикстуры и `monkeypatch`
+
+- **`os.environ[...] = ...` в теле теста запрещена.** Только `monkeypatch.setenv` — автоматический откат после теста. Прямая запись отравляет env для параллельных тестов и последующих в том же процессе.
+- **Прямой сброс singleton запрещён** (`_settings_instance = None`, `_default_rag_provider = None`). Допустимо только в `conftest.py` (module-level setup до импорта приложения) или в фикстуре через `monkeypatch.setattr`.
+- **Присвоение модульных переменных** (`some_module.var = ...`) — только через `monkeypatch.setattr` (автооткат).
+- **`unittest.mock.patch` / `@patch` не использовать.** Только pytest `monkeypatch`. При исключении в `with patch(...)` патч может не откатиться; `monkeypatch` откатывается гарантированно в teardown.
+
+### Параллельная безопасность (pytest-xdist)
+
+Тесты запускаются с `-n N --dist=loadgroup`. Каждый gw-worker — отдельный процесс. БД, Redis, MinIO — общие.
+
+- Каждый тест **обязан** быть безопасен для параллельного выполнения с другими тестами на других gw-workers.
+- **Захардкоженные идентификаторы** (`task_id="my-task"`, `context_id="ctx-1"`, `flow_id="test_flow"`) в БД/Redis — **запрещены**. Все идентификаторы содержат `unique_id`.
+- **Захардкоженные порты, временные файлы, Redis-ключи** без `unique_id`/xdist-суффикса — **запрещены** (исключение: session-фикстуры с `FileLock`).
+- Тесты с эксклюзивным доступом к общему ресурсу — **обязаны** быть в `xdist_group` (маркер или `pytest_collection_modifyitems`).
+- **`time.sleep` для ожидания асинхронного результата — не использовать.** Вместо: `asyncio.wait_for`, `asyncio.sleep` с поллингом, `await` результата с таймаутом.
+
+### Идемпотентность фикстур
+
+- **Session-фикстуры** при xdist выполняются **по разу на каждый gw-worker** (не глобально). Обязаны быть идемпотентны: повторные `create_bucket`, `run_migrations`, `load_flows_to_db` не должны падать.
+- **Teardown session-фикстур** не должен разрушать ресурсы, нужные другим gw-workers. Координация — через `FileLock` и ref-counting (`SessionWorkerManager`).
+
+### Чистота тестового тела
+
+- **`try/except` в теле теста запрещён.** Тест должен падать при ошибке. Единственное исключение — `pytest.raises` для проверки что код бросает исключение.
+- **`except: pass` в теле теста запрещён.** Проглоченные ошибки допустимы только в teardown фикстур для cleanup ресурсов.
+- **Создание своих `AsyncClient`, `httpx.Client`, сессий БД** — запрещено. Только готовые фикстуры (`flows_client`, `crm_client_http` и т.д.).
+- **`get_container()` в теле теста** — запрещено. Использовать фикстуру `container`.
+- **Cleanup данных** — в teardown фикстуры (`yield ... # cleanup`), не в теле теста.
+
+### Изоляция данных
+
+- Тест **не должен мутировать чужие данные** (созданные другим тестом или session-фикстурой) без `unique_id`-изоляции.
+- Каждая сущность в БД/Redis, создаваемая тестом, содержит `unique_id` в идентификаторе. Коллизии между параллельными тестами — баг автора теста.
+
+---
+
 **Documents / office:** **`tests/office/`** — BFF с реальной **`platform_office`** и MinIO (**`test_office_bff_integration.py`**), плюс **`@pytest.mark.integration`** healthcheck к Document Server (**`test_onlyoffice_document_server.py`**). В **`docker-compose-test.yaml`** сервис **`onlyoffice-documentserver`** (порт хоста **18088**), в **`tests_runner`** заданы **`OFFICE__*`**; **`make test-up`** поднимает тот же сервис. Фикстуры **`office_app`**, **`office_client`** — **`tests/fixtures/clients.py`**. См. **`office.mdc`**.
 
 **FileWriter / внешние картинки:** **`tests/core/files/test_file_writer_network.py`** — реальные HTTP GET к публичным URL (стабильные JPEG на **`picsum.photos`** по фиксированным id), маркеры **`integration`** и **`network`**, **`@pytest.mark.timeout(180, func_only=True)`**. Исключить из прогона: **`pytest -m "not network"`**. При прогоне тестов под **`tests/core/files/`** каталог **`tests/core/files/file_writer_output/`** сначала очищается (**`pytest_sessionstart`** в **`tests/core/files/conftest.py`**), затем **`test_file_writer.py`** и **`test_file_writer_network.py`** пишут артефакты (**`file_writer_artifacts.overwrite_artifact`**). Каталог в **`.gitignore`**.

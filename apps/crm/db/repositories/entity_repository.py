@@ -114,8 +114,9 @@ class EntityRepository(BaseCRMRepository[CRMEntity]):
             await session.refresh(entity)
 
         search_text = self._build_search_text(entity)
+        rag_namespace = entity.namespace or "default"
         await self._rag.upload_text(
-            namespace_id="default",
+            namespace_id=rag_namespace,
             text=search_text,
             document_name=entity.entity_id,
             metadata={
@@ -172,11 +173,12 @@ class EntityRepository(BaseCRMRepository[CRMEntity]):
             await session.commit()
             await session.refresh(merged)
 
-        await self._rag.delete_document("default", entity.entity_id)
+        rag_namespace = entity.namespace or "default"
+        await self._rag.delete_document(rag_namespace, entity.entity_id)
 
         search_text = self._build_search_text(entity)
         await self._rag.upload_text(
-            namespace_id="default",
+            namespace_id=rag_namespace,
             text=search_text,
             document_name=entity.entity_id,
             metadata={
@@ -192,13 +194,17 @@ class EntityRepository(BaseCRMRepository[CRMEntity]):
     async def delete(self, entity_id: str) -> bool:
         """Удаляет entity из crm_entities + vector_documents."""
         async with self._db.session() as session:
+            namespace_stmt = select(CRMEntity.namespace).where(CRMEntity.entity_id == entity_id)
+            namespace_row = await session.execute(namespace_stmt)
+            rag_namespace = namespace_row.scalar() or "default"
+
             stmt = delete(CRMEntity).where(CRMEntity.entity_id == entity_id)
             result = await session.execute(stmt)
             await session.commit()
             deleted = result.rowcount > 0
 
         if deleted:
-            await self._rag.delete_document("default", entity_id)
+            await self._rag.delete_document(rag_namespace, entity_id)
             logger.info(f"Deleted entity: {entity_id}")
 
         return deleted

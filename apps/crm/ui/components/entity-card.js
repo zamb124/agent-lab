@@ -257,6 +257,9 @@ export class EntityCard extends PlatformElement {
             }
 
             .attribute-label {
+                display: flex;
+                align-items: center;
+                gap: var(--space-1);
                 font-size: var(--text-xs);
                 color: var(--text-tertiary);
                 margin-bottom: var(--space-1);
@@ -266,6 +269,34 @@ export class EntityCard extends PlatformElement {
                 font-size: var(--text-base);
                 color: var(--text-primary);
                 word-break: break-word;
+            }
+
+            .attr-badge {
+                display: inline-flex;
+                align-items: center;
+                padding: 0 4px;
+                border-radius: var(--radius-sm);
+                font-size: 9px;
+                font-weight: 600;
+                text-transform: uppercase;
+                letter-spacing: 0.03em;
+                line-height: 14px;
+                flex-shrink: 0;
+            }
+
+            .attr-badge.required {
+                background: rgba(239, 68, 68, 0.12);
+                color: #ef4444;
+            }
+
+            .attr-badge.optional {
+                background: rgba(59, 130, 246, 0.10);
+                color: #3b82f6;
+            }
+
+            .attr-badge.public {
+                background: rgba(34, 197, 94, 0.10);
+                color: #22c55e;
             }
 
             .related-list {
@@ -816,6 +847,46 @@ export class EntityCard extends PlatformElement {
         return {};
     }
 
+    _getEntityTypeForCurrent() {
+        const typeId = this._entity?.entity_subtype || this._entity?.entity_type;
+        return this._entityTypes.find(t => t.type_id === typeId) || null;
+    }
+
+    _isAttributeRequired(key) {
+        const entityType = this._getEntityTypeForCurrent();
+        return Boolean(entityType?.required_fields?.[key]);
+    }
+
+    _isAttributeOptional(key) {
+        const entityType = this._getEntityTypeForCurrent();
+        return Boolean(entityType?.optional_fields?.[key]);
+    }
+
+    _isAttributePublic(key) {
+        const entityType = this._getEntityTypeForCurrent();
+        return (entityType?.public_fields || []).includes(key);
+    }
+
+    _getAttributeLabel(key) {
+        const entityType = this._getEntityTypeForCurrent();
+        const spec = entityType?.required_fields?.[key]
+            || entityType?.optional_fields?.[key];
+        return spec?.label || key;
+    }
+
+    _renderAttributeBadges(key) {
+        const badges = [];
+        if (this._isAttributeRequired(key)) {
+            badges.push(html`<span class="attr-badge required">${this.i18n.t('entity_card.badge_required')}</span>`);
+        } else if (this._isAttributeOptional(key)) {
+            badges.push(html`<span class="attr-badge optional">${this.i18n.t('entity_card.badge_optional')}</span>`);
+        }
+        if (this._isAttributePublic(key)) {
+            badges.push(html`<span class="attr-badge public">${this.i18n.t('entity_card.badge_public')}</span>`);
+        }
+        return badges;
+    }
+
     _renderAttributes(attributes) {
         if (!attributes || Object.keys(attributes).length === 0) {
             return '';
@@ -827,7 +898,10 @@ export class EntityCard extends PlatformElement {
                 <div class="attributes-grid">
                     ${Object.entries(attributes).map(([key, value]) => html`
                         <div class="attribute-item">
-                            <div class="attribute-label">${key}</div>
+                            <div class="attribute-label">
+                                ${this._getAttributeLabel(key)}
+                                ${this._renderAttributeBadges(key)}
+                            </div>
                             <platform-field
                                 .type=${this._getAttributeFieldType(key)}
                                 .value=${value}

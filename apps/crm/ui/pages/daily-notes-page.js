@@ -7,6 +7,56 @@ import '../modals/entity-modal.js';
 import '../modals/note-view-modal.js';
 import '../modals/ai-analysis-modal.js';
 
+/**
+ * WKWebView и часть встроенных браузеров отдают только legacy getUserMedia.
+ * @param {MediaStreamConstraints} constraints
+ * @returns {Promise<MediaStream>}
+ */
+function getUserMediaCompat(constraints) {
+    const nav = typeof navigator !== 'undefined' ? navigator : null;
+    if (nav?.mediaDevices && typeof nav.mediaDevices.getUserMedia === 'function') {
+        return nav.mediaDevices.getUserMedia(constraints);
+    }
+    const legacy = nav && (nav.getUserMedia || nav.webkitGetUserMedia || nav.mozGetUserMedia);
+    if (typeof legacy === 'function') {
+        return new Promise((resolve, reject) => {
+            legacy.call(nav, constraints, resolve, reject);
+        });
+    }
+    return Promise.reject(new Error('NO_GET_USER_MEDIA'));
+}
+
+function hasGetUserMediaApi() {
+    const nav = typeof navigator !== 'undefined' ? navigator : null;
+    if (nav?.mediaDevices && typeof nav.mediaDevices.getUserMedia === 'function') {
+        return true;
+    }
+    return Boolean(nav && (nav.getUserMedia || nav.webkitGetUserMedia || nav.mozGetUserMedia));
+}
+
+/**
+ * Safari / iOS не декодирует WebM; приоритет MP4/AAC.
+ * @returns {string}
+ */
+function pickVoiceMimeType() {
+    if (typeof MediaRecorder === 'undefined') {
+        return '';
+    }
+    const variants = [
+        'audio/mp4;codecs=mp4a.40.2',
+        'audio/mp4',
+        'audio/webm;codecs=opus',
+        'audio/webm',
+        'audio/ogg;codecs=opus',
+    ];
+    for (const variant of variants) {
+        if (MediaRecorder.isTypeSupported(variant)) {
+            return variant;
+        }
+    }
+    return '';
+}
+
 export class DailyNotesPage extends PlatformElement {
     static properties = {
         _notes: { state: true },
@@ -27,6 +77,7 @@ export class DailyNotesPage extends PlatformElement {
         _namespaceHasAnyEntity: { state: true },
         _namespaceProbeValid: { state: true },
         _analyzingNoteId: { state: true },
+        _voiceState: { state: true },
     };
 
     static styles = [
@@ -161,6 +212,39 @@ export class DailyNotesPage extends PlatformElement {
 
             .cta-btn:hover {
                 background: var(--crm-daily-notes-cta-hover);
+            }
+
+            .voice-btn {
+                min-height: 44px;
+                width: 44px;
+                border: 1px solid var(--crm-stroke);
+                border-radius: var(--radius-full);
+                background: var(--crm-surface);
+                color: var(--text-secondary);
+                cursor: pointer;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                transition: all var(--duration-fast);
+                flex-shrink: 0;
+            }
+            .voice-btn:hover {
+                background: var(--crm-surface-elevated);
+                color: var(--text-primary);
+            }
+            .voice-btn.recording {
+                background: var(--platform-danger-bg, #fef2f2);
+                border-color: var(--platform-danger, #ef4444);
+                color: var(--platform-danger, #ef4444);
+                animation: voice-pulse 1.5s ease-in-out infinite;
+            }
+            .voice-btn.processing {
+                opacity: 0.6;
+                cursor: wait;
+            }
+            @keyframes voice-pulse {
+                0%, 100% { transform: scale(1); }
+                50% { transform: scale(1.08); }
             }
 
             .cards-scroll {
@@ -820,6 +904,9 @@ export class DailyNotesPage extends PlatformElement {
         this._namespaceHasAnyEntity = false;
         this._namespaceProbeValid = false;
         this._analyzingNoteId = null;
+        this._voiceState = 'idle';
+        this._mediaRecorder = null;
+        this._audioChunks = [];
         this._unsubscribe = null;
         this._onPlatformNotification = this._onPlatformNotification.bind(this);
         this._onMobileSearch = this._onMobileSearch.bind(this);
@@ -1211,6 +1298,95 @@ export class DailyNotesPage extends PlatformElement {
             attributes: {},
         };
         this._openNoteModal(draftNote, { editable: true, draftMode: true });
+    }
+
+    async _onVoiceToggle() {
+        if (this._voiceState === 'recording') {
+            this._stopVoiceRecording();
+            return;
+        }
+        if (this._voiceState !== 'idle') return;
+
+        const notify = this.services.get('notify');
+
+        if (!window.isSecureContext) {
+            notify.warning(this.i18n.t('voice.audio_https_only', {}, 'common'));
+            return;
+        }
+        if (!hasGetUserMediaApi()) {
+            notify.warning(this.i18n.t('voice.audio_no_recorder', {}, 'common'));
+            return;
+        }
+        if (typeof MediaRecorder === 'undefined') {
+            notify.warning(this.i18n.t('voice.audio_no_recorder', {}, 'common'));
+            return;
+        }
+
+        let stream;
+        try {
+            stream = await getUserMediaCompat({ audio: true });
+        } catch (err) {
+            const msg = err instanceof Error ? err.message : String(err);
+            notify.warning(msg || this.i18n.t('voice.audio_start_failed', {}, 'common'));
+            return;
+        }
+
+        this._audioChunks = [];
+        const mimeType = pickVoiceMimeType();
+        this._mediaRecorder = mimeType
+            ? new MediaRecorder(stream, { mimeType })
+            : new MediaRecorder(stream);
+        const resolvedMime = this._mediaRecorder.mimeType || mimeType || 'audio/mp4';
+
+        this._mediaRecorder.ondataavailable = (e) => {
+            if (e.data.size > 0) {
+                this._audioChunks.push(e.data);
+            }
+        };
+
+        this._mediaRecorder.onstop = async () => {
+            stream.getTracks().forEach(t => t.stop());
+            this._voiceState = 'processing';
+            const blob = new Blob(this._audioChunks, { type: resolvedMime });
+            const crmApi = this.services.get('crmApi');
+            try {
+                const result = await crmApi.voiceInput(blob);
+                this._voiceState = 'idle';
+                this._mediaRecorder = null;
+                this._audioChunks = [];
+
+                if (!result.text || !result.text.trim()) {
+                    notify.warning(this.i18n.t('voice_input.empty_result'));
+                    return;
+                }
+                const focusDate = CRMStore.getDailyNotesFocusDate();
+                const draftNote = {
+                    entity_id: `draft-${Date.now()}`,
+                    entity_type: 'note',
+                    entity_subtype: null,
+                    name: '',
+                    description: result.text.trim(),
+                    note_date: focusDate,
+                    attributes: {},
+                };
+                this._openNoteModal(draftNote, { editable: true, draftMode: true });
+            } catch (err) {
+                this._voiceState = 'idle';
+                this._mediaRecorder = null;
+                this._audioChunks = [];
+                const msg = err instanceof Error ? err.message : String(err);
+                notify.error(msg || this.i18n.t('voice.audio_start_failed', {}, 'common'));
+            }
+        };
+
+        this._mediaRecorder.start();
+        this._voiceState = 'recording';
+    }
+
+    _stopVoiceRecording() {
+        if (this._mediaRecorder && this._mediaRecorder.state === 'recording') {
+            this._mediaRecorder.stop();
+        }
     }
 
     async _onRefreshSummary() {
@@ -1652,6 +1828,15 @@ export class DailyNotesPage extends PlatformElement {
                         .value=${{ start: this._dateFrom, end: this._dateTo }}
                         @change=${this._onDateRangeChange}
                     ></platform-date-picker>
+                    <button
+                        class="voice-btn ${this._voiceState}"
+                        type="button"
+                        title=${this.i18n.t(`voice_input.btn_${this._voiceState}`)}
+                        ?disabled=${this._voiceState === 'processing'}
+                        @click=${this._onVoiceToggle}
+                    >
+                        <platform-icon name=${this._voiceState === 'recording' ? 'stop' : 'microphone'} size="18"></platform-icon>
+                    </button>
                     <button class="cta-btn" type="button" @click=${this._onCreateNote}>${this.i18n.t('daily_notes_page.add_note')}</button>
                 </div>
             </div>

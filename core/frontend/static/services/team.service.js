@@ -5,6 +5,10 @@ export class TeamService extends BaseService {
         return this.get('/api/team/members');
     }
 
+    async searchUsers(query) {
+        return this.get(`/api/team/search?q=${encodeURIComponent(query)}`);
+    }
+
     async generateInviteLink(role = 'developer') {
         return this.post('/api/invites/generate', { role });
     }

@@ -78,6 +78,15 @@ export class CRMAPIService extends BaseService {
         return this.get('/entities/aggregate', params);
     }
 
+    async voiceInput(audioFile, language = null) {
+        const formData = new FormData();
+        formData.append('file', audioFile);
+        if (language) {
+            formData.append('language', language);
+        }
+        return this.post('/entities/voice-input', formData);
+    }
+
     async searchEntities(query, params = {}) {
         if (!query) {
             throw new Error('Search query is required');

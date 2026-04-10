@@ -17,6 +17,7 @@ export class EntityFilters extends CRMPanel {
         _selectedType: { state: true },
         _currentNamespace: { state: true },
         _aggregate: { state: true },
+        _tagInput: { state: true },
     };
 
     static styles = [
@@ -165,6 +166,59 @@ export class EntityFilters extends CRMPanel {
                 color: var(--text-primary);
             }
 
+            .tag-chips {
+                display: flex;
+                flex-wrap: wrap;
+                gap: var(--space-1);
+                margin-top: var(--space-2);
+            }
+
+            .tag-chip {
+                display: inline-flex;
+                align-items: center;
+                gap: 4px;
+                padding: 3px 8px;
+                background: var(--crm-selected-bg);
+                border: 1px solid var(--crm-selected-stroke);
+                border-radius: var(--radius-full);
+                color: var(--crm-selected-text);
+                font-size: 12px;
+            }
+
+            .tag-chip-remove {
+                display: inline-flex;
+                align-items: center;
+                justify-content: center;
+                width: 14px;
+                height: 14px;
+                border: none;
+                background: transparent;
+                color: inherit;
+                cursor: pointer;
+                padding: 0;
+                font-size: 14px;
+                line-height: 1;
+                opacity: 0.7;
+            }
+            .tag-chip-remove:hover { opacity: 1; }
+
+            .tag-input-row {
+                display: flex;
+                gap: var(--space-2);
+            }
+            .tag-input-row .filter-input { flex: 1; }
+            .tag-add-btn {
+                padding: 0 var(--space-3);
+                border: 1px solid var(--crm-stroke);
+                border-radius: var(--radius-lg);
+                background: var(--crm-surface);
+                color: var(--text-primary);
+                font-size: var(--text-sm);
+                cursor: pointer;
+                white-space: nowrap;
+            }
+            .tag-add-btn:hover { background: var(--crm-surface-elevated); }
+
             .namespace-indicator {
                 display: flex;
                 align-items: center;
@@ -217,6 +271,7 @@ export class EntityFilters extends CRMPanel {
         this._selectedType = null;
         this._currentNamespace = null;
         this._aggregate = null;
+        this._tagInput = '';
         this._applyFiltersTimer = null;
 
         this._filtersUnsubscribe = CRMStore.subscribe(state => {
@@ -285,8 +340,36 @@ export class EntityFilters extends CRMPanel {
         this._applyFilters();
     }
 
+    _onTagInputChange(e) {
+        this._tagInput = e.target.value;
+    }
+
+    _onTagInputKeydown(e) {
+        if (e.key === 'Enter') {
+            e.preventDefault();
+            this._addTag();
+        }
+    }
+
+    _addTag() {
+        const tag = this._tagInput.trim();
+        if (!tag) return;
+        const current = this._filters.tags || [];
+        if (current.includes(tag)) return;
+        CRMStore.setEntityFilters({ tags: [...current, tag] });
+        this._tagInput = '';
+        this._applyFilters();
+    }
+
+    _removeTag(tag) {
+        const current = this._filters.tags || [];
+        CRMStore.setEntityFilters({ tags: current.filter(t => t !== tag) });
+        this._applyFilters();
+    }
+
     _onClearFilters() {
         CRMStore.clearEntityFilters();
+        this._tagInput = '';
         this._applyFilters();
     }
 
@@ -418,6 +501,31 @@ export class EntityFilters extends CRMPanel {
                         </div>
                     </div>
                 ` : ''}
+
+                <div class="filter-group">
+                    <label class="filter-label">${this.i18n.t('entity_filters.tags_label')}</label>
+                    <div class="tag-input-row">
+                        <input
+                            type="text"
+                            class="filter-input"
+                            placeholder=${this.i18n.t('entity_filters.tags_placeholder')}
+                            .value=${this._tagInput}
+                            @input=${this._onTagInputChange}
+                            @keydown=${this._onTagInputKeydown}
+                        />
+                        <button type="button" class="tag-add-btn" @click=${this._addTag}>+</button>
+                    </div>
+                    ${(this._filters.tags || []).length > 0 ? html`
+                        <div class="tag-chips">
+                            ${this._filters.tags.map(tag => html`
+                                <span class="tag-chip">
+                                    ${tag}
+                                    <button type="button" class="tag-chip-remove" @click=${() => this._removeTag(tag)}>&times;</button>
+                                </span>
+                            `)}
+                        </div>
+                    ` : ''}
+                </div>
 
                 <div class="filter-group">
                     <label class="filter-label">${this.i18n.t('entity_filters.date_label')}</label>

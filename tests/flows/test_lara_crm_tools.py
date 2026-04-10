@@ -36,13 +36,12 @@ async def lara_crm_tool_context(
     from core.models.context_models import Context
     from core.models.identity_models import Company, User
 
-    ns = f"g_{unique_id}"
     ctx = Context(
         user=User(user_id=system_user_id, name="Lara CRM tools"),
         active_company=Company(company_id="system", name="System"),
         auth_token=auth_token_system,
         channel="test",
-        active_namespace=ns,
+        active_namespace="default",
         metadata={"user_id": system_user_id, "email": "test@example.com", "grps": []},
     )
     set_context(ctx)

@@ -11,6 +11,8 @@ import '../components/entity-card.js';
 import '../modals/entity-modal.js';
 import '../modals/entity-merge-modal.js';
 import '@platform/lib/components/platform-icon.js';
+import '@platform/lib/components/platform-date-picker.js';
+import '@platform/lib/components/glass-spinner.js';
 
 const MERGE_DRAG_MIME = 'application/x-crm-entity-merge';
 
@@ -33,6 +35,14 @@ export class EntitiesPage extends PlatformElement {
         _bulkOperating: { state: true },
         _showExportMenu: { state: true },
         _showBulkStatusMenu: { state: true },
+        _showFiltersPanel: { state: true },
+        _searchMode: { state: true },
+        _selectedSubtype: { state: true },
+        _filterTags: { state: true },
+        _tagInput: { state: true },
+        _dateFrom: { state: true },
+        _dateTo: { state: true },
+        _aggregate: { state: true },
     };
 
     static styles = [
@@ -51,7 +61,7 @@ export class EntitiesPage extends PlatformElement {
 
             .page-toolbar {
                 flex-shrink: 0;
-                padding-bottom: var(--space-2);
+                padding-bottom: var(--space-1);
             }
 
             .section-label {
@@ -64,7 +74,7 @@ export class EntitiesPage extends PlatformElement {
                 display: flex;
                 align-items: center;
                 gap: var(--space-3);
-                margin-bottom: var(--space-3);
+                margin-bottom: var(--space-2);
             }
 
             .title {
@@ -202,6 +212,7 @@ export class EntitiesPage extends PlatformElement {
                 flex-direction: column;
                 min-height: 0;
                 overflow: hidden;
+                position: relative;
             }
 
             .cards-scroll {
@@ -210,6 +221,38 @@ export class EntitiesPage extends PlatformElement {
                 overflow-x: hidden;
                 min-height: 0;
                 padding: var(--space-1);
+                transition: filter 0.2s ease, opacity 0.2s ease;
+            }
+
+            .list-panel.busy .cards-scroll {
+                filter: saturate(0.92);
+                opacity: 0.6;
+                pointer-events: none;
+            }
+
+            .list-overlay {
+                position: absolute;
+                inset: 0;
+                z-index: 6;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                pointer-events: none;
+                animation: list-overlay-in 0.2s ease;
+            }
+
+            @keyframes list-overlay-in {
+                from { opacity: 0; }
+                to { opacity: 1; }
+            }
+
+            @media (prefers-reduced-motion: reduce) {
+                .cards-scroll {
+                    transition: none;
+                }
+                .list-overlay {
+                    animation: none;
+                }
             }
 
             .cards-grid {
@@ -272,10 +315,11 @@ export class EntitiesPage extends PlatformElement {
             }
 
             .merge-dnd-hint {
-                margin: 0 0 var(--space-2) 0;
-                font-size: var(--text-xs);
+                margin: 0;
+                padding: 0 0 var(--space-1) 0;
+                font-size: 11px;
                 color: var(--text-tertiary);
-                line-height: 1.4;
+                line-height: 1.3;
             }
 
             .card-header {
@@ -365,6 +409,152 @@ export class EntitiesPage extends PlatformElement {
                 cursor: pointer;
             }
             .btn-icon:hover { background: var(--glass-bg-subtle); }
+            .btn-icon.active {
+                background: var(--crm-selected-bg);
+                border-color: var(--crm-selected-stroke);
+                color: var(--crm-selected-text);
+            }
+
+            .filters-collapsible {
+                overflow: hidden;
+                max-height: 0;
+                opacity: 0;
+                transition: max-height 0.3s ease, opacity 0.2s ease, padding 0.3s ease;
+                padding: 0 var(--space-4);
+            }
+            .filters-collapsible.open {
+                max-height: 500px;
+                opacity: 1;
+                padding: var(--space-3) var(--space-4);
+            }
+
+            .expanded-filters {
+                display: flex;
+                flex-wrap: wrap;
+                gap: var(--space-4);
+                align-items: flex-start;
+            }
+
+            .expanded-filter-group {
+                display: flex;
+                flex-direction: column;
+                gap: var(--space-1);
+                min-width: 0;
+            }
+
+            .expanded-filter-label {
+                font-size: var(--text-xs);
+                color: var(--text-tertiary);
+                font-weight: 500;
+                text-transform: uppercase;
+                letter-spacing: 0.04em;
+            }
+
+            .search-mode-toggle {
+                display: flex;
+                gap: 0;
+                border: 1px solid var(--glass-border-subtle);
+                border-radius: var(--radius-md);
+                overflow: hidden;
+            }
+
+            .search-mode-btn {
+                padding: 4px 10px;
+                font-size: var(--text-xs);
+                border: none;
+                background: transparent;
+                color: var(--text-secondary);
+                cursor: pointer;
+                transition: all var(--duration-fast);
+                white-space: nowrap;
+            }
+            .search-mode-btn:not(:last-child) {
+                border-right: 1px solid var(--glass-border-subtle);
+            }
+            .search-mode-btn.active {
+                background: var(--crm-selected-bg);
+                color: var(--crm-selected-text);
+                font-weight: 500;
+            }
+            .search-mode-btn:hover:not(.active) {
+                background: var(--glass-bg-subtle);
+            }
+
+            .subtype-chips {
+                display: flex;
+                flex-wrap: wrap;
+                gap: var(--space-1);
+            }
+
+            .tag-input-row {
+                display: flex;
+                gap: var(--space-1);
+                align-items: center;
+            }
+            .tag-filter-input {
+                padding: 4px 8px;
+                border: 1px solid var(--glass-border-subtle);
+                border-radius: var(--radius-md);
+                background: transparent;
+                color: var(--text-primary);
+                font-size: var(--text-xs);
+                outline: none;
+                min-width: 100px;
+            }
+            .tag-filter-input:focus {
+                border-color: var(--crm-selected-stroke);
+            }
+            .tag-add-btn {
+                padding: 4px 8px;
+                border: 1px solid var(--glass-border-subtle);
+                border-radius: var(--radius-md);
+                background: transparent;
+                color: var(--text-secondary);
+                cursor: pointer;
+                font-size: var(--text-xs);
+            }
+            .tag-add-btn:hover { background: var(--glass-bg-subtle); }
+
+            .tag-chips {
+                display: flex;
+                flex-wrap: wrap;
+                gap: var(--space-1);
+                margin-top: 2px;
+            }
+            .tag-chip {
+                display: inline-flex;
+                align-items: center;
+                gap: 3px;
+                padding: 2px 8px;
+                background: var(--crm-selected-bg);
+                border: 1px solid var(--crm-selected-stroke);
+                border-radius: var(--radius-full);
+                color: var(--crm-selected-text);
+                font-size: 11px;
+            }
+            .tag-chip-remove {
+                display: inline-flex;
+                align-items: center;
+                justify-content: center;
+                width: 12px;
+                height: 12px;
+                border: none;
+                background: transparent;
+                color: inherit;
+                cursor: pointer;
+                padding: 0;
+                font-size: 12px;
+                line-height: 1;
+                opacity: 0.7;
+            }
+            .tag-chip-remove:hover { opacity: 1; }
+
+            .date-filter-picker {
+                --platform-date-picker-label-size: 11px;
+                --platform-date-picker-value-size: 12px;
+                max-width: 220px;
+            }
+
             .export-menu {
                 position: absolute;
                 top: 100%;
@@ -892,6 +1082,14 @@ export class EntitiesPage extends PlatformElement {
         this._bulkOperating = false;
         this._showExportMenu = false;
         this._showBulkStatusMenu = false;
+        this._showFiltersPanel = false;
+        this._searchMode = 'hybrid';
+        this._selectedSubtype = null;
+        this._filterTags = [];
+        this._tagInput = '';
+        this._dateFrom = null;
+        this._dateTo = null;
+        this._aggregate = null;
         this._goToImportWizard = this._goToImportWizard.bind(this);
         this._scrollObserver = null;
 
@@ -903,7 +1101,13 @@ export class EntitiesPage extends PlatformElement {
             this._loadingMore = state.entities.loadingMore;
             this._hasMore = state.entities.hasMore;
             this._selectedType = state.entities.filters.entity_type;
+            this._selectedSubtype = state.entities.filters.entity_subtype;
             this._selectedStatus = state.entities.filters.status;
+            this._searchMode = state.entities.filters.search_mode || 'hybrid';
+            this._filterTags = state.entities.filters.tags || [];
+            this._dateFrom = state.entities.filters.date_from;
+            this._dateTo = state.entities.filters.date_to;
+            this._aggregate = state.entities.aggregate || null;
             this._isMobile = state.ui.isMobile;
 
             const prevNs = this._currentNamespace;
@@ -976,7 +1180,10 @@ export class EntitiesPage extends PlatformElement {
         const crmApi = this.services.get('crmApi');
         const ns = this._resolveNamespaceName(CRMStore.state.namespaces.current);
         await CRMStore.loadEntityTypes(crmApi, ns || 'default');
-        await CRMStore.loadEntities(crmApi);
+        await Promise.all([
+            CRMStore.loadEntities(crmApi),
+            CRMStore.loadAggregate(crmApi),
+        ]);
     }
 
     _goToImportWizard() {
@@ -1014,13 +1221,88 @@ export class EntitiesPage extends PlatformElement {
 
     _onClearFilters() {
         this._query = '';
+        this._tagInput = '';
         CRMStore.clearEntityFilters();
         this._applyFilters();
     }
 
+    _onSearchModeChange(mode) {
+        CRMStore.setSearchMode(mode);
+        this._applyFiltersDebounced();
+    }
+
+    _onSubtypeSelect(subtypeId) {
+        const next = this._selectedSubtype === subtypeId ? null : subtypeId;
+        CRMStore.setEntityFilters({ entity_subtype: next });
+        this._applyFilters();
+    }
+
+    _onDateRangeChange(e) {
+        const range = e.target.value;
+        if (range && typeof range !== 'object') {
+            throw new Error('Date range value must be object');
+        }
+        CRMStore.setEntityFilters({
+            date_from: range?.start || null,
+            date_to: range?.end || null,
+        });
+        this._applyFilters();
+    }
+
+    _onTagInputChange(e) {
+        this._tagInput = e.target.value;
+    }
+
+    _onTagInputKeydown(e) {
+        if (e.key === 'Enter') {
+            e.preventDefault();
+            this._addTag();
+        }
+    }
+
+    _addTag() {
+        const tag = this._tagInput.trim();
+        if (!tag) return;
+        if (this._filterTags.includes(tag)) return;
+        CRMStore.setEntityFilters({ tags: [...this._filterTags, tag] });
+        this._tagInput = '';
+        this._applyFilters();
+    }
+
+    _removeTag(tag) {
+        CRMStore.setEntityFilters({ tags: this._filterTags.filter(t => t !== tag) });
+        this._applyFilters();
+    }
+
+    _applyFiltersDebounced() {
+        if (this._debounceTimer) {
+            clearTimeout(this._debounceTimer);
+        }
+        this._debounceTimer = setTimeout(() => {
+            this._debounceTimer = null;
+            this._applyFilters();
+        }, 250);
+    }
+
+    _getSubtypes() {
+        if (!this._selectedType) return [];
+        return this._entityTypes.filter(t => t.parent_type_id === this._selectedType);
+    }
+
+    _hasExpandedFilters() {
+        return this._selectedSubtype
+            || (this._filterTags && this._filterTags.length > 0)
+            || this._dateFrom
+            || this._dateTo
+            || this._searchMode !== 'hybrid';
+    }
+
     async _applyFilters() {
         const crmApi = this.services.get('crmApi');
-        await CRMStore.loadEntities(crmApi);
+        await Promise.all([
+            CRMStore.loadEntities(crmApi),
+            CRMStore.loadAggregate(crmApi),
+        ]);
     }
 
     _onSelectEntity(entityId) {
@@ -1211,7 +1493,10 @@ export class EntitiesPage extends PlatformElement {
     }
 
     _hasActiveFilters() {
-        return this._selectedType || this._selectedStatus || this._query.trim().length > 0;
+        return this._selectedType
+            || this._selectedStatus
+            || this._query.trim().length > 0
+            || this._hasExpandedFilters();
     }
 
     _platformAuthUserId(user) {
@@ -1320,6 +1605,14 @@ export class EntitiesPage extends PlatformElement {
                                 @input=${this._onSearchInput}
                             />
                         </label>
+                        <button
+                            class="btn-icon ${this._showFiltersPanel || this._hasExpandedFilters() ? 'active' : ''}"
+                            type="button"
+                            title=${this.i18n.t('entity_filters.panel_title')}
+                            @click=${() => { this._showFiltersPanel = !this._showFiltersPanel; }}
+                        >
+                            <platform-icon name="adjustment" size="16"></platform-icon>
+                        </button>
                         <div class="export-dropdown">
                             <button class="btn-icon" type="button" title="Export" @click=${this._toggleExportMenu}>
                                 <platform-icon name="save" size="16"></platform-icon>
@@ -1406,18 +1699,92 @@ export class EntitiesPage extends PlatformElement {
                             </div>
                         ` : ''}
                     </div>
-                    ${this._entities.length >= 2 && !this._loading
-                        ? html`<p class="merge-dnd-hint">${this.i18n.t('entities_page.merge_dnd_hint')}</p>`
-                        : ''}
+                </div>
+                <div class="filters-collapsible ${this._showFiltersPanel ? 'open' : ''}">
+                    <div class="expanded-filters">
+                        <div class="expanded-filter-group">
+                            <span class="expanded-filter-label">${this.i18n.t('entity_filters.search_label')}</span>
+                            <div class="search-mode-toggle">
+                                ${['text', 'semantic', 'hybrid'].map(mode => html`
+                                    <button
+                                        type="button"
+                                        class="search-mode-btn ${this._searchMode === mode ? 'active' : ''}"
+                                        @click=${() => this._onSearchModeChange(mode)}
+                                    >${this.i18n.t(`entities.search_modes.${mode}`)}</button>
+                                `)}
+                            </div>
+                        </div>
+
+                        ${this._getSubtypes().length > 0 ? html`
+                            <div class="expanded-filter-group">
+                                <span class="expanded-filter-label">${this.i18n.t('entity_filters.subtype_label')}</span>
+                                <div class="subtype-chips">
+                                    ${this._getSubtypes().map(type => html`
+                                        <button
+                                            class="filter-chip ${this._selectedSubtype === type.type_id ? 'active' : ''}"
+                                            type="button"
+                                            @click=${() => this._onSubtypeSelect(type.type_id)}
+                                        >
+                                            <platform-icon name="${this._resolveIconName(type.icon)}" size="14"></platform-icon>
+                                            ${type.name}
+                                        </button>
+                                    `)}
+                                </div>
+                            </div>
+                        ` : ''}
+
+                        <div class="expanded-filter-group">
+                            <span class="expanded-filter-label">${this.i18n.t('entity_filters.tags_label')}</span>
+                            <div class="tag-input-row">
+                                <input
+                                    type="text"
+                                    class="tag-filter-input"
+                                    placeholder=${this.i18n.t('entity_filters.tags_placeholder')}
+                                    .value=${this._tagInput}
+                                    @input=${this._onTagInputChange}
+                                    @keydown=${this._onTagInputKeydown}
+                                />
+                                <button type="button" class="tag-add-btn" @click=${this._addTag}>+</button>
+                            </div>
+                            ${this._filterTags.length > 0 ? html`
+                                <div class="tag-chips">
+                                    ${this._filterTags.map(tag => html`
+                                        <span class="tag-chip">
+                                            ${tag}
+                                            <button type="button" class="tag-chip-remove" @click=${() => this._removeTag(tag)}>&times;</button>
+                                        </span>
+                                    `)}
+                                </div>
+                            ` : ''}
+                        </div>
+
+                        <div class="expanded-filter-group">
+                            <span class="expanded-filter-label">${this.i18n.t('entity_filters.date_label')}</span>
+                            <platform-date-picker
+                                class="date-filter-picker"
+                                mode="date"
+                                selection="range"
+                                value-format="iso"
+                                .value=${{ start: this._dateFrom, end: this._dateTo }}
+                                @change=${this._onDateRangeChange}
+                            ></platform-date-picker>
+                        </div>
+                    </div>
                 </div>
             ` : ''}
+            ${this._entities.length >= 2 && !this._loading
+                ? html`<p class="merge-dnd-hint">${this.i18n.t('entities_page.merge_dnd_hint')}</p>`
+                : ''}
 
             <div class="layout">
-                <section class="list-panel ${listActive ? 'mobile-active' : ''}">
+                <section class="list-panel ${listActive ? 'mobile-active' : ''} ${this._loading ? 'busy' : ''}">
+                    ${this._loading ? html`
+                        <div class="list-overlay">
+                            <glass-spinner size="lg"></glass-spinner>
+                        </div>
+                    ` : ''}
                     <div class="cards-scroll">
-                        ${this._loading ? html`
-                            <div class="empty">${this.i18n.t('loading', {}, 'common')}</div>
-                        ` : this._entities.length === 0 ? html`
+                        ${this._entities.length === 0 && !this._loading ? html`
                             <div class="empty ${!this._hasActiveFilters() ? 'empty-import' : ''}">
                                 ${!this._hasActiveFilters() ? html`
                                     <p class="empty-import-text">${this.i18n.t('import_wizard_cta.empty_entities_hint')}</p>

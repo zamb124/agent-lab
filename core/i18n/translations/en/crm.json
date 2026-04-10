@@ -567,6 +567,8 @@
         "search_placeholder": "Name, description...",
         "type_label": "Type",
         "subtype_label": "Subtype",
+        "tags_label": "Tags",
+        "tags_placeholder": "Enter a tag...",
         "date_label": "Date",
         "reset": "Reset filters"
     },
@@ -585,7 +587,10 @@
         "empty_pick_subtitle": "from the list on the left",
         "request_access_tooltip": "Request access",
         "delete_entity_tooltip": "Delete entity",
-        "actions_menu_tooltip": "More actions"
+        "actions_menu_tooltip": "More actions",
+        "badge_required": "required",
+        "badge_optional": "optional",
+        "badge_public": "public"
     },
     "grants": {
         "success_entity_public": "Entity is now public",
@@ -745,12 +750,16 @@
         "label_due": "Due date",
         "label_priority": "Priority",
         "label_extra_attributes": "Additional attributes",
+        "label_required_fields": "Required fields",
+        "label_optional_fields": "Optional fields",
+        "label_custom_fields": "Custom attributes",
         "loading_types": "Loading types...",
         "placeholder_name": "Enter name",
         "placeholder_description": "Enter description",
         "priority_unset": "Not set",
         "add_attribute": "+ Add attribute",
-        "saving": "Saving..."
+        "saving": "Saving...",
+        "required_fields": "Required: {{fields}}"
     },
     "entity_merge": {
         "heading": "Merge entities",
@@ -789,14 +798,15 @@
         "submit": "Create"
     },
     "share_modal": {
-        "err_enter_user_id": "Enter user ID",
+        "err_enter_user_id": "Enter email or user name",
         "err_enter_company_id": "Enter company ID",
+        "err_user_not_found": "User not found",
         "success_user": "Access granted to user",
         "success_company": "Access granted to company",
         "err_share": "Failed to grant access",
-        "label_user_id": "User ID *",
+        "label_user_id": "User *",
         "label_company_id": "Company ID *",
-        "placeholder_user_id": "Enter user_id",
+        "placeholder_user_id": "Email or user name",
         "placeholder_company_id": "Enter company_id",
         "label_access_level": "Access level",
         "role_viewer_desc": "Read only",
@@ -804,7 +814,9 @@
         "role_admin_desc": "Full access",
         "label_expires_optional": "Expiry (optional)",
         "saving": "Saving...",
-        "submit_grant": "Grant access"
+        "submit_grant": "Grant access",
+        "searching": "Searching...",
+        "no_results": "No users found"
     },
     "note_view_modal": {
         "header_edit": "Edit note",
@@ -1141,5 +1153,11 @@
         "err_type_id_required": "type_id is required",
         "err_name_required": "Name is required",
         "err_create": "Failed to create relationship type"
+    },
+    "voice_input": {
+        "btn_idle": "Record voice note",
+        "btn_recording": "Stop recording",
+        "btn_processing": "Transcribing...",
+        "empty_result": "Could not recognize speech. Please try again."
     }
 }

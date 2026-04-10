@@ -102,13 +102,63 @@ export class EntityModal extends PlatformModal {
                 margin-top: -4px;
             }
 
-            .required-fields-hint {
-                font-size: 12px;
-                color: var(--text-tertiary);
-                margin-bottom: var(--space-2);
-                padding: 6px 10px;
-                background: rgba(239, 68, 68, 0.08);
+            .field-badge {
+                display: inline-flex;
+                align-items: center;
+                padding: 1px 6px;
                 border-radius: var(--radius-sm);
+                font-size: 10px;
+                font-weight: 600;
+                text-transform: uppercase;
+                letter-spacing: 0.03em;
+                line-height: 16px;
+                flex-shrink: 0;
+            }
+
+            .field-badge.required {
+                background: rgba(239, 68, 68, 0.12);
+                color: #ef4444;
+            }
+
+            .field-badge.optional {
+                background: rgba(59, 130, 246, 0.10);
+                color: #3b82f6;
+            }
+
+            .field-badge.public {
+                background: rgba(34, 197, 94, 0.10);
+                color: #22c55e;
+            }
+
+            .field-section-title {
+                display: flex;
+                align-items: center;
+                gap: var(--space-2);
+                font-size: var(--text-sm);
+                font-weight: 600;
+                color: var(--text-secondary);
+                margin-bottom: var(--space-2);
+                margin-top: var(--space-4);
+            }
+
+            .field-section-title:first-child {
+                margin-top: 0;
+            }
+
+            .field-label-row {
+                display: flex;
+                align-items: center;
+                gap: var(--space-2);
+                min-width: 0;
+                flex: 1;
+            }
+
+            .field-label-text {
+                font-size: var(--text-sm);
+                color: var(--text-secondary);
+                white-space: nowrap;
+                overflow: hidden;
+                text-overflow: ellipsis;
             }
 
             .add-attribute-btn {
@@ -218,6 +268,7 @@ export class EntityModal extends PlatformModal {
                 ...this._formData,
                 entity_type: defaultType.type_id,
             };
+            this._ensureSchemaRows();
         }
         
         if (this.entity) {
@@ -235,6 +286,7 @@ export class EntityModal extends PlatformModal {
             this._attributeRows = Object.entries(this.entity.attributes || {}).map(
                 ([key, value]) => ({ key, value })
             );
+            this._ensureSchemaRows();
         }
     }
 
@@ -263,6 +315,7 @@ export class EntityModal extends PlatformModal {
             entity_type: typeId,
             entity_subtype: null,
         };
+        this._ensureSchemaRows();
     }
 
     _onSubtypeSelect(subtypeId) {
@@ -270,6 +323,7 @@ export class EntityModal extends PlatformModal {
             ...this._formData,
             entity_subtype: this._formData.entity_subtype === subtypeId ? null : subtypeId,
         };
+        this._ensureSchemaRows();
     }
 
     _onNameInput(e) {
@@ -399,24 +453,160 @@ export class EntityModal extends PlatformModal {
         return {};
     }
 
-    _getRequiredFieldNames() {
+    _getSelectedEntityType() {
         const typeId = this._formData.entity_subtype || this._formData.entity_type;
-        const entityType = this._entityTypes.find(t => t.type_id === typeId);
-        if (!entityType || !entityType.required_fields) return [];
+        return this._entityTypes.find(t => t.type_id === typeId) || null;
+    }
+
+    _getRequiredFieldNames() {
+        const entityType = this._getSelectedEntityType();
+        if (!entityType?.required_fields) return [];
         return Object.keys(entityType.required_fields);
     }
 
-    _renderRequiredFields() {
-        const requiredNames = this._getRequiredFieldNames();
-        if (requiredNames.length === 0) return '';
+    _getOptionalFieldNames() {
+        const entityType = this._getSelectedEntityType();
+        if (!entityType?.optional_fields) return [];
+        return Object.keys(entityType.optional_fields);
+    }
+
+    _getPublicFieldNames() {
+        const entityType = this._getSelectedEntityType();
+        return entityType?.public_fields || [];
+    }
+
+    _getFieldLabel(fieldKey) {
+        const spec = this._getFieldSpec(fieldKey);
+        return spec?.label || fieldKey;
+    }
+
+    _isFieldRequired(fieldKey) {
+        const entityType = this._getSelectedEntityType();
+        return Boolean(entityType?.required_fields?.[fieldKey]);
+    }
+
+    _isFieldOptional(fieldKey) {
+        const entityType = this._getSelectedEntityType();
+        return Boolean(entityType?.optional_fields?.[fieldKey]);
+    }
+
+    _isFieldPublic(fieldKey) {
+        return this._getPublicFieldNames().includes(fieldKey);
+    }
+
+    _ensureSchemaRows() {
+        const requiredKeys = this._getRequiredFieldNames();
+        const optionalKeys = this._getOptionalFieldNames();
         const existingKeys = new Set(this._attributeRows.map(r => r.key.trim()));
-        const missing = requiredNames.filter(f => !existingKeys.has(f));
-        if (missing.length === 0) return '';
+        const toAdd = [];
+        for (const key of requiredKeys) {
+            if (!existingKeys.has(key)) {
+                toAdd.push({ key, value: '' });
+            }
+        }
+        for (const key of optionalKeys) {
+            if (!existingKeys.has(key)) {
+                toAdd.push({ key, value: '' });
+            }
+        }
+        if (toAdd.length > 0) {
+            this._attributeRows = [...this._attributeRows, ...toAdd];
+        }
+    }
+
+    _renderFieldBadges(fieldKey) {
+        const badges = [];
+        if (this._isFieldRequired(fieldKey)) {
+            badges.push(html`<span class="field-badge required">${this.i18n.t('entity_card.badge_required')}</span>`);
+        } else if (this._isFieldOptional(fieldKey)) {
+            badges.push(html`<span class="field-badge optional">${this.i18n.t('entity_card.badge_optional')}</span>`);
+        }
+        if (this._isFieldPublic(fieldKey)) {
+            badges.push(html`<span class="field-badge public">${this.i18n.t('entity_card.badge_public')}</span>`);
+        }
+        return badges;
+    }
+
+    _renderAttributeRow(row, index, isSchemaField) {
         return html`
-            <div class="required-fields-hint">
-                ${this.i18n.t('entity_modal.required_fields', { fields: missing.join(', ') },
-                    'crm', `Required: ${missing.join(', ')}`)}
+            <div class="attribute-row">
+                ${isSchemaField ? html`
+                    <div class="field-label-row">
+                        <span class="field-label-text">${this._getFieldLabel(row.key)}</span>
+                        ${this._renderFieldBadges(row.key)}
+                    </div>
+                ` : html`
+                    <input
+                        type="text"
+                        class="form-input ${this._fieldErrors[row.key] ? 'field-error' : ''}"
+                        placeholder=${this.i18n.t('ai_entity_card.attr_key_placeholder')}
+                        .value=${row.key}
+                        @input=${(e) => this._onAttributeKeyChange(index, e.target.value)}
+                    />
+                `}
+                <platform-field
+                    .type=${this._getFieldType(row.key)}
+                    .value=${row.value}
+                    .config=${this._getFieldConfig(row.key)}
+                    mode="edit"
+                    style="flex: 1;"
+                    @change=${(e) => this._onAttributeValueChange(index, e.detail.value)}
+                ></platform-field>
+                ${!isSchemaField ? html`
+                    <button
+                        type="button"
+                        class="remove-btn"
+                        @click=${() => this._onRemoveAttribute(index)}
+                    >
+                        <platform-icon name="close" size="14"></platform-icon>
+                    </button>
+                ` : ''}
+                ${this._fieldErrors[row.key] ? html`
+                    <span class="field-error-text">${this._fieldErrors[row.key]}</span>
+                ` : ''}
             </div>
+        `;
+    }
+
+    _renderAttributeGroups() {
+        const requiredKeys = new Set(this._getRequiredFieldNames());
+        const optionalKeys = new Set(this._getOptionalFieldNames());
+
+        const requiredRows = [];
+        const optionalRows = [];
+        const customRows = [];
+
+        for (let i = 0; i < this._attributeRows.length; i++) {
+            const row = this._attributeRows[i];
+            const key = row.key.trim();
+            if (requiredKeys.has(key)) {
+                requiredRows.push({ row, index: i });
+            } else if (optionalKeys.has(key)) {
+                optionalRows.push({ row, index: i });
+            } else {
+                customRows.push({ row, index: i });
+            }
+        }
+
+        return html`
+            ${requiredRows.length > 0 ? html`
+                <div class="field-section-title">
+                    ${this.i18n.t('entity_modal.label_required_fields')}
+                </div>
+                ${requiredRows.map(({ row, index }) => this._renderAttributeRow(row, index, true))}
+            ` : ''}
+            ${optionalRows.length > 0 ? html`
+                <div class="field-section-title">
+                    ${this.i18n.t('entity_modal.label_optional_fields')}
+                </div>
+                ${optionalRows.map(({ row, index }) => this._renderAttributeRow(row, index, true))}
+            ` : ''}
+            ${customRows.length > 0 ? html`
+                <div class="field-section-title">
+                    ${this.i18n.t('entity_modal.label_custom_fields')}
+                </div>
+                ${customRows.map(({ row, index }) => this._renderAttributeRow(row, index, false))}
+            ` : ''}
         `;
     }
 
@@ -536,37 +726,7 @@ export class EntityModal extends PlatformModal {
                 ` : ''}
 
                 <div class="attributes-section">
-                    <label class="form-label">${this.i18n.t('entity_modal.label_extra_attributes')}</label>
-                    ${this._renderRequiredFields()}
-                    ${this._attributeRows.map((row, index) => html`
-                        <div class="attribute-row">
-                            <input
-                                type="text"
-                                class="form-input ${this._fieldErrors[row.key] ? 'field-error' : ''}"
-                                placeholder=${this.i18n.t('ai_entity_card.attr_key_placeholder')}
-                                .value=${row.key}
-                                @input=${(e) => this._onAttributeKeyChange(index, e.target.value)}
-                            />
-                            <platform-field
-                                .type=${this._getFieldType(row.key)}
-                                .value=${row.value}
-                                .config=${this._getFieldConfig(row.key)}
-                                mode="edit"
-                                style="flex: 1;"
-                                @change=${(e) => this._onAttributeValueChange(index, e.detail.value)}
-                            ></platform-field>
-                            <button
-                                type="button"
-                                class="remove-btn"
-                                @click=${() => this._onRemoveAttribute(index)}
-                            >
-                                <platform-icon name="close" size="14"></platform-icon>
-                            </button>
-                            ${this._fieldErrors[row.key] ? html`
-                                <span class="field-error-text">${this._fieldErrors[row.key]}</span>
-                            ` : ''}
-                        </div>
-                    `)}
+                    ${this._renderAttributeGroups()}
                     <button
                         type="button"
                         class="add-attribute-btn"

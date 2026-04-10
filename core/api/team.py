@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, HTTPException, Query, Request
 from pydantic import BaseModel, Field
 
 from core.context import get_context
@@ -50,3 +50,34 @@ async def get_team_members(request: Request) -> list[TeamMemberResponse]:
         ))
 
     return members
+
+
+class UserSearchResult(BaseModel):
+    user_id: str
+    name: str
+    email: str | None = None
+    avatar_url: str | None = None
+
+
+@router.get("/search", response_model=list[UserSearchResult])
+async def search_users(
+    request: Request,
+    q: str = Query(..., min_length=2, description="Email или имя для поиска"),
+) -> list[UserSearchResult]:
+    """Поиск пользователей по email или имени (по всем компаниям)."""
+    ctx = get_context()
+    if not ctx or not ctx.user:
+        raise HTTPException(status_code=401, detail="Authentication required")
+
+    user_repo = request.app.state.container.user_repository
+    users = await user_repo.search_by_query(q, limit=20)
+
+    return [
+        UserSearchResult(
+            user_id=u.user_id,
+            name=u.name,
+            email=u.emails[0] if u.emails else None,
+            avatar_url=u.avatar_url,
+        )
+        for u in users
+    ]

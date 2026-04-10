@@ -11,6 +11,8 @@ import pytest
 import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
 
+pytestmark = [pytest.mark.timeout(30)]
+
 
 @pytest_asyncio.fixture
 async def flows_team_client():

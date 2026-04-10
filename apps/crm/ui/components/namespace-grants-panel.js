@@ -6,6 +6,7 @@ import { PlatformElement } from '@platform/lib/platform-element/index.js';
 import { buttonStyles } from '@platform/lib/styles/shared/button.styles.js';
 import { CRMStore } from '../store/crm.store.js';
 import '@platform/lib/components/platform-icon.js';
+import '../modals/share-modal.js';
 
 export class NamespaceGrantsPanel extends PlatformElement {
     static properties = {
@@ -222,22 +223,22 @@ export class NamespaceGrantsPanel extends PlatformElement {
         this.success(this.i18n.t('grants.success_namespace_public'));
     }
 
-    async _onShareToUser() {
-        const userId = prompt(this.i18n.t('grants.prompt_user_id'));
-        if (!userId) return;
-        
-        const crmApi = this.services.get('crmApi');
-        await CRMStore.grantNamespaceToUser(crmApi, this.namespace, userId, 'viewer');
-        this.success(this.i18n.t('grants.success_access_granted'));
+    _onShareToUser() {
+        this._openShareModal('user');
     }
 
-    async _onShareToCompany() {
-        const companyId = prompt(this.i18n.t('grants.prompt_company_id'));
-        if (!companyId) return;
-        
-        const crmApi = this.services.get('crmApi');
-        await CRMStore.grantNamespaceToCompany(crmApi, this.namespace, companyId, 'viewer');
-        this.success(this.i18n.t('grants.success_access_granted'));
+    _onShareToCompany() {
+        this._openShareModal('company');
+    }
+
+    _openShareModal(shareType) {
+        const modal = document.createElement('share-modal');
+        modal.namespaceId = this.namespace;
+        modal.shareType = shareType;
+        document.body.appendChild(modal);
+        modal.showModal();
+        modal.addEventListener('close', () => modal.remove());
+        modal.addEventListener('shared', () => this._loadGrants());
     }
 
     async _onRevokeGrant(grantId) {
