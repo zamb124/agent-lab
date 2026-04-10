@@ -75,6 +75,9 @@ class AuthMiddleware(BaseHTTPMiddleware):
         context_factory = ContextFactory(container)
         
         rule = self.route_matcher.match(path)
+        if rule and rule.skip:
+            return await call_next(request)
+
         if not rule:
             if path_allows_spa_fallback(path) and browser_request_allows_spa_fallback(request):
                 rule = RouteRule(

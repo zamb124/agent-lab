@@ -506,6 +506,11 @@ class BillingService:
         quantity = quantity_from_span(rule.quantity_from, span_dict)
         resource_name = rule.resource_name
 
+        if quantity == 0:
+            skip_usage_id = f"skipped:zero_quantity:{span_id}:{rule.rule_id}"
+            await settlement.mark(span_id, rule.rule_id, skip_usage_id)
+            return skip_usage_id
+
         unit_cost = await self._unit_cost_for_company(company, resource_name)
         cost = unit_cost * quantity
 

@@ -133,4 +133,4 @@ async def yoomoney_callback(request: Request, container: ContainerDep, code: str
 
     logger.info("YooMoney OAuth: access_token успешно получен и сохранён")
 
-    return RedirectResponse(url="/frontend/billing?oauth=success")
+    return RedirectResponse(url="/billing?oauth=success")

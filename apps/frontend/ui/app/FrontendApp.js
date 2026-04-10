@@ -239,6 +239,7 @@ export class FrontendApp extends PlatformApp {
             '/api-keys',
             '/embed-configs',
             '/billing',
+            '/frontend/billing',
             '/scheduler-tasks',
             '/lead-requests',
             '/platform-tracing',

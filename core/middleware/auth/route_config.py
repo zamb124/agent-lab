@@ -83,7 +83,7 @@ SKIP_PATHS = [
     "/flows/health",
     "/crm/health",
     "/debug/*",
-    "/*/api/v1/payments/webhook/*",
+    "/api/v1/payments/webhook/*",
 ]
 
 ROUTE_RULES: List[RouteRule] = [

@@ -1323,7 +1323,7 @@ class TestYooMoneyOAuthCallback:
             follow_redirects=False,
         )
 
-        # Callback делает redirect на /frontend/billing?oauth=success
+        # Callback делает redirect на /billing?oauth=success
         assert response.status_code in (302, 307)
 
         # Проверяем что токен сохранён в storage

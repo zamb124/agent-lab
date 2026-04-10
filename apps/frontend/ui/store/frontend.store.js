@@ -26,11 +26,12 @@ const CONSOLE_PATH_TO_VIEW = new Map(
  * @returns {string | null}
  */
 export function getConsoleViewForPath(path) {
-    const direct = CONSOLE_PATH_TO_VIEW.get(path);
+    const normalized = path.startsWith('/frontend/') ? path.slice('/frontend'.length) : path;
+    const direct = CONSOLE_PATH_TO_VIEW.get(normalized);
     if (direct) {
         return direct;
     }
-    if (path === '/settings' || path.startsWith('/settings/')) {
+    if (normalized === '/settings' || normalized.startsWith('/settings/')) {
         return 'settings';
     }
     return null;

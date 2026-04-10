@@ -213,7 +213,7 @@
   },
   "payment_providers": {
     "default_provider": "yoomoney_main",
-    "sync_enabled": false,
+    "sync_enabled": true,
     "sync_cron": "*/30 * * * *",
     "providers": {
       "yoomoney_main": {
