@@ -323,6 +323,13 @@ export class CRMAPIService extends BaseService {
         return this.get(`/entities/${entityId}/card`);
     }
 
+    async getEntityCardIfPresent(entityId) {
+        if (!entityId) {
+            throw new Error('Entity ID is required');
+        }
+        return this.get(`/entities/${entityId}/card`, {}, { notFoundReturns: null });
+    }
+
     async getDailySummary(date, options = {}) {
         if (!date) {
             throw new Error('Date is required');

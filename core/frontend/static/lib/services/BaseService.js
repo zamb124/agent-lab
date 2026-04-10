@@ -8,9 +8,9 @@ export class BaseService {
         this.baseUrl = baseUrl;
     }
 
-    async get(path, params = {}) {
+    async get(path, params = {}, fetchOptions = {}) {
         const url = this._buildUrlWithParams(path, params);
-        return this._fetch('GET', url, null, {});
+        return this._fetch('GET', url, null, fetchOptions);
     }
 
     async getBlob(path, params = {}) {
@@ -123,7 +123,11 @@ export class BaseService {
     async _fetch(method, path, data, options = {}) {
         const url = `${this.baseUrl}${path}`;
         const isFormData = data instanceof FormData;
-        const { headers: optionHeaders = {}, ...restOptions } = options;
+        const {
+            headers: optionHeaders = {},
+            notFoundReturns: _notFoundReturns,
+            ...fetchInitOverrides
+        } = options;
 
         const config = {
             method,
@@ -132,7 +136,7 @@ export class BaseService {
                 ...optionHeaders,
             },
             credentials: 'include',
-            ...restOptions,
+            ...fetchInitOverrides,
         };
 
         if (data) {
@@ -140,8 +144,11 @@ export class BaseService {
         }
 
         const response = await fetch(url, config);
-        
+
         if (!response.ok) {
+            if (response.status === 404 && Object.prototype.hasOwnProperty.call(options, 'notFoundReturns')) {
+                return options.notFoundReturns;
+            }
             if (response.status === 401) {
                 window.dispatchEvent(new CustomEvent(AppEvents.AUTH_UNAUTHORIZED, { bubbles: true }));
             }

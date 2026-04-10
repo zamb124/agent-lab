@@ -255,6 +255,7 @@ const baseStore = new BaseStore('crm', {
         entitiesLoading: false,
         loadingMore: false,
         cardLoading: false,
+        entityCardNotFound: false,
         aggregate: null,
     },
     grants: {
@@ -1497,6 +1498,7 @@ export const CRMStore = {
                 list: [],
                 currentEntityId: null,
                 currentEntity: null,
+                entityCardNotFound: false,
             }
         }));
     },
@@ -1968,6 +1970,7 @@ export const CRMStore = {
                     ? s.entities.list.find(e => e.entity_id === entityId) || null
                     : null,
                 currentEntityRelated: [],
+                entityCardNotFound: false,
             },
             grants: { ...s.grants, currentEntityGrants: [] }
         }));
@@ -1978,7 +1981,7 @@ export const CRMStore = {
         }
     },
 
-    async loadEntityCard(crmApi, entityId) {
+    async loadEntityCard(crmApi, entityId, options = {}) {
         if (!crmApi) {
             throw new Error('crmApi service is required');
         }
@@ -1986,20 +1989,46 @@ export const CRMStore = {
             throw new Error('Entity ID is required');
         }
 
-        baseStore.setState((s) => ({
-            entities: { ...s.entities, cardLoading: true }
-        }));
+        const updateStore = options.updateStore !== false;
 
-        const card = await crmApi.getEntityCard(entityId);
+        if (updateStore) {
+            baseStore.setState((s) => ({
+                entities: {
+                    ...s.entities,
+                    cardLoading: true,
+                    entityCardNotFound: false,
+                }
+            }));
+        }
 
-        baseStore.setState((s) => ({
-            entities: {
-                ...s.entities,
-                currentEntity: card.entity,
-                currentEntityRelated: card.related_entities || [],
-                cardLoading: false,
+        const card = await crmApi.getEntityCardIfPresent(entityId);
+
+        if (!card) {
+            if (updateStore) {
+                baseStore.setState((s) => ({
+                    entities: {
+                        ...s.entities,
+                        currentEntity: null,
+                        currentEntityRelated: [],
+                        cardLoading: false,
+                        entityCardNotFound: true,
+                    }
+                }));
             }
-        }));
+            return null;
+        }
+
+        if (updateStore) {
+            baseStore.setState((s) => ({
+                entities: {
+                    ...s.entities,
+                    currentEntity: card.entity,
+                    currentEntityRelated: card.related_entities || [],
+                    cardLoading: false,
+                    entityCardNotFound: false,
+                }
+            }));
+        }
 
         return card;
     },
@@ -2097,6 +2126,7 @@ export const CRMStore = {
                 list: [entity, ...s.entities.list],
                 currentEntityId: entity.entity_id,
                 currentEntity: entity,
+                entityCardNotFound: false,
             }
         }));
 
@@ -2141,6 +2171,7 @@ export const CRMStore = {
                     list: nextList,
                     currentEntityId: nextCurrentId,
                     currentEntity: nextCurrentEntity,
+                    entityCardNotFound: false,
                 },
             };
         });
@@ -2193,6 +2224,7 @@ export const CRMStore = {
                 currentEntity: s.entities.currentEntityId === entityId
                     ? null
                     : s.entities.currentEntity,
+                entityCardNotFound: false,
             }
         }));
     },

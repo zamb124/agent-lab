@@ -205,10 +205,15 @@ export class NoteViewModal extends PlatformModal {
             throw new Error('Note entity_id is required');
         }
         const crmApi = this.crmApi;
-        const card = await CRMStore.loadEntityCard(crmApi, this.note.entity_id);
+        const card = await CRMStore.loadEntityCard(crmApi, this.note.entity_id, { updateStore: false });
+        if (!card) {
+            this._relatedEntities = [];
+            this._relationships = [];
+            this._attachments = [];
+            return;
+        }
         if (
-            !card
-            || !Array.isArray(card.related_entities)
+            !Array.isArray(card.related_entities)
             || !Array.isArray(card.relationships)
             || !Array.isArray(card.attachments)
         ) {

@@ -585,6 +585,8 @@
         "request_approve": "Одобрить",
         "empty_pick_title": "Выберите сущность",
         "empty_pick_subtitle": "из списка слева",
+        "not_found_title": "Сущность не найдена",
+        "not_found_subtitle": "Возможно, она удалена или недоступна в этом пространстве.",
         "request_access_tooltip": "Запросить доступ",
         "delete_entity_tooltip": "Удалить сущность",
         "actions_menu_tooltip": "Дополнительные действия",
@@ -1158,6 +1160,9 @@
         "btn_idle": "Записать голосовую заметку",
         "btn_recording": "Остановить запись",
         "btn_processing": "Распознавание...",
-        "empty_result": "Не удалось распознать речь. Попробуйте ещё раз."
+        "empty_result": "Не удалось распознать речь. Попробуйте ещё раз.",
+        "dictate_idle": "Надиктовать текст",
+        "dictate_recording": "Остановить диктовку",
+        "dictate_appended": "Текст добавлен в заметку"
     }
 }

@@ -1311,13 +1311,19 @@ class EntityService:
             sk = (st.lower(), self._normalize_name_for_relationship_key(sn))
             tk = (tt.lower(), self._normalize_name_for_relationship_key(tn))
             if sk not in key_index:
-                raise ValueError(
-                    f"Нет сущности черновика для конца связи source: type={st!r} name={sn!r}"
+                logger.warning(
+                    "analyze: LLM вернул связь с source, для которого нет черновика сущности: "
+                    "type=%r name=%r — связь пропущена",
+                    st, sn,
                 )
+                continue
             if tk not in key_index:
-                raise ValueError(
-                    f"Нет сущности черновика для конца связи target: type={tt!r} name={tn!r}"
+                logger.warning(
+                    "analyze: LLM вернул связь с target, для которого нет черновика сущности: "
+                    "type=%r name=%r — связь пропущена",
+                    tt, tn,
                 )
+                continue
             out.append(
                 AIAnalysisRelationshipDraft(
                     draft_relationship_id=str(uuid.uuid4()),
@@ -1733,6 +1739,23 @@ class EntityService:
 
         return (leaf_type_id, initial_subtype)
 
+    async def _collect_note_family_type_ids(self) -> set[str]:
+        """Возвращает множество type_id, принадлежащих ветке note (включая note и дочерние типы)."""
+        all_types = await self._entity_type_repo.get_all_for_company(include_system=True)
+        children_by_parent: dict[str | None, list[str]] = {}
+        for et in all_types:
+            children_by_parent.setdefault(et.parent_type_id, []).append(et.type_id)
+
+        result: set[str] = {"note"}
+        queue = ["note"]
+        while queue:
+            parent = queue.pop()
+            for child in children_by_parent.get(parent, []):
+                if child not in result:
+                    result.add(child)
+                    queue.append(child)
+        return result
+
     async def _create_entity_from_draft_row(
         self,
         ent: AIExtractedEntity,
@@ -2049,14 +2072,21 @@ class EntityService:
         if not isinstance(entities_data, list):
             entities_data = []
         entity_list: List[AIExtractedEntity] = []
+        note_family_type_ids = await self._collect_note_family_type_ids()
         for i, raw_ent in enumerate(entities_data):
             if not isinstance(raw_ent, dict):
                 raise ValueError(f"entities[{i}] должен быть объектом")
-            entity_list.append(
-                AIExtractedEntity.model_validate(
-                    self._normalize_entity_payload(raw_ent)
-                )
+            parsed = AIExtractedEntity.model_validate(
+                self._normalize_entity_payload(raw_ent)
             )
+            if parsed.entity_type.lower() in note_family_type_ids:
+                logger.warning(
+                    "analyze: LLM вернул сущность note-семейства (type=%r, name=%r) "
+                    "в массиве entities — пропущена (заметка уже представлена в поле note)",
+                    parsed.entity_type, parsed.name,
+                )
+                continue
+            entity_list.append(parsed)
 
         rels_data = normalized_result.get("relationships")
         if not isinstance(rels_data, list):

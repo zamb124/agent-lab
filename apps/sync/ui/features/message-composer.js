@@ -11,36 +11,10 @@ import { SyncStore } from '../store/sync.store.js';
 import { senderUserId } from '../utils/sender.js';
 import { SYNC_MESSAGE_TEXT_MAX_CHARS } from '../constants/sync-limits.js';
 import { extractMentionedUserIdsFromPlainText } from '../utils/sync-mention-text.js';
+import { getUserMediaCompat, hasGetUserMediaApi, pickVoiceMimeType } from '@platform/lib/utils/voice-recording.js';
 import '@platform/lib/components/platform-icon.js';
 
 const EMOJIS = ['😀', '😅', '😉', '😍', '🤝', '🔥', '✅', '💡', '🧠', '🚀', '📌', '🧩', '⚠️', '❌', '👍', '👀'];
-
-/**
- * WKWebView и часть встроенных браузеров отдают только legacy getUserMedia.
- * @param {MediaStreamConstraints} constraints
- * @returns {Promise<MediaStream>}
- */
-function getUserMediaCompat(constraints) {
-    const nav = typeof navigator !== 'undefined' ? navigator : null;
-    if (nav?.mediaDevices && typeof nav.mediaDevices.getUserMedia === 'function') {
-        return nav.mediaDevices.getUserMedia(constraints);
-    }
-    const legacy = nav && (nav.getUserMedia || nav.webkitGetUserMedia || nav.mozGetUserMedia);
-    if (typeof legacy === 'function') {
-        return new Promise((resolve, reject) => {
-            legacy.call(nav, constraints, resolve, reject);
-        });
-    }
-    return Promise.reject(new Error('NO_GET_USER_MEDIA'));
-}
-
-function hasGetUserMediaApi() {
-    const nav = typeof navigator !== 'undefined' ? navigator : null;
-    if (nav?.mediaDevices && typeof nav.mediaDevices.getUserMedia === 'function') {
-        return true;
-    }
-    return Boolean(nav && (nav.getUserMedia || nav.webkitGetUserMedia || nav.mozGetUserMedia));
-}
 
 function extractPlainTextFromMsg(msg) {
     const contents = msg?.contents ?? [];
@@ -1198,22 +1172,7 @@ export class MessageComposer extends PlatformElement {
     }
 
     _pickMediaRecorderMimeType() {
-        /*
-         * Safari / iOS не декодирует WebM в <audio>; сначала MP4/AAC — иначе голосовые не играют в приложении.
-         */
-        const variants = [
-            'audio/mp4;codecs=mp4a.40.2',
-            'audio/mp4',
-            'audio/webm;codecs=opus',
-            'audio/webm',
-            'audio/ogg;codecs=opus',
-        ];
-        for (const variant of variants) {
-            if (MediaRecorder.isTypeSupported(variant)) {
-                return variant;
-            }
-        }
-        return '';
+        return pickVoiceMimeType();
     }
 
     _formatRecordingSeconds() {

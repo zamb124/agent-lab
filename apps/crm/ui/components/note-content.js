@@ -6,6 +6,7 @@ import '@platform/lib/components/platform-icon.js';
 import '@platform/lib/components/platform-date-picker.js';
 import { CRMStore } from '../store/crm.store.js';
 import { resolveFileIconKey } from '@platform/services/icon.service.js';
+import { getUserMediaCompat, hasGetUserMediaApi, pickVoiceMimeType } from '@platform/lib/utils/voice-recording.js';
 
 function getLocalIsoDate() {
     const now = new Date();
@@ -53,6 +54,7 @@ export class NoteContent extends PlatformElement {
         _ctxSearchResults: { state: true },
         _ctxSearchLoading: { state: true },
         _ctxLookupLabel: { state: true },
+        _voiceRecState: { state: true },
     };
 
     static styles = [
@@ -748,6 +750,57 @@ export class NoteContent extends PlatformElement {
                 max-height: 100%;
             }
 
+            .note-voice-dictate-bar {
+                display: flex;
+                align-items: center;
+                gap: 8px;
+                padding: 0 0 4px 0;
+            }
+
+            .voice-dictate-btn {
+                width: 36px;
+                height: 36px;
+                border: 1px solid var(--crm-stroke);
+                border-radius: 18px;
+                display: inline-flex;
+                align-items: center;
+                justify-content: center;
+                cursor: pointer;
+                background: var(--crm-surface-muted);
+                color: var(--text-secondary);
+                padding: 0;
+                transition: background var(--duration-fast), border-color var(--duration-fast), color var(--duration-fast);
+            }
+
+            .voice-dictate-btn:hover {
+                background: var(--crm-surface);
+                border-color: var(--crm-stroke-strong);
+                color: var(--text-primary);
+            }
+
+            .voice-dictate-btn:disabled {
+                opacity: 0.55;
+                cursor: not-allowed;
+            }
+
+            .voice-dictate-btn.recording {
+                background: var(--error-bg);
+                border-color: var(--error);
+                color: var(--error);
+                animation: voice-dictate-pulse 1.4s ease-in-out infinite;
+            }
+
+            @keyframes voice-dictate-pulse {
+                0%, 100% { opacity: 1; }
+                50% { opacity: 0.6; }
+            }
+
+            .voice-dictate-label {
+                font-size: 13px;
+                line-height: 18px;
+                color: var(--text-tertiary);
+            }
+
             .sidebar {
                 display: flex;
                 flex-direction: column;
@@ -1365,6 +1418,9 @@ export class NoteContent extends PlatformElement {
         this._voiceSearchTimer = 0;
         this._ctxSearchTimer = 0;
         this._onDocPointerDown = null;
+        this._voiceRecState = 'idle';
+        this._voiceMediaRecorder = null;
+        this._voiceAudioChunks = [];
     }
 
     connectedCallback() {
@@ -1389,6 +1445,7 @@ export class NoteContent extends PlatformElement {
         if (this._ctxSearchTimer) {
             window.clearTimeout(this._ctxSearchTimer);
         }
+        this._stopVoiceDictation();
         super.disconnectedCallback();
     }
 
@@ -2210,6 +2267,102 @@ export class NoteContent extends PlatformElement {
         this._draftText = event.target.value;
     }
 
+    _voiceDictateTitle() {
+        if (this._voiceRecState === 'recording') {
+            return this.i18n.t('voice_input.dictate_recording');
+        }
+        if (this._voiceRecState === 'processing') {
+            return this.i18n.t('voice_input.btn_processing');
+        }
+        return this.i18n.t('voice_input.dictate_idle');
+    }
+
+    async _onVoiceDictateToggle() {
+        if (this._voiceRecState === 'recording') {
+            this._stopVoiceDictation();
+            return;
+        }
+        if (this._voiceRecState !== 'idle') {
+            return;
+        }
+
+        const notify = this.services.get('notify');
+
+        if (!window.isSecureContext) {
+            notify.warning(this.i18n.t('voice.audio_https_only', {}, 'common'));
+            return;
+        }
+        if (!hasGetUserMediaApi()) {
+            notify.warning(this.i18n.t('voice.audio_no_recorder', {}, 'common'));
+            return;
+        }
+        if (typeof MediaRecorder === 'undefined') {
+            notify.warning(this.i18n.t('voice.audio_no_recorder', {}, 'common'));
+            return;
+        }
+
+        let stream;
+        try {
+            stream = await getUserMediaCompat({ audio: true });
+        } catch (err) {
+            const msg = err instanceof Error ? err.message : String(err);
+            notify.warning(msg || this.i18n.t('voice.audio_start_failed', {}, 'common'));
+            return;
+        }
+
+        this._voiceAudioChunks = [];
+        const mimeType = pickVoiceMimeType();
+        this._voiceMediaRecorder = mimeType
+            ? new MediaRecorder(stream, { mimeType })
+            : new MediaRecorder(stream);
+        const resolvedMime = this._voiceMediaRecorder.mimeType || mimeType || 'audio/mp4';
+
+        this._voiceMediaRecorder.ondataavailable = (e) => {
+            if (e.data.size > 0) {
+                this._voiceAudioChunks.push(e.data);
+            }
+        };
+
+        this._voiceMediaRecorder.onstop = async () => {
+            stream.getTracks().forEach(t => t.stop());
+            this._voiceRecState = 'processing';
+            const blob = new Blob(this._voiceAudioChunks, { type: resolvedMime });
+            const crmApi = this.crmApi;
+            if (!crmApi) {
+                throw new Error('crmApi is required');
+            }
+            try {
+                const result = await crmApi.voiceInput(blob);
+                this._voiceRecState = 'idle';
+                this._voiceMediaRecorder = null;
+                this._voiceAudioChunks = [];
+
+                if (!result.text || !result.text.trim()) {
+                    notify.warning(this.i18n.t('voice_input.empty_result'));
+                    return;
+                }
+                const separator = this._draftText?.trim() ? '\n\n' : '';
+                this._draftText = (this._draftText || '') + separator + result.text.trim();
+                notify.success(this.i18n.t('voice_input.dictate_appended'));
+            } catch (err) {
+                this._voiceRecState = 'idle';
+                this._voiceMediaRecorder = null;
+                this._voiceAudioChunks = [];
+                const msg = err instanceof Error ? err.message : String(err);
+                notify.error(msg || this.i18n.t('voice.audio_start_failed', {}, 'common'));
+            }
+        };
+
+        this._voiceMediaRecorder.start();
+        this._voiceRecState = 'recording';
+    }
+
+    _stopVoiceDictation() {
+        if (this._voiceMediaRecorder && this._voiceMediaRecorder.state === 'recording') {
+            this._voiceMediaRecorder.stop();
+        }
+    }
+
     _onSubtypeChange(event) {
         this._draftSubtype = event.target.value;
     }
@@ -2463,6 +2616,23 @@ export class NoteContent extends PlatformElement {
                         </div>
                     </div>
                     ${this.editable ? html`
+                        <div class="note-voice-dictate-bar">
+                            <button
+                                class="voice-dictate-btn ${this._voiceRecState === 'recording' ? 'recording' : ''}"
+                                type="button"
+                                ?disabled=${this._voiceRecState === 'processing'}
+                                @click=${this._onVoiceDictateToggle}
+                                title=${this._voiceDictateTitle()}
+                            >
+                                <platform-icon
+                                    name=${this._voiceRecState === 'recording' ? 'stop' : 'microphone'}
+                                    size="16"
+                                ></platform-icon>
+                            </button>
+                            ${this._voiceRecState === 'processing' ? html`
+                                <span class="voice-dictate-label">${this.i18n.t('voice_input.btn_processing')}</span>
+                            ` : ''}
+                        </div>
                         <textarea
                             class="note-text-input"
                             .value=${noteText}

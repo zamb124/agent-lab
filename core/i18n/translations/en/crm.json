@@ -585,6 +585,8 @@
         "request_approve": "Approve",
         "empty_pick_title": "Select an entity",
         "empty_pick_subtitle": "from the list on the left",
+        "not_found_title": "Entity not found",
+        "not_found_subtitle": "It may have been deleted or is not available in this space.",
         "request_access_tooltip": "Request access",
         "delete_entity_tooltip": "Delete entity",
         "actions_menu_tooltip": "More actions",
@@ -1158,6 +1160,9 @@
         "btn_idle": "Record voice note",
         "btn_recording": "Stop recording",
         "btn_processing": "Transcribing...",
-        "empty_result": "Could not recognize speech. Please try again."
+        "empty_result": "Could not recognize speech. Please try again.",
+        "dictate_idle": "Dictate text",
+        "dictate_recording": "Stop dictation",
+        "dictate_appended": "Text appended to note"
     }
 }

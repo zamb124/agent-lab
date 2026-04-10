@@ -32,6 +32,7 @@ export class EntityCard extends PlatformElement {
         _headerMenuAnchor: { state: true },
         _headerMenuZ: { state: true },
         _entityGrants: { state: true },
+        _entityCardNotFound: { state: true },
     };
 
     static styles = [
@@ -477,6 +478,7 @@ export class EntityCard extends PlatformElement {
         this._headerMenuAnchor = null;
         this._headerMenuZ = 0;
         this._entityGrants = [];
+        this._entityCardNotFound = false;
         this._syncedAccessRequestsForEntityId = '';
         this._boundAuthChangeForOwnership = this._onAuthChangeForOwnership.bind(this);
         this._boundCloseHeaderMenu = this._closeHeaderMenuOnOutside.bind(this);
@@ -486,6 +488,7 @@ export class EntityCard extends PlatformElement {
             this._relatedEntities = state.entities.currentEntityRelated || [];
             this._entityTypes = state.entities.entityTypes || [];
             this._loading = state.entities.cardLoading || false;
+            this._entityCardNotFound = state.entities.entityCardNotFound === true;
             this._entityGrants = state.grants.currentEntityGrants || [];
             this._syncOwnershipAndAccessUI();
         });
@@ -1039,6 +1042,18 @@ export class EntityCard extends PlatformElement {
                     <div>${this.i18n.t('entity_card.empty_pick_title')}</div>
                     <div style="font-size: var(--text-sm);">
                         ${this.i18n.t('entity_card.empty_pick_subtitle')}
+                    </div>
+                </div>
+            `;
+        }
+
+        if (this._entityCardNotFound) {
+            return html`
+                <div class="empty-state">
+                    <platform-icon name="info" size="56"></platform-icon>
+                    <div>${this.i18n.t('entity_card.not_found_title')}</div>
+                    <div style="font-size: var(--text-sm);">
+                        ${this.i18n.t('entity_card.not_found_subtitle')}
                     </div>
                 </div>
             `;

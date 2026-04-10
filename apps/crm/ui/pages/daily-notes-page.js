@@ -1,61 +1,12 @@
 import { html, css } from 'lit';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
 import { CRMStore } from '../store/crm.store.js';
+import { getUserMediaCompat, hasGetUserMediaApi, pickVoiceMimeType } from '@platform/lib/utils/voice-recording.js';
 import '@platform/lib/components/platform-icon.js';
 import '@platform/lib/components/platform-date-picker.js';
 import '../modals/entity-modal.js';
 import '../modals/note-view-modal.js';
 import '../modals/ai-analysis-modal.js';
-
-/**
- * WKWebView и часть встроенных браузеров отдают только legacy getUserMedia.
- * @param {MediaStreamConstraints} constraints
- * @returns {Promise<MediaStream>}
- */
-function getUserMediaCompat(constraints) {
-    const nav = typeof navigator !== 'undefined' ? navigator : null;
-    if (nav?.mediaDevices && typeof nav.mediaDevices.getUserMedia === 'function') {
-        return nav.mediaDevices.getUserMedia(constraints);
-    }
-    const legacy = nav && (nav.getUserMedia || nav.webkitGetUserMedia || nav.mozGetUserMedia);
-    if (typeof legacy === 'function') {
-        return new Promise((resolve, reject) => {
-            legacy.call(nav, constraints, resolve, reject);
-        });
-    }
-    return Promise.reject(new Error('NO_GET_USER_MEDIA'));
-}
-
-function hasGetUserMediaApi() {
-    const nav = typeof navigator !== 'undefined' ? navigator : null;
-    if (nav?.mediaDevices && typeof nav.mediaDevices.getUserMedia === 'function') {
-        return true;
-    }
-    return Boolean(nav && (nav.getUserMedia || nav.webkitGetUserMedia || nav.mozGetUserMedia));
-}
-
-/**
- * Safari / iOS не декодирует WebM; приоритет MP4/AAC.
- * @returns {string}
- */
-function pickVoiceMimeType() {
-    if (typeof MediaRecorder === 'undefined') {
-        return '';
-    }
-    const variants = [
-        'audio/mp4;codecs=mp4a.40.2',
-        'audio/mp4',
-        'audio/webm;codecs=opus',
-        'audio/webm',
-        'audio/ogg;codecs=opus',
-    ];
-    for (const variant of variants) {
-        if (MediaRecorder.isTypeSupported(variant)) {
-            return variant;
-        }
-    }
-    return '';
-}
 
 export class DailyNotesPage extends PlatformElement {
     static properties = {
@@ -1570,8 +1521,11 @@ export class DailyNotesPage extends PlatformElement {
         const crmApi = this.services.get('crmApi');
         const relatedEntitiesById = await Promise.all(
             unresolvedNoteIds.map(async (entityId) => {
-                const card = await crmApi.getEntityCard(entityId);
-                if (!card || !Array.isArray(card.related_entities)) {
+                const card = await crmApi.getEntityCardIfPresent(entityId);
+                if (!card) {
+                    return [entityId, []];
+                }
+                if (!Array.isArray(card.related_entities)) {
                     throw new Error('Entity card must contain related_entities array');
                 }
                 return [entityId, card.related_entities];
