@@ -622,7 +622,8 @@ export const CRMStore = {
             ai: { ...s.ai, analyzing: true }
         }));
         
-        const response = await crmApi.findEntitiesByText(text);
+        const ns = this._getCurrentNamespaceName();
+        const response = await crmApi.findEntitiesByText(text, ns);
         const entities = response.entities || [];
         
         baseStore.setState((s) => ({

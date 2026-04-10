@@ -220,6 +220,13 @@ class EntityService:
         return context.active_company.company_id
 
     @staticmethod
+    def _get_user_id() -> str:
+        context = get_context()
+        if not context or not context.user:
+            raise ValueError("Нет пользователя в контексте")
+        return str(context.user.user_id)
+
+    @staticmethod
     def _normalize_namespace(namespace: Optional[str]) -> Optional[str]:
         if namespace is None:
             return None
@@ -886,8 +893,7 @@ class EntityService:
         всегда получал ровно ``limit`` читаемых записей (или меньше,
         если данных в БД не осталось).
         """
-        context = get_context()
-        user_id = str(context.user.user_id) if context and context.user else None
+        user_id = self._get_user_id()
         company_id = self._get_company_id()
 
         oversample_factor = 3
@@ -1119,9 +1125,9 @@ class EntityService:
         namespace: Optional[str] = None,
         filters: Optional[Dict[str, Any]] = None,
         limit: int = 100,
-    ) -> List[CRMEntity]:
-        """Семантический поиск entities с фильтрацией по грантам."""
-        entities = await self._entity_repo.search(
+    ) -> List[Tuple[CRMEntity, float]]:
+        """Семантический поиск entities с фильтрацией по грантам. Возвращает (entity, score)."""
+        results = await self._entity_repo.search_with_similarity(
             query=query,
             entity_type=entity_type,
             entity_subtype=entity_subtype,
@@ -1129,10 +1135,12 @@ class EntityService:
             filters=filters,
             limit=limit,
         )
-        context = get_context()
-        user_id = str(context.user.user_id) if context and context.user else None
+        entities = [entity for entity, _ in results]
+        user_id = self._get_user_id()
         company_id = self._get_company_id()
-        return await self._access_control.batch_filter_readable(entities, user_id, company_id)
+        readable = await self._access_control.batch_filter_readable(entities, user_id, company_id)
+        readable_ids = {e.entity_id for e in readable}
+        return [(e, score) for e, score in results if e.entity_id in readable_ids]
 
     async def hybrid_search(
         self,
@@ -1153,8 +1161,7 @@ class EntityService:
             limit=limit,
         )
         entities = [entity for entity, _, _ in results]
-        context = get_context()
-        user_id = str(context.user.user_id) if context and context.user else None
+        user_id = self._get_user_id()
         company_id = self._get_company_id()
         readable = await self._access_control.batch_filter_readable(entities, user_id, company_id)
         readable_ids = {e.entity_id for e in readable}
@@ -1179,8 +1186,7 @@ class EntityService:
             limit=limit,
         )
         entities = [entity for entity, _ in results]
-        context = get_context()
-        user_id = str(context.user.user_id) if context and context.user else None
+        user_id = self._get_user_id()
         company_id = self._get_company_id()
         readable = await self._access_control.batch_filter_readable(entities, user_id, company_id)
         readable_ids = {e.entity_id for e in readable}
@@ -1196,12 +1202,12 @@ class EntityService:
     async def search_mentions(
         self,
         text: str,
-        limit: int = 20
+        namespace: Optional[str] = None,
+        limit: int = 20,
     ) -> List[CRMEntity]:
         """
         Real-time поиск упоминаний entities в тексте для подсветки.
-        
-        Использует семантический поиск + keyword matching для быстрого поиска.
+        Семантический поиск + фильтр по совпадению имени.
         """
         if not text or len(text) < 3:
             return []
@@ -1218,26 +1224,22 @@ class EntityService:
         
         combined_query = " ".join(unique_phrases)
 
-        entities = await self._entity_repo.search(
+        scored = await self._entity_repo.search_with_similarity(
             query=combined_query,
+            namespace=namespace,
             limit=limit,
         )
+        entities = [entity for entity, _ in scored]
 
-        context = get_context()
-        user_id = str(context.user.user_id) if context and context.user else None
+        user_id = self._get_user_id()
         company_id = self._get_company_id()
         entities = await self._access_control.batch_filter_readable(entities, user_id, company_id)
 
-        entities_with_keyword_match = []
-        for entity in entities:
-            name_lower = entity.name.lower()
-            if any(phrase in name_lower for phrase in unique_phrases):
-                entities_with_keyword_match.append(entity)
-
-        if entities_with_keyword_match:
-            return entities_with_keyword_match
-
-        return entities[:10]
+        matched = [
+            entity for entity in entities
+            if any(phrase in entity.name.lower() for phrase in unique_phrases)
+        ]
+        return matched if matched else entities[:10]
     
     @staticmethod
     def _normalize_name_for_relationship_key(name: str) -> str:
@@ -2799,16 +2801,16 @@ class EntityService:
 
         from apps.crm_worker.tasks.daily_summary_tasks import rebuild_daily_summary_task
         context = get_context()
-        auth_token = context.auth_token if context else None
-        user_id = context.user.user_id if context and context.user else None
+        if not context:
+            raise ValueError("Нет контекста для отправки задачи rebuild_daily_summary")
 
         await rebuild_daily_summary_task.kiq(
             company_id=company_id,
             date_str=date_str,
             namespace=self._normalize_namespace(namespace),
             reason="event",
-            auth_token=auth_token,
-            user_id=user_id,
+            auth_token=context.auth_token,
+            user_id=self._get_user_id(),
         )
         return True
 
@@ -3151,8 +3153,8 @@ class EntityService:
         from core.context import get_context
 
         context = get_context()
-        auth_token = context.auth_token if context else None
-        user_id = context.user.user_id if context and context.user else None
+        if not context:
+            raise ValueError("Нет контекста для отправки задачи rebuild_period_summary")
 
         await rebuild_period_summary_task.kiq(
             company_id=company_id,
@@ -3160,8 +3162,8 @@ class EntityService:
             date_to=date_to,
             namespace=self._normalize_namespace(namespace),
             reason="event",
-            auth_token=auth_token,
-            user_id=user_id,
+            auth_token=context.auth_token,
+            user_id=self._get_user_id(),
         )
         return True
 

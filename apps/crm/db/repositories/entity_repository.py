@@ -483,35 +483,6 @@ class EntityRepository(BaseCRMRepository[CRMEntity]):
 
     # -- Semantic Search --
 
-    async def search(
-        self,
-        query: str,
-        entity_type: Optional[str] = None,
-        entity_subtype: Optional[str] = None,
-        namespace: Optional[str] = None,
-        filters: Optional[Dict[str, Any]] = None,
-        limit: int = 10,
-        company_id: Optional[str] = None,
-    ) -> List[CRMEntity]:
-        """
-        Семантический поиск entities через JOIN с vector_documents.
-
-        1. Генерирует embedding для query
-        2. JOIN crm_entities <-> vector_documents по entity_id == document_id
-        3. Фильтрует по company_id, entity_type и т.д.
-        4. Сортирует по cosine distance
-        """
-        scored_entities = await self.search_with_similarity(
-            query=query,
-            entity_type=entity_type,
-            entity_subtype=entity_subtype,
-            namespace=namespace,
-            filters=filters,
-            limit=limit,
-            company_id=company_id,
-        )
-        return [entity for entity, _ in scored_entities]
-
     async def search_with_similarity(
         self,
         query: str,
@@ -564,17 +535,12 @@ class EntityRepository(BaseCRMRepository[CRMEntity]):
             resolved_order: List[str] = []
             score_by_resolved: Dict[str, float] = {}
             for item in search_results:
-                meta = item.metadata or {}
-                raw_parent = meta.get("entity_id")
-                if raw_parent is not None and str(raw_parent).strip() != "":
-                    resolved_id = str(raw_parent).strip()
-                else:
-                    resolved_id = item.document_id
-                if resolved_id not in score_by_resolved:
-                    score_by_resolved[resolved_id] = item.score
-                    resolved_order.append(resolved_id)
-                elif item.score > score_by_resolved[resolved_id]:
-                    score_by_resolved[resolved_id] = item.score
+                entity_id = item.document_id
+                if entity_id not in score_by_resolved:
+                    score_by_resolved[entity_id] = item.score
+                    resolved_order.append(entity_id)
+                elif item.score > score_by_resolved[entity_id]:
+                    score_by_resolved[entity_id] = item.score
 
             ordered_entity_ids = resolved_order
 

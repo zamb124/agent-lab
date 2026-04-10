@@ -276,6 +276,7 @@ class RelationshipResponse(BaseModel):
 class SearchMentionsRequest(BaseModel):
     """Запрос на поиск упоминаний в тексте"""
     text: str = Field(description="Текст для поиска упоминаний")
+    namespace: Optional[str] = Field(None, description="Namespace для ограничения поиска")
 
 
 class AIAnalyzeRequest(BaseModel):

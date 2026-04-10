@@ -2,6 +2,7 @@
 Тесты фильтрации и семантического поиска.
 
 User Story: Поиск по дате, владельцу, тексту, тегам, сущностям.
+Контракт /entities/search: has_more, score, match_type, search_mode дефолт.
 """
 
 import pytest
@@ -128,4 +129,106 @@ class TestFilteringSearch:
         assert list_resp.status_code == 200
         found = [r for r in list_resp.json()["items"] if r["name"] == unique_name]
         assert len(found) >= 1
+
+
+class TestSearchContract:
+    """Контракт ответа /entities/search: score, match_type, has_more, search_mode дефолт."""
+
+    @pytest.mark.asyncio
+    async def test_search_has_more_always_false(self, crm_client, unique_id, auth_headers_system):
+        """Поиск не поддерживает cursor-пагинацию: has_more=false."""
+        await crm_client.post(
+            "/crm/api/v1/entities/",
+            json={"entity_type": "note", "name": f"has_more_check_{unique_id}"},
+            headers=auth_headers_system,
+        )
+        for mode in ("hybrid", "text", "semantic"):
+            resp = await crm_client.get(
+                "/crm/api/v1/entities/search",
+                params={"query": unique_id, "search_mode": mode, "limit": 1},
+                headers=auth_headers_system,
+            )
+            assert resp.status_code == 200
+            payload = resp.json()
+            assert payload["has_more"] is False, f"search_mode={mode}: has_more should be False"
+            assert payload["next_cursor"] is None, f"search_mode={mode}: next_cursor should be None"
+
+    @pytest.mark.asyncio
+    async def test_search_default_mode_is_hybrid(self, crm_client, unique_id, auth_headers_system):
+        """Без указания search_mode дефолт = hybrid."""
+        await crm_client.post(
+            "/crm/api/v1/entities/",
+            json={
+                "entity_type": "note",
+                "name": f"default_mode_{unique_id}",
+                "description": f"text for search {unique_id}",
+            },
+            headers=auth_headers_system,
+        )
+        resp = await crm_client.get(
+            "/crm/api/v1/entities/search",
+            params={"query": unique_id},
+            headers=auth_headers_system,
+        )
+        assert resp.status_code == 200
+        payload = resp.json()
+        items = payload["items"]
+        if items:
+            item = items[0]
+            assert "match_type" in item, "hybrid по умолчанию должен возвращать match_type"
+
+    @pytest.mark.asyncio
+    async def test_all_search_modes_return_score_and_match_type(
+        self, crm_client, unique_id, auth_headers_system
+    ):
+        """Все три search_mode возвращают score и match_type (единый контракт)."""
+        await crm_client.post(
+            "/crm/api/v1/entities/",
+            json={
+                "entity_type": "note",
+                "name": f"score_contract_{unique_id}",
+                "description": f"score contract description {unique_id}",
+            },
+            headers=auth_headers_system,
+        )
+        expected_match_types = {
+            "hybrid": {"text", "semantic", "hybrid"},
+            "text": {"text"},
+            "semantic": {"semantic"},
+        }
+        for mode, valid_types in expected_match_types.items():
+            resp = await crm_client.get(
+                "/crm/api/v1/entities/search",
+                params={"query": unique_id, "search_mode": mode, "limit": 50},
+                headers=auth_headers_system,
+            )
+            assert resp.status_code == 200
+            items = resp.json()["items"]
+            for item in items:
+                assert "score" in item, f"mode={mode}: score обязателен"
+                assert "match_type" in item, f"mode={mode}: match_type обязателен"
+                assert item["match_type"] in valid_types, (
+                    f"mode={mode}: match_type={item['match_type']} не в {valid_types}"
+                )
+
+    @pytest.mark.asyncio
+    async def test_mentions_search_accepts_namespace(self, crm_client, unique_id, auth_headers_system):
+        """POST /entities/search/mentions принимает namespace."""
+        await crm_client.post(
+            "/crm/api/v1/entities/",
+            json={
+                "entity_type": "contact",
+                "name": f"Mention_{unique_id}",
+                "namespace": "default",
+            },
+            headers=auth_headers_system,
+        )
+        resp = await crm_client.post(
+            "/crm/api/v1/entities/search/mentions",
+            json={"text": f"Mention_{unique_id}", "namespace": "default"},
+            headers=auth_headers_system,
+        )
+        assert resp.status_code == 200
+        payload = resp.json()
+        assert isinstance(payload["entities"], list)
 

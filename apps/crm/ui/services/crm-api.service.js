@@ -101,11 +101,15 @@ export class CRMAPIService extends BaseService {
         return this.get('/workspace/lara-summary', { namespace: namespace.trim() });
     }
     
-    async findEntitiesByText(text) {
+    async findEntitiesByText(text, namespace = null) {
         if (!text) {
             throw new Error('Text is required');
         }
-        return this.post('/entities/search/mentions', { text });
+        const body = { text };
+        if (namespace) {
+            body.namespace = namespace;
+        }
+        return this.post('/entities/search/mentions', body);
     }
     
     async analyzeNote(noteId, options = {}) {

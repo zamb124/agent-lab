@@ -319,7 +319,7 @@ async def search_entities(
     entity_type: Optional[str] = Query(None),
     entity_subtype: Optional[str] = Query(None),
     namespace: Optional[str] = Query(None, description="Фильтр по namespace"),
-    search_mode: str = Query("semantic", description="text | semantic | hybrid"),
+    search_mode: str = Query("hybrid", description="text | semantic | hybrid"),
     status: Optional[str] = Query(None, description="Как у списка: статус"),
     priority: Optional[str] = Query(None, description="Как у списка: приоритет"),
     tags: Optional[str] = Query(None),
@@ -358,7 +358,7 @@ async def search_entities(
             resp.score = score
             resp.match_type = match_type
             items.append(resp)
-        return PaginatedEntityResponse(items=items, next_cursor=None, has_more=len(items) >= limit)
+        return PaginatedEntityResponse(items=items, next_cursor=None, has_more=False)
 
     if search_mode == "text":
         results = await container.entity_service.text_search(
@@ -375,9 +375,9 @@ async def search_entities(
             resp.score = score
             resp.match_type = "text"
             items.append(resp)
-        return PaginatedEntityResponse(items=items, next_cursor=None, has_more=len(items) >= limit)
+        return PaginatedEntityResponse(items=items, next_cursor=None, has_more=False)
 
-    entities = await container.entity_service.search_entities(
+    results = await container.entity_service.search_entities(
         query=query,
         entity_type=entity_type,
         entity_subtype=entity_subtype,
@@ -385,11 +385,13 @@ async def search_entities(
         filters=filters if filters else None,
         limit=limit,
     )
-    return PaginatedEntityResponse(
-        items=[EntityResponse.model_validate(e) for e in entities],
-        next_cursor=None,
-        has_more=len(entities) >= limit,
-    )
+    items = []
+    for entity, score in results:
+        resp = EntityResponse.model_validate(entity)
+        resp.score = score
+        resp.match_type = "semantic"
+        items.append(resp)
+    return PaginatedEntityResponse(items=items, next_cursor=None, has_more=False)
 
 
 @router.get("/timeline/bounds", response_model=EntityTimelineBoundsResponse)
@@ -815,7 +817,7 @@ async def search_mentions(
     if not text or len(text) < 3:
         return {"entities": []}
     
-    entities = await container.entity_service.search_mentions(text, limit=20)
+    entities = await container.entity_service.search_mentions(text, namespace=request.namespace, limit=20)
     return {
         "entities": [
             {
