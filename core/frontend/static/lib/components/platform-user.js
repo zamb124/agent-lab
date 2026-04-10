@@ -47,16 +47,44 @@ export class PlatformUser extends PlatformElement {
         this._boundDocumentClick = (e) => this._handleDocumentClick(e);
         this._boundCompanySwitchStorage = (e) => this._handleCompanySwitchStorage(e);
         this._boundWindowFocus = () => this._scheduleCompanyAlignmentCheck();
-        this._boundWindowPageShow = () => this._scheduleCompanyAlignmentCheck();
+        this._boundWindowPageShow = () => {
+            this._companyAlignmentSkipUntil = 0;
+            this._scheduleCompanyAlignmentCheck();
+        };
         this._boundVisibilityChange = () => {
             if (document.visibilityState === 'visible') {
+                this._companyAlignmentSkipUntil = 0;
                 this._scheduleCompanyAlignmentCheck();
             }
         };
         this._companyAlignmentIntervalId = null;
         this._companyAlignmentInFlight = false;
         this._companyAlignmentQueued = false;
+        this._companyAlignmentSkipUntil = 0;
+        this._companyAlignmentNetworkFailures = 0;
+        this._boundOnline = () => this._onBrowserOnline();
         this._i18nUnsub = null;
+    }
+
+    /**
+     * Сетевой сбой (сервер не слушает, DNS, offline): fetch бросает TypeError, не HTTP-ответ.
+     */
+    _isAuthMeNetworkFailure(error) {
+        if (!error || typeof error !== 'object') {
+            return false;
+        }
+        const name = error.name;
+        const message = typeof error.message === 'string' ? error.message : '';
+        if (name === 'TypeError' && message.includes('fetch')) {
+            return true;
+        }
+        return false;
+    }
+
+    _onBrowserOnline() {
+        this._companyAlignmentSkipUntil = 0;
+        this._companyAlignmentNetworkFailures = 0;
+        this._scheduleCompanyAlignmentCheck();
     }
 
     _pt(key, params = {}) {
@@ -71,6 +99,7 @@ export class PlatformUser extends PlatformElement {
         window.addEventListener('storage', this._boundCompanySwitchStorage);
         window.addEventListener('focus', this._boundWindowFocus);
         window.addEventListener('pageshow', this._boundWindowPageShow);
+        window.addEventListener('online', this._boundOnline);
         document.addEventListener('visibilitychange', this._boundVisibilityChange);
         this._companyAlignmentIntervalId = window.setInterval(() => {
             this._scheduleCompanyAlignmentCheck();
@@ -84,6 +113,7 @@ export class PlatformUser extends PlatformElement {
         window.removeEventListener('storage', this._boundCompanySwitchStorage);
         window.removeEventListener('focus', this._boundWindowFocus);
         window.removeEventListener('pageshow', this._boundWindowPageShow);
+        window.removeEventListener('online', this._boundOnline);
         document.removeEventListener('visibilitychange', this._boundVisibilityChange);
         if (this._companyAlignmentIntervalId !== null) {
             window.clearInterval(this._companyAlignmentIntervalId);
@@ -403,19 +433,38 @@ export class PlatformUser extends PlatformElement {
             return;
         }
         this._checkCompanyAlignment().catch((error) => {
+            if (this._isAuthMeNetworkFailure(error)) {
+                return;
+            }
             console.error('[PlatformUser] Company alignment check failed:', error);
         });
     }
 
     async _checkCompanyAlignment() {
+        if (typeof Date.now === 'function' && Date.now() < this._companyAlignmentSkipUntil) {
+            return;
+        }
         this._companyAlignmentInFlight = true;
         try {
-            const userData = await this.auth.get('/api/auth/me');
-            this.user = userData;
-            if (!Array.isArray(this.companies) || this.companies.length === 0) {
-                await this._loadCompanies();
+            try {
+                const userData = await this.auth.get('/api/auth/me');
+                this._companyAlignmentNetworkFailures = 0;
+                this._companyAlignmentSkipUntil = 0;
+                this.user = userData;
+                if (!Array.isArray(this.companies) || this.companies.length === 0) {
+                    await this._loadCompanies();
+                }
+                this._ensureCompanyAlignment();
+            } catch (error) {
+                if (this._isAuthMeNetworkFailure(error)) {
+                    this._companyAlignmentNetworkFailures += 1;
+                    const exp = Math.min(this._companyAlignmentNetworkFailures, 6);
+                    const delayMs = Math.min(120000, 5000 * 2 ** exp);
+                    this._companyAlignmentSkipUntil = Date.now() + delayMs;
+                    return;
+                }
+                throw error;
             }
-            this._ensureCompanyAlignment();
         } finally {
             this._companyAlignmentInFlight = false;
             if (this._companyAlignmentQueued) {
