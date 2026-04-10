@@ -163,17 +163,21 @@ class PaymentSyncService:
         
         company_ids = []
         for subdomain_key in subdomain_keys:
-            company_id_json = await storage.get(subdomain_key, force_global=True)
-            if not company_id_json:
+            raw = await storage.get(subdomain_key, force_global=True)
+            if not raw:
                 continue
-            
-            try:
-                company_id = json.loads(company_id_json)
-                if company_id:
-                    company_ids.append(company_id)
-            except (json.JSONDecodeError, ValueError) as e:
-                logger.debug(f"Пропускаем невалидный subdomain ключ {subdomain_key}: {e}")
+
+            parsed = json.loads(raw)
+            if isinstance(parsed, dict):
+                cid = parsed.get("company_id")
+            elif isinstance(parsed, str):
+                cid = parsed
+            else:
+                logger.warning("Неожиданный формат subdomain записи %s: %s", subdomain_key, type(parsed).__name__)
                 continue
+
+            if cid:
+                company_ids.append(cid)
         
         logger.info(f"Найдено компаний для синхронизации: {len(company_ids)}")
         
