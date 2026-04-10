@@ -3,6 +3,7 @@
 #
 # Архитектура:
 #   domain.com/            → frontend  (8002)
+#   domain.com/documentation → тот же frontend (8002), статика Fumadocs; отдельный path в ingress не нужен
 #   domain.com/agents      → agents    (8001)
 #   domain.com/crm         → crm       (8003)
 #   domain.com/rag         → rag       (8004)

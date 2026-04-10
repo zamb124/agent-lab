@@ -74,7 +74,7 @@ app = create_service_app(
     version="1.0.0",
     api_version=None,
     include_crud_routers=False,
-    mkdocs_gateway_prefix="frontend",
+    documentation_gateway_prefix="frontend",
 )
 
 # Монтирование core/frontend (общая библиотека) - СНАЧАЛА монтируем статику!

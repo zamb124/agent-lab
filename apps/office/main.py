@@ -33,7 +33,7 @@ app = create_service_app(
     description="Документы Office через OnlyOffice Document Server",
     api_version="v1",
     include_crud_routers=False,
-    mkdocs_gateway_prefix="documents",
+    documentation_gateway_prefix="documents",
 )
 
 core_frontend_path = Path(__file__).parent.parent.parent / "core" / "frontend" / "static"

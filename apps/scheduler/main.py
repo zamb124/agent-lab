@@ -128,7 +128,7 @@ app = create_service_app(
     version="1.0.0",
     api_version="v1",
     include_crud_routers=False,
-    mkdocs_gateway_prefix="scheduler",
+    documentation_gateway_prefix="scheduler",
 )
 
 

@@ -1,6 +1,6 @@
 /**
- * Ссылки на пользовательскую документацию MkDocs (docs/scenarios/...).
- * Сервис монтирует site/ на /documentation/; у frontend дубль на /frontend/documentation/.
+ * Ссылки на пользовательскую документацию (Fumadocs, docs/scenarios/...).
+ * Статика из documentation-dist/ монтируется на /documentation/; у frontend дубль на /frontend/documentation/.
  */
 
 const SCENARIO_SERVICES = new Set(['sync', 'flows', 'crm', 'rag', 'frontend']);

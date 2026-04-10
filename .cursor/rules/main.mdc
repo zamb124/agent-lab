@@ -231,6 +231,8 @@ UV: `uv add package`, `uv sync`, `uv run python file.py`, `uv run pytest`.
 
 Локально все сервисы одной командой: **`make app`** (эквивалент `uv run python scripts/run.py all`: uvicorn с `--reload`, TaskIQ worker/scheduler без reload; остановка Ctrl+C). Падение одного процесса (например порт занят) не останавливает остальные. Зависшие процессы на портах HTTP: **`make app APP_KILL=1`** или `uv run python scripts/run.py kill-ports` (порты HTTP-сервисов из `scripts/run.py`, включая **8008** для office).
 
+**Портал пользовательской документации (Fumadocs):** **`make doc`** — `scripts/docs_prepare.py` + сборка `apps/documentation/` (Node); артефакт **`documentation-dist/`** в корне репозитория, раздача **`/documentation/`** через `mount_repo_documentation`. Исходный контент: **`docs/`** (`guides/`, `scenarios/`, …). Локальный предпросмотр: **`make doc-serve`** (Next dev, `basePath` `/documentation`).
+
 ## Документация библиотек
 
 Используй Context7 для получения актуальной документации FastAPI, SQLAlchemy, pgvector, TaskIQ и других библиотек.

@@ -300,9 +300,9 @@ help:
 	@echo "  make logs          - Показать логи всех сервисов"
 	@echo "  make clean         - Удалить все (включая volumes)"
 	@echo ""
-	@echo "Документация (MkDocs):"
-	@echo "  make doc-docker - Полная сборка в Docker (agents + API docs + MkDocs)"
-	@echo "  make doc        - Собрать MkDocs (без генерации API)"
+	@echo "Документация (Fumadocs, apps/documentation):"
+	@echo "  make doc-docker - Собрать только стадию docs-builder (Docker)"
+	@echo "  make doc        - docs_prepare + npm ci/build + documentation-dist/"
 	@echo "  make doc-serve  - Запустить dev-сервер (http://127.0.0.1:8000)"
 	@echo "  make doc-clean  - Удалить собранную документацию"
 
@@ -322,33 +322,26 @@ include mk/migrate.mk
 
 # Короткие алиасы
 doc:
-	@echo "Локальная сборка документации..."
-	uv run mkdocs build --clean
-	@echo "Документация собрана в site/"
+	@echo "Локальная сборка документации (Fumadocs)..."
+	uv run python scripts/docs_prepare.py
+	cd apps/documentation && npm ci && npm run build
+	rm -rf documentation-dist
+	mkdir -p documentation-dist
+	cp -r apps/documentation/out/. documentation-dist/
+	@echo "Документация в documentation-dist/ (монтирование /documentation/)"
 
 doc-serve:
-	@echo "📚 Запуск dev-сервера документации на http://127.0.0.1:8000"
-	uv run mkdocs serve
+	@echo "Dev Fumadocs: http://127.0.0.1:3000 (basePath /documentation)"
+	cd apps/documentation && npm install && npm run dev
 
 doc-docker:
-	@echo "Сборка документации в Docker (полный цикл)..."
-	@echo "1. Запуск agents сервиса..."
-	docker-compose up -d agents
-	@echo "2. Ожидание готовности сервиса..."
-	@sleep 5
-	@echo "3. Генерация API документации..."
-	docker-compose --profile docs run --rm docs-generator
-	@echo "4. Сборка MkDocs..."
-	docker build -t agent-lab-docs --target docs-builder .
-	docker create --name temp-docs agent-lab-docs
-	docker cp temp-docs:/app/site ./site
-	docker rm temp-docs
-	@echo "Документация собрана в site/"
+	docker build --target docs-builder -t agent-lab-docs .
+	@echo "Образ agent-lab-docs; статика в контейнере: /app/documentation-dist/"
 
 doc-clean:
-	@echo "🧹 Очистка документации..."
-	rm -rf site/
-	@echo "✅ Директория site/ удалена"
+	@echo "Очистка артефактов документации..."
+	rm -rf documentation-dist/ site/ apps/documentation/out apps/documentation/.next apps/documentation/generated
+	@echo "Готово"
 
 # Полные имена (для обратной совместимости)
 docs-build: doc

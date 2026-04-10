@@ -36,7 +36,7 @@ def _normalize_segment(name: str, field: str) -> str:
         raise ValueError(f"pytest.mark.scenario: пустой {field}")
     if not _SEGMENT_RE.match(s):
         raise ValueError(
-            f"pytest.mark.scenario: {field}={name!r} — допустимы латиница, цифры, _, - (сегмент пути MkDocs)"
+            f"pytest.mark.scenario: {field}={name!r} — допустимы латиница, цифры, _, - (сегмент пути docs/scenarios)"
         )
     return s
 
@@ -79,7 +79,7 @@ class ScenarioRecorder:
         if raw_service is None:
             raise ValueError(
                 'Укажите сервис: @pytest.mark.scenario(service="sync", ...) '
-                "(sync | flows | crm | rag | frontend — сегмент пути и группа в MkDocs)"
+                "(sync | flows | crm | rag | frontend — сегмент пути и группа в docs/scenarios)"
             )
         service = _normalize_segment(str(raw_service), "service")
 
@@ -146,7 +146,7 @@ class ScenarioRecorder:
         full_page: bool = False,
         label_en: str | None = None,
     ) -> None:
-        """Фиксирует шаг; при переданном page делает скриншот текущего состояния. label_en — подпись для README.en.md (MkDocs /en/)."""
+        """Фиксирует шаг; при переданном page делает скриншот текущего состояния. label_en — подпись для README.en.md (при полной паре title_en/description_en)."""
         rel: str | None = None
         if page is not None:
             n = len(self.steps) + 1

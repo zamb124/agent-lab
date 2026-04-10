@@ -1,4 +1,4 @@
-"""Монтирование собранного MkDocs (`site/` в корне репозитория) на `/documentation/`."""
+"""Монтирование статического Fumadocs (documentation-dist/ в корне репозитория) на /documentation/."""
 
 from __future__ import annotations
 
@@ -11,8 +11,10 @@ from fastapi.staticfiles import StaticFiles
 
 logger = logging.getLogger(__name__)
 
+DOCUMENTATION_DIST = "documentation-dist"
 
-def mount_mkdocs_documentation(
+
+def mount_documentation_static(
     app: FastAPI,
     repo_root: Path,
     *,
@@ -20,13 +22,14 @@ def mount_mkdocs_documentation(
 ) -> None:
     """
     Регистрирует GET /documentation -> 307 на /documentation/ и mount StaticFiles на /documentation/.
-    Если gateway_prefix задан (например \"frontend\" для ingress), дублирует на /{gateway_prefix}/documentation/.
-    Если каталога site/ нет — ничего не монтирует (лог предупреждения).
+    Если gateway_prefix задан (например \"frontend\" для ingress), дублирует на /{prefix}/documentation/.
+    Если каталога documentation-dist/ нет — ничего не монтирует (предупреждение в лог).
     """
-    site = repo_root / "site"
-    if not site.is_dir():
+    dist = repo_root / DOCUMENTATION_DIST
+    if not dist.is_dir():
         logger.warning(
-            "Каталог site/ не найден (make doc или uv run mkdocs build), URL /documentation недоступен"
+            "Каталог %s/ не найден (make doc), URL /documentation недоступен",
+            DOCUMENTATION_DIST,
         )
         return
 
@@ -36,10 +39,10 @@ def mount_mkdocs_documentation(
 
     app.mount(
         "/documentation/",
-        StaticFiles(directory=str(site), html=True),
-        name="mkdocs-documentation",
+        StaticFiles(directory=str(dist), html=True),
+        name="documentation-static",
     )
-    logger.info("Документация MkDocs: GET /documentation/ -> %s", site)
+    logger.info("Документация: GET /documentation/ -> %s", dist)
 
     if gateway_prefix:
         prefix = gateway_prefix.strip().strip("/")
@@ -54,7 +57,7 @@ def mount_mkdocs_documentation(
 
         app.mount(
             f"{gw_base}/",
-            StaticFiles(directory=str(site), html=True),
-            name=f"mkdocs-documentation-{prefix}-prefix",
+            StaticFiles(directory=str(dist), html=True),
+            name=f"documentation-static-{prefix}-prefix",
         )
-        logger.info("Документация MkDocs: GET %s/ -> %s", gw_base, site)
+        logger.info("Документация: GET %s/ -> %s", gw_base, dist)

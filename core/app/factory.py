@@ -104,8 +104,8 @@ def create_service_app(
     openapi_url: str = "/openapi.json",
     include_auth_middleware: bool = True,
     include_crud_routers: bool = True,
-    mount_repo_mkdocs: bool = True,
-    mkdocs_gateway_prefix: Optional[str] = None,
+    mount_repo_documentation: bool = True,
+    documentation_gateway_prefix: Optional[str] = None,
     include_platform_pwa: Optional[bool] = None,
 ) -> FastAPI:
     """
@@ -128,8 +128,8 @@ def create_service_app(
         docs_url, redoc_url, openapi_url: Пути для документации
         include_auth_middleware: Включать ли AuthMiddleware
         include_crud_routers: Включать ли автоматические CRUD роутеры
-        mount_repo_mkdocs: Смонтировать MkDocs из корня репозитория ``site/`` на ``/documentation/`` (False для flows со своим ``apps/flows/site``).
-        mkdocs_gateway_prefix: Если задан (например ``frontend``), дублировать документацию на ``/{prefix}/documentation/`` за ingress.
+        mount_repo_documentation: Смонтировать Fumadocs из корня репозитория ``documentation-dist/`` на ``/documentation/`` (False для flows со своим ``apps/flows/site``).
+        documentation_gateway_prefix: Если задан (например ``frontend``), дублировать документацию на ``/{prefix}/documentation/`` за ingress.
         include_platform_pwa: Маршруты ``/manifest.json``, ``/sw.js``, ``/offline.html``. None: выключено при ``TESTING=true``, иначе включено.
         
     Returns:
@@ -371,13 +371,13 @@ def create_service_app(
             if Path(directory).exists():
                 app.mount(mount_path, StaticFiles(directory=directory), name=name)
 
-    if mount_repo_mkdocs:
-        from core.frontend.mkdocs_mount import mount_mkdocs_documentation
+    if mount_repo_documentation:
+        from core.frontend.documentation_mount import mount_documentation_static
 
-        mount_mkdocs_documentation(
+        mount_documentation_static(
             app,
             project_root,
-            gateway_prefix=mkdocs_gateway_prefix,
+            gateway_prefix=documentation_gateway_prefix,
         )
 
     if include_platform_pwa is None:

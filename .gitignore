@@ -14,8 +14,13 @@ sgr-service/config.yaml
 
 /backend/app/custom_flows/fashn_buyer/add_token.py
 
-# MkDocs
+# MkDocs (legacy; см. documentation-dist для Fumadocs)
 site/
+
+documentation-dist/
+apps/documentation/generated/
+
+docs/scenarios/**/index.mdx
 
 /server.log
 
