@@ -399,8 +399,9 @@ export class BillingPage extends PlatformElement {
 
     _openTopupModal() {
         const modal = document.createElement('topup-modal');
-        modal.title = this.i18n.t('modal.title', {}, I18nNs.BILLING);
+        modal.heading = this.i18n.t('modal.title', {}, I18nNs.BILLING);
         document.body.appendChild(modal);
+        modal.showModal();
         modal.addEventListener('close', () => modal.remove());
     }
 
