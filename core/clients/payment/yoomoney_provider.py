@@ -47,6 +47,7 @@ class YooMoneyConfig(PaymentProviderConfig):
     )
     client_id: Optional[str] = Field(default=None, description="OAuth client_id приложения")
     client_secret: Optional[str] = Field(default=None, description="OAuth client_secret приложения")
+    access_token: Optional[str] = Field(default=None, description="OAuth access_token (из env, загружается в storage при старте)")
     api_url: str = Field(
         default="https://yoomoney.ru/api",
         description="URL YooMoney API"

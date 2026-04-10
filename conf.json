@@ -223,7 +223,8 @@
         "notification_secret": "YOUR_YOOMONEY_NOTIFICATION_SECRET",
         "quickpay_url": "https://yoomoney.ru/quickpay/confirm.xml",
         "client_id": "YOUR_YOOMONEY_CLIENT_ID",
-        "client_secret": "YOUR_YOOMONEY_CLIENT_SECRET"
+        "client_secret": "YOUR_YOOMONEY_CLIENT_SECRET",
+        "access_token": "YOUR_YOOMONEY_ACCESS_TOKEN"
       }
     }
   },

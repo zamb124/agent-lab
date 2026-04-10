@@ -41,6 +41,7 @@ async def on_startup(app: FastAPI, container, settings: FrontendSettings) -> Non
 
     from core.clients.payment import PaymentProviderFactory
     PaymentProviderFactory.initialize()
+    await PaymentProviderFactory.seed_access_tokens(container.shared_storage)
     logger.info("Платежные провайдеры инициализированы")
 
 

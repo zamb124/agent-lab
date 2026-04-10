@@ -10,7 +10,7 @@ from typing import Dict, Optional
 
 from core.config import get_settings
 from core.clients.payment.base_provider import BasePaymentProvider
-from core.clients.payment.yoomoney_provider import YooMoneyProvider, YooMoneyConfig
+from core.clients.payment.yoomoney_provider import YooMoneyProvider, YooMoneyConfig, load_access_token, save_access_token
 from core.clients.payment.yukassa_provider import YuKassaProvider, YuKassaConfig
 
 logger = logging.getLogger(__name__)
@@ -128,6 +128,23 @@ class PaymentProviderFactory:
             for name, provider in cls._providers.items()
         ]
     
+    @classmethod
+    async def seed_access_tokens(cls, storage) -> None:
+        """Загружает access_token из конфига в storage, если в storage пусто."""
+        for name, provider in cls._providers.items():
+            if not isinstance(provider, YooMoneyProvider):
+                continue
+            if not provider.config.access_token:
+                continue
+            existing = await load_access_token(storage)
+            if existing:
+                logger.info("YooMoney access_token уже есть в storage (истекает %s)", existing.expires_at)
+                provider._access_token = existing.token
+                continue
+            token_data = await save_access_token(storage, provider.config.access_token)
+            provider._access_token = provider.config.access_token
+            logger.info("YooMoney access_token загружен из конфига в storage (истекает %s)", token_data.expires_at)
+
     @classmethod
     def get_provider_for_company(cls, company) -> Optional[BasePaymentProvider]:
         """

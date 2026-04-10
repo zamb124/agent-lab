@@ -32,6 +32,7 @@ async def payment_sync_tick(
     from core.clients.payment.factory import PaymentProviderFactory
     if not PaymentProviderFactory.get_available_providers():
         PaymentProviderFactory.initialize()
+    await PaymentProviderFactory.seed_access_tokens(container.shared_storage)
 
     stats = await sync_service.sync_all_companies()
 
