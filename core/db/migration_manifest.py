@@ -8,13 +8,11 @@ import importlib
 import json
 from pathlib import Path
 
-
-def _project_root() -> Path:
-    return Path(__file__).resolve().parent.parent.parent
+from core.config.loader import get_project_root
 
 
 def load_migration_manifest() -> dict:
-    path = _project_root() / "migrations" / "services.json"
+    path = get_project_root() / "migrations" / "services.json"
     with open(path, encoding="utf-8") as f:
         return json.load(f)
 

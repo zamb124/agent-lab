@@ -35,7 +35,7 @@ from uvicorn.middleware.proxy_headers import ProxyHeadersMiddleware
 from pydantic_settings import BaseSettings as PydanticBaseSettings
 
 
-from core.config.loader import load_merged_config
+from core.config.loader import get_project_root, load_merged_config
 from core.config import set_settings
 from core.app.health_payload import build_health_payload
 from core.logging import setup_logging
@@ -71,7 +71,7 @@ def load_service_settings(
     Returns:
         (settings, project_root)
     """
-    project_root = Path(__file__).parent.parent.parent
+    project_root = get_project_root()
 
     merged_config = load_merged_config(service_name=service_name)
     

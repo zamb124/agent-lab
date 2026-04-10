@@ -17,6 +17,8 @@ alwaysApply: false
 
 ## ENV
 
+**Корень репозитория:** `AGENT_LAB_PROJECT_ROOT` — если не задан, ищется вверх от `core/config/loader.py` первый каталог с `pyproject.toml`, `core/`, `apps/` (нужно для `documentation-dist/`, `conf.json`, миграций при запуске из `.venv`, когда `Path(__file__)` указывает в `site-packages`).
+
 Вложенность через **`__`** (верхний регистр секций):
 
 ```

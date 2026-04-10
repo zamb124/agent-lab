@@ -14,15 +14,13 @@ from pathlib import Path
 from alembic import command
 from alembic.config import Config
 
+from core.config.loader import get_project_root
+
 logger = logging.getLogger(__name__)
 
 
-def _get_project_root() -> Path:
-    return Path(__file__).parent.parent.parent
-
-
 def _make_alembic_config(script_location: str, db_url: str) -> Config | None:
-    root = _get_project_root()
+    root = get_project_root()
     ini_path = root / script_location / "alembic.ini"
 
     if not ini_path.exists():
