@@ -201,8 +201,7 @@ class Company(BaseModel):
     balance: float = Field(
         default=50.0,
         title="Баланс",
-        description="Баланс компании в RUB (реальные деньги на счету)",
-        ge=0.0,
+        description="Баланс компании в RUB; отрицательное значение — задолженность после списаний",
         groups={"admin": {"readonly": False}, "user": {"readonly": True}},
     )
     monthly_budget: float = Field(
