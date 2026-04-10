@@ -348,9 +348,6 @@ export class BillingPage extends PlatformElement {
     }
 
     async _loadBilling() {
-        const { subscription } = this.state.value;
-        if (subscription) return;
-
         FrontendStore.setBillingLoading(true);
         const billingService = this.services.get('billing');
         const [sub, usage] = await Promise.all([
