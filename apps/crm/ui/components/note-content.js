@@ -1509,8 +1509,20 @@ export class NoteContent extends PlatformElement {
         if (!crmApi) {
             throw new Error('crmApi is required');
         }
+        const currentNs = CRMStore.state.namespaces.current;
+        if (!currentNs) {
+            if (isVoice) {
+                this._voiceSearchResults = [];
+                this._voiceSearchLoading = false;
+            } else {
+                this._ctxSearchResults = [];
+                this._ctxSearchLoading = false;
+            }
+            this.requestUpdate();
+            return;
+        }
         const namespace = this._readNamespaceForSearch();
-        const response = await crmApi.searchEntities(trimmed, { namespace, limit: 20 });
+        const response = await crmApi.searchEntities(trimmed, { namespace, limit: 20, search_mode: 'text' });
         const list = Array.isArray(response.items) ? response.items : [];
         let filtered;
         if (isVoice) {
