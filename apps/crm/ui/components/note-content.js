@@ -750,11 +750,31 @@ export class NoteContent extends PlatformElement {
                 max-height: 100%;
             }
 
-            .note-voice-dictate-bar {
+            .note-text-input-wrap {
+                position: relative;
+                min-height: 0;
+                height: 100%;
                 display: flex;
-                align-items: center;
-                gap: 8px;
-                padding: 0 0 4px 0;
+                flex-direction: column;
+            }
+
+            .note-text-input-wrap .note-text-input {
+                flex: 1 1 auto;
+                min-height: 0;
+                width: 100%;
+                box-sizing: border-box;
+                padding-right: 52px;
+            }
+
+            .note-voice-dictate-floating {
+                position: absolute;
+                top: 12px;
+                right: 12px;
+                z-index: 2;
+                display: flex;
+                flex-direction: column;
+                align-items: flex-end;
+                gap: 6px;
             }
 
             .voice-dictate-btn {
@@ -796,9 +816,11 @@ export class NoteContent extends PlatformElement {
             }
 
             .voice-dictate-label {
-                font-size: 13px;
-                line-height: 18px;
+                font-size: 12px;
+                line-height: 16px;
                 color: var(--text-tertiary);
+                max-width: min(200px, 42vw);
+                text-align: right;
             }
 
             .sidebar {
@@ -2616,29 +2638,31 @@ export class NoteContent extends PlatformElement {
                         </div>
                     </div>
                     ${this.editable ? html`
-                        <div class="note-voice-dictate-bar">
-                            <button
-                                class="voice-dictate-btn ${this._voiceRecState === 'recording' ? 'recording' : ''}"
-                                type="button"
-                                ?disabled=${this._voiceRecState === 'processing'}
-                                @click=${this._onVoiceDictateToggle}
-                                title=${this._voiceDictateTitle()}
-                            >
-                                <platform-icon
-                                    name=${this._voiceRecState === 'recording' ? 'stop' : 'microphone'}
-                                    size="16"
-                                ></platform-icon>
-                            </button>
-                            ${this._voiceRecState === 'processing' ? html`
-                                <span class="voice-dictate-label">${this.i18n.t('voice_input.btn_processing')}</span>
-                            ` : ''}
+                        <div class="note-text-input-wrap">
+                            <textarea
+                                class="note-text-input"
+                                .value=${noteText}
+                                @input=${this._onTextInput}
+                                placeholder=${this.i18n.t('notes.placeholder')}
+                            ></textarea>
+                            <div class="note-voice-dictate-floating">
+                                <button
+                                    class="voice-dictate-btn ${this._voiceRecState === 'recording' ? 'recording' : ''}"
+                                    type="button"
+                                    ?disabled=${this._voiceRecState === 'processing'}
+                                    @click=${this._onVoiceDictateToggle}
+                                    title=${this._voiceDictateTitle()}
+                                >
+                                    <platform-icon
+                                        name=${this._voiceRecState === 'recording' ? 'stop' : 'microphone'}
+                                        size="16"
+                                    ></platform-icon>
+                                </button>
+                                ${this._voiceRecState === 'processing' ? html`
+                                    <span class="voice-dictate-label">${this.i18n.t('voice_input.btn_processing')}</span>
+                                ` : ''}
+                            </div>
                         </div>
-                        <textarea
-                            class="note-text-input"
-                            .value=${noteText}
-                            @input=${this._onTextInput}
-                            placeholder=${this.i18n.t('notes.placeholder')}
-                        ></textarea>
                     ` : this._renderMarkdown(noteText)}
                 </section>
 
