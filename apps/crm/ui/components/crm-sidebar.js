@@ -5,6 +5,7 @@ import { html, css } from 'lit';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
 import { sidebarStyles, sidebarNavItemStyles } from '@platform/lib/styles/shared/sidebar.styles.js';
 import { CRMStore } from '../store/crm.store.js';
+import { readShellSidebarCollapsed } from '@platform/lib/utils/shell-sidebar-preference.js';
 import '@platform/lib/components/layout/platform-service-sidebar.js';
 import '@platform/lib/components/platform-user.js';
 import '@platform/lib/components/platform-icon.js';
@@ -249,7 +250,7 @@ export class CRMSidebar extends PlatformElement {
 
     constructor() {
         super();
-        this.collapsed = false;
+        this.collapsed = readShellSidebarCollapsed();
         this.mobileOpen = false;
         this._currentView = 'notes';
         this._notesCount = 0;

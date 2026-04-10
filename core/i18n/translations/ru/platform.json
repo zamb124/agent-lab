@@ -51,5 +51,12 @@
     "switched": "Компания изменена",
     "switch_error": "Ошибка смены компании: {{message}}",
     "subdomain_missing": "Не найден subdomain для выбранной компании"
+  },
+  "platform_field": {
+    "empty_value": "Не задано",
+    "boolean_true": "Да",
+    "boolean_false": "Нет",
+    "array_placeholder": "Введите значение и нажмите Enter",
+    "object_placeholder": "JSON объект"
   }
 }

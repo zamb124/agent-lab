@@ -9,6 +9,7 @@ from apps.crm.db.models import EntityType
 from apps.crm.db.repositories.entity_repository import EntityRepository
 from apps.crm.db.repositories.entity_type_repository import EntityTypeRepository
 from apps.crm.db.repositories.namespace_template_repository import NamespaceTemplateRepository
+from apps.crm.services.company_init_service import CompanyInitService
 from core.db.repositories.namespace_repository import NamespaceRepository
 
 
@@ -19,11 +20,13 @@ class NamespaceTemplateService:
         entity_type_repo: EntityTypeRepository,
         namespace_repo: NamespaceRepository,
         entity_repo: EntityRepository,
+        company_init_service: CompanyInitService,
     ) -> None:
         self._template_repo = template_repo
         self._entity_type_repo = entity_type_repo
         self._namespace_repo = namespace_repo
         self._entity_repo = entity_repo
+        self._company_init_service = company_init_service
 
     async def create_namespace_from_template(
         self,
@@ -77,6 +80,7 @@ class NamespaceTemplateService:
                     weight_coefficient=item.weight_coefficient,
                     namespace_ids=[],
                     is_context_anchor=item.is_context_anchor,
+                    is_voice_target=item.is_voice_target,
                 )
                 runtime_type = await self._entity_type_repo.create(runtime_type)
                 existing_types_map[runtime_type.type_id] = runtime_type
@@ -96,6 +100,7 @@ class NamespaceTemplateService:
                     check_duplicates=item.check_duplicates,
                     weight_coefficient=item.weight_coefficient,
                     is_context_anchor=item.is_context_anchor,
+                    is_voice_target=item.is_voice_target,
                 )
 
             current_namespaces = runtime_type.namespace_ids or []
@@ -104,14 +109,23 @@ class NamespaceTemplateService:
                     runtime_type.type_id, [namespace_name],
                 )
 
+        await self._company_init_service._ensure_namespace_entity(company_id, namespace_name)
+
         return namespace
 
     async def get_namespace_editability(self, namespace_name: str) -> dict[str, Any]:
-        entity_count = await self._entity_repo.count_by_namespace(namespace_name)
-        used_type_ids = await self._entity_repo.list_used_entity_types_by_namespace(namespace_name)
-        used_type_ids_set = set(used_type_ids)
-
         all_types = await self._entity_type_repo.get_all_for_company()
+
+        cross_namespace_type_ids = {
+            t.type_id for t in all_types if "*" in (t.namespace_ids or [])
+        }
+
+        entity_count = await self._entity_repo.count_by_namespace(
+            namespace_name, exclude_entity_types=cross_namespace_type_ids,
+        )
+        used_type_ids = await self._entity_repo.list_used_entity_types_by_namespace(namespace_name)
+        used_type_ids_set = set(used_type_ids) - cross_namespace_type_ids
+
         current_allowed_type_ids = sorted(
             [item.type_id for item in all_types if namespace_name in (item.namespace_ids or [])]
         )
@@ -127,7 +141,7 @@ class NamespaceTemplateService:
             "namespace": namespace_name,
             "has_entities": has_entities,
             "entity_count": entity_count,
-            "used_type_ids": used_type_ids,
+            "used_type_ids": sorted(used_type_ids_set),
             "current_allowed_type_ids": current_allowed_type_ids,
             "can_update_allowed_types": not has_entities,
             "can_add_types": True,

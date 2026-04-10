@@ -681,7 +681,8 @@ export class AIAnalysisModal extends PlatformModal {
         this._entityTypes = Array.isArray(state.entities.entityTypes) ? state.entities.entityTypes : [];
         this._relationshipTypes = Array.isArray(state.entities.relationshipTypes) ? state.entities.relationshipTypes : [];
         this._importReviewActive = Boolean(state.ai.importReview);
-        this._analyzing = state.ai.analyzing === true;
+        const aid = state.ai.analyzingNoteId;
+        this._analyzing = typeof aid === 'string' && aid.trim().length > 0;
         const taskSuggestions = this._getTaskSuggestions();
         const currentDoneMap = new Map(this._taskStates.map((task) => [task.id, task.done]));
         this._taskStates = taskSuggestions.map((task) => ({

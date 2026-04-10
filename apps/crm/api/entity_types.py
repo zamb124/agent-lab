@@ -130,6 +130,7 @@ async def create_entity_type(
         namespace_ids=namespace_ids,
         company_id=company_id,
         is_context_anchor=data.is_context_anchor,
+        is_voice_target=data.is_voice_target,
     )
     
     await repo.create_custom_type(entity_type, company_id)
@@ -167,6 +168,8 @@ async def update_entity_type(
         fields["color"] = data.color
     if data.is_context_anchor is not None:
         fields["is_context_anchor"] = data.is_context_anchor
+    if data.is_voice_target is not None:
+        fields["is_voice_target"] = data.is_voice_target
 
     resolved_color = fields.get("color") or entity_type.color
     if not resolved_color or not resolved_color.strip():

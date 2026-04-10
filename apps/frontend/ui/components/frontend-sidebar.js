@@ -6,6 +6,7 @@ import { PlatformElement } from '@platform/lib/platform-element/index.js';
 import { AppEvents } from '@platform/lib/utils/types.js';
 import { sidebarStyles, sidebarNavItemStyles } from '@platform/lib/styles/shared/sidebar.styles.js';
 import { FrontendStore } from '../store/frontend.store.js';
+import { readShellSidebarCollapsed } from '@platform/lib/utils/shell-sidebar-preference.js';
 import '@platform/lib/components/layout/platform-service-sidebar.js';
 import '@platform/lib/components/platform-icon.js';
 import '@platform/lib/components/platform-user.js';
@@ -148,7 +149,7 @@ export class FrontendSidebar extends PlatformElement {
 
     constructor() {
         super();
-        this.collapsed = false;
+        this.collapsed = readShellSidebarCollapsed();
         this.mobileOpen = false;
 
         this.state = this.use((s) => ({

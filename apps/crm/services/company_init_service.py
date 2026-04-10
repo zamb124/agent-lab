@@ -2,22 +2,34 @@
 Сервис инициализации компании.
 
 Копирует системные типы из шаблонов с company_id новой компании.
+Автосоздает системные CRM-сущности (company, default namespace).
 """
 
 from typing import List
 from datetime import datetime, timezone
+import uuid
 
 from sqlalchemy import select
 
-from apps.crm.db.models import EntityType, RelationshipType
+from apps.crm.constants_graph import (
+    BELONGS_TO_RELATIONSHIP_TYPE,
+    COMPANY_ENTITY_TYPE,
+    NAMESPACE_ENTITY_TYPE,
+    PLATFORM_COMPANY_ID_ATTR,
+    PLATFORM_NAMESPACE_ATTR,
+)
+from apps.crm.db.models import CRMEntity, EntityType, Relationship, RelationshipType
+from apps.crm.db.repositories.entity_repository import EntityRepository
 from apps.crm.db.repositories.entity_type_repository import EntityTypeRepository
 from apps.crm.db.repositories.namespace_template_repository import NamespaceTemplateRepository
+from apps.crm.db.repositories.relationship_repository import RelationshipRepository
 from apps.crm.db.repositories.relationship_type_repository import RelationshipTypeRepository
 from apps.crm.system_templates import (
     NAMESPACE_TEMPLATE_SEEDS,
     SYSTEM_ENTITY_TYPE_TEMPLATES,
     SYSTEM_RELATIONSHIP_TYPE_TEMPLATES
 )
+from core.db.repositories.company_repository import CompanyRepository
 from core.logging import get_logger
 
 logger = get_logger(__name__)
@@ -28,8 +40,9 @@ class CompanyInitService:
     Сервис для инициализации компании в CRM.
     
     При первом входе компании:
-    1. Копирует системные типы сущностей (note, meeting, call, task)
-    2. Копирует системные типы связей (mentions, linked)
+    1. Копирует системные типы сущностей
+    2. Копирует системные типы связей
+    3. Создает системные CRM-сущности (company entity, default namespace entity)
     """
     
     def __init__(
@@ -37,10 +50,16 @@ class CompanyInitService:
         entity_type_repo: EntityTypeRepository,
         relationship_type_repo: RelationshipTypeRepository,
         namespace_template_repo: NamespaceTemplateRepository,
+        entity_repo: EntityRepository,
+        company_repo: CompanyRepository,
+        relationship_repo: RelationshipRepository,
     ):
         self._entity_type_repo = entity_type_repo
         self._relationship_type_repo = relationship_type_repo
         self._namespace_template_repo = namespace_template_repo
+        self._entity_repo = entity_repo
+        self._company_repo = company_repo
+        self._relationship_repo = relationship_repo
     
     async def initialize_company(self, company_id: str) -> dict:
         """
@@ -57,6 +76,8 @@ class CompanyInitService:
         entity_types_created = await self._init_entity_types(company_id)
         relationship_types_created = await self._init_relationship_types(company_id)
         templates_created = await self._init_namespace_templates(company_id)
+        await self._ensure_company_entity(company_id)
+        await self._ensure_namespace_entity(company_id, "default")
         
         logger.info(
             f"Company {company_id} initialized: "
@@ -79,6 +100,7 @@ class CompanyInitService:
         existing_by_id = {item.type_id: item for item in existing_types}
 
         for template in SYSTEM_ENTITY_TYPE_TEMPLATES:
+            namespace_ids = template.get("namespace_ids", ["default"])
             existing = existing_by_id.get(template["type_id"])
             if existing is None:
                 entity_type = EntityType(
@@ -96,8 +118,10 @@ class CompanyInitService:
                     is_event=template.get('is_event', False),
                     check_duplicates=template.get('check_duplicates', True),
                     weight_coefficient=template.get('weight_coefficient', 1.0),
-                    namespace_ids=["default"],
+                    namespace_ids=namespace_ids,
                     is_context_anchor=template.get('is_context_anchor', False),
+                    is_voice_target=template.get('is_voice_target', False),
+                    extractable=template.get('extractable', True),
                     created_at=datetime.now(timezone.utc)
                 )
                 await self._entity_type_repo.create(entity_type)
@@ -119,11 +143,10 @@ class CompanyInitService:
                 check_duplicates=template.get("check_duplicates", True),
                 weight_coefficient=template.get("weight_coefficient", 1.0),
                 is_context_anchor=template.get("is_context_anchor", False),
+                is_voice_target=template.get("is_voice_target", False),
+                extractable=template.get("extractable", True),
+                namespace_ids=namespace_ids,
             )
-            if "default" not in (existing.namespace_ids or []):
-                await self._entity_type_repo.add_namespace_ids(
-                    existing.type_id, ["default"], company_id=company_id,
-                )
         
         return created_count
 
@@ -204,6 +227,7 @@ class CompanyInitService:
                     weight_coefficient=item.get("weight_coefficient", 1.0),
                     namespace_ids=item.get("namespace_ids", []),
                     is_context_anchor=item.get("is_context_anchor", False),
+                    is_voice_target=item.get("is_voice_target", False),
                 )
         return created_count
     
@@ -231,3 +255,74 @@ class CompanyInitService:
             )
             result = await session.execute(stmt)
             return list(result.scalars().all())
+
+    async def _ensure_company_entity(self, company_id: str) -> str:
+        """Идемпотентно создает CRM-сущность для компании-тенанта."""
+        existing = await self._entity_repo.find_by_attribute(
+            entity_type=COMPANY_ENTITY_TYPE,
+            attribute_key=PLATFORM_COMPANY_ID_ATTR,
+            attribute_value=company_id,
+            company_id=company_id,
+        )
+        if existing:
+            return existing[0].entity_id
+
+        company = await self._company_repo.get(company_id)
+        if company is None:
+            raise ValueError(f"Company not found: {company_id}")
+
+        entity = CRMEntity(
+            entity_id=str(uuid.uuid4()),
+            company_id=company_id,
+            namespace="default",
+            entity_type=COMPANY_ENTITY_TYPE,
+            name=company.name,
+            attributes={PLATFORM_COMPANY_ID_ATTR: company_id},
+            tags=[],
+            user_id=company.owner_user_id or company_id,
+        )
+        await self._entity_repo.create(entity)
+        logger.info(f"Created company entity {entity.entity_id} for company {company_id}")
+        return entity.entity_id
+
+    async def _ensure_namespace_entity(
+        self,
+        company_id: str,
+        namespace_name: str,
+    ) -> str:
+        """Идемпотентно создает CRM-сущность для namespace."""
+        existing = await self._entity_repo.find_by_attribute(
+            entity_type=NAMESPACE_ENTITY_TYPE,
+            attribute_key=PLATFORM_NAMESPACE_ATTR,
+            attribute_value=namespace_name,
+            company_id=company_id,
+        )
+        if existing:
+            return existing[0].entity_id
+
+        company_entity_id = await self._ensure_company_entity(company_id)
+
+        entity = CRMEntity(
+            entity_id=str(uuid.uuid4()),
+            company_id=company_id,
+            namespace=namespace_name,
+            entity_type=NAMESPACE_ENTITY_TYPE,
+            name=namespace_name,
+            attributes={PLATFORM_NAMESPACE_ATTR: namespace_name},
+            tags=[],
+            user_id=company_id,
+        )
+        await self._entity_repo.create(entity)
+
+        rel = Relationship(
+            relationship_id=str(uuid.uuid4()),
+            company_id=company_id,
+            namespace=namespace_name,
+            source_entity_id=entity.entity_id,
+            target_entity_id=company_entity_id,
+            relationship_type=BELONGS_TO_RELATIONSHIP_TYPE,
+        )
+        await self._relationship_repo.create(rel)
+
+        logger.info(f"Created namespace entity {entity.entity_id} for namespace {namespace_name}")
+        return entity.entity_id

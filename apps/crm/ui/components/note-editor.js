@@ -260,12 +260,12 @@ export class NoteEditor extends PlatformElement {
     _initFromStore() {
         const state = CRMStore.state;
         const { currentNoteId, notes, noteText, noteRelatedEntities, entityTypes } = state.entities;
-        const { analyzing } = state.ai;
+        const { analyzingNoteId } = state.ai;
         const { isMobile } = state.ui;
         
         this._currentNoteId = currentNoteId;
         this._noteText = noteText;
-        this._analyzing = analyzing;
+        this._analyzing = typeof analyzingNoteId === 'string' && analyzingNoteId === currentNoteId;
         this._isMobile = isMobile;
         this._relatedEntities = noteRelatedEntities || [];
         this._entityTypes = entityTypes || [];
@@ -284,7 +284,7 @@ export class NoteEditor extends PlatformElement {
         
         this._unsubscribe = CRMStore.subscribe(state => {
             const { currentNoteId, notes, noteText, noteRelatedEntities, entityTypes } = state.entities;
-            const { analyzing } = state.ai;
+            const { analyzingNoteId } = state.ai;
             const { isMobile } = state.ui;
             
             const prevNoteId = this._currentNoteId;
@@ -292,7 +292,7 @@ export class NoteEditor extends PlatformElement {
             
             this._currentNoteId = currentNoteId;
             this._noteText = noteText;
-            this._analyzing = analyzing;
+            this._analyzing = typeof analyzingNoteId === 'string' && analyzingNoteId === currentNoteId;
             this._isMobile = isMobile;
             this._relatedEntities = noteRelatedEntities || [];
             this._entityTypes = entityTypes || [];

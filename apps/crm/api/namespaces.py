@@ -191,6 +191,7 @@ async def get_namespace_template(
                 weight_coefficient=item.weight_coefficient,
                 namespace_ids=item.namespace_ids,
                 is_context_anchor=item.is_context_anchor,
+                is_voice_target=item.is_voice_target,
             )
             for item in template_types
         ],
@@ -265,6 +266,7 @@ async def upsert_template_type(
         weight_coefficient=request.weight_coefficient,
         namespace_ids=request.namespace_ids,
         is_context_anchor=request.is_context_anchor,
+        is_voice_target=request.is_voice_target,
     )
     return NamespaceTemplateTypeResponse(
         type_id=item.type_id,
@@ -281,6 +283,7 @@ async def upsert_template_type(
         weight_coefficient=item.weight_coefficient,
         namespace_ids=item.namespace_ids,
         is_context_anchor=item.is_context_anchor,
+        is_voice_target=item.is_voice_target,
     )
 
 

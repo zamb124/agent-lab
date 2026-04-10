@@ -117,6 +117,9 @@ class CRMContainer(BaseContainer):
             entity_type_repo=self.entity_type_repository,
             relationship_type_repo=self.relationship_type_repository,
             namespace_template_repo=self.namespace_template_repository,
+            entity_repo=self.entity_repository,
+            company_repo=self.company_repository,
+            relationship_repo=self.relationship_repository,
         )
 
     @lazy
@@ -127,6 +130,7 @@ class CRMContainer(BaseContainer):
             entity_type_repo=self.entity_type_repository,
             namespace_repo=self.namespace_repository,
             entity_repo=self.entity_repository,
+            company_init_service=self.company_init_service,
         )
 
     @lazy
@@ -136,6 +140,7 @@ class CRMContainer(BaseContainer):
             entity_repo=self.entity_repository,
             entity_type_repo=self.entity_type_repository,
             user_repository=self.user_repository,
+            relationship_repo=self.relationship_repository,
         )
     
     @lazy

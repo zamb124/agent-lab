@@ -75,7 +75,7 @@ class TestNamespaceEditabilityEmpty:
 
     @pytest.mark.asyncio
     async def test_empty_namespace_can_remove_all_types(self, crm_client, unique_id, auth_headers_system):
-        """В пустом namespace можно убрать все типы"""
+        """В пустом namespace можно убрать все пользовательские типы"""
         type_a = f"alpha_{unique_id}"
         type_b = f"beta_{unique_id}"
         namespace_name, _ = await _create_namespace_with_types(
@@ -94,7 +94,13 @@ class TestNamespaceEditabilityEmpty:
             headers=auth_headers_system,
         )
         assert types_resp.status_code == 200
-        assert len(types_resp.json()) == 0
+        remaining_type_ids = {t["type_id"] for t in types_resp.json()}
+        assert type_a not in remaining_type_ids
+        assert type_b not in remaining_type_ids
+        for t in types_resp.json():
+            assert "*" in t["namespace_ids"], (
+                f"Тип {t['type_id']} остался в namespace без '*' в namespace_ids"
+            )
 
     @pytest.mark.asyncio
     async def test_empty_namespace_description_always_editable(self, crm_client, unique_id, auth_headers_system):

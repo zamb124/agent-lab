@@ -11,6 +11,7 @@ import {
     setPlatformNamespaceSelection,
 } from '@platform/lib/utils/platform-namespace.js';
 import { AppEvents } from '@platform/lib/utils/types.js';
+import { readShellSidebarCollapsed } from '@platform/lib/utils/shell-sidebar-preference.js';
 import '@platform/lib/components/layout/platform-service-sidebar.js';
 import '@platform/lib/components/platform-icon.js';
 import '@platform/lib/components/platform-user.js';
@@ -212,7 +213,7 @@ export class OfficeSidebar extends PlatformElement {
     constructor() {
         super();
         this.activeView = 'list';
-        this.collapsed = false;
+        this.collapsed = readShellSidebarCollapsed();
         this.mobileOpen = false;
         this._integrationOk = true;
         this._loading = true;

@@ -273,6 +273,18 @@ class MyModal extends GlassModal {
   - `label` (`string`, опционально)
   - событие `change` с `detail.value: boolean`
 
+## Typed Field (`platform-field`)
+
+- Универсальный компонент для ввода и отображения типизированных значений: `core/frontend/static/lib/components/fields/platform-field.js` (side-effect import `@platform/lib/components/fields/platform-field.js`).
+- Для атрибутов CRM-сущностей и любых типизированных данных (`string`, `text`, `number`, `integer`, `boolean`, `date`, `datetime`, `enum`, `array`, `object`) использовать `platform-field`, а не голые `<input>`.
+- Подробная документация, API и строгие правила: **`data-types.mdc`**.
+- API компонента:
+  - `type` (`string`) — тип данных
+  - `value` (`any`) — типизированное значение
+  - `mode` (`view` | `edit`)
+  - `label`, `placeholder`, `disabled`, `config`
+  - событие `change` с `detail.value`
+
 ## Tooltip / Help Hint (`platform-help-hint`)
 
 - Единый платформенный tooltip-компонент: `core/frontend/static/lib/components/platform-help-hint.js` (side-effect import `@platform/lib/components/platform-help-hint.js`).
@@ -503,6 +515,8 @@ export class MyForm extends PlatformElement {
 
 **Канон для боковой колонки SPA:** [`platform-service-sidebar`](../../core/frontend/static/lib/components/layout/platform-service-sidebar.js) — единая оболочка: прокидывает слоты внутрь [`platform-sidebar`](../../core/frontend/static/lib/components/layout/platform-sidebar.js), отражает на хосте атрибуты **`collapsed`** и **`mobile-open`** (для стилей приложения вида `platform-service-sidebar[collapsed] .nav-label`), пробрасывает события **`collapse-change`** / **`mobile-change`**, методы **`toggleMobile()`** / **`closeMobile()`** для вызова из `*App` (бургер). Сервисный компонент (`*-sidebar` в `apps/*/ui`) рендерит один `<platform-service-sidebar>` и наполнение слотов; не дублировать отдельный `<platform-sidebar>` в приложениях.
 
+**Персистенция desktop-`collapsed` (все SPA):** [`shell-sidebar-preference.js`](../../core/frontend/static/lib/utils/shell-sidebar-preference.js) — ключ **`platform:shell-sidebar-collapsed`** в `localStorage`, значения **`true`** / **`false`** (строки); при невалидном значении в хранилище — исключение. Чтение при создании: в конструкторе **`PlatformServiceSidebar`** и в конструкторе каждого сервисного `*-sidebar` через **`readShellSidebarCollapsed()`**, чтобы родительский `?collapsed=${...}` не затирал состояние на первом кадре. Запись при переключении — только в **`PlatformServiceSidebar._onCollapseChange`** (**`writeShellSidebarCollapsed`**). Состояние **`mobile-open`** не сохраняется.
+
 **`platform-sidebar`** (внутренний): кнопка свернуть/развернуть (chevron, `aria-expanded`, i18n `shell.sidebar.collapse` / `shell.sidebar.expand`) — при **развёрнутом** сайдбаре в одной строке с логотипом (`margin-left: auto` у `.sidebar-logo > .collapse-btn`); при **collapsed** — отдельная строка **`.sidebar-collapse-row`** между логотипом и `header`/nav, чтобы шеврон не был под иконкой сервиса. Слоты `logo` / `header` / default / `footer`, mobile overlay. Клик по логотипу не переключает collapsed.
 
 ```javascript
@@ -516,7 +530,7 @@ import '@platform/lib/components/layout/sidebar-nav-item.js';
 
 | Property | Type | Default | Description |
 |----------|------|---------|-------------|
-| `collapsed` | Boolean | false | Свернутый режим (только иконки) |
+| `collapsed` | Boolean | из `readShellSidebarCollapsed()` | Свернутый режим (только иконки); начальное значение синхронизировать с утилитой в обёртке сервиса |
 | `mobile-open` | Boolean | false | Открыт на мобильном |
 | `logo-src` | String | '' | Путь к логотипу |
 | `logo-text` | String | '' | Текст логотипа |

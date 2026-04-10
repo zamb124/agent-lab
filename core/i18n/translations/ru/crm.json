@@ -2,7 +2,9 @@
     "title": "CRM",
     "notifications": {
         "period_summary_range_clamped_title": "Период сводки сокращён",
-        "period_summary_range_clamped_message": "Запрошено дней: {requested_days}. Сводка строится максимум за {max_days} дней; учтены последние {max_days} дней до конца выбранного периода (более ранние дни не входят в сводку)."
+        "period_summary_range_clamped_message": "Запрошено дней: {requested_days}. Сводка строится максимум за {max_days} дней; учтены последние {max_days} дней до конца выбранного периода (более ранние дни не входят в сводку).",
+        "analyze_mentioned_entity_short_description_title": "Анализ заметки не выполнен",
+        "analyze_mentioned_entity_short_description_message": "Упомянутая сущность «{entity_name}» (тип: {entity_type}) не подходит для анализа: в поле «Описание» нужно не менее {min_len} символов. Откройте карточку по ссылке в уведомлении и дополните описание."
     },
     "nav": {
         "dashboard": "Дашборд",
@@ -687,6 +689,7 @@
         "summary_generated_at": "Сгенерирована в {{time}}",
         "analysis_draft_at": "Есть черновик анализа от {{time}}",
         "summary_prompt": "Нажмите обновить для генерации summary",
+        "analysis_in_progress": "Идёт AI-анализ заметки…",
         "relationship": "Связь",
         "unknown_entity": "Неизвестная сущность",
         "current_note_fallback": "Текущая заметка",
@@ -905,7 +908,8 @@
         "empty_period": "На выбранный период заметок нет",
         "published_at": "Опубликовано в {{time}}",
         "analysis_open_draft": "Открыть черновик AI анализа",
-        "analysis_run": "AI анализ"
+        "analysis_run": "AI анализ",
+        "analysis_in_progress": "Идёт AI-анализ…"
     },
     "spaces_page": {
         "hint_namespace_description": "Описание текущего пространства. Изменение описания не влияет на существующие сущности и доступно всегда.",

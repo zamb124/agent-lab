@@ -37,8 +37,10 @@ from apps.crm.db.repositories.access_request_repository import AccessRequestRepo
 from apps.crm.db.repositories.company_mapping_repository import CompanyMappingRepository
 from apps.crm.db.models import Relationship
 from apps.crm.constants_graph import (
+    COMPANY_ENTITY_TYPE,
     IN_CONTEXT_RELATIONSHIP_TYPE,
     NOTE_VOICE_RELATIONSHIP_TYPE,
+    PLATFORM_COMPANY_ID_ATTR,
     PLATFORM_USER_ID_ATTR,
 )
 from apps.crm.services.attachment_service import AttachmentService
@@ -58,6 +60,7 @@ import json
 logger = get_logger(__name__)
 from core.config import get_settings
 from apps.crm.config import get_crm_settings
+from apps.crm.taskiq_analyze_errors import format_mentioned_entity_short_description_error
 from core.utils.chunked_async import map_reduce_tree, run_chunked_map
 
 _ANALYZE_ENTITY_DESCRIPTION_MIN_LEN = 12
@@ -325,8 +328,12 @@ class EntityService:
         ent = await self._entity_repo.get(entity_id)
         if ent is None or ent.company_id != company_id:
             raise ValueError(f"Сущность голоса не найдена: {entity_id}")
-        if ent.entity_type != "contact":
-            raise ValueError("Голос заметки должен быть типа contact")
+        et = await self._entity_type_repo.get_by_type_id(ent.entity_type)
+        if et is None or not et.is_voice_target:
+            raise ValueError(
+                f"Тип {ent.entity_type!r} не может быть голосом заметки "
+                f"(is_voice_target=False)"
+            )
 
     async def _validate_context_target(self, entity_id: str, company_id: str) -> None:
         ent = await self._entity_repo.get(entity_id)
@@ -1790,12 +1797,38 @@ class EntityService:
             request.extract_relationship_types
         )
         ctx = get_context()
-        prefix_parts: list[str] = []
+        known_entities: list[dict[str, Any]] = []
         if ctx and ctx.user:
-            profile_block = await self._user_person_service.format_user_profile_for_ai(ctx.user.user_id)
-            if profile_block.strip():
-                prefix_parts.append("ПРОФИЛЬ АВТОРА ЗАМЕТКИ:\n" + profile_block)
-        anchor_types = [et for et in entity_types if getattr(et, "is_context_anchor", False)]
+            company_id = self._get_company_id()
+            member_entity_id = await self._user_person_service.get_or_create_person_entity_id(
+                ctx.user.user_id, company_id,
+            )
+            member_entity = await self._entity_repo.get(member_entity_id)
+            if member_entity:
+                known_entities.append({
+                    "entity_id": member_entity.entity_id,
+                    "name": member_entity.name,
+                    "type": "member",
+                    "description": member_entity.attributes.get("description", ""),
+                })
+
+            company_entities = await self._entity_repo.find_by_attribute(
+                entity_type=COMPANY_ENTITY_TYPE,
+                attribute_key=PLATFORM_COMPANY_ID_ATTR,
+                attribute_value=company_id,
+                company_id=company_id,
+            )
+            if company_entities:
+                ce = company_entities[0]
+                known_entities.append({
+                    "entity_id": ce.entity_id,
+                    "name": ce.name,
+                    "type": "company",
+                    "description": ce.attributes.get("description", ""),
+                })
+
+        prefix_parts: list[str] = []
+        anchor_types = [et for et in entity_types if et.is_context_anchor]
         if anchor_types:
             anchor_lines = "\n".join(f"- {et.name} ({et.type_id})" for et in anchor_types)
             prefix_parts.append("ТИПЫ-ЯКОРЯ КОНТЕКСТА (привязка заметок к сделке, лиду и т.д.):\n" + anchor_lines)
@@ -1808,6 +1841,7 @@ class EntityService:
             prompt=prompt,
             entity_types=entity_types,
             relationship_types=relationship_types,
+            known_entities=known_entities if known_entities else None,
         )
         logger.info(
             "crm.analyze.flow_llm_ms=%.1f",
@@ -1868,6 +1902,8 @@ class EntityService:
         ]
         
         for et in entity_types:
+            if not et.extractable:
+                continue
             if extract_entity_types and et.type_id not in extract_entity_types:
                 continue
             
@@ -1932,9 +1968,14 @@ class EntityService:
             occupied.add(k)
             desc = row.description
             if not isinstance(desc, str) or len(desc.strip()) < _ANALYZE_ENTITY_DESCRIPTION_MIN_LEN:
+                display_name = (row.name or "").strip() or mid
                 raise ValueError(
-                    f"У сущности {mid} нет описания длиной "
-                    f"не менее {_ANALYZE_ENTITY_DESCRIPTION_MIN_LEN} символов (нужно для analyze)"
+                    format_mentioned_entity_short_description_error(
+                        entity_id=mid,
+                        entity_name=display_name,
+                        entity_type=row.entity_type,
+                        min_len=_ANALYZE_ENTITY_DESCRIPTION_MIN_LEN,
+                    )
                 )
             payload = {
                 "entity_type": row.entity_type,
@@ -1955,24 +1996,32 @@ class EntityService:
         prompt: str,
         entity_types: List,
         relationship_types: List,
+        known_entities: Optional[List[Dict[str, Any]]] = None,
     ) -> _AnalyzePipelineState:
         """Вызывает AI agent через A2A API для анализа"""
         from core.config import get_settings
 
         settings = get_settings()
 
+        extractable_entity_types = [
+            et for et in entity_types
+            if et.prompt and et.extractable
+        ]
         variables = {
             **_crm_llm_interface_language_vars(),
             "text": text,
             "entity_types": [
                 {"type": et.type_id, "prompt": et.prompt or ""}
-                for et in entity_types if et.prompt
+                for et in extractable_entity_types
             ],
             "relationship_types": [
                 {"type": rt.type_id, "prompt": rt.prompt or ""}
                 for rt in relationship_types if rt.prompt
             ],
         }
+
+        if known_entities:
+            variables["known_entities"] = known_entities
 
         flows_base_url = settings.server.get_flows_service_url().rstrip("/")
 

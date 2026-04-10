@@ -20,7 +20,7 @@ export class NoteViewModal extends PlatformModal {
         _noteSubtypes: { state: true },
         _relationshipTypes: { state: true },
         _attachments: { state: true },
-        _processingEntities: { state: true },
+        _storeAnalyzingNoteId: { state: true },
         _processingAttachment: { state: true },
         _processingRelationship: { state: true },
         _deleting: { state: true },
@@ -84,12 +84,13 @@ export class NoteViewModal extends PlatformModal {
         this._noteSubtypes = [];
         this._relationshipTypes = [];
         this._attachments = [];
-        this._processingEntities = false;
+        this._storeAnalyzingNoteId = null;
         this._processingAttachment = false;
         this._processingRelationship = false;
         this._deleting = false;
         this._editing = false;
         this._savingNote = false;
+        this._crmStoreUnsub = null;
     }
 
     renderHeader() {
@@ -140,6 +141,27 @@ export class NoteViewModal extends PlatformModal {
         return this._openEntityModal({
             detail: { entity: { entity_id: entityId.trim(), name: '' } },
         });
+    }
+
+    connectedCallback() {
+        super.connectedCallback();
+        const syncAnalyzingNoteId = () => {
+            const aid = CRMStore.state.ai.analyzingNoteId;
+            const next = typeof aid === 'string' && aid.trim().length > 0 ? aid.trim() : null;
+            if (next !== this._storeAnalyzingNoteId) {
+                this._storeAnalyzingNoteId = next;
+            }
+        };
+        syncAnalyzingNoteId();
+        this._crmStoreUnsub = CRMStore.subscribe(() => {
+            syncAnalyzingNoteId();
+        });
+    }
+
+    disconnectedCallback() {
+        super.disconnectedCallback();
+        this._crmStoreUnsub?.();
+        this._crmStoreUnsub = null;
     }
 
     async firstUpdated() {
@@ -246,7 +268,6 @@ export class NoteViewModal extends PlatformModal {
             throw new Error('Note description is required for analysis');
         }
 
-        this._processingEntities = true;
         const analysisModal = document.createElement('ai-analysis-modal');
         analysisModal.loading = true;
         document.body.appendChild(analysisModal);
@@ -271,7 +292,6 @@ export class NoteViewModal extends PlatformModal {
                 mentionedEntityIds,
             });
         } finally {
-            this._processingEntities = false;
             analysisModal.loading = false;
         }
 
@@ -648,6 +668,17 @@ export class NoteViewModal extends PlatformModal {
         return `${hours}:${minutes}`;
     }
 
+    _isNoteAiAnalyzing() {
+        if (!this.note || typeof this.note !== 'object') {
+            return false;
+        }
+        const id = this.note.entity_id;
+        if (typeof id !== 'string' || id.trim().length === 0) {
+            return false;
+        }
+        return this._storeAnalyzingNoteId === id.trim();
+    }
+
     renderBody() {
         if (!this.note || typeof this.note !== 'object') {
             throw new Error('note is required');
@@ -667,7 +698,7 @@ export class NoteViewModal extends PlatformModal {
                     .summaryEntities=${this._getNoteSummaryEntities()}
                     .hasAnalysisDraft=${this._hasAnalysisDraft()}
                     .analysisDraftGeneratedAt=${this._getAnalysisDraftGeneratedAt()}
-                    .processingEntities=${this._processingEntities}
+                    .processingEntities=${this._isNoteAiAnalyzing()}
                     .deletingNote=${this._deleting}
                     .editable=${this._editing}
                     .savingNote=${this._savingNote}

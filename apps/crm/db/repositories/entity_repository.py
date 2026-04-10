@@ -86,6 +86,24 @@ class EntityRepository(BaseCRMRepository[CRMEntity]):
             return parsed_value.replace(tzinfo=timezone.utc)
         return parsed_value
 
+    async def find_by_attribute(
+        self,
+        entity_type: str,
+        attribute_key: str,
+        attribute_value: str,
+        company_id: Optional[str] = None,
+    ) -> List[CRMEntity]:
+        """Поиск сущностей по типу и значению в attributes (jsonb)."""
+        cid = company_id or self._get_company_id()
+        async with self._db.session() as session:
+            stmt = select(CRMEntity).where(
+                CRMEntity.company_id == cid,
+                CRMEntity.entity_type == entity_type,
+                CRMEntity.attributes[attribute_key].astext == attribute_value,
+            )
+            result = await session.execute(stmt)
+            return list(result.scalars().all())
+
     # -- CRUD --
 
     async def create(self, entity: CRMEntity) -> CRMEntity:
@@ -414,6 +432,7 @@ class EntityRepository(BaseCRMRepository[CRMEntity]):
         self,
         namespace: str,
         company_id: Optional[str] = None,
+        exclude_entity_types: Optional[set[str]] = None,
     ) -> int:
         """Считает количество сущностей в namespace."""
         if not namespace:
@@ -425,6 +444,8 @@ class EntityRepository(BaseCRMRepository[CRMEntity]):
                 CRMEntity.company_id == cid,
                 CRMEntity.namespace == namespace,
             )
+            if exclude_entity_types:
+                stmt = stmt.where(CRMEntity.entity_type.notin_(exclude_entity_types))
             result = await session.execute(stmt)
             value = result.scalar()
             if value is None:

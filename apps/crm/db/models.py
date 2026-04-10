@@ -177,6 +177,20 @@ class EntityType(Base):
         nullable=False,
         comment="Тип может быть якорем контекста для заметок (сделка, лид и т.д.)",
     )
+    extractable: Mapped[bool] = mapped_column(
+        Boolean,
+        default=True,
+        nullable=False,
+        server_default="true",
+        comment="AI может создавать новые сущности этого типа при анализе",
+    )
+    is_voice_target: Mapped[bool] = mapped_column(
+        Boolean,
+        default=False,
+        nullable=False,
+        server_default="false",
+        comment="Сущности этого типа допустимы как голос (автор) заметки",
+    )
 
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
@@ -539,6 +553,13 @@ class NamespaceTemplateType(Base):
         default=False,
         nullable=False,
         comment="При материализации в EntityType — якорь контекста",
+    )
+    is_voice_target: Mapped[bool] = mapped_column(
+        Boolean,
+        default=False,
+        nullable=False,
+        server_default="false",
+        comment="При материализации в EntityType — допустим как голос заметки",
     )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),

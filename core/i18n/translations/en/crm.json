@@ -2,7 +2,9 @@
     "title": "CRM",
     "notifications": {
         "period_summary_range_clamped_title": "Summary period shortened",
-        "period_summary_range_clamped_message": "You selected {requested_days} days. Period summaries are limited to {max_days} days; only the last {max_days} days up to the end of your range are included (earlier days are omitted)."
+        "period_summary_range_clamped_message": "You selected {requested_days} days. Period summaries are limited to {max_days} days; only the last {max_days} days up to the end of your range are included (earlier days are omitted).",
+        "analyze_mentioned_entity_short_description_title": "Note analysis failed",
+        "analyze_mentioned_entity_short_description_message": "The mentioned entity \"{entity_name}\" (type: {entity_type}) cannot be analyzed: the Description field must be at least {min_len} characters. Open the card using the link in this notification and add a longer description."
     },
     "nav": {
         "dashboard": "Dashboard",
@@ -687,6 +689,7 @@
         "summary_generated_at": "Generated at {{time}}",
         "analysis_draft_at": "Analysis draft from {{time}}",
         "summary_prompt": "Click refresh to generate summary",
+        "analysis_in_progress": "AI note analysis in progress…",
         "relationship": "Relationship",
         "unknown_entity": "Unknown entity",
         "current_note_fallback": "Current note",
@@ -905,7 +908,8 @@
         "empty_period": "No notes for the selected period",
         "published_at": "Published at {{time}}",
         "analysis_open_draft": "Open AI analysis draft",
-        "analysis_run": "AI analysis"
+        "analysis_run": "AI analysis",
+        "analysis_in_progress": "AI analysis in progress…"
     },
     "spaces_page": {
         "hint_namespace_description": "Description of the current space. Changing it does not affect existing entities and is always allowed.",

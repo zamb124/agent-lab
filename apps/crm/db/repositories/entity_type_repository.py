@@ -6,7 +6,7 @@
 """
 
 from typing import List, Optional
-from sqlalchemy import select, update as sa_update
+from sqlalchemy import select, update as sa_update, or_
 
 from apps.crm.db.base import CRMDatabase, BaseCRMRepository
 from apps.crm.db.models import EntityType
@@ -44,7 +44,12 @@ class EntityTypeRepository(BaseCRMRepository[EntityType]):
         async with self._db.session() as session:
             stmt = select(EntityType).where(EntityType.company_id == company_id)
             if namespace:
-                stmt = stmt.where(EntityType.namespace_ids.contains([namespace]))
+                stmt = stmt.where(
+                    or_(
+                        EntityType.namespace_ids.contains([namespace]),
+                        EntityType.namespace_ids.contains(["*"]),
+                    )
+                )
             result = await session.execute(stmt)
             return list(result.scalars().all())
 

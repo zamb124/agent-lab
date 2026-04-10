@@ -35,6 +35,16 @@ export class EntityMention extends PlatformElement {
                 color: white;
             }
             
+            .mention.member {
+                background: rgba(30, 136, 229, 0.15);
+                color: rgb(30, 136, 229);
+            }
+            
+            .mention.member:hover {
+                background: rgb(30, 136, 229);
+                color: white;
+            }
+            
             .mention.contact {
                 background: rgba(59, 130, 246, 0.15);
                 color: rgb(59, 130, 246);
@@ -52,6 +62,16 @@ export class EntityMention extends PlatformElement {
             
             .mention.company:hover {
                 background: rgb(168, 85, 247);
+                color: white;
+            }
+            
+            .mention.namespace {
+                background: rgba(120, 144, 156, 0.15);
+                color: rgb(120, 144, 156);
+            }
+            
+            .mention.namespace:hover {
+                background: rgb(120, 144, 156);
                 color: white;
             }
             
@@ -137,8 +157,10 @@ export class EntityMention extends PlatformElement {
     
     _getTypeClass() {
         const typeMap = {
+            'member': 'member',
             'contact': 'contact',
             'company': 'company',
+            'namespace': 'namespace',
             'task': 'task',
         };
         return typeMap[this.entityType] || '';

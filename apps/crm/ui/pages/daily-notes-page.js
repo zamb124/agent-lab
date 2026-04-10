@@ -26,6 +26,7 @@ export class DailyNotesPage extends PlatformElement {
         _notesLeavingIds: { state: true },
         _namespaceHasAnyEntity: { state: true },
         _namespaceProbeValid: { state: true },
+        _analyzingNoteId: { state: true },
     };
 
     static styles = [
@@ -387,6 +388,26 @@ export class DailyNotesPage extends PlatformElement {
                 color: #8b5cf6;
                 box-shadow: 0 0 8px rgba(139, 92, 246, 0.25);
                 animation: ai-pulse 2s ease-in-out infinite;
+            }
+
+            .analyze-btn.analyzing {
+                animation: analyze-btn-busy 1.2s ease-in-out infinite;
+                cursor: wait;
+                pointer-events: none;
+            }
+
+            .analyze-btn:disabled {
+                opacity: 0.72;
+                cursor: not-allowed;
+            }
+
+            @keyframes analyze-btn-busy {
+                0%, 100% {
+                    opacity: 1;
+                }
+                50% {
+                    opacity: 0.55;
+                }
             }
 
             @keyframes ai-pulse {
@@ -798,6 +819,7 @@ export class DailyNotesPage extends PlatformElement {
         this._notesLeavingIds = [];
         this._namespaceHasAnyEntity = false;
         this._namespaceProbeValid = false;
+        this._analyzingNoteId = null;
         this._unsubscribe = null;
         this._onPlatformNotification = this._onPlatformNotification.bind(this);
         this._onMobileSearch = this._onMobileSearch.bind(this);
@@ -811,12 +833,19 @@ export class DailyNotesPage extends PlatformElement {
         this._dateTo = range.to;
         this._currentNamespace = CRMStore.state.namespaces.current;
         this._isMobile = CRMStore.state.ui.isMobile;
+        const initialAid = CRMStore.state.ai.analyzingNoteId;
+        this._analyzingNoteId = typeof initialAid === 'string' && initialAid.trim().length > 0 ? initialAid.trim() : null;
         window.addEventListener('crm-mobile-search', this._onMobileSearch);
         this._unsubscribe = CRMStore.subscribe((state) => {
             const { from, to } = CRMStore.getDailyNotesRange();
             this._dateFrom = from;
             this._dateTo = to;
             this._isMobile = state.ui.isMobile;
+            const aid = state.ai.analyzingNoteId;
+            const nextAnalyzingId = typeof aid === 'string' && aid.trim().length > 0 ? aid.trim() : null;
+            if (nextAnalyzingId !== this._analyzingNoteId) {
+                this._analyzingNoteId = nextAnalyzingId;
+            }
             const previousNamespace = this._normalizeNamespaceName(this._getCurrentNamespaceName());
             this._currentNamespace = state.namespaces.current;
             const nextNamespace = this._normalizeNamespaceName(this._getCurrentNamespaceName());
@@ -1048,6 +1077,17 @@ export class DailyNotesPage extends PlatformElement {
             return value;
         }
         return defaultValue;
+    }
+
+    _isNoteAiAnalyzing(note) {
+        if (!note || typeof note !== 'object') {
+            throw new Error('Note object is required');
+        }
+        const id = note.entity_id;
+        if (typeof id !== 'string' || id.trim().length === 0) {
+            return false;
+        }
+        return this._analyzingNoteId === id.trim();
     }
 
     _onSearchInput(event) {
@@ -1387,13 +1427,14 @@ export class DailyNotesPage extends PlatformElement {
 
     _getEntityTagIcon(entity) {
         const entityType = typeof entity?.entity_type === 'string' ? entity.entity_type : '';
-        if (entityType === 'contact') {
-            return 'user';
-        }
-        if (entityType === 'organization') {
-            return 'database';
-        }
-        return 'folder';
+        const iconMap = {
+            'member': 'user-shield',
+            'contact': 'user',
+            'company': 'building',
+            'namespace': 'layers',
+            'organization': 'database',
+        };
+        return iconMap[entityType] || 'folder';
     }
 
     _getNoteSubtypeLabel(note) {
@@ -1681,10 +1722,15 @@ export class DailyNotesPage extends PlatformElement {
                                             <div class="note-footer-right">
                                                 <span class="published-at">${this.i18n.t('daily_notes_page.published_at', { time: this._formatTime(this._getTextValue(note.updated_at, this._getTextValue(note.created_at, new Date().toISOString()))) })}</span>
                                                 <button
-                                                    class="analyze-btn ${this._hasNoteAnalysisDraft(note) ? 'has-draft' : this._noteNeedsAiProcessing(note) ? 'needs-ai' : ''}"
+                                                    class="analyze-btn ${this._isNoteAiAnalyzing(note) ? 'analyzing' : ''} ${this._hasNoteAnalysisDraft(note) ? 'has-draft' : this._noteNeedsAiProcessing(note) ? 'needs-ai' : ''}"
                                                     type="button"
+                                                    ?disabled=${this._isNoteAiAnalyzing(note)}
                                                     @click=${(event) => { event.stopPropagation(); this._onAnalyzeNote(note); }}
-                                                    title=${this._hasNoteAnalysisDraft(note) ? this.i18n.t('daily_notes_page.analysis_open_draft') : this.i18n.t('daily_notes_page.analysis_run')}
+                                                    title=${this._isNoteAiAnalyzing(note)
+                                                        ? this.i18n.t('daily_notes_page.analysis_in_progress')
+                                                        : (this._hasNoteAnalysisDraft(note)
+                                                            ? this.i18n.t('daily_notes_page.analysis_open_draft')
+                                                            : this.i18n.t('daily_notes_page.analysis_run'))}
                                                 >
                                                     <platform-icon name="ai" size="14" colored></platform-icon>
                                                 </button>

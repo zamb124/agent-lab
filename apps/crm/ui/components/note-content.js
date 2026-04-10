@@ -409,7 +409,34 @@ export class NoteContent extends PlatformElement {
                 cursor: not-allowed;
             }
 
-            .summary-rebuild-icon.spinning {
+            .summary-refresh-btn {
+                width: 32px;
+                height: 32px;
+                border-radius: var(--radius-full);
+                border: none;
+                background: var(--crm-summary-title-gradient);
+                color: var(--text-inverse);
+                display: inline-flex;
+                align-items: center;
+                justify-content: center;
+                cursor: pointer;
+                flex-shrink: 0;
+                box-shadow: var(--glass-shadow-subtle);
+                transition: opacity var(--duration-fast), transform var(--duration-fast);
+            }
+
+            .summary-refresh-btn:hover {
+                opacity: 0.85;
+                transform: scale(1.06);
+            }
+
+            .summary-refresh-btn:disabled {
+                opacity: 0.45;
+                cursor: not-allowed;
+                transform: none;
+            }
+
+            .summary-refresh-icon.spinning {
                 animation: note-ai-rebuild-spin 0.9s linear infinite;
                 transform-origin: center;
             }
@@ -1466,6 +1493,19 @@ export class NoteContent extends PlatformElement {
         return ids;
     }
 
+    _getVoiceTargetTypeIdSet() {
+        if (!Array.isArray(this.entityTypes)) {
+            throw new Error('entityTypes must be array');
+        }
+        const ids = new Set();
+        for (const item of this.entityTypes) {
+            if (item && item.is_voice_target === true && typeof item.type_id === 'string' && item.type_id.trim().length > 0) {
+                ids.add(item.type_id.trim());
+            }
+        }
+        return ids;
+    }
+
     _scheduleVoicePickSearch(mode) {
         if (mode === 'voice') {
             if (this._voiceSearchTimer) {
@@ -1526,7 +1566,8 @@ export class NoteContent extends PlatformElement {
         const list = Array.isArray(response.items) ? response.items : [];
         let filtered;
         if (isVoice) {
-            filtered = list.filter((e) => e && e.entity_type === 'contact');
+            const voiceTypes = this._getVoiceTargetTypeIdSet();
+            filtered = list.filter((e) => e && typeof e.entity_type === 'string' && voiceTypes.has(e.entity_type));
         } else {
             const allowed = this._getContextAnchorTypeIdSet();
             filtered = list.filter((e) => e && typeof e.entity_type === 'string' && allowed.has(e.entity_type));
@@ -1644,6 +1685,9 @@ export class NoteContent extends PlatformElement {
     }
 
     _getSummaryMeta() {
+        if (this.processingEntities === true) {
+            return this.i18n.t('note_content.analysis_in_progress');
+        }
         if (typeof this.summaryGeneratedAt === 'string' && this.summaryGeneratedAt.trim().length > 0) {
             return this.i18n.t('note_content.summary_generated_at', { time: this.summaryGeneratedAt });
         }
@@ -1986,8 +2030,9 @@ export class NoteContent extends PlatformElement {
         if (!entity || typeof entity.entity_id !== 'string' || entity.entity_id.trim().length === 0) {
             throw new Error('entity_id is required');
         }
-        if (entity.entity_type !== 'contact') {
-            throw new Error('Voice entity must be contact');
+        const voiceTypes = this._getVoiceTargetTypeIdSet();
+        if (!voiceTypes.has(entity.entity_type)) {
+            throw new Error(`Entity type ${entity.entity_type} is not a valid voice target`);
         }
         this._draftManualVoiceId = entity.entity_id.trim();
         const name = typeof entity.name === 'string' ? entity.name.trim() : '';
@@ -2446,17 +2491,16 @@ export class NoteContent extends PlatformElement {
                                     </button>
                                 ` : ''}
                                 <button
-                                    class="round-btn"
+                                    class="summary-refresh-btn"
                                     type="button"
                                     title=${this.i18n.t('note_content.refresh')}
                                     ?disabled=${this.processingEntities || this.draftMode}
                                     @click=${this._emitSummaryRefresh}
                                 >
                                     <platform-icon
-                                        class="summary-rebuild-icon ${this.processingEntities ? 'spinning' : ''}"
-                                        name="ai"
+                                        class=${this.processingEntities ? 'summary-refresh-icon spinning' : 'summary-refresh-icon'}
+                                        name="refresh"
                                         size="18"
-                                        colored
                                     ></platform-icon>
                                 </button>
                             </div>

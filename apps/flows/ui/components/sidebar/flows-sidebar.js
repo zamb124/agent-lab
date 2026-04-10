@@ -9,6 +9,7 @@ import { AppEvents } from '@platform/lib/utils/types.js';
 import { FlowsStore } from '../../store/flows.store.js';
 import { setUrlParam, removeUrlParams } from '../../utils/url-sync.js';
 import { canManageOperatorWorkbench } from '../../utils/operator-workbench-access.js';
+import { readShellSidebarCollapsed } from '@platform/lib/utils/shell-sidebar-preference.js';
 import '@platform/lib/components/layout/platform-service-sidebar.js';
 import '@platform/lib/components/layout/sidebar-section.js';
 import '@platform/lib/components/platform-icon.js';
@@ -122,7 +123,7 @@ export class FlowsSidebar extends PlatformElement {
 
     constructor() {
         super();
-        this.collapsed = false;
+        this.collapsed = readShellSidebarCollapsed();
         this.mobileOpen = false;
         this._onFlowsAuthChange = () => this.requestUpdate();
         this.state = this.use(s => ({

@@ -172,6 +172,7 @@ class EntityTypeCreate(BaseModel):
     check_duplicates: bool = True
     namespace_ids: Optional[List[str]] = None
     is_context_anchor: bool = False
+    is_voice_target: bool = False
 
 
 class EntityTypeUpdate(BaseModel):
@@ -186,6 +187,7 @@ class EntityTypeUpdate(BaseModel):
     color: Optional[str] = None
     namespace_ids: Optional[List[str]] = None
     is_context_anchor: Optional[bool] = None
+    is_voice_target: Optional[bool] = None
 
 
 class EntityTypeResponse(BaseModel):
@@ -208,6 +210,8 @@ class EntityTypeResponse(BaseModel):
     weight_coefficient: float
     namespace_ids: List[str]
     is_context_anchor: bool
+    is_voice_target: bool
+    extractable: bool
     created_at: datetime
 
 
@@ -375,6 +379,7 @@ class NamespaceTemplateTypeUpsertRequest(BaseModel):
     weight_coefficient: float = 1.0
     namespace_ids: List[str] = Field(default_factory=list)
     is_context_anchor: bool = False
+    is_voice_target: bool = False
 
 
 class NamespaceTemplateTypeResponse(BaseModel):
@@ -392,6 +397,7 @@ class NamespaceTemplateTypeResponse(BaseModel):
     weight_coefficient: float
     namespace_ids: List[str]
     is_context_anchor: bool
+    is_voice_target: bool
 
 
 class NamespaceTemplateDetailsResponse(BaseModel):

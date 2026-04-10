@@ -51,5 +51,12 @@
     "switched": "Company switched",
     "switch_error": "Could not switch company: {{message}}",
     "subdomain_missing": "Subdomain not found for the selected company"
+  },
+  "platform_field": {
+    "empty_value": "Not set",
+    "boolean_true": "Yes",
+    "boolean_false": "No",
+    "array_placeholder": "Enter a value and press Enter",
+    "object_placeholder": "JSON object"
   }
 }

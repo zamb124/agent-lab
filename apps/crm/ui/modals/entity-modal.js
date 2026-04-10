@@ -10,6 +10,7 @@ import { CRMStore } from '../store/crm.store.js';
 import '@platform/lib/components/tag-input.js';
 import '@platform/lib/components/platform-icon.js';
 import '@platform/lib/components/platform-date-picker.js';
+import '@platform/lib/components/fields/platform-field.js';
 
 export class EntityModal extends PlatformModal {
     static properties = {
@@ -375,6 +376,29 @@ export class EntityModal extends PlatformModal {
         return errors;
     }
 
+    _getFieldSpec(fieldKey) {
+        const typeId = this._formData.entity_subtype || this._formData.entity_type;
+        const entityType = this._entityTypes.find(t => t.type_id === typeId);
+        if (!entityType) return null;
+        const spec = entityType.required_fields?.[fieldKey]
+            || entityType.optional_fields?.[fieldKey];
+        return spec || null;
+    }
+
+    _getFieldType(fieldKey) {
+        const spec = this._getFieldSpec(fieldKey);
+        return spec?.type || 'string';
+    }
+
+    _getFieldConfig(fieldKey) {
+        const spec = this._getFieldSpec(fieldKey);
+        if (!spec) return {};
+        if (spec.type === 'enum') {
+            return { values: spec.values || [] };
+        }
+        return {};
+    }
+
     _getRequiredFieldNames() {
         const typeId = this._formData.entity_subtype || this._formData.entity_type;
         const entityType = this._entityTypes.find(t => t.type_id === typeId);
@@ -523,13 +547,14 @@ export class EntityModal extends PlatformModal {
                                 .value=${row.key}
                                 @input=${(e) => this._onAttributeKeyChange(index, e.target.value)}
                             />
-                            <input
-                                type="text"
-                                class="form-input ${this._fieldErrors[row.key] ? 'field-error' : ''}"
-                                placeholder=${this.i18n.t('ai_entity_card.attr_value_placeholder')}
+                            <platform-field
+                                .type=${this._getFieldType(row.key)}
                                 .value=${row.value}
-                                @input=${(e) => this._onAttributeValueChange(index, e.target.value)}
-                            />
+                                .config=${this._getFieldConfig(row.key)}
+                                mode="edit"
+                                style="flex: 1;"
+                                @change=${(e) => this._onAttributeValueChange(index, e.detail.value)}
+                            ></platform-field>
                             <button
                                 type="button"
                                 class="remove-btn"

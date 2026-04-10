@@ -6,6 +6,7 @@ import { PlatformElement } from '@platform/lib/platform-element/index.js';
 import { sidebarStyles, sidebarNavItemStyles } from '@platform/lib/styles/shared/sidebar.styles.js';
 import { buttonStyles } from '@platform/lib/styles/shared/button.styles.js';
 import { RagStore } from '../store/rag.store.js';
+import { readShellSidebarCollapsed } from '@platform/lib/utils/shell-sidebar-preference.js';
 import '@platform/lib/components/layout/platform-service-sidebar.js';
 import '@platform/lib/components/platform-icon.js';
 import '@platform/lib/components/platform-user.js';
@@ -209,7 +210,7 @@ export class RagSidebar extends PlatformElement {
 
     constructor() {
         super();
-        this.collapsed = false;
+        this.collapsed = readShellSidebarCollapsed();
         this.mobileOpen = false;
         this._providerDropdownOpen = false;
 

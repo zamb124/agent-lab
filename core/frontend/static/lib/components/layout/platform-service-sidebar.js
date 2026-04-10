@@ -5,11 +5,16 @@
  * Слоты (пробрасываются в platform-sidebar): header, default (nav), footer.
  * Слот logo пробрасывается только если у хоста есть дочерний узел со slot="logo" (иначе пустой <slot> ломал бы logo-src/logo-text).
  * События: collapse-change, mobile-change (проброс с внутреннего platform-sidebar).
+ * Desktop collapsed: начальное значение и запись в localStorage — shell-sidebar-preference.
  *
  * Методы: toggleMobile(), closeMobile() — для вызова из родительского App (меню).
  */
 import { html, css } from 'lit';
 import { PlatformElement } from '../../platform-element/index.js';
+import {
+    readShellSidebarCollapsed,
+    writeShellSidebarCollapsed,
+} from '../../utils/shell-sidebar-preference.js';
 import './platform-sidebar.js';
 
 export class PlatformServiceSidebar extends PlatformElement {
@@ -38,7 +43,7 @@ export class PlatformServiceSidebar extends PlatformElement {
 
     constructor() {
         super();
-        this.collapsed = false;
+        this.collapsed = readShellSidebarCollapsed();
         this.mobileOpen = false;
         this.logoSrc = '';
         this.logoText = '';
@@ -66,6 +71,7 @@ export class PlatformServiceSidebar extends PlatformElement {
             throw new Error('platform-sidebar collapse-change: expected detail.collapsed boolean');
         }
         this.collapsed = next;
+        writeShellSidebarCollapsed(next);
         this.emit('collapse-change', { collapsed: next });
     }
 

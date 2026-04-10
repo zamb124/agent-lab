@@ -12,22 +12,45 @@ class TestCompanyInit:
     
     @pytest.mark.asyncio
     async def test_system_types_exist_for_company(self, crm_client, unique_id, auth_headers_system):
-        """Системные типы минимального ядра (note, task) существуют для компании"""
+        """Системные типы минимального ядра существуют для компании"""
         types_resp = await crm_client.get("/crm/api/v1/entity-types/", headers=auth_headers_system)
         assert types_resp.status_code == 200
         
         types = types_resp.json()
         type_ids = [t["type_id"] for t in types]
+        types_by_id = {t["type_id"]: t for t in types}
         
         assert "note" in type_ids
         assert "task" in type_ids
+        assert "contact" in type_ids
+        assert "member" in type_ids
+        assert "company" in type_ids
+        assert "namespace" in type_ids
         
         for entity_type in types:
             assert entity_type["company_id"] is not None
+
+        member_t = types_by_id["member"]
+        assert member_t["is_voice_target"] is True
+        assert member_t["extractable"] is False
+        assert member_t["is_context_anchor"] is False
+        assert "*" in member_t["namespace_ids"]
+
+        contact_t = types_by_id["contact"]
+        assert contact_t["is_voice_target"] is True
+
+        company_t = types_by_id["company"]
+        assert company_t["extractable"] is False
+        assert company_t["is_context_anchor"] is False
+        assert "*" in company_t["namespace_ids"]
+
+        namespace_t = types_by_id["namespace"]
+        assert namespace_t["extractable"] is False
+        assert "*" in namespace_t["namespace_ids"]
     
     @pytest.mark.asyncio
     async def test_system_relationship_types_exist(self, crm_client, unique_id, auth_headers_system):
-        """Все 11 системных типов связей существуют и неизменяемы"""
+        """Все системные типы связей существуют и неизменяемы"""
         types_resp = await crm_client.get("/crm/api/v1/relationships/types/", headers=auth_headers_system)
         assert types_resp.status_code == 200
 
@@ -39,6 +62,7 @@ class TestCompanyInit:
             "parent_of", "child_of",
             "assigned_to", "belongs_to", "follows_up",
             "blocks", "blocked_by", "duplicates",
+            "note_voice", "in_context",
         ]
         for expected_id in expected_type_ids:
             assert expected_id in types_by_id, f"Системный тип связи '{expected_id}' отсутствует"

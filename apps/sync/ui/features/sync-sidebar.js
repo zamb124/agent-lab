@@ -8,6 +8,7 @@ import { buttonStyles } from '@platform/lib/styles/shared/button.styles.js';
 import { SyncStore } from '../store/sync.store.js';
 import './sync-channel-row.js';
 import './sync-direct-member-row.js';
+import { readShellSidebarCollapsed } from '@platform/lib/utils/shell-sidebar-preference.js';
 import '@platform/lib/components/layout/platform-service-sidebar.js';
 import '@platform/lib/components/platform-icon.js';
 import '@platform/lib/components/platform-user.js';
@@ -527,7 +528,7 @@ export class SyncSidebar extends PlatformElement {
 
     constructor() {
         super();
-        this.collapsed = false;
+        this.collapsed = readShellSidebarCollapsed();
         const s = SyncStore.state;
         this._spaces = s.spaces;
         this._channels = s.channels;

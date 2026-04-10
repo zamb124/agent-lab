@@ -95,6 +95,7 @@ class NamespaceTemplateRepository(BaseCRMRepository[NamespaceTemplate]):
         weight_coefficient: float,
         namespace_ids: list[str],
         is_context_anchor: bool = False,
+        is_voice_target: bool = False,
     ) -> NamespaceTemplateType:
         async with self._db.session() as session:
             stmt = select(NamespaceTemplateType).where(
@@ -121,6 +122,7 @@ class NamespaceTemplateRepository(BaseCRMRepository[NamespaceTemplate]):
             existing.weight_coefficient = weight_coefficient
             existing.namespace_ids = namespace_ids
             existing.is_context_anchor = is_context_anchor
+            existing.is_voice_target = is_voice_target
             session.add(existing)
             await session.commit()
             await session.refresh(existing)

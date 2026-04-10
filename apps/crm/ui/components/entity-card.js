@@ -12,6 +12,7 @@ import { CRMStore } from '../store/crm.store.js';
 import { nextModalLayerZIndex } from '@platform/lib/utils/modal-z-stack.js';
 import './grants-panel.js';
 import '@platform/lib/components/platform-icon.js';
+import '@platform/lib/components/fields/platform-field.js';
 
 export class EntityCard extends PlatformElement {
     static properties = {
@@ -794,6 +795,27 @@ export class EntityCard extends PlatformElement {
         await import('./mini-graph-preview.js');
     }
 
+    _getAttributeFieldType(fieldKey) {
+        const typeId = this._entity?.entity_subtype || this._entity?.entity_type;
+        const entityType = this._entityTypes.find(t => t.type_id === typeId);
+        if (!entityType) return 'string';
+        const spec = entityType.required_fields?.[fieldKey]
+            || entityType.optional_fields?.[fieldKey];
+        return spec?.type || 'string';
+    }
+
+    _getAttributeFieldConfig(fieldKey) {
+        const typeId = this._entity?.entity_subtype || this._entity?.entity_type;
+        const entityType = this._entityTypes.find(t => t.type_id === typeId);
+        if (!entityType) return {};
+        const spec = entityType.required_fields?.[fieldKey]
+            || entityType.optional_fields?.[fieldKey];
+        if (spec?.type === 'enum') {
+            return { values: spec.values || [] };
+        }
+        return {};
+    }
+
     _renderAttributes(attributes) {
         if (!attributes || Object.keys(attributes).length === 0) {
             return '';
@@ -806,7 +828,12 @@ export class EntityCard extends PlatformElement {
                     ${Object.entries(attributes).map(([key, value]) => html`
                         <div class="attribute-item">
                             <div class="attribute-label">${key}</div>
-                            <div class="attribute-value">${value}</div>
+                            <platform-field
+                                .type=${this._getAttributeFieldType(key)}
+                                .value=${value}
+                                .config=${this._getAttributeFieldConfig(key)}
+                                mode="view"
+                            ></platform-field>
                         </div>
                     `)}
                 </div>

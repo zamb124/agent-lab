@@ -32,7 +32,10 @@ from apps.crm.models.api import (
 )
 from apps.crm.db.models import CRMEntity
 from apps.crm.config import get_crm_settings
-from apps.crm.taskiq_analyze_errors import parse_validation_from_task_message
+from apps.crm.taskiq_analyze_errors import (
+    parse_mentioned_entity_short_description_from_task_message,
+    parse_validation_from_task_message,
+)
 from apps.crm.services.entity_service import DraftVersionConflictError, SchemaValidationError
 from apps.crm.dependencies import ContainerDep
 from apps.crm_worker.tasks.analysis_tasks import process_note_task
@@ -517,6 +520,35 @@ async def _dispatch_note_task(
         parsed = parse_validation_from_task_message(err_msg)
         if parsed is not None:
             raise HTTPException(status_code=422, detail=parsed)
+        mentioned_short = parse_mentioned_entity_short_description_from_task_message(err_msg)
+        if mentioned_short is not None:
+            detail_text = t(
+                "crm.notifications.analyze_mentioned_entity_short_description_message",
+                entity_name=mentioned_short["entity_name"],
+                entity_type=mentioned_short["entity_type"],
+                min_len=mentioned_short["min_len"],
+            )
+            if ctx.user and mode in ("analyze", "process"):
+                await notify_user(
+                    user_id=ctx.user.user_id,
+                    notification=Notification(
+                        type=NotificationType.SYSTEM,
+                        title=t(
+                            "crm.notifications.analyze_mentioned_entity_short_description_title"
+                        ),
+                        message=detail_text,
+                        service="crm",
+                        action_url=f"/crm/entities/{mentioned_short['entity_id']}",
+                        data={
+                            "event": "crm.analyze.mentioned_entity_short_description",
+                            "note_id": note_id,
+                            "entity_id": mentioned_short["entity_id"],
+                            "entity_name": mentioned_short["entity_name"],
+                            "entity_type": mentioned_short["entity_type"],
+                        },
+                    ),
+                )
+            raise HTTPException(status_code=422, detail=detail_text)
         raise HTTPException(status_code=422, detail=err_msg or repr(err))
     return res.return_value
 

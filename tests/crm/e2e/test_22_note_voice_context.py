@@ -35,7 +35,7 @@ class TestNoteVoiceAndContext:
         assert "in_context" in ids
 
     @pytest.mark.asyncio
-    async def test_person_entity_self_returns_contact(self, crm_client, auth_headers_system, unique_id):
+    async def test_person_entity_self_returns_member(self, crm_client, auth_headers_system, unique_id):
         await crm_client.put(
             "/crm/api/auth/me",
             json={
@@ -50,7 +50,7 @@ class TestNoteVoiceAndContext:
         )
         assert resp.status_code == 200
         body = resp.json()
-        assert body["entity_type"] == "contact"
+        assert body["entity_type"] == "member"
         assert "entity_id" in body
         assert body["namespace"] == "default"
 
@@ -134,7 +134,8 @@ class TestNoteVoiceAndContext:
         assert c["target_entity_id"] == anchor_id
 
     @pytest.mark.asyncio
-    async def test_voice_must_be_contact(self, crm_client, auth_headers_system, unique_id):
+    async def test_voice_rejects_non_voice_target_type(self, crm_client, auth_headers_system, unique_id):
+        """note не имеет is_voice_target=True, поэтому не может быть голосом."""
         wrong = await crm_client.post(
             "/crm/api/v1/entities/",
             json={
@@ -308,10 +309,10 @@ class TestNoteVoiceAndContext:
         assert r.status_code == 201
 
         lead_tid = f"lead_nv_{unique_id}"
-        await crm_client.put(
+        r = await crm_client.put(
             f"/crm/api/v1/namespaces/{ns_name}",
             json={
-                "allowed_type_ids": ["note", lead_tid],
+                "allowed_type_ids": ["note", lead_tid, "namespace"],
                 "crm_settings": {
                     "show_note_voice_ui": True,
                     "default_note_voice": "none",
@@ -320,6 +321,7 @@ class TestNoteVoiceAndContext:
             },
             headers=auth_headers_system,
         )
+        assert r.status_code == 200
 
         note_resp = await crm_client.post(
             "/crm/api/v1/entities/",

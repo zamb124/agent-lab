@@ -60,6 +60,20 @@
 3. **Запрещено** добавлять `relationship_type`, которого нет в списке разрешённых связей.
 4. **Запрещено** ссылаться в связи на тип или имя, для которых нет строки в `note`/`entities`.
 
+{if known_entities}
+## KNOWN ENTITIES (существующие сущности)
+
+Эти сущности **УЖЕ существуют** в системе. Правила работы с ними:
+- **НЕ создавай** для них новых записей в `entities`.
+- Если в тексте упоминается автор (по имени, через «я», «мы», «мой»), используй known entity типа `member`.
+- Если упоминается компания автора (по названию, через «наша компания», «наша команда», «мы»), используй known entity типа `company`.
+- В `relationships` можно создавать связи **к и от** known entities, указывая их `name` и `type` как `source_name`/`source_type` или `target_name`/`target_type`.
+
+{for ke in known_entities}
+- **{ke.type}**: `{ke.name}` (entity_id: `{ke.entity_id}`){if ke.description} — {ke.description}{endif}
+{endfor}
+{endif}
+
 ## КАЧЕСТВО
 
 - Не придумывай факты, которых нет в тексте.

@@ -282,6 +282,7 @@ const baseStore = new BaseStore('crm', {
         suggestions: [],
         mentionedEntities: [],
         analyzing: false,
+        analyzingNoteId: null,
         noteSummaries: {},
         draftByNoteId: {},
         analyzeContextNote: null,
@@ -643,7 +644,7 @@ export const CRMStore = {
         }
 
         baseStore.setState((s) => ({
-            ai: { ...s.ai, analyzing: true }
+            ai: { ...s.ai, analyzing: true, analyzingNoteId: noteId }
         }));
 
         try {
@@ -730,7 +731,7 @@ export const CRMStore = {
             return analysis;
         } finally {
             baseStore.setState((s) => ({
-                ai: { ...s.ai, analyzing: false }
+                ai: { ...s.ai, analyzing: false, analyzingNoteId: null }
             }));
         }
     },
