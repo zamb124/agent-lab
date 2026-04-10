@@ -6,6 +6,7 @@ import { openUrlSameWindowOrTab } from '@platform/lib/utils/native-app-shell.js'
 import '@platform/lib/components/company-modal.js';
 import '@platform/lib/components/layout/page-header.js';
 import '@platform/lib/components/platform-icon.js';
+import '@platform/lib/components/glass-spinner.js';
 
 export class DashboardPage extends PlatformElement {
     static styles = [
@@ -16,7 +17,53 @@ export class DashboardPage extends PlatformElement {
                 flex-direction: column;
                 height: 100%;
             }
-            
+
+            .top-row {
+                display: flex;
+                align-items: center;
+                justify-content: space-between;
+                gap: var(--space-4);
+                margin-bottom: var(--space-8);
+            }
+
+            .stats-strip {
+                display: flex;
+                align-items: center;
+                gap: 0;
+                background: var(--glass-solid-medium);
+                border: 1px solid var(--border-subtle);
+                border-radius: var(--radius-lg);
+                backdrop-filter: blur(20px);
+                flex-shrink: 0;
+            }
+
+            .stat-cell {
+                display: flex;
+                flex-direction: column;
+                align-items: center;
+                padding: var(--space-3) var(--space-5);
+                border-right: 1px solid var(--border-subtle);
+            }
+
+            .stat-cell:last-child {
+                border-right: none;
+            }
+
+            .stat-value {
+                font-size: var(--text-base);
+                font-weight: var(--font-bold);
+                color: var(--accent);
+                white-space: nowrap;
+                line-height: 1.2;
+            }
+
+            .stat-label {
+                font-size: 10px;
+                color: var(--text-tertiary);
+                margin-top: 2px;
+                white-space: nowrap;
+            }
+
             .services-grid {
                 display: grid;
                 grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
@@ -145,43 +192,12 @@ export class DashboardPage extends PlatformElement {
                 margin: 0;
             }
 
-            .stats-section {
-                background: var(--glass-solid-medium);
-                border: 1px solid var(--border-subtle);
-                border-radius: var(--radius-lg);
-                padding: var(--space-8);
-                backdrop-filter: blur(20px);
-                margin-bottom: var(--space-8);
-            }
-
-            .stats-grid {
-                display: grid;
-                grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-                gap: var(--space-8);
-                margin-top: var(--space-6);
-            }
-
-            .stat-item {
-                text-align: center;
-            }
-
-            .stat-value {
-                font-size: var(--text-4xl);
-                font-weight: var(--font-bold);
-                color: var(--accent);
-                margin: 0 0 var(--space-2) 0;
-            }
-
-            .stat-label {
-                font-size: var(--text-sm);
-                color: var(--text-secondary);
-                margin: 0;
-            }
-
-            .loading-state {
-                text-align: center;
-                padding: var(--space-12);
-                color: var(--text-secondary);
+            .page-loading {
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                flex: 1;
+                min-height: 200px;
             }
 
             .section-title {
@@ -192,6 +208,15 @@ export class DashboardPage extends PlatformElement {
             }
 
             @media (max-width: 768px) {
+                .top-row {
+                    flex-direction: column;
+                    align-items: stretch;
+                }
+
+                .stats-strip {
+                    justify-content: center;
+                }
+
                 .services-grid,
                 .quick-actions {
                     grid-template-columns: 1fr;
@@ -226,15 +251,10 @@ export class DashboardPage extends PlatformElement {
     }
 
     async _loadData() {
-        const { servicesStatus, subscription } = this.state.value;
-        
-        if (Object.keys(servicesStatus).length === 0) {
-            await this._loadServicesStatus();
-        }
-        
-        if (!subscription) {
-            await this._loadBilling();
-        }
+        await Promise.all([
+            this._loadServicesStatus(),
+            this._loadBilling(),
+        ]);
         
         const user = this.auth.user;
         if (user && !user.active_company_id) {
@@ -271,8 +291,8 @@ export class DashboardPage extends PlatformElement {
 
         if (servicesLoading && billingLoading) {
             return html`
-                <div class="loading-state">
-                    <p>${td('console_home.loading')}</p>
+                <div class="page-loading">
+                    <glass-spinner size="lg"></glass-spinner>
                 </div>
             `;
         }
@@ -280,16 +300,45 @@ export class DashboardPage extends PlatformElement {
         const user = this.auth.user;
 
         return html`
-            <page-header 
-                title=${td('console_home.welcome_title')}
-                subtitle="${user?.name ?? td('console_home.user_fallback')}"
-            ></page-header>
+            <div class="top-row">
+                <page-header 
+                    title=${td('console_home.welcome_title')}
+                    subtitle="${user?.name ?? td('console_home.user_fallback')}"
+                ></page-header>
+                ${this._renderStatsStrip()}
+            </div>
             
             ${this._renderServices()}
             ${this._renderQuickActions()}
-            ${this._renderStats()}
             
             <company-modal></company-modal>
+        `;
+    }
+
+    _renderStatsStrip() {
+        const { subscription } = this.state.value;
+        const td = (key, params) => this.i18n.t(key, params ?? {});
+
+        const balance = subscription?.balance ?? 0;
+        const spent = subscription?.current_month_spent ?? 0;
+        const plan = subscription?.plan ?? 'FREE';
+        const cur = td('console_home.currency_rub');
+
+        return html`
+            <div class="stats-strip">
+                <div class="stat-cell">
+                    <div class="stat-value">${balance.toFixed(2)} ${cur}</div>
+                    <div class="stat-label">${td('console_home.stat_balance')}</div>
+                </div>
+                <div class="stat-cell">
+                    <div class="stat-value">${spent.toFixed(2)} ${cur}</div>
+                    <div class="stat-label">${td('console_home.stat_spent_month')}</div>
+                </div>
+                <div class="stat-cell">
+                    <div class="stat-value">${plan.toUpperCase()}</div>
+                    <div class="stat-label">${td('console_home.stat_plan')}</div>
+                </div>
+            </div>
         `;
     }
 
@@ -411,10 +460,10 @@ export class DashboardPage extends PlatformElement {
                 action: () => FrontendStore.setCurrentView('embed-configs'),
             },
             {
-                iconName: 'clipboard',
-                title: td('console_home.quick_billing_title'),
-                description: td('console_home.quick_billing_desc'),
-                action: () => FrontendStore.setCurrentView('billing'),
+                iconName: 'settings',
+                title: td('console_home.quick_settings_title'),
+                description: td('console_home.quick_settings_desc'),
+                action: () => FrontendStore.setCurrentView('settings'),
             },
         ];
 
@@ -433,45 +482,6 @@ export class DashboardPage extends PlatformElement {
                             </div>
                         </div>
                     `)}
-                </div>
-            </div>
-        `;
-    }
-
-    _renderStats() {
-        const { subscription, servicesStatus } = this.state.value;
-        const td = (key, params) => this.i18n.t(key, params ?? {});
-
-        const balance = subscription?.balance ?? 0;
-        const spent = subscription?.current_month_spent ?? 0;
-        const plan = subscription?.plan ?? 'FREE';
-
-        const statuses = Object.values(servicesStatus);
-        const healthyCount = statuses.filter((s) => s.status === 'healthy').length;
-        const totalCount = statuses.length;
-
-        const cur = td('console_home.currency_rub');
-
-        return html`
-            <div class="stats-section">
-                <h2 class="section-title">${td('console_home.stats_title')}</h2>
-                <div class="stats-grid">
-                    <div class="stat-item">
-                        <div class="stat-value">${balance.toFixed(0)} ${cur}</div>
-                        <div class="stat-label">${td('console_home.stat_balance')}</div>
-                    </div>
-                    <div class="stat-item">
-                        <div class="stat-value">${spent.toFixed(0)} ${cur}</div>
-                        <div class="stat-label">${td('console_home.stat_spent_month')}</div>
-                    </div>
-                    <div class="stat-item">
-                        <div class="stat-value">${plan.toUpperCase()}</div>
-                        <div class="stat-label">${td('console_home.stat_plan')}</div>
-                    </div>
-                    <div class="stat-item">
-                        <div class="stat-value">${healthyCount}/${totalCount}</div>
-                        <div class="stat-label">${td('console_home.stat_services_online')}</div>
-                    </div>
                 </div>
             </div>
         `;

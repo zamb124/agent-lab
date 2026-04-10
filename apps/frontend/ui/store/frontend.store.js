@@ -8,8 +8,8 @@ const CONSOLE_VIEW_TO_PATH = new Map([
     ['dashboard', '/dashboard'],
     ['team', '/team'],
     ['api-keys', '/api-keys'],
-    ['billing', '/billing'],
     ['embed-configs', '/embed-configs'],
+    ['billing', '/billing'],
     ['settings', '/settings'],
     ['scheduler-tasks', '/scheduler-tasks'],
     ['lead-requests', '/lead-requests'],
@@ -71,6 +71,10 @@ const baseStore = new BaseStore('frontend', {
         billing: {
             subscription: null,
             usage: null,
+            loading: false,
+        },
+        payments: {
+            history: [],
             loading: false,
         },
         services: {
@@ -214,6 +218,24 @@ export const FrontendStore = {
             entities: {
                 ...s.entities,
                 billing: { ...s.entities.billing, loading },
+            },
+        }));
+    },
+
+    setPaymentHistory(history) {
+        baseStore.setState((s) => ({
+            entities: {
+                ...s.entities,
+                payments: { history, loading: false },
+            },
+        }));
+    },
+
+    setPaymentsLoading(loading) {
+        baseStore.setState((s) => ({
+            entities: {
+                ...s.entities,
+                payments: { ...s.entities.payments, loading },
             },
         }));
     },

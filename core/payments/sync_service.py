@@ -11,7 +11,6 @@ from typing import Dict, Any
 from core.clients.payment.factory import PaymentProviderFactory
 from core.models.payment_models import PaymentStatus
 from .service import PaymentService
-from core.db.storage import Storage
 
 logger = logging.getLogger(__name__)
 
@@ -19,16 +18,8 @@ logger = logging.getLogger(__name__)
 class PaymentSyncService:
     """Сервис для синхронизации статусов транзакций с провайдерами"""
     
-    def __init__(self, storage: Storage, payment_service: PaymentService = None):
-        self._storage = storage
+    def __init__(self, payment_service: PaymentService):
         self._payment_service = payment_service
-    
-    @property
-    def payment_service(self) -> PaymentService:
-        """Ленивая инициализация payment_service"""
-        if self._payment_service is None:
-            self._payment_service = PaymentService(storage=self._storage)
-        return self._payment_service
     
     async def sync_pending_transactions(self, company_id: str) -> Dict[str, Any]:
         """
@@ -41,8 +32,7 @@ class PaymentSyncService:
         
         logger.debug(f"Проверка pending транзакций для компании {company_id}")
         
-        # Получаем все pending транзакции компании
-        all_transactions = await self.payment_service.get_company_transactions(
+        all_transactions = await self._payment_service.get_company_transactions(
             company_id=company_id,
             limit=100,
             offset=0
@@ -94,12 +84,10 @@ class PaymentSyncService:
                 logger.warning(f"Провайдер {provider_type} не найден")
                 continue
             
-            # Проверяем что провайдер поддерживает синхронизацию
             if not hasattr(provider, 'sync_pending_transactions'):
                 logger.warning(f"Провайдер {provider_type} не поддерживает синхронизацию")
                 continue
             
-            # Синхронизируем
             try:
                 txn_dicts = [
                     {
@@ -110,7 +98,9 @@ class PaymentSyncService:
                     for t in transactions
                 ]
                 
-                found_operations = await provider.sync_pending_transactions(txn_dicts)
+                found_operations = await provider.sync_pending_transactions(
+                    txn_dicts, storage=self._payment_service._storage,
+                )
                 
                 stats["checked"] += len(transactions)
                 stats["found"] += len(found_operations)
@@ -124,7 +114,7 @@ class PaymentSyncService:
                     transaction_id = op["transaction_id"]
                     
                     # Получаем транзакцию
-                    transaction = await self.payment_service.get_transaction(transaction_id)
+                    transaction = await self._payment_service.get_transaction(transaction_id)
                     if not transaction:
                         logger.warning(f"Транзакция {transaction_id} не найдена при синхронизации")
                         continue
@@ -136,10 +126,9 @@ class PaymentSyncService:
                         transaction.completed_at = datetime.now(timezone.utc)
                         
                         # Сохраняем
-                        await self.payment_service._save_transaction(transaction)
+                        await self._payment_service._save_transaction(transaction)
                         
-                        # Пополняем баланс
-                        await self.payment_service._update_company_balance(
+                        await self._payment_service._update_company_balance(
                             transaction.company_id,
                             transaction.amount
                         )
@@ -169,13 +158,12 @@ class PaymentSyncService:
         
         logger.info("Начало глобальной синхронизации транзакций")
         
-        # Получаем все subdomain записи - они есть только у валидных компаний
-        subdomain_keys = await self._storage.list_by_prefix("subdomain:", force_global=True)
+        storage = self._payment_service._storage
+        subdomain_keys = await storage.list_by_prefix("subdomain:", force_global=True)
         
-        # Получаем company_id из каждого subdomain
         company_ids = []
         for subdomain_key in subdomain_keys:
-            company_id_json = await self._storage.get(subdomain_key, force_global=True)
+            company_id_json = await storage.get(subdomain_key, force_global=True)
             if not company_id_json:
                 continue
             

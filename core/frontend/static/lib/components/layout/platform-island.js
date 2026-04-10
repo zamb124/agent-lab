@@ -7,6 +7,7 @@
 import { html, css } from 'lit';
 import { PlatformElement } from '../../platform-element/index.js';
 import { islandHostStyles, islandStyles } from '../../styles/shared/island.styles.js';
+import '../glass-spinner.js';
 
 export class PlatformIsland extends PlatformElement {
     static properties = {
@@ -17,6 +18,7 @@ export class PlatformIsland extends PlatformElement {
         safeBottom: { type: Boolean, attribute: 'safe-bottom' },
         /** У .island-content overflow:hidden — скролл только у внутренних областей (иначе iOS при фокусе в input прокручивает весь слот вверх). */
         contentNoScroll: { type: Boolean, attribute: 'content-no-scroll' },
+        loading: { type: Boolean, reflect: true },
     };
 
     static styles = [
@@ -32,13 +34,19 @@ export class PlatformIsland extends PlatformElement {
         this.headerGlow = true;
         this.safeBottom = false;
         this.contentNoScroll = false;
+        this.loading = false;
     }
 
     render() {
         return html`
             <div class="island">
                 ${this.headerGlow ? html`<div class="island-header-glow"></div>` : ''}
-                <div class="island-content">
+                ${this.loading ? html`
+                    <div class="island-loading-overlay">
+                        <glass-spinner size="lg"></glass-spinner>
+                    </div>
+                ` : ''}
+                <div class="island-content ${this.loading ? 'busy' : ''}">
                     <slot></slot>
                 </div>
             </div>

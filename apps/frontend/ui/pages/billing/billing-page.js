@@ -1,10 +1,11 @@
 /**
- * Billing Page - Управление биллингом и подпиской
+ * Billing Page - Баланс, тарифный план, пополнение и история платежей.
  */
 import { html, css } from 'lit';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
 import { I18nNs } from '@platform/services/i18n/i18n.service.js';
 import { FrontendStore } from '../../store/frontend.store.js';
+import '../../modals/topup-modal.js';
 import '@platform/lib/components/layout/page-header.js';
 
 export class BillingPage extends PlatformElement {
@@ -13,11 +14,6 @@ export class BillingPage extends PlatformElement {
         css`
             :host {
                 display: block;
-            }
-
-            .page-container {
-                max-width: 1200px;
-                margin: 0 auto;
             }
 
             .billing-grid {
@@ -63,26 +59,26 @@ export class BillingPage extends PlatformElement {
             .balance-label {
                 font-size: var(--text-sm);
                 color: var(--text-secondary);
-                margin: 0;
+                margin: 0 0 var(--space-4) 0;
             }
 
-            .primary-button {
-                width: 100%;
-                padding: var(--space-3) var(--space-6);
-                background: var(--accent);
-                color: white;
+            .btn-topup {
+                display: inline-flex;
+                align-items: center;
+                gap: var(--space-2);
+                padding: var(--space-3) var(--space-5);
+                background: var(--accent-gradient);
+                color: var(--text-on-accent, #fff);
                 border: none;
                 border-radius: var(--radius-lg);
                 font-size: var(--text-sm);
                 font-weight: var(--font-semibold);
                 cursor: pointer;
-                transition: all var(--duration-fast);
-                margin-top: var(--space-4);
+                transition: opacity var(--duration-normal);
             }
 
-            .primary-button:hover {
-                transform: scale(1.02);
-                box-shadow: 0 8px 24px rgba(153, 166, 249, 0.4);
+            .btn-topup:hover {
+                opacity: 0.9;
             }
 
             .plan-info {
@@ -164,7 +160,7 @@ export class BillingPage extends PlatformElement {
                 transition: width var(--duration-normal);
             }
 
-            .usage-section {
+            .section {
                 background: var(--glass-solid-medium);
                 border: 1px solid var(--glass-border-subtle);
                 border-radius: var(--radius-xl);
@@ -239,6 +235,76 @@ export class BillingPage extends PlatformElement {
                 color: var(--text-tertiary);
             }
 
+            /* --- Payment History --- */
+
+            .history-table {
+                width: 100%;
+                border-collapse: collapse;
+            }
+
+            .history-table th {
+                text-align: left;
+                font-size: var(--text-xs);
+                font-weight: var(--font-semibold);
+                color: var(--text-tertiary);
+                text-transform: uppercase;
+                letter-spacing: 0.05em;
+                padding: var(--space-3) var(--space-4);
+                border-bottom: 1px solid var(--glass-border-subtle);
+            }
+
+            .history-table td {
+                font-size: var(--text-sm);
+                color: var(--text-primary);
+                padding: var(--space-3) var(--space-4);
+                border-bottom: 1px solid var(--glass-border-subtle);
+            }
+
+            .history-table tr:last-child td {
+                border-bottom: none;
+            }
+
+            .status-badge {
+                display: inline-block;
+                padding: var(--space-1) var(--space-3);
+                border-radius: var(--radius-full);
+                font-size: var(--text-xs);
+                font-weight: var(--font-semibold);
+            }
+
+            .status-success {
+                background: rgba(52, 211, 153, 0.15);
+                color: var(--success);
+            }
+
+            .status-pending {
+                background: rgba(251, 191, 36, 0.15);
+                color: var(--warning, #fbbf24);
+            }
+
+            .status-failed {
+                background: rgba(239, 68, 68, 0.15);
+                color: var(--error);
+            }
+
+            .empty-state {
+                text-align: center;
+                padding: var(--space-8);
+                color: var(--text-tertiary);
+            }
+
+            .empty-state-title {
+                font-size: var(--text-lg);
+                font-weight: var(--font-semibold);
+                color: var(--text-secondary);
+                margin: 0 0 var(--space-2) 0;
+            }
+
+            .empty-state-desc {
+                font-size: var(--text-sm);
+                margin: 0;
+            }
+
             .loading-state {
                 text-align: center;
                 padding: var(--space-12);
@@ -260,6 +326,8 @@ export class BillingPage extends PlatformElement {
             subscription: s.entities.billing.subscription,
             usage: s.entities.billing.usage,
             loading: s.entities.billing.loading,
+            payments: s.entities.payments.history,
+            paymentsLoading: s.entities.payments.loading,
         }));
     }
 
@@ -267,6 +335,8 @@ export class BillingPage extends PlatformElement {
         super.connectedCallback();
         this._i18nUnsub = this.i18n.subscribe(() => this.requestUpdate());
         await this._loadBilling();
+        await this._loadHistory();
+        this._handlePaymentCallback();
     }
 
     disconnectedCallback() {
@@ -280,7 +350,7 @@ export class BillingPage extends PlatformElement {
     async _loadBilling() {
         const { subscription } = this.state.value;
         if (subscription) return;
-        
+
         FrontendStore.setBillingLoading(true);
         const billingService = this.services.get('billing');
         const [sub, usage] = await Promise.all([
@@ -288,6 +358,50 @@ export class BillingPage extends PlatformElement {
             billingService.getUsageStats(),
         ]);
         FrontendStore.setBillingData(sub, usage);
+    }
+
+    async _loadHistory() {
+        FrontendStore.setPaymentsLoading(true);
+        const billingService = this.services.get('billing');
+        const data = await billingService.getHistory();
+        FrontendStore.setPaymentHistory(data.payments ?? []);
+    }
+
+    _handlePaymentCallback() {
+        const params = new URLSearchParams(window.location.search);
+        const paymentStatus = params.get('payment');
+        if (!paymentStatus) return;
+
+        const tb = (key, p) => this.i18n.t(key, p ?? {}, I18nNs.BILLING);
+
+        if (paymentStatus === 'success') {
+            this.success(tb('payment_success_message'));
+            this._reloadAfterPayment();
+        } else if (paymentStatus === 'fail') {
+            this.error(tb('payment_error_message'));
+        }
+
+        const url = new URL(window.location.href);
+        url.searchParams.delete('payment');
+        url.searchParams.delete('transaction_id');
+        window.history.replaceState({}, '', url.pathname);
+    }
+
+    async _reloadAfterPayment() {
+        const billingService = this.services.get('billing');
+        const [sub, usage] = await Promise.all([
+            billingService.getSubscription(),
+            billingService.getUsageStats(),
+        ]);
+        FrontendStore.setBillingData(sub, usage);
+        await this._loadHistory();
+    }
+
+    _openTopupModal() {
+        const modal = document.createElement('topup-modal');
+        modal.title = this.i18n.t('modal.title', {}, I18nNs.BILLING);
+        document.body.appendChild(modal);
+        modal.addEventListener('close', () => modal.remove());
     }
 
     render() {
@@ -312,6 +426,7 @@ export class BillingPage extends PlatformElement {
             </div>
 
             ${this._renderUsageSection()}
+            ${this._renderHistorySection()}
         `;
     }
 
@@ -327,12 +442,12 @@ export class BillingPage extends PlatformElement {
                     <h2 class="card-title">${tb('frontend_console.balance_title')}</h2>
                     <span class="card-icon">B</span>
                 </div>
-                
+
                 <h3 class="balance-amount">${balance.toFixed(0)} ${cur}</h3>
                 <p class="balance-label">${tb('frontend_console.balance_available')}</p>
-                
-                <button class="primary-button" @click=${this._onTopUpClick}>
-                    ${tb('frontend_console.top_up')}
+
+                <button class="btn-topup" @click=${this._openTopupModal}>
+                    + ${tb('frontend_console.top_up')}
                 </button>
             </div>
         `;
@@ -350,11 +465,11 @@ export class BillingPage extends PlatformElement {
                     <h2 class="card-title">${tb('frontend_console.plan_title')}</h2>
                     <span class="card-icon">P</span>
                 </div>
-                
+
                 <div class="plan-info">
                     <h3 class="plan-name">${plan}</h3>
                     <p class="plan-description">${planFeatures.description}</p>
-                    
+
                     <ul class="plan-features">
                         ${planFeatures.features.map((feature) => html`
                             <li class="plan-feature">
@@ -364,12 +479,6 @@ export class BillingPage extends PlatformElement {
                         `)}
                     </ul>
                 </div>
-                
-                ${plan === 'FREE' ? html`
-                    <button class="primary-button" @click=${this._onUpgradeClick}>
-                        ${tb('frontend_console.upgrade_pro')}
-                    </button>
-                ` : ''}
             </div>
         `;
     }
@@ -388,7 +497,7 @@ export class BillingPage extends PlatformElement {
                     <h2 class="card-title">${tb('frontend_console.budget_title')}</h2>
                     <span class="card-icon">L</span>
                 </div>
-                
+
                 <div class="budget-info">
                     <div class="budget-row">
                         <span class="budget-label">${tb('frontend_console.spent')}</span>
@@ -401,16 +510,12 @@ export class BillingPage extends PlatformElement {
                         </span>
                     </div>
                 </div>
-                
+
                 ${monthlyBudget > 0 ? html`
                     <div class="progress-bar">
                         <div class="progress-fill" style="width: ${Math.min(percentage, 100)}%"></div>
                     </div>
                 ` : ''}
-                
-                <button class="primary-button" @click=${this._onSetBudgetClick}>
-                    ${monthlyBudget > 0 ? tb('frontend_console.change_limit') : tb('frontend_console.set_limit')}
-                </button>
             </div>
         `;
     }
@@ -429,9 +534,9 @@ export class BillingPage extends PlatformElement {
         const cur = tb('frontend_console.currency_rub');
 
         return html`
-            <div class="usage-section">
+            <div class="section">
                 <h2 class="section-title">${tb('frontend_console.usage_title')}</h2>
-                
+
                 <div class="usage-grid">
                     <div class="usage-stat">
                         <div class="stat-value">${totalCost.toFixed(2)} ${cur}</div>
@@ -446,7 +551,7 @@ export class BillingPage extends PlatformElement {
                         <div class="stat-label">${tb('frontend_console.resources_used')}</div>
                     </div>
                 </div>
-                
+
                 ${Object.keys(byResource).length > 0 ? html`
                     <div class="resource-list">
                         ${Object.entries(byResource).map(([name, stats]) => html`
@@ -464,6 +569,75 @@ export class BillingPage extends PlatformElement {
         `;
     }
 
+    _renderHistorySection() {
+        const { payments, paymentsLoading } = this.state.value;
+        const tb = (key, params) => this.i18n.t(key, params ?? {}, I18nNs.BILLING);
+        const cur = tb('frontend_console.currency_rub');
+
+        return html`
+            <div class="section">
+                <h2 class="section-title">${tb('payment_history.title')}</h2>
+
+                ${paymentsLoading ? html`
+                    <div class="loading-state">${tb('frontend_console.loading')}</div>
+                ` : !payments || payments.length === 0 ? html`
+                    <div class="empty-state">
+                        <p class="empty-state-title">${tb('payment_history.empty_title')}</p>
+                        <p class="empty-state-desc">${tb('payment_history.empty_description')}</p>
+                    </div>
+                ` : html`
+                    <table class="history-table">
+                        <thead>
+                            <tr>
+                                <th>${tb('history_table.date')}</th>
+                                <th>${tb('history_table.amount')}</th>
+                                <th>${tb('history_table.status')}</th>
+                                <th>${tb('history_table.provider')}</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${payments.map((p) => html`
+                                <tr>
+                                    <td>${this._formatDate(p.created_at)}</td>
+                                    <td>${p.amount.toFixed(2)} ${cur}</td>
+                                    <td>
+                                        <span class="status-badge ${this._statusClass(p.status)}">
+                                            ${tb(`status.${p.status}`) || p.status}
+                                        </span>
+                                    </td>
+                                    <td>${tb(`payment_methods.${p.payment_provider}`) || p.payment_provider}</td>
+                                </tr>
+                            `)}
+                        </tbody>
+                    </table>
+                `}
+            </div>
+        `;
+    }
+
+    _statusClass(status) {
+        const map = {
+            success: 'status-success',
+            pending: 'status-pending',
+            failed: 'status-failed',
+            cancelled: 'status-failed',
+            refunded: 'status-pending',
+        };
+        return map[status] ?? 'status-pending';
+    }
+
+    _formatDate(isoStr) {
+        if (!isoStr) return '—';
+        const d = new Date(isoStr);
+        return d.toLocaleDateString('ru-RU', {
+            day: '2-digit',
+            month: '2-digit',
+            year: 'numeric',
+            hour: '2-digit',
+            minute: '2-digit',
+        });
+    }
+
     _getPlanFeatures(plan) {
         const p = plan.toUpperCase();
         const tb = (key, params) => this.i18n.t(key, params ?? {}, I18nNs.BILLING);
@@ -478,34 +652,6 @@ export class BillingPage extends PlatformElement {
             description: tb(`frontend_console.plan_${planKey}_description`),
             features: featureList,
         };
-    }
-
-    _onTopUpClick() {
-        const modal = document.createElement('topup-balance-modal');
-        document.body.appendChild(modal);
-        modal.addEventListener('close', () => modal.remove());
-        modal.addEventListener('topped-up', async () => {
-            await this._reloadBilling();
-            this.success(this.i18n.t('frontend_console.topup_success', {}, I18nNs.BILLING));
-        });
-    }
-
-    async _reloadBilling() {
-        FrontendStore.setBillingLoading(true);
-        const billingService = this.services.get('billing');
-        const [subscription, usage] = await Promise.all([
-            billingService.getSubscription(),
-            billingService.getUsageStats(),
-        ]);
-        FrontendStore.setBillingData(subscription, usage);
-    }
-
-    _onUpgradeClick() {
-        this.info(this.i18n.t('frontend_console.upgrade_wip', {}, I18nNs.BILLING));
-    }
-
-    _onSetBudgetClick() {
-        this.info(this.i18n.t('frontend_console.budget_wip', {}, I18nNs.BILLING));
     }
 }
 

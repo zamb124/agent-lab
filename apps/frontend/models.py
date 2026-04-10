@@ -48,12 +48,6 @@ class TeamMemberInfo(BaseModel):
     avatar_url: Optional[str] = Field(default=None, description="URL аватара")
 
 
-class TeamInvite(BaseModel):
-    """Приглашение участника"""
-    email: str = Field(description="Email пользователя")
-    role: str = Field(description="Роль (owner, admin, developer, viewer)")
-
-
 class TeamMemberUpdate(BaseModel):
     """Обновление участника"""
     roles: List[str] = Field(description="Новые роли")
@@ -89,12 +83,6 @@ class BillingUsage(BaseModel):
     total_calls: int
     by_resource: Dict[str, Dict[str, float]]
     by_user: Dict[str, Dict[str, Any]]
-
-
-class TopUpRequest(BaseModel):
-    """Запрос на пополнение баланса"""
-    amount: float = Field(ge=100, le=1000000, description="Сумма пополнения (100-1000000 RUB)")
-    payment_method: str = Field(default="card", description="Способ оплаты")
 
 
 class ChangePlanRequest(BaseModel):

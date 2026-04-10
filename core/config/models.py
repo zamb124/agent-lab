@@ -282,6 +282,8 @@ class PaymentProvidersConfig(BaseModel):
     """Конфигурация платежных провайдеров"""
 
     default_provider: Optional[str] = None
+    sync_enabled: bool = Field(default=False, description="Включена ли периодическая сверка транзакций")
+    sync_cron: str = Field(default="*/5 * * * *", description="Cron-расписание для сверки транзакций")
     providers: Dict[str, Any] = Field(
         default_factory=dict, description="Платежные провайдеры (yoomoney_main, yukassa_main, etc.)"
     )

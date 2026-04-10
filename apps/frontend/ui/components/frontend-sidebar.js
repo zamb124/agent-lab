@@ -238,16 +238,6 @@ export class FrontendSidebar extends PlatformElement {
                     </button>
 
                     <button
-                        class="nav-item ${currentView === 'billing' ? 'active' : ''}"
-                        @click=${() => this._navigate('billing')}
-                    >
-                        <span class="nav-icon">
-                            <platform-icon name="clipboard" size="18"></platform-icon>
-                        </span>
-                        <span class="nav-label">${t('console_sidebar.billing')}</span>
-                    </button>
-
-                    <button
                         class="nav-item ${currentView === 'embed-configs' ? 'active' : ''}"
                         @click=${() => this._navigate('embed-configs')}
                     >
@@ -255,6 +245,16 @@ export class FrontendSidebar extends PlatformElement {
                             <platform-icon name="chat" size="18"></platform-icon>
                         </span>
                         <span class="nav-label">${t('console_sidebar.embed')}</span>
+                    </button>
+
+                    <button
+                        class="nav-item ${currentView === 'billing' ? 'active' : ''}"
+                        @click=${() => this._navigate('billing')}
+                    >
+                        <span class="nav-icon">
+                            <platform-icon name="database" size="18"></platform-icon>
+                        </span>
+                        <span class="nav-label">${t('console_sidebar.billing')}</span>
                     </button>
 
                     <button

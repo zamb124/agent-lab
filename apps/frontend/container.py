@@ -53,6 +53,16 @@ class FrontendContainer(BaseContainer):
         from core.db.repositories.usage_repository import UsageRepository
         return UsageRepository(storage=self.shared_storage)
 
+    @lazy
+    def api_key_repository(self):
+        from core.db.repositories.api_key_repository import ApiKeyRepository
+        return ApiKeyRepository(db_url=self.shared_db_url)
+
+    @lazy
+    def payment_service(self):
+        from core.payments import PaymentService
+        return PaymentService(company_repository=self.company_repository)
+
 
 
 # === Глобальный контейнер ===

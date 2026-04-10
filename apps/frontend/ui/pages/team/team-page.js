@@ -9,6 +9,7 @@ import { createAvatarRetry } from '@platform/lib/utils/avatar-retry.js';
 import { FrontendStore } from '../../store/frontend.store.js';
 import '../../modals/edit-team-member-modal.js';
 import '@platform/lib/components/layout/page-header.js';
+import '@platform/lib/components/glass-spinner.js';
 
 export class TeamPage extends PlatformElement {
     static styles = [
@@ -183,10 +184,12 @@ export class TeamPage extends PlatformElement {
                 margin: 0 0 var(--space-6) 0;
             }
 
-            .loading-state {
-                text-align: center;
-                padding: var(--space-12);
-                color: var(--text-secondary);
+            .page-loading {
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                flex: 1;
+                min-height: 200px;
             }
 
             @media (max-width: 768px) {
@@ -283,7 +286,7 @@ export class TeamPage extends PlatformElement {
         const { members, loading } = this.state.value;
         
         if (loading) {
-            return html`<div class="loading-state">${td('team_page.loading')}</div>`;
+            return html`<div class="page-loading"><glass-spinner size="lg"></glass-spinner></div>`;
         }
 
         if (members.length === 0) {

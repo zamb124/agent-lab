@@ -382,6 +382,30 @@ class PushSubscription(Base):
         return f"<PushSubscription(user_id={self.user_id}, platform={self.platform})>"
 
 
+class ApiKeyRecord(Base):
+    """API-ключи компаний (shared БД)."""
+
+    __tablename__ = "api_keys"
+
+    key_id: Mapped[str] = mapped_column(String(255), primary_key=True)
+    company_id: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
+    key_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    key_prefix: Mapped[str] = mapped_column(String(16), nullable=False)
+    scopes: Mapped[list[str]] = mapped_column(JSONB, nullable=False, server_default=text("'[]'::jsonb"))
+    created_by: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
+    revoked: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False
+    )
+    last_used: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+
+    __table_args__ = (
+        Index("ix_api_keys_company_id", "company_id"),
+        Index("ix_api_keys_key_hash", "key_hash", unique=True),
+    )
+
+
 class PlatformShortLink(Base):
     """Короткий публичный код -> полезная нагрузка (вход по звонку Sync, JWT инвайта)."""
 

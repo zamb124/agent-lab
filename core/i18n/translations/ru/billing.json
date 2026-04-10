@@ -80,7 +80,16 @@
   "status": {
     "success": "Успешно",
     "pending": "Ожидание",
+    "failed": "Ошибка",
+    "cancelled": "Отменён",
+    "refunded": "Возврат",
     "error": "Ошибка"
+  },
+  "history_table": {
+    "date": "Дата",
+    "amount": "Сумма",
+    "status": "Статус",
+    "provider": "Провайдер"
   },
   "payment_methods": {
     "yoomoney": "ЮMoney",

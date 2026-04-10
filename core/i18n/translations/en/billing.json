@@ -80,7 +80,16 @@
   "status": {
     "success": "Success",
     "pending": "Pending",
+    "failed": "Failed",
+    "cancelled": "Cancelled",
+    "refunded": "Refunded",
     "error": "Error"
+  },
+  "history_table": {
+    "date": "Date",
+    "amount": "Amount",
+    "status": "Status",
+    "provider": "Provider"
   },
   "payment_methods": {
     "yoomoney": "YooMoney",

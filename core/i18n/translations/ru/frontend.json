@@ -309,8 +309,8 @@
     "quick_api_desc": "Новый ключ для интеграций",
     "quick_embed_title": "Добавить Embed виджет",
     "quick_embed_desc": "Создать новый чат-виджет",
-    "quick_billing_title": "Пополнить баланс",
-    "quick_billing_desc": "Управление биллингом",
+    "quick_settings_title": "Настройки",
+    "quick_settings_desc": "Настройки компании",
     "err_unknown_service": "Неизвестный сервис для dashboard ссылки: {{id}}"
   },
   "select_company": {
@@ -420,7 +420,8 @@
     "used": "Использован:",
     "never_used": "Никогда не использовался",
     "info_no_full_key": "Полный ключ недоступен. Показан только при создании.",
-    "info_wip": "Функция в разработке",
+    "edit_prompt": "Новое название ключа",
+    "toast_renamed": "Ключ переименован",
     "confirm_revoke": "Отозвать ключ \"{{name}}\"? Это действие нельзя отменить.",
     "toast_revoked": "API ключ отозван"
   },
@@ -507,7 +508,11 @@
     "theme_auto": "Как в системе",
     "cancel": "Отмена",
     "creating": "Создание...",
-    "submit": "Создать виджет"
+    "submit": "Создать виджет",
+    "header_edit": "Редактировать виджет",
+    "toast_updated": "Виджет обновлен",
+    "saving": "Сохранение...",
+    "save": "Сохранить"
   },
   "embed_code_modal": {
     "load_error": "Ошибка загрузки кода виджета",
@@ -560,6 +565,23 @@
     "prompt_cron": "cron",
     "prompt_interval": "interval_seconds",
     "prompt_run_at": "run_at ISO8601"
+  },
+  "scheduler_modal": {
+    "header": "Создать задачу планировщика",
+    "label_service": "Целевой сервис",
+    "label_task": "Название задачи",
+    "label_type": "Тип расписания",
+    "label_cron": "Cron-выражение",
+    "label_interval": "Интервал (секунды)",
+    "label_run_at": "Время запуска",
+    "label_payload": "Payload (JSON)",
+    "err_service": "Укажите сервис",
+    "err_task": "Укажите название задачи",
+    "err_run_at": "Укажите время запуска",
+    "creating": "Создание...",
+    "submit": "Создать",
+    "cancel": "Отмена",
+    "toast_created": "Задача создана"
   },
   "frontend_app": {
     "loading": "Загрузка Frontend...",

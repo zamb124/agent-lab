@@ -6,6 +6,8 @@ import { PlatformElement } from '@platform/lib/platform-element/index.js';
 import { FrontendStore } from '../../store/frontend.store.js';
 import '../../modals/create-api-key-modal.js';
 import '@platform/lib/components/layout/page-header.js';
+import '@platform/lib/components/platform-icon.js';
+import '@platform/lib/components/glass-spinner.js';
 
 export class ApiKeysPage extends PlatformElement {
     static styles = [
@@ -179,10 +181,12 @@ export class ApiKeysPage extends PlatformElement {
                 color: var(--accent);
             }
 
-            .loading-state {
-                text-align: center;
-                padding: var(--space-12);
-                color: var(--text-secondary);
+            .page-loading {
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                flex: 1;
+                min-height: 200px;
             }
 
             @media (max-width: 768px) {
@@ -269,7 +273,7 @@ export class ApiKeysPage extends PlatformElement {
         const { loading, keys } = this.state.value;
         
         if (loading) {
-            return html`<div class="loading-state">${td('console_home.loading')}</div>`;
+            return html`<div class="page-loading"><glass-spinner size="lg"></glass-spinner></div>`;
         }
 
         if (keys.length === 0) {
@@ -302,25 +306,11 @@ export class ApiKeysPage extends PlatformElement {
                     <h3 class="key-name">${key.name}</h3>
                     <div class="key-actions">
                         <button 
-                            class="icon-button" 
-                            title=${t('api_keys_page.copy_title')}
-                            @click=${() => this._onCopyKey(key)}
-                        >
-                            C
-                        </button>
-                        <button 
-                            class="icon-button" 
-                            title=${t('api_keys_page.edit_title')}
-                            @click=${() => this._onEditKey(key)}
-                        >
-                            E
-                        </button>
-                        <button 
                             class="icon-button danger" 
                             title=${t('api_keys_page.revoke_title')}
                             @click=${() => this._onRevokeKey(key)}
                         >
-                            X
+                            <platform-icon name="trash" size="16"></platform-icon>
                         </button>
                     </div>
                 </div>
@@ -365,14 +355,6 @@ export class ApiKeysPage extends PlatformElement {
         const modal = document.createElement('create-api-key-modal');
         document.body.appendChild(modal);
         modal.addEventListener('close', () => modal.remove());
-    }
-
-    _onCopyKey(key) {
-        this.info(this.i18n.t('api_keys_page.info_no_full_key', {}));
-    }
-
-    _onEditKey(key) {
-        this.info(this.i18n.t('api_keys_page.info_wip', {}));
     }
 
     async _onRevokeKey(key) {

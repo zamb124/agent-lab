@@ -309,8 +309,8 @@
     "quick_api_desc": "New key for integrations",
     "quick_embed_title": "Add Embed widget",
     "quick_embed_desc": "Create a new chat widget",
-    "quick_billing_title": "Top up balance",
-    "quick_billing_desc": "Billing management",
+    "quick_settings_title": "Settings",
+    "quick_settings_desc": "Company settings",
     "err_unknown_service": "Unknown service for dashboard link: {{id}}"
   },
   "select_company": {
@@ -420,7 +420,8 @@
     "used": "Last used:",
     "never_used": "Never used",
     "info_no_full_key": "Full key is unavailable. It is only shown at creation.",
-    "info_wip": "Feature in development",
+    "edit_prompt": "New key name",
+    "toast_renamed": "Key renamed",
     "confirm_revoke": "Revoke key \"{{name}}\"? This cannot be undone.",
     "toast_revoked": "API key revoked"
   },
@@ -507,7 +508,11 @@
     "theme_auto": "Match system",
     "cancel": "Cancel",
     "creating": "Creating...",
-    "submit": "Create widget"
+    "submit": "Create widget",
+    "header_edit": "Edit widget",
+    "toast_updated": "Widget updated",
+    "saving": "Saving...",
+    "save": "Save"
   },
   "embed_code_modal": {
     "load_error": "Failed to load widget code",
@@ -560,6 +565,23 @@
     "prompt_cron": "cron",
     "prompt_interval": "interval_seconds",
     "prompt_run_at": "run_at ISO8601"
+  },
+  "scheduler_modal": {
+    "header": "Create scheduler task",
+    "label_service": "Target service",
+    "label_task": "Task name",
+    "label_type": "Schedule type",
+    "label_cron": "Cron expression",
+    "label_interval": "Interval (seconds)",
+    "label_run_at": "Run at",
+    "label_payload": "Payload (JSON)",
+    "err_service": "Service is required",
+    "err_task": "Task name is required",
+    "err_run_at": "Run time is required",
+    "creating": "Creating...",
+    "submit": "Create",
+    "cancel": "Cancel",
+    "toast_created": "Task created"
   },
   "frontend_app": {
     "loading": "Loading Frontend...",

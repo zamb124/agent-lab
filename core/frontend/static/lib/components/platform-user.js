@@ -187,17 +187,12 @@ export class PlatformUser extends PlatformElement {
             return;
         }
 
-        try {
-            const userData = await this.auth.get('/api/auth/me');
-            this.user = userData;
-            this._avatarRetry.reset();
-            await this._loadCompanies();
-            this._ensureCompanyAlignment();
-            await this._loadServiceAttrs();
-        } catch (error) {
-            console.error('[PlatformUser] Failed to load user:', error);
-            this.user = null;
-        }
+        const userData = await this.auth.get('/api/auth/me');
+        this.user = userData;
+        this._avatarRetry.reset();
+        await this._loadCompanies();
+        this._ensureCompanyAlignment();
+        await this._loadServiceAttrs();
     }
 
     async _loadCompanies() {
@@ -432,12 +427,7 @@ export class PlatformUser extends PlatformElement {
             this._companyAlignmentQueued = true;
             return;
         }
-        this._checkCompanyAlignment().catch((error) => {
-            if (this._isAuthMeNetworkFailure(error)) {
-                return;
-            }
-            console.error('[PlatformUser] Company alignment check failed:', error);
-        });
+        this._checkCompanyAlignment();
     }
 
     async _checkCompanyAlignment() {

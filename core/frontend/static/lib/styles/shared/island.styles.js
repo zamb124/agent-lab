@@ -152,6 +152,30 @@ export const islandStyles = css`
         overflow: hidden;
         overflow-y: hidden;
     }
+
+    /* ========== LOADING STATE ========== */
+
+    .island-loading-overlay {
+        position: absolute;
+        inset: 0;
+        z-index: 10;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        pointer-events: none;
+        animation: island-loading-in 0.15s ease;
+    }
+
+    .island-content.busy {
+        opacity: 0.5;
+        pointer-events: none;
+        transition: opacity 0.15s ease;
+    }
+
+    @keyframes island-loading-in {
+        from { opacity: 0; }
+        to { opacity: 1; }
+    }
 `;
 
 /**

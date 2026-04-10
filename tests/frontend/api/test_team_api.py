@@ -31,79 +31,6 @@ class TestTeamAPI:
         
         assert response.status_code == 401
 
-    async def test_invite_member_success(self, frontend_client: AsyncClient, auth_headers):
-        """Приглашение нового участника"""
-        response = await frontend_client.post(
-            "/frontend/api/team/invite",
-            headers=auth_headers,
-            json={
-                "email": "newmember@test.com",
-                "role": "developer"
-            }
-        )
-        
-        assert response.status_code == 200
-        data = response.json()
-        assert data["success"] is True
-        assert "newmember@test.com" in data["email"]
-
-    async def test_invite_member_invalid_role(self, frontend_client: AsyncClient, auth_headers):
-        """Приглашение с недопустимой ролью"""
-        response = await frontend_client.post(
-            "/frontend/api/team/invite",
-            headers=auth_headers,
-            json={
-                "email": "test@test.com",
-                "role": "invalid_role"
-            }
-        )
-        
-        assert response.status_code == 400
-        assert "Недопустимая роль" in response.json()["detail"]
-
-    async def test_invite_member_as_viewer_forbidden(
-        self, 
-        frontend_client: AsyncClient, 
-        frontend_container
-    ):
-        """Попытка пригласить участника с ролью viewer (нет прав)"""
-        import uuid
-        from core.utils.tokens import get_token_service
-        from core.models.identity_models import User, Company
-        
-        # Создаем компанию
-        company_id = f"test_company_{uuid.uuid4().hex[:8]}"
-        company = Company(
-            company_id=company_id,
-            name="Test Company",
-            owner_id="owner_user",
-            members={"viewer_user": ["viewer"]}
-        )
-        await frontend_container.company_repository.set(company)
-        
-        # Создаем viewer пользователя
-        user = User(
-            user_id="viewer_user",
-            name="Viewer User",
-            companies={company_id: ["viewer"]},
-            active_company_id=company_id
-        )
-        await frontend_container.user_repository.set(user)
-        
-        token_service = get_token_service()
-        token = token_service.create_token("viewer_user", company_id=company_id)
-        
-        response = await frontend_client.post(
-            "/frontend/api/team/invite",
-            headers={"Authorization": f"Bearer {token}"},
-            json={
-                "email": "new@test.com",
-                "role": "developer"
-            }
-        )
-        
-        assert response.status_code == 403
-
     async def test_update_member_role_success(
         self, 
         frontend_client: AsyncClient, 
@@ -182,8 +109,9 @@ class TestTeamAPI:
         frontend_container
     ):
         """Удаление участника из команды"""
+        import uuid
         from core.utils.tokens import get_token_service
-        from core.models.identity_models import User
+        from core.models.identity_models import User, Company
         
         token_service = get_token_service()
         token_data = token_service.validate_token(auth_headers["Authorization"].replace("Bearer ", ""))
@@ -191,36 +119,46 @@ class TestTeamAPI:
         
         company = await frontend_container.company_repository.get(company_id)
         
-        # Добавляем участника для удаления
-        test_user_id = "test_member_to_remove"
+        test_user_id = f"member_rm_{uuid.uuid4().hex[:8]}"
+        
+        fallback_company_id = f"fallback_{uuid.uuid4().hex[:8]}"
+        fallback_company = Company(
+            company_id=fallback_company_id,
+            name="Fallback",
+            owner_user_id=test_user_id,
+            members={test_user_id: ["owner"]},
+        )
+        await frontend_container.company_repository.set(fallback_company)
+        
         company.members[test_user_id] = ["developer"]
         await frontend_container.company_repository.set(company)
         
         test_user = User(
             user_id=test_user_id,
             name="Test Member To Remove",
-            companies={company_id: ["developer"]},
-            active_company_id=company_id
+            companies={
+                company_id: ["developer"],
+                fallback_company_id: ["owner"],
+            },
+            active_company_id=company_id,
         )
         await frontend_container.user_repository.set(test_user)
         
-        # Удаляем
         response = await frontend_client.delete(
             f"/frontend/api/team/members/{test_user_id}",
-            headers=auth_headers
+            headers=auth_headers,
         )
         
         assert response.status_code == 200
         data = response.json()
         assert data["success"] is True
         
-        # Проверяем что участник действительно удален
         updated_company = await frontend_container.company_repository.get(company_id)
         assert test_user_id not in updated_company.members
         
-        # Проверяем что у пользователя удалена компания
         updated_user = await frontend_container.user_repository.get(test_user_id)
         assert company_id not in updated_user.companies
+        assert updated_user.active_company_id == fallback_company_id
 
     async def test_remove_member_cannot_remove_owner(
         self, 

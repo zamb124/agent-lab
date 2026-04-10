@@ -169,6 +169,21 @@ export class CreateEmbedModal extends PlatformModal {
         this._flowsLoading = true;
         this._position = 'bottom-right';
         this._theme = 'dark';
+        this._editConfig = null;
+    }
+
+    setEditConfig(config) {
+        this._editConfig = config;
+        this._name = config.name;
+        this._flowId = config.flow_id;
+        this._skillId = config.skill_id || 'default';
+        this._position = config.position || 'bottom-right';
+        this._theme = config.theme || 'dark';
+        this.requestUpdate();
+    }
+
+    get _isEditMode() {
+        return this._editConfig !== null;
     }
 
     async connectedCallback() {
@@ -267,30 +282,34 @@ export class CreateEmbedModal extends PlatformModal {
         this._loading = true;
         this.requestUpdate();
 
-        try {
-            await this.services.get('embed').create({
-                name: this._name.trim(),
-                flow_id: this._flowId.trim(),
-                skill_id: skillId,
-                position: this._position,
-                theme: this._theme,
-                status: 'active',
-            });
+        const payload = {
+            name: this._name.trim(),
+            flow_id: this._flowId.trim(),
+            skill_id: skillId,
+            position: this._position,
+            theme: this._theme,
+            status: 'active',
+        };
 
-            FrontendStore.setEmbedLoading(true);
-            const configs = await this.services.get('embed').list();
-            FrontendStore.setEmbedConfigs(configs);
+        const embedService = this.services.get('embed');
 
-            this.success(td('embed_create_modal.toast_created'));
-            this._handleClose();
-            this.dispatchEvent(new CustomEvent('created'));
-        } catch (e) {
-            const msg = e instanceof Error ? e.message : String(e);
-            this.error(msg);
-        } finally {
-            this._loading = false;
-            this.requestUpdate();
+        if (this._isEditMode) {
+            await embedService.update(this._editConfig.embed_id, payload);
+        } else {
+            await embedService.create(payload);
         }
+
+        FrontendStore.setEmbedLoading(true);
+        const configs = await embedService.list();
+        FrontendStore.setEmbedConfigs(configs);
+
+        const toastKey = this._isEditMode ? 'embed_create_modal.toast_updated' : 'embed_create_modal.toast_created';
+        this.success(td(toastKey));
+        this._handleClose();
+        this.dispatchEvent(new CustomEvent(this._isEditMode ? 'updated' : 'created'));
+
+        this._loading = false;
+        this.requestUpdate();
     }
 
     close() {
@@ -304,7 +323,8 @@ export class CreateEmbedModal extends PlatformModal {
     }
 
     renderHeader() {
-        return this.i18n.t('embed_create_modal.header', {});
+        const key = this._isEditMode ? 'embed_create_modal.header_edit' : 'embed_create_modal.header';
+        return this.i18n.t(key, {});
     }
 
     renderBody() {
@@ -404,7 +424,9 @@ export class CreateEmbedModal extends PlatformModal {
 
     renderSaveHeaderButton() {
         const td = (k, p) => this.i18n.t(k, p ?? {});
-        const title = this._loading ? td('embed_create_modal.creating') : td('embed_create_modal.submit');
+        const loadingKey = this._isEditMode ? 'embed_create_modal.saving' : 'embed_create_modal.creating';
+        const submitKey = this._isEditMode ? 'embed_create_modal.save' : 'embed_create_modal.submit';
+        const title = this._loading ? td(loadingKey) : td(submitKey);
         return this._renderHeaderSaveIcon({
             onClick: () => this._handleCreate(),
             disabled: this._loading || this._flowsLoading,

@@ -2,6 +2,7 @@ import { html, css } from 'lit';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
 import '@platform/lib/components/layout/page-header.js';
 import '@platform/lib/components/glass-modal.js';
+import '@platform/lib/components/glass-spinner.js';
 
 export class SchedulerTasksPage extends PlatformElement {
     static styles = [
@@ -9,6 +10,14 @@ export class SchedulerTasksPage extends PlatformElement {
         css`
             :host {
                 display: block;
+            }
+
+            .page-loading {
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                flex: 1;
+                min-height: 200px;
             }
 
             .toolbar {
@@ -351,43 +360,13 @@ export class SchedulerTasksPage extends PlatformElement {
         this.redisSnapshotModalOpen = false;
     }
 
-    async _createSchedule() {
-        const td = (k) => this.i18n.t(k, {});
-        const targetService = prompt(td('scheduler_page.prompt_target'), 'flows');
-        if (!targetService) {
-            return;
-        }
-        const taskName = prompt(td('scheduler_page.prompt_task'), 'sync_llm_models_task');
-        if (!taskName) {
-            return;
-        }
-        const scheduleType = prompt(td('scheduler_page.prompt_schedule_type'), 'interval');
-        if (!scheduleType) {
-            return;
-        }
-        const payloadRaw = prompt(td('scheduler_page.prompt_payload'), '{}');
-        if (payloadRaw === null) {
-            return;
-        }
-        const payload = JSON.parse(payloadRaw);
-        const request = {
-            target_service: targetService,
-            task_name: taskName,
-            schedule_type: scheduleType,
-            timezone: 'UTC',
-            payload,
-        };
-        if (scheduleType === 'cron') {
-            request.cron = prompt(td('scheduler_page.prompt_cron'), '*/5 * * * *');
-        } else if (scheduleType === 'interval') {
-            request.interval_seconds = Number(prompt(td('scheduler_page.prompt_interval'), '60'));
-        } else if (scheduleType === 'one_time') {
-            request.run_at = prompt(td('scheduler_page.prompt_run_at'), new Date(Date.now() + 60000).toISOString());
-        } else {
-            throw new Error(`Unknown schedule_type: ${scheduleType}`);
-        }
-        await this.services.get('schedulerTasks').create(request);
-        await this._load();
+    _createSchedule() {
+        import('../modals/create-scheduler-task-modal.js').then(() => {
+            const modal = document.createElement('create-scheduler-task-modal');
+            document.body.appendChild(modal);
+            modal.addEventListener('close', () => modal.remove());
+            modal.addEventListener('created', () => this._load());
+        });
     }
 
     render() {
@@ -424,7 +403,7 @@ export class SchedulerTasksPage extends PlatformElement {
             </div>
 
             ${this.loading
-                ? html`<div>${td('scheduler_page.loading')}</div>`
+                ? html`<div class="page-loading"><glass-spinner size="lg"></glass-spinner></div>`
                 : html`
                       <div class="table-wrap">
                           <table>

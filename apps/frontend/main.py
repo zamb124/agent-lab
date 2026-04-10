@@ -20,6 +20,8 @@ from apps.frontend.api.scheduler import router as scheduler_router
 from apps.frontend.api.leads import leads_router, lead_requests_router
 from apps.frontend.api.platform_tracing import router as platform_tracing_router
 from apps.frontend.api.platform_billing import router as platform_billing_router
+from apps.frontend.api.payments_webhook import router as payments_webhook_router
+from apps.frontend.api.yoomoney_oauth import router as yoomoney_oauth_router
 from apps.frontend.config import FrontendSettings, get_frontend_settings
 from apps.frontend.container import get_frontend_container
 from apps.frontend.dependencies import ContainerDep
@@ -36,6 +38,10 @@ async def on_startup(app: FastAPI, container, settings: FrontendSettings) -> Non
     await ensure_demo_company_and_user(container)
     n = await container.billing_service.ensure_settlement_rules_materialized_for_all_companies()
     logger.info("Биллинг: правила settlement проверены/записаны для компаний: %s", n)
+
+    from core.clients.payment import PaymentProviderFactory
+    PaymentProviderFactory.initialize()
+    logger.info("Платежные провайдеры инициализированы")
 
 
 # Создаем приложение через фабрику (автоматически подключает middleware, контейнер и т.д.)
@@ -59,6 +65,8 @@ app = create_service_app(
         lead_requests_router,
         platform_tracing_router,
         platform_billing_router,
+        payments_webhook_router,
+        yoomoney_oauth_router,
     ],
     title="Platform Management",
     description="Управление платформой: авторизация, компании, биллинг",
@@ -97,6 +105,7 @@ for route in list(app.routes):
 
 
 @app.get("/api/health")
+@app.get("/health")
 async def health(container: ContainerDep):
     _ = container
     return {"status": "ok", "service": "frontend"}

@@ -7,6 +7,7 @@ import { FrontendStore } from '../store/frontend.store.js';
 import '../modals/create-embed-modal.js';
 import '../modals/embed-code-modal.js';
 import '@platform/lib/components/layout/page-header.js';
+import '@platform/lib/components/glass-spinner.js';
 
 export class EmbedConfigsPage extends PlatformElement {
     static styles = [
@@ -99,10 +100,12 @@ export class EmbedConfigsPage extends PlatformElement {
                 box-shadow: 0 8px 24px rgba(153, 166, 249, 0.4);
             }
 
-            .loading-state {
-                text-align: center;
-                padding: var(--space-12);
-                color: var(--text-secondary);
+            .page-loading {
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                flex: 1;
+                min-height: 200px;
             }
 
             .empty-state {
@@ -178,7 +181,17 @@ export class EmbedConfigsPage extends PlatformElement {
     }
 
     _handleEdit(embedId) {
-        this.info(this.i18n.t('embed_page.info_wip', {}));
+        const { configs } = this.state.value;
+        const config = configs.find((c) => c.embed_id === embedId);
+        if (!config) return;
+
+        const modal = document.createElement('create-embed-modal');
+        document.body.appendChild(modal);
+        modal.setEditConfig(config);
+        modal.addEventListener('close', () => modal.remove());
+        modal.addEventListener('updated', async () => {
+            await this._reloadConfigs();
+        });
     }
 
     _handleGetCode(embedId) {
@@ -203,7 +216,7 @@ export class EmbedConfigsPage extends PlatformElement {
         const { loading, configs } = this.state.value;
         
         if (loading) {
-            return html`<div class="loading-state">${td('console_home.loading')}</div>`;
+            return html`<div class="page-loading"><glass-spinner size="lg"></glass-spinner></div>`;
         }
 
         if (configs.length === 0) {

@@ -119,14 +119,31 @@ export class FrontendApp extends PlatformApp {
         `
     ];
 
+    static properties = {
+        ...PlatformApp.properties,
+        _islandLoading: { state: true },
+    };
+
     constructor() {
         super();
         this._isLanding = false;
         this._dashboardLastServiceRedirectDone = false;
+        this._islandLoading = false;
+        this._prevView = null;
 
-        this.state = this.use((s) => ({
-            currentView: s.ui.currentView,
-        }));
+        this.state = this.use((s) => {
+            const view = s.ui.currentView;
+            if (this._prevView && this._prevView !== view) {
+                this._islandLoading = true;
+                requestAnimationFrame(() => {
+                    requestAnimationFrame(() => {
+                        this._islandLoading = false;
+                    });
+                });
+            }
+            this._prevView = view;
+            return { currentView: view };
+        });
     }
 
     /**
@@ -220,8 +237,8 @@ export class FrontendApp extends PlatformApp {
             '/dashboard',
             '/team',
             '/api-keys',
-            '/billing',
             '/embed-configs',
+            '/billing',
             '/scheduler-tasks',
             '/lead-requests',
             '/platform-tracing',
@@ -342,10 +359,10 @@ export class FrontendApp extends PlatformApp {
                 return html`<team-page></team-page>`;
             case 'api-keys':
                 return html`<api-keys-page></api-keys-page>`;
-            case 'billing':
-                return html`<billing-page></billing-page>`;
             case 'embed-configs':
                 return html`<embed-configs-page></embed-configs-page>`;
+            case 'billing':
+                return html`<billing-page></billing-page>`;
             case 'settings':
                 return html`<settings-page></settings-page>`;
             case 'scheduler-tasks':
@@ -464,7 +481,7 @@ export class FrontendApp extends PlatformApp {
             </div>
 
             <div class="main">
-                <platform-island>
+                <platform-island ?loading=${this._islandLoading}>
                     ${this._renderContent()}
                 </platform-island>
             </div>

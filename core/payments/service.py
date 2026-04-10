@@ -216,10 +216,19 @@ class PaymentService:
                 )
                 
                 await self._save_transaction(transaction)
-                
+
+                await self._update_company_balance(
+                    company_id_from_label,
+                    verification_result.amount,
+                )
+
+                notification.processed = True
+                await self._save_notification(notification)
+
                 logger.info(
                     f"✅ Транзакция восстановлена из webhook: {transaction.transaction_id}"
                 )
+                return
             else:
                 logger.error(
                     f"❌ Транзакция {verification_result.transaction_id} не найдена и не может быть восстановлена"
