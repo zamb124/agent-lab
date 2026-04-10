@@ -36,7 +36,7 @@ def _get_yoomoney_provider() -> YooMoneyProvider:
 
 
 def _build_callback_url(request: Request) -> str:
-    """Формирует абсолютный URL для OAuth callback."""
+    """Формирует абсолютный URL для OAuth callback на apex-домене."""
     from core.config import get_settings
     settings = get_settings()
 
@@ -44,8 +44,7 @@ def _build_callback_url(request: Request) -> str:
         host = request.headers.get("host", f"localhost:{settings.server.port}")
         return f"http://{host}/frontend/api/billing/yoomoney/callback"
 
-    host = request.headers.get("host", PRIMARY_DOMAIN)
-    return f"https://{host}/frontend/api/billing/yoomoney/callback"
+    return f"https://{PRIMARY_DOMAIN}/frontend/api/billing/yoomoney/callback"
 
 
 @router.get("/authorize")
