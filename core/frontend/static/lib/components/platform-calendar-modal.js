@@ -2162,9 +2162,6 @@ export class PlatformCalendarModal extends PlatformModal {
     }
 
     _onDragStart(event, pointerEvent) {
-        if (event.source !== 'platform') {
-            return;
-        }
         pointerEvent.preventDefault();
         pointerEvent.stopPropagation();
         const target = pointerEvent.currentTarget;
