@@ -487,7 +487,8 @@
             },
             "entities": {
                 "title": "Entities",
-                "action_title": "Create entity"
+                "action_title": "Create entity",
+                "extra_title": "Filters"
             },
             "graph": {
                 "title": "Relationship graph"

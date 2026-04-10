@@ -101,6 +101,26 @@ export class CrmMobileAppHeader extends PlatformElement {
                 border-color: var(--accent);
             }
 
+            .assistant-btn {
+                width: 36px;
+                height: 36px;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                border-radius: var(--radius-md);
+                background: #99a6f9;
+                border: none;
+                color: #0f0f12;
+                cursor: pointer;
+                flex-shrink: 0;
+                padding: 0;
+                transition: background var(--duration-fast);
+            }
+
+            .assistant-btn:hover {
+                background: #8794f0;
+            }
+
             .action-btn {
                 width: 36px;
                 height: 36px;
@@ -199,7 +219,7 @@ export class CrmMobileAppHeader extends PlatformElement {
 
                 ${this.assistantIcon ? html`
                     <button
-                        class="icon-btn"
+                        class="assistant-btn"
                         type="button"
                         title=${this.assistantTitle || ''}
                         @click=${() => this.emit('header-assistant')}

@@ -33,7 +33,6 @@ export class EntitiesPage extends PlatformElement {
         _mergeDropHoverId: { state: true },
         _selectedIds: { state: true },
         _bulkOperating: { state: true },
-        _showExportMenu: { state: true },
         _showBulkStatusMenu: { state: true },
         _showFiltersPanel: { state: true },
         _searchMode: { state: true },
@@ -393,9 +392,6 @@ export class EntitiesPage extends PlatformElement {
                 white-space: nowrap;
             }
 
-            .export-dropdown {
-                position: relative;
-            }
             .btn-icon {
                 display: flex;
                 align-items: center;
@@ -555,31 +551,6 @@ export class EntitiesPage extends PlatformElement {
                 max-width: 220px;
             }
 
-            .export-menu {
-                position: absolute;
-                top: 100%;
-                right: 0;
-                z-index: 10;
-                display: flex;
-                flex-direction: column;
-                background: var(--bg-elevated);
-                border: 1px solid var(--glass-border-subtle);
-                border-radius: var(--radius-md);
-                overflow: hidden;
-                margin-top: 4px;
-                min-width: 80px;
-                box-shadow: var(--glass-shadow-subtle);
-            }
-            .export-menu button {
-                padding: 8px 12px;
-                border: none;
-                background: transparent;
-                color: var(--text-primary);
-                font-size: 13px;
-                cursor: pointer;
-                text-align: left;
-            }
-            .export-menu button:hover { background: var(--glass-bg-subtle); }
 
             .entity-card-item.selected {
                 border-color: var(--accent, #3b82f6);
@@ -969,6 +940,10 @@ export class EntitiesPage extends PlatformElement {
                     display: none;
                 }
 
+                .btn-icon {
+                    display: none;
+                }
+
                 .filters-row {
                     gap: 6px;
                     overflow-x: auto;
@@ -1080,7 +1055,6 @@ export class EntitiesPage extends PlatformElement {
         this._mergeDropHoverId = '';
         this._selectedIds = new Set();
         this._bulkOperating = false;
-        this._showExportMenu = false;
         this._showBulkStatusMenu = false;
         this._showFiltersPanel = false;
         this._searchMode = 'hybrid';
@@ -1122,11 +1096,14 @@ export class EntitiesPage extends PlatformElement {
 
     connectedCallback() {
         super.connectedCallback();
+        this._boundToggleFilters = () => { this._showFiltersPanel = !this._showFiltersPanel; };
+        window.addEventListener('entities-toggle-filters', this._boundToggleFilters);
         this._reloadData();
     }
 
     disconnectedCallback() {
         super.disconnectedCallback();
+        window.removeEventListener('entities-toggle-filters', this._boundToggleFilters);
         this._unsubscribe?.();
         this._disconnectScrollObserver();
         if (this._debounceTimer) {
@@ -1613,17 +1590,6 @@ export class EntitiesPage extends PlatformElement {
                         >
                             <platform-icon name="adjustment" size="16"></platform-icon>
                         </button>
-                        <div class="export-dropdown">
-                            <button class="btn-icon" type="button" title="Export" @click=${this._toggleExportMenu}>
-                                <platform-icon name="save" size="16"></platform-icon>
-                            </button>
-                            ${this._showExportMenu ? html`
-                                <div class="export-menu">
-                                    <button @click=${() => this._onExport('csv')}>CSV</button>
-                                    <button @click=${() => this._onExport('json')}>JSON</button>
-                                </div>
-                            ` : ''}
-                        </div>
                         <button class="cta-btn" type="button" @click=${this._onCreateEntity}>${this.i18n.t('create', {}, 'common')}</button>
                     </div>
                     <div class="filters-row">
@@ -1906,26 +1872,6 @@ export class EntitiesPage extends PlatformElement {
                 </div>
             </article>
         `;
-    }
-
-    _toggleExportMenu() {
-        this._showExportMenu = !this._showExportMenu;
-    }
-
-    async _onExport(format) {
-        this._showExportMenu = false;
-        try {
-            const crmApi = this.services.get('crmApi');
-            const blob = await crmApi.exportEntities({ format });
-            const url = URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = `entities.${format}`;
-            a.click();
-            URL.revokeObjectURL(url);
-        } catch (err) {
-            this.error(err instanceof Error ? err.message : String(err));
-        }
     }
 
     _onToggleSelect(entityId, checked) {

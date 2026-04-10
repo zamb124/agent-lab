@@ -97,6 +97,12 @@ export class PlatformEmbedChatDrawer extends LitElement {
             display: block;
         }
 
+        @media (max-width: 767px) {
+            .fab {
+                display: none;
+            }
+        }
+
         :host([data-embed-theme='light']) .fab {
             --embed-drawer-fab-border: rgba(109, 98, 232, 0.35);
             --embed-drawer-fab-bg: linear-gradient(145deg, #f0edff 0%, #e2e8ff 100%);

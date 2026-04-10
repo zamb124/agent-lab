@@ -364,7 +364,9 @@ export class CRMApp extends PlatformApp {
     }
 
     _onMobileExtra() {
-        if (this._currentView === 'tasks') {
+        if (this._currentView === 'entities') {
+            this._dispatchPageEvent('entities-toggle-filters');
+        } else if (this._currentView === 'tasks') {
             this._dispatchPageEvent('tasks-refresh');
         }
     }
@@ -460,6 +462,8 @@ export class CRMApp extends PlatformApp {
                 title: v('entities.title'),
                 actionIcon: 'plus',
                 actionTitle: v('entities.action_title'),
+                extraIcon: 'adjustment',
+                extraTitle: v('entities.extra_title'),
                 searchable: true,
             },
             graph: { title: v('graph.title'), actionIcon: null },
@@ -583,7 +587,7 @@ export class CRMApp extends PlatformApp {
                             ?searchable=${!!viewCfg.searchable}
                             ?searchOpen=${this._mobileSearchOpen}
                             .searchValue=${this._mobileSearchInputValue}
-                            assistant-icon="sparkle"
+                            assistant-icon="ai"
                             .assistantTitle=${this.i18n.t('app_shell.embed_chat_toggle')}
                             .extraIcon=${viewCfg.extraIcon || ''}
                             .extraTitle=${viewCfg.extraTitle || ''}
