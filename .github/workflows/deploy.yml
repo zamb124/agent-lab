@@ -246,3 +246,13 @@ jobs:
             done
 
             docker image prune -f
+
+            # Настройка ingress: статика + nginx location blocks
+            if [ -f /opt/agent-lab/conf.local.json ]; then
+              echo "Настройка ingress (статика + nginx location blocks)..."
+              cd /opt/agent-lab
+              bash deploy/ingress.sh
+            else
+              echo "WARNING: conf.local.json не найден — пропускаем настройку ingress"
+              echo "Для настройки ingress выполните на сервере: cd /opt/agent-lab && bash deploy/ingress.sh"
+            fi

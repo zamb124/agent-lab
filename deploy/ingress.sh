@@ -85,6 +85,11 @@ SSH="ssh -o StrictHostKeyChecking=accept-new -o BatchMode=yes -o ConnectTimeout=
 HOST_IP="$(${SSH} "ip -4 addr show scope global | awk '/inet / {print \$2}' | awk -F/ '{print \$1}' | head -1")"
 log "IP хоста: ${HOST_IP}"
 
+# ─── Подготовка статики ──────────────────────────────────────────────────────
+# Копируем UI файлы из apps/*/ui/ в единую структуру static/ для nginx ingress
+log "Подготовка статики для ingress"
+${SSH} "cd ${REMOTE_DIR} && bash -s" < "${SCRIPT_DIR}/prepare-static.sh"
+
 # cert-manager
 log "Проверяем cert-manager"
 ${SSH} "microk8s kubectl get namespace cert-manager >/dev/null 2>&1 || (microk8s enable cert-manager && microk8s kubectl wait --for=condition=ready pod -l app=cert-manager -n cert-manager --timeout=120s)"
@@ -197,6 +202,11 @@ EOFTLS
 fi
 
 log "Создаём Ingress для ${DOMAIN} и *.${DOMAIN}"
+log "REMOTE_DIR для nginx config: ${REMOTE_DIR}"
+
+# Передаём REMOTE_DIR в SSH сессию для подстановки в nginx config
+export REMOTE_DIR
+log "Kubectl apply Ingress..."
 ${SSH} "microk8s kubectl apply -f -" <<EOF
 apiVersion: networking.k8s.io/v1
 kind: Ingress
@@ -225,6 +235,128 @@ metadata:
         add_header Cache-Control "public, max-age=3600" always;
         add_header Access-Control-Allow-Origin "*" always;
       }
+      # Статика платформы — отдаётся напрямую nginx, минуя FastAPI
+      # Пути к статике после prepare-static.sh: ${REMOTE_DIR}/static/...
+      location /static/core/ {
+        alias ${REMOTE_DIR}/static/core/;
+        add_header Cache-Control "public, max-age=31536000, immutable";
+        add_header Access-Control-Allow-Origin "*" always;
+      }
+      location /crm/ui/static/ {
+        alias ${REMOTE_DIR}/static/crm/ui/;
+        add_header Cache-Control "public, max-age=31536000, immutable";
+        add_header Access-Control-Allow-Origin "*" always;
+      }
+      location /crm/ui/vendor/3d-force-graph/ {
+        alias ${REMOTE_DIR}/static/crm/ui/vendor/3d-force-graph/;
+        add_header Cache-Control "public, max-age=31536000, immutable";
+        add_header Access-Control-Allow-Origin "*" always;
+      }
+      location /crm/ui/vendor/three/ {
+        alias ${REMOTE_DIR}/static/crm/ui/vendor/three/;
+        add_header Cache-Control "public, max-age=31536000, immutable";
+        add_header Access-Control-Allow-Origin "*" always;
+      }
+      location /sync/ui/static/ {
+        alias ${REMOTE_DIR}/static/sync/ui/;
+        add_header Cache-Control "public, max-age=31536000, immutable";
+        add_header Access-Control-Allow-Origin "*" always;
+      }
+      location /rag/ui/static/ {
+        alias ${REMOTE_DIR}/static/rag/ui/;
+        add_header Cache-Control "public, max-age=31536000, immutable";
+        add_header Access-Control-Allow-Origin "*" always;
+      }
+      location /documents/ui/static/ {
+        alias ${REMOTE_DIR}/static/documents/ui/;
+        add_header Cache-Control "public, max-age=31536000, immutable";
+        add_header Access-Control-Allow-Origin "*" always;
+      }
+      location /flows/static/ {
+        alias ${REMOTE_DIR}/static/flows/ui/;
+        add_header Cache-Control "public, max-age=31536000, immutable";
+        add_header Access-Control-Allow-Origin "*" always;
+      }
+      location /static/frontend/ {
+        alias ${REMOTE_DIR}/static/frontend/;
+        add_header Cache-Control "public, max-age=31536000, immutable";
+        add_header Access-Control-Allow-Origin "*" always;
+      }
+      # SPA fallback для сервисов — корневые location с proxy_pass на сервисы
+      # nginx сначала ищет статику по alias, а если файл не найден (404) — проксирует на FastAPI
+      # Это нужно для корректной работы SPA роутинга при refresh страниц
+      # Frontend (/) — основной SPA
+      location / {
+        alias ${REMOTE_DIR}/static/frontend/;
+        try_files $uri $uri/ @proxy_frontend;
+      }
+      location @proxy_frontend {
+        proxy_pass http://frontend-svc:8002;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+      }
+      # CRM (/crm/*)
+      location /crm/ {
+        alias ${REMOTE_DIR}/static/crm/ui/;
+        try_files $uri $uri/ @proxy_crm;
+      }
+      location @proxy_crm {
+        proxy_pass http://crm-svc:8003;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+      }
+      # Sync (/sync/*)
+      location /sync/ {
+        alias ${REMOTE_DIR}/static/sync/ui/;
+        try_files $uri $uri/ @proxy_sync;
+      }
+      location @proxy_sync {
+        proxy_pass http://sync-svc:8005;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+      }
+      # RAG (/rag/*)
+      location /rag/ {
+        alias ${REMOTE_DIR}/static/rag/ui/;
+        try_files $uri $uri/ @proxy_rag;
+      }
+      location @proxy_rag {
+        proxy_pass http://rag-svc:8004;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+      }
+      # Documents (/documents/*)
+      location /documents/ {
+        alias ${REMOTE_DIR}/static/documents/ui/;
+        try_files $uri $uri/ @proxy_documents;
+      }
+      location @proxy_documents {
+        proxy_pass http://office-svc:8008;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+      }
+      # Flows (/flows/*)
+      location /flows/ {
+        alias ${REMOTE_DIR}/static/flows/ui/;
+        try_files $uri $uri/ @proxy_flows;
+      }
+      location @proxy_flows {
+        proxy_pass http://agents-svc:8001;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+      }
 spec:
   ingressClassName: public
 ${TLS_SPEC}
@@ -238,6 +370,8 @@ ${PATHS}
       paths:
 ${PATHS}
 EOF
+
+log "✅ Ingress создан"
 
 if ${SSH} "microk8s kubectl get secret ${TLS_SECRET} -n default >/dev/null 2>&1"; then
   log "Certificate ${TLS_SECRET} уже существует — пропускаем"
@@ -508,6 +642,7 @@ if [[ -z "${_HAS_I18N_VOLUME}" ]]; then
 else
   log "i18n: hostPath volume уже смонтирован — пропускаем патч"
 fi
+
 
 echo
 echo "======================================"

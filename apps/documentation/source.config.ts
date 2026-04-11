@@ -18,7 +18,7 @@ export const docs = defineDocs({
       'index.mdx',
       'guides/**/*.mdx',
       'guides/**/*.md',
-      'scenarios/**/index.mdx',
+      'scenarios/**/*.mdx',
     ],
     postprocess: {
       includeProcessedMarkdown: true,

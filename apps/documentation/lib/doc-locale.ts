@@ -9,37 +9,20 @@ export const DOC_LOCALES: { name: string; locale: DocLocale }[] = [
   { name: 'English', locale: 'en' },
 ];
 
-const GUIDE_LOCALE = /^guides\/(ru|en)(\/|$)/;
-
-export function docLocaleFromPathname(pathname: string): DocLocale | null {
-  const trimmed = pathname.replace(/^\/+|\/+$/g, '');
-  const match = GUIDE_LOCALE.exec(trimmed);
-  if (!match) {
-    return null;
+/**
+ * Сохраняет предпочтительный язык в localStorage.
+ * Fumadocs i18n сам управляет URL, но мы запоминаем выбор для главной страницы.
+ */
+export function writeStoredDocLocale(locale: DocLocale): void {
+  if (typeof window === 'undefined') {
+    return;
   }
-  return match[1] as DocLocale;
+  window.localStorage.setItem(DOC_LOCALE_STORAGE_KEY, locale);
 }
 
 /**
- * Сегменты пути без ведущего и завершающего слэша (как в usePathname с basePath).
+ * Читает предпочтительный язык из localStorage.
  */
-function pathSegments(pathname: string): string[] {
-  const trimmed = pathname.replace(/^\/+|\/+$/g, '');
-  return trimmed ? trimmed.split('/').filter(Boolean) : [];
-}
-
-/**
- * Целевой путь с учётом `trailingSlash: true` в Next.
- */
-export function hrefForDocLocale(pathname: string, next: DocLocale): string {
-  const segments = pathSegments(pathname);
-  if (segments[0] === 'guides' && (segments[1] === 'ru' || segments[1] === 'en')) {
-    segments[1] = next;
-    return `/${segments.join('/')}/`;
-  }
-  return `/guides/${next}/`;
-}
-
 export function readStoredDocLocale(): DocLocale | null {
   if (typeof window === 'undefined') {
     return null;
@@ -51,13 +34,9 @@ export function readStoredDocLocale(): DocLocale | null {
   return null;
 }
 
-export function writeStoredDocLocale(locale: DocLocale): void {
-  if (typeof window === 'undefined') {
-    return;
-  }
-  window.localStorage.setItem(DOC_LOCALE_STORAGE_KEY, locale);
-}
-
+/**
+ * UI-строки для каждого языка.
+ */
 export const DOC_UI_STRINGS: Record<DocLocale, TranslationsOption> = {
   ru: {
     search: 'Поиск',
