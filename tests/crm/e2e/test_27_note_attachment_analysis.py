@@ -1,0 +1,431 @@
+"""
+Тесты пайплайна обработки текстового содержимого вложений в AI-анализе заметки.
+
+Проверяется:
+1. resolve_note_text — сборка текста из description + вложений.
+2. Малое вложение: текст включается без вызова summarize_attachment.
+3. Большое вложение: сначала суммаризация LLM, потом analyze.
+4. Параметр attachment_chars_limit_per_file управляет порогом суммаризации.
+5. include_attachments=False полностью пропускает файлы.
+
+Ключевой механизм верификации E2E-тестов:
+mock_llm_redis раздаёт ответы строго по порядку. Если код вызывает лишний
+LLM (или пропускает нужный), следующий вызов получает «чужой» ответ →
+неверный JSON → тест падает. Мок-очередь кодирует ожидаемую
+последовательность вызовов без явного шпионажа.
+"""
+
+from __future__ import annotations
+
+import json
+
+import pytest
+
+_ANALYZE_META = {"dates_mentioned": [], "places_mentioned": [], "key_topics": []}
+
+
+def _analyze_llm_response(*, note_name: str) -> str:
+    return json.dumps(
+        {
+            "note": {
+                "entity_type": "note",
+                "name": note_name,
+                "description": "Итог анализа.",
+            },
+            "entities": [
+                {
+                    "entity_type": "task",
+                    "name": "Иван Иванов",
+                    "description": "Менеджер проекта",
+                    "attributes": {"role": "менеджер"},
+                },
+            ],
+            "relationships": [
+                {
+                    "source_type": "note",
+                    "source_name": note_name,
+                    "target_type": "task",
+                    "target_name": "Иван Иванов",
+                    "relationship_type": "mentions",
+                    "weight": 1.0,
+                }
+            ],
+            "metadata": _ANALYZE_META,
+        }
+    )
+
+
+class TestResolveNoteText:
+    """Прямые тесты NoteProcessingService.resolve_note_text без LLM.
+
+    Используем crm_container для обращения к сервису напрямую.
+    Никакого real_taskiq не нужно — LLM не вызывается при маленьких файлах
+    и при отключённой суммаризации.
+    """
+
+    @pytest.mark.asyncio
+    async def test_description_without_attachments(
+        self,
+        crm_client,
+        crm_container,
+        unique_id: str,
+        auth_headers_system: dict,
+    ) -> None:
+        """Заметка без вложений: resolve_note_text возвращает только description."""
+        description = f"Текст заметки {unique_id} без файлов."
+        note_resp = await crm_client.post(
+            "/crm/api/v1/entities/",
+            json={
+                "entity_type": "note",
+                "name": f"Тест описания {unique_id}",
+                "description": description,
+                "namespace": "default",
+            },
+            headers=auth_headers_system,
+        )
+        assert note_resp.status_code in (200, 201), note_resp.text
+        note_id = note_resp.json()["entity_id"]
+
+        text = await crm_container.note_processing_service.resolve_note_text(
+            note_id,
+            include_attachments=True,
+            attachment_chars_limit=40_000,
+        )
+
+        assert description in text
+
+    @pytest.mark.asyncio
+    async def test_small_attachment_included_verbatim(
+        self,
+        crm_client,
+        crm_container,
+        unique_id: str,
+        auth_headers_system: dict,
+    ) -> None:
+        """Малое вложение (ниже лимита): полный текст файла попадает в результат без суммаризации."""
+        description = f"Описание встречи {unique_id}."
+        note_resp = await crm_client.post(
+            "/crm/api/v1/entities/",
+            json={
+                "entity_type": "note",
+                "name": f"Малый файл {unique_id}",
+                "description": description,
+                "namespace": "default",
+            },
+            headers=auth_headers_system,
+        )
+        assert note_resp.status_code in (200, 201), note_resp.text
+        note_id = note_resp.json()["entity_id"]
+
+        file_text = f"Протокол совещания {unique_id}. Присутствовали: Иван Иванов, Петр Петров."
+        files = {"file": ("protocol.txt", file_text.encode(), "text/plain")}
+        upload = await crm_client.post(
+            f"/crm/api/v1/entities/{note_id}/attachments",
+            files=files,
+            headers=auth_headers_system,
+        )
+        assert upload.status_code == 200, upload.text
+
+        # attachment_chars_limit=1_000_000 → суммаризация не вызывается никогда
+        text = await crm_container.note_processing_service.resolve_note_text(
+            note_id,
+            include_attachments=True,
+            attachment_chars_limit=1_000_000,
+        )
+
+        assert description in text
+        assert "Иван Иванов" in text
+        assert "Петр Петров" in text
+
+    @pytest.mark.asyncio
+    async def test_multiple_small_attachments_all_included(
+        self,
+        crm_client,
+        crm_container,
+        unique_id: str,
+        auth_headers_system: dict,
+    ) -> None:
+        """Несколько малых вложений: тексты всех файлов присутствуют в результате."""
+        note_resp = await crm_client.post(
+            "/crm/api/v1/entities/",
+            json={
+                "entity_type": "note",
+                "name": f"Несколько файлов {unique_id}",
+                "description": f"Основная заметка {unique_id}.",
+                "namespace": "default",
+            },
+            headers=auth_headers_system,
+        )
+        assert note_resp.status_code in (200, 201), note_resp.text
+        note_id = note_resp.json()["entity_id"]
+
+        signatures = [f"МАРКЕР_{i}_{unique_id}" for i in range(3)]
+        for i, sig in enumerate(signatures):
+            files = {"file": (f"doc{i}.txt", f"Содержимое {sig}.".encode(), "text/plain")}
+            upload = await crm_client.post(
+                f"/crm/api/v1/entities/{note_id}/attachments",
+                files=files,
+                headers=auth_headers_system,
+            )
+            assert upload.status_code == 200, upload.text
+
+        text = await crm_container.note_processing_service.resolve_note_text(
+            note_id,
+            include_attachments=True,
+            attachment_chars_limit=1_000_000,
+        )
+
+        for sig in signatures:
+            assert sig in text, f"Маркер '{sig}' не найден в собранном тексте"
+
+    @pytest.mark.asyncio
+    async def test_include_attachments_false_skips_files(
+        self,
+        crm_client,
+        crm_container,
+        unique_id: str,
+        auth_headers_system: dict,
+    ) -> None:
+        """include_attachments=False: файл не читается, в результате только description."""
+        file_marker = f"МАРКЕР_ФАЙЛА_{unique_id}"
+        description = f"Только описание {unique_id}."
+        note_resp = await crm_client.post(
+            "/crm/api/v1/entities/",
+            json={
+                "entity_type": "note",
+                "name": f"Флаг attachments {unique_id}",
+                "description": description,
+                "namespace": "default",
+            },
+            headers=auth_headers_system,
+        )
+        assert note_resp.status_code in (200, 201), note_resp.text
+        note_id = note_resp.json()["entity_id"]
+
+        files = {"file": ("marker.txt", f"Содержимое {file_marker}.".encode(), "text/plain")}
+        upload = await crm_client.post(
+            f"/crm/api/v1/entities/{note_id}/attachments",
+            files=files,
+            headers=auth_headers_system,
+        )
+        assert upload.status_code == 200, upload.text
+
+        text = await crm_container.note_processing_service.resolve_note_text(
+            note_id,
+            include_attachments=False,
+            attachment_chars_limit=1_000_000,
+        )
+
+        assert description in text
+        assert file_marker not in text
+
+
+@pytest.mark.real_taskiq
+class TestAnalyzeWithAttachments:
+    """E2E тесты POST /analyze с вложениями.
+
+    Инфраструктура: реальный TaskIQ + MockLLM в Redis. Flows, RAG, CRM — реальные.
+    """
+
+    @pytest.mark.asyncio
+    async def test_small_attachment_single_llm_call(
+        self,
+        crm_client,
+        mock_llm_redis,
+        unique_id: str,
+        auth_headers_system: dict,
+    ) -> None:
+        """Малое вложение (< дефолтного лимита 40k): один LLM вызов — только analyze.
+
+        Если бы summarize_attachment вызвался, он «съел» бы единственный
+        мок-ответ, analyze получил бы {"summary": ...} вместо CRM-JSON → ValueError.
+        """
+        note_name = f"Малый файл E2E {unique_id}"
+        note_resp = await crm_client.post(
+            "/crm/api/v1/entities/",
+            json={
+                "entity_type": "note",
+                "name": note_name,
+                "description": f"Короткая заметка {unique_id}.",
+                "namespace": "default",
+            },
+            headers=auth_headers_system,
+        )
+        assert note_resp.status_code in (200, 201), note_resp.text
+        note_id = note_resp.json()["entity_id"]
+
+        small_content = f"Встреча с Иваном {unique_id}. Обсудили проект."
+        files = {"file": ("small.txt", small_content.encode(), "text/plain")}
+        upload = await crm_client.post(
+            f"/crm/api/v1/entities/{note_id}/attachments",
+            files=files,
+            headers=auth_headers_system,
+        )
+        assert upload.status_code == 200, upload.text
+
+        await mock_llm_redis([
+            {"type": "text", "content": _analyze_llm_response(note_name=note_name)},
+        ])
+
+        resp = await crm_client.post(
+            f"/crm/api/v1/entities/notes/{note_id}/analyze",
+            json={},
+            headers=auth_headers_system,
+        )
+        assert resp.status_code == 200, resp.text
+        assert len(resp.json()["entities"]) >= 1
+
+    @pytest.mark.asyncio
+    async def test_large_attachment_summarized_then_analyzed(
+        self,
+        crm_client,
+        mock_llm_redis,
+        unique_id: str,
+        auth_headers_system: dict,
+    ) -> None:
+        """Большое вложение (> 40k символов): два LLM вызова — summarize, затем analyze.
+
+        Порядок мок-ответов строго кодирует ожидаемую последовательность.
+        Если порядок вызовов окажется другим, ни один ответ не пройдёт валидацию.
+        """
+        note_name = f"Большой файл E2E {unique_id}"
+        note_resp = await crm_client.post(
+            "/crm/api/v1/entities/",
+            json={
+                "entity_type": "note",
+                "name": note_name,
+                "description": f"Заметка с большим файлом {unique_id}.",
+                "namespace": "default",
+            },
+            headers=auth_headers_system,
+        )
+        assert note_resp.status_code in (200, 201), note_resp.text
+        note_id = note_resp.json()["entity_id"]
+
+        # 42 000 символов — превышает дефолтный порог 40 000
+        phrase = f"Иван Иванов из компании Рога и Копыта обсуждал проект {unique_id}. "
+        large_content = (phrase * (42_000 // len(phrase) + 1))[:42_000]
+        files = {"file": ("large_report.txt", large_content.encode(), "text/plain")}
+        upload = await crm_client.post(
+            f"/crm/api/v1/entities/{note_id}/attachments",
+            files=files,
+            headers=auth_headers_system,
+        )
+        assert upload.status_code == 200, upload.text
+
+        summary_text = f"Иван Иванов (Рога и Копыта) провёл встречу по проекту {unique_id}."
+        await mock_llm_redis([
+            # 1-й вызов: summarize_attachment
+            {"type": "text", "content": json.dumps({"summary": summary_text})},
+            # 2-й вызов: analyze
+            {"type": "text", "content": _analyze_llm_response(note_name=note_name)},
+        ])
+
+        resp = await crm_client.post(
+            f"/crm/api/v1/entities/notes/{note_id}/analyze",
+            json={},
+            headers=auth_headers_system,
+        )
+        assert resp.status_code == 200, resp.text
+        assert len(resp.json()["entities"]) >= 1
+
+    @pytest.mark.asyncio
+    async def test_attachment_chars_limit_per_file_configurable(
+        self,
+        crm_client,
+        mock_llm_redis,
+        unique_id: str,
+        auth_headers_system: dict,
+    ) -> None:
+        """attachment_chars_limit_per_file=5000 в теле запроса: файл 6k символов суммаризируется.
+
+        Доказывает, что параметр из NoteProcessingConfig доходит до resolve_note_text.
+        Дефолт — 40k, поэтому с дефолтом этот файл не суммаризировался бы.
+        """
+        note_name = f"Настраиваемый лимит {unique_id}"
+        note_resp = await crm_client.post(
+            "/crm/api/v1/entities/",
+            json={
+                "entity_type": "note",
+                "name": note_name,
+                "description": f"Тест кастомного лимита {unique_id}.",
+                "namespace": "default",
+            },
+            headers=auth_headers_system,
+        )
+        assert note_resp.status_code in (200, 201), note_resp.text
+        note_id = note_resp.json()["entity_id"]
+
+        # 6 000 символов — больше лимита 5 000, но меньше дефолта 40 000
+        phrase = f"Протокол совещания {unique_id}. Присутствовал Алексей Смирнов из ООО Ромашка. "
+        medium_content = (phrase * (6_000 // len(phrase) + 1))[:6_000]
+        files = {"file": ("medium.txt", medium_content.encode(), "text/plain")}
+        upload = await crm_client.post(
+            f"/crm/api/v1/entities/{note_id}/attachments",
+            files=files,
+            headers=auth_headers_system,
+        )
+        assert upload.status_code == 200, upload.text
+
+        await mock_llm_redis([
+            # 1-й вызов: summarize_attachment (6000 > 5000 → суммаризация)
+            {"type": "text", "content": json.dumps({"summary": f"Краткий протокол {unique_id}."})},
+            # 2-й вызов: analyze
+            {"type": "text", "content": _analyze_llm_response(note_name=note_name)},
+        ])
+
+        resp = await crm_client.post(
+            f"/crm/api/v1/entities/notes/{note_id}/analyze",
+            json={"attachment_chars_limit_per_file": 5_000},
+            headers=auth_headers_system,
+        )
+        assert resp.status_code == 200, resp.text
+        assert len(resp.json()["entities"]) >= 1
+
+    @pytest.mark.asyncio
+    async def test_include_attachments_false_single_llm_call(
+        self,
+        crm_client,
+        mock_llm_redis,
+        unique_id: str,
+        auth_headers_system: dict,
+    ) -> None:
+        """include_attachments=False: большой файл игнорируется — один LLM вызов (analyze).
+
+        Если файл был бы прочитан и суммаризирован, мок-очередь опустела бы раньше срока.
+        """
+        note_name = f"Без вложений в анализе {unique_id}"
+        note_resp = await crm_client.post(
+            "/crm/api/v1/entities/",
+            json={
+                "entity_type": "note",
+                "name": note_name,
+                "description": f"Анализируем только описание {unique_id}.",
+                "namespace": "default",
+            },
+            headers=auth_headers_system,
+        )
+        assert note_resp.status_code in (200, 201), note_resp.text
+        note_id = note_resp.json()["entity_id"]
+
+        phrase = f"Данные из файла {unique_id}. "
+        large_content = (phrase * (50_000 // len(phrase) + 1))[:50_000]
+        files = {"file": ("ignored.txt", large_content.encode(), "text/plain")}
+        upload = await crm_client.post(
+            f"/crm/api/v1/entities/{note_id}/attachments",
+            files=files,
+            headers=auth_headers_system,
+        )
+        assert upload.status_code == 200, upload.text
+
+        await mock_llm_redis([
+            {"type": "text", "content": _analyze_llm_response(note_name=note_name)},
+        ])
+
+        resp = await crm_client.post(
+            f"/crm/api/v1/entities/notes/{note_id}/analyze",
+            json={"include_attachments": False},
+            headers=auth_headers_system,
+        )
+        assert resp.status_code == 200, resp.text
+        assert len(resp.json()["entities"]) >= 1

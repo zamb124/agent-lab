@@ -904,6 +904,19 @@ export const SyncStore = {
     },
 
     /**
+     * Объединённый список для сайдбара: direct-каналы (всегда) + topic-каналы с фильтром по пространствам.
+     * Сортировка по свежести общая — все вместе.
+     * @returns {object[]}
+     */
+    getUnifiedSidebarChannelList() {
+        const all = baseStore.state.channels.list;
+        const visible = (c) => !isHiddenSyncChannelName(c.name);
+        const direct = all.filter(c => c.type === 'direct' && visible(c));
+        const topic = this.getChannelsForSidebarList();
+        return _sortChannelsByRecent([...direct, ...topic]);
+    },
+
+    /**
      * Личные + topic-каналы с учётом фильтра сайдбара (для сетки выбора канала).
      * @returns {object[]}
      */

@@ -25,26 +25,6 @@ export class SyncSidebar extends PlatformElement {
                 height: 100%;
             }
 
-            .section-title {
-                flex: 1;
-                min-width: 0;
-                font-size: var(--text-xs);
-                font-weight: var(--font-semibold);
-                text-transform: uppercase;
-                letter-spacing: 0.08em;
-                color: var(--text-tertiary);
-                padding: 0;
-                margin-bottom: 0;
-            }
-
-            .section-header {
-                display: flex;
-                align-items: center;
-                gap: var(--space-2);
-                padding: 0 var(--space-3);
-                margin-bottom: var(--space-2);
-            }
-
             .add-btn {
                 margin-left: auto;
                 display: inline-flex;
@@ -68,21 +48,28 @@ export class SyncSidebar extends PlatformElement {
                 color: var(--text-secondary);
             }
 
-            .space-filters-header {
+            .spaces-row {
                 display: flex;
+                flex-direction: row;
                 align-items: center;
-                justify-content: space-between;
                 gap: var(--space-2);
-                padding: 0 var(--space-3);
-                margin-bottom: var(--space-2);
+                padding: var(--space-2) var(--space-3);
+                border-top: 1px solid var(--glass-border-subtle);
+                flex-shrink: 0;
                 min-width: 0;
             }
 
-            .space-filters-header .section-title {
-                margin-bottom: 0;
+            .spaces-row-label {
+                font-size: var(--text-xs);
+                font-weight: var(--font-semibold);
+                text-transform: uppercase;
+                letter-spacing: 0.08em;
+                color: var(--text-tertiary);
+                flex-shrink: 0;
+                white-space: nowrap;
             }
 
-            .space-tags-scroll {
+            .spaces-chips-scroll {
                 display: flex;
                 flex-direction: row;
                 flex-wrap: nowrap;
@@ -90,24 +77,51 @@ export class SyncSidebar extends PlatformElement {
                 gap: var(--space-2);
                 overflow-x: auto;
                 overflow-y: hidden;
-                padding: 0 var(--space-3) var(--space-3);
-                margin: 0 0 var(--space-1);
-                scrollbar-width: thin;
+                flex: 1;
+                min-width: 0;
+                scrollbar-width: none;
                 -webkit-overflow-scrolling: touch;
             }
 
-            .space-tags-scroll::-webkit-scrollbar {
-                height: 6px;
+            .spaces-chips-scroll::-webkit-scrollbar {
+                display: none;
             }
 
-            .space-tags-scroll::-webkit-scrollbar-thumb {
-                background: var(--glass-border-medium);
-                border-radius: 3px;
-            }
-
-            .space-tags-empty {
-                padding-left: var(--space-3);
+            .spaces-filter-btn {
+                display: none;
                 flex-shrink: 0;
+                align-items: center;
+                justify-content: center;
+                width: 28px;
+                height: 28px;
+                padding: 0;
+                border: 1px solid var(--glass-border-subtle);
+                border-radius: var(--radius-md);
+                background: transparent;
+                color: var(--text-tertiary);
+                cursor: pointer;
+                transition: all var(--duration-fast);
+            }
+
+            .spaces-filter-btn.has-filter {
+                border-color: var(--accent);
+                color: var(--accent);
+                background: var(--sync-active-row-bg);
+            }
+
+            .spaces-filter-btn:hover {
+                background: var(--glass-solid-subtle);
+                color: var(--text-secondary);
+            }
+
+            @media (max-width: 767px) {
+                .spaces-filter-btn {
+                    display: inline-flex;
+                }
+
+                .space-chip-gear {
+                    display: none !important;
+                }
             }
 
             .space-chip {
@@ -170,21 +184,33 @@ export class SyncSidebar extends PlatformElement {
                 color: var(--accent);
             }
 
-            .section-header--static {
+            .unified-channels-header {
                 display: flex;
                 align-items: center;
                 gap: var(--space-2);
-                padding: 0 var(--space-3);
-                margin-bottom: var(--space-2);
-                cursor: default;
-                user-select: none;
-                box-sizing: border-box;
-                width: 100%;
+                padding: 0 var(--space-3) var(--space-2);
+                flex-shrink: 0;
             }
 
-            .section-header--static .section-title {
+            .channels-search {
                 flex: 1;
                 min-width: 0;
+                padding: 5px var(--space-2);
+                border-radius: var(--radius-lg);
+                border: 1px solid var(--glass-border-subtle);
+                background: var(--glass-solid-subtle);
+                color: var(--text-primary);
+                font-size: var(--text-xs);
+                font-family: inherit;
+                outline: none;
+            }
+
+            .channels-search:focus {
+                border-color: var(--accent);
+            }
+
+            .channels-search::placeholder {
+                color: var(--text-tertiary);
             }
 
             .sync-sidebar-inner {
@@ -195,17 +221,21 @@ export class SyncSidebar extends PlatformElement {
                 overflow: hidden;
             }
 
-            .channels-section:last-child {
+            .channels-section--unified {
                 flex: 1 1 0;
                 min-height: 0;
                 display: flex;
                 flex-direction: column;
                 overflow: hidden;
+                border-top: 1px solid var(--glass-border-subtle);
+                padding-top: var(--space-2);
             }
 
             .section-scroll--channels {
                 flex: 1 1 0;
                 min-height: 0;
+                overflow-y: auto;
+                padding-right: var(--space-1);
             }
 
             .nav-row-wrap {
@@ -257,10 +287,129 @@ export class SyncSidebar extends PlatformElement {
                 flex: 0 0 auto;
             }
 
-            .section-scroll {
-                max-height: 30vh;
+            .spaces-overlay {
+                position: fixed;
+                inset: 0;
+                z-index: 9999;
+                background: rgba(0, 0, 0, 0.35);
+                display: flex;
+                align-items: flex-end;
+                animation: overlay-in var(--duration-fast) ease;
+            }
+
+            @keyframes overlay-in {
+                from { opacity: 0; }
+                to { opacity: 1; }
+            }
+
+            .spaces-sheet {
+                width: 100%;
+                max-height: 70dvh;
+                border-radius: 16px 16px 0 0;
+                background: var(--bg-surface, var(--glass-solid-medium, #fff));
                 overflow-y: auto;
-                padding-right: var(--space-1);
+                -webkit-overflow-scrolling: touch;
+                box-shadow: 0 -4px 24px rgba(0, 0, 0, 0.15);
+                animation: sheet-in var(--duration-normal) var(--easing-default);
+            }
+
+            @keyframes sheet-in {
+                from { transform: translateY(100%); }
+                to { transform: translateY(0); }
+            }
+
+            .spaces-modal-header {
+                display: flex;
+                align-items: center;
+                justify-content: space-between;
+                padding: var(--space-4) var(--space-4) var(--space-3);
+                border-bottom: 1px solid var(--glass-border-subtle);
+                position: sticky;
+                top: 0;
+                background: var(--bg-surface, #ffffff);
+                z-index: 1;
+            }
+
+            .spaces-modal-title {
+                font-size: var(--text-sm);
+                font-weight: var(--font-semibold);
+                color: var(--text-primary);
+            }
+
+            .spaces-modal-done {
+                padding: var(--space-1) var(--space-3);
+                border: none;
+                border-radius: var(--radius-md);
+                background: var(--accent);
+                color: #fff;
+                font-size: var(--text-sm);
+                font-weight: var(--font-semibold);
+                cursor: pointer;
+                font-family: inherit;
+            }
+
+            .spaces-modal-list {
+                padding: var(--space-2) 0;
+            }
+
+            .spaces-modal-item {
+                display: flex;
+                align-items: center;
+                gap: var(--space-3);
+                padding: var(--space-3) var(--space-4);
+                cursor: pointer;
+            }
+
+            .spaces-modal-item:active {
+                background: var(--glass-solid-subtle);
+            }
+
+            .spaces-modal-item-name {
+                flex: 1;
+                min-width: 0;
+                font-size: var(--text-sm);
+                color: var(--text-primary);
+                overflow: hidden;
+                text-overflow: ellipsis;
+                white-space: nowrap;
+            }
+
+            .spaces-modal-item-check {
+                flex-shrink: 0;
+                width: 20px;
+                height: 20px;
+                border-radius: 50%;
+                border: 2px solid var(--glass-border-medium);
+                background: transparent;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                transition: all var(--duration-fast);
+            }
+
+            .spaces-modal-item-check.checked {
+                background: var(--accent);
+                border-color: var(--accent);
+            }
+
+            .spaces-modal-item-gear {
+                flex-shrink: 0;
+                display: inline-flex;
+                align-items: center;
+                justify-content: center;
+                width: 32px;
+                height: 32px;
+                border: none;
+                border-radius: var(--radius-md);
+                background: transparent;
+                color: var(--text-tertiary);
+                cursor: pointer;
+                transition: color var(--duration-fast), background var(--duration-fast);
+            }
+
+            .spaces-modal-item-gear:hover {
+                background: var(--glass-solid-medium);
+                color: var(--accent);
             }
 
             .loading-text {
@@ -318,30 +467,6 @@ export class SyncSidebar extends PlatformElement {
                 padding: var(--space-2);
             }
 
-            .channels-section {
-                border-top: 1px solid var(--glass-border-subtle);
-                padding-top: var(--space-3);
-                margin-top: var(--space-2);
-            }
-
-            .section-header--toggle {
-                cursor: pointer;
-                user-select: none;
-                width: 100%;
-                box-sizing: border-box;
-            }
-
-            .chevron-rot {
-                display: inline-flex;
-                align-items: center;
-                transition: transform var(--duration-fast);
-                flex-shrink: 0;
-            }
-
-            .chevron-rot.is-closed {
-                transform: rotate(-90deg);
-            }
-
             .sync-sidebar-footer {
                 display: flex;
                 flex-direction: column;
@@ -384,28 +509,6 @@ export class SyncSidebar extends PlatformElement {
                 padding: 0 var(--space-3) var(--space-2);
             }
 
-            .direct-search {
-                width: 100%;
-                box-sizing: border-box;
-                margin: 0 0 var(--space-2);
-                padding: var(--space-2) var(--space-3);
-                border-radius: var(--radius-lg);
-                border: 1px solid var(--glass-border-subtle);
-                background: var(--glass-solid-subtle);
-                color: var(--text-primary);
-                font-size: var(--text-xs);
-                font-family: inherit;
-                outline: none;
-            }
-
-            .direct-search:focus {
-                border-color: var(--accent);
-            }
-
-            .direct-search::placeholder {
-                color: var(--text-tertiary);
-            }
-
             .row-gear {
                 flex-shrink: 0;
                 display: inline-flex;
@@ -427,28 +530,25 @@ export class SyncSidebar extends PlatformElement {
                 color: var(--accent);
             }
 
-            platform-service-sidebar[collapsed] .sync-sidebar-inner .section-title,
-            platform-service-sidebar[collapsed] .sync-sidebar-inner .chevron-rot,
-            platform-service-sidebar[collapsed] .sync-sidebar-inner .direct-search,
             platform-service-sidebar[collapsed] .sync-sidebar-inner .section-empty,
             platform-service-sidebar[collapsed] .sync-sidebar-inner .loading-text,
             platform-service-sidebar[collapsed] .sync-sidebar-inner .add-btn {
                 display: none !important;
             }
 
-            platform-service-sidebar[collapsed] .sync-sidebar-inner .section-header--toggle,
-            platform-service-sidebar[collapsed] .sync-sidebar-inner .section-header--static {
-                justify-content: center;
-                padding-left: var(--space-2);
-                padding-right: var(--space-2);
-            }
-
             platform-service-sidebar[collapsed] .sidebar-adhoc-row {
                 padding: 0 var(--space-2) var(--space-2);
             }
 
-            platform-service-sidebar[collapsed] .sync-sidebar-inner .space-filters-header,
-            platform-service-sidebar[collapsed] .sync-sidebar-inner .space-tags-scroll {
+            platform-service-sidebar[collapsed] .sync-sidebar-inner .spaces-row {
+                display: none !important;
+            }
+
+            platform-service-sidebar[collapsed] .sync-sidebar-inner .unified-channels-header {
+                display: none !important;
+            }
+
+            platform-service-sidebar[collapsed] .sync-sidebar-inner .channels-search {
                 display: none !important;
             }
 
@@ -461,15 +561,9 @@ export class SyncSidebar extends PlatformElement {
                 display: none !important;
             }
 
-            platform-service-sidebar[collapsed] .sync-sidebar-inner .channels-section {
+            platform-service-sidebar[collapsed] .sync-sidebar-inner .channels-section--unified {
                 border-top: none;
                 padding-top: var(--space-2);
-                margin-top: 0;
-            }
-
-            platform-service-sidebar[collapsed] .sync-sidebar-inner .section-scroll {
-                max-height: none;
-                padding-right: 0;
             }
 
             .call-join-btn {
@@ -483,9 +577,9 @@ export class SyncSidebar extends PlatformElement {
                 margin-right: var(--space-1);
                 box-sizing: border-box;
                 border-radius: var(--radius-md);
-                border: 1px solid rgba(22, 163, 74, 0.4);
-                background: rgba(22, 163, 74, 0.08);
-                color: #15803d;
+                border: 1px solid var(--success-border);
+                background: var(--success-bg);
+                color: var(--success);
                 font-size: var(--text-xs);
                 font-weight: var(--font-semibold);
                 flex-shrink: 0;
@@ -495,20 +589,19 @@ export class SyncSidebar extends PlatformElement {
             }
 
             .call-join-btn:hover {
-                background: rgba(22, 163, 74, 0.14);
-                border-color: rgba(21, 128, 61, 0.55);
-                color: #166534;
+                background: rgba(16, 185, 129, 0.2);
+                border-color: var(--success);
+                color: var(--success);
             }
 
             .nav-row-wrap.active .call-join-btn {
-                border-color: rgba(22, 163, 74, 0.55);
-                background: rgba(22, 163, 74, 0.12);
-                color: #14532d;
+                border-color: var(--success);
+                background: rgba(16, 185, 129, 0.16);
+                color: var(--success);
             }
 
             .call-join-btn platform-icon {
                 flex-shrink: 0;
-                opacity: 0.9;
             }
         `
     ];
@@ -520,10 +613,10 @@ export class SyncSidebar extends PlatformElement {
         _channels: { state: true },
         _companyMembers: { state: true },
         _chat: { state: true },
-        _sectionOpen: { state: true },
-        _directSearch: { state: true },
-        _typingPeersByChannel: { state: true },
         _sidebarSpaceFilterIds: { state: true },
+        _channelSearch: { state: true },
+        _spacesModalOpen: { state: true },
+        _mobileSidebarOpen: { state: true },
     };
 
     constructor() {
@@ -534,10 +627,10 @@ export class SyncSidebar extends PlatformElement {
         this._channels = s.channels;
         this._companyMembers = s.companyMembers;
         this._chat = s.chat;
-        this._sectionOpen = s.ui.sidebarSectionOpen;
-        this._directSearch = '';
-        this._typingPeersByChannel = s.typingPeersByChannel ?? {};
         this._sidebarSpaceFilterIds = s.ui.sidebarSpaceFilterIds ?? [];
+        this._channelSearch = '';
+        this._spacesModalOpen = false;
+        this._mobileSidebarOpen = s.ui.mobileSidebarOpen ?? false;
         this._i18nUnsub = null;
     }
 
@@ -549,9 +642,8 @@ export class SyncSidebar extends PlatformElement {
             this._channels = state.channels;
             this._companyMembers = state.companyMembers;
             this._chat = state.chat;
-            this._sectionOpen = state.ui.sidebarSectionOpen;
-            this._typingPeersByChannel = state.typingPeersByChannel ?? {};
             this._sidebarSpaceFilterIds = state.ui.sidebarSpaceFilterIds ?? [];
+            this._mobileSidebarOpen = state.ui.mobileSidebarOpen ?? false;
         });
     }
 
@@ -579,67 +671,79 @@ export class SyncSidebar extends PlatformElement {
     }
 
     async _selectChannel(channel) {
-        const syncApi = this.services.get('syncApi');
-        await SyncStore.selectChannelAndLoadMessages(syncApi, channel.space_id, channel.id);
         if (window.innerWidth < 768) {
             SyncStore.setMobileSidebarOpen(false);
         }
+        const syncApi = this.services.get('syncApi');
+        await SyncStore.selectChannelAndLoadMessages(syncApi, channel.space_id, channel.id);
     }
 
     async _openDirectWithMember(member) {
+        if (window.innerWidth < 768) {
+            SyncStore.setMobileSidebarOpen(false);
+        }
         try {
             const syncApi = this.services.get('syncApi');
             const existing = SyncStore.findDirectChannelForPeer(member.user_id);
             if (existing) {
-                await this._selectChannel(existing);
+                await SyncStore.selectChannelAndLoadMessages(syncApi, null, existing.id);
                 return;
             }
             const created = await syncApi.createDirectChannel(member.user_id);
             await SyncStore.loadChannels(syncApi);
             SyncStore.sanitizeChatSelectionAfterLoad();
             await SyncStore.selectChannelAndLoadMessages(syncApi, null, created.id);
-            if (window.innerWidth < 768) {
-                SyncStore.setMobileSidebarOpen(false);
-            }
         } catch (err) {
             const text = err instanceof Error ? err.message : String(err);
             this.error(text);
         }
     }
 
-    _filteredCompanyMembers() {
-        const list = this._companyMembers.list;
-        const q = this._directSearch.trim().toLowerCase();
-        if (!q) {
-            return list;
-        }
-        return list.filter((m) => {
-            const name = typeof m.name === 'string' ? m.name.toLowerCase() : '';
-            const id = typeof m.user_id === 'string' ? m.user_id.toLowerCase() : '';
-            return name.includes(q) || id.includes(q);
-        });
+    _openSpacesModal() {
+        this._spacesModalOpen = true;
     }
 
-    _isDirectRowActive(member, selectedChannelId) {
-        const ch = SyncStore.findDirectChannelForPeer(member.user_id);
-        return ch !== null && ch.id === selectedChannelId;
+    _closeSpacesModal() {
+        this._spacesModalOpen = false;
     }
 
     render() {
         const ts = (key, params) => this.i18n.t(key, params ?? {});
         const { selectedChannelId } = this._chat;
-        const sec = this._sectionOpen || { direct: true, spaces: true, channels: true };
-        const sidebarChannels = SyncStore.getChannelsForSidebarList();
         const filterIds = this._sidebarSpaceFilterIds;
         const hasActiveFilter = Array.isArray(filterIds) && filterIds.length > 0;
-        const memberRows = this._filteredCompanyMembers();
         const spaceList = this._spaces.list;
+        const q = this._channelSearch.trim().toLowerCase();
+
+        const allChannels = SyncStore.getUnifiedSidebarChannelList();
+        const filteredChannels = q
+            ? allChannels.filter(c => {
+                const title = (SyncStore.channelDisplayTitle(c) ?? '').toLowerCase();
+                return title.includes(q);
+            })
+            : allChannels;
+
+        const existingPeerIds = new Set(
+            allChannels
+                .filter(c => c.type === 'direct' && c.peer?.user_id)
+                .map(c => c.peer.user_id),
+        );
+        const allMembers = this._companyMembers?.list ?? [];
+        const membersWithoutDm = allMembers.filter(m => !existingPeerIds.has(m.user_id));
+        const filteredMembersWithoutDm = q
+            ? membersWithoutDm.filter(m => {
+                const name = (typeof m.name === 'string' ? m.name : '').toLowerCase();
+                const id = (typeof m.user_id === 'string' ? m.user_id : '').toLowerCase();
+                return name.includes(q) || id.includes(q);
+            })
+            : membersWithoutDm;
 
         return html`
             <platform-service-sidebar
                 logo-src="/static/core/assets/service_logos/sync_logo.svg"
                 logo-text="Sync Chat"
                 ?collapsed=${this.collapsed}
+                ?mobile-open=${this._mobileSidebarOpen}
                 @collapse-change=${(e) => {
                     this.collapsed = e.detail.collapsed;
                 }}
@@ -662,66 +766,13 @@ export class SyncSidebar extends PlatformElement {
                             <span class="sidebar-adhoc-label">${ts('sidebar.create_sync_label')}</span>
                         </button>
                     </div>
-                    <div class="channels-section">
-                        <div
-                            class="section-header section-header--toggle"
-                            @click=${() => SyncStore.setSidebarSectionOpen('direct', !sec.direct)}
-                        >
-                            <span class="chevron-rot ${sec.direct ? '' : 'is-closed'}">
-                                <platform-icon name="chevron-down" size="14"></platform-icon>
-                            </span>
-                            <platform-icon name="user" size="16"></platform-icon>
-                            <span class="section-title">${ts('sidebar.direct_section')}</span>
-                        </div>
-                        ${sec.direct ? html`
-                            <input
-                                type="search"
-                                class="direct-search"
-                                placeholder=${ts('sidebar.direct_search_placeholder')}
-                                aria-label=${ts('sidebar.direct_search_aria')}
-                                .value=${this._directSearch}
-                                @input=${(e) => { this._directSearch = e.target.value; }}
-                                @click=${(e) => e.stopPropagation()}
-                            />
-                            <div class="section-scroll">
-                                ${this._companyMembers.loading
-                                    ? html`<div class="loading-text">${ts('sidebar.loading')}</div>`
-                                    : ''}
-                                ${!this._companyMembers.loading && memberRows.length === 0
-                                    ? html`<div class="section-empty">${ts('sidebar.direct_empty')}</div>`
-                                    : ''}
-                                ${memberRows.map((member) => html`
-                                    <sync-direct-member-row
-                                        .member=${member}
-                                        .active=${this._isDirectRowActive(member, selectedChannelId)}
-                                        .iconOnly=${this.collapsed}
-                                        @click=${() => this._openDirectWithMember(member)}
-                                    ></sync-direct-member-row>
-                                `)}
-                            </div>
-                        ` : ''}
-                    </div>
 
-                    <div class="channels-section">
-                        <div class="space-filters-header">
-                            <span class="section-title">${ts('sidebar.spaces_section')}</span>
-                            <button
-                                type="button"
-                                class="add-btn"
-                                title=${ts('sidebar.create_space_title')}
-                                aria-label=${ts('sidebar.create_space_aria')}
-                                @click=${() => SyncStore.openSpaceSettingsCreate()}
-                            >+</button>
-                        </div>
-                        <div class="space-tags-scroll">
+                    <div class="spaces-row">
+                        <span class="spaces-row-label">${ts('sidebar.spaces_section')}</span>
+                        <div class="spaces-chips-scroll">
                             ${this._spaces.loading ? html`<div class="loading-text">${ts('sidebar.loading')}</div>` : ''}
-                            ${!this._spaces.loading && spaceList.length === 0
-                                ? html`<div class="section-empty space-tags-empty">${ts('sidebar.spaces_empty')}</div>`
-                                : ''}
                             ${spaceList.map((space) => html`
-                                <div
-                                    class="space-chip ${filterIds.includes(space.id) ? 'active' : ''}"
-                                >
+                                <div class="space-chip ${filterIds.includes(space.id) ? 'active' : ''}">
                                     <button
                                         type="button"
                                         class="space-chip-main"
@@ -742,41 +793,58 @@ export class SyncSidebar extends PlatformElement {
                                 </div>
                             `)}
                         </div>
+                        <button
+                            type="button"
+                            class="spaces-filter-btn ${hasActiveFilter ? 'has-filter' : ''}"
+                            title=${ts('sidebar.spaces_section')}
+                            aria-label=${ts('sidebar.spaces_section')}
+                            @click=${this._openSpacesModal}
+                        >
+                            <platform-icon name="filter" size="14"></platform-icon>
+                        </button>
+                        <button
+                            type="button"
+                            class="add-btn"
+                            title=${ts('sidebar.create_space_title')}
+                            aria-label=${ts('sidebar.create_space_aria')}
+                            @click=${() => SyncStore.openSpaceSettingsCreate()}
+                        >+</button>
                     </div>
 
-                    <div class="channels-section">
-                        <div class="section-header section-header--static">
-                            <platform-icon name="chat" size="16"></platform-icon>
-                            <span class="section-title">${ts('sidebar.channels_section')}</span>
-                            ${spaceList.length > 0
-        ? html`
-                            <button
-                                type="button"
-                                class="add-btn"
-                                title=${ts('sidebar.create_channel_title')}
-                                aria-label=${ts('sidebar.create_channel_aria')}
-                                style="margin-left:auto"
-                                @click=${() => this._openChannelCreate()}
-                            >+</button>
-                            `
-        : ''}
+                    <div class="channels-section--unified">
+                        <div class="unified-channels-header">
+                            <input
+                                type="search"
+                                class="channels-search"
+                                placeholder=${ts('sidebar.direct_search_placeholder')}
+                                aria-label=${ts('sidebar.direct_search_aria')}
+                                .value=${this._channelSearch}
+                                @input=${(e) => { this._channelSearch = e.target.value; }}
+                            />
+                            ${spaceList.length > 0 ? html`
+                                <button
+                                    type="button"
+                                    class="add-btn"
+                                    title=${ts('sidebar.create_channel_title')}
+                                    aria-label=${ts('sidebar.create_channel_aria')}
+                                    @click=${() => this._openChannelCreate()}
+                                >+</button>
+                            ` : ''}
                         </div>
-                        <div class="section-scroll section-scroll--channels">
+                        <div class="section-scroll--channels">
                             ${this._channels.loading ? html`<div class="loading-text">${ts('sidebar.loading')}</div>` : ''}
                             ${!this._channels.loading && spaceList.length === 0
                                 ? html`<div class="section-empty">${ts('sidebar.create_space_first')}</div>`
                                 : ''}
-                            ${!this._channels.loading && spaceList.length > 0 && sidebarChannels.length === 0
-                                ? html`<div class="section-empty">${hasActiveFilter
+                            ${!this._channels.loading && spaceList.length > 0 && filteredChannels.length === 0 && filteredMembersWithoutDm.length === 0
+                                ? html`<div class="section-empty">${hasActiveFilter || q
                                     ? ts('sidebar.no_channels_filtered')
                                     : ts('sidebar.no_channels_yet')}</div>`
                                 : ''}
-                            ${sidebarChannels.map((channel) => {
-                                    const showGear = channel.type !== 'direct';
-                                    return html`
-                                    <div
-                                        class="nav-row-wrap ${channel.id === selectedChannelId ? 'active' : ''}"
-                                    >
+                            ${filteredChannels.map((channel) => {
+                                const showGear = channel.type !== 'direct';
+                                return html`
+                                    <div class="nav-row-wrap ${channel.id === selectedChannelId ? 'active' : ''}">
                                         <sync-channel-row
                                             in-nav-wrap
                                             .channel=${channel}
@@ -817,7 +885,15 @@ export class SyncSidebar extends PlatformElement {
                                         ` : ''}
                                     </div>
                                 `;
-                                })}
+                            })}
+                            ${filteredMembersWithoutDm.map((member) => html`
+                                <sync-direct-member-row
+                                    .member=${member}
+                                    .active=${false}
+                                    .iconOnly=${this.collapsed}
+                                    @click=${() => this._openDirectWithMember(member)}
+                                ></sync-direct-member-row>
+                            `)}
                         </div>
                     </div>
                 </div>
@@ -831,6 +907,46 @@ export class SyncSidebar extends PlatformElement {
                     <platform-deployment-version base-url="/sync" footer></platform-deployment-version>
                 </div>
             </platform-service-sidebar>
+
+            ${this._spacesModalOpen ? html`
+                <div class="spaces-overlay" @click=${this._closeSpacesModal}>
+                    <div class="spaces-sheet" @click=${(e) => e.stopPropagation()}>
+                        <div class="spaces-modal-header">
+                            <span class="spaces-modal-title">${ts('sidebar.spaces_section')}</span>
+                            <button
+                                type="button"
+                                class="spaces-modal-done"
+                                @click=${this._closeSpacesModal}
+                            >${ts('sidebar.spaces_modal_done')}</button>
+                        </div>
+                        <div class="spaces-modal-list">
+                            ${spaceList.map((space) => html`
+                                <div class="spaces-modal-item" @click=${() => SyncStore.toggleSidebarSpaceFilter(space.id)}>
+                                    <div class="spaces-modal-item-check ${filterIds.includes(space.id) ? 'checked' : ''}">
+                                        ${filterIds.includes(space.id) ? html`
+                                            <platform-icon name="check" size="12" style="color:#fff"></platform-icon>
+                                        ` : ''}
+                                    </div>
+                                    <span class="spaces-modal-item-name">${space.name}</span>
+                                    <button
+                                        type="button"
+                                        class="spaces-modal-item-gear"
+                                        title=${ts('sidebar.space_settings_title')}
+                                        aria-label=${ts('sidebar.space_settings_aria')}
+                                        @click=${(e) => {
+                                            e.stopPropagation();
+                                            this._closeSpacesModal();
+                                            SyncStore.openSpaceSettings(space.id);
+                                        }}
+                                    >
+                                        <platform-icon name="settings" size="16"></platform-icon>
+                                    </button>
+                                </div>
+                            `)}
+                        </div>
+                    </div>
+                </div>
+            ` : ''}
         `;
     }
 }

@@ -665,6 +665,7 @@ export class EntitiesPage extends PlatformElement {
                 border-radius: 8px;
                 overflow: hidden;
                 margin-bottom: 4px;
+                cursor: help;
             }
             .score-bar {
                 position: absolute;
@@ -1835,10 +1836,25 @@ export class EntitiesPage extends PlatformElement {
                         : ''}
                 </div>
                 ${entity.score != null ? html`
-                    <div class="card-score">
+                    <div class="card-score" title="${(() => {
+                        const modeTitle = {
+                            semantic: this.i18n.t('search.score_title_semantic'),
+                            text: this.i18n.t('search.score_title_text'),
+                            hybrid: this.i18n.t('search.score_title_hybrid'),
+                        }[this._searchMode] ?? '';
+                        if (this._searchMode === 'hybrid' && entity.match_type) {
+                            const foundBy = {
+                                text: this.i18n.t('search.found_by_text'),
+                                semantic: this.i18n.t('search.found_by_semantic'),
+                                hybrid: this.i18n.t('search.found_by_both'),
+                            }[entity.match_type] ?? '';
+                            return foundBy ? `${modeTitle}\n${foundBy}` : modeTitle;
+                        }
+                        return modeTitle;
+                    })()}">
                         <div class="score-bar" style="width: ${Math.round(entity.score * 100)}%"></div>
                         <span class="score-label">${(entity.score * 100).toFixed(0)}%</span>
-                        ${entity.match_type ? html`<span class="match-type-badge">${entity.match_type}</span>` : ''}
+                        <span class="match-type-badge">${this._searchMode}</span>
                     </div>
                 ` : ''}
                 ${entity.description ? html`

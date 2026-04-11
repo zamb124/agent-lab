@@ -580,6 +580,14 @@ class NoteProcessingConfig(BaseModel):
         default=True,
         description="Включать текст из attachment_ids заметки",
     )
+    attachment_chars_limit_per_file: int = Field(
+        default=40_000,
+        ge=5_000,
+        description=(
+            "Порог символов для текста одного вложения. "
+            "Если текст файла превышает значение — он суммаризируется LLM перед анализом."
+        ),
+    )
 
 
 class NoteProcessingResult(BaseModel):

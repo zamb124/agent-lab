@@ -2519,6 +2519,30 @@ class EntityService:
         )
         return self._extract_data_from_a2a_response(response)
 
+    async def call_summarize_attachment(self, text: str, filename: str) -> str:
+        """Суммаризировать текст вложения до компактного резюме через CRM flows skill."""
+        company_id = self._get_company_id()
+        settings = get_settings()
+        flows_base = settings.server.get_flows_service_url().rstrip("/")
+        variables = {
+            **_crm_llm_interface_language_vars(),
+            "text": text,
+            "filename": filename,
+        }
+        response = await self._a2a_client.send_task(
+            base_url=f"{flows_base}/flows/api/v1/crm",
+            content="Summarize attachment",
+            skill_id="summarize_attachment",
+            metadata={"variables": variables, "company_id": company_id},
+        )
+        data = self._extract_data_from_a2a_response(response)
+        summary = data.get("summary", "")
+        if not isinstance(summary, str):
+            raise ValueError(
+                f"summarize_attachment вернул некорректный тип summary: {type(summary)}"
+            )
+        return summary
+
     async def _persist_daily_summary_state(
         self,
         *,

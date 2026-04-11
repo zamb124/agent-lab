@@ -4,6 +4,7 @@ import { CRMStore } from '../store/crm.store.js';
 import { getUserMediaCompat, hasGetUserMediaApi, pickVoiceMimeType } from '@platform/lib/utils/voice-recording.js';
 import '@platform/lib/components/platform-icon.js';
 import '@platform/lib/components/platform-date-picker.js';
+import '@platform/lib/components/glass-spinner.js';
 import '../modals/entity-modal.js';
 import '../modals/note-view-modal.js';
 import '../modals/ai-analysis-modal.js';
@@ -29,6 +30,10 @@ export class DailyNotesPage extends PlatformElement {
         _namespaceProbeValid: { state: true },
         _analyzingNoteId: { state: true },
         _voiceState: { state: true },
+        _searchMode: { state: true },
+        _searchResults: { state: true },
+        _searchLoading: { state: true },
+        _debounceTimer: { state: true },
     };
 
     static styles = [
@@ -63,6 +68,30 @@ export class DailyNotesPage extends PlatformElement {
                 min-width: 0;
                 min-height: 0;
                 overflow: hidden;
+                position: relative;
+            }
+
+            .main-column.busy .cards-scroll {
+                filter: saturate(0.92);
+                opacity: 0.6;
+                pointer-events: none;
+                transition: filter 0.2s ease, opacity 0.2s ease;
+            }
+
+            .list-overlay {
+                position: absolute;
+                inset: 0;
+                z-index: 6;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                pointer-events: none;
+                animation: list-overlay-in 0.2s ease;
+            }
+
+            @keyframes list-overlay-in {
+                from { opacity: 0; }
+                to { opacity: 1; }
             }
 
             .page-header {
@@ -831,6 +860,75 @@ export class DailyNotesPage extends PlatformElement {
                     to { transform: translateY(0); opacity: 1; }
                 }
             }
+
+            .search-mode-toggle {
+                display: flex;
+                gap: 0;
+                border: 1px solid var(--glass-border-subtle);
+                border-radius: var(--radius-md);
+                overflow: hidden;
+                flex-shrink: 0;
+            }
+            .search-mode-btn {
+                padding: 4px 10px;
+                font-size: var(--text-xs);
+                border: none;
+                background: transparent;
+                color: var(--text-secondary);
+                cursor: pointer;
+                transition: all var(--duration-fast);
+                white-space: nowrap;
+            }
+            .search-mode-btn:not(:last-child) {
+                border-right: 1px solid var(--glass-border-subtle);
+            }
+            .search-mode-btn.active {
+                background: var(--crm-selected-bg);
+                color: var(--crm-selected-text);
+                font-weight: 500;
+            }
+            .search-mode-btn:hover:not(.active) {
+                background: var(--glass-bg-subtle);
+            }
+
+            .card-score {
+                display: flex;
+                align-items: center;
+                gap: 6px;
+                height: 16px;
+                position: relative;
+                background: var(--glass-bg-subtle, rgba(255,255,255,0.06));
+                border-radius: 8px;
+                overflow: hidden;
+                margin-bottom: 6px;
+                cursor: help;
+            }
+            .score-bar {
+                position: absolute;
+                left: 0;
+                top: 0;
+                height: 100%;
+                background: linear-gradient(90deg, #3b82f6, #8b5cf6);
+                opacity: 0.25;
+                border-radius: 8px;
+            }
+            .score-label {
+                position: relative;
+                z-index: 1;
+                font-size: 10px;
+                font-weight: 600;
+                color: var(--text-secondary);
+                padding-left: 6px;
+            }
+            .match-type-badge {
+                position: relative;
+                z-index: 1;
+                font-size: 9px;
+                text-transform: uppercase;
+                color: var(--text-tertiary);
+                margin-left: auto;
+                padding-right: 6px;
+            }
         `,
     ];
 
@@ -856,6 +954,10 @@ export class DailyNotesPage extends PlatformElement {
         this._namespaceProbeValid = false;
         this._analyzingNoteId = null;
         this._voiceState = 'idle';
+        this._searchMode = 'hybrid';
+        this._searchResults = [];
+        this._searchLoading = false;
+        this._debounceTimer = null;
         this._mediaRecorder = null;
         this._audioChunks = [];
         this._unsubscribe = null;
@@ -1131,7 +1233,30 @@ export class DailyNotesPage extends PlatformElement {
     _onSearchInput(event) {
         this._query = event.target.value;
         CRMStore.setNotesPageSearchQuery(this._query);
-        this._loadVisibleNoteEntities();
+        if (this._debounceTimer) clearTimeout(this._debounceTimer);
+        if (!this._query.trim()) {
+            this._searchResults = [];
+            this._loadVisibleNoteEntities();
+            return;
+        }
+        this._debounceTimer = setTimeout(() => this._doSearch(), 300);
+    }
+
+    async _doSearch() {
+        const crmApi = this.services.get('crmApi');
+        this._searchLoading = true;
+        const result = await crmApi.searchEntities(this._query.trim(), {
+            entity_type: 'note',
+            search_mode: this._searchMode,
+            limit: 50,
+        });
+        this._searchResults = Array.isArray(result?.items) ? result.items : [];
+        this._searchLoading = false;
+    }
+
+    _onSearchModeChange(mode) {
+        this._searchMode = mode;
+        if (this._query.trim()) this._doSearch();
     }
 
     async _onDateRangeChange(event) {
@@ -1425,19 +1550,11 @@ export class DailyNotesPage extends PlatformElement {
     }
 
     _getFilteredNotes() {
-        const normalizedQuery = this._query.trim().toLowerCase();
+        if (this._query.trim()) {
+            return this._searchResults;
+        }
         const leavingSet = new Set(this._notesLeavingIds);
-        return this._notes.filter((note) => {
-            if (leavingSet.has(note.entity_id)) {
-                return true;
-            }
-            if (!normalizedQuery) {
-                return true;
-            }
-            const inTitle = typeof note.name === 'string' && note.name.toLowerCase().includes(normalizedQuery);
-            const inDescription = typeof note.description === 'string' && note.description.toLowerCase().includes(normalizedQuery);
-            return inTitle || inDescription;
-        });
+        return this._notes.filter((note) => !leavingSet.has(note.entity_id));
     }
 
     _getSummaryChipTone(index) {
@@ -1768,6 +1885,17 @@ export class DailyNotesPage extends PlatformElement {
                         .value=${this._query}
                         @input=${this._onSearchInput}
                     />
+                    ${this._query.trim() ? html`
+                        <div class="search-mode-toggle" @click=${(e) => e.preventDefault()}>
+                            ${['text', 'semantic', 'hybrid'].map(mode => html`
+                                <button
+                                    type="button"
+                                    class="search-mode-btn ${this._searchMode === mode ? 'active' : ''}"
+                                    @click=${(e) => { e.preventDefault(); this._onSearchModeChange(mode); }}
+                                >${this.i18n.t(`entities.search_modes.${mode}`)}</button>
+                            `)}
+                        </div>
+                    ` : ''}
                 </label>
                 <div class="toolbar-actions">
                     <platform-date-picker
@@ -1793,7 +1921,12 @@ export class DailyNotesPage extends PlatformElement {
             </div>
 
             <div class="layout">
-                <section class="main-column">
+                <section class="main-column ${this._searchLoading ? 'busy' : ''}">
+                    ${this._searchLoading ? html`
+                        <div class="list-overlay">
+                            <glass-spinner size="lg"></glass-spinner>
+                        </div>
+                    ` : ''}
                     <div class="cards-scroll">
                         ${filteredNotes.length === 0 ? html`
                             <div class="empty ${this._namespaceProbeValid && !this._namespaceHasAnyEntity ? 'empty-import' : ''}">
@@ -1835,6 +1968,28 @@ export class DailyNotesPage extends PlatformElement {
                                                 </div>
                                             `;
                                         })()}
+                                        ${note.score != null ? html`
+                                            <div class="card-score" title="${(() => {
+                                                const modeTitle = {
+                                                    semantic: this.i18n.t('search.score_title_semantic'),
+                                                    text: this.i18n.t('search.score_title_text'),
+                                                    hybrid: this.i18n.t('search.score_title_hybrid'),
+                                                }[this._searchMode] ?? '';
+                                                if (this._searchMode === 'hybrid' && note.match_type) {
+                                                    const foundBy = {
+                                                        text: this.i18n.t('search.found_by_text'),
+                                                        semantic: this.i18n.t('search.found_by_semantic'),
+                                                        hybrid: this.i18n.t('search.found_by_both'),
+                                                    }[note.match_type] ?? '';
+                                                    return foundBy ? `${modeTitle}\n${foundBy}` : modeTitle;
+                                                }
+                                                return modeTitle;
+                                            })()}">
+                                                <div class="score-bar" style="width: ${Math.round(note.score * 100)}%"></div>
+                                                <span class="score-label">${(note.score * 100).toFixed(0)}%</span>
+                                                <span class="match-type-badge">${this._searchMode}</span>
+                                            </div>
+                                        ` : ''}
                                         <h3 class="note-title">${note.name}</h3>
                                         ${this._getNoteSubtypeLabel(note).length > 0 ? html`
                                             <p class="published-at">${this._getNoteSubtypeLabel(note)}</p>

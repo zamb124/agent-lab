@@ -21,6 +21,7 @@ export class NoteViewModal extends PlatformModal {
         _relationshipTypes: { state: true },
         _attachments: { state: true },
         _storeAnalyzingNoteId: { state: true },
+        _pendingAttachmentFiles: { state: true },
         _processingAttachment: { state: true },
         _processingRelationship: { state: true },
         _deleting: { state: true },
@@ -85,6 +86,7 @@ export class NoteViewModal extends PlatformModal {
         this._relationshipTypes = [];
         this._attachments = [];
         this._storeAnalyzingNoteId = null;
+        this._pendingAttachmentFiles = [];
         this._processingAttachment = false;
         this._processingRelationship = false;
         this._deleting = false;
@@ -377,7 +379,12 @@ export class NoteViewModal extends PlatformModal {
             throw new Error('Attachment file is required');
         }
         if (this.draftMode) {
-            throw new Error('Attachment upload is not available in draft mode');
+            const pendingId = `pending-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+            this._pendingAttachmentFiles = [
+                ...this._pendingAttachmentFiles,
+                { file, _pendingId: pendingId, filename: file.name, content_type: file.type },
+            ];
+            return;
         }
         if (!this.note || typeof this.note !== 'object' || typeof this.note.entity_id !== 'string') {
             throw new Error('Note entity_id is required');
@@ -408,8 +415,11 @@ export class NoteViewModal extends PlatformModal {
         if (!attachment || typeof attachment !== 'object') {
             throw new Error('Attachment payload is required');
         }
-        if (this.draftMode) {
-            throw new Error('Attachment delete is not available in draft mode');
+        if (typeof attachment._pendingId === 'string') {
+            this._pendingAttachmentFiles = this._pendingAttachmentFiles.filter(
+                (p) => p._pendingId !== attachment._pendingId,
+            );
+            return;
         }
         if (!this.note || typeof this.note !== 'object' || typeof this.note.entity_id !== 'string') {
             throw new Error('Note entity_id is required');
@@ -541,6 +551,10 @@ export class NoteViewModal extends PlatformModal {
                     });
                     this.note = createdNote;
                     this.draftMode = false;
+                    for (const pending of this._pendingAttachmentFiles) {
+                        await CRMStore.uploadEntityAttachment(crmApi, createdNote.entity_id, pending.file);
+                    }
+                    this._pendingAttachmentFiles = [];
                     this.dispatchEvent(new CustomEvent('note-created', {
                         detail: { noteId: createdNote.entity_id },
                         bubbles: true,
@@ -697,7 +711,7 @@ export class NoteViewModal extends PlatformModal {
                     .entityTypes=${this._entityTypes}
                     .noteSubtypes=${this._noteSubtypes}
                     .relationshipTypes=${this._relationshipTypes}
-                    .attachments=${this._attachments}
+                    .attachments=${[...this._attachments, ...this._pendingAttachmentFiles]}
                     .summaryText=${this._getNoteSummaryText()}
                     .summaryGeneratedAt=${this._getNoteSummaryGeneratedAt()}
                     .summaryEntities=${this._getNoteSummaryEntities()}

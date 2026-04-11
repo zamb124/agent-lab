@@ -20,9 +20,11 @@ function mulberry32(seed) {
 }
 
 /**
- * Случайно 3–5 строк слева (голубой оттенок) и 3–5 справа (зелёный), разные размеры пузырей.
- * Порядок: по очереди other, own, пока не исчерпаются квоты.
+ * Высоты пузырей кратны высоте строки (~24px) + padding (8px),
+ * чтобы скелетоны выглядели как реальные 1–3 строки текста.
  */
+const SKELETON_LINE_HEIGHTS = [36, 60, 84];
+
 function buildSkeletonPlan(seed) {
     const rnd = mulberry32(seed >>> 0);
     const nLeft = 3 + Math.floor(rnd() * 3);
@@ -34,16 +36,16 @@ function buildSkeletonPlan(seed) {
         if (left > 0) {
             rows.push({
                 side: 'other',
-                widthPct: 50 + Math.floor(rnd() * 36),
-                minH: 28 + Math.floor(rnd() * 36),
+                widthPct: 42 + Math.floor(rnd() * 40),
+                minH: SKELETON_LINE_HEIGHTS[Math.floor(rnd() * SKELETON_LINE_HEIGHTS.length)],
             });
             left -= 1;
         }
         if (right > 0) {
             rows.push({
                 side: 'own',
-                widthPct: 48 + Math.floor(rnd() * 38),
-                minH: 28 + Math.floor(rnd() * 36),
+                widthPct: 38 + Math.floor(rnd() * 42),
+                minH: SKELETON_LINE_HEIGHTS[Math.floor(rnd() * SKELETON_LINE_HEIGHTS.length)],
             });
             right -= 1;
         }
@@ -122,6 +124,7 @@ export class MessageList extends PlatformElement {
         _peerReadAtByChannel: { state: true },
         _selectedChannelType: { state: true },
         _skeletonPlan: { state: true },
+        _skeletonFading: { state: true },
         _hasMoreOlder: { state: true },
         _loadingOlder: { state: true },
         _activeCallOverlay: { state: true },
@@ -136,6 +139,30 @@ export class MessageList extends PlatformElement {
                 flex: 1 1 auto;
                 min-height: 0;
                 overflow: hidden;
+                position: relative;
+            }
+
+            @keyframes messages-enter {
+                from { opacity: 0; }
+                to   { opacity: 1; }
+            }
+
+            @keyframes skeleton-exit {
+                from { opacity: 1; }
+                to   { opacity: 0; }
+            }
+
+            .list.messages-entering {
+                animation: messages-enter 300ms ease forwards;
+            }
+
+            .skeleton-exit-overlay {
+                position: absolute;
+                inset: 0;
+                z-index: 2;
+                pointer-events: none;
+                overflow: hidden;
+                animation: skeleton-exit 280ms ease forwards;
             }
 
             /*
@@ -166,6 +193,13 @@ export class MessageList extends PlatformElement {
                 color: var(--text-secondary);
             }
 
+            .skeleton-list {
+                display: flex;
+                flex-direction: column;
+                gap: var(--space-3);
+                padding: var(--space-4) var(--space-3) var(--space-2);
+            }
+
             .skeleton-row {
                 display: flex;
                 align-items: flex-end;
@@ -180,6 +214,62 @@ export class MessageList extends PlatformElement {
                 justify-content: flex-end;
             }
 
+            .skeleton-row-inner {
+                display: flex;
+                flex-direction: column;
+                gap: 4px;
+                min-width: 0;
+            }
+
+            .skeleton-row.other .skeleton-row-inner {
+                align-items: flex-start;
+            }
+
+            .skeleton-row.own .skeleton-row-inner {
+                align-items: flex-end;
+            }
+
+            .skeleton-name {
+                height: 10px;
+                width: 72px;
+                border-radius: var(--radius-sm);
+                background-size: 200% 100%;
+                animation: skeleton-shimmer 1.35s ease-in-out infinite;
+                background: linear-gradient(
+                    90deg,
+                    rgba(96, 165, 250, 0.12) 0%,
+                    rgba(96, 165, 250, 0.24) 50%,
+                    rgba(96, 165, 250, 0.12) 100%
+                );
+            }
+
+            .skeleton-time {
+                height: 9px;
+                width: 36px;
+                border-radius: var(--radius-sm);
+                margin-top: 2px;
+                background-size: 200% 100%;
+                animation: skeleton-shimmer 1.35s ease-in-out infinite;
+            }
+
+            .skeleton-row.other .skeleton-time {
+                background: linear-gradient(
+                    90deg,
+                    rgba(96, 165, 250, 0.08) 0%,
+                    rgba(96, 165, 250, 0.18) 50%,
+                    rgba(96, 165, 250, 0.08) 100%
+                );
+            }
+
+            .skeleton-row.own .skeleton-time {
+                background: linear-gradient(
+                    90deg,
+                    rgba(153, 166, 249, 0.08) 0%,
+                    rgba(153, 166, 249, 0.18) 50%,
+                    rgba(153, 166, 249, 0.08) 100%
+                );
+            }
+
             .skeleton-avatar {
                 width: 32px;
                 height: 32px;
@@ -187,42 +277,59 @@ export class MessageList extends PlatformElement {
                 flex-shrink: 0;
                 background-size: 200% 100%;
                 animation: skeleton-shimmer 1.35s ease-in-out infinite;
-            }
-
-            .skeleton-avatar--other {
-                border: 1px solid rgba(56, 189, 248, 0.28);
+                border: 1px solid rgba(96, 165, 250, 0.22);
                 background: linear-gradient(
                     90deg,
-                    rgba(56, 189, 248, 0.1) 0%,
-                    rgba(56, 189, 248, 0.24) 50%,
-                    rgba(56, 189, 248, 0.1) 100%
+                    rgba(96, 165, 250, 0.10) 0%,
+                    rgba(96, 165, 250, 0.22) 50%,
+                    rgba(96, 165, 250, 0.10) 100%
                 );
             }
 
             .skeleton-bubble {
-                max-width: min(320px, 88%);
-                border-radius: var(--radius-lg);
+                max-width: min(320px, 85%);
+                border-radius: var(--sync-bubble-radius, var(--radius-md));
                 background-size: 200% 100%;
                 animation: skeleton-shimmer 1.35s ease-in-out infinite;
             }
 
             .skeleton-bubble--other {
-                border: 1px solid rgba(56, 189, 248, 0.32);
+                border: 1px solid rgba(96, 165, 250, 0.24);
                 background: linear-gradient(
                     90deg,
-                    rgba(56, 189, 248, 0.12) 0%,
-                    rgba(56, 189, 248, 0.28) 50%,
-                    rgba(56, 189, 248, 0.12) 100%
+                    rgba(147, 197, 253, 0.14) 0%,
+                    rgba(96, 165, 250, 0.28) 50%,
+                    rgba(147, 197, 253, 0.14) 100%
                 );
             }
 
             .skeleton-bubble--own {
-                border: 1px solid rgba(34, 197, 94, 0.32);
+                border: 1px solid rgba(153, 166, 249, 0.30);
                 background: linear-gradient(
                     90deg,
-                    rgba(34, 197, 94, 0.1) 0%,
-                    rgba(34, 197, 94, 0.26) 50%,
-                    rgba(34, 197, 94, 0.1) 100%
+                    rgba(153, 166, 249, 0.10) 0%,
+                    rgba(153, 166, 249, 0.26) 50%,
+                    rgba(153, 166, 249, 0.10) 100%
+                );
+            }
+
+            :host-context([data-theme="dark"]) .skeleton-bubble--other {
+                border-color: rgba(59, 130, 246, 0.22);
+                background: linear-gradient(
+                    90deg,
+                    rgba(219, 234, 254, 0.08) 0%,
+                    rgba(191, 219, 254, 0.18) 50%,
+                    rgba(219, 234, 254, 0.08) 100%
+                );
+            }
+
+            :host-context([data-theme="dark"]) .skeleton-bubble--own {
+                border-color: rgba(135, 148, 240, 0.25);
+                background: linear-gradient(
+                    90deg,
+                    rgba(153, 166, 249, 0.14) 0%,
+                    rgba(135, 148, 240, 0.28) 50%,
+                    rgba(153, 166, 249, 0.14) 100%
                 );
             }
 
@@ -278,6 +385,8 @@ export class MessageList extends PlatformElement {
         this._peerReadAtByChannel = {};
         this._selectedChannelType = null;
         this._skeletonPlan = [];
+        this._skeletonFading = false;
+        this._skeletonFadeTimer = null;
         this._wasLoading = false;
         this._hasMoreOlder = false;
         this._loadingOlder = false;
@@ -311,6 +420,37 @@ export class MessageList extends PlatformElement {
         });
     }
 
+    _renderSkeletonRows() {
+        const plan = this._skeletonPlan.length > 0
+            ? this._skeletonPlan
+            : buildSkeletonPlan(0x9e3779b9);
+        return plan.map((row, i) => {
+            const delay = `${i * 0.07}s`;
+            const bubbleClass = row.side === 'other'
+                ? 'skeleton-bubble skeleton-bubble--other'
+                : 'skeleton-bubble skeleton-bubble--own';
+            const avatar = row.side === 'other'
+                ? html`<div class="skeleton-avatar" style=${`animation-delay: ${delay}`}></div>`
+                : '';
+            const name = row.side === 'other'
+                ? html`<div class="skeleton-name" style=${`animation-delay: ${delay}; width: ${48 + (i % 3) * 20}px`}></div>`
+                : '';
+            return html`
+                <div class="skeleton-row ${row.side}">
+                    ${avatar}
+                    <div class="skeleton-row-inner">
+                        ${name}
+                        <div
+                            class=${bubbleClass}
+                            style=${`width: ${row.widthPct}%; min-height: ${row.minH}px; animation-delay: ${delay}`}
+                        ></div>
+                        <div class="skeleton-time" style=${`animation-delay: ${delay}`}></div>
+                    </div>
+                </div>
+            `;
+        });
+    }
+
     _regenerateSkeletonPlan() {
         const seed = (Date.now() ^ (Math.floor(Math.random() * 0x7fffffff) << 16)) >>> 0;
         this._skeletonPlan = buildSkeletonPlan(seed);
@@ -336,9 +476,16 @@ export class MessageList extends PlatformElement {
             const loading = state.messages.loading;
             if (loading && !this._wasLoading) {
                 this._regenerateSkeletonPlan();
+                this._skeletonFading = false;
+                clearTimeout(this._skeletonFadeTimer);
             }
-            if (!loading) {
-                this._skeletonPlan = [];
+            if (this._loading && !loading) {
+                this._skeletonFading = true;
+                clearTimeout(this._skeletonFadeTimer);
+                this._skeletonFadeTimer = setTimeout(() => {
+                    this._skeletonFading = false;
+                    this._skeletonPlan = [];
+                }, 320);
             }
             this._wasLoading = loading;
             this._loading = loading;
@@ -376,6 +523,7 @@ export class MessageList extends PlatformElement {
         this._i18nUnsub?.();
         this._i18nUnsub = null;
         this._unsubscribe?.();
+        clearTimeout(this._skeletonFadeTimer);
         window.removeEventListener(AppEvents.AUTH_CHANGE, this._onAuthChange);
         this._detachListResizeObserver();
     }
@@ -546,54 +694,13 @@ export class MessageList extends PlatformElement {
         }
     }
 
-    render() {
-        const filtered = this._messages.filter(m => {
-            if (this._focusedThreadId === null) return true;
-            return m.thread_id === this._focusedThreadId;
-        });
-
-        const items = buildListItems(filtered);
-        const peerReadAt = this._peerReadAtByChannel[this.channelId] ?? null;
-
-        if (this._loading) {
-            const plan = this._skeletonPlan.length > 0
-                ? this._skeletonPlan
-                : buildSkeletonPlan(0x9e3779b9);
-            return html`
-                <div class="list" @scroll=${this._onScroll} @scroll-to-message=${this._onScrollToMessage}>
-                    <div class="messages-loading-bar" aria-busy="true" aria-live="polite">
-                        <glass-spinner size="md"></glass-spinner>
-                        <span class="messages-loading-label">${this._tp('message_list.loading_messages')}</span>
-                    </div>
-                    <div class="skeleton-list" aria-hidden="true">
-                        ${plan.map((row, i) => {
-            const delay = `${i * 0.06}s`;
-            const bubbleClass = row.side === 'other'
-                ? 'skeleton-bubble skeleton-bubble--other'
-                : 'skeleton-bubble skeleton-bubble--own';
-            const avatar = row.side === 'other'
-                ? html`<div
-                                    class="skeleton-avatar skeleton-avatar--other"
-                                    style=${`animation-delay: ${delay}`}
-                                ></div>`
-                : '';
-            return html`
-                            <div class="skeleton-row ${row.side}">
-                                ${avatar}
-                                <div
-                                    class=${bubbleClass}
-                                    style=${`width: ${row.widthPct}%; min-height: ${row.minH}px; animation-delay: ${delay}`}
-                                ></div>
-                            </div>
-                        `;
-        })}
-                    </div>
-                </div>
-            `;
-        }
-
+    _renderMessages(filtered, items, peerReadAt, entering) {
         return html`
-            <div class="list" @scroll=${this._onScroll} @scroll-to-message=${this._onScrollToMessage}>
+            <div
+                class="list ${entering ? 'messages-entering' : ''}"
+                @scroll=${this._onScroll}
+                @scroll-to-message=${this._onScrollToMessage}
+            >
                 ${filtered.length === 0 ? html`<div class="empty-text">${this._tp('message_list.empty_messages')}</div>` : ''}
                 ${this._loadingOlder ? html`
                     <div class="messages-loading-bar" aria-live="polite">
@@ -638,6 +745,39 @@ export class MessageList extends PlatformElement {
                 })}
             </div>
         `;
+    }
+
+    render() {
+        const filtered = this._messages.filter(m => {
+            if (this._focusedThreadId === null) return true;
+            return m.thread_id === this._focusedThreadId;
+        });
+
+        const items = buildListItems(filtered);
+        const peerReadAt = this._peerReadAtByChannel[this.channelId] ?? null;
+
+        if (this._loading) {
+            return html`
+                <div class="list" aria-busy="true" aria-live="polite" @scroll=${this._onScroll} @scroll-to-message=${this._onScrollToMessage}>
+                    <div class="skeleton-list" aria-hidden="true">
+                        ${this._renderSkeletonRows()}
+                    </div>
+                </div>
+            `;
+        }
+
+        if (this._skeletonFading) {
+            return html`
+                ${this._renderMessages(filtered, items, peerReadAt, true)}
+                <div class="skeleton-exit-overlay" aria-hidden="true">
+                    <div class="skeleton-list">
+                        ${this._renderSkeletonRows()}
+                    </div>
+                </div>
+            `;
+        }
+
+        return this._renderMessages(filtered, items, peerReadAt, false);
     }
 }
 

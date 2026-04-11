@@ -17,7 +17,7 @@ from apps.crm.models.api import (
     NoteProcessingResult,
 )
 from apps.crm.services.entity_service import EntityService
-from apps.crm.services.file_text_reader import load_text_from_stored_file_id
+from apps.crm.services.file_text_reader import load_text_and_name_from_stored_file_id
 
 
 class NoteProcessingService:
@@ -29,8 +29,13 @@ class NoteProcessingService:
         note_id: str,
         *,
         include_attachments: bool = True,
+        attachment_chars_limit: int = 40_000,
     ) -> str:
-        """Собрать текст из description + текстового содержимого вложений."""
+        """Собрать текст из description + текстового содержимого вложений.
+
+        Если текст вложения превышает attachment_chars_limit символов,
+        он суммаризируется LLM перед добавлением в общий контекст.
+        """
         note = await self._entity_service.get_entity(note_id)
         if note is None:
             raise ValueError(f"Заметка не найдена: {note_id}")
@@ -43,8 +48,15 @@ class NoteProcessingService:
 
         if include_attachments and note.attachment_ids:
             for file_id in note.attachment_ids:
-                text = await load_text_from_stored_file_id(file_id)
+                text, filename = await load_text_and_name_from_stored_file_id(file_id)
                 stripped = text.strip()
+                if not stripped:
+                    continue
+                if len(stripped) > attachment_chars_limit:
+                    stripped = await self._entity_service.call_summarize_attachment(
+                        stripped, filename
+                    )
+                    stripped = stripped.strip()
                 if stripped:
                     parts.append(stripped)
 
@@ -66,6 +78,7 @@ class NoteProcessingService:
         text = await self.resolve_note_text(
             note_id,
             include_attachments=config.include_attachments,
+            attachment_chars_limit=config.attachment_chars_limit_per_file,
         )
         namespace = note.namespace or "default"
 

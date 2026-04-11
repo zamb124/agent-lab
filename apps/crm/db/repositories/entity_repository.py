@@ -591,7 +591,8 @@ class EntityRepository(BaseCRMRepository[CRMEntity]):
         Возвращает (entity, rrf_score, match_type).
         match_type: "text" | "semantic" | "hybrid" (найдено обоими).
         """
-        k = 60  # RRF константа
+        k = 60
+        rrf_max = 2.0 / (k + 1)  # теоретический максимум при ранге 1 в обоих списках
 
         fts_entities = await self.fts_search_ranked(
             query, entity_type, entity_subtype, namespace, filters, limit * 3, company_id,
@@ -631,7 +632,8 @@ class EntityRepository(BaseCRMRepository[CRMEntity]):
         results: List[Tuple[CRMEntity, float, str]] = []
         for eid, rrf_score, match_type in scored[:limit]:
             entity = entity_pool[eid]
-            results.append((entity, rrf_score, match_type))
+            normalized_score = min(1.0, rrf_score / rrf_max)
+            results.append((entity, normalized_score, match_type))
         return results
 
     async def fts_search_ranked(

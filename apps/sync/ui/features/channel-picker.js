@@ -18,7 +18,9 @@ export class ChannelPicker extends PlatformElement {
             :host {
                 display: block;
                 padding: var(--space-6);
-                flex: 1;
+                flex: 1 1 0;
+                min-height: 0;
+                overflow-y: auto;
             }
 
             .hint {

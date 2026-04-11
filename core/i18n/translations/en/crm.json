@@ -42,7 +42,13 @@
     },
     "back_to_dashboard": "Back to Dashboard",
     "search": {
-        "placeholder": "Search..."
+        "placeholder": "Search...",
+        "score_title_semantic": "Semantic similarity: cosine closeness to the query (0–100%)",
+        "score_title_text": "Full-text search: keyword relevance",
+        "score_title_hybrid": "Hybrid search: position across text and semantic results (100% = best match)",
+        "found_by_text": "found by: keyword search",
+        "found_by_semantic": "found by: semantic search",
+        "found_by_both": "found by: keyword and semantic search"
     },
     "filters": {
         "type": "Type",

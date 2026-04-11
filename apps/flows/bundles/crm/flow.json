@@ -117,6 +117,25 @@
       },
       "edges": []
     },
+    "summarize_attachment": {
+      "name": "Attachment Summarization",
+      "description": "Сжатие большого файла до фактов для CRM-анализа",
+      "nodes": {
+        "main": {
+          "type": "llm_node",
+          "prompt": "prompts/summarize_attachment.md",
+          "llm": {
+            "model": "qwen/qwen3.5-397b-a17b",
+            "temperature": 0.1
+          },
+          "tools": [],
+          "structured_output": true,
+          "output_schema_file": "schemas/summarize_attachment.output_schema.json",
+          "output_key": "response"
+        }
+      },
+      "edges": []
+    },
     "deduplicate": {
       "name": "Deduplicate Check",
       "description": "Сравнивает две сущности и определяет дубликат ли это",

@@ -2556,7 +2556,7 @@ export class NoteContent extends PlatformElement {
                                     type="button"
                                     title=${this.i18n.t('note_content.attach_add_title')}
                                     aria-label=${this.i18n.t('note_content.attach_aria', { count: String(attachments.length) })}
-                                    ?disabled=${this.draftMode || this.processingAttachment}
+                                    ?disabled=${this.processingAttachment}
                                     @click=${this._openFilePicker}
                                 >
                                     <platform-icon name="paperclip" size="20"></platform-icon>
@@ -2582,7 +2582,7 @@ export class NoteContent extends PlatformElement {
                                                 class="attach-dropdown-remove"
                                                 type="button"
                                                 title=${this.i18n.t('note_content.remove_file')}
-                                                ?disabled=${this.processingAttachment || this.draftMode}
+                                                ?disabled=${this.processingAttachment}
                                                 @click=${() => this._emitDeleteAttachment(attachment)}
                                             >
                                                 <platform-icon name="close" size="16"></platform-icon>

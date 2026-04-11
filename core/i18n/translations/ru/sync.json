@@ -14,6 +14,7 @@
     "create_space_title": "Создать пространство",
     "create_space_aria": "Создать пространство",
     "spaces_empty": "Нет пространств. Нажми +.",
+    "spaces_modal_done": "Готово",
     "space_settings_title": "Настройки пространства",
     "space_settings_aria": "Настройки пространства",
     "channels_section": "Каналы",

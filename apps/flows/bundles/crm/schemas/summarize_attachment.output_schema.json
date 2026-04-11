@@ -1,0 +1,10 @@
+{
+  "type": "object",
+  "properties": {
+    "summary": {
+      "type": "string",
+      "description": "Компактное резюме файла, сохраняющее все релевантные факты"
+    }
+  },
+  "required": ["summary"]
+}

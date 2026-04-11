@@ -7,15 +7,9 @@ from __future__ import annotations
 from core.files.reader.service import FileReader, _read_stored_file_by_id
 
 
-async def load_text_from_stored_file_id(file_id: str) -> str:
-    fid = str(file_id).strip()
-    if not fid:
-        raise ValueError("file_id пуст")
-    raw, name = await _read_stored_file_by_id(fid)
-    reader = FileReader()
-    result = await reader.read(raw, file_name=name)
+def _join_pages(pages: list) -> str:
     parts: list[str] = []
-    for page in result.pages:
+    for page in pages:
         chunk = (page.text or "").strip()
         if chunk:
             parts.append(chunk)
@@ -24,3 +18,25 @@ async def load_text_from_stored_file_id(file_id: str) -> str:
     if len(parts) == 1:
         return parts[0]
     return ""
+
+
+async def load_text_from_stored_file_id(file_id: str) -> str:
+    """Извлечь полный текст файла из shared storage по file_id."""
+    fid = str(file_id).strip()
+    if not fid:
+        raise ValueError("file_id пуст")
+    raw, name = await _read_stored_file_by_id(fid)
+    reader = FileReader()
+    result = await reader.read(raw, file_name=name)
+    return _join_pages(result.pages)
+
+
+async def load_text_and_name_from_stored_file_id(file_id: str) -> tuple[str, str]:
+    """Извлечь текст и оригинальное имя файла из shared storage по file_id."""
+    fid = str(file_id).strip()
+    if not fid:
+        raise ValueError("file_id пуст")
+    raw, name = await _read_stored_file_by_id(fid)
+    reader = FileReader()
+    result = await reader.read(raw, file_name=name)
+    return _join_pages(result.pages), name
