@@ -757,8 +757,8 @@ class CallOverlay extends PlatformElement {
             position: absolute;
             right: calc(100% + 8px);
             left: auto;
-            top: 0;
-            bottom: auto;
+            top: auto;
+            bottom: 0;
             min-width: 260px;
             padding: var(--space-2) 0;
             font-family: var(--font-sans);
@@ -841,9 +841,11 @@ class CallOverlay extends PlatformElement {
             width: 46px;
             height: 28px;
             border-radius: var(--radius-full);
-            background: rgba(255, 255, 255, 0.14);
-            box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.2);
-            transition: background var(--duration-fast) var(--easing-default);
+            background: rgba(255, 255, 255, 0.28);
+            border: 1.5px solid rgba(255, 255, 255, 0.18);
+            box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.25);
+            transition: background var(--duration-fast) var(--easing-default),
+                        border-color var(--duration-fast) var(--easing-default);
             justify-self: end;
             align-self: center;
         }
@@ -852,22 +854,25 @@ class CallOverlay extends PlatformElement {
             content: '';
             position: absolute;
             top: 3px;
-            left: 4px;
+            left: 3px;
             width: 22px;
             height: 22px;
             border-radius: 50%;
-            background: #fff;
-            box-shadow: 0 2px 6px rgba(0, 0, 0, 0.25);
-            transition: transform var(--duration-fast) var(--easing-default);
+            background: rgba(255, 255, 255, 0.65);
+            box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3);
+            transition: transform var(--duration-fast) var(--easing-default),
+                        background var(--duration-fast) var(--easing-default);
         }
 
         .call-menu-toggle:has(.call-switch-input:checked) .call-switch-visual {
             background: var(--accent);
+            border-color: transparent;
             box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.15), var(--accent-glow);
         }
 
         .call-menu-toggle:has(.call-switch-input:checked) .call-switch-visual::after {
-            transform: translateX(16px);
+            transform: translateX(18px);
+            background: #fff;
         }
 
         .call-menu-toggle:has(.call-switch-input:focus-visible) .call-switch-visual {
@@ -1129,7 +1134,7 @@ class CallOverlay extends PlatformElement {
             return;
         }
         const fs = this._getFullscreenElement();
-        if (fs && this.shadowRoot?.contains(fs)) {
+        if (fs && (fs === this || this.shadowRoot?.contains(fs))) {
             this._exitTileFullscreenIfOurs();
             e.preventDefault();
         }
@@ -1328,22 +1333,31 @@ class CallOverlay extends PlatformElement {
         const el = this._getFullscreenElement();
         if (!el) {
             this._fullscreenTileKey = null;
-        } else if (!this.shadowRoot?.contains(el)) {
-            this._fullscreenTileKey = null;
         } else {
-            let key = el.getAttribute?.('data-tile-key');
-            if (!key && typeof el.closest === 'function') {
-                const tile = el.closest('.participant-tile');
-                key = tile?.getAttribute('data-tile-key') ?? null;
+            // Chrome reports document.fullscreenElement as the shadow host when the
+            // fullscreen element lives inside a shadow root. Resolve the actual element
+            // via shadowRoot.fullscreenElement in that case.
+            let fsEl = el;
+            if (el === this && this.shadowRoot) {
+                fsEl = this.shadowRoot.fullscreenElement ?? null;
             }
-            this._fullscreenTileKey = key;
+            if (!fsEl || !this.shadowRoot?.contains(fsEl)) {
+                this._fullscreenTileKey = null;
+            } else {
+                let key = fsEl.getAttribute?.('data-tile-key');
+                if (!key && typeof fsEl.closest === 'function') {
+                    const tile = fsEl.closest('.participant-tile');
+                    key = tile?.getAttribute('data-tile-key') ?? null;
+                }
+                this._fullscreenTileKey = key;
+            }
         }
         this.requestUpdate();
     }
 
     _exitTileFullscreenIfOurs() {
         const el = this._getFullscreenElement();
-        if (el && this.shadowRoot?.contains(el)) {
+        if (el && (el === this || this.shadowRoot?.contains(el))) {
             const d = document;
             if (d.exitFullscreen) {
                 d.exitFullscreen();
@@ -1371,7 +1385,12 @@ class CallOverlay extends PlatformElement {
         const tileKey = tile.getAttribute('data-tile-key');
         const doc = document;
         const current = this._getFullscreenElement();
-        if (current && (current === tile || tile.contains(current))) {
+        const tileIsFullscreen = current && (
+            current === tile ||
+            tile.contains(current) ||
+            (current === this && this._fullscreenTileKey === tileKey)
+        );
+        if (tileIsFullscreen) {
             if (doc.exitFullscreen) doc.exitFullscreen();
             else if (doc.webkitExitFullscreen) doc.webkitExitFullscreen();
             else if (doc.mozCancelFullScreen) doc.mozCancelFullScreen();

@@ -203,6 +203,25 @@ data:
   default.conf: |
     server {
         listen 80;
+        # MIME типы для JS модулей — браузер отказывается исполнять .mjs с application/octet-stream
+        types {
+            text/html                             html htm shtml;
+            text/css                              css;
+            application/javascript                js mjs;
+            application/json                      json;
+            application/wasm                      wasm;
+            image/svg+xml                         svg svgz;
+            image/png                             png;
+            image/jpeg                            jpg jpeg;
+            image/gif                             gif;
+            image/webp                            webp;
+            image/x-icon                          ico;
+            font/woff                             woff;
+            font/woff2                            woff2;
+            font/ttf                              ttf;
+            font/otf                              otf;
+            application/octet-stream              bin exe;
+        }
         location = /api/i18n/ru {
             alias /srv/static/i18n/ru.json;
             default_type application/json;
@@ -306,7 +325,8 @@ spec:
     protocol: TCP
 EOF
 
-log "Ожидаем готовности static-server"
+log "Перезапускаем static-server (подхватывает новый ConfigMap с MIME типами)"
+${SSH} "microk8s kubectl rollout restart deployment/static-server -n default"
 ${SSH} "microk8s kubectl rollout status deployment/static-server -n default --timeout=60s"
 
 # Генерируем paths для ingress — статика идёт на static-server-svc, остальное на сервисы
