@@ -6,6 +6,7 @@ export class GraphSearchPill extends PlatformElement {
         query: { type: String },
         viewMode: { type: String, attribute: 'view-mode' },
         modes: { type: Array },
+        searchMode: { type: String, attribute: 'search-mode' },
     };
 
     static styles = [
@@ -103,6 +104,41 @@ export class GraphSearchPill extends PlatformElement {
                 color: var(--text-primary);
             }
 
+            .search-mode-toggle {
+                display: flex;
+                align-items: center;
+                gap: 2px;
+                pointer-events: auto;
+                background: var(--glass-solid-subtle);
+                border: 1px solid var(--glass-border-subtle);
+                border-radius: 999px;
+                padding: 2px;
+                backdrop-filter: blur(6px);
+            }
+
+            .search-mode-btn {
+                display: inline-flex;
+                align-items: center;
+                padding: 4px 9px;
+                border-radius: 999px;
+                border: none;
+                background: transparent;
+                color: var(--text-secondary);
+                font-size: 11px;
+                cursor: pointer;
+                transition: background 0.14s, color 0.14s;
+            }
+
+            .search-mode-btn:hover {
+                color: var(--text-primary);
+                background: var(--glass-solid-medium);
+            }
+
+            .search-mode-btn.active {
+                background: var(--accent-subtle);
+                color: var(--text-primary);
+            }
+
             @media (max-width: 1199px) {
                 .pill input {
                     width: 140px;
@@ -135,6 +171,7 @@ export class GraphSearchPill extends PlatformElement {
         this.query = '';
         this.viewMode = 'influence';
         this.modes = ['influence', 'related', 'path'];
+        this.searchMode = 'hybrid';
     }
 
     _onInput(e) {
@@ -145,6 +182,13 @@ export class GraphSearchPill extends PlatformElement {
         if (e.key === 'Escape') {
             this.emit('search-clear');
         }
+        if (e.key === 'Enter') {
+            this.emit('search-submit');
+        }
+    }
+
+    _onSearchModeChange(mode) {
+        this.emit('search-mode-change', { mode });
     }
 
     _onClear() {
@@ -179,6 +223,16 @@ export class GraphSearchPill extends PlatformElement {
                         <platform-icon name="refresh" size="16"></platform-icon>
                     </button>`
                 }
+            </div>
+            <div class="search-mode-toggle">
+                ${['text', 'semantic', 'hybrid'].map((mode) => html`
+                    <button
+                        class="search-mode-btn ${this.searchMode === mode ? 'active' : ''}"
+                        type="button"
+                        title=${this.i18n.t(`graph.search_mode_${mode}`)}
+                        @click=${() => this._onSearchModeChange(mode)}
+                    >${this.i18n.t(`entities.search_modes.${mode}`)}</button>
+                `)}
             </div>
             <div class="mode-pills">
                 ${this.modes.map((mode) => html`

@@ -1,5 +1,7 @@
 """
-Хелперы для тестов импорта базы знаний: загрузка файлов, ожидание воркера, откат.
+Хелперы для тестов: загрузка файлов, ожидание задач, откат.
+
+Задачи теперь трекируются через /crm/api/v1/tasks/*.
 """
 
 from __future__ import annotations
@@ -28,47 +30,87 @@ async def crm_upload_bytes(
     return file_id.strip()
 
 
-async def wait_knowledge_import_terminal(
+async def wait_task_terminal(
     crm_client: AsyncClient,
     headers: dict[str, Any],
-    import_id: str,
+    task_id: str,
     *,
-    timeout_sec: float = 20.0,
+    timeout_sec: float = 30.0,
     poll_sec: float = 0.35,
+    fail_on_failed: bool = True,
 ) -> dict[str, Any]:
+    """Ждём терминального статуса задачи через GET /tasks/{task_id}."""
     deadline = time.monotonic() + timeout_sec
     last: dict[str, Any] = {}
     while time.monotonic() < deadline:
         response = await crm_client.get(
-            f"/crm/api/v1/knowledge-imports/{import_id}",
+            f"/crm/api/v1/tasks/{task_id}",
             headers=headers,
         )
         if response.status_code != 200:
-            raise AssertionError(f"get import: {response.status_code} {response.text}")
+            raise AssertionError(f"GET task: {response.status_code} {response.text}")
         last = response.json()
         status = last.get("status")
-        if status in ("completed", "failed", "cancelled"):
-            if status == "failed":
+        if status in ("completed", "failed", "cancelled", "rolled_back"):
+            if fail_on_failed and status == "failed":
                 raise AssertionError(
-                    f"import failed: {last.get('error_message')} chunk_errors={last.get('chunk_errors')}"
+                    f"task failed: {last.get('error_message')}"
                 )
             return last
         await asyncio.sleep(poll_sec)
-    raise TimeoutError(f"knowledge import {import_id} не завершился: last={last}")
+    raise TimeoutError(f"task {task_id} не завершился за {timeout_sec}s: last={last}")
 
 
-async def rollback_knowledge_import(
+async def rollback_task(
     crm_client: AsyncClient,
     headers: dict[str, Any],
-    import_id: str,
+    task_id: str,
 ) -> dict[str, Any]:
     response = await crm_client.post(
-        f"/crm/api/v1/knowledge-imports/{import_id}/rollback",
+        f"/crm/api/v1/tasks/{task_id}/rollback",
         headers=headers,
     )
     if response.status_code != 200:
         raise AssertionError(f"rollback: {response.status_code} {response.text}")
     return response.json()
+
+
+async def start_analyze_and_wait(
+    crm_client: AsyncClient,
+    headers: dict[str, Any],
+    note_id: str,
+    *,
+    timeout_sec: float = 30.0,
+    fail_on_failed: bool = True,
+    **extra_params: Any,
+) -> tuple[dict[str, Any], dict[str, Any]]:
+    """Запускает анализ заметки и ждёт завершения.
+
+    Возвращает (task_row, ai_analysis_draft со стороны ноты).
+    """
+    body = {"note_id": note_id, **extra_params}
+    start_resp = await crm_client.post(
+        "/crm/api/v1/tasks/note-analyze",
+        json=body,
+        headers=headers,
+    )
+    if start_resp.status_code != 202:
+        raise AssertionError(f"start analyze: {start_resp.status_code} {start_resp.text}")
+    task_id = start_resp.json().get("task_id")
+    if not isinstance(task_id, str) or not task_id.strip():
+        raise AssertionError(f"нет task_id: {start_resp.json()}")
+
+    task = await wait_task_terminal(
+        crm_client, headers, task_id,
+        timeout_sec=timeout_sec,
+        fail_on_failed=fail_on_failed,
+    )
+
+    note_resp = await crm_client.get(f"/crm/api/v1/entities/{note_id}", headers=headers)
+    if note_resp.status_code != 200:
+        raise AssertionError(f"GET note: {note_resp.status_code} {note_resp.text}")
+    draft = note_resp.json().get("attributes", {}).get("ai_analysis_draft") or {}
+    return task, draft
 
 
 async def fetch_entity_texts(
@@ -87,7 +129,6 @@ async def fetch_entity_texts(
         row = r.json()
         name = str(row.get("name") or "")
         desc = str(row.get("description") or "")
-        et = str(row.get("entity_type") or "")
         out.append((eid, name, desc))
     return out
 

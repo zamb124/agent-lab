@@ -144,7 +144,7 @@ export class CRMAPIService extends BaseService {
             body.check_duplicates = options.checkDuplicates;
         }
 
-        return this.post(`/entities/notes/${encodeURIComponent(noteId)}/analyze`, body);
+        return this.post('/tasks/note-analyze', { note_id: noteId, ...body });
     }
 
     async patchNoteAnalysisDraft(noteId, body) {
@@ -161,7 +161,11 @@ export class CRMAPIService extends BaseService {
         if (!noteId) {
             throw new Error('Note ID is required');
         }
-        return this.post(`/entities/notes/${encodeURIComponent(noteId)}/apply`, {});
+        const taskResp = await this.post('/tasks/note-analyze', { note_id: noteId, mode: 'apply' });
+        if (!taskResp?.task_id) {
+            throw new Error('Apply task did not return task_id');
+        }
+        return { task_id: taskResp.task_id };
     }
     
     async getEntityTypes() {
@@ -610,46 +614,90 @@ export class CRMAPIService extends BaseService {
         return this.post('/files/', formData);
     }
 
-    async listKnowledgeImports(namespace, limit = 50) {
+    // === TASKS (unified: knowledge_import + note_analyze) ===
+
+    async listTasks(namespace, limit = 50, taskType = null, noteId = null) {
         if (!namespace || typeof namespace !== 'string') {
             throw new Error('Namespace is required');
         }
-        return this.get('/knowledge-imports', { namespace, limit });
+        const params = { namespace, limit };
+        if (taskType) {
+            params.task_type = taskType;
+        }
+        if (noteId) {
+            params.note_id = noteId;
+        }
+        return this.get('/tasks', params);
     }
 
-    async startKnowledgeImport(body) {
+    async getTask(taskId) {
+        if (!taskId) {
+            throw new Error('Task ID is required');
+        }
+        return this.get(`/tasks/${encodeURIComponent(taskId)}`, {});
+    }
+
+    async startKnowledgeImportTask(body) {
         if (!body || typeof body !== 'object') {
             throw new Error('Body is required');
         }
-        return this.post('/knowledge-imports', body);
+        return this.post('/tasks/knowledge-import', body);
     }
 
-    async cancelKnowledgeImport(importId) {
-        if (!importId) {
-            throw new Error('Import ID is required');
+    async startNoteAnalyzeTask(noteId, options = {}) {
+        if (!noteId) {
+            throw new Error('Note ID is required');
         }
-        return this.post(`/knowledge-imports/${importId}/cancel`, {});
+        return this.post('/tasks/note-analyze', { note_id: noteId, ...options });
     }
 
-    async rollbackKnowledgeImport(importId) {
-        if (!importId) {
-            throw new Error('Import ID is required');
+    async cancelTask(taskId) {
+        if (!taskId) {
+            throw new Error('Task ID is required');
         }
-        return this.post(`/knowledge-imports/${importId}/rollback`, {});
+        return this.post(`/tasks/${encodeURIComponent(taskId)}/cancel`, {});
     }
 
-    async getKnowledgeImportCreatedEntities(importId) {
-        if (!importId) {
-            throw new Error('Import ID is required');
+    async rollbackTask(taskId) {
+        if (!taskId) {
+            throw new Error('Task ID is required');
         }
-        return this.get(`/knowledge-imports/${importId}/created-entities`, {});
+        return this.post(`/tasks/${encodeURIComponent(taskId)}/rollback`, {});
     }
 
-    async completeKnowledgeImportReview(importId) {
-        if (!importId) {
-            throw new Error('Import ID is required');
+    async getTaskCreatedEntities(taskId) {
+        if (!taskId) {
+            throw new Error('Task ID is required');
         }
-        return this.post(`/knowledge-imports/${importId}/review-complete`, {});
+        return this.get(`/tasks/${encodeURIComponent(taskId)}/created-entities`, {});
+    }
+
+    async completeTaskReview(taskId) {
+        if (!taskId) {
+            throw new Error('Task ID is required');
+        }
+        return this.post(`/tasks/${encodeURIComponent(taskId)}/review-complete`, {});
+    }
+
+    async retryTask(taskId) {
+        if (!taskId) {
+            throw new Error('Task ID is required');
+        }
+        return this.post(`/tasks/${encodeURIComponent(taskId)}/retry`, {});
+    }
+
+    async startDailySummaryTask(namespace, dateStr) {
+        if (!namespace || !dateStr) {
+            throw new Error('namespace and dateStr are required');
+        }
+        return this.post('/tasks/daily-summary', { namespace, date_str: dateStr });
+    }
+
+    async startPeriodSummaryTask(namespace, dateFrom, dateTo) {
+        if (!namespace || !dateFrom || !dateTo) {
+            throw new Error('namespace, dateFrom and dateTo are required');
+        }
+        return this.post('/tasks/period-summary', { namespace, date_from: dateFrom, date_to: dateTo });
     }
 
     // === ATTACHMENTS ===

@@ -12,7 +12,7 @@
       "name": "Lara",
       "prompt": "prompts/base.md",
       "llm": {
-        "model": "gpt-4o",
+        "model": "qwen/qwen3.5-397b-a17b",
         "temperature": 0.2
       },
       "tools": ["ask_user"],
@@ -50,7 +50,7 @@
           "name": "Lara CRM",
           "prompt": "prompts/crm.md",
           "llm": {
-            "model": "gpt-4o",
+            "model": "qwen/qwen3.5-397b-a17b",
             "temperature": 0.2
           },
           "tools": [

@@ -8,7 +8,7 @@ from datetime import datetime, timezone
 import pytest
 from httpx import AsyncClient
 
-from apps.crm.db.models import CRMKnowledgeImport
+from apps.crm.db.models import CRMTask
 from core.context import clear_context, set_context
 from core.models.context_models import Context
 from core.models.identity_models import Company, User
@@ -45,25 +45,28 @@ async def test_lara_workspace_summary_import_awaiting_review(
     system_user_id: str,
 ) -> None:
     ns = f"g_{unique_id}"
-    imp_id = f"ki_{uuid.uuid4().hex[:12]}"
+    task_id = f"ki_{uuid.uuid4().hex[:12]}"
     now = datetime.now(timezone.utc)
-    row = CRMKnowledgeImport(
-        import_id=imp_id,
+    row = CRMTask(
+        task_id=task_id,
+        task_type="knowledge_import",
+        status="completed",
+        stage="completed",
+        progress_pct=100,
         company_id="system",
         namespace=ns,
         user_id=system_user_id,
-        mode="notes_only",
-        status="completed",
-        split_by_headings=False,
-        chunk_max_chars=50_000,
-        notes_created_count=0,
-        entities_created_count=0,
-        relationships_created_count=0,
-        created_entity_ids=[],
-        created_relationship_ids=[],
-        attachment_document_ids=[],
-        cancel_requested=False,
-        review_completed_at=None,
+        data={
+            "mode": "notes_only",
+            "notes_created_count": 1,
+            "entities_created_count": 0,
+            "relationships_created_count": 0,
+            "created_entity_ids": ["fake-entity-id"],
+            "created_relationship_ids": [],
+            "attachment_document_ids": [],
+            "review_completed_at": None,
+            "chunk_errors": [],
+        },
         completed_at=now,
         created_at=now,
         updated_at=now,
@@ -76,7 +79,7 @@ async def test_lara_workspace_summary_import_awaiting_review(
     )
     set_context(ctx)
     try:
-        await crm_container.knowledge_import_repository.create(row)
+        await crm_container.task_repository.create(row)
     finally:
         clear_context()
 

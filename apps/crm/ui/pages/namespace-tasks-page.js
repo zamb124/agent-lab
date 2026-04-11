@@ -26,10 +26,11 @@ function namespaceNameFromStore() {
     return 'default';
 }
 
-export class NamespaceImportsPage extends PlatformElement {
+export class NamespaceTasksPage extends PlatformElement {
     static properties = {
-        _imports: { state: true },
+        _tasks: { state: true },
         _loading: { state: true },
+        _taskTypeFilter: { state: true },
         _wizardOpen: { state: true },
         _wizardStep: { state: true },
         _selectedTypeIds: { state: true },
@@ -267,6 +268,26 @@ export class NamespaceImportsPage extends PlatformElement {
                     0 0 14px rgba(239, 68, 68, 0.45),
                     inset 0 0 16px rgba(185, 28, 28, 0.25);
             }
+            .import-icon-btn--retry {
+                border-color: rgba(99, 102, 241, 0.5);
+                color: #a5b4fc;
+                background: rgba(49, 46, 129, 0.3);
+            }
+            .import-icon-btn--retry:hover {
+                border-color: #818cf8;
+                color: #c7d2fe;
+                background: rgba(67, 56, 202, 0.4);
+            }
+            .import-icon-btn--view-error {
+                border-color: rgba(251, 191, 36, 0.5);
+                color: #fde68a;
+                background: rgba(120, 53, 15, 0.25);
+            }
+            .import-icon-btn--view-error:hover {
+                border-color: #fbbf24;
+                color: #fef3c7;
+                background: rgba(146, 64, 14, 0.35);
+            }
             :host-context([data-theme='light']) .import-icon-btn--cancel {
                 border-color: rgba(217, 119, 6, 0.45);
                 color: #b45309;
@@ -355,6 +376,15 @@ export class NamespaceImportsPage extends PlatformElement {
             .review-badge.pending { background: rgba(251, 191, 36, 0.22); color: #fde047; }
             .review-badge.done { background: rgba(34, 197, 94, 0.22); color: #86efac; }
             .review-badge.na { color: var(--text-tertiary); font-weight: 500; }
+            .tasks-filter-bar { display: flex; gap: var(--space-1); flex-wrap: wrap; margin-bottom: var(--space-2); }
+            .tasks-filter-btn { background: none; border: 1px solid var(--crm-stroke); border-radius: var(--radius-full); padding: 4px 14px; font-size: var(--text-sm); color: var(--text-secondary); cursor: pointer; transition: all 0.15s; }
+            .tasks-filter-btn.active { background: var(--primary-soft); border-color: var(--primary); color: var(--primary); font-weight: 600; }
+            .tasks-filter-btn:hover:not(.active) { border-color: var(--text-tertiary); }
+            .task-progress-wrap { width: 100%; height: 4px; background: var(--crm-stroke); border-radius: 2px; margin-top: 4px; }
+            .task-progress-bar { height: 4px; background: var(--primary); border-radius: 2px; transition: width 0.4s; }
+            .task-stage-label { font-size: var(--text-xs); color: var(--text-tertiary); margin-top: 2px; }
+            .task-type-badge { display: inline-block; padding: 2px 8px; border-radius: var(--radius-full); font-size: var(--text-xs); font-weight: 600; background: var(--crm-stroke); color: var(--text-secondary); }
+            .task-name-cell { max-width: 180px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--text-sm); }
             :host-context([data-theme='light']) .review-badge.pending {
                 background: rgba(251, 191, 36, 0.2);
                 color: #b45309;
@@ -363,13 +393,95 @@ export class NamespaceImportsPage extends PlatformElement {
                 background: rgba(34, 197, 94, 0.14);
                 color: #15803d;
             }
+
+            /* Mobile cards */
+            .task-cards { display: none; flex-direction: column; gap: var(--space-3); }
+            .task-card {
+                background: var(--crm-surface-elevated);
+                border: 1px solid var(--crm-stroke);
+                border-radius: var(--radius-xl);
+                padding: var(--space-4);
+                display: flex;
+                flex-direction: column;
+                gap: var(--space-3);
+            }
+            .task-card-header {
+                display: flex;
+                align-items: center;
+                justify-content: space-between;
+                gap: var(--space-2);
+                flex-wrap: wrap;
+            }
+            .task-card-title {
+                font-size: var(--text-base);
+                font-weight: 600;
+                color: var(--text-primary);
+                flex: 1;
+                min-width: 0;
+                overflow: hidden;
+                text-overflow: ellipsis;
+                white-space: nowrap;
+            }
+            .task-card-meta {
+                display: flex;
+                align-items: center;
+                gap: var(--space-2);
+                flex-wrap: wrap;
+            }
+            .task-card-progress {
+                display: flex;
+                flex-direction: column;
+                gap: var(--space-1);
+            }
+            .task-card-stats {
+                display: flex;
+                gap: var(--space-4);
+                font-size: var(--text-sm);
+                color: var(--text-secondary);
+            }
+            .task-card-stat { display: flex; flex-direction: column; gap: 2px; }
+            .task-card-stat-label { font-size: var(--text-xs); color: var(--text-tertiary); }
+            .task-card-stat-val { font-weight: 600; color: var(--text-primary); font-variant-numeric: tabular-nums; }
+            .task-card-actions {
+                display: flex;
+                gap: var(--space-2);
+                flex-wrap: wrap;
+                border-top: 1px solid var(--crm-stroke);
+                padding-top: var(--space-3);
+            }
+            .task-card-action-btn {
+                display: inline-flex;
+                align-items: center;
+                gap: var(--space-2);
+                padding: var(--space-2) var(--space-3);
+                border-radius: var(--radius-lg);
+                border: 1px solid var(--crm-stroke);
+                background: var(--crm-surface-muted);
+                color: var(--text-secondary);
+                font-size: var(--text-sm);
+                font-weight: 500;
+                cursor: pointer;
+                transition: all 0.15s;
+            }
+            .task-card-action-btn:hover { background: var(--crm-surface-elevated); color: var(--text-primary); }
+            .task-card-action-btn--stop { border-color: rgba(251,191,36,0.5); color: #fbbf24; }
+            .task-card-action-btn--stop:hover { border-color: rgba(253,224,71,0.85); color: #fcd34d; }
+            .task-card-action-btn--danger { border-color: rgba(239,68,68,0.4); color: #ef4444; }
+            .task-card-action-btn--danger:hover { border-color: rgba(239,68,68,0.7); }
+
+            @media (max-width: 700px) {
+                .imports-table-shell { display: none; }
+                .task-cards { display: flex; }
+                .container { padding: var(--space-2); }
+            }
         `,
     ];
 
     constructor() {
         super();
-        this._imports = [];
+        this._tasks = [];
         this._loading = false;
+        this._taskTypeFilter = null;
         this._wizardOpen = false;
         this._wizardStep = 0;
         this._selectedTypeIds = [];
@@ -409,6 +521,8 @@ export class NamespaceImportsPage extends PlatformElement {
         this._pollTimer = window.setInterval(() => {
             this._maybePoll();
         }, POLL_MS);
+        this._handleTaskWsNotification = this._onTaskWsNotification.bind(this);
+        window.addEventListener('platform-notification-received', this._handleTaskWsNotification);
     }
 
     disconnectedCallback() {
@@ -418,22 +532,39 @@ export class NamespaceImportsPage extends PlatformElement {
             window.clearInterval(this._pollTimer);
             this._pollTimer = null;
         }
+        if (this._handleTaskWsNotification) {
+            window.removeEventListener('platform-notification-received', this._handleTaskWsNotification);
+            this._handleTaskWsNotification = null;
+        }
     }
 
     async firstUpdated() {
-        await this._loadImports();
+        await this._loadTasks();
+    }
+
+    _onTaskWsNotification(event) {
+        const n = event.detail;
+        if (!n || n.service !== 'crm') {
+            return;
+        }
+        if (n.type === 'crm_task_updated') {
+            const ns = namespaceNameFromStore();
+            if (n.data?.namespace === ns) {
+                this._loadTasks({ silent: true });
+            }
+        }
     }
 
     _maybePoll() {
         const active =
-            Array.isArray(this._imports) &&
-            this._imports.some((r) => r.status === 'running' || r.status === 'pending');
+            Array.isArray(this._tasks) &&
+            this._tasks.some((r) => r.status === 'running' || r.status === 'pending');
         if (active) {
-            this._loadImports({ silent: true });
+            this._loadTasks({ silent: true });
         }
     }
 
-    async _loadImports(options = {}) {
+    async _loadTasks(options = {}) {
         const silent = Boolean(options.silent);
         const ns = namespaceNameFromStore();
         const crmApi = this.services.get('crmApi');
@@ -441,7 +572,7 @@ export class NamespaceImportsPage extends PlatformElement {
             this._loading = true;
         }
         try {
-            this._imports = await crmApi.listKnowledgeImports(ns, 100);
+            this._tasks = await crmApi.listTasks(ns, 100);
         } catch (e) {
             const msg = e instanceof Error ? e.message : String(e);
             this.error(msg);
@@ -450,6 +581,14 @@ export class NamespaceImportsPage extends PlatformElement {
                 this._loading = false;
             }
         }
+    }
+
+    _filteredTasks() {
+        const tasks = Array.isArray(this._tasks) ? this._tasks : [];
+        if (!this._taskTypeFilter) {
+            return tasks;
+        }
+        return tasks.filter((r) => r.task_type === this._taskTypeFilter);
     }
 
     _openWizard() {
@@ -850,9 +989,9 @@ export class NamespaceImportsPage extends PlatformElement {
         this._starting = true;
         this._closeWizard();
         try {
-            await crmApi.startKnowledgeImport(body);
-            this.success(this.i18n.t('knowledge_import.started'));
-            await this._loadImports({ silent: true });
+            await crmApi.startKnowledgeImportTask(body);
+            this.success(this.i18n.t('task_tracker.started'));
+            await this._loadTasks({ silent: true });
         } catch (e) {
             const msg = e instanceof Error ? e.message : String(e);
             this.error(msg);
@@ -861,11 +1000,32 @@ export class NamespaceImportsPage extends PlatformElement {
         }
     }
 
+    async _retryRow(taskId) {
+        const crmApi = this.services.get('crmApi');
+        try {
+            await crmApi.retryTask(taskId);
+            await this._loadTasks({ silent: true });
+        } catch (e) {
+            const msg = e instanceof Error ? e.message : String(e);
+            this.error(msg);
+        }
+    }
+
+    async _viewError(row) {
+        const { platformConfirm } = await import('@platform/lib/components/platform-confirm-modal.js');
+        const errorText = typeof row.error_message === 'string' ? row.error_message : String(row.error_message || '');
+        await platformConfirm(errorText, {
+            title: this.i18n.t('task_tracker.action_view_error'),
+            confirmText: this.i18n.t('close', {}, 'common'),
+            cancelText: null,
+        });
+    }
+
     async _cancelRow(id) {
         const crmApi = this.services.get('crmApi');
         try {
-            await crmApi.cancelKnowledgeImport(id);
-            await this._loadImports({ silent: true });
+            await crmApi.cancelTask(id);
+            await this._loadTasks({ silent: true });
         } catch (e) {
             const msg = e instanceof Error ? e.message : String(e);
             this.error(msg);
@@ -885,8 +1045,8 @@ export class NamespaceImportsPage extends PlatformElement {
         }
         const crmApi = this.services.get('crmApi');
         try {
-            await crmApi.rollbackKnowledgeImport(id);
-            await this._loadImports({ silent: true });
+            await crmApi.rollbackTask(id);
+            await this._loadTasks({ silent: true });
         } catch (e) {
             const msg = e instanceof Error ? e.message : String(e);
             this.error(msg);
@@ -904,8 +1064,8 @@ export class NamespaceImportsPage extends PlatformElement {
         if (!['completed', 'failed', 'cancelled'].includes(row.status)) {
             return false;
         }
-        const entN = Array.isArray(row.created_entity_ids) ? row.created_entity_ids.length : 0;
-        const relN = Array.isArray(row.created_relationship_ids) ? row.created_relationship_ids.length : 0;
+        const entN = Array.isArray(row.data?.created_entity_ids) ? row.data?.created_entity_ids.length : 0;
+        const relN = Array.isArray(row.data?.created_relationship_ids) ? row.data?.created_relationship_ids.length : 0;
         return entN > 0 || relN > 0;
     }
 
@@ -913,7 +1073,7 @@ export class NamespaceImportsPage extends PlatformElement {
         if (!this._canOpenImportDetail(row)) {
             return false;
         }
-        return row.review_completed_at == null || row.review_completed_at === '';
+        return row.data?.review_completed_at == null || row.data?.review_completed_at === '';
     }
 
     _importJobStatusTheme(status) {
@@ -980,7 +1140,7 @@ export class NamespaceImportsPage extends PlatformElement {
         const crmApi = this.services.get('crmApi');
         let summary;
         try {
-            summary = await crmApi.getKnowledgeImportCreatedEntities(id);
+            summary = await crmApi.getTaskCreatedEntities(id);
         } catch (e) {
             const msg = e instanceof Error ? e.message : String(e);
             this.error(msg);
@@ -996,9 +1156,9 @@ export class NamespaceImportsPage extends PlatformElement {
                 },
             );
             if (confirmed) {
-                await crmApi.completeKnowledgeImportReview(id);
+                await crmApi.completeTaskReview(id);
                 this.success(this.i18n.t('knowledge_import.approve_success'));
-                void this._loadImports({ silent: true });
+                void this._loadTasks({ silent: true });
             }
             return;
         }
@@ -1015,11 +1175,11 @@ export class NamespaceImportsPage extends PlatformElement {
         analysisModal.addEventListener('close', () => {
             CRMStore.clearKnowledgeImportReview();
             analysisModal.remove();
-            void this._loadImports({ silent: true });
+            void this._loadTasks({ silent: true });
         });
         analysisModal.addEventListener('saved', () => {
             this.success(this.i18n.t('knowledge_import.approve_success'));
-            void this._loadImports({ silent: true });
+            void this._loadTasks({ silent: true });
         });
     }
 
@@ -1031,52 +1191,83 @@ export class NamespaceImportsPage extends PlatformElement {
                 <div class="section">
                     <button class="back-btn" type="button" @click=${() => CRMStore.setCurrentView('spaces')}>
                         <platform-icon name="arrow-left" size="14"></platform-icon>
-                        ${this.i18n.t('knowledge_import.back_spaces')}
+                        ${this.i18n.t('task_tracker.back_spaces')}
                     </button>
                     <div class="hero">
                         <div class="hero-title">
-                            <platform-icon name="database" size="18"></platform-icon>
-                            ${this.i18n.t('knowledge_import.title')}
+                            <platform-icon name="tasks" size="18"></platform-icon>
+                            ${this.i18n.t('task_tracker.title')}
                         </div>
                         <button class="save-btn" type="button" @click=${this._openWizard}>
                             <platform-icon name="plus" size="14"></platform-icon>
                             ${this.i18n.t('knowledge_import.cta_wizard')}
                         </button>
                     </div>
-                    <div class="mono">${this.i18n.t('knowledge_import.namespace_label')}: ${ns}</div>
+                    <div class="mono">${this.i18n.t('task_tracker.namespace_label')}: ${ns}</div>
                 </div>
 
                 <div class="section">
-                    <div class="hero-title">${this.i18n.t('knowledge_import.list_title')}</div>
-                    ${this._loading ? html`<div class="imports-list-loading">${this.i18n.t('knowledge_import.loading')}</div>` : ''}
+                    <div class="hero-title">${this.i18n.t('task_tracker.list_title')}</div>
+                    <div class="tasks-filter-bar" role="group" aria-label=${this.i18n.t('task_tracker.filter_label')}>
+                        ${[
+                            { key: null, label: this.i18n.t('task_tracker.filter_all') },
+                            { key: 'knowledge_import', label: this.i18n.t('task_tracker.filter_knowledge_import') },
+                            { key: 'note_analyze', label: this.i18n.t('task_tracker.filter_note_analyze') },
+                            { key: 'daily_summary', label: this.i18n.t('task_tracker.filter_daily_summary') },
+                        ].map(({ key, label }) => html`
+                            <button
+                                type="button"
+                                class="tasks-filter-btn ${this._taskTypeFilter === key ? 'active' : ''}"
+                                @click=${() => { this._taskTypeFilter = key; }}
+                            >${label}</button>
+                        `)}
+                    </div>
+                    ${this._loading ? html`<div class="imports-list-loading">${this.i18n.t('task_tracker.loading')}</div>` : ''}
                     <div class="imports-table-shell">
                         <table class="imports-table">
                             <thead>
                                 <tr>
-                                    <th scope="col">${this.i18n.t('knowledge_import.col_status')}</th>
-                                    <th scope="col">${this.i18n.t('knowledge_import.col_mode')}</th>
-                                    <th class="th-num" scope="col">${this.i18n.t('knowledge_import.col_notes')}</th>
-                                    <th class="th-num" scope="col">${this.i18n.t('knowledge_import.col_entities')}</th>
-                                    <th class="th-num" scope="col">${this.i18n.t('knowledge_import.col_rels')}</th>
-                                    <th scope="col">${this.i18n.t('knowledge_import.col_review')}</th>
+                                    <th scope="col">${this.i18n.t('task_tracker.col_status')}</th>
+                                    <th scope="col">${this.i18n.t('task_tracker.col_type')}</th>
+                                    <th scope="col">${this.i18n.t('task_tracker.col_name')}</th>
+                                    <th class="th-num" scope="col">${this.i18n.t('task_tracker.col_notes')}</th>
+                                    <th class="th-num" scope="col">${this.i18n.t('task_tracker.col_entities')}</th>
+                                    <th class="th-num" scope="col">${this.i18n.t('task_tracker.col_rels')}</th>
+                                    <th scope="col">${this.i18n.t('task_tracker.col_review')}</th>
                                     <th class="th-actions" scope="col">${this.i18n.t('knowledge_import.col_actions')}</th>
                                 </tr>
                             </thead>
                             <tbody>
-                                ${(this._imports || []).map((row) => {
-                                    const entN = Array.isArray(row.created_entity_ids) ? row.created_entity_ids.length : 0;
-                                    const relN = Array.isArray(row.created_relationship_ids) ? row.created_relationship_ids.length : 0;
+                                ${(this._filteredTasks()).map((row) => {
+                                    const isImport = row.task_type === 'knowledge_import';
+                                    const isAnalyze = row.task_type === 'note_analyze';
+                                    const entN = isImport ? (Array.isArray(row.data?.created_entity_ids) ? row.data.created_entity_ids.length : 0) : (row.data?.result_entities_count ?? 0);
+                                    const relN = isImport ? (Array.isArray(row.data?.created_relationship_ids) ? row.data.created_relationship_ids.length : 0) : (row.data?.result_relationships_count ?? 0);
                                     const canRollback =
-                                        ['completed', 'failed', 'cancelled'].includes(row.status) && (entN > 0 || relN > 0);
-                                    const canDetail = this._canOpenImportDetail(row);
-                                    const needsRev = this._importNeedsReview(row);
+                                        isImport && ['completed', 'failed', 'cancelled'].includes(row.status) && ((Array.isArray(row.data?.created_entity_ids) ? row.data.created_entity_ids.length : 0) > 0 || (Array.isArray(row.data?.created_relationship_ids) ? row.data.created_relationship_ids.length : 0) > 0);
+                                    const canDetail = isImport && this._canOpenImportDetail(row);
+                                    const needsRev = canDetail && this._importNeedsReview(row);
+                                    const stageLabel = this.i18n.t(`task.stage.${row.stage}`, {}, 'crm') || row.stage;
+                                    const typeLabel = isImport
+                                        ? this.i18n.t('task.type.knowledge_import')
+                                        : this.i18n.t('task.type.note_analyze');
+                                    const nameLabel = isAnalyze ? (row.data?.note_name || row.data?.note_id || '') : (isImport ? this._importListModeLabel(row.data?.mode) : '');
                                     return html`
                                         <tr>
-                                            <td>${this._importJobStatusPill(row.status)}</td>
-                                            <td>${this._importListModePill(row.mode)}</td>
-                                            <td class="td-num">${row.notes_created_count ?? 0}</td>
-                                            <td class="td-num">${row.entities_created_count ?? 0}</td>
-                                            <td class="td-num">${row.relationships_created_count ?? 0}</td>
+                                            <td>
+                                                ${this._importJobStatusPill(row.status)}
+                                                ${(row.status === 'running' || row.status === 'pending') ? html`
+                                                    <div class="task-progress-wrap">
+                                                        <div class="task-progress-bar" style="width: ${row.progress_pct || 0}%"></div>
+                                                    </div>
+                                                    <div class="task-stage-label">${stageLabel}</div>
+                                                ` : ''}
+                                            </td>
+                                            <td><span class="task-type-badge">${typeLabel}</span></td>
+                                            <td class="task-name-cell">${nameLabel}</td>
+                                            <td class="td-num">${isImport ? (row.data?.notes_created_count ?? 0) : '—'}</td>
+                                            <td class="td-num">${entN !== null && entN !== undefined ? entN : '—'}</td>
+                                            <td class="td-num">${relN !== null && relN !== undefined ? relN : '—'}</td>
                                             <td>
                                                 ${canDetail
                                                     ? html`<span class="review-badge ${needsRev ? 'pending' : 'done'}">${needsRev ? this.i18n.t('knowledge_import.review_pending') : this.i18n.t('knowledge_import.review_done')}</span>`
@@ -1088,7 +1279,7 @@ export class NamespaceImportsPage extends PlatformElement {
                                                         ? html`<button
                                                               type="button"
                                                               class="import-open-detail-btn"
-                                                              @click=${() => this._openImportReviewModal(row.import_id)}
+                                                              @click=${() => this._openImportReviewModal(row.task_id)}
                                                           >
                                                               <platform-icon name="doc-detail" size="16"></platform-icon>
                                                               <span>${this.i18n.t('knowledge_import.action_open_detail')}</span>
@@ -1100,7 +1291,7 @@ export class NamespaceImportsPage extends PlatformElement {
                                                               class="import-icon-btn import-icon-btn--cancel"
                                                               title=${this.i18n.t('knowledge_import.action_cancel')}
                                                               aria-label=${this.i18n.t('knowledge_import.action_cancel')}
-                                                              @click=${() => this._cancelRow(row.import_id)}
+                                                              @click=${() => this._cancelRow(row.task_id)}
                                                           >
                                                               <span class="import-cancel-glyph" aria-hidden="true">
                                                                   <platform-icon name="stop" size="16"></platform-icon>
@@ -1113,9 +1304,31 @@ export class NamespaceImportsPage extends PlatformElement {
                                                               class="import-icon-btn import-icon-btn--rollback"
                                                               title=${this.i18n.t('knowledge_import.action_rollback')}
                                                               aria-label=${this.i18n.t('knowledge_import.action_rollback')}
-                                                              @click=${() => this._rollbackRow(row.import_id)}
+                                                              @click=${() => this._rollbackRow(row.task_id)}
                                                           >
                                                               <platform-icon name="undo" size="18"></platform-icon>
+                                                          </button>`
+                                                        : null}
+                                                    ${(row.status === 'failed' || row.status === 'cancelled')
+                                                        ? html`<button
+                                                              type="button"
+                                                              class="import-icon-btn import-icon-btn--retry"
+                                                              title=${this.i18n.t('task_tracker.action_retry')}
+                                                              aria-label=${this.i18n.t('task_tracker.action_retry')}
+                                                              @click=${() => this._retryRow(row.task_id)}
+                                                          >
+                                                              <platform-icon name="refresh" size="16"></platform-icon>
+                                                          </button>`
+                                                        : null}
+                                                    ${row.status === 'failed' && row.error_message
+                                                        ? html`<button
+                                                              type="button"
+                                                              class="import-icon-btn import-icon-btn--view-error"
+                                                              title=${this.i18n.t('task_tracker.action_view_error')}
+                                                              aria-label=${this.i18n.t('task_tracker.action_view_error')}
+                                                              @click=${() => this._viewError(row)}
+                                                          >
+                                                              <platform-icon name="alert-triangle" size="16"></platform-icon>
                                                           </button>`
                                                         : null}
                                                 </div>
@@ -1125,6 +1338,92 @@ export class NamespaceImportsPage extends PlatformElement {
                                 })}
                             </tbody>
                         </table>
+                    <div class="task-cards">
+                        ${(this._filteredTasks()).map((row) => {
+                            const isImport = row.task_type === 'knowledge_import';
+                            const isAnalyze = row.task_type === 'note_analyze';
+                            const entN = isImport ? (Array.isArray(row.data?.created_entity_ids) ? row.data.created_entity_ids.length : 0) : (row.data?.result_entities_count ?? 0);
+                            const relN = isImport ? (Array.isArray(row.data?.created_relationship_ids) ? row.data.created_relationship_ids.length : 0) : (row.data?.result_relationships_count ?? 0);
+                            const canRollback = isImport && ['completed', 'failed', 'cancelled'].includes(row.status) && ((Array.isArray(row.data?.created_entity_ids) ? row.data.created_entity_ids.length : 0) > 0 || (Array.isArray(row.data?.created_relationship_ids) ? row.data.created_relationship_ids.length : 0) > 0);
+                            const canDetail = isImport && this._canOpenImportDetail(row);
+                            const needsRev = canDetail && this._importNeedsReview(row);
+                            const stageLabel = this.i18n.t(`task.stage.${row.stage}`, {}, 'crm') || row.stage;
+                            const typeLabel = isImport ? this.i18n.t('task.type.knowledge_import') : this.i18n.t('task.type.note_analyze');
+                            const nameLabel = isAnalyze ? (row.data?.note_name || row.data?.note_id || '') : (isImport ? this._importListModeLabel(row.data?.mode) : '');
+                            const isActive = row.status === 'running' || row.status === 'pending';
+                            return html`
+                                <div class="task-card">
+                                    <div class="task-card-header">
+                                        <div class="task-card-title">${nameLabel || typeLabel}</div>
+                                        <div class="task-card-meta">
+                                            <span class="task-type-badge">${typeLabel}</span>
+                                            ${this._importJobStatusPill(row.status)}
+                                        </div>
+                                    </div>
+                                    ${isActive ? html`
+                                        <div class="task-card-progress">
+                                            <div class="task-progress-wrap">
+                                                <div class="task-progress-bar" style="width: ${row.progress_pct || 0}%"></div>
+                                            </div>
+                                            <div class="task-stage-label">${stageLabel}</div>
+                                        </div>
+                                    ` : ''}
+                                    <div class="task-card-stats">
+                                        ${entN > 0 || relN > 0 ? html`
+                                            <div class="task-card-stat">
+                                                <span class="task-card-stat-label">${this.i18n.t('task_tracker.col_entities')}</span>
+                                                <span class="task-card-stat-val">${entN}</span>
+                                            </div>
+                                            <div class="task-card-stat">
+                                                <span class="task-card-stat-label">${this.i18n.t('task_tracker.col_rels')}</span>
+                                                <span class="task-card-stat-val">${relN}</span>
+                                            </div>
+                                        ` : ''}
+                                        ${needsRev ? html`
+                                            <span class="review-badge pending">${this.i18n.t('knowledge_import.review_pending')}</span>
+                                        ` : ''}
+                                    </div>
+                                    <div class="task-card-actions">
+                                        ${canDetail ? html`
+                                            <button type="button" class="task-card-action-btn"
+                                                @click=${() => this._openImportReviewModal(row.task_id)}>
+                                                <platform-icon name="doc-detail" size="14"></platform-icon>
+                                                ${this.i18n.t('knowledge_import.action_open_detail')}
+                                            </button>
+                                        ` : ''}
+                                        ${isActive ? html`
+                                            <button type="button" class="task-card-action-btn task-card-action-btn--stop"
+                                                @click=${() => this._cancelRow(row.task_id)}>
+                                                <platform-icon name="stop" size="14"></platform-icon>
+                                                ${this.i18n.t('knowledge_import.action_cancel')}
+                                            </button>
+                                        ` : ''}
+                                        ${canRollback ? html`
+                                            <button type="button" class="task-card-action-btn task-card-action-btn--danger"
+                                                @click=${() => this._rollbackRow(row.task_id)}>
+                                                <platform-icon name="undo" size="14"></platform-icon>
+                                                ${this.i18n.t('knowledge_import.action_rollback')}
+                                            </button>
+                                        ` : ''}
+                                        ${(row.status === 'failed' || row.status === 'cancelled') ? html`
+                                            <button type="button" class="task-card-action-btn"
+                                                @click=${() => this._retryRow(row.task_id)}>
+                                                <platform-icon name="refresh" size="14"></platform-icon>
+                                                ${this.i18n.t('task_tracker.action_retry')}
+                                            </button>
+                                        ` : ''}
+                                        ${row.status === 'failed' && row.error_message ? html`
+                                            <button type="button" class="task-card-action-btn task-card-action-btn--danger"
+                                                @click=${() => this._viewError(row)}>
+                                                <platform-icon name="alert-triangle" size="14"></platform-icon>
+                                                ${this.i18n.t('task_tracker.action_view_error')}
+                                            </button>
+                                        ` : ''}
+                                    </div>
+                                </div>
+                            `;
+                        })}
+                    </div>
                     </div>
                 </div>
             </div>
@@ -1375,4 +1674,4 @@ export class NamespaceImportsPage extends PlatformElement {
     }
 }
 
-customElements.define('namespace-imports-page', NamespaceImportsPage);
+customElements.define('namespace-tasks-page', NamespaceTasksPage);

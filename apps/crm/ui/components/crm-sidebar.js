@@ -405,7 +405,16 @@ export class CRMSidebar extends PlatformElement {
                         <span class="nav-label">${this.i18n.t('nav.tasks')}</span>
                     </button>
                     <button
-                        class="nav-item ${['settings', 'templates', 'spaces', 'namespace_imports'].includes(this._currentView) ? 'active' : ''}"
+                        class="nav-item ${this._currentView === 'namespace_imports' ? 'active' : ''}"
+                        @click=${() => this._navigate('namespace_imports')}
+                    >
+                        <div class="nav-icon-wrapper ai">
+                            <platform-icon name="ai" size="18"></platform-icon>
+                        </div>
+                        <span class="nav-label">${this.i18n.t('nav.ai_analysis')}</span>
+                    </button>
+                    <button
+                        class="nav-item ${['settings', 'templates', 'spaces'].includes(this._currentView) ? 'active' : ''}"
                         @click=${() => this._navigate('settings')}
                     >
                         <div class="nav-icon-wrapper settings">

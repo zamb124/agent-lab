@@ -7,6 +7,42 @@ User Story: AI автоматически анализирует текст, в�
 import pytest
 import json
 
+
+async def _analyze_note(
+    crm_client,
+    headers: dict,
+    note_id: str,
+    **extra,
+):
+    """Запускает анализ заметки через POST /tasks/note-analyze и ждёт завершения.
+
+    Возвращает (task_row, ai_analysis_draft).
+    """
+    import asyncio, time
+    body = {"note_id": note_id, **extra}
+    start = await crm_client.post(
+        "/crm/api/v1/tasks/note-analyze",
+        json=body,
+        headers=headers,
+    )
+    assert start.status_code == 202, start.text
+    task_id = start.json()["task_id"]
+    deadline = time.monotonic() + 60.0
+    last = {}
+    while time.monotonic() < deadline:
+        tr = await crm_client.get(f"/crm/api/v1/tasks/{task_id}", headers=headers)
+        assert tr.status_code == 200, tr.text
+        last = tr.json()
+        if last.get("status") in ("completed", "failed", "cancelled"):
+            break
+        await asyncio.sleep(0.4)
+    assert last.get("status") == "completed", f"task failed: {last.get('error_message')}"
+    nr = await crm_client.get(f"/crm/api/v1/entities/{note_id}", headers=headers)
+    draft = nr.json().get("attributes", {}).get("ai_analysis_draft") or {}
+    return last, draft
+
+
+
 _META = {"dates_mentioned": [], "places_mentioned": [], "key_topics": []}
 
 
@@ -71,8 +107,7 @@ class TestAIAnalysis:
         }, headers=auth_headers_system)
         note_id = note_resp.json()["entity_id"]
         
-        response = await crm_client.post(f"/crm/api/v1/entities/notes/{note_id}/analyze", json={},
-                                         headers=auth_headers_system)
+        _, response = await _analyze_note(crm_client, auth_headers_system, note_id)
         
         assert response.status_code == 200
         result = response.json()
@@ -139,8 +174,7 @@ class TestAIAnalysis:
         }, headers=auth_headers_system)
         note_id = note_resp.json()["entity_id"]
         
-        response = await crm_client.post(f"/crm/api/v1/entities/notes/{note_id}/analyze", json={},
-                                         headers=auth_headers_system)
+        _, response = await _analyze_note(crm_client, auth_headers_system, note_id)
         
         assert response.status_code == 200
         result = response.json()
@@ -190,8 +224,7 @@ class TestAIAnalysis:
         }, headers=auth_headers_system)
         note_id = note_resp.json()["entity_id"]
         
-        response = await crm_client.post(f"/crm/api/v1/entities/notes/{note_id}/analyze", json={},
-                                         headers=auth_headers_system)
+        _, response = await _analyze_note(crm_client, auth_headers_system, note_id)
         
         assert response.status_code == 200
         result = response.json()
@@ -246,9 +279,7 @@ class TestAIAnalysis:
         }, headers=auth_headers_system)
         note_id = note_resp.json()["entity_id"]
         
-        response = await crm_client.post(f"/crm/api/v1/entities/notes/{note_id}/analyze", json={
-            "mentioned_entity_ids": [existing_id],
-        }, headers=auth_headers_system)
+        _, response = await _analyze_note(crm_client, auth_headers_system, note_id, "mentioned_entity_ids": [existing_id],)
         
         assert response.status_code == 200
         result = response.json()
@@ -287,9 +318,7 @@ class TestAIAnalysis:
         }, headers=auth_headers_system)
         note_id = note_resp.json()["entity_id"]
         
-        response = await crm_client.post(f"/crm/api/v1/entities/notes/{note_id}/analyze", json={
-            "extract_entity_types": ["task"],
-        }, headers=auth_headers_system)
+        _, response = await _analyze_note(crm_client, auth_headers_system, note_id, "extract_entity_types": ["task"],)
         
         assert response.status_code == 200
         result = response.json()
@@ -341,12 +370,10 @@ class TestAIAnalysis:
         }, headers=auth_headers_system)
         note_id = note_resp.json()["entity_id"]
         
-        response = await crm_client.post(f"/crm/api/v1/entities/notes/{note_id}/analyze", json={
-            "extract_relationship_types": [f"works_on_{unique_id}"],
-        }, headers=auth_headers_system)
-        
-        assert response.status_code == 200
-        result = response.json()
+        _, result = await _analyze_note(
+            crm_client, auth_headers_system, note_id,
+            extract_relationship_types=[f"works_on_{unique_id}"],
+        )
         
         custom_rel = next(
             (r for r in result["relationships"] if r["relationship_type"] == f"works_on_{unique_id}"),

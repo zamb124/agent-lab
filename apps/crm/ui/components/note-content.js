@@ -724,7 +724,6 @@ export class NoteContent extends PlatformElement {
             .note-text-input {
                 width: 100%;
                 min-height: 180px;
-                resize: none;
                 font-size: 16px;
                 line-height: 24px;
                 color: var(--text-primary);
@@ -732,6 +731,7 @@ export class NoteContent extends PlatformElement {
                 border: 1px solid var(--border-subtle);
                 border-radius: var(--radius-lg);
                 padding: 20px;
+                padding-right: 52px;
                 outline: none;
                 font-family: inherit;
                 box-shadow: none;
@@ -739,6 +739,9 @@ export class NoteContent extends PlatformElement {
                 backdrop-filter: none;
                 transition: border-color var(--duration-fast), box-shadow var(--duration-fast);
                 overflow-y: auto;
+                white-space: pre-wrap;
+                word-wrap: break-word;
+                cursor: text;
             }
 
             .note-text-input:focus {
@@ -746,8 +749,10 @@ export class NoteContent extends PlatformElement {
                 box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 15%, transparent);
             }
 
-            .note-text-input::placeholder {
+            .note-text-input:empty::before {
+                content: attr(data-placeholder);
                 color: var(--text-disabled);
+                pointer-events: none;
             }
 
             .note-main.is-editing .note-text-input {
@@ -769,12 +774,11 @@ export class NoteContent extends PlatformElement {
                 min-height: 0;
                 width: 100%;
                 box-sizing: border-box;
-                padding-right: 52px;
             }
 
             .note-mention-dropdown {
                 position: absolute;
-                z-index: 10;
+                z-index: 100;
                 background: var(--crm-surface, #fff);
                 border: 1px solid var(--crm-stroke);
                 border-radius: 25px;
@@ -846,13 +850,18 @@ export class NoteContent extends PlatformElement {
                 border-radius: 4px;
                 padding: 0 4px;
                 font-size: 0.95em;
+                font-weight: 700;
                 cursor: pointer;
-                font-weight: 500;
+                user-select: none;
                 transition: background var(--duration-fast);
             }
 
             .note-entity-mention:hover {
                 background: var(--accent-soft-hover, rgba(var(--accent-rgb, 99, 102, 241), 0.18));
+            }
+
+            .note-text-input .note-entity-mention {
+                cursor: default;
             }
 
             .note-voice-dictate-floating {
@@ -1539,6 +1548,8 @@ export class NoteContent extends PlatformElement {
         this._mentionLoading = false;
         this._mentionCoords = null;
         this._mentionDebounceTimer = 0;
+        this._onDocSelectionChange = null;
+        this._editableNeedsInit = false;
     }
 
     connectedCallback() {
@@ -1546,13 +1557,25 @@ export class NoteContent extends PlatformElement {
         this._onDocPointerDown = (e) => {
             const path = e.composedPath();
             if (path.includes(this)) {
+                if (this._mentionTriggerIndex !== -1) {
+                    const inDropdown = path.some(
+                        (el) => el instanceof Element && el.classList?.contains('note-mention-dropdown'),
+                    );
+                    if (!inDropdown) {
+                        this._hideMentionDropdown();
+                    }
+                }
                 return;
             }
             this._voiceSearchOpen = false;
             this._ctxSearchOpen = false;
+            if (this._mentionTriggerIndex !== -1) {
+                this._hideMentionDropdown();
+            }
             this.requestUpdate();
         };
         document.addEventListener('pointerdown', this._onDocPointerDown, true);
+
     }
 
     disconnectedCallback() {
@@ -1792,6 +1815,7 @@ export class NoteContent extends PlatformElement {
                 this._draftText = noteDescription;
                 this._draftSubtype = noteSubtype;
                 this._draftNoteDate = noteDate || getLocalIsoDate();
+                this._editableNeedsInit = true;
             }
         }
         if (
@@ -1809,6 +1833,10 @@ export class NoteContent extends PlatformElement {
         super.updated(changedProperties);
         if (this.editable) {
             queueMicrotask(() => void this._ensureDraftEntityLabels());
+        }
+        if (this._editableNeedsInit) {
+            this._editableNeedsInit = false;
+            this._initEditableContent();
         }
     }
 
@@ -2381,9 +2409,198 @@ export class NoteContent extends PlatformElement {
         this._draftTitle = event.target.value;
     }
 
+    // --- contenteditable helpers ---
+
+    _descriptionToEditableHtml(text) {
+        if (!text) {
+            return '';
+        }
+        const TOKEN_RE = /\[@([^\]]+)\]\(entity:([0-9a-f-]+)\)/gi;
+        let result = '';
+        let last = 0;
+        let match;
+        while ((match = TOKEN_RE.exec(text)) !== null) {
+            const plain = text.slice(last, match.index);
+            result += plain
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/\n/g, '<br>');
+            const name = match[1];
+            const entityId = match[2];
+            result += `<span class="note-entity-mention" data-entity-id="${entityId}" contenteditable="false">@${name.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')}</span>`;
+            last = match.index + match[0].length;
+        }
+        const tail = text.slice(last);
+        result += tail
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/\n/g, '<br>');
+        return result;
+    }
+
+    _serializeEditableContent(div) {
+        let text = '';
+        const walk = (node, isLast) => {
+            if (node.nodeType === Node.TEXT_NODE) {
+                text += node.textContent;
+                return;
+            }
+            if (node.nodeType !== Node.ELEMENT_NODE) {
+                return;
+            }
+            const el = /** @type {HTMLElement} */ (node);
+            if (el.classList.contains('note-entity-mention')) {
+                const entityId = el.dataset.entityId;
+                const name = el.textContent.replace(/^@/, '');
+                text += `[@${name}](entity:${entityId})`;
+                return;
+            }
+            if (el.tagName === 'BR') {
+                // Браузеры добавляют <br> как placeholder в конце contenteditable — не добавляем \n
+                if (!isLast) {
+                    text += '\n';
+                }
+                return;
+            }
+            const isBlock = el.tagName === 'DIV' || el.tagName === 'P';
+            if (isBlock && text.length > 0 && !text.endsWith('\n')) {
+                text += '\n';
+            }
+            const children = Array.from(el.childNodes);
+            for (let i = 0; i < children.length; i++) {
+                walk(children[i], i === children.length - 1);
+            }
+        };
+        const children = Array.from(div.childNodes);
+        for (let i = 0; i < children.length; i++) {
+            walk(children[i], i === children.length - 1);
+        }
+        return text;
+    }
+
+    _initEditableContent(keepFocus) {
+        const div = this.renderRoot.querySelector('.note-text-input');
+        if (!div) {
+            return;
+        }
+        div.innerHTML = this._descriptionToEditableHtml(this._draftText);
+        if (!keepFocus) {
+            div.focus();
+            const range = document.createRange();
+            const sel = window.getSelection();
+            if (sel) {
+                range.selectNodeContents(div);
+                range.collapse(false);
+                sel.removeAllRanges();
+                sel.addRange(range);
+            }
+        }
+    }
+
+    // --- mention detection через InputEvent.data (надёжно в любом браузере/Shadow DOM) ---
+
+    _initEditableContent() {
+        const div = this.renderRoot.querySelector('.note-text-input');
+        if (!div) {
+            return;
+        }
+        div.innerHTML = this._descriptionToEditableHtml(this._draftText);
+        div.focus();
+        const range = document.createRange();
+        const sel = window.getSelection();
+        if (sel) {
+            range.selectNodeContents(div);
+            range.collapse(false);
+            sel.removeAllRanges();
+            sel.addRange(range);
+        }
+    }
+
     _onTextInput(event) {
-        this._draftText = event.target.value;
-        this._detectMentionContext(event.target);
+        if (event.isComposing) {
+            return;
+        }
+        const div = event.currentTarget;
+        this._draftText = this._serializeEditableContent(div);
+
+        const inputData = event.data ?? '';
+        const inputType = event.inputType ?? '';
+
+        // InputEvent.data === '@' — пользователь нажал @, где бы ни был курсор
+        if (inputData === '@') {
+            this._mentionTriggerIndex = 1;
+            this._mentionQuery = '';
+            this._mentionCandidates = [];
+            this._mentionSelectedIdx = 0;
+            this._mentionLoading = false;
+            this._mentionCoords = this._getMentionCoordsAfterAt(div);
+            this.requestUpdate();
+            return;
+        }
+
+        if (this._mentionTriggerIndex === -1) {
+            return;
+        }
+
+        if (inputType === 'insertText' && inputData && !/[\s\n\t]/.test(inputData)) {
+            // Пользователь печатает буквы после @
+            this._mentionQuery += inputData;
+            if (this._mentionQuery.length > 0) {
+                this._mentionLoading = true;
+                clearTimeout(this._mentionDebounceTimer);
+                this._mentionDebounceTimer = window.setTimeout(() => {
+                    void this._fetchMentionCandidates(this._mentionQuery);
+                }, 250);
+            }
+            this.requestUpdate();
+        } else if (inputType === 'deleteContentBackward') {
+            if (this._mentionQuery.length > 0) {
+                this._mentionQuery = this._mentionQuery.slice(0, -1);
+                if (this._mentionQuery.length > 0) {
+                    this._mentionLoading = true;
+                    clearTimeout(this._mentionDebounceTimer);
+                    this._mentionDebounceTimer = window.setTimeout(() => {
+                        void this._fetchMentionCandidates(this._mentionQuery);
+                    }, 250);
+                } else {
+                    this._mentionCandidates = [];
+                    this._mentionLoading = false;
+                }
+                this.requestUpdate();
+            } else {
+                // Удалили сам @
+                this._hideMentionDropdown();
+            }
+        } else {
+            // Пробел, Enter, вставка, удаление слова — выходим из mention-режима
+            this._hideMentionDropdown();
+        }
+    }
+
+    _getMentionCoordsAfterAt(div) {
+        // Selection API надёжен ИМЕННО в момент нажатия @
+        const wrap = div.closest('.note-text-input-wrap') || div.parentElement;
+        const wrapRect = wrap ? wrap.getBoundingClientRect() : { top: 0, left: 0 };
+        try {
+            const sel = window.getSelection();
+            if (sel && sel.rangeCount > 0) {
+                const range = sel.getRangeAt(0).cloneRange();
+                range.collapse(true);
+                const rect = range.getBoundingClientRect();
+                if (rect.width !== 0 || rect.height !== 0) {
+                    return {
+                        top: rect.bottom - wrapRect.top + 4,
+                        left: Math.max(0, rect.left - wrapRect.left),
+                    };
+                }
+            }
+        } catch (_) {
+            // ignore
+        }
+        const divRect = div.getBoundingClientRect();
+        return { top: divRect.top - wrapRect.top + 44, left: 20 };
     }
 
     _onTextKeyDown(event) {
@@ -2410,85 +2627,6 @@ export class NoteContent extends PlatformElement {
         } else if (event.key === 'Escape') {
             this._hideMentionDropdown();
         }
-    }
-
-    _computeCaretCoords(textarea, atIndex) {
-        const cs = window.getComputedStyle(textarea);
-        const mirror = document.createElement('div');
-        Object.assign(mirror.style, {
-            position: 'absolute',
-            top: '0',
-            left: '-9999px',
-            visibility: 'hidden',
-            overflow: 'auto',
-            width: cs.width,
-            whiteSpace: 'pre-wrap',
-            wordWrap: 'break-word',
-            fontFamily: cs.fontFamily,
-            fontSize: cs.fontSize,
-            fontWeight: cs.fontWeight,
-            lineHeight: cs.lineHeight,
-            paddingTop: cs.paddingTop,
-            paddingRight: cs.paddingRight,
-            paddingBottom: cs.paddingBottom,
-            paddingLeft: cs.paddingLeft,
-            borderTopWidth: cs.borderTopWidth,
-            borderBottomWidth: cs.borderBottomWidth,
-            borderLeftWidth: cs.borderLeftWidth,
-            borderRightWidth: cs.borderRightWidth,
-            boxSizing: cs.boxSizing,
-        });
-        mirror.textContent = textarea.value.slice(0, atIndex);
-        const marker = document.createElement('span');
-        marker.textContent = '\u200b';
-        mirror.appendChild(marker);
-        document.body.appendChild(mirror);
-        const markerTop = marker.offsetTop;
-        const markerLeft = marker.offsetLeft;
-        const lineH = parseFloat(cs.lineHeight) || parseFloat(cs.fontSize) * 1.4 || 20;
-        document.body.removeChild(mirror);
-        return {
-            top: markerTop - textarea.scrollTop + lineH,
-            left: markerLeft,
-        };
-    }
-
-    _detectMentionContext(textarea) {
-        const val = textarea.value;
-        const cursor = textarea.selectionStart;
-        let atPos = -1;
-        for (let i = cursor - 1; i >= 0; i--) {
-            const ch = val[i];
-            if (ch === '@') {
-                atPos = i;
-                break;
-            }
-            if (ch === ' ' || ch === '\n' || ch === '\r' || ch === '\t') {
-                break;
-            }
-        }
-        if (atPos === -1) {
-            this._hideMentionDropdown();
-            return;
-        }
-        const query = val.slice(atPos + 1, cursor);
-        if (query === this._mentionQuery && this._mentionTriggerIndex === atPos) {
-            return;
-        }
-        this._mentionTriggerIndex = atPos;
-        this._mentionQuery = query;
-        this._mentionSelectedIdx = 0;
-        this._mentionCoords = this._computeCaretCoords(textarea, atPos);
-        if (query.length < 1) {
-            this._mentionCandidates = [];
-            this.requestUpdate();
-            return;
-        }
-        clearTimeout(this._mentionDebounceTimer);
-        this._mentionDebounceTimer = window.setTimeout(() => {
-            void this._fetchMentionCandidates(query);
-        }, 250);
-        this.requestUpdate();
     }
 
     async _fetchMentionCandidates(query) {
@@ -2521,32 +2659,70 @@ export class NoteContent extends PlatformElement {
     }
 
     _insertMention(entity) {
-        const textarea = this.renderRoot.querySelector('.note-text-input');
-        if (!textarea) {
+        const div = this.renderRoot.querySelector('.note-text-input');
+        if (!div) {
             return;
         }
-        const val = textarea.value;
-        const atPos = this._mentionTriggerIndex;
-        const cursor = textarea.selectionStart;
-        const token = `[@${entity.name}](entity:${entity.entity_id})`;
-        const before = val.slice(0, atPos);
-        const after = val.slice(cursor);
-        const newVal = before + token + after;
-        const newCursor = atPos + token.length;
-        this._draftText = newVal;
-        this._hideMentionDropdown();
-        queueMicrotask(() => {
-            const ta = this.renderRoot.querySelector('.note-text-input');
-            if (ta) {
-                ta.value = newVal;
-                ta.setSelectionRange(newCursor, newCursor);
-                ta.focus();
+        const query = this._mentionQuery;
+        const pattern = '@' + query;
+
+        // Ищем текстовый узел с @query — знаем точный паттерн
+        const walk = (node) => {
+            if (node.nodeType === Node.TEXT_NODE) {
+                return node.textContent.includes(pattern) ? node : null;
             }
-        });
+            if (node.nodeType === Node.ELEMENT_NODE && node.classList?.contains('note-entity-mention')) {
+                return null;
+            }
+            for (const child of node.childNodes) {
+                const found = walk(child);
+                if (found) return found;
+            }
+            return null;
+        };
+        const textNode = walk(div);
+        if (!textNode) {
+            return;
+        }
+        const text = textNode.textContent;
+        const atIdx = text.lastIndexOf(pattern);
+        if (atIdx === -1) {
+            return;
+        }
+        const endIdx = atIdx + pattern.length;
+
+        const span = document.createElement('span');
+        span.className = 'note-entity-mention';
+        span.dataset.entityId = entity.entity_id;
+        span.contentEditable = 'false';
+        span.textContent = `@${entity.name}`;
+
+        const beforeNode = document.createTextNode(text.slice(0, atIdx));
+        const afterNode = document.createTextNode('\u00a0' + text.slice(endIdx));
+        const parent = textNode.parentNode;
+        parent.insertBefore(beforeNode, textNode);
+        parent.insertBefore(span, textNode);
+        parent.insertBefore(afterNode, textNode);
+        parent.removeChild(textNode);
+
+        const sel = window.getSelection();
+        if (sel) {
+            try {
+                const r = document.createRange();
+                r.setStart(afterNode, 1);
+                r.collapse(true);
+                sel.removeAllRanges();
+                sel.addRange(r);
+            } catch (_) {
+                // best-effort
+            }
+        }
+        this._draftText = this._serializeEditableContent(div);
+        this._hideMentionDropdown();
     }
 
     _renderMentionDropdown() {
-        if (this._mentionTriggerIndex === -1 || !this._mentionCoords) {
+        if (this._mentionTriggerIndex === -1 || !this._mentionCoords || this._mentionQuery.length === 0) {
             return '';
         }
         const candidates = this._mentionCandidates;
@@ -2658,6 +2834,7 @@ export class NoteContent extends PlatformElement {
                 }
                 const separator = this._draftText?.trim() ? '\n\n' : '';
                 this._draftText = (this._draftText || '') + separator + result.text.trim();
+                this.requestUpdate();
                 notify.success(this.i18n.t('voice_input.dictate_appended'));
             } catch (err) {
                 this._voiceRecState = 'idle';
@@ -2950,13 +3127,13 @@ export class NoteContent extends PlatformElement {
                     </div>
                     ${this.editable ? html`
                         <div class="note-text-input-wrap">
-                            <textarea
+                            <div
                                 class="note-text-input"
-                                .value=${noteText}
+                                contenteditable="true"
+                                data-placeholder=${this.i18n.t('notes.placeholder')}
                                 @input=${this._onTextInput}
                                 @keydown=${this._onTextKeyDown}
-                                placeholder=${this.i18n.t('notes.placeholder')}
-                            ></textarea>
+                            ></div>
                             ${this._renderMentionDropdown()}
                             <div class="note-voice-dictate-floating">
                                 <button

@@ -446,6 +446,24 @@ export class DailyNotesPage extends PlatformElement {
                 color: var(--accent-secondary);
             }
 
+            .analyze-btn.has-applied {
+                border-color: rgba(34, 197, 94, 0.5);
+                background: rgba(34, 197, 94, 0.12);
+                color: #16a34a;
+            }
+
+            .note-type-badge {
+                display: inline-flex;
+                align-items: center;
+                justify-content: center;
+                width: 24px;
+                height: 24px;
+                border-radius: 8px;
+                background: var(--crm-surface-elevated, rgba(0,0,0,0.05));
+                color: var(--text-tertiary);
+                flex-shrink: 0;
+            }
+
             .analyze-btn.needs-ai {
                 border-color: rgba(139, 92, 246, 0.5);
                 background: rgba(139, 92, 246, 0.14);
@@ -1477,6 +1495,10 @@ export class DailyNotesPage extends PlatformElement {
             this._openNoteAnalysisDraftModal(note);
             return;
         }
+        if (this._hasNoteAnalysisApplied(note)) {
+            this._openNoteModal(note);
+            return;
+        }
         const noteText = note.description.trim();
         if (!noteText) {
             throw new Error('Empty note cannot be analyzed');
@@ -1516,6 +1538,19 @@ export class DailyNotesPage extends PlatformElement {
         return typeof draft === 'object'
             && draft !== null
             && typeof draft.draft_version === 'number';
+    }
+
+    _hasNoteAnalysisApplied(note) {
+        if (!note || typeof note !== 'object') {
+            throw new Error('Note object is required');
+        }
+        const attrs = note.attributes;
+        if (!attrs || typeof attrs !== 'object') {
+            return false;
+        }
+        return typeof attrs.ai_analysis_applied_at === 'string'
+            && attrs.ai_analysis_applied_at.length > 0
+            && !this._hasNoteAnalysisDraft(note);
     }
 
     _noteNeedsAiProcessing(note) {
@@ -1691,6 +1726,21 @@ export class DailyNotesPage extends PlatformElement {
             .filter((part) => part.length > 0)
             .map((part) => `${part.charAt(0).toUpperCase()}${part.slice(1)}`)
             .join(' ');
+    }
+
+    _getNoteSubtypeIcon(note) {
+        const subtype = typeof note?.entity_subtype === 'string' ? note.entity_subtype.trim() : '';
+        const iconMap = {
+            call: 'phone-call',
+            meeting: 'calendar',
+            email: 'mail',
+            task: 'tasks',
+            note: 'doc-detail',
+        };
+        if (subtype.length > 0) {
+            return iconMap[subtype] ?? 'doc-detail';
+        }
+        return 'doc-detail';
     }
 
     _getAuthorName(note) {
@@ -1953,6 +2003,12 @@ export class DailyNotesPage extends PlatformElement {
                                             return html`
                                                 <div class="note-tags-row">
                                                     <div class="note-tags">
+                                                        <span
+                                                            class="note-type-badge"
+                                                            title=${this._getNoteSubtypeLabel(note) || this.i18n.t('daily_notes_page.note_type_default')}
+                                                        >
+                                                            <platform-icon name=${this._getNoteSubtypeIcon(note)} size="14"></platform-icon>
+                                                        </span>
                                                         ${relatedEntities.map((entity, index) => html`
                                                             <button
                                                                 class="note-tag ${this._getEntityTagTone(index)}"
@@ -1991,9 +2047,6 @@ export class DailyNotesPage extends PlatformElement {
                                             </div>
                                         ` : ''}
                                         <h3 class="note-title">${note.name}</h3>
-                                        ${this._getNoteSubtypeLabel(note).length > 0 ? html`
-                                            <p class="published-at">${this._getNoteSubtypeLabel(note)}</p>
-                                        ` : ''}
                                         <p class="note-text">${this._getNotePreviewText(note)}</p>
                                         <div class="note-footer">
                                             ${(() => {
@@ -2013,7 +2066,7 @@ export class DailyNotesPage extends PlatformElement {
                                             <div class="note-footer-right">
                                                 <span class="published-at">${this.i18n.t('daily_notes_page.published_at', { time: this._formatTime(this._getTextValue(note.updated_at, this._getTextValue(note.created_at, new Date().toISOString()))) })}</span>
                                                 <button
-                                                    class="analyze-btn ${this._isNoteAiAnalyzing(note) ? 'analyzing' : ''} ${this._hasNoteAnalysisDraft(note) ? 'has-draft' : this._noteNeedsAiProcessing(note) ? 'needs-ai' : ''}"
+                                                    class="analyze-btn ${this._isNoteAiAnalyzing(note) ? 'analyzing' : ''} ${this._hasNoteAnalysisDraft(note) ? 'has-draft' : this._hasNoteAnalysisApplied(note) ? 'has-applied' : this._noteNeedsAiProcessing(note) ? 'needs-ai' : ''}"
                                                     type="button"
                                                     ?disabled=${this._isNoteAiAnalyzing(note)}
                                                     @click=${(event) => { event.stopPropagation(); this._onAnalyzeNote(note); }}
@@ -2021,7 +2074,9 @@ export class DailyNotesPage extends PlatformElement {
                                                         ? this.i18n.t('daily_notes_page.analysis_in_progress')
                                                         : (this._hasNoteAnalysisDraft(note)
                                                             ? this.i18n.t('daily_notes_page.analysis_open_draft')
-                                                            : this.i18n.t('daily_notes_page.analysis_run'))}
+                                                            : (this._hasNoteAnalysisApplied(note)
+                                                                ? this.i18n.t('daily_notes_page.analysis_view_applied')
+                                                                : this.i18n.t('daily_notes_page.analysis_run')))}
                                                 >
                                                     <platform-icon name="ai" size="14" colored></platform-icon>
                                                 </button>

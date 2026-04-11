@@ -14,6 +14,65 @@ import pytest
 from apps.crm.models.api import AIAnalysisDraftStored, AIExtractedEntity
 from apps.crm.services.entity_service import ApplyAnalysisDraftEntityFailuresError, EntityService
 
+
+
+async def _apply_note(crm_client, headers: dict, note_id: str):
+    """Применяет черновик анализа заметки через /tasks/note-analyze с mode=apply."""
+    import asyncio, time
+    start = await crm_client.post(
+        "/crm/api/v1/tasks/note-analyze",
+        json={"note_id": note_id, "mode": "apply"},
+        headers=headers,
+    )
+    if start.status_code not in (200, 202):
+        return start  # propagate error for assertions
+    task_id = start.json()["task_id"]
+    deadline = time.monotonic() + 30.0
+    last = {}
+    while time.monotonic() < deadline:
+        tr = await crm_client.get(f"/crm/api/v1/tasks/{task_id}", headers=headers)
+        last = tr.json()
+        if last.get("status") in ("completed", "failed", "cancelled"):
+            break
+        await asyncio.sleep(0.3)
+    return type("FakeResp", (), {"status_code": 200 if last.get("status") == "completed" else 422, "json": lambda: last, "text": str(last)})()
+
+
+async def _analyze_note(
+    crm_client,
+    headers: dict,
+    note_id: str,
+    **extra,
+):
+    """Запускает анализ заметки через POST /tasks/note-analyze и ждёт завершения.
+
+    Возвращает (task_row, ai_analysis_draft).
+    """
+    import asyncio, time
+    body = {"note_id": note_id, **extra}
+    start = await crm_client.post(
+        "/crm/api/v1/tasks/note-analyze",
+        json=body,
+        headers=headers,
+    )
+    assert start.status_code == 202, start.text
+    task_id = start.json()["task_id"]
+    deadline = time.monotonic() + 60.0
+    last = {}
+    while time.monotonic() < deadline:
+        tr = await crm_client.get(f"/crm/api/v1/tasks/{task_id}", headers=headers)
+        assert tr.status_code == 200, tr.text
+        last = tr.json()
+        if last.get("status") in ("completed", "failed", "cancelled"):
+            break
+        await asyncio.sleep(0.4)
+    assert last.get("status") == "completed", f"task failed: {last.get('error_message')}"
+    nr = await crm_client.get(f"/crm/api/v1/entities/{note_id}", headers=headers)
+    draft = nr.json().get("attributes", {}).get("ai_analysis_draft") or {}
+    return last, draft
+
+
+
 _ANALYZE_META = {"dates_mentioned": [], "places_mentioned": [], "key_topics": []}
 
 
@@ -101,11 +160,7 @@ class TestAnalysisDraftPipeline:
             ]
         )
 
-        analyze = await crm_client.post(
-            f"/crm/api/v1/entities/notes/{note_id}/analyze",
-            json={},
-            headers=auth_headers_system,
-        )
+        _, analyze = await _analyze_note(crm_client, auth_headers_system, note_id)
         assert analyze.status_code == 200, analyze.text
         body = analyze.json()
         assert len(body["entities"]) == 2
@@ -172,11 +227,7 @@ class TestAnalysisDraftPipeline:
             ]
         )
 
-        analyze = await crm_client.post(
-            f"/crm/api/v1/entities/notes/{note_id}/analyze",
-            json={},
-            headers=auth_headers_system,
-        )
+        _, analyze = await _analyze_note(crm_client, auth_headers_system, note_id)
         assert analyze.status_code == 200, analyze.text
 
         bad = await crm_client.patch(
@@ -245,11 +296,7 @@ class TestAnalysisDraftPipeline:
             ]
         )
 
-        await crm_client.post(
-            f"/crm/api/v1/entities/notes/{note_id}/analyze",
-            json={},
-            headers=auth_headers_system,
-        )
+        await _analyze_note(crm_client, auth_headers_system, note_id)
 
         get1 = await crm_client.get(f"/crm/api/v1/entities/{note_id}", headers=auth_headers_system)
         draft1 = get1.json()["attributes"]["ai_analysis_draft"]
@@ -330,17 +377,10 @@ class TestAnalysisDraftPipeline:
             ]
         )
 
-        an = await crm_client.post(
-            f"/crm/api/v1/entities/notes/{note_id}/analyze",
-            json={"check_duplicates": False},
-            headers=auth_headers_system,
-        )
+        _, an = await _analyze_note(crm_client, auth_headers_system, note_id, "check_duplicates": False)
         assert an.status_code == 200, an.text
 
-        apply_resp = await crm_client.post(
-            f"/crm/api/v1/entities/notes/{note_id}/apply",
-            headers=auth_headers_system,
-        )
+        apply_resp = await _apply_note(crm_client, auth_headers_system, note_id)
         assert apply_resp.status_code == 200, apply_resp.text
         result = apply_resp.json()
         assert len(result["created_entity_ids"]) == 1
@@ -403,22 +443,12 @@ class TestAnalysisDraftPipeline:
             ]
         )
 
-        await crm_client.post(
-            f"/crm/api/v1/entities/notes/{note_id}/analyze",
-            json={},
-            headers=auth_headers_system,
-        )
+        await _analyze_note(crm_client, auth_headers_system, note_id)
 
-        first = await crm_client.post(
-            f"/crm/api/v1/entities/notes/{note_id}/apply",
-            headers=auth_headers_system,
-        )
+        first = await _apply_note(crm_client, auth_headers_system, note_id)
         assert first.status_code == 200, first.text
 
-        second = await crm_client.post(
-            f"/crm/api/v1/entities/notes/{note_id}/apply",
-            headers=auth_headers_system,
-        )
+        second = await _apply_note(crm_client, auth_headers_system, note_id)
         assert second.status_code == 422, second.text
 
 

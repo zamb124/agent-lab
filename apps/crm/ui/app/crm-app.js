@@ -14,7 +14,7 @@ import '../pages/tasks-page.js';
 import '../pages/settings-hub-page.js';
 import '../pages/templates-page.js';
 import '../pages/spaces-page.js';
-import '../pages/namespace-imports-page.js';
+import '../pages/namespace-tasks-page.js';
 import '../pages/relationship-types-page.js';
 import '../modals/entity-modal.js';
 import '../modals/note-view-modal.js';
@@ -439,7 +439,7 @@ export class CRMApp extends PlatformApp {
         }
 
         if (this._currentView === 'namespace_imports') {
-            return html`<namespace-imports-page></namespace-imports-page>`;
+            return html`<namespace-tasks-page></namespace-tasks-page>`;
         }
 
         if (this._currentView === 'relationship_types') {

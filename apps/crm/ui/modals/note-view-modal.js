@@ -27,6 +27,10 @@ export class NoteViewModal extends PlatformModal {
         _deleting: { state: true },
         _editing: { state: true },
         _savingNote: { state: true },
+        _activeTaskId: { state: true },
+        _taskStage: { state: true },
+        _taskPct: { state: true },
+        _taskStatus: { state: true },
     };
 
     static styles = [
@@ -70,6 +74,48 @@ export class NoteViewModal extends PlatformModal {
                     padding: 0;
                 }
             }
+            .analyze-progress-banner {
+                display: flex;
+                flex-direction: column;
+                gap: 8px;
+                background: var(--primary-soft, rgba(99,102,241,0.1));
+                border-radius: var(--radius-lg);
+                padding: 12px 16px;
+                margin: 8px;
+            }
+            .analyze-progress-row {
+                display: flex;
+                align-items: center;
+                justify-content: space-between;
+                font-size: var(--text-sm);
+                color: var(--text-secondary);
+            }
+            .analyze-progress-bar-wrap {
+                width: 100%;
+                height: 5px;
+                background: rgba(99,102,241,0.2);
+                border-radius: 3px;
+                overflow: hidden;
+            }
+            .analyze-progress-bar {
+                height: 100%;
+                background: var(--primary, #6366f1);
+                border-radius: 3px;
+                transition: width 0.5s ease;
+                position: relative;
+                min-width: 8px;
+            }
+            .analyze-progress-bar::after {
+                content: '';
+                position: absolute;
+                inset: 0;
+                background: linear-gradient(90deg, transparent 20%, rgba(255,255,255,0.4) 50%, transparent 80%);
+                animation: progress-shimmer 1.6s infinite;
+            }
+            @keyframes progress-shimmer {
+                0% { transform: translateX(-100%); }
+                100% { transform: translateX(200%); }
+            }
         `,
     ];
 
@@ -93,6 +139,11 @@ export class NoteViewModal extends PlatformModal {
         this._editing = false;
         this._savingNote = false;
         this._crmStoreUnsub = null;
+        this._activeTaskId = null;
+        this._taskStage = null;
+        this._taskPct = 0;
+        this._taskStatus = null;
+        this._handleTaskWsNotification = null;
     }
 
     renderHeader() {
@@ -158,12 +209,56 @@ export class NoteViewModal extends PlatformModal {
         this._crmStoreUnsub = CRMStore.subscribe(() => {
             syncAnalyzingNoteId();
         });
+        this._handleTaskWsNotification = (event) => {
+            const n = event.detail;
+            if (!n || n.service !== 'crm' || n.type !== 'crm_task_updated') {
+                return;
+            }
+            if (n.data?.task_id !== this._activeTaskId) {
+                return;
+            }
+            this._taskStage = n.data?.stage || null;
+            this._taskPct = n.data?.progress_pct ?? 0;
+            this._taskStatus = n.data?.status || null;
+            if (n.data?.status === 'completed') {
+                this._activeTaskId = null;
+                this._taskStatus = 'completed';
+                void (async () => {
+                    try {
+                        const crmApi = this.crmApi;
+                        const fresh = await crmApi.getEntity(this.note?.entity_id);
+                        if (fresh && this.note) {
+                            this.note = fresh;
+                            CRMStore.setNoteInStore(fresh);
+                        }
+                        await this._loadRelatedEntities();
+                        // Открываем модалку черновика только если это analyze (черновик появился),
+                        // но не для apply (он уже применён)
+                        if (this._hasAnalysisDraft()) {
+                            this._handleOpenAnalysisDraft();
+                        }
+                    } catch (_e) {
+                        void this._loadRelatedEntities();
+                    }
+                })();
+            } else if (n.data?.status === 'failed') {
+                this._activeTaskId = null;
+                this._taskStatus = 'failed';
+                const msg = n.message || n.data?.error_message || 'Анализ завершился с ошибкой';
+                this.error(msg);
+            }
+        };
+        window.addEventListener('platform-notification-received', this._handleTaskWsNotification);
     }
 
     disconnectedCallback() {
         super.disconnectedCallback();
         this._crmStoreUnsub?.();
         this._crmStoreUnsub = null;
+        if (this._handleTaskWsNotification) {
+            window.removeEventListener('platform-notification-received', this._handleTaskWsNotification);
+            this._handleTaskWsNotification = null;
+        }
     }
 
     async firstUpdated() {
@@ -172,6 +267,38 @@ export class NoteViewModal extends PlatformModal {
         await this._loadEntityTypes();
         await this._loadRelationshipTypes();
         await this._loadRelatedEntities();
+        await this._restoreActiveAnalyzeTask();
+    }
+
+    async _restoreActiveAnalyzeTask() {
+        if (!this.note || typeof this.note.entity_id !== 'string' || this.draftMode) {
+            return;
+        }
+        if (this._activeTaskId) {
+            return;
+        }
+        const crmApi = this.crmApi;
+        const ns = typeof this.note.namespace === 'string' && this.note.namespace.trim()
+            ? this.note.namespace.trim()
+            : 'default';
+        try {
+            const tasks = await crmApi.listTasks(ns, 10, 'note_analyze', this.note.entity_id);
+            if (!Array.isArray(tasks)) {
+                return;
+            }
+            const active = tasks.find(
+                (t) => t.status === 'running' || t.status === 'pending',
+            );
+            if (!active) {
+                return;
+            }
+            this._activeTaskId = active.task_id;
+            this._taskStage = active.stage || 'pending';
+            this._taskPct = active.progress_pct ?? 0;
+            this._taskStatus = active.status;
+        } catch (_e) {
+            // не критично — просто не показываем прогресс
+        }
     }
 
     async _loadEntityTypes() {
@@ -318,8 +445,29 @@ export class NoteViewModal extends PlatformModal {
         document.body.appendChild(analysisModal);
         analysisModal.showModal();
         analysisModal.addEventListener('close', () => analysisModal.remove());
+        // Перехватываем task_id apply-джобы до закрытия модалки.
+        // Дальше _handleTaskWsNotification отследит завершение через WebSocket.
+        analysisModal.addEventListener('apply-task-started', (e) => {
+            const taskId = e.detail?.taskId;
+            if (typeof taskId === 'string' && taskId.length > 0) {
+                this._activeTaskId = taskId;
+                this._taskStatus = 'running';
+                this._taskStage = 'applying';
+                this._taskPct = 85;
+                this.requestUpdate();
+            }
+        });
         analysisModal.addEventListener('saved', async () => {
-            this._syncNoteFromStore();
+            try {
+                const crmApi = this.crmApi;
+                const fresh = await crmApi.getEntity(this.note?.entity_id);
+                if (fresh && this.note) {
+                    this.note = fresh;
+                    CRMStore.setNoteInStore(fresh);
+                }
+            } catch (_e) {
+                this._syncNoteFromStore();
+            }
             await this._loadRelatedEntities();
         });
     }
@@ -351,8 +499,23 @@ export class NoteViewModal extends PlatformModal {
     }
 
     async _handleSummaryRefresh() {
+        if (!this.note || typeof this.note.entity_id !== 'string') {
+            throw new Error('note is required');
+        }
+        if (this._activeTaskId && (this._taskStatus === 'running' || this._taskStatus === 'pending')) {
+            this.warning(this.i18n.t('note_view_modal.analyze_already_running'));
+            return;
+        }
+        const crmApi = this.crmApi;
         try {
-            await this._refreshEntitiesFromNote();
+            const task = await crmApi.startNoteAnalyzeTask(this.note.entity_id, {});
+            if (!task || typeof task.task_id !== 'string') {
+                throw new Error('Задача анализа не создана');
+            }
+            this._activeTaskId = task.task_id;
+            this._taskStage = task.stage || 'pending';
+            this._taskPct = task.progress_pct ?? 0;
+            this._taskStatus = task.status;
         } catch (error) {
             const message = error instanceof Error
                 ? error.message
@@ -702,7 +865,19 @@ export class NoteViewModal extends PlatformModal {
         if (!this.note || typeof this.note !== 'object') {
             throw new Error('note is required');
         }
+        const isAnalyzing = Boolean(this._activeTaskId) && this._taskStatus !== 'completed' && this._taskStatus !== 'failed';
         return html`
+            ${isAnalyzing ? html`
+                <div class="analyze-progress-banner">
+                    <div class="analyze-progress-row">
+                        <span>${this.i18n.t(`task.stage.${this._taskStage || 'pending'}`, {}, 'crm') || this._taskStage || '...'}</span>
+                        <span>${this._taskPct ?? 0}%</span>
+                    </div>
+                    <div class="analyze-progress-bar-wrap">
+                        <div class="analyze-progress-bar" style="width: ${this._taskPct ?? 0}%"></div>
+                    </div>
+                </div>
+            ` : ''}
             <div class="note-view-shell">
                 <note-content
                     .note=${this.note}

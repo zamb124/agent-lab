@@ -1368,6 +1368,23 @@ class EntityService:
             relationships=list(snapshot.relationships),
         )
         attrs["ai_analysis_draft"] = stored.model_dump(mode="json")
+
+        # Если LLM вернул описание заметки — сохраняем его как ai_summary
+        # чтобы пользователь видел резюме сразу, не дожидаясь ежечасовой daily summary задачи
+        note_field = snapshot.note
+        if note_field and isinstance(getattr(note_field, "description", None), str):
+            summary_text = note_field.description.strip()
+            if summary_text:
+                attrs["ai_summary"] = summary_text
+                attrs["ai_summary_generated_at"] = datetime.now(timezone.utc).isoformat()
+                entity_names = [
+                    e.name
+                    for e in (snapshot.entities or [])
+                    if isinstance(getattr(e, "name", None), str) and e.name.strip()
+                ]
+                if entity_names:
+                    attrs["ai_summary_entities"] = entity_names[:8]
+
         await self.update_entity(note_id, {"attributes": attrs})
 
     async def _load_analysis_draft_from_note(
@@ -2417,9 +2434,11 @@ class EntityService:
 
         Работает только с exact match (регистронезависимо). Уже токенизированные
         упоминания не трогаются. Падежные формы не обрабатываются.
+        Сортировка по убыванию длины имени предотвращает частичные замены
+        (например «Ольга» не испортит «Ольга Ким»).
         """
         text = description
-        for entity in entities:
+        for entity in sorted(entities, key=lambda e: len(e.get("name") or ""), reverse=True):
             entity_id = entity.get("entity_id") or entity.get("id")
             name = entity.get("name")
             if not entity_id or not name:
@@ -2453,6 +2472,41 @@ class EntityService:
                 source_entity_id=note_id,
                 target_entity_id=entity_id,
                 relationship_type="linked",
+                namespace=namespace,
+                weight=1.0,
+                attributes={},
+                company_id=company_id,
+                created_at=now,
+                updated_at=now,
+            )
+            await self._relationship_repo.create(row)
+
+    async def sync_note_mentions_from_applied_entities(
+        self, note_id: str, entity_ids: list[str]
+    ) -> None:
+        """
+        После apply AI-анализа: создаёт mentions-связи от заметки ко всем найденным сущностям.
+        AI не всегда включает эти связи в черновик — создаём принудительно для всех извлечённых.
+        """
+        if not entity_ids:
+            return
+        note = await self._entity_repo.get(note_id)
+        if note is None:
+            raise ValueError(f"Заметка не найдена: {note_id}")
+        namespace = self._resolve_namespace_for_write(note.namespace)
+        company_id = self._get_company_id()
+        now = datetime.now(timezone.utc)
+        for entity_id in entity_ids:
+            if entity_id == note_id:
+                continue
+            existing = await self._relationship_repo.find_exact(note_id, entity_id, "mentions")
+            if existing:
+                continue
+            row = Relationship(
+                relationship_id=str(uuid.uuid4()),
+                source_entity_id=note_id,
+                target_entity_id=entity_id,
+                relationship_type="mentions",
                 namespace=namespace,
                 weight=1.0,
                 attributes={},

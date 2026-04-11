@@ -4,7 +4,7 @@ TaskIQ задачи пересчета Daily Summary для CRM.
 
 from __future__ import annotations
 
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta, timezone
 from typing import Any, Optional, TYPE_CHECKING
 
 from sqlalchemy import and_, select
@@ -132,8 +132,12 @@ async def rebuild_daily_summary_task(
     reason: str = "event",
     auth_token: Optional[str] = None,
     user_id: Optional[str] = None,
+    task_id: Optional[str] = None,
 ) -> dict[str, Any]:
-    """Пересчитывает и сохраняет summary в Redis state."""
+    """Пересчитывает и сохраняет summary в Redis state.
+
+    task_id — опциональный идентификатор записи CRMTask для обновления прогресса.
+    """
     resolved_auth_token = auth_token
     if resolved_auth_token is None:
         resolved_auth_token = await _build_auth_token_for_company(company_id=company_id, user_id=user_id)
@@ -144,20 +148,46 @@ async def rebuild_daily_summary_task(
         user_id=user_id,
     )
     container = get_crm_container()
-    async with traced_operation(
-        "crm.worker.rebuild_daily_summary",
-        event_type="crm.worker",
-        operation_category="sync_command",
-        extra_attributes={
-            trace_attributes.ATTR_TENANT_COMPANY_ID: company_id,
-            "platform.crm.summary_date": date_str,
-            "platform.crm.summary_namespace": namespace or "",
-        },
-    ):
-        state = await container.entity_service.rebuild_daily_summary(
-            date_str=date_str,
-            namespace=namespace,
+
+    if task_id:
+        await container.task_repository.patch_progress(
+            task_id, company_id,
+            status="running", stage="summarizing_day", progress_pct=50,
+            started_at=datetime.now(timezone.utc),
         )
+
+    try:
+        async with traced_operation(
+            "crm.worker.rebuild_daily_summary",
+            event_type="crm.worker",
+            operation_category="sync_command",
+            extra_attributes={
+                trace_attributes.ATTR_TENANT_COMPANY_ID: company_id,
+                "platform.crm.summary_date": date_str,
+                "platform.crm.summary_namespace": namespace or "",
+            },
+        ):
+            state = await container.entity_service.rebuild_daily_summary(
+                date_str=date_str,
+                namespace=namespace,
+            )
+    except Exception as exc:
+        if task_id:
+            await container.task_repository.patch_progress(
+                task_id, company_id,
+                status="failed", stage="failed", progress_pct=100,
+                error_message=str(exc),
+                completed_at=datetime.now(timezone.utc),
+            )
+        raise
+
+    if task_id:
+        await container.task_repository.patch_progress(
+            task_id, company_id,
+            status="completed", stage="completed", progress_pct=100,
+            completed_at=datetime.now(timezone.utc),
+        )
+
     if state.get("revalidating") is False and state.get("stale") is False:
         await _notify_daily_summary_updated(
             company_id=company_id,
@@ -182,6 +212,7 @@ async def rebuild_period_summary_task(
     reason: str = "event",
     auth_token: Optional[str] = None,
     user_id: Optional[str] = None,
+    task_id: Optional[str] = None,
 ) -> dict[str, Any]:
     """Пересчитывает и сохраняет period summary в Redis и S3."""
     resolved_auth_token = auth_token
@@ -194,21 +225,47 @@ async def rebuild_period_summary_task(
         user_id=user_id,
     )
     container = get_crm_container()
-    async with traced_operation(
-        "crm.worker.rebuild_period_summary",
-        event_type="crm.worker",
-        operation_category="sync_command",
-        extra_attributes={
-            trace_attributes.ATTR_TENANT_COMPANY_ID: company_id,
-            "platform.crm.period_from": date_from,
-            "platform.crm.period_to": date_to,
-        },
-    ):
-        state = await container.entity_service.rebuild_period_summary(
-            date_from=date_from,
-            date_to=date_to,
-            namespace=namespace,
+
+    if task_id:
+        await container.task_repository.patch_progress(
+            task_id, company_id,
+            status="running", stage="summarizing_day", progress_pct=50,
+            started_at=datetime.now(timezone.utc),
         )
+
+    try:
+        async with traced_operation(
+            "crm.worker.rebuild_period_summary",
+            event_type="crm.worker",
+            operation_category="sync_command",
+            extra_attributes={
+                trace_attributes.ATTR_TENANT_COMPANY_ID: company_id,
+                "platform.crm.period_from": date_from,
+                "platform.crm.period_to": date_to,
+            },
+        ):
+            state = await container.entity_service.rebuild_period_summary(
+                date_from=date_from,
+                date_to=date_to,
+                namespace=namespace,
+            )
+    except Exception as exc:
+        if task_id:
+            await container.task_repository.patch_progress(
+                task_id, company_id,
+                status="failed", stage="failed", progress_pct=100,
+                error_message=str(exc),
+                completed_at=datetime.now(timezone.utc),
+            )
+        raise
+
+    if task_id:
+        await container.task_repository.patch_progress(
+            task_id, company_id,
+            status="completed", stage="completed", progress_pct=100,
+            completed_at=datetime.now(timezone.utc),
+        )
+
     if state.get("revalidating") is False and state.get("stale") is False:
         await _notify_daily_summary_updated(
             company_id=company_id,

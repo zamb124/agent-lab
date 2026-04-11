@@ -206,17 +206,17 @@ class CRMContainer(BaseContainer):
         return NoteProcessingService(entity_service=self.entity_service)
 
     @lazy
-    def knowledge_import_repository(self):
-        from apps.crm.db.repositories.knowledge_import_repository import KnowledgeImportRepository
+    def task_repository(self):
+        from apps.crm.db.repositories.task_repository import TaskRepository
 
-        return KnowledgeImportRepository(db=self.crm_db)
+        return TaskRepository(db=self.crm_db)
 
     @lazy
-    def knowledge_import_service(self):
-        from apps.crm.services.knowledge_import_service import KnowledgeImportService
+    def task_service(self):
+        from apps.crm.services.task_service import TaskService
 
-        return KnowledgeImportService(
-            import_repo=self.knowledge_import_repository,
+        return TaskService(
+            task_repo=self.task_repository,
             entity_service=self.entity_service,
             relationship_repo=self.relationship_repository,
         )
@@ -226,7 +226,7 @@ class CRMContainer(BaseContainer):
         from apps.crm.services.lara_workspace_service import LaraWorkspaceService
 
         return LaraWorkspaceService(
-            import_repo=self.knowledge_import_repository,
+            task_repo=self.task_repository,
             entity_repo=self.entity_repository,
         )
 

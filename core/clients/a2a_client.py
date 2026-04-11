@@ -159,7 +159,8 @@ class A2AClient:
                 # Нормализуем ответ - парсим artifacts в response
                 return self._parse_a2a_response(result)
         except httpx.HTTPError as e:
-            raise A2AClientError(f"HTTP error sending task to {url}: {e}")
+            error_str = str(e) or type(e).__name__
+            raise A2AClientError(f"HTTP error sending task to {url}: {error_str}")
         except ValueError as e:
             raise A2AClientError(f"Invalid JSON response from {url}: {e}")
 

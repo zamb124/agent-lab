@@ -15,8 +15,8 @@ from tests.crm.knowledge_import_helpers import (
     combined_entity_blob,
     crm_upload_bytes,
     fetch_entity_texts,
-    rollback_knowledge_import,
-    wait_knowledge_import_terminal,
+    rollback_task,
+    wait_task_terminal,
 )
 
 _META = {"dates_mentioned": [], "places_mentioned": [], "key_topics": []}
@@ -90,35 +90,35 @@ async def _start_notes_import(
     if source_file_ids is not None:
         body["source_file_ids"] = source_file_ids
     response = await crm_client.post(
-        "/crm/api/v1/knowledge-imports",
+        "/crm/api/v1/tasks/knowledge-import",
         json=body,
         headers=headers,
     )
-    if response.status_code != 200:
+    if response.status_code != 202:
         raise AssertionError(f"start import: {response.status_code} {response.text}")
     payload = response.json()
-    import_id = payload.get("import_id")
-    if not isinstance(import_id, str) or not import_id.strip():
-        raise AssertionError(f"нет import_id: {payload}")
-    return import_id.strip()
+    task_id = payload.get("task_id")
+    if not isinstance(task_id, str) or not task_id.strip():
+        raise AssertionError(f"нет task_id: {payload}")
+    return task_id.strip()
 
 
 async def _assert_blob_then_rollback(
     crm_client,
     headers: dict,
     *,
-    import_id: str,
+    task_id: str,
     must_contain: str,
 ) -> None:
-    row = await wait_knowledge_import_terminal(crm_client, headers, import_id)
+    row = await wait_task_terminal(crm_client, headers, task_id)
     assert row.get("status") == "completed"
-    ids = row.get("created_entity_ids") or []
+    ids = (row.get("data") or {}).get("created_entity_ids") or []
     assert len(ids) >= 1
     blob = combined_entity_blob(await fetch_entity_texts(crm_client, headers, ids))
     assert must_contain in blob
-    await rollback_knowledge_import(crm_client, headers, import_id)
+    await rollback_task(crm_client, headers, task_id)
     final = await crm_client.get(
-        f"/crm/api/v1/knowledge-imports/{import_id}",
+        f"/crm/api/v1/tasks/{task_id}",
         headers=headers,
     )
     assert final.status_code == 200
@@ -135,7 +135,7 @@ class TestKnowledgeImportE2E:
     ) -> None:
         ns = f"g_{unique_id}"
         marker = f"KN_E2E_INLINE_{unique_id}"
-        import_id = await _start_notes_import(
+        task_id = await _start_notes_import(
             crm_client,
             auth_headers_system,
             namespace=ns,
@@ -144,7 +144,7 @@ class TestKnowledgeImportE2E:
         await _assert_blob_then_rollback(
             crm_client,
             auth_headers_system,
-            import_id=import_id,
+            task_id=task_id,
             must_contain=marker,
         )
 
@@ -156,7 +156,7 @@ class TestKnowledgeImportE2E:
         marker = f"KN_E2E_MD_{unique_id}"
         raw = f"# Раздел\n\n{marker}\n".encode("utf-8")
         fid = await crm_upload_bytes(crm_client, auth_headers_system, f"{unique_id}.md", raw)
-        import_id = await _start_notes_import(
+        task_id = await _start_notes_import(
             crm_client,
             auth_headers_system,
             namespace=ns,
@@ -165,7 +165,7 @@ class TestKnowledgeImportE2E:
         await _assert_blob_then_rollback(
             crm_client,
             auth_headers_system,
-            import_id=import_id,
+            task_id=task_id,
             must_contain=marker,
         )
 
@@ -177,7 +177,7 @@ class TestKnowledgeImportE2E:
         marker = f"KN_E2E_TXT_{unique_id}"
         raw = f"plain\n{marker}\n".encode("utf-8")
         fid = await crm_upload_bytes(crm_client, auth_headers_system, f"{unique_id}.txt", raw)
-        import_id = await _start_notes_import(
+        task_id = await _start_notes_import(
             crm_client,
             auth_headers_system,
             namespace=ns,
@@ -186,7 +186,7 @@ class TestKnowledgeImportE2E:
         await _assert_blob_then_rollback(
             crm_client,
             auth_headers_system,
-            import_id=import_id,
+            task_id=task_id,
             must_contain=marker,
         )
 
@@ -198,7 +198,7 @@ class TestKnowledgeImportE2E:
         marker = f"KN_E2E_CSV_{unique_id}"
         raw = f"col1,col2\n1,{marker}\n".encode("utf-8")
         fid = await crm_upload_bytes(crm_client, auth_headers_system, f"{unique_id}.csv", raw)
-        import_id = await _start_notes_import(
+        task_id = await _start_notes_import(
             crm_client,
             auth_headers_system,
             namespace=ns,
@@ -207,7 +207,7 @@ class TestKnowledgeImportE2E:
         await _assert_blob_then_rollback(
             crm_client,
             auth_headers_system,
-            import_id=import_id,
+            task_id=task_id,
             must_contain=marker,
         )
 
@@ -220,7 +220,7 @@ class TestKnowledgeImportE2E:
         marker = f"KN_E2E_XLSX_{unique_id}"
         raw = _xlsx_bytes(marker)
         fid = await crm_upload_bytes(crm_client, auth_headers_system, f"{unique_id}.xlsx", raw)
-        import_id = await _start_notes_import(
+        task_id = await _start_notes_import(
             crm_client,
             auth_headers_system,
             namespace=ns,
@@ -229,7 +229,7 @@ class TestKnowledgeImportE2E:
         await _assert_blob_then_rollback(
             crm_client,
             auth_headers_system,
-            import_id=import_id,
+            task_id=task_id,
             must_contain=marker,
         )
 
@@ -242,7 +242,7 @@ class TestKnowledgeImportE2E:
         marker = f"KN_E2E_DOCX_{unique_id}"
         raw = _docx_bytes(marker)
         fid = await crm_upload_bytes(crm_client, auth_headers_system, f"{unique_id}.docx", raw)
-        import_id = await _start_notes_import(
+        task_id = await _start_notes_import(
             crm_client,
             auth_headers_system,
             namespace=ns,
@@ -251,7 +251,7 @@ class TestKnowledgeImportE2E:
         await _assert_blob_then_rollback(
             crm_client,
             auth_headers_system,
-            import_id=import_id,
+            task_id=task_id,
             must_contain=marker,
         )
 
@@ -264,7 +264,7 @@ class TestKnowledgeImportE2E:
         marker = f"KN_E2E_PDF_{unique_id}"
         raw = _pdf_bytes(tmp_path, marker)
         fid = await crm_upload_bytes(crm_client, auth_headers_system, f"{unique_id}.pdf", raw)
-        import_id = await _start_notes_import(
+        task_id = await _start_notes_import(
             crm_client,
             auth_headers_system,
             namespace=ns,
@@ -273,7 +273,7 @@ class TestKnowledgeImportE2E:
         await _assert_blob_then_rollback(
             crm_client,
             auth_headers_system,
-            import_id=import_id,
+            task_id=task_id,
             must_contain=marker,
         )
 
@@ -297,19 +297,19 @@ class TestKnowledgeImportE2E:
             f"b_{unique_id}.txt",
             f"file2\n{m2}\n".encode("utf-8"),
         )
-        import_id = await _start_notes_import(
+        task_id = await _start_notes_import(
             crm_client,
             auth_headers_system,
             namespace=ns,
             source_text=f"inline\n{m0}\n",
             source_file_ids=[f1, f2],
         )
-        row = await wait_knowledge_import_terminal(crm_client, auth_headers_system, import_id)
+        row = await wait_task_terminal(crm_client, auth_headers_system, task_id)
         assert row.get("status") == "completed"
-        ids = row.get("created_entity_ids") or []
+        ids = (row.get("data") or {}).get("created_entity_ids") or []
         blob = combined_entity_blob(await fetch_entity_texts(crm_client, auth_headers_system, ids))
         assert m0 in blob and m1 in blob and m2 in blob
-        await rollback_knowledge_import(crm_client, auth_headers_system, import_id)
+        await rollback_task(crm_client, auth_headers_system, task_id)
 
     @pytest.mark.asyncio
     async def test_notes_only_split_by_headings_two_notes(
@@ -319,19 +319,19 @@ class TestKnowledgeImportE2E:
         a = f"KN_E2E_HA_{unique_id}"
         b = f"KN_E2E_HB_{unique_id}"
         text = f"# Part one\n\n{a}\n\n## Part two\n\n{b}\n"
-        import_id = await _start_notes_import(
+        task_id = await _start_notes_import(
             crm_client,
             auth_headers_system,
             namespace=ns,
             source_text=text,
             split_by_headings=True,
         )
-        row = await wait_knowledge_import_terminal(crm_client, auth_headers_system, import_id)
-        assert row.get("notes_created_count") == 2
-        ids = row.get("created_entity_ids") or []
+        row = await wait_task_terminal(crm_client, auth_headers_system, task_id)
+        assert (row.get("data") or {}).get("notes_created_count") == 2
+        ids = (row.get("data") or {}).get("created_entity_ids") or []
         blob = combined_entity_blob(await fetch_entity_texts(crm_client, auth_headers_system, ids))
         assert a in blob and b in blob
-        await rollback_knowledge_import(crm_client, auth_headers_system, import_id)
+        await rollback_task(crm_client, auth_headers_system, task_id)
 
     @pytest.mark.asyncio
     async def test_review_list_and_complete_then_rollback(
@@ -339,29 +339,29 @@ class TestKnowledgeImportE2E:
     ) -> None:
         ns = f"g_{unique_id}"
         marker = f"KN_E2E_REV_{unique_id}"
-        import_id = await _start_notes_import(
+        task_id = await _start_notes_import(
             crm_client,
             auth_headers_system,
             namespace=ns,
             source_text=f"text\n{marker}\n",
         )
-        row = await wait_knowledge_import_terminal(crm_client, auth_headers_system, import_id)
+        row = await wait_task_terminal(crm_client, auth_headers_system, task_id)
         assert row.get("status") == "completed"
         list_r = await crm_client.get(
-            f"/crm/api/v1/knowledge-imports/{import_id}/created-entities",
+            f"/crm/api/v1/tasks/{task_id}/created-entities",
             headers=auth_headers_system,
         )
         assert list_r.status_code == 200
         listed = list_r.json()
-        assert listed.get("import_id") == import_id
+        assert listed.get("task_id") == task_id
         assert len(listed.get("entities") or []) >= 1
         done = await crm_client.post(
-            f"/crm/api/v1/knowledge-imports/{import_id}/review-complete",
+            f"/crm/api/v1/tasks/{task_id}/review-complete",
             headers=auth_headers_system,
         )
         assert done.status_code == 200
-        assert done.json().get("review_completed_at") is not None
-        await rollback_knowledge_import(crm_client, auth_headers_system, import_id)
+        assert (done.json().get("data") or {}).get("review_completed_at") is not None
+        await rollback_task(crm_client, auth_headers_system, task_id)
 
     @pytest.mark.asyncio
     async def test_graph_mode_single_chunk_mock_llm(
@@ -420,25 +420,25 @@ class TestKnowledgeImportE2E:
             "chunk_max_chars": 50_000,
         }
         response = await crm_client.post(
-            "/crm/api/v1/knowledge-imports",
+            "/crm/api/v1/tasks/knowledge-import",
             json=body,
             headers=auth_headers_system,
         )
-        assert response.status_code == 200, response.text
-        import_id = response.json()["import_id"]
-        row = await wait_knowledge_import_terminal(
+        assert response.status_code == 202, response.text
+        task_id = response.json()["task_id"]
+        row = await wait_task_terminal(
             crm_client,
             auth_headers_system,
-            import_id,
+            task_id,
         )
         assert row.get("status") == "completed"
-        assert int(row.get("notes_created_count") or 0) >= 1
-        assert int(row.get("entities_created_count") or 0) >= 1
-        ids = row.get("created_entity_ids") or []
+        assert int((row.get("data") or {}).get("notes_created_count") or 0) >= 1
+        assert int((row.get("data") or {}).get("entities_created_count") or 0) >= 1
+        ids = (row.get("data") or {}).get("created_entity_ids") or []
         blob = combined_entity_blob(await fetch_entity_texts(crm_client, auth_headers_system, ids))
         assert chunk_marker in blob
         assert task_name in blob
-        await rollback_knowledge_import(crm_client, auth_headers_system, import_id)
+        await rollback_task(crm_client, auth_headers_system, task_id)
 
     @pytest.mark.asyncio
     async def test_graph_mode_meeting_stored_as_note_for_notes_ui(
@@ -497,16 +497,16 @@ class TestKnowledgeImportE2E:
             "chunk_max_chars": 50_000,
         }
         response = await crm_client.post(
-            "/crm/api/v1/knowledge-imports",
+            "/crm/api/v1/tasks/knowledge-import",
             json=body,
             headers=auth_headers_system,
         )
-        assert response.status_code == 200, response.text
-        import_id = response.json()["import_id"]
-        row = await wait_knowledge_import_terminal(
+        assert response.status_code == 202, response.text
+        task_id = response.json()["task_id"]
+        row = await wait_task_terminal(
             crm_client,
             auth_headers_system,
-            import_id,
+            task_id,
         )
         assert row.get("status") == "completed"
         list_r = await crm_client.get(
@@ -526,4 +526,4 @@ class TestKnowledgeImportE2E:
             (e.get("name") or "") == meeting_name and e.get("entity_type") == "note"
             for e in items
         ), items
-        await rollback_knowledge_import(crm_client, auth_headers_system, import_id)
+        await rollback_task(crm_client, auth_headers_system, task_id)

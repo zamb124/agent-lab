@@ -649,7 +649,6 @@ export class AIAnalysisModal extends PlatformModal {
         this._loadingIntervalId = null;
         this._loadingStartedAt = 0;
         this._unsubscribe = null;
-        this.hideHeaderClose = true;
         this.headerSavePrimary = true;
     }
 
@@ -1477,7 +1476,13 @@ export class AIAnalysisModal extends PlatformModal {
             if (CRMStore.state.ai.importReview) {
                 await CRMStore.persistKnowledgeImportReview(crmApi);
             } else {
-                await CRMStore.confirmAllSuggestions(crmApi);
+                const taskId = await CRMStore.confirmAllSuggestions(crmApi);
+                // Уведомляем родителя о запущенной задаче до закрытия модалки
+                this.dispatchEvent(new CustomEvent('apply-task-started', {
+                    detail: { taskId },
+                    bubbles: true,
+                    composed: true,
+                }));
             }
             this.dispatchEvent(new CustomEvent('saved'));
             this.close();

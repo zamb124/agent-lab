@@ -14,7 +14,8 @@
         "entities": "Сущности",
         "tasks": "Задачи",
         "graph": "Граф знаний",
-        "settings": "Настройки"
+        "settings": "Настройки",
+        "ai_analysis": "AI анализ"
     },
     "pages": {
         "dashboard": "Главная",
@@ -236,9 +237,15 @@
         "context_open_entity": "Открыть карточку",
         "context_path_from": "Маршрут от этой сущности",
         "context_graph_from": "Граф от этой сущности",
-        "search_placeholder_short": "Фильтр...",
+        "search_placeholder_short": "Поиск по графу...",
         "search_clear": "Очистить",
         "search_refresh_graph": "Обновить граф",
+        "search_mode_label": "Режим поиска",
+        "search_mode_text": "Текстовый поиск",
+        "search_mode_semantic": "Семантический поиск",
+        "search_mode_hybrid": "Гибридный поиск",
+        "search_results": "Найдено {{count}} сущностей",
+        "search_empty": "По запросу ничего не найдено",
         "mini_loading": "Загрузка графа...",
         "mini_no_edges": "Нет связей",
         "mini_depth_level": "Уровень {{current}} из {{max}}",
@@ -517,7 +524,7 @@
                 "title": "Пространства"
             },
             "namespace_imports": {
-                "title": "Импорты базы знаний"
+                "title": "Задачи"
             }
         }
     },
@@ -834,6 +841,7 @@
         "header_view": "Просмотр заметки",
         "graph_open_title": "Граф связей (отдельное окно)",
         "err_summary_refresh": "Ошибка обновления сводки",
+        "analyze_already_running": "Анализ заметки уже выполняется",
         "err_save_note": "Ошибка сохранения заметки"
     },
     "ai_analysis_modal": {
@@ -906,8 +914,8 @@
         "card_templates_description": "Создание и редактирование шаблонов для новых пространств. Полный контроль типов сущностей, полей и промптов.",
         "card_spaces_title": "Настройки пространств",
         "card_spaces_description": "Управление типами и описаниями текущих пространств компании. Безопасное добавление и редактирование.",
-        "card_imports_title": "Импорты",
-        "card_imports_description": "Журнал импорта базы знаний по пространствам: статус, откат и просмотр созданных сущностей.",
+        "card_imports_title": "Задачи",
+        "card_imports_description": "Журнал задач CRM: импорт знаний, анализ заметок — статус, прогресс, откат.",
         "card_rel_types_title": "Типы связей",
         "card_rel_types_description": "Управление типами связей между сущностями: направленность, обратные типы, веса и визуальное оформление."
     },
@@ -932,7 +940,9 @@
         "published_at": "Опубликовано в {{time}}",
         "analysis_open_draft": "Открыть черновик AI анализа",
         "analysis_run": "AI анализ",
-        "analysis_in_progress": "Идёт AI-анализ…"
+        "analysis_in_progress": "Идёт AI-анализ…",
+        "analysis_view_applied": "Просмотреть результаты AI анализа",
+        "note_type_default": "Заметка"
     },
     "spaces_page": {
         "hint_namespace_description": "Описание текущего пространства. Изменение описания не влияет на существующие сущности и доступно всегда.",
@@ -982,7 +992,7 @@
         "add_type": "Добавить тип",
         "types_hint": "Можно редактировать название, описание и промпт. Идентификатор (type_id) неизменяем.",
         "pick_space": "Выберите пространство для редактирования",
-        "imports_nav": "Импорты",
+        "imports_nav": "Задачи",
         "imports_pick_space": "Сначала выберите пространство в списке"
     },
     "graph_page": {
@@ -1173,5 +1183,51 @@
         "dictate_idle": "Надиктовать текст",
         "dictate_recording": "Остановить диктовку",
         "dictate_appended": "Текст добавлен в заметку"
+    },
+    "task": {
+        "type": {
+            "knowledge_import": "Импорт знаний",
+            "note_analyze": "Анализ заметки",
+            "daily_summary": "Дневная сводка",
+            "period_summary": "Сводка за период"
+        },
+        "stage": {
+            "pending": "Ожидание",
+            "reading_source": "Чтение источника",
+            "splitting": "Разбивка на чанки",
+            "processing_chunks": "Обработка чанков",
+            "reading_attachments": "Чтение вложений",
+            "summarizing": "Суммаризация",
+            "analyzing": "Анализ текста",
+            "applying": "Применение результатов",
+            "summarizing_day": "Составление сводки",
+            "completed": "Завершено",
+            "failed": "Ошибка",
+            "cancelled": "Отменено",
+            "rolled_back": "Откачено"
+        }
+    },
+    "task_tracker": {
+        "title": "Задачи",
+        "list_title": "Список задач",
+        "back_spaces": "К пространствам",
+        "namespace_label": "Пространство",
+        "loading": "Загрузка задач...",
+        "started": "Задача запущена",
+        "filter_label": "Фильтр по типу",
+        "filter_all": "Все",
+        "filter_knowledge_import": "Импорт знаний",
+        "filter_note_analyze": "Анализ заметок",
+        "filter_daily_summary": "Дневная сводка",
+        "action_retry": "Повторить",
+        "action_view_error": "Посмотреть ошибку",
+        "col_status": "Статус",
+        "col_type": "Тип",
+        "col_name": "Название",
+        "col_notes": "Заметок",
+        "col_entities": "Сущностей",
+        "col_rels": "Связей",
+        "col_review": "Ревью",
+        "col_actions": "Действия"
     }
 }

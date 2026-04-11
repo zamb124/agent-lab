@@ -11,7 +11,7 @@ pytestmark = pytest.mark.timeout(20, func_only=True)
 async def test_start_import_chunk_max_chars_pydantic(crm_client, auth_headers_system, unique_id) -> None:
     ns = f"g_{unique_id}"
     response = await crm_client.post(
-        "/crm/api/v1/knowledge-imports",
+        "/crm/api/v1/tasks/knowledge-import",
         json={
             "namespace": ns,
             "mode": "notes_only",
@@ -27,7 +27,7 @@ async def test_start_import_chunk_max_chars_pydantic(crm_client, auth_headers_sy
 async def test_start_import_empty_source(crm_client, auth_headers_system, unique_id) -> None:
     ns = f"g_{unique_id}"
     response = await crm_client.post(
-        "/crm/api/v1/knowledge-imports",
+        "/crm/api/v1/tasks/knowledge-import",
         json={
             "namespace": ns,
             "mode": "notes_only",
@@ -44,7 +44,7 @@ async def test_start_import_empty_source(crm_client, auth_headers_system, unique
 async def test_start_import_conflict_file_id_and_list(crm_client, auth_headers_system, unique_id) -> None:
     ns = f"g_{unique_id}"
     response = await crm_client.post(
-        "/crm/api/v1/knowledge-imports",
+        "/crm/api/v1/tasks/knowledge-import",
         json={
             "namespace": ns,
             "mode": "notes_only",

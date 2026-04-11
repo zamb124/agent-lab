@@ -21,6 +21,32 @@ import json
 
 import pytest
 
+import asyncio
+import time as _time
+
+
+async def _analyze_note_task(crm_client, headers, note_id, *, fail_on_failed=True, **kwargs):
+    """Запускает анализ и ждёт завершения. Возвращает (task_row, note_draft)."""
+    body = {"note_id": note_id, **kwargs}
+    start = await crm_client.post("/crm/api/v1/tasks/note-analyze", json=body, headers=headers)
+    if start.status_code != 202:
+        # Surface validation errors (e.g. 400/422) directly
+        return start, {}
+    task_id = start.json()["task_id"]
+    deadline = _time.monotonic() + 60.0
+    last = {}
+    while _time.monotonic() < deadline:
+        tr = await crm_client.get(f"/crm/api/v1/tasks/{task_id}", headers=headers)
+        last = tr.json()
+        if last.get("status") in ("completed", "failed", "cancelled"):
+            break
+        await asyncio.sleep(0.4)
+    nr = await crm_client.get(f"/crm/api/v1/entities/{note_id}", headers=headers)
+    draft = nr.json().get("attributes", {}).get("ai_analysis_draft") or {}
+    return last, draft
+
+
+
 _ANALYZE_META = {"dates_mentioned": [], "places_mentioned": [], "key_topics": []}
 
 
@@ -267,13 +293,8 @@ class TestAnalyzeWithAttachments:
             {"type": "text", "content": _analyze_llm_response(note_name=note_name, person_name=f"Менеджер {unique_id}")},
         ])
 
-        resp = await crm_client.post(
-            f"/crm/api/v1/entities/notes/{note_id}/analyze",
-            json={"check_duplicates": False},
-            headers=auth_headers_system,
-        )
-        assert resp.status_code == 200, resp.text
-        assert len(resp.json()["entities"]) >= 1
+        task, resp = await _analyze_note_task(crm_client, auth_headers_system, note_id, check_duplicates=False)
+        assert len(resp.get("entities") or []) >= 1
 
     @pytest.mark.asyncio
     async def test_large_attachment_summarized_then_analyzed(
@@ -321,13 +342,8 @@ class TestAnalyzeWithAttachments:
             {"type": "text", "content": _analyze_llm_response(note_name=note_name, person_name=f"Менеджер {unique_id}")},
         ])
 
-        resp = await crm_client.post(
-            f"/crm/api/v1/entities/notes/{note_id}/analyze",
-            json={"check_duplicates": False},
-            headers=auth_headers_system,
-        )
-        assert resp.status_code == 200, resp.text
-        assert len(resp.json()["entities"]) >= 1
+        task, resp = await _analyze_note_task(crm_client, auth_headers_system, note_id, check_duplicates=False)
+        assert len(resp.get("entities") or []) >= 1
 
     @pytest.mark.asyncio
     async def test_attachment_chars_limit_per_file_configurable(
@@ -374,13 +390,8 @@ class TestAnalyzeWithAttachments:
             {"type": "text", "content": _analyze_llm_response(note_name=note_name, person_name=f"Менеджер {unique_id}")},
         ])
 
-        resp = await crm_client.post(
-            f"/crm/api/v1/entities/notes/{note_id}/analyze",
-            json={"attachment_chars_limit_per_file": 5_000, "check_duplicates": False},
-            headers=auth_headers_system,
-        )
-        assert resp.status_code == 200, resp.text
-        assert len(resp.json()["entities"]) >= 1
+        task, resp = await _analyze_note_task(crm_client, auth_headers_system, note_id, attachment_chars_limit_per_file=5_000, check_duplicates=False)
+        assert len(resp.get("entities") or []) >= 1
 
     @pytest.mark.asyncio
     async def test_include_attachments_false_single_llm_call(
@@ -422,14 +433,8 @@ class TestAnalyzeWithAttachments:
             {"type": "text", "content": _analyze_llm_response(note_name=note_name, person_name=f"Менеджер {unique_id}")},
         ])
 
-        resp = await crm_client.post(
-            f"/crm/api/v1/entities/notes/{note_id}/analyze",
-            json={"include_attachments": False, "check_duplicates": False},
-            headers=auth_headers_system,
-        )
-        assert resp.status_code == 200, resp.text
-        body = resp.json()
-        assert len(body["entities"]) >= 1, f"Expected entities >= 1, got: {body}"
+        task, resp = await _analyze_note_task(crm_client, auth_headers_system, note_id, include_attachments=False, check_duplicates=False)
+        assert len(resp.get("entities") or []) >= 1, f"Expected entities >= 1, got: {resp}"
 
 
 class TestAttachmentGuarantee:
@@ -590,10 +595,9 @@ class TestAnalyzeBlockedByEmptyAttachment:
         )
         assert upload.status_code == 200, upload.text
 
-        resp = await crm_client.post(
-            f"/crm/api/v1/entities/notes/{note_id}/analyze",
-            json={"include_attachments": True, "check_duplicates": False},
-            headers=auth_headers_system,
+        task, _ = await _analyze_note_task(
+            crm_client, auth_headers_system, note_id,
+            include_attachments=True, check_duplicates=False,
         )
-        assert resp.status_code == 422, resp.text
-        assert "не содержит извлекаемого текста" in resp.json()["detail"]
+        assert task["status"] == "failed", task
+        assert "не содержит извлекаемого текста" in (task.get("error_message") or "")

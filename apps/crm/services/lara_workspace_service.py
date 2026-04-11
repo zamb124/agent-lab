@@ -5,17 +5,17 @@
 from __future__ import annotations
 
 from apps.crm.db.repositories.entity_repository import EntityRepository
-from apps.crm.db.repositories.knowledge_import_repository import KnowledgeImportRepository
+from apps.crm.db.repositories.task_repository import TaskRepository
 from apps.crm.models.api import LaraWorkspaceSummaryResponse
 
 
 class LaraWorkspaceService:
     def __init__(
         self,
-        import_repo: KnowledgeImportRepository,
+        task_repo: TaskRepository,
         entity_repo: EntityRepository,
     ) -> None:
-        self._import_repo = import_repo
+        self._task_repo = task_repo
         self._entity_repo = entity_repo
 
     async def get_lara_summary(self, namespace: str) -> LaraWorkspaceSummaryResponse:
@@ -23,8 +23,10 @@ class LaraWorkspaceService:
         if not ns:
             raise ValueError("namespace is required")
 
-        awaiting = await self._import_repo.count_imports_awaiting_review_for_namespace(ns)
-        in_progress = await self._import_repo.count_imports_in_progress_for_namespace(ns)
+        awaiting = await self._task_repo.count_awaiting_review_for_namespace(ns)
+        in_progress = await self._task_repo.count_in_progress_for_namespace(
+            ns, task_type="knowledge_import"
+        )
         notes_draft = await self._entity_repo.count_notes_with_analysis_draft_not_applied(ns)
 
         return LaraWorkspaceSummaryResponse(

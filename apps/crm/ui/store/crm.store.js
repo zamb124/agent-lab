@@ -737,6 +737,20 @@ export const CRMStore = {
         }
     },
 
+    setNoteInStore(note) {
+        if (!note?.entity_id) {
+            throw new Error('note.entity_id is required');
+        }
+        baseStore.setState((s) => ({
+            entities: {
+                ...s.entities,
+                notes: s.entities.notes.map((n) =>
+                    n.entity_id === note.entity_id ? note : n
+                ),
+            },
+        }));
+    },
+
     openNoteAnalysisDraft(noteId) {
         if (!noteId) {
             throw new Error('Note ID is required');
@@ -1357,12 +1371,9 @@ export const CRMStore = {
             throw new Error('No analyze draft on server for this note; run analyze with note_id');
         }
 
-        const applyResult = await crmApi.applyNoteAnalysisDraft(currentNoteId);
+        const { task_id } = await crmApi.applyNoteAnalysisDraft(currentNoteId);
 
-        const createdCount = (applyResult.created_entity_ids?.length || 0)
-            + (applyResult.updated_entity_ids?.length || 0)
-            + (applyResult.created_relationship_ids?.length || 0);
-
+        // Сразу очищаем локальный черновик — результат придёт через WebSocket
         baseStore.setState((s) => ({
             ai: {
                 ...s.ai,
@@ -1375,10 +1386,7 @@ export const CRMStore = {
             },
         }));
 
-        await this.loadNotes(crmApi);
-        await this.loadEntities(crmApi);
-
-        return createdCount;
+        return task_id;
     },
 
     async loadEntityTypes(crmApi, namespace = null) {

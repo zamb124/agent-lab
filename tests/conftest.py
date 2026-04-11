@@ -261,7 +261,7 @@ async def _crm_base_schema_ready(db_url: str) -> bool:
         await engine.dispose()
 
 
-async def _crm_knowledge_imports_table_ready(db_url: str) -> bool:
+async def _crm_tasks_table_ready(db_url: str) -> bool:
     from sqlalchemy.ext.asyncio import create_async_engine
     from sqlalchemy import text
 
@@ -274,7 +274,7 @@ async def _crm_knowledge_imports_table_ready(db_url: str) -> bool:
                     SELECT COUNT(*)
                     FROM information_schema.tables
                     WHERE table_schema = 'public'
-                      AND table_name = 'crm_knowledge_imports'
+                      AND table_name = 'crm_tasks'
                     """
                 )
             )
@@ -286,10 +286,8 @@ async def _crm_knowledge_imports_table_ready(db_url: str) -> bool:
 
 
 async def _crm_schema_ready(db_url: str) -> bool:
-    """Полная готовность CRM-схемы для тестов (включая импорт знаний)."""
-    return await _crm_base_schema_ready(db_url) and await _crm_knowledge_imports_table_ready(
-        db_url
-    )
+    """Полная готовность CRM-схемы для тестов."""
+    return await _crm_base_schema_ready(db_url) and await _crm_tasks_table_ready(db_url)
 
 
 async def _shared_calendar_schema_ready(db_url: str) -> bool:

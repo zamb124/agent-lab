@@ -124,6 +124,7 @@ export class GraphPage extends PlatformElement {
         _timelineMaxTimestamp: { state: true },
         _panelVisibility: { state: true },
         _contextMenu: { state: true },
+        _searchMode: { state: true },
     };
 
     static styles = [
@@ -656,6 +657,8 @@ export class GraphPage extends PlatformElement {
         this._mergeAnchorId = '';
         this._contextMenu = null;
         this._timelineReloadTimer = null;
+        this._searchMode = 'hybrid';
+        this._searchDebounceTimer = null;
         this._entityTypePaletteNamespace = '';
         this._onSearchQueryInput = this._onSearchQueryInput.bind(this);
         this._onModeChange = this._onModeChange.bind(this);
@@ -950,44 +953,11 @@ export class GraphPage extends PlatformElement {
     }
 
     _getVisibleGraphSnapshot() {
-        const query = this._entitySearchQuery.trim().toLowerCase();
-        if (!query) {
-            return {
-                nodes: this._graphNodes,
-                edges: this._graphEdges,
-                isFiltered: this._timelineStartPercent > 0 || this._timelineEndPercent < 100,
-                isEmpty: this._graphNodes.length === 0,
-            };
-        }
-        const matchedNodeIds = new Set();
-        this._graphNodes.forEach((node) => {
-            const nodeId = node.entity_id || node.id || '';
-            const nodeName = node.name || node.label || '';
-            const nodeType = node.entity_type || '';
-            const haystack = `${String(nodeName)} ${String(nodeId)} ${String(nodeType)}`.toLowerCase();
-            if (haystack.includes(query)) {
-                matchedNodeIds.add(nodeId);
-            }
-        });
-        if (matchedNodeIds.size === 0) {
-            return {
-                nodes: [],
-                edges: [],
-                isFiltered: true,
-                isEmpty: true,
-            };
-        }
-        const nodes = this._graphNodes.filter((node) => matchedNodeIds.has(node.entity_id || node.id));
-        const edges = this._graphEdges.filter((edge) => {
-            const sourceId = edge.source_id || edge.source_entity_id || edge.source;
-            const targetId = edge.target_id || edge.target_entity_id || edge.target;
-            return matchedNodeIds.has(sourceId) && matchedNodeIds.has(targetId);
-        });
         return {
-            nodes,
-            edges,
-            isFiltered: true,
-            isEmpty: false,
+            nodes: this._graphNodes,
+            edges: this._graphEdges,
+            isFiltered: this._timelineStartPercent > 0 || this._timelineEndPercent < 100 || this._entitySearchQuery.trim().length > 0,
+            isEmpty: this._graphNodes.length === 0,
         };
     }
 
@@ -1009,6 +979,11 @@ export class GraphPage extends PlatformElement {
 
     _clearCanvasSearchFilter() {
         this._entitySearchQuery = '';
+        if (this._searchDebounceTimer) {
+            clearTimeout(this._searchDebounceTimer);
+            this._searchDebounceTimer = null;
+        }
+        this._rebuildGraphByMode();
     }
 
     _showContextMenu(screenX, screenY, nodeId, edgeId) {
@@ -1872,6 +1847,13 @@ export class GraphPage extends PlatformElement {
 
     _onSearchQueryInput(event) {
         this._entitySearchQuery = event.target.value;
+        if (this._searchDebounceTimer) {
+            clearTimeout(this._searchDebounceTimer);
+        }
+        this._searchDebounceTimer = setTimeout(() => {
+            this._searchDebounceTimer = null;
+            this._onSearchEntity();
+        }, 400);
     }
 
     _onModeChange(event) {
@@ -1927,15 +1909,38 @@ export class GraphPage extends PlatformElement {
     async _onSearchEntity() {
         const query = this._entitySearchQuery.trim();
         if (!query) {
-            this._clearCanvasSearchFilter();
+            await this._rebuildGraphByMode();
             return;
         }
-        const snapshot = this._getVisibleGraphSnapshot();
-        if (snapshot.isEmpty) {
-            this.warning(this.i18n.t('graph_page.warn_filter_empty'));
-            return;
+        this._loading = true;
+        try {
+            const namespaceName = this._getNamespaceName();
+            const searchResults = await this.crmApi.searchEntities(query, {
+                search_mode: this._searchMode,
+                namespace: namespaceName || undefined,
+                limit: 50,
+            });
+            const items = Array.isArray(searchResults?.items) ? searchResults.items : [];
+            if (items.length === 0) {
+                this._graphNodes = [];
+                this._graphEdges = [];
+                this.warning(this.i18n.t('graph.search_empty'));
+                return;
+            }
+            const entityIds = items.map((e) => e.entity_id).filter(Boolean);
+            const timelineParams = this._getTimelineQueryParams();
+            const graph = await this.crmApi.getOverviewGraph(entityIds, {
+                max_depth: this._maxDepth,
+                relationship_types: this._relationshipTypeFilter || null,
+                namespace: namespaceName || null,
+                ...timelineParams,
+            });
+            this._graphNodes = Array.isArray(graph.nodes) ? graph.nodes : [];
+            this._graphEdges = Array.isArray(graph.edges) ? graph.edges : [];
+            this.success(this.i18n.t('graph.search_results', { count: String(this._graphNodes.length) }));
+        } finally {
+            this._loading = false;
         }
-        this.success(this.i18n.t('graph_page.success_filtered', { count: String(snapshot.nodes.length) }));
     }
 
     _getBackendOperations() {
@@ -2119,8 +2124,11 @@ export class GraphPage extends PlatformElement {
                         .query=${this._entitySearchQuery}
                         .viewMode=${this._viewMode}
                         .modes=${VIEW_MODES}
-                        @search-input=${(e) => { this._entitySearchQuery = e.detail.query; }}
+                        .searchMode=${this._searchMode}
+                        @search-input=${(e) => { this._entitySearchQuery = e.detail.query; if (this._searchDebounceTimer) { clearTimeout(this._searchDebounceTimer); } this._searchDebounceTimer = setTimeout(() => { this._searchDebounceTimer = null; this._onSearchEntity(); }, 400); }}
                         @search-clear=${this._clearCanvasSearchFilter}
+                        @search-submit=${() => { if (this._searchDebounceTimer) { clearTimeout(this._searchDebounceTimer); this._searchDebounceTimer = null; } this._onSearchEntity(); }}
+                        @search-mode-change=${(e) => { this._searchMode = e.detail.mode; if (this._entitySearchQuery.trim()) { this._onSearchEntity(); } }}
                         @mode-change=${(e) => { this._viewMode = e.detail.mode; if (e.detail.mode !== 'influence') { this._defaultOverviewActive = false; } if (e.detail.mode !== 'path') { this._canvasPathState = 'idle'; this._canvasPathHint = this.i18n.t('graph_page.hint_browse'); } this._rebuildGraphByMode(); }}
                         @refresh=${this._loadGraphData}
                     ></graph-search-pill>

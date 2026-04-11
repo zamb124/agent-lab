@@ -14,7 +14,8 @@
         "entities": "Entities",
         "tasks": "Tasks",
         "graph": "Knowledge Graph",
-        "settings": "Settings"
+        "settings": "Settings",
+        "ai_analysis": "AI Analysis"
     },
     "pages": {
         "dashboard": "Dashboard",
@@ -236,9 +237,15 @@
         "context_open_entity": "Open card",
         "context_path_from": "Path from this entity",
         "context_graph_from": "Graph from this entity",
-        "search_placeholder_short": "Filter...",
+        "search_placeholder_short": "Search graph...",
         "search_clear": "Clear",
         "search_refresh_graph": "Refresh graph",
+        "search_mode_label": "Search mode",
+        "search_mode_text": "Text search",
+        "search_mode_semantic": "Semantic search",
+        "search_mode_hybrid": "Hybrid search",
+        "search_results": "Found {{count}} entities",
+        "search_empty": "No entities found for this query",
         "mini_loading": "Loading graph...",
         "mini_no_edges": "No relationships",
         "mini_depth_level": "Level {{current}} of {{max}}",
@@ -517,7 +524,7 @@
                 "title": "Spaces"
             },
             "namespace_imports": {
-                "title": "Knowledge base imports"
+                "title": "Tasks"
             }
         }
     },
@@ -834,6 +841,7 @@
         "header_view": "View note",
         "graph_open_title": "Relationship graph (separate window)",
         "err_summary_refresh": "Failed to refresh summary",
+        "analyze_already_running": "Note analysis is already in progress",
         "err_save_note": "Failed to save note"
     },
     "ai_analysis_modal": {
@@ -906,8 +914,8 @@
         "card_templates_description": "Create and edit templates for new spaces. Full control of entity types, fields, and prompts.",
         "card_spaces_title": "Space settings",
         "card_spaces_description": "Manage types and descriptions of your company spaces. Safe to add and edit metadata.",
-        "card_imports_title": "Imports",
-        "card_imports_description": "Knowledge base import log per space: status, rollback, and created entities.",
+        "card_imports_title": "Tasks",
+        "card_imports_description": "CRM task log: knowledge import, note analysis — status, progress, rollback.",
         "card_rel_types_title": "Relationship types",
         "card_rel_types_description": "Manage relationship types between entities: direction, inverse types, weights, and visual styling."
     },
@@ -932,7 +940,9 @@
         "published_at": "Published at {{time}}",
         "analysis_open_draft": "Open AI analysis draft",
         "analysis_run": "AI analysis",
-        "analysis_in_progress": "AI analysis in progress…"
+        "analysis_in_progress": "AI analysis in progress…",
+        "analysis_view_applied": "View AI analysis results",
+        "note_type_default": "Note"
     },
     "spaces_page": {
         "hint_namespace_description": "Description of the current space. Changing it does not affect existing entities and is always allowed.",
@@ -982,7 +992,7 @@
         "add_type": "Add type",
         "types_hint": "You can edit name, description, and prompt. type_id is immutable.",
         "pick_space": "Select a space to edit",
-        "imports_nav": "Imports",
+        "imports_nav": "Tasks",
         "imports_pick_space": "Select a space in the list first"
     },
     "graph_page": {
@@ -1173,5 +1183,51 @@
         "dictate_idle": "Dictate text",
         "dictate_recording": "Stop dictation",
         "dictate_appended": "Text appended to note"
+    },
+    "task": {
+        "type": {
+            "knowledge_import": "Knowledge Import",
+            "note_analyze": "Note Analysis",
+            "daily_summary": "Daily Summary",
+            "period_summary": "Period Summary"
+        },
+        "stage": {
+            "pending": "Pending",
+            "reading_source": "Reading source",
+            "splitting": "Splitting into chunks",
+            "processing_chunks": "Processing chunks",
+            "reading_attachments": "Reading attachments",
+            "summarizing": "Summarizing",
+            "analyzing": "Analyzing text",
+            "applying": "Applying results",
+            "summarizing_day": "Computing summary",
+            "completed": "Completed",
+            "failed": "Failed",
+            "cancelled": "Cancelled",
+            "rolled_back": "Rolled back"
+        }
+    },
+    "task_tracker": {
+        "title": "Tasks",
+        "list_title": "Task list",
+        "back_spaces": "Back to spaces",
+        "namespace_label": "Namespace",
+        "loading": "Loading tasks...",
+        "started": "Task started",
+        "filter_label": "Filter by type",
+        "filter_all": "All",
+        "filter_knowledge_import": "Knowledge Import",
+        "filter_note_analyze": "Note Analysis",
+        "filter_daily_summary": "Daily Summary",
+        "action_retry": "Retry",
+        "action_view_error": "View Error",
+        "col_status": "Status",
+        "col_type": "Type",
+        "col_name": "Name",
+        "col_notes": "Notes",
+        "col_entities": "Entities",
+        "col_rels": "Relations",
+        "col_review": "Review",
+        "col_actions": "Actions"
     }
 }

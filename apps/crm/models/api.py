@@ -711,3 +711,83 @@ class StructuredKnowledgeImportRequest(BaseModel):
     entities: List[Dict[str, Any]] = Field(default_factory=list)
     relationships: List[Dict[str, Any]] = Field(default_factory=list)
 
+
+# ── Unified task models ────────────────────────────────────────────────────────
+
+class TaskResponse(BaseModel):
+    """Ответ с данными задачи из crm_tasks."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    task_id: str
+    task_type: str
+    status: str
+    stage: str
+    progress_pct: int = 0
+    error_message: Optional[str] = None
+    data: Dict[str, Any] = Field(default_factory=dict)
+    taskiq_task_id: Optional[str] = None
+    cancel_requested: bool = False
+    company_id: str
+    namespace: str
+    user_id: str
+    started_at: Optional[datetime] = None
+    completed_at: Optional[datetime] = None
+    created_at: datetime
+    updated_at: datetime
+
+
+class StartKnowledgeImportRequest(BaseModel):
+    """Запуск импорта знаний через /tasks/knowledge-import."""
+
+    namespace: str = Field(..., description="Пространство назначения")
+    mode: Literal["notes_only", "graph"] = Field(...)
+    source_file_id: Optional[str] = Field(default=None)
+    source_file_ids: Optional[List[str]] = Field(default=None)
+    source_text: Optional[str] = Field(default=None)
+    extract_entity_types: Optional[List[str]] = Field(default=None)
+    split_by_headings: bool = Field(default=False)
+    chunk_max_chars: int = Field(default=50_000, ge=2000, le=500_000)
+
+
+class StartNoteAnalyzeRequest(BaseModel):
+    """Запуск анализа заметки через /tasks/note-analyze."""
+
+    note_id: str
+    mode: Literal["analyze", "apply", "process"] = Field(default="analyze")
+    include_attachments: bool = Field(default=True)
+    attachment_chars_limit_per_file: int = Field(default=40_000, ge=5_000)
+    check_duplicates: bool = Field(default=True)
+    extract_entity_types: Optional[List[str]] = Field(default=None)
+    extract_relationship_types: Optional[List[str]] = Field(default=None)
+    mentioned_entity_ids: Optional[List[str]] = Field(default=None)
+
+
+class TaskCreatedEntitiesResponse(BaseModel):
+    """Список сущностей созданных задачей knowledge_import."""
+
+    task_id: str
+    namespace: str
+    status: str
+    review_completed_at: Optional[str] = None
+    relationships_created_count: int = 0
+    entities: List[KnowledgeImportCreatedEntityItem] = Field(default_factory=list)
+    missing_entity_ids: List[str] = Field(default_factory=list)
+
+
+class StartDailySummaryRequest(BaseModel):
+    """Запуск пересчёта дневной сводки через /tasks/daily-summary."""
+
+    namespace: str = Field(..., description="Пространство назначения")
+    date_str: str = Field(..., description="Дата в формате YYYY-MM-DD")
+    reason: str = Field(default="manual")
+
+
+class StartPeriodSummaryRequest(BaseModel):
+    """Запуск пересчёта сводки за период через /tasks/period-summary."""
+
+    namespace: str = Field(..., description="Пространство назначения")
+    date_from: str = Field(..., description="Начало периода YYYY-MM-DD")
+    date_to: str = Field(..., description="Конец периода YYYY-MM-DD")
+    reason: str = Field(default="manual")
+

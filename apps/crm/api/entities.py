@@ -39,7 +39,6 @@ from apps.crm.taskiq_analyze_errors import (
 )
 from apps.crm.services.entity_service import DraftVersionConflictError, SchemaValidationError
 from apps.crm.dependencies import ContainerDep
-from apps.crm_worker.tasks.analysis_tasks import process_note_task
 from core.files.media.transcriber import MediaTranscriber
 from core.context import get_context
 from core.i18n.service import t
@@ -433,127 +432,6 @@ async def patch_note_analysis_draft(
         raise HTTPException(status_code=422, detail=str(exc)) from exc
 
 
-@router.post("/notes/{note_id}/analyze", response_model=AIAnalyzeResponse)
-async def analyze_note(
-    note_id: str,
-    container: ContainerDep,
-    config: NoteProcessingConfig = Body(default_factory=NoteProcessingConfig),
-):
-    """AI-анализ заметки: текст берётся из note.description + attachment_ids."""
-    result = await _dispatch_note_task(note_id, container, mode="analyze", config=config)
-    ctx = get_context()
-    if ctx and ctx.user:
-        suggestions_count = len(result.get("entities") or []) + len(result.get("relationships") or [])
-        await notify_user(
-            user_id=ctx.user.user_id,
-            notification=Notification(
-                type=NotificationType.TASK_COMPLETED,
-                title="Анализ завершён",
-                message=f"Найдено {suggestions_count} предложений",
-                service="crm",
-                data={"note_id": note_id, "analysis": result},
-            ),
-        )
-    return AIAnalyzeResponse.model_validate(result)
-
-
-@router.post("/notes/{note_id}/apply", response_model=AIAnalysisDraftApplyResult)
-async def apply_note(
-    note_id: str,
-    container: ContainerDep,
-):
-    """Применить черновик анализа заметки."""
-    return await _dispatch_note_task(note_id, container, mode="apply")
-
-
-@router.post("/notes/{note_id}/process", response_model=NoteProcessingResult)
-async def process_note(
-    note_id: str,
-    container: ContainerDep,
-    config: NoteProcessingConfig = Body(default_factory=NoteProcessingConfig),
-):
-    """Полный конвейер: analyze + apply."""
-    return await _dispatch_note_task(note_id, container, mode="process", config=config)
-
-
-async def _dispatch_note_task(
-    note_id: str,
-    container: ContainerDep,
-    *,
-    mode: str,
-    config: NoteProcessingConfig | None = None,
-) -> dict:
-    """Общая логика отправки process_note_task в worker и ожидания результата."""
-    note = await container.entity_service.get_entity(note_id)
-    if not note:
-        raise HTTPException(status_code=404, detail="Note not found")
-    ctx = get_context()
-    user_id = ctx.user.user_id if ctx and ctx.user else None
-    company_id = ctx.active_company.company_id if ctx and ctx.active_company else None
-    auth_token = ctx.auth_token if ctx else None
-    if not user_id or not await container.access_control_service.can_write_entity(note, user_id, company_id):
-        raise HTTPException(status_code=403, detail="Access denied")
-    if not user_id or not company_id:
-        raise HTTPException(status_code=500, detail="Контекст пользователя или компании отсутствует")
-
-    effective_config = config if config is not None else NoteProcessingConfig()
-    settings = get_crm_settings()
-    ns = note.namespace or "default"
-
-    try:
-        task = await process_note_task.kiq(
-            note_id=note_id,
-            company_id=company_id,
-            namespace=ns,
-            auth_token=auth_token,
-            user_id=user_id,
-            interface_language=ctx.language.value,
-            config_payload=effective_config.model_dump(mode="json"),
-            mode=mode,
-        )
-        res = await task.wait_result(timeout=settings.taskiq_sync_timeout_seconds)
-    except TaskiqResultTimeoutError as exc:
-        raise HTTPException(
-            status_code=504,
-            detail=f"Таймаут {mode} заметки в worker",
-        ) from exc
-    if res.is_err:
-        err = res.error
-        err_msg = str(err) if err else ""
-        parsed = parse_validation_from_task_message(err_msg)
-        if parsed is not None:
-            raise HTTPException(status_code=422, detail=parsed)
-        mentioned_short = parse_mentioned_entity_short_description_from_task_message(err_msg)
-        if mentioned_short is not None:
-            detail_text = t(
-                "crm.notifications.analyze_mentioned_entity_short_description_message",
-                entity_name=mentioned_short["entity_name"],
-                entity_type=mentioned_short["entity_type"],
-                min_len=mentioned_short["min_len"],
-            )
-            if ctx.user and mode in ("analyze", "process"):
-                await notify_user(
-                    user_id=ctx.user.user_id,
-                    notification=Notification(
-                        type=NotificationType.SYSTEM,
-                        title=t(
-                            "crm.notifications.analyze_mentioned_entity_short_description_title"
-                        ),
-                        message=detail_text,
-                        service="crm",
-                        action_url=f"/crm/entities/{mentioned_short['entity_id']}",
-                        data={
-                            "event": "crm.analyze.mentioned_entity_short_description",
-                            "note_id": note_id,
-                            "entity_id": mentioned_short["entity_id"],
-                            "entity_name": mentioned_short["entity_name"],
-                            "entity_type": mentioned_short["entity_type"],
-                        },
-                    ),
-                )
-            raise HTTPException(status_code=422, detail=detail_text)
-        raise HTTPException(status_code=422, detail=err_msg or repr(err))
-    return res.return_value
 
 
 @router.get("/{entity_id}")
