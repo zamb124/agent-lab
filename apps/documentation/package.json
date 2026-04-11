@@ -5,7 +5,7 @@
   "scripts": {
     "prepare-content": "python3 ../../scripts/docs_prepare.py",
     "prebuild": "npm run prepare-content",
-    "build": "next build",
+    "build": "next build --webpack",
     "predev": "npm run prepare-content",
     "dev": "next dev --port 3000",
     "start": "serve out",

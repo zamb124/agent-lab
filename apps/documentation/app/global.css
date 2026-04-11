@@ -1,6 +1,8 @@
 @import 'tailwindcss';
-@import 'fumadocs-ui/css/neutral.css';
+@import 'fumadocs-ui/css/aspen.css';
 @import 'fumadocs-ui/css/preset.css';
+
+@custom-variant dark (&:where(.dark, .dark *));
 
 html {
   scrollbar-gutter: stable;
@@ -9,4 +11,26 @@ html {
 html > body[data-scroll-locked] {
   margin-right: 0px !important;
   --removed-body-scroll-bar-size: 0px !important;
+}
+
+/*
+  По умолчанию первая колонка сетки — minmax(..., 1fr): пустая полоса слева от сайдбара.
+  Нулевая ширина первой колонки убирает этот зазор.
+*/
+#nd-docs-layout {
+  grid-template-columns:
+    0
+    var(--fd-sidebar-col)
+    minmax(
+      0,
+      calc(var(--fd-layout-width, 97rem) - var(--fd-sidebar-width) - var(--fd-toc-width))
+    )
+    var(--fd-toc-width)
+    minmax(min-content, 1fr) !important;
+}
+
+/* mx-auto в дефолтном Container центрирует узкий столбец в широкой ячейке main — большой зазор у сайдбара */
+#nd-page {
+  margin-inline-start: 0 !important;
+  margin-inline-end: auto !important;
 }

@@ -13,6 +13,7 @@ import {
 import { useDocsSearch } from 'fumadocs-core/search/client';
 import { create } from '@orama/orama';
 import { useI18n } from 'fumadocs-ui/contexts/i18n';
+import { docPublicBasePath } from '@/lib/shared';
 
 function initOrama() {
   return create({
@@ -22,12 +23,17 @@ function initOrama() {
   });
 }
 
+function searchIndexUrl(): string {
+  return `${docPublicBasePath}/api/search`;
+}
+
 export default function DefaultSearchDialog(props: SharedProps) {
   const { locale } = useI18n(); // (optional) for i18n
   const { search, setSearch, query } = useDocsSearch({
     type: 'static',
     initOrama,
     locale,
+    from: searchIndexUrl(),
   });
 
   return (
