@@ -306,10 +306,6 @@ help:
 	@echo "  make doc-serve  - Запустить dev-сервер (http://127.0.0.1:8000)"
 	@echo "  make doc-clean  - Удалить собранную документацию"
 
-run-rag:
-	@echo "🚀 Запуск RAG сервиса..."
-	uv run python scripts/run_rag.py
-
 include mk/db.mk
 include mk/app.mk
 include mk/worker.mk

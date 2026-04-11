@@ -334,6 +334,13 @@ export class CRMAPIService extends BaseService {
         return this.get(`/entities/${entityId}/card`, {}, { notFoundReturns: null });
     }
 
+    async getEntityCardsBulk(entityIds) {
+        if (!Array.isArray(entityIds) || entityIds.length === 0) {
+            throw new Error('entityIds must be a non-empty array');
+        }
+        return this.post('/entities/cards/bulk', { entity_ids: entityIds });
+    }
+
     async getDailySummary(date, options = {}) {
         if (!date) {
             throw new Error('Date is required');

@@ -1519,22 +1519,19 @@ export class DailyNotesPage extends PlatformElement {
         }
 
         const crmApi = this.services.get('crmApi');
-        const relatedEntitiesById = await Promise.all(
-            unresolvedNoteIds.map(async (entityId) => {
-                const card = await crmApi.getEntityCardIfPresent(entityId);
-                if (!card) {
-                    return [entityId, []];
-                }
-                if (!Array.isArray(card.related_entities)) {
-                    throw new Error('Entity card must contain related_entities array');
-                }
-                return [entityId, card.related_entities];
-            }),
-        );
+        const cardsMap = await crmApi.getEntityCardsBulk(unresolvedNoteIds);
 
         const next = { ...this._noteEntitiesByNoteId };
-        for (const [entityId, relatedEntities] of relatedEntitiesById) {
-            next[entityId] = relatedEntities;
+        for (const entityId of unresolvedNoteIds) {
+            const card = cardsMap[entityId];
+            if (!card) {
+                next[entityId] = [];
+                continue;
+            }
+            if (!Array.isArray(card.related_entities)) {
+                throw new Error('Entity card must contain related_entities array');
+            }
+            next[entityId] = card.related_entities;
         }
         this._noteEntitiesByNoteId = next;
     }

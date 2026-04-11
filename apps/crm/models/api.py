@@ -125,6 +125,11 @@ class BulkDeleteResponse(BaseModel):
     errors: List[BulkErrorItem]
 
 
+class BulkCardsRequest(BaseModel):
+    """Batch загрузка карточек по списку entity_id."""
+    entity_ids: List[str]
+
+
 class EntityTimelineBoundsResponse(BaseModel):
     """Границы timeline по created_at."""
     min_created_at: Optional[datetime]

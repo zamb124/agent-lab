@@ -29,6 +29,7 @@ from apps.crm.models.api import (
     BulkDeleteRequest,
     BulkDeleteResponse,
     BulkErrorItem,
+    BulkCardsRequest,
 )
 from apps.crm.db.models import CRMEntity
 from apps.crm.config import get_crm_settings
@@ -751,6 +752,15 @@ async def get_period_summary(
             ),
         )
     return summary
+
+
+@router.post("/cards/bulk")
+async def get_entity_cards_bulk(
+    body: BulkCardsRequest,
+    container: ContainerDep,
+) -> Dict[str, Any]:
+    """Batch-загрузка карточек для списка entity_id за один запрос."""
+    return await container.entity_service.get_bulk_entity_cards(body.entity_ids)
 
 
 @router.get("/{entity_id}/card")

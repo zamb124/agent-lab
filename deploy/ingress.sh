@@ -203,8 +203,14 @@ data:
   default.conf: |
     server {
         listen 80;
-        location /api/i18n/ {
-            alias /srv/static/i18n/;
+        location = /api/i18n/ru {
+            alias /srv/static/i18n/ru.json;
+            default_type application/json;
+            add_header Cache-Control "public, max-age=3600" always;
+            add_header Access-Control-Allow-Origin "*" always;
+        }
+        location = /api/i18n/en {
+            alias /srv/static/i18n/en.json;
             default_type application/json;
             add_header Cache-Control "public, max-age=3600" always;
             add_header Access-Control-Allow-Origin "*" always;
@@ -306,8 +312,9 @@ ${SSH} "microk8s kubectl rollout status deployment/static-server -n default --ti
 # Генерируем paths для ingress — статика идёт на static-server-svc, остальное на сервисы
 build_paths() {
   # Сначала пути к статике (более специфичные → матчатся раньше)
+  # /api/i18n/ обрабатывается внутри static-server через exact location match
   cat <<STATICPATHS
-      - path: /api/i18n/
+      - path: /api/i18n
         pathType: Prefix
         backend:
           service:
@@ -435,6 +442,7 @@ metadata:
     nginx.ingress.kubernetes.io/proxy-read-timeout: "300"
     nginx.ingress.kubernetes.io/proxy-send-timeout: "300"
     nginx.ingress.kubernetes.io/configuration-snippet: |
+      proxy_http_version 1.1;
       proxy_set_header Upgrade \$http_upgrade;
       proxy_set_header Connection "upgrade";
 spec:
@@ -551,6 +559,7 @@ metadata:
     nginx.ingress.kubernetes.io/proxy-send-timeout: "3600"
     nginx.ingress.kubernetes.io/proxy-body-size: "100m"
     nginx.ingress.kubernetes.io/configuration-snippet: |
+      proxy_http_version 1.1;
       proxy_set_header Upgrade \$http_upgrade;
       proxy_set_header Connection "upgrade";
 spec:
@@ -653,6 +662,7 @@ metadata:
     nginx.ingress.kubernetes.io/proxy-read-timeout: "3600"
     nginx.ingress.kubernetes.io/proxy-send-timeout: "3600"
     nginx.ingress.kubernetes.io/configuration-snippet: |
+      proxy_http_version 1.1;
       proxy_set_header Upgrade \$http_upgrade;
       proxy_set_header Connection "upgrade";
 spec:

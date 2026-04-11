@@ -3361,6 +3361,82 @@ class EntityService:
             "attachments": attachments
         }
     
+    async def get_bulk_entity_cards(
+        self,
+        entity_ids: list[str],
+    ) -> dict[str, dict[str, Any]]:
+        """
+        Batch-загрузка карточек для списка entity_id.
+
+        Вместо N запросов делает:
+          - 1 запрос за всеми сущностями
+          - 1 запрос за всеми relationships
+          - 1 запрос за всеми связанными сущностями
+          - N параллельных запросов за attachments (по одному на entity)
+
+        Returns:
+            Dict {entity_id: card_dict}; отсутствующие entity_id не включаются в результат.
+        """
+        if not entity_ids:
+            return {}
+
+        entities = await self._entity_repo.get_by_ids(entity_ids)
+        entities_by_id = {e.entity_id: e for e in entities}
+
+        relationships_by_entity = await self._relationship_repo.get_neighbors(entity_ids)
+
+        all_related_ids: set[str] = set()
+        for eid, rels in relationships_by_entity.items():
+            for rel in rels:
+                neighbor = rel.target_entity_id if rel.source_entity_id == eid else rel.source_entity_id
+                all_related_ids.add(neighbor)
+        all_related_ids -= set(entity_ids)
+
+        related_entities = await self._entity_repo.get_by_ids(list(all_related_ids)) if all_related_ids else []
+        related_by_id = {e.entity_id: e for e in related_entities}
+
+        attachments_list = await asyncio.gather(
+            *[self._attachment_service.get_attachments(eid) for eid in entity_ids if eid in entities_by_id]
+        )
+        existing_ids = [eid for eid in entity_ids if eid in entities_by_id]
+        attachments_by_entity = dict(zip(existing_ids, attachments_list))
+
+        result: dict[str, dict[str, Any]] = {}
+        for eid in entity_ids:
+            entity = entities_by_id.get(eid)
+            if not entity:
+                continue
+            rels = relationships_by_entity.get(eid, [])
+            rel_neighbor_ids: set[str] = set()
+            for rel in rels:
+                neighbor = rel.target_entity_id if rel.source_entity_id == eid else rel.source_entity_id
+                rel_neighbor_ids.add(neighbor)
+            result[eid] = {
+                "entity": self._entity_to_dict(entity),
+                "relationships": [
+                    {
+                        "relationship_id": rel.relationship_id,
+                        "company_id": rel.company_id,
+                        "namespace": rel.namespace,
+                        "source_entity_id": rel.source_entity_id,
+                        "target_entity_id": rel.target_entity_id,
+                        "relationship_type": rel.relationship_type,
+                        "weight": rel.weight,
+                        "attributes": rel.attributes,
+                        "created_at": rel.created_at.isoformat() if rel.created_at else None,
+                        "updated_at": rel.updated_at.isoformat() if rel.updated_at else None,
+                    }
+                    for rel in rels
+                ],
+                "related_entities": [
+                    self._entity_to_dict(related_by_id[nid])
+                    for nid in rel_neighbor_ids
+                    if nid in related_by_id
+                ],
+                "attachments": attachments_by_entity.get(eid, []),
+            }
+        return result
+
     @staticmethod
     def _entity_to_dict(entity: CRMEntity) -> Dict[str, Any]:
         """Конвертирует SQLAlchemy CRMEntity в dict."""
