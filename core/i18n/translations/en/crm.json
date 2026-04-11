@@ -742,7 +742,9 @@
         "task_fallback": "Task",
         "related_entities": "Related entities",
         "relationships": "Relationships",
-        "remove": "Remove"
+        "remove": "Remove",
+        "mention_searching": "Searching…",
+        "mention_no_results": "No results"
     },
     "entity_modal": {
         "header_edit": "Edit entity",

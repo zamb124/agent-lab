@@ -51,14 +51,20 @@ class NoteProcessingService:
                 text, filename = await load_text_and_name_from_stored_file_id(file_id)
                 stripped = text.strip()
                 if not stripped:
-                    continue
+                    raise ValueError(
+                        f"Вложение '{filename}' (file_id={file_id}) не содержит извлекаемого текста. "
+                        "Анализ без полного содержимого всех вложений невозможен."
+                    )
                 if len(stripped) > attachment_chars_limit:
                     stripped = await self._entity_service.call_summarize_attachment(
                         stripped, filename
                     )
                     stripped = stripped.strip()
-                if stripped:
-                    parts.append(stripped)
+                    if not stripped:
+                        raise ValueError(
+                            f"Суммаризация вложения '{filename}' (file_id={file_id}) не вернула текст."
+                        )
+                parts.append(stripped)
 
         combined = "\n\n---\n\n".join(parts)
         if not combined.strip():
@@ -105,9 +111,10 @@ class NoteProcessingService:
         note_id: str,
         config: NoteProcessingConfig,
     ) -> NoteProcessingResult:
-        """Полный конвейер: analyze + apply."""
+        """Полный конвейер: analyze + apply + обогащение description токенами @."""
         await self.analyze(note_id, config)
         apply_result = await self.apply(note_id)
+        await self._entity_service.enrich_note_description_with_mention_tokens(note_id)
         return NoteProcessingResult(
             note_id=note_id,
             created_entity_ids=apply_result.created_entity_ids,

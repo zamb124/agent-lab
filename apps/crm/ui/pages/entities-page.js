@@ -1732,6 +1732,7 @@ export class EntitiesPage extends PlatformElement {
                                 mode="date"
                                 selection="range"
                                 value-format="iso"
+                                compact
                                 .value=${{ start: this._dateFrom, end: this._dateTo }}
                                 @change=${this._onDateRangeChange}
                             ></platform-date-picker>

@@ -742,7 +742,9 @@
         "task_fallback": "Задача",
         "related_entities": "Связанные сущности",
         "relationships": "Связи",
-        "remove": "Удалить"
+        "remove": "Удалить",
+        "mention_searching": "Поиск…",
+        "mention_no_results": "Ничего не найдено"
     },
     "entity_modal": {
         "header_edit": "Редактировать сущность",

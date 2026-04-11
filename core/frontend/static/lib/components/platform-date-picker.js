@@ -154,6 +154,7 @@ export class PlatformDatePicker extends PlatformElement {
         leadingIcon: { type: String, attribute: 'leading-icon' },
         embedded: { type: Boolean, reflect: true },
         hideTriggerIcon: { type: Boolean, attribute: 'hide-trigger-icon', reflect: true },
+        compact: { type: Boolean, reflect: true },
         open: { type: Boolean, reflect: true },
         _viewYear: { state: true },
         _viewMonth: { state: true },
@@ -208,6 +209,30 @@ export class PlatformDatePicker extends PlatformElement {
                 background: transparent;
                 padding: 0;
                 box-shadow: none;
+            }
+
+            :host([compact]) {
+                min-width: 120px;
+            }
+
+            :host([compact]) .trigger {
+                min-height: 28px;
+                padding: 3px var(--space-2);
+                font-size: var(--text-xs);
+                border-radius: var(--radius-md);
+            }
+
+            :host([compact]) .trigger.with-label {
+                min-height: 44px;
+                padding: var(--space-1) var(--space-3);
+            }
+
+            :host([compact]) .trigger-label {
+                font-size: 10px;
+            }
+
+            :host([compact]) .trigger-value {
+                font-size: var(--text-sm);
             }
 
             .trigger:focus-visible {
@@ -296,6 +321,7 @@ export class PlatformDatePicker extends PlatformElement {
         this.leadingIcon = 'calendar';
         this.embedded = false;
         this.hideTriggerIcon = false;
+        this.compact = false;
         this.open = false;
 
         const now = new Date();
@@ -1272,7 +1298,7 @@ export class PlatformDatePicker extends PlatformElement {
                 ?disabled=${this.disabled}
             >
                 ${hasLabel ? html`
-                    <platform-icon class="leading-icon" name=${this.leadingIcon || 'calendar'} size="22"></platform-icon>
+                    <platform-icon class="leading-icon" name=${this.leadingIcon || 'calendar'} size=${this.compact ? '16' : '22'}></platform-icon>
                 ` : ''}
                 <span class="trigger-text ${hasLabel ? 'with-label' : ''} ${displayValue ? '' : 'trigger-placeholder'}">
                     ${hasLabel ? html`
@@ -1283,7 +1309,7 @@ export class PlatformDatePicker extends PlatformElement {
                     `}
                 </span>
                 ${showTrailingIcon ? html`
-                    <platform-icon name=${this.open ? 'chevron-up' : 'calendar'} size="16"></platform-icon>
+                    <platform-icon name=${this.open ? 'chevron-up' : 'calendar'} size=${this.compact ? '13' : '16'}></platform-icon>
                 ` : ''}
             </button>
         `;

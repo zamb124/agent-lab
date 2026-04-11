@@ -55,6 +55,12 @@ export class NoteContent extends PlatformElement {
         _ctxSearchLoading: { state: true },
         _ctxLookupLabel: { state: true },
         _voiceRecState: { state: true },
+        _mentionTriggerIndex: { state: true },
+        _mentionQuery: { state: true },
+        _mentionCandidates: { state: true },
+        _mentionSelectedIdx: { state: true },
+        _mentionLoading: { state: true },
+        _mentionCoords: { state: true },
     };
 
     static styles = [
@@ -766,6 +772,89 @@ export class NoteContent extends PlatformElement {
                 padding-right: 52px;
             }
 
+            .note-mention-dropdown {
+                position: absolute;
+                z-index: 10;
+                background: var(--crm-surface, #fff);
+                border: 1px solid var(--crm-stroke);
+                border-radius: 25px;
+                box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
+                min-width: 220px;
+                max-width: 360px;
+                max-height: 200px;
+                overflow-y: auto;
+                padding: 8px 0;
+            }
+
+            .note-mention-dropdown-hint {
+                padding: 8px 16px;
+                font-size: 13px;
+                color: var(--text-secondary);
+            }
+
+            .note-mention-dropdown-item {
+                display: flex;
+                align-items: center;
+                gap: 8px;
+                padding: 8px 16px;
+                cursor: pointer;
+                font-size: 14px;
+                line-height: 20px;
+                color: var(--text-primary);
+                transition: background var(--duration-fast);
+            }
+
+            .note-mention-dropdown-item:first-child {
+                border-radius: 25px 25px 0 0;
+            }
+
+            .note-mention-dropdown-item:last-child {
+                border-radius: 0 0 25px 25px;
+            }
+
+            .note-mention-dropdown-item:only-child {
+                border-radius: 25px;
+            }
+
+            .note-mention-dropdown-item:hover,
+            .note-mention-dropdown-item.is-selected {
+                background: var(--crm-surface-muted);
+            }
+
+            .note-mention-item-name {
+                flex: 1;
+                min-width: 0;
+                overflow: hidden;
+                text-overflow: ellipsis;
+                white-space: nowrap;
+            }
+
+            .note-mention-item-type {
+                font-size: 11px;
+                color: var(--text-tertiary);
+                background: var(--crm-surface-muted);
+                border-radius: 4px;
+                padding: 1px 5px;
+                flex-shrink: 0;
+            }
+
+            .note-entity-mention {
+                display: inline-flex;
+                align-items: center;
+                background: var(--accent-soft, rgba(var(--accent-rgb, 99, 102, 241), 0.10));
+                color: var(--accent, #6366f1);
+                border-radius: 4px;
+                padding: 0 4px;
+                font-size: 0.95em;
+                cursor: pointer;
+                font-weight: 500;
+                transition: background var(--duration-fast);
+            }
+
+            .note-entity-mention:hover {
+                background: var(--accent-soft-hover, rgba(var(--accent-rgb, 99, 102, 241), 0.18));
+            }
+
             .note-voice-dictate-floating {
                 position: absolute;
                 top: 12px;
@@ -1443,6 +1532,13 @@ export class NoteContent extends PlatformElement {
         this._voiceRecState = 'idle';
         this._voiceMediaRecorder = null;
         this._voiceAudioChunks = [];
+        this._mentionTriggerIndex = -1;
+        this._mentionQuery = '';
+        this._mentionCandidates = [];
+        this._mentionSelectedIdx = 0;
+        this._mentionLoading = false;
+        this._mentionCoords = null;
+        this._mentionDebounceTimer = 0;
     }
 
     connectedCallback() {
@@ -2287,6 +2383,203 @@ export class NoteContent extends PlatformElement {
 
     _onTextInput(event) {
         this._draftText = event.target.value;
+        this._detectMentionContext(event.target);
+    }
+
+    _onTextKeyDown(event) {
+        if (this._mentionTriggerIndex === -1 || this._mentionCandidates.length === 0) {
+            return;
+        }
+        if (event.key === 'ArrowDown') {
+            event.preventDefault();
+            this._mentionSelectedIdx = Math.min(
+                this._mentionSelectedIdx + 1,
+                this._mentionCandidates.length - 1,
+            );
+            this.requestUpdate();
+        } else if (event.key === 'ArrowUp') {
+            event.preventDefault();
+            this._mentionSelectedIdx = Math.max(this._mentionSelectedIdx - 1, 0);
+            this.requestUpdate();
+        } else if (event.key === 'Enter' || event.key === 'Tab') {
+            const selected = this._mentionCandidates[this._mentionSelectedIdx];
+            if (selected) {
+                event.preventDefault();
+                this._insertMention(selected);
+            }
+        } else if (event.key === 'Escape') {
+            this._hideMentionDropdown();
+        }
+    }
+
+    _computeCaretCoords(textarea, atIndex) {
+        const cs = window.getComputedStyle(textarea);
+        const mirror = document.createElement('div');
+        Object.assign(mirror.style, {
+            position: 'absolute',
+            top: '0',
+            left: '-9999px',
+            visibility: 'hidden',
+            overflow: 'auto',
+            width: cs.width,
+            whiteSpace: 'pre-wrap',
+            wordWrap: 'break-word',
+            fontFamily: cs.fontFamily,
+            fontSize: cs.fontSize,
+            fontWeight: cs.fontWeight,
+            lineHeight: cs.lineHeight,
+            paddingTop: cs.paddingTop,
+            paddingRight: cs.paddingRight,
+            paddingBottom: cs.paddingBottom,
+            paddingLeft: cs.paddingLeft,
+            borderTopWidth: cs.borderTopWidth,
+            borderBottomWidth: cs.borderBottomWidth,
+            borderLeftWidth: cs.borderLeftWidth,
+            borderRightWidth: cs.borderRightWidth,
+            boxSizing: cs.boxSizing,
+        });
+        mirror.textContent = textarea.value.slice(0, atIndex);
+        const marker = document.createElement('span');
+        marker.textContent = '\u200b';
+        mirror.appendChild(marker);
+        document.body.appendChild(mirror);
+        const markerTop = marker.offsetTop;
+        const markerLeft = marker.offsetLeft;
+        const lineH = parseFloat(cs.lineHeight) || parseFloat(cs.fontSize) * 1.4 || 20;
+        document.body.removeChild(mirror);
+        return {
+            top: markerTop - textarea.scrollTop + lineH,
+            left: markerLeft,
+        };
+    }
+
+    _detectMentionContext(textarea) {
+        const val = textarea.value;
+        const cursor = textarea.selectionStart;
+        let atPos = -1;
+        for (let i = cursor - 1; i >= 0; i--) {
+            const ch = val[i];
+            if (ch === '@') {
+                atPos = i;
+                break;
+            }
+            if (ch === ' ' || ch === '\n' || ch === '\r' || ch === '\t') {
+                break;
+            }
+        }
+        if (atPos === -1) {
+            this._hideMentionDropdown();
+            return;
+        }
+        const query = val.slice(atPos + 1, cursor);
+        if (query === this._mentionQuery && this._mentionTriggerIndex === atPos) {
+            return;
+        }
+        this._mentionTriggerIndex = atPos;
+        this._mentionQuery = query;
+        this._mentionSelectedIdx = 0;
+        this._mentionCoords = this._computeCaretCoords(textarea, atPos);
+        if (query.length < 1) {
+            this._mentionCandidates = [];
+            this.requestUpdate();
+            return;
+        }
+        clearTimeout(this._mentionDebounceTimer);
+        this._mentionDebounceTimer = window.setTimeout(() => {
+            void this._fetchMentionCandidates(query);
+        }, 250);
+        this.requestUpdate();
+    }
+
+    async _fetchMentionCandidates(query) {
+        const crmApi = this.crmApi;
+        if (!crmApi) {
+            throw new Error('crmApi is required');
+        }
+        this._mentionLoading = true;
+        this.requestUpdate();
+        const ns = CRMStore.state?.namespaces?.current?.name ?? null;
+        const response = await crmApi.findEntitiesByText(query, ns);
+        if (this._mentionQuery !== query) {
+            return;
+        }
+        this._mentionCandidates = Array.isArray(response.entities) ? response.entities : [];
+        this._mentionSelectedIdx = 0;
+        this._mentionLoading = false;
+        this.requestUpdate();
+    }
+
+    _hideMentionDropdown() {
+        this._mentionTriggerIndex = -1;
+        this._mentionQuery = '';
+        this._mentionCandidates = [];
+        this._mentionSelectedIdx = 0;
+        this._mentionLoading = false;
+        this._mentionCoords = null;
+        clearTimeout(this._mentionDebounceTimer);
+        this.requestUpdate();
+    }
+
+    _insertMention(entity) {
+        const textarea = this.renderRoot.querySelector('.note-text-input');
+        if (!textarea) {
+            return;
+        }
+        const val = textarea.value;
+        const atPos = this._mentionTriggerIndex;
+        const cursor = textarea.selectionStart;
+        const token = `[@${entity.name}](entity:${entity.entity_id})`;
+        const before = val.slice(0, atPos);
+        const after = val.slice(cursor);
+        const newVal = before + token + after;
+        const newCursor = atPos + token.length;
+        this._draftText = newVal;
+        this._hideMentionDropdown();
+        queueMicrotask(() => {
+            const ta = this.renderRoot.querySelector('.note-text-input');
+            if (ta) {
+                ta.value = newVal;
+                ta.setSelectionRange(newCursor, newCursor);
+                ta.focus();
+            }
+        });
+    }
+
+    _renderMentionDropdown() {
+        if (this._mentionTriggerIndex === -1 || !this._mentionCoords) {
+            return '';
+        }
+        const candidates = this._mentionCandidates;
+        const loading = this._mentionLoading;
+        if (!loading && candidates.length === 0) {
+            return '';
+        }
+        const { top, left } = this._mentionCoords;
+        return html`
+            <div
+                class="note-mention-dropdown"
+                role="listbox"
+                style="top:${top}px;left:${left}px"
+            >
+                ${loading ? html`
+                    <div class="note-mention-dropdown-hint">
+                        ${this.i18n.t('note_content.mention_searching')}
+                    </div>
+                ` : candidates.map((entity, idx) => html`
+                    <div
+                        class="note-mention-dropdown-item ${idx === this._mentionSelectedIdx ? 'is-selected' : ''}"
+                        role="option"
+                        aria-selected=${idx === this._mentionSelectedIdx}
+                        @mousedown=${(e) => { e.preventDefault(); this._insertMention(entity); }}
+                    >
+                        <span class="note-mention-item-name">${entity.name}</span>
+                        ${entity.entity_type ? html`
+                            <span class="note-mention-item-type">${entity.entity_type}</span>
+                        ` : ''}
+                    </div>
+                `)}
+            </div>
+        `;
     }
 
     _voiceDictateTitle() {
@@ -2405,20 +2698,38 @@ export class NoteContent extends PlatformElement {
             .replace(/'/g, '&#39;');
     }
 
+    _postProcessEntityMentions(htmlContent) {
+        return htmlContent.replace(
+            /<a href="entity:([0-9a-f-]+)">([^<]*)<\/a>/gi,
+            '<span class="note-entity-mention" data-entity-id="$1">$2</span>',
+        );
+    }
+
+    _onMentionChipClick(event) {
+        const chip = event.target.closest('.note-entity-mention');
+        if (!chip) {
+            return;
+        }
+        const entityId = chip.dataset.entityId;
+        if (!entityId) {
+            return;
+        }
+        this.emit('entity-open', { entity: { entity_id: entityId } });
+    }
+
     _renderMarkdown(text) {
         const escaped = this._escapeHtml(text);
         if (escaped.length === 0) {
             return html`<p class="note-text">${this.i18n.t('note_content.no_description')}</p>`;
         }
         if (window.marked && typeof window.marked.parse === 'function') {
-            const htmlContent = window.marked.parse(escaped, {
-                breaks: true,
-                gfm: true,
-            });
-            return html`<div class="note-markdown">${unsafeHTML(htmlContent)}</div>`;
+            const htmlContent = this._postProcessEntityMentions(
+                window.marked.parse(escaped, { breaks: true, gfm: true }),
+            );
+            return html`<div class="note-markdown" @click=${this._onMentionChipClick}>${unsafeHTML(htmlContent)}</div>`;
         }
-        const htmlContent = escaped.replace(/\n/g, '<br>');
-        return html`<div class="note-markdown">${unsafeHTML(htmlContent)}</div>`;
+        const htmlContent = this._postProcessEntityMentions(escaped.replace(/\n/g, '<br>'));
+        return html`<div class="note-markdown" @click=${this._onMentionChipClick}>${unsafeHTML(htmlContent)}</div>`;
     }
 
     _emitSummaryRefresh() {
@@ -2643,8 +2954,10 @@ export class NoteContent extends PlatformElement {
                                 class="note-text-input"
                                 .value=${noteText}
                                 @input=${this._onTextInput}
+                                @keydown=${this._onTextKeyDown}
                                 placeholder=${this.i18n.t('notes.placeholder')}
                             ></textarea>
+                            ${this._renderMentionDropdown()}
                             <div class="note-voice-dictate-floating">
                                 <button
                                     class="voice-dictate-btn ${this._voiceRecState === 'recording' ? 'recording' : ''}"

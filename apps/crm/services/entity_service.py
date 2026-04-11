@@ -873,6 +873,11 @@ class EntityService:
                 resolved_voice_id=resolved_voice,
                 resolved_context_id=resolved_context,
             )
+            if "description" in updates:
+                mention_ids = self.extract_linked_entity_ids_from_description(
+                    entity.description or ""
+                )
+                await self._sync_note_mention_links(entity.entity_id, mention_ids, ns)
 
         return entity
     
@@ -2381,6 +2386,111 @@ class EntityService:
             seen.add(key)
             entities.append(normalized)
         return entities
+
+    # Соответствует формату [@Name](entity:UUID) в description заметки
+    _MENTION_TOKEN_RE = re.compile(
+        r"\[@[^\]]+\]\(entity:([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\)",
+        re.IGNORECASE,
+    )
+    _EXISTING_TOKEN_SPLIT_RE = re.compile(
+        r"(\[@[^\]]+\]\(entity:[0-9a-f\-]+\))",
+        re.IGNORECASE,
+    )
+
+    def extract_linked_entity_ids_from_description(self, text: str) -> list[str]:
+        """Возвращает список entity_id из [@Name](entity:UUID) токенов в тексте."""
+        if not text:
+            return []
+        seen: set[str] = set()
+        result: list[str] = []
+        for entity_id in self._MENTION_TOKEN_RE.findall(text):
+            if entity_id not in seen:
+                seen.add(entity_id)
+                result.append(entity_id)
+        return result
+
+    def _enrich_description_with_entity_mentions(
+        self, description: str, entities: list[dict]
+    ) -> str:
+        """
+        Вставляет [@Name](entity:id) токены в plain-текст description.
+
+        Работает только с exact match (регистронезависимо). Уже токенизированные
+        упоминания не трогаются. Падежные формы не обрабатываются.
+        """
+        text = description
+        for entity in entities:
+            entity_id = entity.get("entity_id") or entity.get("id")
+            name = entity.get("name")
+            if not entity_id or not name:
+                continue
+            name_stripped = name.strip()
+            if not name_stripped:
+                continue
+            replacement = f"[@{name_stripped}](entity:{entity_id})"
+            name_re = re.compile(re.escape(name_stripped), re.IGNORECASE)
+            # Разбиваем по уже существующим токенам: чётные индексы — plain-текст
+            segments = self._EXISTING_TOKEN_SPLIT_RE.split(text)
+            for i in range(0, len(segments), 2):
+                segments[i] = name_re.sub(replacement, segments[i])
+            text = "".join(segments)
+        return text
+
+    async def _sync_note_mention_links(
+        self, note_id: str, entity_ids: list[str], namespace: str
+    ) -> None:
+        """Создаёт linked-связи для сущностей, упомянутых в тексте заметки через @-токены."""
+        if not entity_ids:
+            return
+        company_id = self._get_company_id()
+        now = datetime.now(timezone.utc)
+        for entity_id in entity_ids:
+            existing = await self._relationship_repo.find_exact(note_id, entity_id, "linked")
+            if existing:
+                continue
+            row = Relationship(
+                relationship_id=str(uuid.uuid4()),
+                source_entity_id=note_id,
+                target_entity_id=entity_id,
+                relationship_type="linked",
+                namespace=namespace,
+                weight=1.0,
+                attributes={},
+                company_id=company_id,
+                created_at=now,
+                updated_at=now,
+            )
+            await self._relationship_repo.create(row)
+
+    async def enrich_note_description_with_mention_tokens(self, note_id: str) -> None:
+        """
+        После apply AI-анализа: вставляет [@Name](entity:id) токены в description
+        для сущностей, связанных с заметкой через linked/mentions связи.
+        """
+        note = await self._entity_repo.get(note_id)
+        if note is None:
+            raise ValueError(f"Заметка не найдена: {note_id}")
+        if not note.description:
+            return
+        relationships = await self._relationship_repo.get_by_entity(note_id)
+        linked_target_ids = [
+            r.target_entity_id
+            for r in relationships
+            if r.source_entity_id == note_id and r.relationship_type in ("linked", "mentions")
+        ]
+        if not linked_target_ids:
+            return
+        entities: list[dict] = []
+        for entity_id in linked_target_ids:
+            entity = await self._entity_repo.get(entity_id)
+            if entity and entity.name:
+                entities.append({"entity_id": entity_id, "name": entity.name})
+        if not entities:
+            return
+        enriched = self._enrich_description_with_entity_mentions(note.description, entities)
+        if enriched == note.description:
+            return
+        await self.update_entity(note_id, {"description": enriched})
 
     def _extract_entities_from_notes(self, notes: list[CRMEntity]) -> list[str]:
         entities: list[str] = []

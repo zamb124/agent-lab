@@ -179,7 +179,11 @@ class A2AClient:
         # Получаем статус
         status_obj = task_result.get("status", {})
         status = status_obj.get("state", "completed") if isinstance(status_obj, dict) else "completed"
-        
+
+        if status == "failed":
+            error_msg = status_obj.get("message") if isinstance(status_obj, dict) else None
+            raise A2AClientError(f"A2A task failed: {error_msg or 'unknown error'}")
+
         # Извлекаем текст из artifacts
         response_text = ""
         artifacts = task_result.get("artifacts", [])

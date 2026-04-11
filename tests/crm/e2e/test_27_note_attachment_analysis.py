@@ -24,7 +24,7 @@ import pytest
 _ANALYZE_META = {"dates_mentioned": [], "places_mentioned": [], "key_topics": []}
 
 
-def _analyze_llm_response(*, note_name: str) -> str:
+def _analyze_llm_response(*, note_name: str, person_name: str) -> str:
     return json.dumps(
         {
             "note": {
@@ -35,7 +35,7 @@ def _analyze_llm_response(*, note_name: str) -> str:
             "entities": [
                 {
                     "entity_type": "task",
-                    "name": "Иван Иванов",
+                    "name": person_name,
                     "description": "Менеджер проекта",
                     "attributes": {"role": "менеджер"},
                 },
@@ -45,7 +45,7 @@ def _analyze_llm_response(*, note_name: str) -> str:
                     "source_type": "note",
                     "source_name": note_name,
                     "target_type": "task",
-                    "target_name": "Иван Иванов",
+                    "target_name": person_name,
                     "relationship_type": "mentions",
                     "weight": 1.0,
                 }
@@ -264,12 +264,12 @@ class TestAnalyzeWithAttachments:
         assert upload.status_code == 200, upload.text
 
         await mock_llm_redis([
-            {"type": "text", "content": _analyze_llm_response(note_name=note_name)},
+            {"type": "text", "content": _analyze_llm_response(note_name=note_name, person_name=f"Менеджер {unique_id}")},
         ])
 
         resp = await crm_client.post(
             f"/crm/api/v1/entities/notes/{note_id}/analyze",
-            json={},
+            json={"check_duplicates": False},
             headers=auth_headers_system,
         )
         assert resp.status_code == 200, resp.text
@@ -313,17 +313,17 @@ class TestAnalyzeWithAttachments:
         )
         assert upload.status_code == 200, upload.text
 
-        summary_text = f"Иван Иванов (Рога и Копыта) провёл встречу по проекту {unique_id}."
+        summary_text = f"Менеджер {unique_id} провёл встречу по проекту."
         await mock_llm_redis([
             # 1-й вызов: summarize_attachment
             {"type": "text", "content": json.dumps({"summary": summary_text})},
             # 2-й вызов: analyze
-            {"type": "text", "content": _analyze_llm_response(note_name=note_name)},
+            {"type": "text", "content": _analyze_llm_response(note_name=note_name, person_name=f"Менеджер {unique_id}")},
         ])
 
         resp = await crm_client.post(
             f"/crm/api/v1/entities/notes/{note_id}/analyze",
-            json={},
+            json={"check_duplicates": False},
             headers=auth_headers_system,
         )
         assert resp.status_code == 200, resp.text
@@ -371,12 +371,12 @@ class TestAnalyzeWithAttachments:
             # 1-й вызов: summarize_attachment (6000 > 5000 → суммаризация)
             {"type": "text", "content": json.dumps({"summary": f"Краткий протокол {unique_id}."})},
             # 2-й вызов: analyze
-            {"type": "text", "content": _analyze_llm_response(note_name=note_name)},
+            {"type": "text", "content": _analyze_llm_response(note_name=note_name, person_name=f"Менеджер {unique_id}")},
         ])
 
         resp = await crm_client.post(
             f"/crm/api/v1/entities/notes/{note_id}/analyze",
-            json={"attachment_chars_limit_per_file": 5_000},
+            json={"attachment_chars_limit_per_file": 5_000, "check_duplicates": False},
             headers=auth_headers_system,
         )
         assert resp.status_code == 200, resp.text
@@ -419,13 +419,181 @@ class TestAnalyzeWithAttachments:
         assert upload.status_code == 200, upload.text
 
         await mock_llm_redis([
-            {"type": "text", "content": _analyze_llm_response(note_name=note_name)},
+            {"type": "text", "content": _analyze_llm_response(note_name=note_name, person_name=f"Менеджер {unique_id}")},
         ])
 
         resp = await crm_client.post(
             f"/crm/api/v1/entities/notes/{note_id}/analyze",
-            json={"include_attachments": False},
+            json={"include_attachments": False, "check_duplicates": False},
             headers=auth_headers_system,
         )
         assert resp.status_code == 200, resp.text
-        assert len(resp.json()["entities"]) >= 1
+        body = resp.json()
+        assert len(body["entities"]) >= 1, f"Expected entities >= 1, got: {body}"
+
+
+class TestAttachmentGuarantee:
+    """Жёсткая гарантия: вложение без текста → анализ не запускается."""
+
+    @pytest.mark.asyncio
+    async def test_empty_attachment_raises_in_resolve_note_text(
+        self,
+        crm_client,
+        crm_container,
+        unique_id: str,
+        auth_headers_system: dict,
+    ) -> None:
+        """Пустой файл → resolve_note_text бросает ValueError с именем файла."""
+        note_resp = await crm_client.post(
+            "/crm/api/v1/entities/",
+            json={
+                "entity_type": "note",
+                "name": f"Пустой файл {unique_id}",
+                "description": f"Описание заметки {unique_id}.",
+                "namespace": "default",
+            },
+            headers=auth_headers_system,
+        )
+        assert note_resp.status_code in (200, 201), note_resp.text
+        note_id = note_resp.json()["entity_id"]
+
+        files = {"file": ("empty.txt", b"", "text/plain")}
+        upload = await crm_client.post(
+            f"/crm/api/v1/entities/{note_id}/attachments",
+            files=files,
+            headers=auth_headers_system,
+        )
+        assert upload.status_code == 200, upload.text
+
+        with pytest.raises(ValueError, match="не содержит извлекаемого текста"):
+            await crm_container.note_processing_service.resolve_note_text(
+                note_id,
+                include_attachments=True,
+                attachment_chars_limit=1_000_000,
+            )
+
+    @pytest.mark.asyncio
+    async def test_whitespace_only_attachment_raises(
+        self,
+        crm_client,
+        crm_container,
+        unique_id: str,
+        auth_headers_system: dict,
+    ) -> None:
+        """Файл только из пробелов → тоже не допускается в анализ."""
+        note_resp = await crm_client.post(
+            "/crm/api/v1/entities/",
+            json={
+                "entity_type": "note",
+                "name": f"Пробельный файл {unique_id}",
+                "description": f"Описание {unique_id}.",
+                "namespace": "default",
+            },
+            headers=auth_headers_system,
+        )
+        assert note_resp.status_code in (200, 201), note_resp.text
+        note_id = note_resp.json()["entity_id"]
+
+        files = {"file": ("spaces.txt", b"   \n\t\n   ", "text/plain")}
+        upload = await crm_client.post(
+            f"/crm/api/v1/entities/{note_id}/attachments",
+            files=files,
+            headers=auth_headers_system,
+        )
+        assert upload.status_code == 200, upload.text
+
+        with pytest.raises(ValueError, match="не содержит извлекаемого текста"):
+            await crm_container.note_processing_service.resolve_note_text(
+                note_id,
+                include_attachments=True,
+                attachment_chars_limit=1_000_000,
+            )
+
+    @pytest.mark.asyncio
+    async def test_valid_file_passes_resolve_note_text(
+        self,
+        crm_client,
+        crm_container,
+        unique_id: str,
+        auth_headers_system: dict,
+    ) -> None:
+        """Непустой файл + пустой файл → ошибка на пустом (порядок проверяется)."""
+        note_resp = await crm_client.post(
+            "/crm/api/v1/entities/",
+            json={
+                "entity_type": "note",
+                "name": f"Смешанные файлы {unique_id}",
+                "description": f"Описание {unique_id}.",
+                "namespace": "default",
+            },
+            headers=auth_headers_system,
+        )
+        assert note_resp.status_code in (200, 201), note_resp.text
+        note_id = note_resp.json()["entity_id"]
+
+        good_content = f"Контент с информацией {unique_id}.".encode()
+        upload_good = await crm_client.post(
+            f"/crm/api/v1/entities/{note_id}/attachments",
+            files={"file": ("good.txt", good_content, "text/plain")},
+            headers=auth_headers_system,
+        )
+        assert upload_good.status_code == 200, upload_good.text
+
+        upload_empty = await crm_client.post(
+            f"/crm/api/v1/entities/{note_id}/attachments",
+            files={"file": ("empty.txt", b"", "text/plain")},
+            headers=auth_headers_system,
+        )
+        assert upload_empty.status_code == 200, upload_empty.text
+
+        with pytest.raises(ValueError, match="не содержит извлекаемого текста"):
+            await crm_container.note_processing_service.resolve_note_text(
+                note_id,
+                include_attachments=True,
+                attachment_chars_limit=1_000_000,
+            )
+
+
+@pytest.mark.real_taskiq
+class TestAnalyzeBlockedByEmptyAttachment:
+    """E2E: пустое вложение → POST /analyze возвращает 422 без LLM-вызова."""
+
+    @pytest.mark.asyncio
+    async def test_empty_attachment_blocks_analyze_http(
+        self,
+        crm_client,
+        unique_id: str,
+        auth_headers_system: dict,
+    ) -> None:
+        """Пустой txt → воркер бросает ValueError → HTTP 422 с текстом ошибки.
+
+        mock_llm_redis не нужен: LLM до него не доходит — ошибка в resolve_note_text.
+        """
+        note_resp = await crm_client.post(
+            "/crm/api/v1/entities/",
+            json={
+                "entity_type": "note",
+                "name": f"HTTP пустой файл {unique_id}",
+                "description": f"Описание {unique_id}.",
+                "namespace": "default",
+            },
+            headers=auth_headers_system,
+        )
+        assert note_resp.status_code in (200, 201), note_resp.text
+        note_id = note_resp.json()["entity_id"]
+
+        files = {"file": ("empty.txt", b"", "text/plain")}
+        upload = await crm_client.post(
+            f"/crm/api/v1/entities/{note_id}/attachments",
+            files=files,
+            headers=auth_headers_system,
+        )
+        assert upload.status_code == 200, upload.text
+
+        resp = await crm_client.post(
+            f"/crm/api/v1/entities/notes/{note_id}/analyze",
+            json={"include_attachments": True, "check_duplicates": False},
+            headers=auth_headers_system,
+        )
+        assert resp.status_code == 422, resp.text
+        assert "не содержит извлекаемого текста" in resp.json()["detail"]
