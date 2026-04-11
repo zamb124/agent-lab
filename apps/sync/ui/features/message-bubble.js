@@ -749,14 +749,24 @@ export class MessageBubble extends PlatformElement {
                 background: rgba(51, 65, 85, 0.3);
             }
 
-            /* Without this, flex (bubble-contents + time) with min-width:0 shrinks the audio player to a pill. */
             .bubble.bubble--media {
-                min-width: min(288px, 100%);
+                min-width: min(260px, 100%);
+            }
+
+            .bubble.bubble--media .bubble-body {
+                flex-direction: column;
+                align-items: stretch;
+                gap: 2px;
+            }
+
+            .bubble.bubble--media .bubble-body .bubble-time {
+                align-self: flex-end;
             }
 
             .bubble.bubble--media .bubble-contents {
-                flex: 1 1 auto;
-                min-width: min(236px, calc(100% - 52px));
+                flex: none;
+                min-width: 0;
+                width: 100%;
             }
 
             .bubble.bubble--media platform-audio-message-player {
