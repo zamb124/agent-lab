@@ -65,7 +65,7 @@ jobs:
           host: ${{ secrets.SERVER_HOST }}
           username: ${{ secrets.SERVER_USER }}
           key: ${{ secrets.SERVER_SSH_KEY }}
-          source: "docker-compose-prod.yaml,conf.json"
+          source: "docker-compose-prod.yaml,conf.json,deploy/prepare-static.sh"
           target: /opt/agent-lab/
 
       # docker-compose-prod монтирует ./migrations/postgres/init.sql — без файла на хосте
@@ -247,12 +247,12 @@ jobs:
 
             docker image prune -f
 
-            # Настройка ingress: статика + nginx location blocks
-            if [ -f /opt/agent-lab/conf.local.json ]; then
-              echo "Настройка ingress (статика + nginx location blocks)..."
-              cd /opt/agent-lab
-              bash deploy/ingress.sh
-            else
-              echo "WARNING: conf.local.json не найден — пропускаем настройку ingress"
-              echo "Для настройки ingress выполните на сервере: cd /opt/agent-lab && bash deploy/ingress.sh"
-            fi
+            # Подготовка статики: извлекаем UI файлы и i18n из Docker образа
+            # static-server (nginx pod) уже настроен через ingress.sh при первом деплое
+            # При каждом деплое нужно только обновить файлы на диске
+            echo "Подготовка статики из образа ${IMAGE}..."
+            REMOTE_DIR=/opt/agent-lab IMAGE=${IMAGE} bash /opt/agent-lab/deploy/prepare-static.sh
+
+            # Перезапускаем static-server если он уже запущен (подхватывает новые файлы)
+            microk8s kubectl rollout restart deployment/static-server -n default 2>/dev/null || true
+            microk8s kubectl rollout status deployment/static-server -n default --timeout=60s 2>/dev/null || true

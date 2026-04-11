@@ -88,7 +88,44 @@ log "IP хоста: ${HOST_IP}"
 # ─── Подготовка статики ──────────────────────────────────────────────────────
 # Копируем UI файлы из apps/*/ui/ в единую структуру static/ для nginx ingress
 log "Подготовка статики для ingress"
-${SSH} "cd ${REMOTE_DIR} && bash -s" < "${SCRIPT_DIR}/prepare-static.sh"
+
+# Передаём REMOTE_DIR и CONF_LOCAL_JSON в скрипт
+export REMOTE_DIR
+export CONF_LOCAL_JSON="${CONF_LOCAL_JSON}"
+${SSH} "REMOTE_DIR=${REMOTE_DIR} && cd \${REMOTE_DIR} && bash -s" < "${SCRIPT_DIR}/prepare-static.sh"
+
+# i18n генерация встроена внутрь prepare-static.sh выше
+
+# ─── Включаем snippet annotations в ingress controller ──────────────────────
+# С nginx ingress controller v1.9+ server-snippet и configuration-snippet
+# отключены по умолчанию из соображений безопасности.
+# Без этого все location blocks в server-snippet тихо игнорируются.
+log "Включаем snippet annotations в ingress controller"
+
+# Определяем имя ConfigMap (в MicroK8s может быть разным)
+_CM_NAME=""
+for _candidate in "nginx-load-balancer-microk8s-conf" "nginx-ingress-microk8s-controller"; do
+  if ${SSH} "microk8s kubectl -n ingress get configmap ${_candidate} >/dev/null 2>&1"; then
+    _CM_NAME="${_candidate}"
+    break
+  fi
+done
+
+if [[ -z "${_CM_NAME}" ]]; then
+  log "WARNING: ConfigMap ingress controller не найден — snippet annotations не включены"
+else
+  log "ConfigMap: ${_CM_NAME}"
+  _SNIPPETS_ENABLED="$(${SSH} "microk8s kubectl -n ingress get configmap ${_CM_NAME} -o yaml | grep -c 'allow-snippet-annotations' || true")"
+  if [[ "${_SNIPPETS_ENABLED}" -gt 0 ]]; then
+    log "snippet annotations уже включены"
+  else
+    log "Включаем allow-snippet-annotations и annotations-risk-level=Critical"
+    ${SSH} "microk8s kubectl -n ingress patch configmap ${_CM_NAME} --type=merge -p '{\"data\":{\"allow-snippet-annotations\":\"true\",\"annotations-risk-level\":\"Critical\"}}'"
+    log "Перезапускаем ingress controller для применения ConfigMap"
+    ${SSH} "microk8s kubectl -n ingress rollout restart daemonset nginx-ingress-microk8s-controller"
+    ${SSH} "microk8s kubectl -n ingress rollout status daemonset nginx-ingress-microk8s-controller --timeout=120s"
+  fi
+fi
 
 # cert-manager
 log "Проверяем cert-manager"
@@ -150,8 +187,192 @@ subsets:
 EOF
 done < <(jq -c '.ingress.services[]' "${CONF_LOCAL_JSON}")
 
-# Генерируем paths для ingress
+# ─── Статический nginx сервер ────────────────────────────────────────────────
+# root/alias запрещены в nginx ingress snippets (PR #8624 kubernetes/ingress-nginx).
+# Правильное решение: отдельный nginx pod с hostPath монтирующий /opt/agent-lab/static.
+# Ingress направляет /static/*, /crm/ui/static/ и т.д. на этот pod.
+
+log "Создаём static-server (nginx pod для раздачи статики)"
+${SSH} "microk8s kubectl apply -f -" <<EOF
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: static-server-conf
+  namespace: default
+data:
+  default.conf: |
+    server {
+        listen 80;
+        location /api/i18n/ {
+            alias /srv/static/i18n/;
+            default_type application/json;
+            add_header Cache-Control "public, max-age=3600" always;
+            add_header Access-Control-Allow-Origin "*" always;
+        }
+        location /static/core/ {
+            alias /srv/static/core/;
+            add_header Cache-Control "public, max-age=31536000, immutable" always;
+            add_header Access-Control-Allow-Origin "*" always;
+        }
+        location /static/frontend/ {
+            alias /srv/static/frontend/;
+            add_header Cache-Control "public, max-age=31536000, immutable" always;
+            add_header Access-Control-Allow-Origin "*" always;
+        }
+        location /crm/ui/static/ {
+            alias /srv/static/crm/ui/;
+            add_header Cache-Control "public, max-age=31536000, immutable" always;
+            add_header Access-Control-Allow-Origin "*" always;
+        }
+        location /crm/ui/vendor/ {
+            alias /srv/static/crm/ui/vendor/;
+            add_header Cache-Control "public, max-age=31536000, immutable" always;
+            add_header Access-Control-Allow-Origin "*" always;
+        }
+        location /sync/ui/static/ {
+            alias /srv/static/sync/ui/;
+            add_header Cache-Control "public, max-age=31536000, immutable" always;
+            add_header Access-Control-Allow-Origin "*" always;
+        }
+        location /rag/ui/static/ {
+            alias /srv/static/rag/ui/;
+            add_header Cache-Control "public, max-age=31536000, immutable" always;
+            add_header Access-Control-Allow-Origin "*" always;
+        }
+        location /documents/ui/static/ {
+            alias /srv/static/documents/ui/;
+            add_header Cache-Control "public, max-age=31536000, immutable" always;
+            add_header Access-Control-Allow-Origin "*" always;
+        }
+        location /flows/static/ {
+            alias /srv/static/flows/ui/;
+            add_header Cache-Control "public, max-age=31536000, immutable" always;
+            add_header Access-Control-Allow-Origin "*" always;
+        }
+    }
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: static-server
+  namespace: default
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: static-server
+  template:
+    metadata:
+      labels:
+        app: static-server
+    spec:
+      containers:
+      - name: nginx
+        image: nginx:alpine
+        ports:
+        - containerPort: 80
+        volumeMounts:
+        - name: nginx-conf
+          mountPath: /etc/nginx/conf.d
+        - name: static-files
+          mountPath: /srv/static
+          readOnly: true
+      volumes:
+      - name: nginx-conf
+        configMap:
+          name: static-server-conf
+      - name: static-files
+        hostPath:
+          path: ${REMOTE_DIR}/static
+          type: DirectoryOrCreate
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: static-server-svc
+  namespace: default
+spec:
+  selector:
+    app: static-server
+  ports:
+  - port: 80
+    targetPort: 80
+    protocol: TCP
+EOF
+
+log "Ожидаем готовности static-server"
+${SSH} "microk8s kubectl rollout status deployment/static-server -n default --timeout=60s"
+
+# Генерируем paths для ingress — статика идёт на static-server-svc, остальное на сервисы
 build_paths() {
+  # Сначала пути к статике (более специфичные → матчатся раньше)
+  cat <<STATICPATHS
+      - path: /api/i18n/
+        pathType: Prefix
+        backend:
+          service:
+            name: static-server-svc
+            port:
+              number: 80
+      - path: /static/core/
+        pathType: Prefix
+        backend:
+          service:
+            name: static-server-svc
+            port:
+              number: 80
+      - path: /static/frontend/
+        pathType: Prefix
+        backend:
+          service:
+            name: static-server-svc
+            port:
+              number: 80
+      - path: /crm/ui/static/
+        pathType: Prefix
+        backend:
+          service:
+            name: static-server-svc
+            port:
+              number: 80
+      - path: /crm/ui/vendor/
+        pathType: Prefix
+        backend:
+          service:
+            name: static-server-svc
+            port:
+              number: 80
+      - path: /sync/ui/static/
+        pathType: Prefix
+        backend:
+          service:
+            name: static-server-svc
+            port:
+              number: 80
+      - path: /rag/ui/static/
+        pathType: Prefix
+        backend:
+          service:
+            name: static-server-svc
+            port:
+              number: 80
+      - path: /documents/ui/static/
+        pathType: Prefix
+        backend:
+          service:
+            name: static-server-svc
+            port:
+              number: 80
+      - path: /flows/static/
+        pathType: Prefix
+        backend:
+          service:
+            name: static-server-svc
+            port:
+              number: 80
+STATICPATHS
+
+  # Динамические сервисы (из conf.local.json)
   jq -r '
     .ingress.services
     | sort_by(.path | length)
@@ -202,10 +423,6 @@ EOFTLS
 fi
 
 log "Создаём Ingress для ${DOMAIN} и *.${DOMAIN}"
-log "REMOTE_DIR для nginx config: ${REMOTE_DIR}"
-
-# Передаём REMOTE_DIR в SSH сессию для подстановки в nginx config
-export REMOTE_DIR
 log "Kubectl apply Ingress..."
 ${SSH} "microk8s kubectl apply -f -" <<EOF
 apiVersion: networking.k8s.io/v1
@@ -218,145 +435,8 @@ metadata:
     nginx.ingress.kubernetes.io/proxy-read-timeout: "300"
     nginx.ingress.kubernetes.io/proxy-send-timeout: "300"
     nginx.ingress.kubernetes.io/configuration-snippet: |
-      proxy_hide_header Cache-Control;
-      add_header Cache-Control "no-cache, must-revalidate" always;
       proxy_set_header Upgrade \$http_upgrade;
       proxy_set_header Connection "upgrade";
-    nginx.ingress.kubernetes.io/server-snippet: |
-      location = /api/i18n/ru {
-        alias /srv/i18n/ru.json;
-        default_type application/json;
-        add_header Cache-Control "public, max-age=3600" always;
-        add_header Access-Control-Allow-Origin "*" always;
-      }
-      location = /api/i18n/en {
-        alias /srv/i18n/en.json;
-        default_type application/json;
-        add_header Cache-Control "public, max-age=3600" always;
-        add_header Access-Control-Allow-Origin "*" always;
-      }
-      # Статика платформы — отдаётся напрямую nginx, минуя FastAPI
-      # Пути к статике после prepare-static.sh: ${REMOTE_DIR}/static/...
-      location /static/core/ {
-        alias ${REMOTE_DIR}/static/core/;
-        add_header Cache-Control "public, max-age=31536000, immutable";
-        add_header Access-Control-Allow-Origin "*" always;
-      }
-      location /crm/ui/static/ {
-        alias ${REMOTE_DIR}/static/crm/ui/;
-        add_header Cache-Control "public, max-age=31536000, immutable";
-        add_header Access-Control-Allow-Origin "*" always;
-      }
-      location /crm/ui/vendor/3d-force-graph/ {
-        alias ${REMOTE_DIR}/static/crm/ui/vendor/3d-force-graph/;
-        add_header Cache-Control "public, max-age=31536000, immutable";
-        add_header Access-Control-Allow-Origin "*" always;
-      }
-      location /crm/ui/vendor/three/ {
-        alias ${REMOTE_DIR}/static/crm/ui/vendor/three/;
-        add_header Cache-Control "public, max-age=31536000, immutable";
-        add_header Access-Control-Allow-Origin "*" always;
-      }
-      location /sync/ui/static/ {
-        alias ${REMOTE_DIR}/static/sync/ui/;
-        add_header Cache-Control "public, max-age=31536000, immutable";
-        add_header Access-Control-Allow-Origin "*" always;
-      }
-      location /rag/ui/static/ {
-        alias ${REMOTE_DIR}/static/rag/ui/;
-        add_header Cache-Control "public, max-age=31536000, immutable";
-        add_header Access-Control-Allow-Origin "*" always;
-      }
-      location /documents/ui/static/ {
-        alias ${REMOTE_DIR}/static/documents/ui/;
-        add_header Cache-Control "public, max-age=31536000, immutable";
-        add_header Access-Control-Allow-Origin "*" always;
-      }
-      location /flows/static/ {
-        alias ${REMOTE_DIR}/static/flows/ui/;
-        add_header Cache-Control "public, max-age=31536000, immutable";
-        add_header Access-Control-Allow-Origin "*" always;
-      }
-      location /static/frontend/ {
-        alias ${REMOTE_DIR}/static/frontend/;
-        add_header Cache-Control "public, max-age=31536000, immutable";
-        add_header Access-Control-Allow-Origin "*" always;
-      }
-      # SPA fallback для сервисов — корневые location с proxy_pass на сервисы
-      # nginx сначала ищет статику по alias, а если файл не найден (404) — проксирует на FastAPI
-      # Это нужно для корректной работы SPA роутинга при refresh страниц
-      # Frontend (/) — основной SPA
-      location / {
-        alias ${REMOTE_DIR}/static/frontend/;
-        try_files $uri $uri/ @proxy_frontend;
-      }
-      location @proxy_frontend {
-        proxy_pass http://frontend-svc:8002;
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
-      }
-      # CRM (/crm/*)
-      location /crm/ {
-        alias ${REMOTE_DIR}/static/crm/ui/;
-        try_files $uri $uri/ @proxy_crm;
-      }
-      location @proxy_crm {
-        proxy_pass http://crm-svc:8003;
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
-      }
-      # Sync (/sync/*)
-      location /sync/ {
-        alias ${REMOTE_DIR}/static/sync/ui/;
-        try_files $uri $uri/ @proxy_sync;
-      }
-      location @proxy_sync {
-        proxy_pass http://sync-svc:8005;
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
-      }
-      # RAG (/rag/*)
-      location /rag/ {
-        alias ${REMOTE_DIR}/static/rag/ui/;
-        try_files $uri $uri/ @proxy_rag;
-      }
-      location @proxy_rag {
-        proxy_pass http://rag-svc:8004;
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
-      }
-      # Documents (/documents/*)
-      location /documents/ {
-        alias ${REMOTE_DIR}/static/documents/ui/;
-        try_files $uri $uri/ @proxy_documents;
-      }
-      location @proxy_documents {
-        proxy_pass http://office-svc:8008;
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
-      }
-      # Flows (/flows/*)
-      location /flows/ {
-        alias ${REMOTE_DIR}/static/flows/ui/;
-        try_files $uri $uri/ @proxy_flows;
-      }
-      location @proxy_flows {
-        proxy_pass http://agents-svc:8001;
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
-      }
 spec:
   ingressClassName: public
 ${TLS_SPEC}
@@ -619,30 +699,23 @@ else
   log "OnlyOffice DS: ingress.onlyoffice_port не задан — пропускаем субдомен ${ONLYOFFICE_SUBDOMAIN}"
 fi
 
-# ─── i18n: статическая отдача переводов через ingress (hostPath) ──────────────
-# Генерируем объединённые JSON переводов на хосте, монтируем в ingress-контроллер.
-# Браузеры получают /api/i18n/ru и /api/i18n/en напрямую от nginx, минуя Python.
+# ─── Монтируем статику в ingress-контроллер ──────────────────────────────────
+# hostPath volume для /opt/agent-lab/static → /srv/static внутри pod
+# i18n уже внутри static/i18n, отдельный volume для i18n не нужен
 
-I18N_HOST_DIR="${REMOTE_DIR}/static/i18n"
-I18N_POD_MOUNT="/srv/i18n"
+STATIC_HOST_DIR="${REMOTE_DIR}/static"
+STATIC_POD_MOUNT="/srv/static"
 
-log "i18n: генерация объединённых переводов в ${I18N_HOST_DIR}"
-${SSH} "cd ${REMOTE_DIR} && mkdir -p ${I18N_HOST_DIR} && docker run --rm -v ${REMOTE_DIR}:/app ghcr.io/zamb124/agent-lab:latest python -m scripts.build_i18n --output /app/static/i18n"
-
-log "i18n: проверяем hostPath volume в ingress-контроллере"
-_HAS_I18N_VOLUME="$(${SSH} "microk8s kubectl -n ingress get daemonset nginx-ingress-microk8s-controller -o jsonpath='{.spec.template.spec.volumes[?(@.name==\"i18n-static\")].name}' 2>/dev/null || true")"
-if [[ -z "${_HAS_I18N_VOLUME}" ]]; then
-  log "i18n: патчим DaemonSet — монтируем ${I18N_HOST_DIR} -> ${I18N_POD_MOUNT}"
-  ${SSH} "microk8s kubectl -n ingress patch daemonset nginx-ingress-microk8s-controller --type=json -p='[
-    {\"op\":\"add\",\"path\":\"/spec/template/spec/volumes/-\",\"value\":{\"name\":\"i18n-static\",\"hostPath\":{\"path\":\"${I18N_HOST_DIR}\",\"type\":\"DirectoryOrCreate\"}}},
-    {\"op\":\"add\",\"path\":\"/spec/template/spec/containers/0/volumeMounts/-\",\"value\":{\"name\":\"i18n-static\",\"mountPath\":\"${I18N_POD_MOUNT}\",\"readOnly\":true}}
-  ]'"
-  log "i18n: ожидаем перезапуск ingress-контроллера"
-  ${SSH} "microk8s kubectl -n ingress rollout status daemonset nginx-ingress-microk8s-controller --timeout=120s"
+log "Статика: проверяем hostPath volume в ingress-контроллере"
+_HAS_STATIC="$(${SSH} "microk8s kubectl -n ingress get daemonset nginx-ingress-microk8s-controller -o yaml | grep -c 'platform-static' || true")"
+if [[ "${_HAS_STATIC}" -gt 0 ]]; then
+  log "Статика: hostPath volume уже смонтирован — пропускаем патч"
 else
-  log "i18n: hostPath volume уже смонтирован — пропускаем патч"
+  log "Статика: патчим DaemonSet — монтируем ${STATIC_HOST_DIR} -> ${STATIC_POD_MOUNT}"
+  ${SSH} "microk8s kubectl -n ingress patch daemonset nginx-ingress-microk8s-controller --type=strategic -p '{\"spec\":{\"template\":{\"spec\":{\"volumes\":[{\"name\":\"platform-static\",\"hostPath\":{\"path\":\"${STATIC_HOST_DIR}\",\"type\":\"DirectoryOrCreate\"}}],\"containers\":[{\"name\":\"nginx-ingress-microk8s\",\"volumeMounts\":[{\"name\":\"platform-static\",\"mountPath\":\"${STATIC_POD_MOUNT}\",\"readOnly\":true}]}]}}}}'"
+  log "Статика: ожидаем перезапуск ingress-контроллера"
+  ${SSH} "microk8s kubectl -n ingress rollout status daemonset nginx-ingress-microk8s-controller --timeout=120s"
 fi
-
 
 echo
 echo "======================================"
