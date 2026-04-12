@@ -84,6 +84,7 @@ SKIP_PATHS = [
     "/crm/health",
     "/debug/*",
     "/api/v1/payments/webhook/*",
+    "/frontend/api/v1/payments/webhook/*",
 ]
 
 ROUTE_RULES: List[RouteRule] = [
@@ -150,6 +151,7 @@ ROUTE_RULES: List[RouteRule] = [
     RouteRule("/flows/api/v1/webhook/telegram/*", auth_required=False, context_type="webhook", channel="telegram"),
     RouteRule("/flows/api/v1/webhook/whatsapp/*", auth_required=False, context_type="webhook", channel="whatsapp"),
     RouteRule("/api/v1/payments/webhook/*", skip=True),
+    RouteRule("/frontend/api/v1/payments/webhook/*", skip=True),
 
     # YooMoney OAuth callback (redirect из браузера после авторизации на yoomoney.ru)
     RouteRule("/api/billing/yoomoney/callback", auth_required=False, context_type="anonymous"),

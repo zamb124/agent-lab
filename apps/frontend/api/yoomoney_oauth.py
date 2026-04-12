@@ -9,7 +9,7 @@ import logging
 from urllib.parse import urlencode
 
 from fastapi import APIRouter, HTTPException, Request
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.responses import JSONResponse, RedirectResponse
 
 from apps.frontend.dependencies import ContainerDep
 from core.clients.payment.factory import PaymentProviderFactory
@@ -84,17 +84,8 @@ async def yoomoney_authorize(request: Request, container: ContainerDep):
         user.user_id, redirect_uri,
     )
 
-    hidden_inputs = "".join(
-        f'<input type="hidden" name="{k}" value="{v}"/>' for k, v in params.items()
-    )
-    html = (
-        f"<html><body onload=\"document.forms[0].submit()\">"
-        f"<form method=\"POST\" action=\"{YOOMONEY_OAUTH_AUTHORIZE_URL}\">"
-        f"{hidden_inputs}</form>"
-        f"<p>Перенаправление на YooMoney...</p>"
-        f"</body></html>"
-    )
-    return HTMLResponse(content=html)
+    authorize_url = f"{YOOMONEY_OAUTH_AUTHORIZE_URL}?{urlencode(params)}"
+    return JSONResponse(content={"authorize_url": authorize_url})
 
 
 @router.get("/callback")

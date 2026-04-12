@@ -129,6 +129,7 @@ async def test_read_xls_empty_raises() -> None:
 
 
 @pytest.mark.asyncio
+@pytest.mark.timeout(120)
 @pytest.mark.skipif(
     shutil.which("soffice") is None and shutil.which("libreoffice") is None,
     reason="LibreOffice не установлен — пропускаем тест чтения .doc",
