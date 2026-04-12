@@ -33,11 +33,11 @@ export class LLMResourceEditor extends BaseResourceEditor {
                     .value=${provider}
                     @change=${(e) => this._onInputChange('provider', e.target.value)}
                 >
-                    <option value="openrouter">OpenRouter</option>
-                    <option value="openai">OpenAI</option>
-                    <option value="anthropic">Anthropic</option>
-                    <option value="bothub">BotHub</option>
-                    <option value="provider_litserve">Provider LitServe</option>
+                    <option value="openrouter">${this.i18n.t('resource_editor.llm.provider_openrouter')}</option>
+                    <option value="openai">${this.i18n.t('resource_editor.llm.provider_openai')}</option>
+                    <option value="anthropic">${this.i18n.t('resource_editor.llm.provider_anthropic')}</option>
+                    <option value="bothub">${this.i18n.t('resource_editor.llm.provider_bothub')}</option>
+                    <option value="provider_litserve">${this.i18n.t('resource_editor.llm.provider_humanitec')}</option>
                 </select>
             </div>
             

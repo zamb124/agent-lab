@@ -210,10 +210,10 @@ export class SettingsPage extends PlatformElement {
                             id="rag-provider"
                         >
                             <option value="provider_litserve" ?selected=${(settings?.rag_embedding?.provider ?? '') === 'provider_litserve'}>
-                                provider_litserve
+                                ${td('settings_page.provider_humanitec')}
                             </option>
                             <option value="openrouter" ?selected=${(settings?.rag_embedding?.provider ?? '') === 'openrouter'}>
-                                openrouter
+                                ${td('settings_page.provider_openrouter')}
                             </option>
                         </select>
                         <div class="form-help">

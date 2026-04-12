@@ -535,10 +535,10 @@ export class LLMConfigEditor extends PlatformElement {
                         <label class="config-label">${this.i18n.t('llm_config_editor.label_provider')}</label>
                         <select class="config-select" .value=${this.provider} @change=${this._onProviderChange}>
                             <option value="">${this.i18n.t('llm_config_editor.option_system_default')}</option>
-                            <option value="openai" ?selected=${this.provider === 'openai'}>OpenAI</option>
-                            <option value="openrouter" ?selected=${this.provider === 'openrouter'}>OpenRouter</option>
-                            <option value="bothub" ?selected=${this.provider === 'bothub'}>Bothub</option>
-                            <option value="provider_litserve" ?selected=${this.provider === 'provider_litserve'}>Provider LitServe</option>
+                            <option value="openai" ?selected=${this.provider === 'openai'}>${this.i18n.t('llm_config_editor.provider_openai')}</option>
+                            <option value="openrouter" ?selected=${this.provider === 'openrouter'}>${this.i18n.t('llm_config_editor.provider_openrouter')}</option>
+                            <option value="bothub" ?selected=${this.provider === 'bothub'}>${this.i18n.t('llm_config_editor.provider_bothub')}</option>
+                            <option value="provider_litserve" ?selected=${this.provider === 'provider_litserve'}>${this.i18n.t('llm_config_editor.provider_humanitec')}</option>
                         </select>
                     </div>
                 </div>

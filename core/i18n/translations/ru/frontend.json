@@ -362,6 +362,8 @@
     "rag_override_title": "Переопределение RAG embedding",
     "rag_override_help": "По умолчанию используется provider/model из conf.json. Включите, чтобы задать значения для текущей компании.",
     "rag_provider_label": "RAG embedding провайдер",
+    "provider_humanitec": "Humanitec",
+    "provider_openrouter": "OpenRouter",
     "rag_provider_default": "По умолчанию: {{provider}}",
     "rag_model_label": "RAG embedding модель",
     "rag_model_default": "По умолчанию: {{model}}",
