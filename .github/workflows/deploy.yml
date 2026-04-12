@@ -20,6 +20,26 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Free disk space before Docker build
+        run: |
+          set -e
+          df -h
+
+          docker system prune -af --volumes || true
+          docker builder prune -af || true
+
+          if [ -d "/opt/hostedtoolcache" ]; then
+            sudo rm -rf /opt/hostedtoolcache || true
+          fi
+          if [ -d "/usr/local/lib/android" ]; then
+            sudo rm -rf /usr/local/lib/android || true
+          fi
+          if [ -d "/usr/share/dotnet" ]; then
+            sudo rm -rf /usr/share/dotnet || true
+          fi
+
+          df -h
+
       - name: Log in to GitHub Container Registry
         uses: docker/login-action@v3
         with:
@@ -48,7 +68,7 @@ jobs:
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
-          cache-to: type=gha,mode=max
+          cache-to: type=gha,mode=min
 
   deploy:
     name: Deploy to server
