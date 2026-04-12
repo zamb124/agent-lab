@@ -123,56 +123,64 @@ export class NoteContent extends PlatformElement {
                 color: var(--text-primary);
             }
 
-            .note-date {
-                margin: 0;
-                font-size: 16px;
-                line-height: 20px;
-                color: var(--text-tertiary);
-            }
-
-            .note-subtype {
-                margin: 0;
-                display: inline-flex;
+            .note-view-meta-bar {
+                display: flex;
+                flex-wrap: wrap;
                 align-items: center;
-                gap: 6px;
-                font-size: 13px;
+                gap: 6px 12px;
+                margin-top: 4px;
+                max-width: 100%;
+                font-size: 12px;
                 line-height: 16px;
                 color: var(--text-secondary);
             }
 
+            .note-view-meta-item {
+                display: inline-flex;
+                align-items: center;
+                gap: 5px;
+                min-width: 0;
+                max-width: 100%;
+            }
+
+            .note-view-meta-item platform-icon {
+                flex-shrink: 0;
+                color: var(--text-tertiary);
+            }
+
+            .note-view-meta-value {
+                min-width: 0;
+                color: var(--text-secondary);
+            }
+
+            .note-view-meta-ellipsis {
+                overflow: hidden;
+                text-overflow: ellipsis;
+                white-space: nowrap;
+                max-width: min(280px, 42vw);
+            }
+
             .note-edit-meta-group {
-                display: flex;
-                flex-direction: column;
-                gap: 16px;
-                padding: 16px 20px;
-                margin-top: 12px;
-                border-radius: var(--radius-lg);
+                display: block;
+                padding: 8px 12px;
+                margin-top: 8px;
+                border-radius: var(--radius-md);
                 background: var(--glass-tint-subtle);
                 border: 1px solid var(--border-subtle);
             }
 
-            .note-edit-meta {
+            .note-edit-meta-row {
                 display: grid;
-                gap: 12px;
-                align-items: center;
+                grid-template-columns: minmax(0, 1fr) minmax(104px, 128px) minmax(0, 1fr) minmax(0, 1fr);
+                gap: 8px 10px;
+                align-items: start;
             }
 
-            .note-edit-meta.note-meta-subtype-date {
-                grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-                gap: 12px;
-            }
-
-            .note-edit-meta.voice-context-row {
-                grid-template-columns: 1fr;
-                gap: 8px;
-            }
-
-            .note-voice-stack,
-            .note-context-stack {
+            .note-meta-cell {
+                min-width: 0;
                 display: flex;
                 flex-direction: column;
-                gap: 6px;
-                min-width: 0;
+                gap: 2px;
             }
 
             .note-field-label {
@@ -186,58 +194,66 @@ export class NoteContent extends PlatformElement {
                 letter-spacing: normal;
             }
 
+            .note-edit-meta-group .note-field-label {
+                font-size: 10px;
+                line-height: 13px;
+                font-weight: 500;
+                margin: 0;
+                color: var(--text-tertiary);
+            }
+
+            .note-edit-meta-group .form-select {
+                min-height: 30px;
+                padding: 4px 8px;
+                font-size: 12px;
+                line-height: 16px;
+                border-radius: 8px;
+            }
+
+            .note-edit-meta-group .note-date-picker {
+                min-width: 0;
+                --platform-date-picker-labeled-bg: var(--glass-tint-subtle);
+                --platform-date-picker-labeled-border: var(--border-subtle);
+                --platform-date-picker-labeled-height: 30px;
+                --platform-date-picker-labeled-padding: 0 8px;
+                --platform-date-picker-label-size: 10px;
+                --platform-date-picker-value-size: 12px;
+            }
+
+            .note-edit-meta-group .entity-search-input {
+                padding: 5px 8px;
+                font-size: 12px;
+                line-height: 16px;
+                min-height: 30px;
+                border-radius: 8px;
+            }
+
+            .note-edit-meta-group .entity-search-clear {
+                width: 30px;
+                height: 30px;
+                border-radius: 8px;
+            }
+
+            .note-edit-meta-group .entity-search-panel {
+                max-height: 180px;
+            }
+
             @media (min-width: 768px) {
                 .note-main.is-editing .note-header {
                     gap: 16px;
                     align-items: flex-start;
                 }
+            }
 
-                .note-edit-meta.voice-context-row {
-                    display: grid;
+            @media (max-width: 1100px) {
+                .note-edit-meta-row {
                     grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-                    gap: 12px 20px;
-                    align-items: start;
-                    max-width: min(720px, 100%);
                 }
+            }
 
-                .note-voice-stack,
-                .note-context-stack {
-                    gap: 5px;
-                }
-
-                .voice-context-row .form-select {
-                    min-height: 36px;
-                    padding: 6px 10px;
-                    font-size: 14px;
-                    line-height: 18px;
-                    border-radius: 10px;
-                }
-
-                .voice-context-row .entity-search-clear {
-                    width: 36px;
-                    height: 36px;
-                    border-radius: 10px;
-                }
-
-                .voice-context-row .entity-search-input {
-                    min-height: 36px;
-                    padding: 8px 10px;
-                    font-size: 14px;
-                    line-height: 18px;
-                    border-radius: 10px;
-                }
-
-                .note-meta-subtype-date .form-select {
-                    min-height: 36px;
-                    padding: 6px 10px;
-                    font-size: 14px;
-                    border-radius: 10px;
-                }
-
-                .note-meta-subtype-date .note-date-picker {
-                    --platform-date-picker-labeled-height: 36px;
-                    --platform-date-picker-value-size: var(--text-base);
-                    --platform-date-picker-labeled-padding: 0 10px;
+            @media (max-width: 560px) {
+                .note-edit-meta-row {
+                    grid-template-columns: 1fr;
                 }
             }
 
@@ -247,12 +263,6 @@ export class NoteContent extends PlatformElement {
 
             .note-date-picker {
                 min-width: 0;
-                --platform-date-picker-labeled-bg: var(--glass-tint-subtle);
-                --platform-date-picker-labeled-border: var(--border-subtle);
-                --platform-date-picker-labeled-height: 44px;
-                --platform-date-picker-labeled-padding: 0 12px;
-                --platform-date-picker-label-size: var(--text-xs);
-                --platform-date-picker-value-size: var(--text-lg);
             }
 
             .entity-search-wrap {
@@ -1418,11 +1428,6 @@ export class NoteContent extends PlatformElement {
                     line-height: 28px;
                 }
 
-                .note-date {
-                    font-size: 14px;
-                    line-height: 18px;
-                }
-
                 .note-actions {
                     width: 100%;
                     display: grid;
@@ -1459,20 +1464,10 @@ export class NoteContent extends PlatformElement {
                 }
 
                 .note-edit-meta-group {
-                    padding: 12px 14px;
+                    padding: 8px 10px;
                 }
 
-                .note-edit-meta.note-meta-subtype-date {
-                    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-                }
-
-                .note-meta-subtype-date .note-date-picker {
-                    --platform-date-picker-labeled-height: 40px;
-                    --platform-date-picker-value-size: var(--text-base);
-                    --platform-date-picker-labeled-padding: 0 10px;
-                }
-
-                .note-edit-meta.voice-context-row {
+                .note-edit-meta-row {
                     grid-template-columns: 1fr;
                 }
 
@@ -1925,6 +1920,37 @@ export class NoteContent extends PlatformElement {
             return [];
         }
         return this.relationships.filter((rel) => rel?.source_entity_id === noteId || rel?.target_entity_id === noteId);
+    }
+
+    _getOutgoingRelationshipTargetEntityId(relationshipType) {
+        const noteId = this.note?.entity_id;
+        if (typeof noteId !== 'string' || noteId.trim().length === 0) {
+            return '';
+        }
+        const rels = Array.isArray(this.relationships) ? this.relationships : [];
+        const rel = rels.find(
+            (r) =>
+                r
+                && r.relationship_type === relationshipType
+                && r.source_entity_id === noteId,
+        );
+        if (!rel || typeof rel.target_entity_id !== 'string') {
+            return '';
+        }
+        const tid = rel.target_entity_id.trim();
+        return tid.length > 0 ? tid : '';
+    }
+
+    _resolveRelatedEntityDisplayName(entityId) {
+        if (typeof entityId !== 'string' || entityId.trim().length === 0) {
+            return '';
+        }
+        const trimmed = entityId.trim();
+        const resolved = this._entityNameFromRelated(trimmed);
+        if (resolved.length > 0) {
+            return resolved;
+        }
+        return trimmed;
     }
 
     _getText(value, fallback) {
@@ -3074,6 +3100,13 @@ export class NoteContent extends PlatformElement {
         const relationships = this._getRelationships();
         const attachments = Array.isArray(this.attachments) ? this.attachments : [];
         const summaryTags = Array.isArray(this.summaryEntities) ? this.summaryEntities : [];
+        const viewSubtypeDisplay = noteSubtypeLabel.length > 0
+            ? noteSubtypeLabel
+            : this.i18n.t('note_content.no_subtype');
+        const voiceTargetId = this._getOutgoingRelationshipTargetEntityId('note_voice');
+        const viewVoiceDisplay = voiceTargetId ? this._resolveRelatedEntityDisplayName(voiceTargetId) : '';
+        const ctxTargetId = this._getOutgoingRelationshipTargetEntityId('in_context');
+        const viewContextDisplay = ctxTargetId ? this._resolveRelatedEntityDisplayName(ctxTargetId) : '';
 
         return html`
             <div class="layout ${this.editable ? 'is-editing' : ''}">
@@ -3089,8 +3122,8 @@ export class NoteContent extends PlatformElement {
                                     placeholder=${this.i18n.t('note_content.title_placeholder')}
                                 />
                                 <div class="note-edit-meta-group">
-                                    <div class="note-edit-meta note-meta-subtype-date">
-                                        <div class="note-voice-stack">
+                                    <div class="note-edit-meta-row">
+                                        <div class="note-meta-cell">
                                             <label class="note-field-label">${this.i18n.t('note_content.no_subtype')}</label>
                                             <select
                                                 class="form-select note-subtype-select"
@@ -3103,7 +3136,7 @@ export class NoteContent extends PlatformElement {
                                                 `)}
                                             </select>
                                         </div>
-                                        <div class="note-voice-stack">
+                                        <div class="note-meta-cell">
                                             <label class="note-field-label">${this.i18n.t('notes.date')}</label>
                                             <platform-date-picker
                                                 class="note-date-picker"
@@ -3113,9 +3146,7 @@ export class NoteContent extends PlatformElement {
                                                 @change=${this._onNoteDateChange}
                                             ></platform-date-picker>
                                         </div>
-                                    </div>
-                                    <div class="note-edit-meta voice-context-row">
-                                        <div class="note-voice-stack">
+                                        <div class="note-meta-cell">
                                             <label class="note-field-label">${this.i18n.t('note_content.note_voice')}</label>
                                             <select
                                                 class="form-select"
@@ -3129,20 +3160,39 @@ export class NoteContent extends PlatformElement {
                                             </select>
                                             ${this._draftVoiceMode === 'manual' ? this._renderVoiceEntityPick() : ''}
                                         </div>
-                                        <div class="note-context-stack">
+                                        <div class="note-meta-cell">
                                             <label class="note-field-label">${this.i18n.t('note_content.context_anchor')}</label>
                                             ${this._renderCtxEntityPick()}
                                         </div>
                                     </div>
                                 </div>
-                            ` : html`<h2 class="note-title">${noteTitle}</h2>`}
-                            ${this.editable ? '' : html`<p class="note-date">${noteDate}</p>`}
-                            ${!this.editable && noteSubtypeLabel.length > 0 ? html`
-                                <p class="note-subtype">
-                                    <platform-icon name="tag" size="14"></platform-icon>
-                                    ${noteSubtypeLabel}
-                                </p>
-                            ` : ''}
+                            ` : html`
+                                <h2 class="note-title">${noteTitle}</h2>
+                                <div class="note-view-meta-bar">
+                                    <span class="note-view-meta-item">
+                                        <platform-icon name="tag" size="12"></platform-icon>
+                                        <span class="note-view-meta-value">${viewSubtypeDisplay}</span>
+                                    </span>
+                                    ${noteDate ? html`
+                                        <span class="note-view-meta-item" title=${this.i18n.t('notes.date')}>
+                                            <platform-icon name="calendar" size="12"></platform-icon>
+                                            <span class="note-view-meta-value">${noteDate}</span>
+                                        </span>
+                                    ` : ''}
+                                    ${viewVoiceDisplay ? html`
+                                        <span class="note-view-meta-item" title=${this.i18n.t('note_content.note_voice')}>
+                                            <platform-icon name="user" size="12"></platform-icon>
+                                            <span class="note-view-meta-value note-view-meta-ellipsis">${viewVoiceDisplay}</span>
+                                        </span>
+                                    ` : ''}
+                                    ${viewContextDisplay ? html`
+                                        <span class="note-view-meta-item" title=${this.i18n.t('note_content.context_anchor')}>
+                                            <platform-icon name="target" size="12"></platform-icon>
+                                            <span class="note-view-meta-value note-view-meta-ellipsis">${viewContextDisplay}</span>
+                                        </span>
+                                    ` : ''}
+                                </div>
+                            `}
                         </div>
                         <div class="note-actions">
                             <div class="attach-dropdown">

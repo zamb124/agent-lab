@@ -77,14 +77,17 @@ async def rag_client(rag_app, rag_worker):
 
 
 @pytest_asyncio.fixture(scope="session")
-async def crm_companies_initialized(app):
+async def crm_companies_initialized(app, auth_token_system, auth_token_company2):
     """
     Инициализирует компании system и company2 один раз за сессию.
-    
+
     initialize_company идемпотентна — при повторном вызове проверяет существование
     и пропускает уже созданные типы. Session scope убирает ~240 лишних вызовов
     initialize_company при 60 CRM тестах * 4 xdist workers.
-    
+
+    Зависит от auth_token_system и auth_token_company2 чтобы гарантировать, что
+    записи company:system и company:company2 уже существуют в storage до инициализации.
+
     Контекст устанавливается вручную: test_context — function-scoped,
     а эта фикстура — session-scoped, поэтому test_context ещё не существует.
     """

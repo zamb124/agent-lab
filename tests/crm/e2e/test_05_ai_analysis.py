@@ -318,7 +318,7 @@ class TestAIAnalysis:
         }, headers=auth_headers_system)
         note_id = note_resp.json()["entity_id"]
         
-        _, response = await _analyze_note(crm_client, auth_headers_system, note_id, "extract_entity_types": ["task"],)
+        _, response = await _analyze_note(crm_client, auth_headers_system, note_id, extract_entity_types=["task"])
         
         assert response.status_code == 200
         result = response.json()

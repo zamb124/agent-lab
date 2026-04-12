@@ -430,7 +430,6 @@ def _read_doc_with_antiword_sync(
     mime: Optional[str],
     opts: ReadOptions,
 ) -> FileReadResult:
-    del opts
     antiword = shutil.which("antiword")
     if antiword is None:
         raise FileReadError(

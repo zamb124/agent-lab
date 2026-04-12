@@ -36,6 +36,7 @@ RUN --mount=type=cache,target=/root/.cache/uv \
     uv pip install --system --group rag-worker
 
 COPY core/ ./core/
+COPY apps/rag/ ./apps/rag/
 COPY apps/rag_worker/ ./apps/rag_worker/
 COPY apps/__init__.py ./apps/
 
