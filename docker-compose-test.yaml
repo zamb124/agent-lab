@@ -79,6 +79,36 @@ services:
     networks:
       - test-net
 
+  provider_litserve:
+    platform: "linux/amd64"
+    build:
+      context: .
+      dockerfile: Dockerfile.test
+      target: default
+    container_name: agentlab_provider_litserve_test
+    command: ["python", "-m", "apps.provider_litserve.main"]
+    ports:
+      - "18014:8014"
+    volumes:
+      - ./conf.json:/app/conf.json:ro
+    environment:
+      - PROVIDER_LITSERVE__INFRA__BACKEND=placeholder
+      - PROVIDER_LITSERVE__INFRA__HOST=0.0.0.0
+      - PROVIDER_LITSERVE__INFRA__GATEWAY_PORT=8014
+    depends_on:
+      redis-test:
+        condition: service_healthy
+      postgres-test:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8014/health"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 20s
+    networks:
+      - test-net
+
   test-a2a-agent:
     platform: "linux/amd64"
     build:
@@ -126,6 +156,7 @@ services:
       - AUTH__PERMISSIONS_ENABLED=false
       - STT__PROVIDER=mock
       - STT__MOCK_TRANSCRIPT_TEXT=Тестовая транскрипция docker worker
+      - PROVIDER_LITSERVE__API__BASE_URL=http://provider_litserve:8014/v1
     command: ["python", "-m", "taskiq", "worker", "apps.flows_worker.worker:worker_app", "--workers", "2"]
     restart: "no"
     networks:
@@ -155,6 +186,7 @@ services:
       - TASKS__BROKER_URL=redis://redis-test:6379/1
       - TESTING=true
       - AUTH__PERMISSIONS_ENABLED=false
+      - PROVIDER_LITSERVE__API__BASE_URL=http://provider_litserve:8014/v1
     command: ["python", "-m", "taskiq", "scheduler", "apps.scheduler.scheduler:scheduler"]
     restart: "no"
     networks:
@@ -181,6 +213,7 @@ services:
       - TASKS__BROKER_URL=redis://redis-test:6379/1
       - TESTING=true
       - AUTH__PERMISSIONS_ENABLED=false
+      - PROVIDER_LITSERVE__API__BASE_URL=http://provider_litserve:8014/v1
     command: ["taskiq", "worker", "apps.rag_worker.worker:worker_app", "--workers", "1"]
     restart: "no"
     networks:
@@ -208,6 +241,8 @@ services:
         condition: service_started
       rag_worker_test:
         condition: service_started
+      provider_litserve:
+        condition: service_healthy
       livekit-test:
         condition: service_healthy
       onlyoffice-documentserver:
@@ -239,6 +274,7 @@ services:
       - OFFICE__JWT_SECRET=test-onlyoffice-jwt-secret
       - OFFICE__DOCUMENT_SERVER_PUBLIC_URL=http://onlyoffice-documentserver
       - OFFICE__CALLBACK_PUBLIC_BASE_URL=http://testserver
+      - PROVIDER_LITSERVE__API__BASE_URL=http://provider_litserve:8014/v1
     command: ["sh", "-c", "test -d /app/test-results || mkdir -p /app/test-results; test -d /app/htmlcov || mkdir -p /app/htmlcov; chmod -R 777 /app/test-results /app/htmlcov 2>/dev/null || true; python -m pytest tests/ -v -n ${PYTEST_WORKERS} --junitxml=/app/test-results/junit.xml --cov=apps --cov=core --cov-report=term-missing --cov-report=html"]
     restart: "no"
     volumes:

@@ -73,7 +73,7 @@ class V1ModelItemSchema(BaseModel):
 
 
 class V1ModelsResponseBody(BaseModel):
-    """Ответ GET ``/v1/models`` (две модели: эмбеддинги и реранк)."""
+    """Ответ GET ``/v1/models`` (модели эмбеддингов, реранка и чата)."""
 
     object: Literal["list"] = "list"
     data: list[V1ModelItemSchema]

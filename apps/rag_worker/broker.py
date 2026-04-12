@@ -29,6 +29,7 @@ async def rag_worker_startup(state: TaskiqState) -> None:
     """Инициализация RAG Worker при старте."""
     from apps.rag.container import get_rag_container
     from apps.rag_worker.config import get_settings
+    from core.config import set_settings
 
     setup_logging(service_name="rag_worker")
 
@@ -39,6 +40,7 @@ async def rag_worker_startup(state: TaskiqState) -> None:
     from core.files.processors import initialize_default_processors
 
     initialize_default_processors(container.file_repository)
+    set_settings(settings)
 
     if settings.tracing.enabled:
         setup_tracing(settings.tracing)

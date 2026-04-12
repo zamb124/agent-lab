@@ -264,22 +264,13 @@ export class LLMConfigEditor extends PlatformElement {
             if (Array.isArray(models) && models.length > 0) {
                 this.models = models.map((m) => ({ id: m, name: m }));
             } else {
-                this.models = this._getDefaultModels();
+                this.models = [];
             }
         } else {
-            this.models = this._getDefaultModels();
+            this.models = [];
         }
 
         this.loading = false;
-    }
-
-    _getDefaultModels() {
-        return [
-            { id: 'gpt-4o', name: 'GPT-4o' },
-            { id: 'gpt-4o-mini', name: 'GPT-4o Mini' },
-            { id: 'gpt-4.1', name: 'GPT-4.1' },
-            { id: 'yandexgpt', name: 'YandexGPT' },
-        ];
     }
 
     _parseExtraBodyObject() {
@@ -313,10 +304,10 @@ export class LLMConfigEditor extends PlatformElement {
         if (this.provider) {
             config.provider = this.provider;
         }
-        if (this.apiKey) {
+        if (this.apiKey && this.provider !== 'provider_litserve') {
             config.api_key = this.apiKey;
         }
-        if (this.baseUrl) {
+        if (this.baseUrl && this.provider !== 'provider_litserve') {
             config.base_url = this.baseUrl;
         }
         if (this.topP != null && !Number.isNaN(this.topP)) {
@@ -410,6 +401,10 @@ export class LLMConfigEditor extends PlatformElement {
 
     _onProviderChange(e) {
         this.provider = e.target.value;
+        if (this.provider === 'provider_litserve') {
+            this.apiKey = '';
+            this.baseUrl = '';
+        }
         this._loadModels(this.provider || null);
         this._emitChangeSafe();
     }
@@ -489,7 +484,7 @@ export class LLMConfigEditor extends PlatformElement {
     }
 
     render() {
-        const showCredentials = this.provider !== '';
+        const showCredentials = this.provider !== '' && this.provider !== 'provider_litserve';
 
         return html`
             <div class="llm-island">
@@ -543,6 +538,7 @@ export class LLMConfigEditor extends PlatformElement {
                             <option value="openai" ?selected=${this.provider === 'openai'}>OpenAI</option>
                             <option value="openrouter" ?selected=${this.provider === 'openrouter'}>OpenRouter</option>
                             <option value="bothub" ?selected=${this.provider === 'bothub'}>Bothub</option>
+                            <option value="provider_litserve" ?selected=${this.provider === 'provider_litserve'}>Provider LitServe</option>
                         </select>
                     </div>
                 </div>

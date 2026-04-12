@@ -881,6 +881,8 @@ def _detect_provider(base_url: Optional[str]) -> Optional[str]:
     """Определяет провайдера по base_url."""
     if not base_url:
         return None
+    if "provider_litserve" in base_url or "localhost:8014" in base_url or "127.0.0.1:8014" in base_url:
+        return "provider_litserve"
     if "openrouter.ai" in base_url:
         return "openrouter"
     if "bothub.chat" in base_url:
@@ -905,7 +907,7 @@ def get_llm(
     Args:
         model_name: Имя модели
         temperature: Температура
-        provider: Провайдер (openai, openrouter, bothub)
+        provider: Провайдер (openai, openrouter, bothub, provider_litserve)
         api_key: API ключ (напрямую или @var:my_key)
         base_url: Base URL провайдера (напрямую или @var:my_url)
         max_tokens: Лимит токенов ответа (если None — из настроек модели / глобальных)
@@ -1022,6 +1024,19 @@ def get_llm(
             llm_provider=actual_provider,
         )
 
+    if actual_provider == "provider_litserve":
+        cfg = settings.provider_litserve
+        base_url = cfg.resolve_openai_v1_base_url()
+        return LLMClient(
+            model=model,
+            api_key="litserve-local",
+            base_url=base_url,
+            temperature=temp,
+            max_tokens=resolved_max_tokens,
+            timeout=timeout,
+            llm_provider=actual_provider,
+        )
+
     raise ValueError(f"Неизвестный LLM провайдер: {actual_provider}")
 
 
@@ -1033,6 +1048,8 @@ def _get_default_base_url(provider: str, settings) -> str:
         return settings.llm.bothub.base_url if settings.llm.bothub else "https://bothub.chat/api/v2/openai/v1"
     if provider == "openai":
         return settings.llm.openai.base_url if settings.llm.openai else "https://api.openai.com/v1"
+    if provider == "provider_litserve":
+        return settings.provider_litserve.resolve_openai_v1_base_url()
     return "https://api.openai.com/v1"
 
 
@@ -1052,7 +1069,7 @@ def get_llm_for_state(
         state: ExecutionState
         model_name: Имя модели
         temperature: Температура
-        provider: Провайдер (openai, openrouter, bothub)
+        provider: Провайдер (openai, openrouter, bothub, provider_litserve)
         api_key: API ключ (напрямую или @var:my_key)
         base_url: Base URL провайдера (напрямую или @var:my_url)
         max_tokens: Лимит токенов ответа для ноды
@@ -1139,6 +1156,17 @@ def get_vision_llm(
             base_url=cfg.base_url,
             temperature=0.1,
             timeout=timeout,
+        )
+
+    if provider == "provider_litserve":
+        cfg = settings.provider_litserve
+        return LLMClient(
+            model=model_name,
+            api_key="litserve-local",
+            base_url=cfg.resolve_openai_v1_base_url(),
+            temperature=0.1,
+            timeout=timeout,
+            llm_provider=provider,
         )
     
     raise ValueError(f"Неизвестный LLM провайдер: {provider}")

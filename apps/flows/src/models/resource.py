@@ -64,7 +64,7 @@ class PromptResourceConfig(StrictBaseModel):
 
 class LLMResourceConfig(StrictBaseModel):
     """LLM модель как ресурс."""
-    provider: str = Field(..., description="openrouter, openai, bothub")
+    provider: str = Field(..., description="openrouter, openai, bothub, provider_litserve")
     model: str = Field(..., description="Имя модели")
     temperature: float = Field(default=0.7)
     max_tokens: Optional[int] = Field(default=None)

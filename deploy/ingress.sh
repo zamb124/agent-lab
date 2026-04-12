@@ -8,6 +8,7 @@
 #   domain.com/crm         → crm       (8003)
 #   domain.com/rag         → rag       (8004)
 #   domain.com/sync        → sync      (8005, websocket)
+#   domain.com/provider-litserve → provider_litserve (8014)
 #   domain.com/documents   → office    (8008, BFF «Документы» + OnlyOffice BFF)
 #   onlyoffice.domain.com  → onlyoffice (порт публикации DS на хосте, обычно 8088)
 #   Весь трафик DS идёт на субдомен — нет проблем с /{semver}-{hex}/... путями,
@@ -30,6 +31,7 @@
 #       {"name": "crm",      "port": 8003, "path": "/crm",     "websocket": false},
 #       {"name": "rag",      "port": 8004, "path": "/rag",     "websocket": false},
 #       {"name": "sync",     "port": 8005, "path": "/sync",    "websocket": true},
+#       {"name": "provider_litserve", "port": 8014, "path": "/provider-litserve", "websocket": false},
 #       {"name": "office",   "port": 8008, "path": "/documents","websocket": false}
 #     ],
 #     "onlyoffice_port": 8088,

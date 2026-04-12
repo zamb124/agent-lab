@@ -54,26 +54,43 @@ def _openrouter_like_model_object(
 def build_provider_litserve_v1_models_response(
     *,
     embedding_openai_model_id: str,
+    embedding_model_ids: list[str],
     embedding_hf_model_id: str,
     embedding_dimension: int,
     embedding_context_length: int,
     rerank_openai_model_id: str,
+    rerank_model_ids: list[str],
     rerank_hf_model_id: str,
     rerank_context_length: int,
+    chat_model_ids: list[str],
     created: int,
 ) -> dict[str, Any]:
     """
-    Тело GET ``/v1/models`` для провайдера: две модели (эмбеддинги и реранк),
+    Тело GET ``/v1/models`` для провайдера: модели эмбеддингов, реранка и чата,
     те же поля верхнего уровня, что у OpenRouter ``/models``.
     """
-    emb_name = embedding_openai_model_id
-    rr_name = rerank_openai_model_id
-    return {
-        "object": "list",
-        "data": [
+    def _uniq(ids: list[str]) -> list[str]:
+        seen: set[str] = set()
+        ordered: list[str] = []
+        for model_id in ids:
+            normalized = model_id.strip()
+            if not normalized or normalized in seen:
+                continue
+            seen.add(normalized)
+            ordered.append(normalized)
+        return ordered
+
+    embedding_ids = _uniq([embedding_openai_model_id, *embedding_model_ids])
+    rerank_ids = _uniq([rerank_openai_model_id, *rerank_model_ids])
+    chat_ids = _uniq(chat_model_ids)
+
+    data: list[dict[str, Any]] = []
+
+    for emb_id in embedding_ids:
+        data.append(
             _openrouter_like_model_object(
-                model_id=embedding_openai_model_id,
-                name=emb_name,
+                model_id=emb_id,
+                name=emb_id,
                 description=(
                     f"Local embedding model (HF: {embedding_hf_model_id}), "
                     f"vector dimension {embedding_dimension}. "
@@ -82,10 +99,14 @@ def build_provider_litserve_v1_models_response(
                 created=created,
                 context_length=embedding_context_length,
                 output_modalities=["embeddings"],
-            ),
+            )
+        )
+
+    for rerank_id in rerank_ids:
+        data.append(
             _openrouter_like_model_object(
-                model_id=rerank_openai_model_id,
-                name=rr_name,
+                model_id=rerank_id,
+                name=rerank_id,
                 description=(
                     f"Local cross-encoder reranker (HF: {rerank_hf_model_id}). "
                     "API: JSON query + passages; response scores[]. "
@@ -94,8 +115,24 @@ def build_provider_litserve_v1_models_response(
                 created=created,
                 context_length=rerank_context_length,
                 output_modalities=["text"],
-            ),
-        ],
+            )
+        )
+
+    for chat_id in chat_ids:
+        data.append(
+            _openrouter_like_model_object(
+                model_id=chat_id,
+                name=chat_id,
+                description="OpenAI-compatible chat via POST /v1/chat/completions.",
+                created=created,
+                context_length=131072,
+                output_modalities=["text"],
+            )
+        )
+
+    return {
+        "object": "list",
+        "data": data,
     }
 
 
@@ -113,6 +150,7 @@ class RerankQueryPassagesRequest(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
+    model: str | None = None
     query: str
     passages: list[str]
 

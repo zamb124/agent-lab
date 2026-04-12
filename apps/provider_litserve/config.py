@@ -1,6 +1,8 @@
 """
-Настройки процессов ``apps/provider_litserve`` (локальные модели эмбеддинга/реранка): общий ``conf.json``
-+ ``services.provider_litserve``. Порты и воркеры: ``provider_litserve.infra``; публичный URL клиентов RAG: ``provider_litserve.api``.
+Настройки процесса ``apps/provider_litserve`` из ``services.provider_litserve``.
+
+Параметры порта и воркеров: ``provider_litserve.infra``.
+Публичный URL для клиентов RAG: ``provider_litserve.api``.
 """
 
 from __future__ import annotations

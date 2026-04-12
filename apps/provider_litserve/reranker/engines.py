@@ -23,7 +23,7 @@ def parse_rerank_body(raw: Any) -> dict[str, Any]:
         b = RerankQueryPassagesRequest.model_validate(raw)
     except ValidationError as e:
         raise HTTPException(status_code=422, detail=e.errors()) from e
-    return {"query": b.query, "passages": b.passages}
+    return {"model": b.model, "query": b.query, "passages": b.passages}
 
 
 class LocalRerankerEngine:
@@ -63,7 +63,28 @@ class LocalRerankerEngine:
             normalize=self._cfg.normalize_scores,
         )
 
-    def rerank(self, query: str, passages: list[str]) -> dict[str, Any]:
+    def allowed_model_ids(self) -> frozenset[str]:
+        configured_ids = [model_id.strip() for model_id in self._cfg.rerank_model_ids if model_id.strip()]
+        return frozenset(
+            {
+                self._cfg.rerank_openai_model_id.strip(),
+                self._cfg.model_id.strip(),
+                *configured_ids,
+            }
+        )
+
+    def rerank(self, query: str, passages: list[str], requested_model: str | None = None) -> dict[str, Any]:
+        if requested_model is not None:
+            model_id = requested_model.strip()
+            if model_id not in self.allowed_model_ids():
+                raise HTTPException(
+                    status_code=422,
+                    detail={
+                        "reason": "unknown_rerank_model",
+                        "model": requested_model,
+                        "allowed": sorted(self.allowed_model_ids()),
+                    },
+                )
         if not passages:
             return {"scores": []}
         if len(passages) > self._cfg.max_passages:

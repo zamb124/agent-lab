@@ -23,6 +23,7 @@ from fastapi import FastAPI
 from httpx import ASGITransport, AsyncClient
 
 from apps.provider_litserve.provider_litserve_asgi import create_provider_litserve_asgi_app
+from apps.provider_litserve.main import ChatCompletionsLitAPI
 from apps.provider_litserve.provider_litserve_http_schemas import (
     OpenAIEmbeddingsResponseBody,
     RerankResponseBody,
@@ -279,3 +280,92 @@ async def test_post_v1_rerank_flagllm_mocked_compute_score(
     assert r.status_code == 200
     parsed = RerankResponseBody.model_validate(r.json())
     assert parsed.scores == [1.0, 0.5, 1.0 / 3]
+
+
+def test_chat_completions_litapi_predict_local_model_response(monkeypatch: pytest.MonkeyPatch) -> None:
+    """ChatCompletionsLitAPI генерирует ответ локальной моделью."""
+
+    class _FakeNoGrad:
+        def __enter__(self):
+            return None
+
+        def __exit__(self, exc_type, exc_val, exc_tb):
+            return None
+
+    fake_torch = types.SimpleNamespace(no_grad=lambda: _FakeNoGrad())
+    monkeypatch.setitem(sys.modules, "torch", fake_torch)
+
+    class _FakeInputs(dict):
+        def to(self, _device: str):
+            return self
+
+    class _Tokenizer:
+        eos_token_id = 1
+
+        @classmethod
+        def from_pretrained(cls, *_a: object, **_k: object):
+            return cls()
+
+        def apply_chat_template(self, messages: list[dict[str, str]], tokenize: bool, add_generation_prompt: bool) -> str:
+            assert tokenize is False
+            assert add_generation_prompt is True
+            return str(messages)
+
+        def __call__(self, prompt: str, return_tensors: str):
+            assert prompt
+            assert return_tensors == "pt"
+            return _FakeInputs({"input_ids": np.array([[11, 12, 13]])})
+
+        def decode(self, output_ids: np.ndarray, skip_special_tokens: bool) -> str:
+            assert skip_special_tokens is True
+            assert output_ids.tolist() == [21, 22]
+            return "hello local"
+
+    class _Model:
+        @classmethod
+        def from_pretrained(cls, *_a: object, **_k: object):
+            return cls()
+
+        def to(self, _device: str):
+            return self
+
+        def generate(self, **_kwargs: Any):
+            return [np.array([11, 12, 13, 21, 22])]
+
+    fake_transformers = types.SimpleNamespace(
+        AutoTokenizer=_Tokenizer,
+        AutoModelForCausalLM=_Model,
+    )
+    monkeypatch.setitem(sys.modules, "transformers", fake_transformers)
+
+    settings = types.SimpleNamespace(
+        provider_litserve=types.SimpleNamespace(
+            infra=types.SimpleNamespace(
+                llm_model_id="Qwen/Qwen2.5-1.5B-Instruct",
+                llm_model_ids=["Qwen/Qwen2.5-1.5B-Instruct"],
+                hf_token="hf_test",
+            )
+        )
+    )
+
+    monkeypatch.setattr("apps.provider_litserve.main.get_provider_litserve_settings", lambda: settings)
+
+    api = ChatCompletionsLitAPI()
+    api.setup("cpu")
+    outputs = list(
+        api.predict(
+            {
+                "model": "Qwen/Qwen2.5-1.5B-Instruct",
+                "messages": [{"role": "user", "content": "hello"}],
+                "stream": True,
+            }
+        )
+    )
+
+    assert len(outputs) == 1
+    out = outputs[0]
+    assert out["role"] == "assistant"
+    assert out["content"] == "hello local"
+    assert out["prompt_tokens"] == 3
+    assert out["completion_tokens"] == 2
+    assert out["total_tokens"] == 5

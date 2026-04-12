@@ -25,4 +25,4 @@ class RerankerLitAPI(ls.LitAPI):
         return parse_rerank_body(request)
 
     def predict(self, x, **kwargs):
-        return self._engine.rerank(x["query"], x["passages"])
+        return self._engine.rerank(x["query"], x["passages"], x.get("model"))

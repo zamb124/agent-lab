@@ -52,10 +52,12 @@ class LocalEmbeddingEngine:
         self._model = SentenceTransformer(mid, device=self._device)
 
     def allowed_model_ids(self) -> frozenset[str]:
+        configured_ids = [model_id.strip() for model_id in self._cfg.embedding_model_ids if model_id.strip()]
         return frozenset(
             {
                 self._cfg.embedding_openai_model_id.strip(),
                 self._cfg.embedding_model_id.strip(),
+                *configured_ids,
             }
         )
 

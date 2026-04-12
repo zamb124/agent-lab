@@ -37,6 +37,7 @@ export class LLMResourceEditor extends BaseResourceEditor {
                     <option value="openai">OpenAI</option>
                     <option value="anthropic">Anthropic</option>
                     <option value="bothub">BotHub</option>
+                    <option value="provider_litserve">Provider LitServe</option>
                 </select>
             </div>
             

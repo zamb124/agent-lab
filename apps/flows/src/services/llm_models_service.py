@@ -110,6 +110,21 @@ class LLMModelsService:
             logger.info(f"OpenAI: получено {len(models)} моделей")
             return models
 
+    async def _fetch_provider_litserve_models(self) -> List[str]:
+        """Запрос моделей от provider_litserve OpenAI-совместимого API."""
+        settings = get_settings()
+        provider_cfg = settings.provider_litserve
+        base_url = provider_cfg.resolve_openai_v1_base_url()
+        url = f"{base_url}/models"
+
+        async with get_httpx_client(timeout=30.0, proxy=False) as client:
+            response = await client.get(url)
+            response.raise_for_status()
+            data = response.json()
+            models = [item["id"] for item in data.get("data", [])]
+            logger.info(f"provider_litserve: получено {len(models)} моделей")
+            return models
+
     async def fetch_models_by_provider(self, provider: str) -> List[str]:
         """Запрос моделей от указанного провайдера."""
         if provider == "bothub":
@@ -118,6 +133,8 @@ class LLMModelsService:
             return await self._fetch_openrouter_models()
         elif provider == "openai":
             return await self._fetch_openai_models()
+        elif provider == "provider_litserve":
+            return await self._fetch_provider_litserve_models()
         else:
             logger.warning(f"Неизвестный провайдер: {provider}")
             return []
@@ -170,6 +187,11 @@ class LLMModelsService:
         # OpenAI
         if settings.llm.openai and settings.llm.openai.api_key:
             results["openai"] = await self.sync_models_by_provider("openai")
+
+        # provider_litserve
+        provider_cfg = settings.provider_litserve
+        if provider_cfg.api.base_url:
+            results["provider_litserve"] = await self.sync_models_by_provider("provider_litserve")
         
         total = sum(results.values())
         logger.info(f"Синхронизировано {total} моделей от всех провайдеров: {results}")

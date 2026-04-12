@@ -9,6 +9,7 @@
     python scripts/run.py rag         # Запуск rag сервиса
     python scripts/run.py sync        # Запуск sync сервиса
     python scripts/run.py office      # Запуск office (Documents / OnlyOffice BFF + UI)
+    python scripts/run.py provider_litserve # Запуск provider_litserve (локальные эмбеддинги/реранк)
     python scripts/run.py flows_worker # Запуск TaskIQ flows_worker
     python scripts/run.py scheduler   # Запуск TaskIQ scheduler
     python scripts/run.py scheduler-api  # Запуск scheduler API
@@ -73,6 +74,11 @@ SERVICES = {
         "type": "uvicorn",
         "app": "apps.app_runtime_targets:scheduler_app",
         "port": "8006",
+    },
+    "provider_litserve": {
+        "type": "module",
+        "module": "apps.provider_litserve.main",
+        "port": "8014",
     },
     
     # TaskIQ workers
@@ -141,6 +147,8 @@ def build_command(service: str) -> list[str]:
             config["workers"],
         ]
         return cmd
+    if service_type == "module":
+        return [sys.executable, "-u", "-m", config["module"]]
     if service_type == "taskiq-scheduler":
         return [
             sys.executable,
@@ -157,7 +165,7 @@ def _uvicorn_ports() -> list[str]:
     return [
         cfg["port"]
         for cfg in SERVICES.values()
-        if cfg["type"] == "uvicorn"
+        if cfg["type"] in {"uvicorn", "module"}
     ]
 
 

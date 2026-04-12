@@ -183,7 +183,7 @@ async def get_models_values(container: ContainerDep, provider: Optional[str] = N
     Список доступных моделей.
     
     Args:
-        provider: Провайдер (bothub, openrouter, openai). 
+        provider: Провайдер (bothub, openrouter, openai, provider_litserve). 
                   Если не указан - используется текущий из конфига.
     """
     
@@ -191,16 +191,7 @@ async def get_models_values(container: ContainerDep, provider: Optional[str] = N
         models = await container.llm_models_service.get_models_by_provider(provider)
     else:
         models = await container.llm_models_service.get_models()
-    
-    # Fallback на базовый список если БД пуста
-    if not models:
-        return [
-            "gpt-4o",
-            "gpt-4o-mini",
-            "gpt-4-turbo",
-            "gpt-3.5-turbo",
-        ]
-    
+
     return models
 
 

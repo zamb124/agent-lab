@@ -473,6 +473,11 @@ class ProviderLitserveInfraConfig(BaseModel):
     embedding_model_id: str = "BAAI/bge-m3"
     embedding_openai_model_id: str = "baai/bge-m3"
     rerank_openai_model_id: str = "baai/bge-reranker-v2-gemma"
+    llm_model_id: str = "Qwen/Qwen2.5-1.5B-Instruct"
+    embedding_model_ids: list[str] = Field(default_factory=list)
+    rerank_model_ids: list[str] = Field(default_factory=list)
+    llm_model_ids: list[str] = Field(default_factory=list)
+    hf_token: str | None = None
 
 
 class ProviderLitserveConfig(BaseModel):
@@ -608,7 +613,7 @@ class ModelConfig(BaseModel):
 class LLMConfig(BaseModel):
     """Конфигурация LLM с поддержкой нескольких провайдеров"""
 
-    provider: str = Field(default="openai", description="Провайдер: openai, openrouter, bothub")
+    provider: str = Field(default="openai", description="Провайдер: openai, openrouter, bothub, provider_litserve")
     default_model: str = Field(default="gpt-4o")
     vision_model: str = Field(
         default="gemini-2.5-pro-preview", description="Модель для multimodal/vision запросов"

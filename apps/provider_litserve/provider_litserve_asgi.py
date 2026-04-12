@@ -65,18 +65,21 @@ def create_provider_litserve_asgi_app(
         response_model=V1ModelsResponseBody,
         tags=["provider_litserve"],
         summary="Список моделей (форма OpenRouter)",
-        response_description="Ровно две записи: эмбеддинги и реранк.",
+        response_description="Записи моделей эмбеддингов, реранка и чата.",
     )
     def get_v1_models() -> V1ModelsResponseBody:
         created = int(time.time())
         raw = build_provider_litserve_v1_models_response(
             embedding_openai_model_id=cfg.embedding_openai_model_id,
+            embedding_model_ids=cfg.embedding_model_ids,
             embedding_hf_model_id=cfg.embedding_model_id,
             embedding_dimension=embedding_dimension_for_models_list,
             embedding_context_length=8192,
             rerank_openai_model_id=cfg.rerank_openai_model_id,
+            rerank_model_ids=cfg.rerank_model_ids,
             rerank_hf_model_id=cfg.model_id,
             rerank_context_length=8192,
+            chat_model_ids=[],
             created=created,
         )
         return validate_v1_models_response(raw)

@@ -158,29 +158,6 @@
     "default_model": "x-ai/grok-code-fast-1",
     "default_summarization_model": "x-ai/grok-4-fast"
   },
-  "provider_litserve": {
-    "api": {
-      "base_url": "http://127.0.0.1:8014/v1"
-    },
-    "infra": {
-      "backend": "placeholder",
-      "host": "0.0.0.0",
-      "gateway_port": 8014,
-      "accelerator": "auto",
-      "workers_per_device": 1,
-      "request_timeout_seconds": 300.0,
-      "fast_queue": false,
-      "max_passages": 128,
-      "max_query_chars": 16384,
-      "max_passage_chars": 64000,
-      "max_length": 1024,
-      "model_batch_size": 8,
-      "model_id": "BAAI/bge-reranker-v2-gemma",
-      "use_fp16": true,
-      "use_bf16": false,
-      "normalize_scores": true
-    }
-  },
   "s3": {
     "enabled": true,
     "default_bucket": "shvedzilla",
@@ -358,6 +335,45 @@
         "flows_service_url": "http://agents:8001"
       }
     },
+    "provider_litserve": {
+      "service_name": "provider_litserve",
+      "provider_litserve": {
+        "api": {
+          "base_url": "http://127.0.0.1:8014/v1"
+        },
+        "infra": {
+          "backend": "placeholder",
+          "host": "0.0.0.0",
+          "gateway_port": 8014,
+          "accelerator": "auto",
+          "workers_per_device": 1,
+          "request_timeout_seconds": 300.0,
+          "fast_queue": false,
+          "max_passages": 128,
+          "max_query_chars": 16384,
+          "max_passage_chars": 64000,
+          "max_length": 1024,
+          "model_batch_size": 8,
+          "model_id": "BAAI/bge-reranker-v2-gemma",
+          "embedding_model_id": "BAAI/bge-m3",
+          "embedding_openai_model_id": "baai/bge-m3",
+          "rerank_openai_model_id": "baai/bge-reranker-v2-gemma",
+          "embedding_model_ids": [
+            "baai/bge-m3"
+          ],
+          "llm_model_id": "Qwen/Qwen2.5-1.5B-Instruct",
+          "llm_model_ids": [
+            "Qwen/Qwen2.5-1.5B-Instruct"
+          ],
+          "rerank_model_ids": [
+            "baai/bge-reranker-v2-gemma"
+          ],
+          "use_fp16": true,
+          "use_bf16": false,
+          "normalize_scores": true
+        }
+      }
+    },
     "rag": {
       "service_name": "rag",
       "server": {
@@ -377,6 +393,11 @@
           }
         }
       },
+      "provider_litserve": {
+        "api": {
+          "base_url": "http://127.0.0.1:8014/v1"
+        }
+      },
       "s3": {
         "enabled": true,
         "default_bucket": "files",
@@ -390,6 +411,14 @@
             "endpoint_url": "http://127.0.0.1:19001",
             "enabled": true
           }
+        }
+      }
+    },
+    "rag_worker": {
+      "service_name": "rag_worker",
+      "provider_litserve": {
+        "api": {
+          "base_url": "http://127.0.0.1:8014/v1"
         }
       }
     },
