@@ -5,6 +5,7 @@ description = "Agent Platform - платформа агентских систе
 requires-python = ">=3.13"
 dependencies = [
     "cairosvg>=2.8.2",
+    "chonkie>=1.6.2",
     "google-auth>=2.43.0",
     "greenlet",
     "pywebpush>=2.1.2",
