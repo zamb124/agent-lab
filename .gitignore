@@ -34,6 +34,8 @@ docs/video/*.mov
 /logs/app.log.5
 /logs/
 /tmp/
+/data/
+/apps/provider_litserve/data/
 /scripts/logs/agents.log
 /.hypothesis/
 /sync1/
