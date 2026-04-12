@@ -5,7 +5,6 @@ description = "Agent Platform - платформа агентских систе
 requires-python = ">=3.13"
 dependencies = [
     "cairosvg>=2.8.2",
-    "chonkie>=1.6.2",
     "google-auth>=2.43.0",
     "greenlet",
     "pywebpush>=2.1.2",
@@ -75,6 +74,7 @@ core = [
     "boto3>=1.28.0",
     "python-jose[cryptography]>=3.3.0",
     "bcrypt>=4.0.0",
+    "chonkie>=1.6.2",
     "authlib>=1.3.0",
     "itsdangerous>=2.2.0",
     "jinja2>=3.1.0",
