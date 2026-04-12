@@ -95,6 +95,7 @@ SYSTEM_ENTITY_TYPE_TEMPLATES = [
         "optional_fields": {
             "display_name": {"type": "string", "label": "Имя"},
             "role": {"type": "string", "label": "Роль"},
+            "aliases": {"type": "array", "label": "Псевдонимы"},
         },
         "is_context_anchor": False,
         "is_voice_target": True,
@@ -112,7 +113,9 @@ SYSTEM_ENTITY_TYPE_TEMPLATES = [
         "color": "#1E88E5",
         "weight_coefficient": 1.0,
         "required_fields": {},
-        "optional_fields": {},
+        "optional_fields": {
+            "aliases": {"type": "array", "label": "Псевдонимы"},
+        },
         "is_context_anchor": False,
         "is_voice_target": True,
         "namespace_ids": ["*"],
@@ -130,7 +133,9 @@ SYSTEM_ENTITY_TYPE_TEMPLATES = [
         "color": "#6D4C41",
         "weight_coefficient": 1.0,
         "required_fields": {},
-        "optional_fields": {},
+        "optional_fields": {
+            "aliases": {"type": "array", "label": "Псевдонимы"},
+        },
         "is_context_anchor": False,
         "namespace_ids": ["*"],
     },

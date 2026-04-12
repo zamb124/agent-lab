@@ -8,14 +8,14 @@
 import asyncio
 import time
 from collections import deque
-from typing import List, Optional, Dict, Any, Tuple, Set, Literal
+from typing import Awaitable, Callable, List, Optional, Dict, Any, Tuple, Set, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 from datetime import datetime, timezone, date, timedelta
 import uuid
 import re
 
-from apps.crm.db.models import CRMEntity
+from apps.crm.db.models import CRMEntity, CRMTask
 from apps.crm.models.api import (
     AIAnalyzeRequest,
     AIAnalyzeResponse,
@@ -35,6 +35,7 @@ from apps.crm.db.repositories.relationship_repository import RelationshipReposit
 from apps.crm.db.repositories.access_grant_repository import AccessGrantRepository
 from apps.crm.db.repositories.access_request_repository import AccessRequestRepository
 from apps.crm.db.repositories.company_mapping_repository import CompanyMappingRepository
+from apps.crm.db.repositories.task_repository import TaskRepository
 from apps.crm.db.models import Relationship
 from apps.crm.constants_graph import (
     COMPANY_ENTITY_TYPE,
@@ -193,6 +194,7 @@ class _AnalyzePipelineState(BaseModel):
     note: Optional[AIExtractedEntity] = None
     entities: List[AIExtractedEntity] = Field(default_factory=list)
     relationships_extracted: List[AIAnalyzeRelationshipExtracted] = Field(default_factory=list)
+    attachment_summaries: List[Dict[str, Any]] = Field(default_factory=list)
 
 
 class EntityService:
@@ -223,6 +225,7 @@ class EntityService:
         company_mapping_repo: CompanyMappingRepository,
         company_repo: "CompanyRepository" = None,
         access_control: "AccessControlService" = None,
+        task_repository: Optional[TaskRepository] = None,
     ):
         self._entity_repo = entity_repo
         self._entity_type_repo = entity_type_repo
@@ -239,6 +242,7 @@ class EntityService:
         self._company_mapping_repo = company_mapping_repo
         self._company_repo = company_repo
         self._access_control = access_control
+        self._task_repository = task_repository
     
     def _get_company_id(self) -> str:
         context = get_context()
@@ -386,6 +390,10 @@ class EntityService:
         if not rels:
             return None
         return rels[0].target_entity_id
+
+    async def get_note_voice_entity_id(self, note_id: str) -> Optional[str]:
+        """Возвращает entity_id автора заметки (note_voice relationship), если есть."""
+        return await self._get_existing_outgoing_target(note_id, NOTE_VOICE_RELATIONSHIP_TYPE)
 
     async def _resolve_voice_entity_id_for_note(
         self,
@@ -1412,6 +1420,9 @@ class EntityService:
                 if entity_names:
                     attrs["ai_summary_entities"] = entity_names[:8]
 
+        if snapshot.attachment_summaries:
+            attrs["attachment_summaries"] = snapshot.attachment_summaries
+
         await self.update_entity(note_id, {"attributes": attrs})
 
     async def _load_analysis_draft_from_note(
@@ -1846,24 +1857,27 @@ class EntityService:
         request: AIAnalyzeRequest,
         check_duplicates: bool = True,
         note_id: Optional[str] = None,
+        progress_cb: Optional[Callable[[str, int, str], Awaitable[None]]] = None,
     ) -> AIAnalyzeResponse:
         """
         AI анализ текста с составными промптами.
-        
+
         Строит промпт из:
         1. EntityType.prompt для базовых типов (note, task)
         2. EntityType.prompt для подтипов (meeting, call)
         3. RelationshipType.prompt для связей (mentions, works_for)
-        
+
         Args:
             request: Запрос на анализ
             check_duplicates: Проверять ли дубликаты (по умолчанию True)
+            note_id: ID заметки для сохранения черновика
+            progress_cb: Колбэк прогресса (stage, pct, message)
         """
         namespace = self._resolve_namespace_for_write(request.namespace)
         await self._ensure_namespace_exists(namespace)
         entity_types = await self._entity_type_repo.get_all_for_company(namespace=namespace)
         relationship_types = await self._relationship_type_repo.get_with_prompts()
-        
+
         prompt = self._build_composite_prompt(
             entity_types,
             relationship_types,
@@ -1872,6 +1886,7 @@ class EntityService:
         )
         ctx = get_context()
         known_entities: list[dict[str, Any]] = []
+        _known_entity_rows: list[CRMEntity] = []
         if ctx and ctx.user:
             company_id = self._get_company_id()
             member_entity_id = await self._user_person_service.get_or_create_person_entity_id(
@@ -1885,6 +1900,7 @@ class EntityService:
                     "type": "member",
                     "description": member_entity.attributes.get("description", ""),
                 })
+                _known_entity_rows.append(member_entity)
 
             company_entities = await self._entity_repo.find_by_attribute(
                 entity_type=COMPANY_ENTITY_TYPE,
@@ -1900,6 +1916,7 @@ class EntityService:
                     "type": "company",
                     "description": ce.attributes.get("description", ""),
                 })
+                _known_entity_rows.append(ce)
 
         prefix_parts: list[str] = []
         anchor_types = [et for et in entity_types if et.is_context_anchor]
@@ -1908,7 +1925,9 @@ class EntityService:
             prefix_parts.append("ТИПЫ-ЯКОРЯ КОНТЕКСТА (привязка заметок к сделке, лиду и т.д.):\n" + anchor_lines)
         if prefix_parts:
             prompt = "\n\n".join(prefix_parts) + "\n\n" + prompt
-        
+
+        if progress_cb:
+            await progress_cb("analyzing", 57, "Извлечение данных")
         t_analyze = time.perf_counter()
         state = await self._call_ai_agent(
             text=request.text,
@@ -1922,6 +1941,8 @@ class EntityService:
             (time.perf_counter() - t_analyze) * 1000,
         )
 
+        if progress_cb:
+            await progress_cb("processing_results", 70, "Обработка результатов")
         await self._inject_mentioned_entities_into_analyze_state(
             state,
             request.mentioned_entity_ids,
@@ -1929,6 +1950,8 @@ class EntityService:
         )
 
         if check_duplicates and state.entities:
+            if progress_cb:
+                await progress_cb("deduplicating", 76, "Проверка дубликатов")
             t_dedup = time.perf_counter()
             dedup_results = await self._deduplicate_entities(
                 extracted_entities=state.entities,
@@ -1949,12 +1972,18 @@ class EntityService:
                         entity.dedup_existing_id = result.existing_entity_id
                         entity.dedup_existing_name = result.existing_entity_name
 
+        if _known_entity_rows:
+            self._inject_known_entities_into_analyze_state(state, _known_entity_rows)
+
+        if progress_cb:
+            await progress_cb("building_draft", 83, "Формирование черновика")
         self._assign_draft_ids_to_note_and_entities(state)
         draft_relationships = self._build_relationship_drafts_from_extracted(state)
         ai_result = AIAnalyzeResponse(
             note=state.note,
             entities=state.entities,
             relationships=draft_relationships,
+            attachment_summaries=state.attachment_summaries,
         )
         if note_id:
             await self._persist_analysis_draft_to_note(note_id, ai_result)
@@ -2072,6 +2101,51 @@ class EntityService:
                 )
             )
 
+    def _inject_known_entities_into_analyze_state(
+        self,
+        state: _AnalyzePipelineState,
+        entity_rows: list[CRMEntity],
+    ) -> None:
+        """
+        Добавляет known entities (member, company) в state.entities как синтетические
+        черновые записи с dedup_action="merge". Это позволяет резолверу связей
+        _build_relationship_drafts_from_extracted найти их в key_index и не дропать
+        AI-созданные связи к автору/компании. Вызывается после dedup, до assign_draft_ids.
+        """
+        occupied: set[tuple[str, str]] = set()
+        if state.note is not None:
+            occupied.add((
+                state.note.entity_type.lower().strip(),
+                self._normalize_name_for_relationship_key(state.note.name),
+            ))
+        for ent in state.entities:
+            occupied.add((
+                ent.entity_type.lower().strip(),
+                self._normalize_name_for_relationship_key(ent.name),
+            ))
+
+        for row in entity_rows:
+            k = (
+                row.entity_type.lower().strip(),
+                self._normalize_name_for_relationship_key(row.name),
+            )
+            if k in occupied:
+                continue
+            occupied.add(k)
+            payload = {
+                "entity_type": row.entity_type,
+                "name": row.name,
+                "description": row.description or row.name,
+                "attributes": dict(row.attributes or {}),
+                "entity_subtype": row.entity_subtype,
+            }
+            synthetic = AIExtractedEntity.model_validate(
+                self._normalize_entity_payload(payload)
+            )
+            synthetic.dedup_action = "merge"
+            synthetic.dedup_existing_id = row.entity_id
+            state.entities.append(synthetic)
+
     async def _call_ai_agent(
         self,
         text: str,
@@ -2160,10 +2234,21 @@ class EntityService:
                 raise ValueError(f"relationships[{i}] должен быть объектом")
             rel_extracted.append(AIAnalyzeRelationshipExtracted.model_validate(raw_rel))
 
+        attachment_summaries: List[Dict[str, Any]] = []
+        summaries_data = normalized_result.get("attachment_summaries")
+        if isinstance(summaries_data, list):
+            for item in summaries_data:
+                if isinstance(item, dict) and item.get("filename") and item.get("summary"):
+                    attachment_summaries.append({
+                        "filename": str(item["filename"]),
+                        "summary": str(item["summary"]),
+                    })
+
         return _AnalyzePipelineState(
             note=note_obj,
             entities=entity_list,
             relationships_extracted=rel_extracted,
+            attachment_summaries=attachment_summaries,
         )
 
     def _normalize_entity_payload(self, payload: Dict[str, Any]) -> Dict[str, Any]:
@@ -2475,9 +2560,13 @@ class EntityService:
         упоминания не трогаются. Падежные формы не обрабатываются.
         Сортировка по убыванию длины имени предотвращает частичные замены
         (например «Ольга» не испортит «Ольга Ким»).
+
+        Каждый entity может содержать поле aliases: list[str] — дополнительные строки
+        для поиска; все они заменяются токеном с канонического именем entity.
         """
-        text = description
-        for entity in sorted(entities, key=lambda e: len(e.get("name") or ""), reverse=True):
+        # Строим плоский список (match_name, canonical_name, entity_id)
+        entries: list[tuple[str, str, str]] = []
+        for entity in entities:
             entity_id = entity.get("entity_id") or entity.get("id")
             name = entity.get("name")
             if not entity_id or not name:
@@ -2485,8 +2574,19 @@ class EntityService:
             name_stripped = name.strip()
             if not name_stripped:
                 continue
-            replacement = f"[@{name_stripped}](entity:{entity_id})"
-            name_re = re.compile(re.escape(name_stripped), re.IGNORECASE)
+            entries.append((name_stripped, name_stripped, entity_id))
+            for alias in (entity.get("aliases") or []):
+                alias_stripped = alias.strip() if alias else ""
+                if alias_stripped:
+                    entries.append((alias_stripped, name_stripped, entity_id))
+
+        # Длинные совпадения обрабатываем первыми
+        entries.sort(key=lambda e: len(e[0]), reverse=True)
+
+        text = description
+        for match_name, canonical_name, entity_id in entries:
+            replacement = f"[@{canonical_name}](entity:{entity_id})"
+            name_re = re.compile(re.escape(match_name), re.IGNORECASE)
             # Разбиваем по уже существующим токенам: чётные индексы — plain-текст
             segments = self._EXISTING_TOKEN_SPLIT_RE.split(text)
             for i in range(0, len(segments), 2):
@@ -2569,15 +2669,40 @@ class EntityService:
         linked_target_ids = [
             r.target_entity_id
             for r in relationships
-            if r.source_entity_id == note_id and r.relationship_type in ("linked", "mentions")
+            if r.source_entity_id == note_id
+            and r.relationship_type in ("linked", "mentions", NOTE_VOICE_RELATIONSHIP_TYPE)
         ]
         if not linked_target_ids:
             return
         entities: list[dict] = []
         for entity_id in linked_target_ids:
             entity = await self._entity_repo.get(entity_id)
-            if entity and entity.name:
-                entities.append({"entity_id": entity_id, "name": entity.name})
+            if not entity or not entity.name:
+                continue
+            entry: dict = {"entity_id": entity_id, "name": entity.name}
+            attrs = entity.attributes or {}
+            aliases: list[str] = []
+
+            # Псевдонимы, вручную заданные пользователем в атрибуте aliases
+            raw_aliases = attrs.get("aliases")
+            if isinstance(raw_aliases, list):
+                for a in raw_aliases:
+                    a_str = (a or "").strip() if isinstance(a, str) else ""
+                    if a_str and a_str != entity.name:
+                        aliases.append(a_str)
+
+            # Для участников платформы дополнительно пробуем first_name и last_name
+            if entity.entity_type == "member":
+                first = (attrs.get("first_name") or "").strip()
+                last = (attrs.get("last_name") or "").strip()
+                if first and first != entity.name and first not in aliases:
+                    aliases.append(first)
+                if last and last != entity.name and last not in aliases:
+                    aliases.append(last)
+
+            if aliases:
+                entry["aliases"] = aliases
+            entities.append(entry)
         if not entities:
             return
         enriched = self._enrich_description_with_entity_mentions(note.description, entities)
@@ -3031,13 +3156,34 @@ class EntityService:
         if not context:
             raise ValueError("Нет контекста для отправки задачи rebuild_daily_summary")
 
+        user_id = self._get_user_id()
+        normalized_namespace = self._normalize_namespace(namespace)
+        task_id: Optional[str] = None
+
+        if self._task_repository is not None:
+            task_row = CRMTask(
+                task_id=str(uuid.uuid4()),
+                task_type="daily_summary",
+                status="running",
+                stage="summarizing_day",
+                progress_pct=10,
+                company_id=company_id,
+                namespace=normalized_namespace,
+                user_id=user_id,
+                started_at=datetime.now(timezone.utc),
+                data={"date_str": date_str, "reason": "event"},
+            )
+            await self._task_repository.create(task_row)
+            task_id = task_row.task_id
+
         await rebuild_daily_summary_task.kiq(
             company_id=company_id,
             date_str=date_str,
-            namespace=self._normalize_namespace(namespace),
+            namespace=normalized_namespace,
             reason="event",
             auth_token=context.auth_token,
-            user_id=self._get_user_id(),
+            user_id=user_id,
+            task_id=task_id,
         )
         return True
 

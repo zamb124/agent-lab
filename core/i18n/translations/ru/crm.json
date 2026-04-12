@@ -886,7 +886,12 @@
         "dedup_existing": "Существующая",
         "dedup_new": "Новая",
         "score_label": "Оценка — {{value}}%",
-        "add_attribute_row": "Добавить"
+        "add_attribute_row": "Добавить",
+        "missing_entities_title": "{{count}} {{count, plural, one{сущность удалена} few{сущности удалены} other{сущностей удалено}}}: не отображается",
+        "missing_entities_body": "Эти сущности были удалены после создания импорта — просмотреть или применить их нельзя. Они отмечены в таблице задач в колонке «Сущностей».",
+        "import_review_tasks_title": "Созданные задачи",
+        "import_review_tasks_hint": "Эти задачи уже созданы в системе данным импортом.",
+        "import_review_total": "Всего создано: {{total}} — {{entities}} сущ. в правой колонке, {{tasks}} задач выше"
     },
     "tasks_page": {
         "column_todo": "Новая",
@@ -1210,8 +1215,13 @@
             "processing_chunks": "Обработка чанков",
             "reading_attachments": "Чтение вложений",
             "summarizing": "Суммаризация",
+            "preparing": "Подготовка анализа",
             "analyzing": "Анализ текста",
+            "processing_results": "Обработка результатов",
+            "deduplicating": "Проверка дубликатов",
+            "building_draft": "Формирование черновика",
             "applying": "Применение результатов",
+            "linking": "Связывание упоминаний",
             "summarizing_day": "Составление сводки",
             "completed": "Завершено",
             "failed": "Ошибка",

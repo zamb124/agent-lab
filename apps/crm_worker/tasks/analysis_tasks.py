@@ -125,7 +125,7 @@ async def process_note_task(
             },
         ):
             if mode == "analyze":
-                await _progress("reading_attachments", 20, "Чтение вложений")
+                await _progress("reading_attachments", 15, "Чтение вложений")
                 if await _check_cancel():
                     return {"status": "cancelled", "task_id": task_id}
                 result = await pipeline.analyze(note_id, config, progress_cb=_progress)
@@ -133,15 +133,15 @@ async def process_note_task(
                 entities_count = len(result_data.get("entities") or [])
                 rel_count = len(result_data.get("relationships") or [])
             elif mode == "apply":
-                await _progress("applying", 85, "Применение черновика")
+                await _progress("applying", 88, "Применение черновика")
                 if await _check_cancel():
                     return {"status": "cancelled", "task_id": task_id}
-                result = await pipeline.apply(note_id)
+                result = await pipeline.apply(note_id, progress_cb=_progress)
                 result_data = result.model_dump(mode="json")
                 entities_count = len(result_data.get("created_entity_ids") or [])
                 rel_count = len(result_data.get("created_relationship_ids") or [])
             elif mode == "process":
-                await _progress("reading_attachments", 20, "Чтение вложений")
+                await _progress("reading_attachments", 15, "Чтение вложений")
                 if await _check_cancel():
                     return {"status": "cancelled", "task_id": task_id}
                 result = await pipeline.process(note_id, config, progress_cb=_progress)

@@ -535,10 +535,40 @@ export class NoteContent extends PlatformElement {
                 padding: 6px 8px;
                 border-radius: 8px;
                 min-height: 32px;
+                position: relative;
             }
 
             .attach-dropdown-row:hover {
                 background: var(--glass-tint-medium);
+            }
+
+            .attach-summary-tooltip {
+                display: none;
+                position: absolute;
+                bottom: calc(100% + 6px);
+                left: 0;
+                width: 260px;
+                z-index: 200;
+                pointer-events: none;
+            }
+
+            .attach-summary-tooltip-text {
+                background: var(--glass-solid-strong);
+                border: 1px solid var(--border-default);
+                border-radius: var(--radius-lg);
+                padding: var(--space-2) var(--space-3);
+                font-size: var(--text-xs);
+                line-height: 1.5;
+                color: var(--text-secondary);
+                box-shadow: var(--glass-shadow-medium);
+                white-space: normal;
+                word-break: break-word;
+                -webkit-backdrop-filter: blur(var(--glass-blur-subtle));
+                backdrop-filter: blur(var(--glass-blur-subtle));
+            }
+
+            .attach-dropdown-row:hover .attach-summary-tooltip {
+                display: block;
             }
 
             .attach-dropdown-name {
@@ -2071,6 +2101,14 @@ export class NoteContent extends PlatformElement {
         return this._getText(attachment?.status, 'unknown');
     }
 
+    _getAttachmentSummary(attachment) {
+        const summaries = this.note?.attributes?.attachment_summaries;
+        if (!Array.isArray(summaries)) return null;
+        const filename = this._getAttachmentName(attachment);
+        const found = summaries.find((s) => s?.filename === filename);
+        return found?.summary ?? null;
+    }
+
     async _downloadAttachment(attachment) {
         const downloadUrl = attachment?.download_url;
         const filename = this._getAttachmentName(attachment);
@@ -2569,6 +2607,36 @@ export class NoteContent extends PlatformElement {
             sel.removeAllRanges();
             sel.addRange(range);
         }
+    }
+
+    _onTextPaste(event) {
+        event.preventDefault();
+        const text = event.clipboardData?.getData('text/plain') ?? '';
+        if (!text) {
+            return;
+        }
+        const selection = this.renderRoot.ownerDocument.getSelection();
+        if (!selection || selection.rangeCount === 0) {
+            return;
+        }
+        const range = selection.getRangeAt(0);
+        range.deleteContents();
+        const lines = text.split('\n');
+        const fragment = this.renderRoot.ownerDocument.createDocumentFragment();
+        lines.forEach((line, i) => {
+            if (i > 0) {
+                fragment.appendChild(this.renderRoot.ownerDocument.createElement('br'));
+            }
+            if (line.length > 0) {
+                fragment.appendChild(this.renderRoot.ownerDocument.createTextNode(line));
+            }
+        });
+        range.insertNode(fragment);
+        range.collapse(false);
+        selection.removeAllRanges();
+        selection.addRange(range);
+        const div = event.currentTarget;
+        this._draftText = this._serializeEditableContent(div);
     }
 
     _onTextInput(event) {
@@ -3106,8 +3174,15 @@ export class NoteContent extends PlatformElement {
                                 <div class="attach-dropdown-panel" role="tooltip" @click=${(e) => e.stopPropagation()}>
                                     ${attachments.length === 0 ? html`
                                         <div class="attach-dropdown-empty">${this.i18n.t('note_content.no_attachments')}</div>
-                                    ` : attachments.map((attachment) => html`
+                                    ` : attachments.map((attachment) => {
+                                        const attachSummary = this._getAttachmentSummary(attachment);
+                                        return html`
                                         <div class="attach-dropdown-row">
+                                            ${attachSummary ? html`
+                                                <div class="attach-summary-tooltip" role="tooltip">
+                                                    <div class="attach-summary-tooltip-text">${attachSummary}</div>
+                                                </div>
+                                            ` : ''}
                                             <platform-icon
                                                 file-icon
                                                 name=${resolveFileIconKey(
@@ -3137,7 +3212,8 @@ export class NoteContent extends PlatformElement {
                                                 <platform-icon name="close" size="16"></platform-icon>
                                             </button>
                                         </div>
-                                    `)}
+                                    `;}
+                                    )}
                                 </div>
                             </div>
                             <input
@@ -3194,6 +3270,7 @@ export class NoteContent extends PlatformElement {
                                 data-placeholder=${this.i18n.t('notes.placeholder')}
                                 @input=${this._onTextInput}
                                 @keydown=${this._onTextKeyDown}
+                                @paste=${this._onTextPaste}
                             ></div>
                             ${this._renderMentionDropdown()}
                             <div class="note-voice-dictate-floating">

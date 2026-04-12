@@ -38,7 +38,7 @@ export class ChatView extends PlatformElement {
                 box-sizing: border-box;
             }
 
-            @media (max-width: 767px) {
+            @media (max-width: 76px) {
                 :host {
                     padding-left: 0;
                     padding-right: 0;

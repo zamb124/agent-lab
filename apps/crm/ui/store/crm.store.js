@@ -852,10 +852,11 @@ export const CRMStore = {
             name: anchor.name,
             description: anchorDesc,
         };
+        const missingEntityIds = Array.isArray(summary.missing_entity_ids) ? summary.missing_entity_ids : [];
         baseStore.setState((s) => ({
             ai: {
                 ...s.ai,
-                importReview: { importId: id, anchorNote: anchor },
+                importReview: { importId: id, anchorNote: anchor, missingEntityIds },
                 suggestions,
                 analyzeContextNote,
                 resolvedDraftEntityIds,

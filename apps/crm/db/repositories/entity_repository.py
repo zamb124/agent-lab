@@ -9,7 +9,7 @@ import base64
 import json
 import logging
 from datetime import date, datetime, timezone
-from typing import Any, Dict, List, Optional, Tuple, Type
+from typing import Any, ClassVar, Dict, List, Optional, Tuple, Type
 
 from sqlalchemy import delete, func, or_, select, update, text, tuple_
 
@@ -49,6 +49,10 @@ class EntityRepository(BaseCRMRepository[CRMEntity]):
             raise ValueError("Нет активной компании в контексте")
         return context.active_company.company_id
 
+    _SKIP_SEARCH_ATTRIBUTE_KEYS: ClassVar[frozenset[str]] = frozenset({
+        "ai_analysis_draft",  # большой JSON-блок, шум в векторном индексе
+    })
+
     def _build_search_text(self, entity: CRMEntity) -> str:
         """Формирует текст для семантического поиска."""
         parts = [entity.name]
@@ -57,8 +61,20 @@ class EntityRepository(BaseCRMRepository[CRMEntity]):
             parts.append(entity.description)
 
         for key, value in (entity.attributes or {}).items():
-            if value:
-                parts.append(f"{key}: {value}")
+            if not value:
+                continue
+            if key in self._SKIP_SEARCH_ATTRIBUTE_KEYS:
+                continue
+            if key == "attachment_summaries" and isinstance(value, list):
+                for item in value:
+                    if isinstance(item, dict):
+                        filename = item.get("filename", "")
+                        summary = item.get("summary", "")
+                        if summary:
+                            label = f"Вложение {filename}: " if filename else ""
+                            parts.append(f"{label}{summary}")
+                continue
+            parts.append(f"{key}: {value}")
 
         if entity.tags:
             parts.append(f"Теги: {', '.join(entity.tags)}")

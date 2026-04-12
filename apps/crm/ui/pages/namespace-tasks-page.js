@@ -547,11 +547,12 @@ export class NamespaceTasksPage extends PlatformElement {
         if (!n || n.service !== 'crm') {
             return;
         }
-        if (n.type === 'crm_task_updated') {
-            const ns = namespaceNameFromStore();
-            if (n.data?.namespace === ns) {
-                this._loadTasks({ silent: true });
-            }
+        const ns = namespaceNameFromStore();
+        if (
+            (n.type === 'crm_task_updated' || n.type === 'crm_daily_summary_updated') &&
+            n.data?.namespace === ns
+        ) {
+            this._loadTasks({ silent: true });
         }
     }
 
@@ -1241,6 +1242,7 @@ export class NamespaceTasksPage extends PlatformElement {
                                 ${(this._filteredTasks()).map((row) => {
                                     const isImport = row.task_type === 'knowledge_import';
                                     const isAnalyze = row.task_type === 'note_analyze';
+                                    const isSummary = row.task_type === 'daily_summary' || row.task_type === 'period_summary';
                                     const entN = isImport ? (Array.isArray(row.data?.created_entity_ids) ? row.data.created_entity_ids.length : 0) : (row.data?.result_entities_count ?? 0);
                                     const relN = isImport ? (Array.isArray(row.data?.created_relationship_ids) ? row.data.created_relationship_ids.length : 0) : (row.data?.result_relationships_count ?? 0);
                                     const canRollback =
@@ -1248,10 +1250,14 @@ export class NamespaceTasksPage extends PlatformElement {
                                     const canDetail = isImport && this._canOpenImportDetail(row);
                                     const needsRev = canDetail && this._importNeedsReview(row);
                                     const stageLabel = this.i18n.t(`task.stage.${row.stage}`, {}, 'crm') || row.stage;
-                                    const typeLabel = isImport
-                                        ? this.i18n.t('task.type.knowledge_import')
-                                        : this.i18n.t('task.type.note_analyze');
-                                    const nameLabel = isAnalyze ? (row.data?.note_name || row.data?.note_id || '') : (isImport ? this._importListModeLabel(row.data?.mode) : '');
+                                    const typeLabel = this.i18n.t(`task.type.${row.task_type}`, {}, 'crm') || row.task_type;
+                                    const nameLabel = isAnalyze
+                                        ? (row.data?.note_name || row.data?.note_id || '')
+                                        : isImport
+                                            ? this._importListModeLabel(row.data?.mode)
+                                            : isSummary
+                                                ? (row.data?.date_str || row.data?.date_from || '')
+                                                : '';
                                     return html`
                                         <tr>
                                             <td>
@@ -1338,18 +1344,26 @@ export class NamespaceTasksPage extends PlatformElement {
                                 })}
                             </tbody>
                         </table>
+                    </div>
                     <div class="task-cards">
                         ${(this._filteredTasks()).map((row) => {
                             const isImport = row.task_type === 'knowledge_import';
                             const isAnalyze = row.task_type === 'note_analyze';
+                            const isSummary = row.task_type === 'daily_summary' || row.task_type === 'period_summary';
                             const entN = isImport ? (Array.isArray(row.data?.created_entity_ids) ? row.data.created_entity_ids.length : 0) : (row.data?.result_entities_count ?? 0);
                             const relN = isImport ? (Array.isArray(row.data?.created_relationship_ids) ? row.data.created_relationship_ids.length : 0) : (row.data?.result_relationships_count ?? 0);
                             const canRollback = isImport && ['completed', 'failed', 'cancelled'].includes(row.status) && ((Array.isArray(row.data?.created_entity_ids) ? row.data.created_entity_ids.length : 0) > 0 || (Array.isArray(row.data?.created_relationship_ids) ? row.data.created_relationship_ids.length : 0) > 0);
                             const canDetail = isImport && this._canOpenImportDetail(row);
                             const needsRev = canDetail && this._importNeedsReview(row);
                             const stageLabel = this.i18n.t(`task.stage.${row.stage}`, {}, 'crm') || row.stage;
-                            const typeLabel = isImport ? this.i18n.t('task.type.knowledge_import') : this.i18n.t('task.type.note_analyze');
-                            const nameLabel = isAnalyze ? (row.data?.note_name || row.data?.note_id || '') : (isImport ? this._importListModeLabel(row.data?.mode) : '');
+                            const typeLabel = this.i18n.t(`task.type.${row.task_type}`, {}, 'crm') || row.task_type;
+                            const nameLabel = isAnalyze
+                                ? (row.data?.note_name || row.data?.note_id || '')
+                                : isImport
+                                    ? this._importListModeLabel(row.data?.mode)
+                                    : isSummary
+                                        ? (row.data?.date_str || row.data?.date_from || '')
+                                        : '';
                             const isActive = row.status === 'running' || row.status === 'pending';
                             return html`
                                 <div class="task-card">
@@ -1423,7 +1437,6 @@ export class NamespaceTasksPage extends PlatformElement {
                                 </div>
                             `;
                         })}
-                    </div>
                     </div>
                 </div>
             </div>

@@ -80,6 +80,18 @@
       },
       "required": ["dates_mentioned", "places_mentioned", "key_topics"],
       "additionalProperties": false
+    },
+    "attachment_summaries": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "filename": { "type": "string" },
+          "summary": { "type": "string", "minLength": 10 }
+        },
+        "required": ["filename", "summary"],
+        "additionalProperties": false
+      }
     }
   },
   "required": ["note", "entities", "relationships", "metadata"],

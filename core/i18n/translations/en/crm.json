@@ -886,7 +886,12 @@
         "dedup_existing": "Existing",
         "dedup_new": "New",
         "score_label": "Score — {{value}}%",
-        "add_attribute_row": "Add"
+        "add_attribute_row": "Add",
+        "missing_entities_title": "{{count}} {{count, plural, one{entity was deleted} other{entities were deleted}}}: not shown",
+        "missing_entities_body": "These entities were deleted after the import was created and cannot be reviewed or applied. They are still counted in the task list under the Entities column.",
+        "import_review_tasks_title": "Created Tasks",
+        "import_review_tasks_hint": "These tasks were already created in the system by this import.",
+        "import_review_total": "Total created: {{total}} — {{entities}} entities on the right, {{tasks}} tasks above"
     },
     "tasks_page": {
         "column_todo": "New",
@@ -1210,8 +1215,13 @@
             "processing_chunks": "Processing chunks",
             "reading_attachments": "Reading attachments",
             "summarizing": "Summarizing",
+            "preparing": "Preparing analysis",
             "analyzing": "Analyzing text",
+            "processing_results": "Processing results",
+            "deduplicating": "Checking duplicates",
+            "building_draft": "Building draft",
             "applying": "Applying results",
+            "linking": "Linking mentions",
             "summarizing_day": "Computing summary",
             "completed": "Completed",
             "failed": "Failed",

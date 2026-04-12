@@ -139,6 +139,81 @@ export class AIAnalysisModal extends PlatformModal {
                 border-color: var(--crm-selected-stroke);
             }
 
+            .missing-entities-banner {
+                display: flex;
+                align-items: flex-start;
+                gap: var(--space-2);
+                padding: var(--space-3);
+                border-radius: var(--radius-xl);
+                border: 1px solid rgba(251, 191, 36, 0.45);
+                background: rgba(120, 53, 15, 0.18);
+                font-size: var(--text-sm);
+                color: #fde68a;
+                line-height: 1.5;
+                min-width: 0;
+            }
+
+            :host-context([data-theme='light']) .missing-entities-banner {
+                background: rgba(254, 243, 199, 0.9);
+                border-color: rgba(217, 119, 6, 0.45);
+                color: #92400e;
+            }
+
+            .missing-entities-banner platform-icon {
+                flex-shrink: 0;
+                margin-top: 1px;
+                color: #fbbf24;
+            }
+
+            :host-context([data-theme='light']) .missing-entities-banner platform-icon {
+                color: #d97706;
+            }
+
+            .missing-entities-text { min-width: 0; }
+
+            .missing-entities-title {
+                font-weight: 600;
+                margin-bottom: 2px;
+            }
+
+            .missing-entities-ids {
+                margin-top: var(--space-1);
+                font-size: var(--text-xs);
+                opacity: 0.8;
+                font-family: ui-monospace, monospace;
+                word-break: break-all;
+            }
+
+            .import-tasks-hint {
+                margin: 0 0 var(--space-2) 0;
+                font-size: var(--text-xs);
+                color: var(--text-tertiary);
+                line-height: 1.5;
+            }
+
+            .import-entities-summary {
+                display: flex;
+                align-items: center;
+                gap: var(--space-2);
+                padding: var(--space-2) var(--space-3);
+                border-radius: var(--radius-lg);
+                border: 1px solid var(--crm-stroke);
+                background: var(--crm-surface-muted);
+                font-size: var(--text-xs);
+                color: var(--text-secondary);
+                margin-bottom: var(--space-1);
+            }
+
+            .import-entities-summary platform-icon {
+                flex-shrink: 0;
+                color: var(--text-tertiary);
+            }
+
+            .import-entities-summary-count {
+                font-weight: 600;
+                color: var(--text-primary);
+            }
+
             .block-title {
                 margin: 0 0 var(--space-2) 0;
                 display: inline-flex;
@@ -1287,34 +1362,77 @@ export class AIAnalysisModal extends PlatformModal {
                     </article>
 
                     <article class="block tasks-wrap">
-                        <h3 class="block-title">${this.i18n.t('ai_analysis_modal.suggested_tasks_title')}</h3>
+                        <h3 class="block-title">
+                            ${this._importReviewActive
+                                ? this.i18n.t('ai_analysis_modal.import_review_tasks_title')
+                                : this.i18n.t('ai_analysis_modal.suggested_tasks_title')}
+                        </h3>
+                        ${this._importReviewActive && this._taskStates.length > 0 ? html`
+                            <p class="import-tasks-hint">${this.i18n.t('ai_analysis_modal.import_review_tasks_hint')}</p>
+                        ` : ''}
                         <div class="tasks-list">
                             ${this._taskStates.map((task) => html`
                                 <label class="task-row ${task.done ? 'done' : ''}">
-                                    <input type="checkbox" .checked=${task.done} @change=${() => this._onToggleTask(task.id)} />
+                                    ${this._importReviewActive
+                                        ? html`<platform-icon name="checklist" size="14" style="flex-shrink:0;color:var(--text-tertiary)"></platform-icon>`
+                                        : html`<input type="checkbox" .checked=${task.done} @change=${() => this._onToggleTask(task.id)} />`}
                                     <span>${task.name}</span>
-                                    <button class="task-remove" type="button" @click=${() => this._onRemoveTask(task.id)}>
-                                        <platform-icon name="close" size="12"></platform-icon>
-                                    </button>
+                                    ${this._importReviewActive
+                                        ? ''
+                                        : html`<button class="task-remove" type="button" @click=${() => this._onRemoveTask(task.id)}>
+                                            <platform-icon name="close" size="12"></platform-icon>
+                                        </button>`}
                                 </label>
                             `)}
                         </div>
-                        <label class="task-input-wrap">
-                            <platform-icon name="ai" size="12" colored></platform-icon>
-                            <input
-                                class="task-input"
-                                type="text"
-                                placeholder=${this.i18n.t('ai_analysis_modal.task_input_placeholder')}
-                                .value=${this._taskDraft}
-                                @input=${this._onTaskDraftInput}
-                                @keydown=${this._onTaskDraftKeydown}
-                            />
-                        </label>
+                        ${!this._importReviewActive ? html`
+                            <label class="task-input-wrap">
+                                <platform-icon name="ai" size="12" colored></platform-icon>
+                                <input
+                                    class="task-input"
+                                    type="text"
+                                    placeholder=${this.i18n.t('ai_analysis_modal.task_input_placeholder')}
+                                    .value=${this._taskDraft}
+                                    @input=${this._onTaskDraftInput}
+                                    @keydown=${this._onTaskDraftKeydown}
+                                />
+                            </label>
+                        ` : ''}
                     </article>
                 </section>
 
                 <section class="column">
-                    
+                    ${this._importReviewActive && this._suggestions.length > 0 ? html`
+                        <div class="import-entities-summary">
+                            <platform-icon name="layers" size="14"></platform-icon>
+                            <span>
+                                ${this.i18n.t('ai_analysis_modal.import_review_total', {
+                                    total: String(this._suggestions.length),
+                                    tasks: String(this._taskStates.length),
+                                    entities: String(connections.length),
+                                })}
+                            </span>
+                        </div>
+                    ` : ''}
+                    ${(() => {
+                        const ir = CRMStore.state.ai.importReview;
+                        const missing = ir && Array.isArray(ir.missingEntityIds) ? ir.missingEntityIds : [];
+                        if (missing.length === 0) {
+                            return '';
+                        }
+                        return html`
+                            <div class="missing-entities-banner" role="alert">
+                                <platform-icon name="alert-triangle" size="16"></platform-icon>
+                                <div class="missing-entities-text">
+                                    <div class="missing-entities-title">
+                                        ${this.i18n.t('ai_analysis_modal.missing_entities_title', { count: String(missing.length) })}
+                                    </div>
+                                    <div>${this.i18n.t('ai_analysis_modal.missing_entities_body')}</div>
+                                    <div class="missing-entities-ids">${missing.join(', ')}</div>
+                                </div>
+                            </div>
+                        `;
+                    })()}
                     <div class="connections-list">
                         ${connections.map((item, index) => {
                             const suggestionIndex = this._suggestions.indexOf(item);

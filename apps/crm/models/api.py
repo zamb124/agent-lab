@@ -515,6 +515,10 @@ class AIAnalyzeResponse(BaseModel):
         default_factory=list,
         description="Связи черновика (только draft-id концов)"
     )
+    attachment_summaries: List[Dict[str, Any]] = Field(
+        default_factory=list,
+        description="Резюме по каждому вложению [{filename, summary}]",
+    )
 
 
 class AIAnalysisDraftStored(BaseModel):

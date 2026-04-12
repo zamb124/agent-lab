@@ -52,8 +52,8 @@ class NoteProcessingService:
 
         if include_attachments and note.attachment_ids:
             if progress_cb:
-                await progress_cb("reading_attachments", 20, "Чтение вложений")
-            for file_id in note.attachment_ids:
+                await progress_cb("reading_attachments", 15, "Чтение вложений")
+            for i, file_id in enumerate(note.attachment_ids):
                 text, filename = await load_text_and_name_from_stored_file_id(file_id)
                 stripped = text.strip()
                 if not stripped:
@@ -63,7 +63,7 @@ class NoteProcessingService:
                     )
                 if len(stripped) > attachment_chars_limit:
                     if progress_cb:
-                        await progress_cb("summarizing", 45, "Суммаризация вложений")
+                        await progress_cb("summarizing", 35, "Суммаризация вложений")
                     stripped = await self._entity_service.call_summarize_attachment(
                         stripped, filename
                     )
@@ -72,7 +72,7 @@ class NoteProcessingService:
                         raise ValueError(
                             f"Суммаризация вложения '{filename}' (file_id={file_id}) не вернула текст."
                         )
-                parts.append(stripped)
+                parts.append(f"=== Вложение {i + 1}: {filename} ===\n{stripped}")
 
         combined = "\n\n---\n\n".join(parts)
         if not combined.strip():
@@ -98,7 +98,7 @@ class NoteProcessingService:
             progress_cb=progress_cb,
         )
         if progress_cb:
-            await progress_cb("analyzing", 65, "Анализ текста")
+            await progress_cb("preparing", 50, "Подготовка анализа")
         namespace = note.namespace or "default"
 
         req = AIAnalyzeRequest(
@@ -113,16 +113,28 @@ class NoteProcessingService:
             req,
             check_duplicates=config.check_duplicates,
             note_id=note_id,
+            progress_cb=progress_cb,
         )
 
-    async def apply(self, note_id: str) -> AIAnalysisDraftApplyResult:
+    async def apply(
+        self,
+        note_id: str,
+        *,
+        progress_cb: Optional[ProgressCb] = None,
+    ) -> AIAnalysisDraftApplyResult:
         """Шаг 2: применение черновика анализа (создание entities + relationships)."""
         result = await self._entity_service.apply_analysis_draft(note_id)
-        # Все найденные AI сущности должны быть связаны с заметкой через mentions.
-        # AI не всегда создаёт эти связи в черновике — создаём принудительно.
         all_entity_ids = result.created_entity_ids + result.updated_entity_ids
+
+        note_voice_id = await self._entity_service.get_note_voice_entity_id(note_id)
+        sync_entity_ids = list(all_entity_ids)
+        if note_voice_id and note_voice_id not in sync_entity_ids:
+            sync_entity_ids.append(note_voice_id)
+
+        if progress_cb:
+            await progress_cb("linking", 94, "Связывание упоминаний")
         await self._entity_service.sync_note_mentions_from_applied_entities(
-            note_id, all_entity_ids
+            note_id, sync_entity_ids
         )
         await self._entity_service.enrich_note_description_with_mention_tokens(note_id)
         return result
@@ -137,8 +149,8 @@ class NoteProcessingService:
         """Полный конвейер: analyze + apply."""
         await self.analyze(note_id, config, progress_cb=progress_cb)
         if progress_cb:
-            await progress_cb("applying", 85, "Применение результатов")
-        apply_result = await self.apply(note_id)
+            await progress_cb("applying", 88, "Применение результатов")
+        apply_result = await self.apply(note_id, progress_cb=progress_cb)
         return NoteProcessingResult(
             note_id=note_id,
             created_entity_ids=apply_result.created_entity_ids,
