@@ -228,7 +228,7 @@ class LLMModelsService:
                 offset=0,
             )
         )
-        return [task for task in schedules if self._is_compatible_background_schedule(task, interval)]
+        return [task for task in schedules.items if self._is_compatible_background_schedule(task, interval)]
 
     @staticmethod
     def _pick_single_or_raise(tasks: list[PlatformScheduledTask], status: ScheduledTaskStatus) -> PlatformScheduledTask | None:

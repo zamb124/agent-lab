@@ -57,7 +57,7 @@ async def search_in_namespace(
     settings = get_settings()
     
     try:
-        rag_provider = get_rag_provider(provider) if provider else container.rag_provider
+        rag_provider = get_rag_provider(provider) if provider else get_rag_provider()
         provider_name = provider or settings.rag.default_provider
         
         results = await rag_provider.search(
@@ -127,7 +127,7 @@ async def global_search(
     settings = get_settings()
     
     try:
-        rag_provider = get_rag_provider(provider) if provider else container.rag_provider
+        rag_provider = get_rag_provider(provider) if provider else get_rag_provider()
         provider_name = provider or settings.rag.default_provider
         
         results = await rag_provider.search_multiple_namespaces(

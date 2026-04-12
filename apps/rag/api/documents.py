@@ -85,7 +85,7 @@ async def ingest_text(
         merged_meta["document_id"] = request.document_id
 
     settings = get_settings()
-    rag_provider = get_rag_provider(provider) if provider else container.rag_provider
+    rag_provider = get_rag_provider(provider) if provider else get_rag_provider()
     provider_name = provider or settings.rag.default_provider
 
     doc = await rag_provider.upload_document_from_text(
@@ -114,7 +114,7 @@ async def list_documents(
     """Список документов в namespace (completed + in-progress)."""
     from core.config import get_settings
     settings = get_settings()
-    rag_provider = get_rag_provider(provider) if provider else container.rag_provider
+    rag_provider = get_rag_provider(provider) if provider else get_rag_provider()
     provider_name = provider or settings.rag.default_provider
 
     completed_docs = await rag_provider.list_documents(namespace_id, limit=limit)
@@ -239,7 +239,7 @@ async def delete_document(
     if status is not None:
         await status_repo.delete_by_document_id(document_id)
 
-    rag_provider = get_rag_provider(provider) if provider else container.rag_provider
+    rag_provider = get_rag_provider(provider) if provider else get_rag_provider()
     success = await rag_provider.delete_document(namespace_id, document_id)
 
     if not success and status is None and file_record is None:

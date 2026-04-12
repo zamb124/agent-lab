@@ -7,11 +7,13 @@ RAG-провайдер из Pydantic ``BaseSettings``: выбор ключа, ``
 
 from __future__ import annotations
 
+import json
 import logging
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass, is_dataclass
 from typing import TYPE_CHECKING, Any, Optional
 
 from core.config.base import BaseSettings, get_settings
+from core.context import get_context
 
 if TYPE_CHECKING:
     from core.rag.base_provider import BaseRAGProvider
@@ -19,6 +21,9 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 _providers_cache: dict[str, type[Any]] | None = None
+_provider_instances_cache: dict[str, Any] = {}
+_RAG_EMBEDDING_OVERRIDE_KEY = "rag_embedding_override"
+_RAG_EMBEDDING_ALLOWED_PROVIDERS = {"openrouter", "provider_litserve"}
 
 
 def _providers() -> dict[str, type[Any]]:
@@ -57,7 +62,7 @@ def resolve_rag_provider_bundle(
 
     rag = settings.rag
     key = rag.get_enabled_provider_key(provider_name)
-    provider_config = rag.providers[key].model_dump()
+    provider_config = dict(rag.providers[key].model_dump())
     embedding_runtime: Any | None = None
     if key == "pgvector":
         embedding_runtime = resolve_rag_embedding_runtime(
@@ -65,11 +70,53 @@ def resolve_rag_provider_bundle(
             settings.llm,
             settings.provider_litserve,
         )
+        if provider_name is None:
+            override = _resolve_company_rag_embedding_override()
+            if override is not None:
+                embedding_override = rag.embedding.model_copy(deep=True)
+                embedding_override.provider = override["provider"]
+                embedding_override.api.model = override["model"]
+                embedding_runtime = resolve_rag_embedding_runtime(
+                    embedding_override,
+                    settings.llm,
+                    settings.provider_litserve,
+                )
     return ResolvedRagProvider(
         provider_key=key,
         provider_config=provider_config,
         embedding_runtime=embedding_runtime,
     )
+
+
+def _resolve_company_rag_embedding_override() -> dict[str, str] | None:
+    context = get_context()
+    if context is None or context.active_company is None:
+        return None
+    metadata = context.active_company.metadata
+    raw = metadata.get(_RAG_EMBEDDING_OVERRIDE_KEY)
+    if raw is None:
+        return None
+    if not isinstance(raw, dict):
+        raise ValueError("company.metadata.rag_embedding_override должен быть объектом")
+    provider_raw = raw.get("provider")
+    model_raw = raw.get("model")
+    if not isinstance(provider_raw, str) or provider_raw not in _RAG_EMBEDDING_ALLOWED_PROVIDERS:
+        raise ValueError("company.metadata.rag_embedding_override.provider имеет недопустимое значение")
+    if not isinstance(model_raw, str) or not model_raw.strip():
+        raise ValueError("company.metadata.rag_embedding_override.model должен быть непустой строкой")
+    return {"provider": provider_raw, "model": model_raw.strip()}
+
+
+def _bundle_cache_key(bundle: ResolvedRagProvider) -> str:
+    embedding_runtime: Any = bundle.embedding_runtime
+    if embedding_runtime is not None and is_dataclass(embedding_runtime):
+        embedding_runtime = asdict(embedding_runtime)
+    payload = {
+        "provider_key": bundle.provider_key,
+        "provider_config": bundle.provider_config,
+        "embedding_runtime": embedding_runtime,
+    }
+    return json.dumps(payload, sort_keys=True, ensure_ascii=True)
 
 
 def get_rag_provider(provider_name: Optional[str] = None) -> BaseRAGProvider:
@@ -79,6 +126,10 @@ def get_rag_provider(provider_name: Optional[str] = None) -> BaseRAGProvider:
     """
     settings = get_settings()
     bundle = resolve_rag_provider_bundle(settings, provider_name)
+    cache_key = _bundle_cache_key(bundle)
+    cached = _provider_instances_cache.get(cache_key)
+    if cached is not None:
+        return cached
     registry = _providers()
 
     if bundle.provider_key not in registry:
@@ -96,6 +147,7 @@ def get_rag_provider(provider_name: Optional[str] = None) -> BaseRAGProvider:
     else:
         instance = provider_class(bundle.provider_config)
 
+    _provider_instances_cache[cache_key] = instance
     logger.info("Создан RAG провайдер: %s", bundle.provider_key)
     return instance
 
@@ -107,6 +159,7 @@ def reset_default_rag_provider_cache() -> None:
     """Сброс синглтона провайдера после смены глобальных настроек (например ``set_settings``)."""
     global _default_rag_provider
     _default_rag_provider = None
+    _provider_instances_cache.clear()
 
 
 def get_default_rag_provider() -> BaseRAGProvider:

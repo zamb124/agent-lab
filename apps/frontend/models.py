@@ -2,7 +2,7 @@
 Модели данных для Frontend сервиса
 """
 from datetime import datetime, timezone
-from typing import Optional, List, Dict, Any
+from typing import Optional, List, Dict, Any, Literal
 from pydantic import BaseModel, Field
 
 
@@ -58,6 +58,21 @@ class CompanySettingsUpdate(BaseModel):
     name: Optional[str] = Field(default=None, description="Название компании")
     monthly_budget: Optional[float] = Field(default=None, description="Месячный лимит")
     metadata: Optional[Dict[str, Any]] = Field(default=None, description="Дополнительные данные")
+    rag_embedding: Optional["RagEmbeddingOverrideUpdate"] = Field(
+        default=None,
+        description="Переопределение embedding модели RAG для компании",
+    )
+
+
+class RagEmbeddingOverrideUpdate(BaseModel):
+    """Переопределение embedding runtime для RAG на уровне компании."""
+
+    enabled: bool = Field(default=False, description="Включить company override")
+    provider: Optional[Literal["openrouter", "provider_litserve"]] = Field(
+        default=None,
+        description="Провайдер эмбеддингов",
+    )
+    model: Optional[str] = Field(default=None, description="ID embedding модели")
 
 
 class ServiceStatus(BaseModel):

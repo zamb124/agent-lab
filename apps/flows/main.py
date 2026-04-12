@@ -156,8 +156,9 @@ async def on_startup(app: FastAPI, container, settings: FlowSettings):
                 session_id="system-scheduler-sync",
             )
             set_context(scheduler_context)
-            synced_count = await container.llm_models_service.sync_models()
-            logger.info(f"Синхронизировано LLM моделей: {synced_count}")
+            synced_counts = await container.llm_models_service.sync_all_providers()
+            total_synced = sum(synced_counts.values())
+            logger.info(f"Синхронизировано LLM моделей: {total_synced} ({synced_counts})")
             # Запуск фоновой синхронизации каждые 60 секунд
             await container.llm_models_service.start_background_sync(interval=60)
         except Exception as e:

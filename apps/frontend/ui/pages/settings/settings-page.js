@@ -191,6 +191,49 @@ export class SettingsPage extends PlatformElement {
                         </div>
                     </div>
 
+                    <div class="form-group">
+                        <label class="form-label">${td('settings_page.rag_override_title')}</label>
+                        <input
+                            type="checkbox"
+                            id="rag-override-enabled"
+                            ?checked=${settings?.rag_embedding?.enabled ?? false}
+                        />
+                        <div class="form-help">
+                            ${td('settings_page.rag_override_help')}
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label">${td('settings_page.rag_provider_label')}</label>
+                        <select
+                            class="form-input"
+                            id="rag-provider"
+                        >
+                            <option value="provider_litserve" ?selected=${(settings?.rag_embedding?.provider ?? '') === 'provider_litserve'}>
+                                provider_litserve
+                            </option>
+                            <option value="openrouter" ?selected=${(settings?.rag_embedding?.provider ?? '') === 'openrouter'}>
+                                openrouter
+                            </option>
+                        </select>
+                        <div class="form-help">
+                            ${td('settings_page.rag_provider_default', { provider: settings?.rag_embedding?.default_provider ?? '' })}
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label">${td('settings_page.rag_model_label')}</label>
+                        <input
+                            type="text"
+                            class="form-input"
+                            value="${settings?.rag_embedding?.model ?? ''}"
+                            id="rag-model"
+                        />
+                        <div class="form-help">
+                            ${td('settings_page.rag_model_default', { model: settings?.rag_embedding?.default_model ?? '' })}
+                        </div>
+                    </div>
+
                     <button type="submit" class="primary-button">
                         ${td('settings_page.save')}
                     </button>
@@ -204,10 +247,18 @@ export class SettingsPage extends PlatformElement {
         
         const name = this.shadowRoot.getElementById('company-name').value;
         const monthlyBudget = parseFloat(this.shadowRoot.getElementById('monthly-budget').value);
+        const ragOverrideEnabled = this.shadowRoot.getElementById('rag-override-enabled').checked;
+        const ragProvider = this.shadowRoot.getElementById('rag-provider').value;
+        const ragModel = this.shadowRoot.getElementById('rag-model').value;
         
         await this.services.get('settings').updateCompanySettings({
             name,
             monthly_budget: monthlyBudget,
+            rag_embedding: {
+                enabled: ragOverrideEnabled,
+                provider: ragProvider,
+                model: ragModel,
+            },
         });
         
         FrontendStore.setSettingsLoading(true);
