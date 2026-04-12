@@ -22,6 +22,7 @@ from apps.flows.src.runtime.nodes import LlmNode, CodeNode
 from apps.flows.src.runtime.flow import Flow
 from apps.flows.src.models import ResourceType, ResourceReference
 from core.state import ExecutionState
+from tests.fixtures.clients import patch_service_client_rag_asgi as _patch_service_client_rag_asgi
 
 
 def make_state(**kwargs) -> ExecutionState:
@@ -819,11 +820,10 @@ async def execute(args, state):
 # RAG Resource
 # =============================================================================
 
+
 class TestRAGResource:
     """
-    RAG resource: семантический поиск по документам.
-    
-    Использует pgvector напрямую через core/rag.
+    RAG resource: загрузка текста через провайдер, поиск через HTTP RAG API (ServiceClient).
     """
 
     @pytest.fixture
@@ -832,16 +832,26 @@ class TestRAGResource:
         return f"test_resources_{uuid.uuid4().hex[:8]}"
 
     @pytest.mark.asyncio
-    async def test_rag_resource_add_and_search(self, unique_namespace, rag_provider_pgvector):
+    async def test_rag_resource_add_and_search(
+        self,
+        unique_namespace,
+        rag_provider_pgvector,
+        rag_app,
+        auth_headers_system,
+        monkeypatch,
+    ):
         """
         RAG resource: добавление документа и поиск.
         """
+        _patch_service_client_rag_asgi(monkeypatch, rag_app, auth_headers_system)
+
         rag_resource = {
             "type": "rag",
             "config": {
                 "namespace": unique_namespace,
                 "provider": "pgvector",
-                "default_top_k": 3
+                "default_top_k": 3,
+                "company_id": "system",
             }
         }
         
@@ -895,22 +905,40 @@ async def execute(args, state):
         assert len(result.search_results) > 0
 
     @pytest.mark.asyncio
-    async def test_rag_resource_in_react_tool(self, mock_llm_with_queue, unique_namespace, rag_provider_pgvector):
+    async def test_rag_resource_in_react_tool(
+        self,
+        mock_llm_with_queue,
+        unique_namespace,
+        rag_provider_pgvector,
+        rag_app,
+        auth_headers_system,
+        monkeypatch,
+    ):
         """
         RAG resource доступен в inline tool LlmNode.
         """
+        _patch_service_client_rag_asgi(monkeypatch, rag_app, auth_headers_system)
+
         rag_resource = {
             "type": "rag",
             "config": {
                 "namespace": unique_namespace,
                 "provider": "pgvector",
-                "default_top_k": 3
+                "default_top_k": 3,
+                "company_id": "system",
             }
         }
         
         # Сначала добавим документ
+        from apps.flows.src.container import get_container
         from apps.flows.src.resources.wrappers import RAGResource
-        rag = RAGResource(namespace=unique_namespace, provider="pgvector")
+
+        rag = RAGResource(
+            namespace=unique_namespace,
+            provider="pgvector",
+            company_id="system",
+            container=get_container(),
+        )
         await rag.add_document(
             document_id="faq_1",
             content="Return policy: You can return any item within 30 days of purchase.",

@@ -7,7 +7,7 @@
 
 from typing import Dict, Any, List, Optional
 from core.logging import get_logger
-from apps.rag_worker.tasks.indexing_tasks import upload_document_task, delete_document_task
+from apps.rag_worker.tasks.indexing_tasks import delete_document_task, index_rag_document_s3_task
 from apps.rag_worker.tasks.search_tasks import search_task
 from apps.rag_worker.tasks.maintenance_tasks import list_documents_task, cleanup_namespace_task
 
@@ -33,7 +33,11 @@ class RAGWorkerClient:
         metadata: Dict[str, Any],
     ) -> Dict[str, Any]:
         """Отправляет задачу индексации в RAG Worker."""
-        task = await upload_document_task.kiq(
+        company_id = metadata.get("company_id")
+        if not company_id or str(company_id).strip() == "":
+            raise ValueError("metadata.company_id обязателен для RAGWorkerClient.upload_document")
+        task = await index_rag_document_s3_task.kiq(
+            company_id=str(company_id).strip(),
             namespace_id=namespace_id,
             s3_key=s3_key,
             document_name=document_name,

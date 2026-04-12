@@ -71,7 +71,11 @@ async for event in subscriber.subscribe(task_id):
 
 ## HTTP клиенты
 
-### Межсервисное взаимодействие - ТОЛЬКО ServiceClient
+### Межсервисное взаимодействие: данные и HTTP
+
+**Данные:** если у процесса есть доступ к БД домена — **репозиторий**, не отдельный HTTP-клиент к peer-сервису (см. `repository_inter_service.mdc`).
+
+**HTTP к API другого сервиса** — **только** `ServiceClient` (прямой `httpx.AsyncClient` между сервисами запрещён).
 
 ```python
 from core.clients import ServiceClient
@@ -219,7 +223,7 @@ external_flow = await container.flow_discovery.register_agent(
 
 1. **TaskIQ:** Задачи регистрируются на брокере своего worker-модуля (`apps.flows_worker.broker`, `apps.idle_worker.broker`, `apps.rag_worker.broker`, `apps.sync.realtime.broker`, `apps.crm_worker.broker`); FIFO per session автоматически
 2. **Streaming:** LLM ТОЛЬКО через `.stream()`, события через Redis Pub/Sub
-3. **HTTP:** Межсервисное ТОЛЬКО через `ServiceClient`, внешнее через `get_httpx_client`
+3. **Данные между сервисами:** репозиторий при доступной БД (`repository_inter_service.mdc`). **HTTP между сервисами:** только `ServiceClient`; внешние API — `get_httpx_client`
 4. **A2A типы:** Используй типы из `a2a-sdk`, НЕ создавай свои
 5. **OAuth:** ВСЕГДА `use_proxy_from_config=False`
 6. **Интеграции:** Авторизация внешних сервисов — через `core/integrations/OAuthService`, не дублировать OAuth-логику в сервисах

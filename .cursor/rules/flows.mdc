@@ -333,7 +333,7 @@ output_mapping:
 | Тип | Класс | Назначение |
 |-----|-------|------------|
 | code | CodeModule | Python модуль с функциями/классами |
-| rag | RAGResource | Семантический поиск по документам |
+| rag | RAGResource | Семантический поиск и `add_document`; в **`RAGResourceConfig`**: **`search_options`** (channels, rrf_k, rerank и т.д.), опционально **`index_profile_config`** (нарезка/парсинг для `add_document`, см. **`rag.mdc`**) |
 | files | FilesResource | S3/MinIO файловое хранилище |
 | cache | CacheResource | Redis кэш |
 | llm | LLMResource | Вызов LLM моделей |

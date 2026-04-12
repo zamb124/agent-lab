@@ -6,7 +6,7 @@ RAG провайдер на базе pgvector (PostgreSQL).
 import logging
 import os
 import uuid
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Union
 
 import tiktoken
 from sqlalchemy import delete, func, select, text
@@ -14,6 +14,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 
 from core.db.models import VectorDocument
 from core.rag.base_provider import BaseRAGProvider
+from core.rag.embedding_runtime import RagEmbeddingRuntime
 from core.rag.models import RAGDocument, RAGNamespace, RAGSearchResult
 from core.files.reader import FileReader
 from core.files.reader.models import FileReadKind, FileReadResult, ReadPage
@@ -73,7 +74,11 @@ class PgVectorProvider(BaseRAGProvider):
     DEFAULT_CHUNK_SIZE = 1000
     DEFAULT_CHUNK_OVERLAP = 100
 
-    def __init__(self, config: Dict[str, Any], embedding_config: Optional[Dict[str, Any]] = None):
+    def __init__(
+        self,
+        config: Dict[str, Any],
+        embedding_config: Optional[Union[RagEmbeddingRuntime, Dict[str, Any]]] = None,
+    ):
         super().__init__(config)
 
         db_url = config.get("db_url")
@@ -100,7 +105,16 @@ class PgVectorProvider(BaseRAGProvider):
 
         timeout = config.get("timeout", 60)
 
-        emb_cfg = embedding_config or {}
+        if embedding_config is None:
+            emb_cfg: Dict[str, Any] = {}
+        elif isinstance(embedding_config, RagEmbeddingRuntime):
+            emb_cfg = {
+                "model": embedding_config.model,
+                "dimension": embedding_config.dimension,
+                "base_url": embedding_config.base_url,
+            }
+        else:
+            emb_cfg = embedding_config
         model = emb_cfg.get("model")
         dimension = emb_cfg.get("dimension")
         embedding_base_url = emb_cfg.get("base_url")
@@ -118,7 +132,11 @@ class PgVectorProvider(BaseRAGProvider):
             dimension=dimension,
         )
 
-        if os.environ.get("TESTING") == "true" or os.environ.get("RAG__EMBEDDING__MOCK") == "true":
+        if (
+            os.environ.get("TESTING") == "true"
+            or os.environ.get("RAG__EMBEDDING__MOCK") == "true"
+            or os.environ.get("PGVECTOR_TEST_MOCK_EMBEDDINGS") == "true"
+        ):
 
             async def fake_generate_embeddings(texts: List[str]) -> List[List[float]]:
                 dim = self._embedding_service.dimension or 1024
@@ -413,12 +431,13 @@ class PgVectorProvider(BaseRAGProvider):
             await session.commit()
 
         logger.info(f"Загружен документ '{document_name}' в {namespace_id}: {len(chunks)} chunks")
+        merged_doc_meta = {**metadata, "total_chunks": len(chunks)}
         return RAGDocument(
             document_id=document_id,
             name=document_name,
             namespace=namespace_id,
             status="completed",
-            metadata=metadata,
+            metadata=merged_doc_meta,
         )
 
     async def _upload_text_internal(

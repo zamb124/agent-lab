@@ -132,11 +132,13 @@ class SmartProxyClient:
 
     def _create_client(self, proxy_url: Optional[str] = None) -> httpx.AsyncClient:
         """Создаёт httpx клиент с указанным прокси"""
-        connect_timeout = 15.0
-
         if self.use_proxy:
             settings = self._get_settings()
             connect_timeout = settings.proxy.connect_timeout
+        else:
+            # Без прокси общий timeout задаёт read/write; connect не должен быть жёстко 15с
+            # (иначе OpenRouter/embeddings при медленном TLS падают с ConnectTimeout).
+            connect_timeout = float(self.timeout)
 
         return httpx.AsyncClient(
             timeout=httpx.Timeout(self.timeout, connect=connect_timeout),

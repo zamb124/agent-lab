@@ -37,7 +37,7 @@ class NamespaceRepository(BaseRepository[Namespace]):
         """ID = name"""
         return entity.name
     
-    async def list(self, *, limit: int, offset: int = 0) -> list[Namespace]:
+    async def list(self, *, limit: int, offset: int = 0) -> List[Namespace]:
         """
         Возвращает страницу namespace компании.
         Если пусто и offset=0 — создает default.
@@ -49,7 +49,7 @@ class NamespaceRepository(BaseRepository[Namespace]):
 
         return namespaces
 
-    async def list_by_company(self, company_id: str, *, limit: int = 200, offset: int = 0) -> list[Namespace]:
+    async def list_by_company(self, company_id: str, *, limit: int = 200, offset: int = 0) -> List[Namespace]:
         """Алиас — компания берется из контекста."""
         return await self.list(limit=limit, offset=offset)
 

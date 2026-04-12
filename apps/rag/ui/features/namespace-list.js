@@ -107,7 +107,8 @@ export class NamespaceList extends PlatformElement {
     async _createNamespace() {
         const modal = document.createElement('namespace-create-modal');
         document.body.appendChild(modal);
-        
+        modal.open = true;
+
         try {
             const data = await modal.waitForSubmit();
             

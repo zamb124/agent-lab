@@ -12,23 +12,11 @@ class RAGContainer(BaseContainer):
     """DI контейнер сервиса RAG."""
 
     @lazy
-    def rag_provider(self):
-        """Получает дефолтный RAG провайдер"""
-        from core.rag.factory import get_default_rag_provider
-        return get_default_rag_provider()
-
-    @lazy
-    def rag_repository(self):
-        """Получает RAG репозиторий"""
-        from core.rag.repository import RAGRepository
-        return RAGRepository()
-
-    @lazy
     def document_status_repository(self):
         """Получает репозиторий статусов документов"""
         from core.db.repositories.document_status_repository import DocumentStatusRepository
         return DocumentStatusRepository(self.db_url)
-    
+
 
 _container: Optional[RAGContainer] = None
 

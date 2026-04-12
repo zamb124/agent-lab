@@ -8,7 +8,7 @@ from typing import List, Optional, Dict, Any
 from fastapi import APIRouter, HTTPException, Query, UploadFile, File, Form
 from pydantic import BaseModel, ConfigDict, Field
 
-from apps.rag_worker.tasks.indexing_tasks import upload_document_task
+from apps.rag_worker.tasks.indexing_tasks import index_rag_document_s3_task
 from core.context import get_context
 from core.files.models import FileResponse
 from core.files.processors import FileProcessor
@@ -188,7 +188,7 @@ async def upload_document(
     metadata_dict["company_id"] = company_id
     metadata_dict["uploaded_by_user_id"] = user_id
 
-    task_id_placeholder = f"task_{document_id}"
+    task_id_placeholder = f"pending_{document_id}"
     status_repo = container.document_status_repository
     await status_repo.create_status(
         document_id=document_id,
@@ -196,14 +196,18 @@ async def upload_document(
         namespace_id=namespace_id,
         document_name=file.filename or "document",
         file_size=len(file_data),
+        extra_metadata={},
     )
 
-    task = await upload_document_task.kiq(
+    task = await index_rag_document_s3_task.kiq(
+        company_id=company_id,
         namespace_id=namespace_id,
         s3_key=file_record.s3_key,
         document_name=file.filename or "document",
-        metadata=metadata_dict,
+        metadata=dict(metadata_dict),
     )
+
+    await status_repo.finalize_enqueued_indexing_task(document_id, task.task_id)
 
     logger.info(
         f"Документ принят: doc_id={document_id}, task_id={task.task_id}, s3_key={file_record.s3_key}"

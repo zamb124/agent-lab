@@ -28,6 +28,7 @@ Python 3.13+, FastAPI, PostgreSQL (pgvector), Redis, TaskIQ, UV, Lit 3, Zustand.
 | sync_worker | — | TaskIQ worker realtime команд sync |
 | idle_worker | — | TaskIQ worker фоновых idle-задач (calendar/model sync и др.) |
 | scheduler | 8006 | Scheduler control-plane API + TaskIQ scheduler process |
+| provider_litserve | 8014 | LitServe: локальные эмбеддинги и реранк (`scripts/run.py provider-litserve`, модуль `apps.provider_litserve.main`) |
 
 ## ОБЯЗАТЕЛЬНО: Новое = правка рулов
 
@@ -199,13 +200,15 @@ service = container.entity_service
 
 Каскад: ENV (высший) -> conf.json/conf.local.json -> defaults. БД: `DATABASE__SHARED_URL`, `DATABASE__FLOWS_URL`, `DATABASE__CRM_URL`, `DATABASE__SYNC_URL`, `DATABASE__RAG_URL`, `DATABASE__REDIS_URL` (см. `configuration.mdc`, `database.mdc`). Устаревшее `DATABASE__URL` читается как алиас к `shared_url`.
 
+Инфраструктура: **`conf.json`** + чтение только через **Pydantic Settings** — см. `configuration.mdc`. Исключение только если это хранится в БД.
+
 ### Асинхронность
 
 ВСЁ асинхронное: `async/await` для БД, HTTP, LLM, тулов, фабрик.
 
 ### Межсервисное взаимодействие
 
-ТОЛЬКО `ServiceClient`. Запрещён прямой `httpx.AsyncClient` между сервисами.
+Данные peer-домена: **сначала репозиторий**, если у процесса есть доступ к соответствующей БД (см. `repository_inter_service.mdc`, `database.mdc`). HTTP к другому сервису — только когда контракт намеренно REST или БД недоступна; тогда **только** `ServiceClient`. Прямой `httpx.AsyncClient` между сервисами запрещён.
 
 ```python
 from core.clients import ServiceClient
@@ -291,6 +294,7 @@ Cursor = `base64url(json({"ts": "<created_at.isoformat()>", "id": "<entity_id>"}
 | Архитектурные принципы | `architecture.mdc` |
 | Конфигурация | `configuration.mdc` |
 | БД, репозитории, модели | `database.mdc` |
+| Доступ к данным между сервисами: репозиторий vs HTTP | `repository_inter_service.mdc` |
 | ExecutionState | `execution_state.mdc` |
 | CRM: entities, graph, grants | `crm.mdc` |
 | RAG: документы, поиск, pgvector | `rag.mdc` |
@@ -300,6 +304,8 @@ Cursor = `base64url(json({"ts": "<created_at.isoformat()>", "id": "<entity_id>"}
 | Frontend: Lit 3, Zustand, i18n | `frontend.mdc` |
 | UI Kit, Design System, палитра | `frontend.mdc` (секция «UI Kit и Design System») |
 | Тестирование, фикстуры | `testing.mdc` |
+| Стиль тестов: инварианты, БД/ORM, изоляция сущностей, DI, читаемость | `testing_invariants.mdc` |
+| Комментарии и описания: только текущее поведение | `documentation_as_is.mdc` |
 | TaskIQ: воркеры, задачи | `taskiq.mdc` |
 | Streaming, events, Redis Pub/Sub | `streaming.mdc` |
 | Интеграции: A2A, HTTP, OAuth | `integrations.mdc` |

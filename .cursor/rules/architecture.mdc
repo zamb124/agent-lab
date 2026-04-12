@@ -152,4 +152,5 @@ trace_id = context.trace_id
 ```
 
 Репозитории берут `company_id` из контекста автоматически.
+Межсервисный доступ к данным: приоритет репозитория при общей БД; `ServiceClient` — для намеренного HTTP API (`repository_inter_service.mdc`).
 `ServiceClient` передаёт `X-Trace-Id`, `Authorization`, `X-Company-Id`, `X-User-Id` из контекста.

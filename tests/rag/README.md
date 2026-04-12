@@ -17,12 +17,13 @@ tests/rag/
 ├── __init__.py
 ├── test_providers_api.py       # 5 тестов API провайдеров
 ├── test_namespaces_api.py      # 8 тестов CRUD namespaces
+├── test_index_profiles_api.py # REST /index-profiles (компания)
 ├── test_documents_api.py       # 10 тестов загрузки/удаления документов
 ├── test_search_api.py          # 8 тестов семантического поиска
 └── test_rag_integration.py     # 6 E2E тестов полных сценариев
 ```
 
-**Итого: 37+ тестов**
+**Итого: 39+ тестов**
 
 ## Фикстуры
 
@@ -128,7 +129,7 @@ os.environ.setdefault("RAG__DEFAULT_PROVIDER", "pgvector")
 os.environ.setdefault("RAG__PROVIDERS__PGVECTOR__ENABLED", "true")
 os.environ.setdefault("RAG__PROVIDERS__PGVECTOR__HOST", "localhost")
 os.environ.setdefault("RAG__PROVIDERS__PGVECTOR__PORT", "5433")
-os.environ.setdefault("RAG__PROVIDERS__PGVECTOR__EMBEDDING_API_KEY", "sk-test-key")
+os.environ.setdefault("LLM__OPENROUTER__API_KEY", "sk-test-key")
 ```
 
 ### Docker Compose (docker-compose-test.yaml)

@@ -65,15 +65,11 @@ os.environ.setdefault("OFFICE__CALLBACK_PUBLIC_BASE_URL", "http://testserver")
 os.environ.setdefault("RAG__ENABLED", "true")
 os.environ.setdefault("RAG__DEFAULT_PROVIDER", "pgvector")
 os.environ.setdefault("RAG__PROVIDERS__PGVECTOR__ENABLED", "true")
-os.environ.setdefault("RAG__PROVIDERS__PGVECTOR__EMBEDDING_API_KEY", "sk-test-key")
+os.environ.setdefault("LLM__OPENROUTER__API_KEY", "sk-test-key")
 
 # Сбрасываем settings singleton чтобы он пересоздался с тестовыми env переменными
 import core.config.base
 core.config.base._settings_instance = None
-
-# Сбрасываем RAG provider singleton
-import core.rag.factory
-core.rag.factory._default_rag_provider = None
 
 # Переопределяем TaskIQ broker ДО импорта приложения
 # Это критично! Broker должен быть переопределен до регистрации задач
@@ -1361,14 +1357,15 @@ async def rag_provider_pgvector():
     
     config = {
         "db_url": os.environ.get("DATABASE__RAG_URL", "postgresql+asyncpg://platform_user:admin@localhost:54322/platform_rag"),
-        "embedding_api_key": "sk-test-key",
         "chunk_size": 1000,
         "chunk_overlap": 100
     }
     
     embedding_config = {
+        "provider": "openrouter",
         "model": "text-embedding-3-small",
-        "dimension": 1024
+        "dimension": 1024,
+        "base_url": "https://api.openai.com/v1",
     }
     
     provider = PgVectorProvider(config, embedding_config)
@@ -1398,38 +1395,6 @@ def unique_namespace_name(unique_id):
             )
     """
     return f"test_namespace_{unique_id}"
-
-
-@pytest.fixture(autouse=True)
-async def mock_embeddings(monkeypatch):
-    """
-    Мокирует EmbeddingService для всех RAG тестов.
-    Генерирует фейковые embeddings вместо HTTP вызовов.
-    """
-    from core.rag.services.embedding_service import EmbeddingService
-    
-    async def fake_generate_embeddings(self, texts: List[str]) -> List[List[float]]:
-        """Возвращает фейковые embeddings фиксированной размерности"""
-        dimension = self.dimension or 1536
-        # Генерируем простые embeddings на основе хеша текста
-        embeddings = []
-        for text in texts:
-            # Используем hash текста для стабильных, но уникальных embeddings
-            hash_val = hash(text)
-            embedding = [float((hash_val + i) % 100) / 100.0 for i in range(dimension)]
-            embeddings.append(embedding)
-        return embeddings
-    
-    async def fake_generate_embedding(self, text: str) -> List[float]:
-        """Возвращает один фейковый embedding"""
-        embeddings = await fake_generate_embeddings(self, [text])
-        return embeddings[0]
-    
-    # Monkey-patch методы EmbeddingService
-    monkeypatch.setattr(EmbeddingService, "generate_embeddings", fake_generate_embeddings)
-    monkeypatch.setattr(EmbeddingService, "generate_embedding", fake_generate_embedding)
-    
-    yield
 
 
 @pytest_asyncio.fixture(scope="session", autouse=True)

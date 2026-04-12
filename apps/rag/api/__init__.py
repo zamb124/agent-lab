@@ -15,5 +15,3 @@ __all__ = [
     "documents_router",
     "search_router",
 ]
-
-

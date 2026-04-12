@@ -283,6 +283,24 @@ class BaseContainer:
         return ServiceClient()
 
     @lazy
+    def rag_provider(self):
+        """Дефолтный RAG-провайдер процесса: ``rag.default_provider`` (API сервиса rag, переключение провайдера)."""
+        from core.rag.factory import get_default_rag_provider
+
+        return get_default_rag_provider()
+
+    @lazy
+    def rag_repository(self):
+        """RAGRepository: in-process всегда ``pgvector`` (хранение в нашей БД); поиск через ``service_client``."""
+        from core.rag.factory import get_rag_provider
+        from core.rag.repository import RAGRepository
+
+        return RAGRepository(
+            get_rag_provider("pgvector"),
+            service_client=self.service_client,
+        )
+
+    @lazy
     def scheduler_client(self):
         """SchedulerClient для единого cron/control-plane."""
         from core.clients.scheduler_client import SchedulerClient

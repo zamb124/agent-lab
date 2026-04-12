@@ -59,16 +59,21 @@ async def test_search_documents(rag_client, unique_namespace_name, auth_headers_
     assert response.status_code == 200
     data = response.json()
     
-    assert "results" in data
-    assert "query" in data
-    assert "namespace_id" in data
-    assert "provider" in data
     assert len(data["results"]) > 0
-    
-    # Проверяем структуру результата
-    result = data["results"][0]
-    assert "content" in result
-    assert "score" in result
+    r0 = data["results"][0]
+    assert {
+        "query": data["query"],
+        "namespace_id": data["namespace_id"],
+        "provider": data["provider"],
+        "first_content_nonempty": bool(r0.get("content")),
+        "first_score_is_number": isinstance(r0.get("score"), (int, float)),
+    } == {
+        "query": "What is Python used for?",
+        "namespace_id": namespace_id,
+        "provider": "pgvector",
+        "first_content_nonempty": True,
+        "first_score_is_number": True,
+    }
 
 
 @pytest.mark.asyncio
@@ -105,8 +110,11 @@ async def test_search_documents_with_filters(rag_client, unique_namespace_name, 
         print(f"ERROR: {response.status_code} - {response.text}")
     assert response.status_code == 200
     data = response.json()
-    
-    assert "results" in data
+
+    assert {"has_results_key": "results" in data, "results_type": type(data["results"]).__name__} == {
+        "has_results_key": True,
+        "results_type": "list",
+    }
 
 
 @pytest.mark.asyncio
@@ -128,9 +136,8 @@ async def test_search_empty_namespace(rag_client, unique_namespace_name, auth_he
     )
     assert response.status_code == 200
     data = response.json()
-    
-    assert "results" in data
-    assert len(data["results"]) == 0
+
+    assert {"results": data["results"]} == {"results": []}
 
 
 @pytest.mark.asyncio
@@ -162,8 +169,9 @@ async def test_search_with_limit(rag_client, unique_namespace_name, auth_headers
     )
     assert response.status_code == 200
     data = response.json()
-    
-    assert len(data["results"]) <= 2
+
+    lr = len(data["results"])
+    assert {"len_results": lr, "within_limit": lr <= 2} == {"len_results": lr, "within_limit": True}
 
 
 @pytest.mark.asyncio
@@ -197,9 +205,11 @@ async def test_search_relevance_score(rag_client, unique_namespace_name, auth_he
     
     if len(data["results"]) > 0:
         result = data["results"][0]
-        assert "score" in result
-        assert isinstance(result["score"], (int, float))
-        assert result["score"] >= 0
+        assert {
+            "has_score": "score" in result,
+            "score_type_ok": isinstance(result["score"], (int, float)),
+            "score_nonneg": result["score"] >= 0,
+        } == {"has_score": True, "score_type_ok": True, "score_nonneg": True}
 
 
 @pytest.mark.asyncio
@@ -252,10 +262,13 @@ async def test_global_search(rag_client, unique_id, auth_headers_system):
     assert response.status_code == 200
     data = response.json()
     
-    assert "results" in data
-    assert "query" in data
-    assert "provider" in data
-    assert isinstance(data["results"], dict)
+    assert {
+        "keys": sorted(data.keys()),
+        "results_is_dict": isinstance(data["results"], dict),
+    } == {
+        "keys": sorted(["provider", "query", "results"]),
+        "results_is_dict": True,
+    }
 
 
 @pytest.mark.asyncio

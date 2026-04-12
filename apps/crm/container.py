@@ -23,7 +23,7 @@ class CRMContainer(BaseContainer):
     
     Добавляет CRM-специфичные:
     - CRMDatabase для реляционных данных (relationships, entity types, relationships)
-    - pgvector для семантического поиска (через RAGRepository)
+    - семантика сущностей через ``rag_repository`` (наследуется от ``BaseContainer``)
     
     Пример:
         container = get_crm_container()
@@ -66,6 +66,7 @@ class CRMContainer(BaseContainer):
     @lazy
     def entity_repository(self):
         from apps.crm.db.repositories.entity_repository import EntityRepository
+
         return EntityRepository(db=self.crm_db, rag_repository=self.rag_repository)
     
     @lazy
@@ -84,12 +85,6 @@ class CRMContainer(BaseContainer):
         return AccessGrantRepository(db=self.crm_db)
     
     # === Сервисы ===
-    
-    @lazy
-    def rag_repository(self):
-        """RAGRepository для работы с pgvector (сущности с embeddings)"""
-        from core.rag import RAGRepository
-        return RAGRepository()
     
     @lazy
     def attachment_service(self):

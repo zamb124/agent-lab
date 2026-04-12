@@ -46,8 +46,11 @@ class RAGResourceProvider(BaseResourceProvider):
         )
         
         return RAGResource(
-            namespace=config.namespace,
+            config.namespace,
+            self._container,
             provider=config.provider,
             default_top_k=config.default_top_k,
-            container=self._container,
+            company_id=config.company_id,
+            search_options=config.search_options,
+            index_profile_config=config.index_profile_config,
         )

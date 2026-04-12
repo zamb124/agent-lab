@@ -17,7 +17,9 @@ from alembic import context
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 
 from core.db.models.rag import (  # noqa: F401
-    Base, DocumentProcessingStatus, VectorDocument,
+    Base,
+    DocumentProcessingStatus,
+    VectorDocument,
 )
 
 config = context.config

@@ -1,47 +1,68 @@
 """
 RAGResource - wrapper для rag ресурса.
 
-Предоставляет доступ к семантическому поиску по документам.
-Использует напрямую RAG провайдеры из core/rag.
+``RAGRepository`` — ``container.rag_repository`` из ``BaseContainer`` (in-process провайдер — ``pgvector``,
+``service_client`` для HTTP-поиска).
+
+Поиск — ``RAGRepository.search_namespace`` (``ServiceClient`` → REST RAG API) с ``bind=self._bind``.
+
+Загрузка текста — in-process ``RAGRepository.provider.upload_document_from_text`` с тем же ``index_profile_config``.
 """
+
+from __future__ import annotations
 
 from typing import Any, Dict, List, Optional
 
-from core.logging import get_logger
-
-logger = get_logger(__name__)
+from core.clients.service_client import ServiceClientError
+from core.rag.index_profile_merge import merge_index_profile_dict_overlays
+from core.rag.rag_resource_bind import RagResourceBindParams
 
 
 class RAGResource:
     """
     Ресурс для работы с RAG namespace.
-    
+
     Пример:
+        kb = RAGResource(
+            "ns-1",
+            get_container(),
+            search_options={
+                "channels": {"semantic": True, "lexical": True},
+                "rerank": True,
+            },
+        )
         results = await kb.search("Как оформить возврат?", top_k=3)
-        for r in results:
-            print(r.content, r.score)
     """
-    
+
     def __init__(
         self,
         namespace: str,
+        container: Any,
+        *,
         provider: str = "pgvector",
         default_top_k: int = 5,
-        container: Any = None,
+        company_id: Optional[str] = None,
+        search_options: Optional[Dict[str, Any]] = None,
+        index_profile_config: Optional[Dict[str, Any]] = None,
     ):
-        self.namespace = namespace
-        self.provider = provider
-        self.default_top_k = default_top_k
         self._container = container
-        self._rag_provider = None
-    
-    def _get_provider(self):
-        """Получает RAG провайдер."""
-        if self._rag_provider is None:
-            from core.rag import get_default_rag_provider
-            self._rag_provider = get_default_rag_provider()
-        return self._rag_provider
-    
+        self._bind = RagResourceBindParams(
+            namespace=namespace,
+            provider=provider,
+            default_top_k=default_top_k,
+            company_id=company_id,
+            search_options=search_options,
+            index_profile_config=index_profile_config,
+        )
+
+    @property
+    def namespace(self) -> str:
+        return self._bind.namespace
+
+    @property
+    def provider(self) -> str:
+        return self._bind.provider
+
     async def search(
         self,
         query: str,
@@ -49,68 +70,78 @@ class RAGResource:
         filters: Optional[Dict[str, Any]] = None,
     ) -> List[Dict[str, Any]]:
         """
-        Семантический поиск по документам.
-        
-        Args:
-            query: Поисковый запрос
-            top_k: Количество результатов
-            filters: Фильтры метаданных
-            
-        Returns:
-            Список результатов с полями: content, score, document_id, metadata
+        Поиск по документам namespace через ``RAGRepository.search_namespace`` (дефолты из ``RagResourceBindParams``).
         """
-        provider = self._get_provider()
-        
-        results = await provider.search(
-            namespace_id=self.namespace,
+        limit = top_k if top_k is not None else self._bind.default_top_k
+
+        data = await self._container.rag_repository.search_namespace(
             query=query,
-            top_k=top_k or self.default_top_k,
+            limit=limit,
             filters=filters,
+            bind=self._bind,
         )
-        
-        # Преобразуем RAGSearchResult в dict
-        return [
-            {
-                "content": r.content,
-                "score": r.score,
-                "document_id": r.document_id,
-                "metadata": r.metadata,
-            }
-            for r in results
-        ]
-    
+
+        if not isinstance(data, dict):
+            raise ServiceClientError("rag search: ожидался JSON-объект")
+        raw_results = data.get("results")
+        if raw_results is None:
+            raise ServiceClientError("rag search: в ответе нет поля results")
+
+        out: List[Dict[str, Any]] = []
+        for item in raw_results:
+            if not isinstance(item, dict):
+                raise ServiceClientError("rag search: элемент results должен быть объектом")
+            md = item.get("metadata")
+            if md is None:
+                md = {}
+            elif not isinstance(md, dict):
+                raise ServiceClientError("rag search: metadata должен быть объектом")
+            out.append(
+                {
+                    "content": item["content"],
+                    "score": item["score"],
+                    "document_id": item["document_id"],
+                    "metadata": md,
+                }
+            )
+        return out
+
     async def add_document(
         self,
         document_id: str,
         content: str,
         metadata: Optional[Dict[str, Any]] = None,
         name: Optional[str] = None,
+        *,
+        index_profile_config: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
         """
-        Добавить документ в namespace.
-        
-        Args:
-            document_id: ID документа
-            content: Текст документа
-            metadata: Метаданные
-            name: Имя документа (по умолчанию = document_id)
-            
-        Returns:
-            Информация о добавленном документе
+        Загрузить текст документа в namespace.
         """
-        provider = self._get_provider()
-        
-        doc_metadata = metadata or {}
+        repo = self._container.rag_repository
+        doc_metadata = {**(metadata or {})}
         doc_metadata["document_id"] = document_id
-        
-        doc = await provider.upload_document_from_text(
-            namespace_id=self.namespace,
+
+        ipc_from_meta = doc_metadata.get("index_profile_config")
+        if not isinstance(ipc_from_meta, dict):
+            ipc_from_meta = None
+
+        ipc = merge_index_profile_dict_overlays(
+            self._bind.index_profile_config,
+            ipc_from_meta,
+            index_profile_config,
+        )
+        if ipc:
+            doc_metadata["index_profile_config"] = ipc
+
+        doc = await repo.provider.upload_document_from_text(
+            namespace_id=self._bind.namespace,
             text=content,
             document_name=name or document_id,
             metadata=doc_metadata,
         )
-        
+
         return {"document_id": doc.document_id, "status": "added"}
-    
+
     def __repr__(self) -> str:
-        return f"<RAGResource namespace={self.namespace} provider={self.provider}>"
+        return f"<RAGResource namespace={self._bind.namespace} provider={self._bind.provider}>"

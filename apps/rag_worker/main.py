@@ -6,6 +6,7 @@
 
 # Инициализируем settings
 from apps.rag_worker.config import get_settings
+
 get_settings()
 
 # Импортируем worker app

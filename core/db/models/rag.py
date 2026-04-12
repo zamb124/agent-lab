@@ -2,14 +2,24 @@
 Модели RAG-базы данных.
 
 Таблицы rag БД: document_processing_status, vector_documents.
+Конфигурация нарезки/парсинга — в ``rag.document_indexing`` (merged settings), не в БД.
 """
 
 from datetime import datetime, timezone
-from typing import Optional, Any
+from typing import Any, Optional
 
-from sqlalchemy import String, Text, DateTime, Integer, Index
+from sqlalchemy import (
+    Boolean,
+    Computed,
+    DateTime,
+    Index,
+    Integer,
+    String,
+    Text,
+    text,
+)
 from sqlalchemy.orm import Mapped, mapped_column
-from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy.dialects.postgresql import JSONB, TSVECTOR
 from pgvector.sqlalchemy import Vector
 
 from core.db.models.base import Base
@@ -19,12 +29,13 @@ class DocumentProcessingStatus(Base):
     """
     Статус обработки документов в RAG.
 
-    Статусы: pending, processing, completed, failed
+    Статусы: pending, processing, completed, failed.
+    Одна строка на document_id
     """
 
     __tablename__ = "document_processing_status"
 
-    document_id: Mapped[str] = mapped_column(String(255), primary_key=True, index=True)
+    document_id: Mapped[str] = mapped_column(String(255), primary_key=True)
     task_id: Mapped[str] = mapped_column(String(255), nullable=False, index=True, unique=True)
     namespace_id: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
     document_name: Mapped[str] = mapped_column(String(500), nullable=False)
@@ -68,6 +79,10 @@ class VectorDocument(Base):
     document_id: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
     document_name: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
     content: Mapped[str] = mapped_column(Text, nullable=False)
+    content_tsv: Mapped[Any] = mapped_column(
+        TSVECTOR,
+        Computed("to_tsvector('simple', coalesce(content, ''))", persisted=True),
+    )
     embedding = mapped_column(Vector(1024), nullable=True)
     chunk_index: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     total_chunks: Mapped[int] = mapped_column(Integer, default=1, nullable=False)
@@ -91,7 +106,9 @@ class VectorDocument(Base):
             postgresql_with={"m": 16, "ef_construction": 64},
             postgresql_ops={"embedding": "vector_cosine_ops"},
         ),
+        Index(
+            "ix_vd_content_tsv_gin",
+            "content_tsv",
+            postgresql_using="gin",
+        ),
     )
-
-    def __repr__(self) -> str:
-        return f"<VectorDocument(id='{self.id}', namespace='{self.namespace_id}', doc='{self.document_id}')>"

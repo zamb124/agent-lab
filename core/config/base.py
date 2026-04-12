@@ -23,6 +23,7 @@ from core.config.models import (
     AmoCRMConfig,
     ProxyConfig,
     PaymentProvidersConfig,
+    ProviderLitserveConfig,
     RAGConfig,
     SGRConfig,
     LegalConfig,
@@ -56,6 +57,7 @@ class BaseSettings(PydanticBaseSettings):
     auth: AuthConfig = Field(default_factory=AuthConfig)
     database: DatabaseConfig = Field(default_factory=DatabaseConfig)
     llm: LLMConfig = Field(default_factory=LLMConfig)
+    provider_litserve: ProviderLitserveConfig = Field(default_factory=ProviderLitserveConfig)
     server: ServerConfig = Field(default_factory=ServerConfig)
     worker: WorkerConfig = Field(default_factory=WorkerConfig)
     logging: LoggingConfig = Field(default_factory=LoggingConfig)
@@ -121,6 +123,7 @@ class BaseSettings(PydanticBaseSettings):
         json_config = load_merged_config()
         merged_data = {**json_config, **data}
         super().__init__(**merged_data)
+
 
 
 _settings_instance = None

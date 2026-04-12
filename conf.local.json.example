@@ -89,12 +89,10 @@
   },
   "rag": {
     "providers": {
-      "pgvector": {
-        "embedding_api_key": "YOUR_EMBEDDING_API_KEY"
-      },
       "agentset": {
         "api_key": "YOUR_AGENTSET_API_KEY",
-        "embedding_api_key": "YOUR_EMBEDDING_API_KEY"
+        "embedding_api_key": "YOUR_EMBEDDING_API_KEY",
+        "base_url": "https://api.agentset.ai"
       }
     }
   },

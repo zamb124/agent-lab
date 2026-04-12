@@ -1,7 +1,6 @@
 {
     "version": "0.2.0",
     "configurations": [
-
         {
             "name": "Python: Current File (uv)",
             "type": "debugpy",
@@ -18,19 +17,11 @@
             "name": "Run Server (run.py)",
             "type": "debugpy",
             "request": "launch",
-            "program": "${workspaceFolder}/run.py",
-            "console": "integratedTerminal",
-            "justMyCode": false,
-            "env": {
-                "PYTHONPATH": "${workspaceFolder}"
-            },
-            "python": "${workspaceFolder}/.venv/bin/python"
-        },
-        {
-            "name": "Run Worker (run_worker.py)",
-            "type": "debugpy",
-            "request": "launch",
-            "program": "${workspaceFolder}/run_worker.py",
+            "program": "${workspaceFolder}/scripts/run.py",
+            "args": [
+                "all"
+            ],
+            "cwd": "${workspaceFolder}",
             "console": "integratedTerminal",
             "justMyCode": false,
             "env": {
@@ -38,6 +29,5 @@
             },
             "python": "${workspaceFolder}/.venv/bin/python"
         }
-    ]
+    ],
 }
-

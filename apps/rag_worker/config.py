@@ -18,6 +18,6 @@ _settings: RAGWorkerSettings | None = None
 def get_settings() -> RAGWorkerSettings:
     global _settings
     if _settings is None:
-        merged = load_merged_config(service_name="rag_worker")
+        merged = load_merged_config(service_name="rag")
         _settings = RAGWorkerSettings(**merged)
     return _settings

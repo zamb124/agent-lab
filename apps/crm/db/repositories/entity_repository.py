@@ -2,7 +2,7 @@
 Репозиторий для CRM entities в PostgreSQL.
 
 Структурные данные -- в crm_entities (CRM DB).
-Семантический поиск -- через JOIN с vector_documents (shared DB).
+Семантический индекс и поиск -- ``RAGRepository`` (in-process pgvector, тот же слой, что у flows/rag).
 """
 
 import base64
@@ -28,7 +28,7 @@ class EntityRepository(BaseCRMRepository[CRMEntity]):
     Репозиторий для CRM entities.
 
     CRUD -- через crm_entities (PostgreSQL).
-    Семантический поиск -- через JOIN с vector_documents (pgvector).
+    Семантика -- ``RAGRepository`` (загрузка текста и поиск через провайдер pgvector).
     """
 
     def __init__(self, db: CRMDatabase, rag_repository: RAGRepository):
@@ -90,6 +90,13 @@ class EntityRepository(BaseCRMRepository[CRMEntity]):
 
         return "\n".join(parts)
 
+    def _rag_chunk_metadata(self, entity: CRMEntity) -> Dict[str, Any]:
+        return {
+            "document_id": entity.entity_id,
+            "company_id": entity.company_id,
+            "entity_type": entity.entity_type,
+        }
+
     @staticmethod
     def _parse_datetime_filter_value(value: Any) -> datetime:
         if isinstance(value, datetime):
@@ -123,7 +130,7 @@ class EntityRepository(BaseCRMRepository[CRMEntity]):
     # -- CRUD --
 
     async def create(self, entity: CRMEntity) -> CRMEntity:
-        """Создает entity в crm_entities + индексирует search_text в vector_documents."""
+        """Создает entity в crm_entities + ставит индексацию search_text в сервисе rag (воркер)."""
         async with self._db.session() as session:
             session.add(entity)
             await session.commit()
@@ -135,11 +142,7 @@ class EntityRepository(BaseCRMRepository[CRMEntity]):
             namespace_id=rag_namespace,
             text=search_text,
             document_name=entity.entity_id,
-            metadata={
-                "document_id": entity.entity_id,
-                "company_id": entity.company_id,
-                "entity_type": entity.entity_type,
-            },
+            metadata=self._rag_chunk_metadata(entity),
         )
 
         logger.info(f"Created entity: {entity.entity_id}, type={entity.full_type}")
@@ -183,7 +186,7 @@ class EntityRepository(BaseCRMRepository[CRMEntity]):
             return list(result.scalars().all())
 
     async def update(self, entity: CRMEntity) -> CRMEntity:
-        """Обновляет entity в crm_entities + переиндексирует в vector_documents."""
+        """Обновляет entity в crm_entities + переиндексирует через сервис rag."""
         async with self._db.session() as session:
             merged = await session.merge(entity)
             await session.commit()
@@ -197,18 +200,14 @@ class EntityRepository(BaseCRMRepository[CRMEntity]):
             namespace_id=rag_namespace,
             text=search_text,
             document_name=entity.entity_id,
-            metadata={
-                "document_id": entity.entity_id,
-                "company_id": entity.company_id,
-                "entity_type": entity.entity_type,
-            },
+            metadata=self._rag_chunk_metadata(entity),
         )
 
         logger.info(f"Updated entity: {entity.entity_id}, type={entity.full_type}")
         return merged
 
     async def delete(self, entity_id: str) -> bool:
-        """Удаляет entity из crm_entities + vector_documents."""
+        """Удаляет entity из crm_entities + индекс в сервисе rag."""
         async with self._db.session() as session:
             namespace_stmt = select(CRMEntity.namespace).where(CRMEntity.entity_id == entity_id)
             namespace_row = await session.execute(namespace_stmt)
