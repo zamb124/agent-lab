@@ -260,7 +260,12 @@ export class SyncApp extends PlatformApp {
             this._connectWs();
         } catch (err) {
             console.error('[SyncApp] initialization failed:', err);
-            this.redirectToAuth();
+            const message = err instanceof Error ? err.message : String(err);
+            if (message.includes('HTTP 401') || message.includes('HTTP 403')) {
+                this.redirectToAuth();
+                return;
+            }
+            this.error(message);
         }
     }
 

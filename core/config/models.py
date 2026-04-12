@@ -478,6 +478,7 @@ class ProviderLitserveInfraConfig(BaseModel):
     rerank_model_ids: list[str] = Field(default_factory=list)
     llm_model_ids: list[str] = Field(default_factory=list)
     hf_token: str | None = None
+    sqlite_path: str = "./data/provider_litserve/registry.db"
 
 
 class ProviderLitserveConfig(BaseModel):

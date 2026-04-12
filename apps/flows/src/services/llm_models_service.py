@@ -228,7 +228,13 @@ class LLMModelsService:
                 offset=0,
             )
         )
-        return [task for task in schedules.items if self._is_compatible_background_schedule(task, interval)]
+        if isinstance(schedules, list):
+            schedule_items = schedules
+        elif hasattr(schedules, "items"):
+            schedule_items = list(schedules.items)
+        else:
+            raise TypeError(f"Unexpected scheduler response type: {type(schedules)!r}")
+        return [task for task in schedule_items if self._is_compatible_background_schedule(task, interval)]
 
     @staticmethod
     def _pick_single_or_raise(tasks: list[PlatformScheduledTask], status: ScheduledTaskStatus) -> PlatformScheduledTask | None:

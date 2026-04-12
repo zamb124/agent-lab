@@ -1,0 +1,24 @@
+{
+  "sidebar": {
+    "models": "Models"
+  },
+  "models": {
+    "title": "Humanitec Models",
+    "subtitle": "Manage local LitServe model registry",
+    "kind": "Kind",
+    "hf_model": "HF model id",
+    "api_model": "API model id",
+    "updated_at": "Updated",
+    "error": "Error",
+    "add": "Add",
+    "retry": "Retry",
+    "delete": "Delete",
+    "loading": "Loading models...",
+    "empty": "No models yet",
+    "hf_placeholder": "Example: Qwen/Qwen2.5-1.5B-Instruct",
+    "api_placeholder": "Example: qwen/qwen2.5-1.5b-instruct",
+    "add_success": "Model added",
+    "retry_success": "Retry started",
+    "delete_success": "Model deleted"
+  }
+}

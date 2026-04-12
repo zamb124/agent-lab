@@ -74,12 +74,14 @@ services:
       - "8014:8014"
     volumes:
       - ./conf.json:/app/conf.json:ro
+      - provider_litserve_dev_data:/var/lib/provider_litserve
     environment:
       - PROVIDER_LITSERVE__INFRA__BACKEND=flagllm
       - PROVIDER_LITSERVE__INFRA__HOST=0.0.0.0
       - PROVIDER_LITSERVE__INFRA__GATEWAY_PORT=8014
       - PROVIDER_LITSERVE__INFRA__MODEL_ID=${PROVIDER_LITSERVE__INFRA__MODEL_ID:-BAAI/bge-reranker-v2-gemma}
       - PROVIDER_LITSERVE__INFRA__EMBEDDING_MODEL_ID=${PROVIDER_LITSERVE__INFRA__EMBEDDING_MODEL_ID:-BAAI/bge-m3}
+      - PROVIDER_LITSERVE__INFRA__SQLITE_PATH=/var/lib/provider_litserve/registry.db
       - HF_TOKEN=${HF_TOKEN:-}
     depends_on:
       postgres:
@@ -282,6 +284,8 @@ volumes:
   redis_dev_data:
     driver: local
   minio_dev_data:
+    driver: local
+  provider_litserve_dev_data:
     driver: local
 networks:
   dev-net:

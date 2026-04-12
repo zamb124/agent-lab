@@ -370,6 +370,7 @@
           "llm_model_ids": [
             "Qwen/Qwen2.5-1.5B-Instruct"
           ],
+          "sqlite_path": "./data/provider_litserve/registry.db",
           "rerank_model_ids": [
             "baai/bge-reranker-v2-gemma"
           ],

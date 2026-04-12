@@ -12,6 +12,7 @@ from apps.provider_litserve.openai_server_contracts import (
     RerankQueryPassagesRequest,
     placeholder_rerank_scores,
 )
+from apps.provider_litserve.runtime_models import allowed_api_model_ids, resolve_hf_model_id
 
 Backend = Literal["placeholder", "flagllm"]
 
@@ -32,46 +33,45 @@ class LocalRerankerEngine:
     def __init__(self, cfg: ProviderLitserveInfraConfig) -> None:
         self._cfg = cfg
         self._backend: Backend = "placeholder"
-        self._model: Any = None
+        self._models: dict[str, Any] = {}
+        self._device: str = "cpu"
 
     def setup(self, device: str | None) -> None:
         self._backend = self._cfg.backend
         if self._backend == "placeholder":
-            self._model = None
+            self._models = {}
             return
+        if not device:
+            raise RuntimeError("LitServe: пустой device в setup()")
+        self._device = device
 
-        mid = self._cfg.model_id
+    def allowed_model_ids(self) -> frozenset[str]:
+        return allowed_api_model_ids("rerank", self._cfg)
+
+    def _ensure_model(self, hf_model_id: str) -> Any:
+        if hf_model_id in self._models:
+            return self._models[hf_model_id]
         try:
             from FlagEmbedding import FlagLLMReranker
         except ImportError as e:
             raise RuntimeError(
                 "backend=flagllm: установите группу зависимостей uv sync --group reranker-model"
             ) from e
-        if not device:
-            raise RuntimeError("LitServe: пустой device в setup()")
-        cuda = device.startswith("cuda")
+        cuda = self._device.startswith("cuda")
         bf16 = self._cfg.use_bf16 and cuda
         fp16 = (not bf16) and cuda and self._cfg.use_fp16
-        self._model = FlagLLMReranker(
-            mid,
+        model = FlagLLMReranker(
+            hf_model_id,
             use_fp16=fp16,
             use_bf16=bf16,
-            devices=[device],
+            devices=[self._device],
             batch_size=self._cfg.model_batch_size,
             max_length=self._cfg.max_length,
             trust_remote_code=True,
             normalize=self._cfg.normalize_scores,
         )
-
-    def allowed_model_ids(self) -> frozenset[str]:
-        configured_ids = [model_id.strip() for model_id in self._cfg.rerank_model_ids if model_id.strip()]
-        return frozenset(
-            {
-                self._cfg.rerank_openai_model_id.strip(),
-                self._cfg.model_id.strip(),
-                *configured_ids,
-            }
-        )
+        self._models[hf_model_id] = model
+        return model
 
     def rerank(self, query: str, passages: list[str], requested_model: str | None = None) -> dict[str, Any]:
         if requested_model is not None:
@@ -85,6 +85,13 @@ class LocalRerankerEngine:
                         "allowed": sorted(self.allowed_model_ids()),
                     },
                 )
+        canonical_model = requested_model.strip() if requested_model is not None else self._cfg.rerank_openai_model_id
+        hf_model_id = resolve_hf_model_id("rerank", canonical_model, self._cfg)
+        if hf_model_id is None:
+            raise HTTPException(
+                status_code=422,
+                detail={"reason": "unknown_rerank_model", "model": canonical_model},
+            )
         if not passages:
             return {"scores": []}
         if len(passages) > self._cfg.max_passages:
@@ -119,11 +126,9 @@ class LocalRerankerEngine:
 
         if self._backend == "placeholder":
             return {"scores": placeholder_rerank_scores(query, passages)}
-
-        if self._model is None:
-            raise HTTPException(status_code=503, detail={"reason": "reranker_not_initialized"})
+        model = self._ensure_model(hf_model_id)
         pairs = [(query, p) for p in passages]
-        raw = self._model.compute_score(
+        raw = model.compute_score(
             pairs,
             batch_size=self._cfg.model_batch_size,
             max_length=self._cfg.max_length,

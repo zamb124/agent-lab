@@ -8,7 +8,7 @@
 #   domain.com/crm         → crm       (8003)
 #   domain.com/rag         → rag       (8004)
 #   domain.com/sync        → sync      (8005, websocket)
-#   domain.com/provider-litserve → provider_litserve (8014)
+#   domain.com/litserve    → provider_litserve (8014)
 #   domain.com/documents   → office    (8008, BFF «Документы» + OnlyOffice BFF)
 #   onlyoffice.domain.com  → onlyoffice (порт публикации DS на хосте, обычно 8088)
 #   Весь трафик DS идёт на субдомен — нет проблем с /{semver}-{hex}/... путями,
@@ -31,7 +31,7 @@
 #       {"name": "crm",      "port": 8003, "path": "/crm",     "websocket": false},
 #       {"name": "rag",      "port": 8004, "path": "/rag",     "websocket": false},
 #       {"name": "sync",     "port": 8005, "path": "/sync",    "websocket": true},
-#       {"name": "provider_litserve", "port": 8014, "path": "/provider-litserve", "websocket": false},
+#       {"name": "provider_litserve", "port": 8014, "path": "/litserve", "websocket": false},
 #       {"name": "office",   "port": 8008, "path": "/documents","websocket": false}
 #     ],
 #     "onlyoffice_port": 8088,
@@ -157,13 +157,21 @@ EOF
 fi
 
 # Services + Endpoints для каждого сервиса
+# Опционально можно задать per-service upstream_host/upstream_ip в ingress.services[]
+# для выноса конкретного сервиса на отдельный физический сервер.
 log "Создаём Services и Endpoints"
 while IFS= read -r entry; do
   name="$(echo "${entry}" | jq -r '.name')"
   port="$(echo "${entry}" | jq -r '.port')"
+  upstream_host="$(echo "${entry}" | jq -r '.upstream_host // .upstream_ip // empty')"
+  if [[ -n "${upstream_host}" ]]; then
+    endpoint_ip="${upstream_host}"
+  else
+    endpoint_ip="${HOST_IP}"
+  fi
   svc="${name}-svc"
 
-  log "  ${svc} -> ${HOST_IP}:${port}"
+  log "  ${svc} -> ${endpoint_ip}:${port}"
   ${SSH} "microk8s kubectl apply -f -" <<EOF
 apiVersion: v1
 kind: Service
@@ -183,7 +191,7 @@ metadata:
   namespace: default
 subsets:
 - addresses:
-  - ip: ${HOST_IP}
+  - ip: ${endpoint_ip}
   ports:
   - port: ${port}
 EOF

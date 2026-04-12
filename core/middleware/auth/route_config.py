@@ -351,6 +351,15 @@ ROUTE_RULES: List[RouteRule] = [
     RouteRule("/sync/", auth_required=False, context_type="anonymous"),
     RouteRule("/sync/*", auth_required=False, context_type="anonymous"),
 
+    # LitServe Service
+    RouteRule("/litserve/ui/static/*", auth_required=False, context_type="anonymous"),
+    RouteRule("/litserve/api/*", context_type="api", auth_required=True),
+    RouteRule("/litserve", auth_required=False, context_type="anonymous"),
+    RouteRule("/litserve/", auth_required=False, context_type="anonymous"),
+    RouteRule("/litserve/*", auth_required=False, context_type="anonymous"),
+    # OpenAI-совместимые эндпоинты живут в корне хоста и авторизуются на уровне handler/dependency.
+    RouteRule("/v1/*", auth_required=False, context_type="anonymous"),
+
     # Documents (apps/office): BFF + Lit shell; OnlyOffice дергает download/callback по JWT в query / Bearer
     RouteRule("/documents/ui/static/*", auth_required=False, context_type="anonymous"),
     RouteRule("/documents/api/v1/office-download", auth_required=False, context_type="anonymous"),

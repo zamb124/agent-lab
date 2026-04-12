@@ -293,6 +293,12 @@ export class LLMConfigEditor extends PlatformElement {
         if (!extra.ok) {
             throw new Error(extra.error || this.i18n.t('llm_config_editor.err_extra_json'));
         }
+        if (this.model && this.models.length > 0) {
+            const modelExists = this.models.some((item) => item.id === this.model);
+            if (!modelExists) {
+                throw new Error(this.i18n.t('llm_config_editor.err_model_not_available'));
+            }
+        }
 
         const config = {
             model: this.model,
@@ -483,8 +489,24 @@ export class LLMConfigEditor extends PlatformElement {
         this.advancedOpen = !this.advancedOpen;
     }
 
+    _buildModelOptions() {
+        const options = [...this.models];
+        if (!this.model) {
+            return options;
+        }
+        const exists = options.some((item) => item.id === this.model);
+        if (!exists) {
+            options.unshift({
+                id: this.model,
+                name: `${this.model} ${this.i18n.t('llm_config_editor.model_missing_suffix')}`,
+            });
+        }
+        return options;
+    }
+
     render() {
         const showCredentials = this.provider !== '' && this.provider !== 'provider_litserve';
+        const modelOptions = this._buildModelOptions();
 
         return html`
             <div class="llm-island">
@@ -495,7 +517,7 @@ export class LLMConfigEditor extends PlatformElement {
                             ? html`<span class="loading">${this.i18n.t('llm_config_editor.loading')}</span>`
                             : html`
                                   <select class="config-select" .value=${this.model} @change=${this._onModelChange}>
-                                      ${this.models.map(
+                                      ${modelOptions.map(
                                           (m) => html`
                                               <option value=${m.id} ?selected=${m.id === this.model}>${m.name}</option>
                                           `,

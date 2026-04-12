@@ -377,6 +377,14 @@ export class DashboardPage extends PlatformElement {
                 description: tp('apps.documents.description'),
             },
         ];
+        if (this.auth.user?.company_id === 'system') {
+            services.push({
+                id: 'litserve',
+                name: td('console_home.litserve_name'),
+                logo: '/static/core/assets/service_logos/frontend_logo.svg',
+                description: td('console_home.litserve_description'),
+            });
+        }
 
         return html`
             <div class="services-section">
@@ -416,6 +424,7 @@ export class DashboardPage extends PlatformElement {
             rag: '8004',
             sync: '8005',
             documents: '8002',
+            litserve: '8014',
         };
 
         const targetPort = servicePortById[serviceId];

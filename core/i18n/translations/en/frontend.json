@@ -119,6 +119,7 @@
     "leads": "Leads",
     "tracing": "Tracing",
     "billing_admin": "Billing (admin)",
+    "litserve_service": "Humanitec Models",
     "docs_section": "Documentation",
     "docs_link": "Humanitec Docs"
   },
@@ -311,6 +312,8 @@
     "quick_embed_desc": "Create a new chat widget",
     "quick_settings_title": "Settings",
     "quick_settings_desc": "Company settings",
+    "litserve_name": "Humanitec Models",
+    "litserve_description": "Manage local LitServe models: add, download, and delete.",
     "err_unknown_service": "Unknown service for dashboard link: {{id}}"
   },
   "select_company": {

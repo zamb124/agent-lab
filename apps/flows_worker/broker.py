@@ -34,10 +34,12 @@ async def _initialize_worker_state(state: TaskiqState, service_name: str) -> Non
     """Инициализация контейнера при старте worker."""
     from apps.flows.config import get_settings
     from apps.flows.src.container import get_container
+    from core.config import set_settings as set_core_settings
     from core.tracing import setup_tracing
     from core.tracing.tracer import set_span_repository, set_tracing_service_name
 
     settings = get_settings()
+    set_core_settings(settings)
     setup_logging(service_name=service_name)
 
     container = get_container()

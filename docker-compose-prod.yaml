@@ -63,7 +63,7 @@ x-common-env: &common-env
   STT__CLOUD_RU__API_KEY: ${STT__CLOUD_RU__API_KEY:-${STT_CLOUD_RU_API_KEY:-}}
   # RAG pgvector (CRM, flows, сервис rag): OpenRouter embeddings. По умолчанию тот же ключ, что и LLM; иначе RAG_EMBEDDING_API_KEY в SSH/env деплоя.
   RAG__PROVIDERS__PGVECTOR__EMBEDDING_API_KEY: ${RAG_EMBEDDING_API_KEY:-${LLM_OPENROUTER_API_KEY:-}}
-  PROVIDER_LITSERVE__API__BASE_URL: http://provider_litserve:8014/v1
+  PROVIDER_LITSERVE__API__BASE_URL: ${PROVIDER_LITSERVE__API__BASE_URL:-http://provider_litserve:8014/v1}
   # OnlyOffice + публичный origin платформы (браузер и исходящие запросы DS). Переопределение: .env на сервере.
   SERVER__PLATFORM_PUBLIC_BASE_URL: ${SERVER__PLATFORM_PUBLIC_BASE_URL:-https://humanitec.ru}
   OFFICE__DOCUMENT_SERVER_PUBLIC_URL: ${OFFICE_DOCUMENT_SERVER_PUBLIC_URL:-https://onlyoffice.humanitec.ru}
@@ -274,6 +274,7 @@ services:
     volumes:
       - ./conf.json:/app/conf.json:ro
       - provider_litserve_logs:/app/logs
+      - provider_litserve_data:/var/lib/provider_litserve
     environment:
       <<: *common-env
       PROVIDER_LITSERVE__INFRA__BACKEND: flagllm
@@ -281,6 +282,7 @@ services:
       PROVIDER_LITSERVE__INFRA__GATEWAY_PORT: "8014"
       PROVIDER_LITSERVE__INFRA__MODEL_ID: ${PROVIDER_LITSERVE__INFRA__MODEL_ID:-BAAI/bge-reranker-v2-gemma}
       PROVIDER_LITSERVE__INFRA__EMBEDDING_MODEL_ID: ${PROVIDER_LITSERVE__INFRA__EMBEDDING_MODEL_ID:-BAAI/bge-m3}
+      PROVIDER_LITSERVE__INFRA__SQLITE_PATH: /var/lib/provider_litserve/registry.db
       HF_TOKEN: ${HF_TOKEN:-}
     depends_on:
       migrations:
@@ -574,6 +576,7 @@ volumes:
   rag_logs:
   sync_logs:
   provider_litserve_logs:
+  provider_litserve_data:
   office_logs:
   scheduler_api_logs:
   flows_worker_logs:

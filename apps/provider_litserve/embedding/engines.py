@@ -14,6 +14,7 @@ from apps.provider_litserve.openai_server_contracts import (
     build_openai_embeddings_response,
     normalize_embedding_inputs,
 )
+from apps.provider_litserve.runtime_models import allowed_api_model_ids, resolve_hf_model_id
 
 
 def parse_embedding_body(raw: Any) -> dict[str, Any]:
@@ -31,7 +32,7 @@ class LocalEmbeddingEngine:
 
     def __init__(self, cfg: ProviderLitserveInfraConfig) -> None:
         self._cfg = cfg
-        self._model: Any = None
+        self._models: dict[str, Any] = {}
         self._device = "cpu"
 
     def setup(self, device: str | None) -> None:
@@ -39,27 +40,21 @@ class LocalEmbeddingEngine:
         if device:
             self._device = device
 
-    def _ensure_model(self) -> None:
-        if self._model is not None:
-            return
-        mid = self._cfg.embedding_model_id
+    def _ensure_model(self, hf_model_id: str) -> Any:
+        if hf_model_id in self._models:
+            return self._models[hf_model_id]
         try:
             from sentence_transformers import SentenceTransformer
         except ImportError as e:
             raise RuntimeError(
                 "Локальный эмбеддер: установите зависимости (uv sync --group reranker-model)"
             ) from e
-        self._model = SentenceTransformer(mid, device=self._device)
+        model = SentenceTransformer(hf_model_id, device=self._device)
+        self._models[hf_model_id] = model
+        return model
 
     def allowed_model_ids(self) -> frozenset[str]:
-        configured_ids = [model_id.strip() for model_id in self._cfg.embedding_model_ids if model_id.strip()]
-        return frozenset(
-            {
-                self._cfg.embedding_openai_model_id.strip(),
-                self._cfg.embedding_model_id.strip(),
-                *configured_ids,
-            }
-        )
+        return allowed_api_model_ids("embedding", self._cfg)
 
     def embed(self, requested_model: str, inp: str | list[str]) -> dict[str, Any]:
         rid = requested_model.strip()
@@ -72,8 +67,11 @@ class LocalEmbeddingEngine:
                     "allowed": sorted(self.allowed_model_ids()),
                 },
             )
+        hf_model_id = resolve_hf_model_id("embedding", rid, self._cfg)
+        if hf_model_id is None:
+            raise HTTPException(status_code=422, detail={"reason": "unknown_embedding_model", "model": requested_model})
         texts = normalize_embedding_inputs(inp)
-        canonical = self._cfg.embedding_openai_model_id
+        canonical = rid
         if not texts:
             return build_openai_embeddings_response(model_id=canonical, vectors=[])
 
@@ -84,8 +82,8 @@ class LocalEmbeddingEngine:
                 detail={"reason": "too_many_inputs", "max": max_n, "got": len(texts)},
             )
 
-        self._ensure_model()
-        raw = self._model.encode(texts, normalize_embeddings=True)
+        model = self._ensure_model(hf_model_id)
+        raw = model.encode(texts, normalize_embeddings=True)
         if not isinstance(raw, np.ndarray):
             raw = np.asarray(raw)
         vectors = [raw[i].tolist() for i in range(raw.shape[0])]

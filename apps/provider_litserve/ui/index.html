@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, minimum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <meta name="robots" content="noindex,nofollow,noarchive">
+    <title>Humanitec Models</title>
+    <link rel="icon" type="image/svg+xml" href="/static/core/assets/service_logos/frontend_logo.svg">
+
+    <script type="importmap">
+    {
+        "imports": {
+            "lit": "/static/core/assets/js/lit/lit.min.js",
+            "lit/decorators.js": "/static/core/assets/js/lit/decorators.min.js",
+            "lit/directives/class-map.js": "/static/core/assets/js/lit/directives/class-map.min.js",
+            "lit/directives/repeat.js": "/static/core/assets/js/lit/directives/repeat.min.js",
+            "lit/directives/unsafe-html.js": "/static/core/assets/js/lit/directives/unsafe-html.min.js",
+            "lit/directives/when.js": "/static/core/assets/js/lit/directives/when.min.js",
+            "lit/directives/guard.js": "/static/core/assets/js/lit/directives/guard.min.js",
+            "@platform/lib/": "/static/core/lib/",
+            "@platform/services/": "/static/core/services/"
+        }
+    }
+    </script>
+
+    <link rel="stylesheet" href="/static/core/assets/css/tokens.css">
+    <link rel="stylesheet" href="/static/core/assets/css/reset.css">
+
+    <script type="module">
+        import '/static/core/lib/components/app-loader.js';
+    </script>
+
+    <style>
+        litserve-app:not(:defined) { opacity: 0; }
+
+        app-loader:not(:defined) {
+            position: fixed;
+            inset: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: var(--bg-gradient);
+            z-index: 9999;
+            color: rgba(255, 255, 255, 0.5);
+            font-family: 'SF Pro Display', -apple-system, BlinkMacSystemFont, sans-serif;
+        }
+
+        app-loader:not(:defined)::after {
+            content: 'LitServe';
+        }
+    </style>
+</head>
+<body class="platform-shell">
+    <app-loader id="app-loader" fullscreen></app-loader>
+    <litserve-app></litserve-app>
+    <script type="module" src="/litserve/ui/static/index.js"></script>
+    <script>
+        customElements.whenDefined('litserve-app').then(() => {
+            const loader = document.getElementById('app-loader');
+            if (loader) {
+                loader.classList.add('hidden');
+                setTimeout(() => loader.remove(), 400);
+            }
+        });
+    </script>
+</body>
+</html>

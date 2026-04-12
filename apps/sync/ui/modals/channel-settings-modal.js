@@ -1014,9 +1014,21 @@ export class ChannelSettingsModal extends PlatformModal {
         if (!this.open || !this.channel) {
             return html``;
         }
+        const createMode = this.createMode;
+        const primaryTitle = createMode
+            ? (this._savingProfile ? this._tp('channel_settings.creating') : this._tp('channel_settings.create'))
+            : (this._savingProfile ? this._tp('channel_settings.saving') : this._tp('channel_settings.save'));
         return html`
             <div class="actions">
                 <button type="button" class="btn" @click=${this._close}>${this._tp('chat_view.cancel')}</button>
+                <button
+                    type="button"
+                    class="btn btn-primary"
+                    ?disabled=${this._savingProfile}
+                    @click=${() => this._onChannelProfilePrimarySave()}
+                >
+                    ${primaryTitle}
+                </button>
             </div>
         `;
     }

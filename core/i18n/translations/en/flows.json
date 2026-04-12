@@ -661,7 +661,9 @@
     "label_extra_json": "Extra parameters (JSON)",
     "hint_extra_json": "Object merged into the request body last; overrides values from the fields above.",
     "err_extra_json": "Invalid JSON in extra parameters",
-    "err_extra_not_object": "Extra parameters must be a JSON object {}, not an array"
+    "err_extra_not_object": "Extra parameters must be a JSON object {}, not an array",
+    "err_model_not_available": "Current model is unavailable for the selected provider. Choose a model from the list.",
+    "model_missing_suffix": "(not in provider list)"
   },
   "test_panel": {
     "running": "Running...",

@@ -312,6 +312,16 @@ export class FrontendSidebar extends PlatformElement {
 
                 <div class="services-section" data-hide-collapsed>
                     <div class="section-title">${t('console_sidebar.docs_section')}</div>
+                    ${this.auth.user?.company_id === 'system'
+                        ? html`
+                              <a class="service-link" href="/litserve">
+                                  <span class="nav-icon">
+                                      <platform-icon name="database" size="18"></platform-icon>
+                                  </span>
+                                  <span>${t('console_sidebar.litserve_service')}</span>
+                              </a>
+                          `
+                        : ''}
                     <a class="service-link" href="/documentation">
                         <span class="nav-icon">
                             <platform-icon name="book-open" size="18"></platform-icon>

@@ -1,0 +1,24 @@
+{
+  "sidebar": {
+    "models": "Модели"
+  },
+  "models": {
+    "title": "Модели Humanitec",
+    "subtitle": "Управление локальным реестром моделей LitServe",
+    "kind": "Тип",
+    "hf_model": "HF model id",
+    "api_model": "API model id",
+    "updated_at": "Обновлено",
+    "error": "Ошибка",
+    "add": "Добавить",
+    "retry": "Повторить",
+    "delete": "Удалить",
+    "loading": "Загрузка моделей...",
+    "empty": "Моделей пока нет",
+    "hf_placeholder": "Например Qwen/Qwen2.5-1.5B-Instruct",
+    "api_placeholder": "Например qwen/qwen2.5-1.5b-instruct",
+    "add_success": "Модель добавлена",
+    "retry_success": "Повторная загрузка запущена",
+    "delete_success": "Модель удалена"
+  }
+}
