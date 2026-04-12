@@ -4,7 +4,6 @@
 import { html, css } from 'lit';
 import { PlatformApp, renderPlatformAppShell } from '@platform/lib/base/PlatformApp.js';
 import { CompaniesService } from '@platform/services/companies.service.js';
-import { TeamService } from '../services/team.service.js';
 import { ApiKeysService } from '../services/api-keys.service.js';
 import { BillingService } from '../services/billing.service.js';
 import { SettingsService } from '../services/settings.service.js';
@@ -12,7 +11,8 @@ import { ServicesStatusService } from '../services/services-status.service.js';
 import { EmbedService } from '../services/embed.service.js';
 import { FlowsCatalogService } from '../services/flows-catalog.service.js';
 import { SchedulerTasksService } from '../services/scheduler-tasks.service.js';
-import { FrontendStore } from '../store/frontend.store.js';
+import { FrontendStore, getConsoleViewForPath } from '../store/frontend.store.js';
+import { replaceLocationToLastVisitedNonFrontendService } from '@platform/lib/utils/last-visited-service.js';
 import '@platform/lib/components/layout/platform-island.js';
 import '@platform/lib/components/auth-modal.js';
 
@@ -119,13 +119,66 @@ export class FrontendApp extends PlatformApp {
         `
     ];
 
+    static properties = {
+        ...PlatformApp.properties,
+        _islandLoading: { state: true },
+    };
+
     constructor() {
         super();
         this._isLanding = false;
-        
-        this.state = this.use((s) => ({
-            currentView: s.ui.currentView,
-        }));
+        this._dashboardLastServiceRedirectDone = false;
+        this._islandLoading = false;
+        this._prevView = null;
+
+        this.state = this.use((s) => {
+            const view = s.ui.currentView;
+            if (this._prevView && this._prevView !== view) {
+                this._islandLoading = true;
+                requestAnimationFrame(() => {
+                    requestAnimationFrame(() => {
+                        this._islandLoading = false;
+                    });
+                });
+            }
+            this._prevView = view;
+            return { currentView: view };
+        });
+    }
+
+    /**
+     * Персистентный ui.currentView и URL: при загрузке и назад/вперёд берём view из pathname.
+     * Клик по сайдбару обновляет и store, и URL через FrontendStore.setCurrentView.
+     */
+    _syncCurrentViewFromPathname() {
+        const path = window.location.pathname;
+        const view = getConsoleViewForPath(path);
+        if (view) {
+            FrontendStore.setCurrentView(view, { skipUrlSync: true });
+        }
+    }
+
+    connectedCallback() {
+        this._syncCurrentViewFromPathname();
+        super.connectedCallback();
+        this._i18nUnsub = this.i18n.subscribe(() => this.requestUpdate());
+        this._onPopState = () => {
+            this._syncCurrentViewFromPathname();
+            this.requestUpdate();
+        };
+        window.addEventListener('popstate', this._onPopState);
+    }
+
+    disconnectedCallback() {
+        if (this._onPopState) {
+            window.removeEventListener('popstate', this._onPopState);
+            this._onPopState = null;
+        }
+        if (this._i18nUnsub) {
+            this._i18nUnsub();
+            this._i18nUnsub = null;
+        }
+        super.disconnectedCallback();
     }
 
     setupStore() {
@@ -136,12 +189,28 @@ export class FrontendApp extends PlatformApp {
         return '/frontend';
     }
 
+    _recordLastVisitedServiceFromApp() {
+        const path = window.location.pathname;
+        if (
+            path === '/' ||
+            path.startsWith('/products/') ||
+            path === '/policy' ||
+            path === '/terms' ||
+            path === '/login' ||
+            path === '/frontend/login' ||
+            path === '/select-company' ||
+            path === '/join'
+        ) {
+            return;
+        }
+        super._recordLastVisitedServiceFromApp();
+    }
+
     async initServices() {
         await super.initServices();
         
         const baseUrl = this.getBaseUrl();
         this.services.register('companies', new CompaniesService(baseUrl));
-        this.services.register('team', new TeamService(baseUrl));
         this.services.register('apiKeys', new ApiKeysService(baseUrl));
         this.services.register('billing', new BillingService(baseUrl));
         this.services.register('settings', new SettingsService(baseUrl));
@@ -164,12 +233,17 @@ export class FrontendApp extends PlatformApp {
             '/products/rag',
             '/products/crm',
             '/products/sync',
+            '/products/documents',
             '/dashboard',
             '/team',
             '/api-keys',
-            '/billing',
             '/embed-configs',
+            '/billing',
+            '/frontend/billing',
             '/scheduler-tasks',
+            '/lead-requests',
+            '/platform-tracing',
+            '/platform-billing',
         ]);
         if (exact.has(path)) {
             return true;
@@ -258,26 +332,50 @@ export class FrontendApp extends PlatformApp {
         return await this.auth.validateToken();
     }
     
+    _normalizeCurrentView(currentView) {
+        const normalizedView = String(currentView ?? '')
+            .trim()
+            .replace(/^\/+/, '')
+            .replace(/\/+$/, '')
+            .split('?')[0]
+            .split('#')[0]
+            .replace(/_/g, '-')
+            .toLowerCase();
+
+        if (!normalizedView) {
+            throw new Error('currentView must be a non-empty string');
+        }
+
+        return normalizedView;
+    }
+
     _renderContent() {
         const { currentView } = this.state.value;
+        const normalizedView = this._normalizeCurrentView(currentView);
 
-        switch (currentView) {
+        switch (normalizedView) {
             case 'dashboard':
                 return html`<dashboard-page></dashboard-page>`;
             case 'team':
                 return html`<team-page></team-page>`;
             case 'api-keys':
                 return html`<api-keys-page></api-keys-page>`;
-            case 'billing':
-                return html`<billing-page></billing-page>`;
             case 'embed-configs':
                 return html`<embed-configs-page></embed-configs-page>`;
+            case 'billing':
+                return html`<billing-page></billing-page>`;
             case 'settings':
                 return html`<settings-page></settings-page>`;
             case 'scheduler-tasks':
                 return html`<scheduler-tasks-page></scheduler-tasks-page>`;
+            case 'lead-requests':
+                return html`<leads-requests-page></leads-requests-page>`;
+            case 'platform-tracing':
+                return html`<tracing-page></tracing-page>`;
+            case 'platform-billing':
+                return html`<billing-admin-page></billing-admin-page>`;
             default:
-                throw new Error(`Unknown view: ${currentView}`);
+                throw new Error(`Unknown view: ${normalizedView}`);
         }
     }
 
@@ -288,21 +386,40 @@ export class FrontendApp extends PlatformApp {
         }
 
         if (!this._servicesInitialized || !this._authChecked) {
+            const t = (k) => this.i18n.t(k, {});
             return html`
                 <div class="loading-container">
                     <div class="loading-spinner"></div>
-                    <div class="loading-text">Загрузка Frontend...</div>
+                    <div class="loading-text">${t('frontend_app.loading')}</div>
                 </div>
             `;
         }
 
         if (!this._isAuthenticated) {
+            const t = (k) => this.i18n.t(k, {});
             return html`
                 <div class="loading-container">
                     <div class="loading-spinner"></div>
-                    <div class="loading-text">Перенаправление на вход...</div>
+                    <div class="loading-text">${t('frontend_app.redirect_login')}</div>
                 </div>
             `;
+        }
+
+        if (
+            !this._isLanding &&
+            window.location.pathname === '/dashboard' &&
+            !this._dashboardLastServiceRedirectDone
+        ) {
+            this._dashboardLastServiceRedirectDone = true;
+            if (replaceLocationToLastVisitedNonFrontendService()) {
+                const t = (k) => this.i18n.t(k, {});
+                return html`
+                    <div class="loading-container">
+                        <div class="loading-spinner"></div>
+                        <div class="loading-text">${t('frontend_app.loading_short')}</div>
+                    </div>
+                `;
+            }
         }
 
         if (this._isLanding) {
@@ -350,6 +467,10 @@ export class FrontendApp extends PlatformApp {
                 return html`<product-sync-page></product-sync-page>`;
             }
             
+            if (path === '/products/documents') {
+                return html`<product-documents-page></product-documents-page>`;
+            }
+            
             return html`<landing-page></landing-page>`;
         }
 
@@ -361,7 +482,7 @@ export class FrontendApp extends PlatformApp {
             </div>
 
             <div class="main">
-                <platform-island>
+                <platform-island ?loading=${this._islandLoading}>
                     ${this._renderContent()}
                 </platform-island>
             </div>

@@ -110,10 +110,17 @@ export class ThreadDrawer extends PlatformElement {
         super();
         this._open = SyncStore.state.ui.threadDrawerOpen;
         this._threadIds = SyncStore.getThreadIds();
+        /** @type {(() => void) | null} */
+        this._i18nUnsub = null;
+    }
+
+    _tp(key, params) {
+        return this.i18n.t(key, params ?? {});
     }
 
     connectedCallback() {
         super.connectedCallback();
+        this._i18nUnsub = this.i18n.subscribe(() => this.requestUpdate());
         this._unsubscribe = SyncStore.subscribe(state => {
             this._open = state.ui.threadDrawerOpen;
             this._threadIds = SyncStore.getThreadIds();
@@ -122,6 +129,8 @@ export class ThreadDrawer extends PlatformElement {
 
     disconnectedCallback() {
         super.disconnectedCallback?.();
+        this._i18nUnsub?.();
+        this._i18nUnsub = null;
         this._unsubscribe?.();
     }
 
@@ -141,12 +150,12 @@ export class ThreadDrawer extends PlatformElement {
             <div class="backdrop" @click=${this._close}></div>
             <aside class="drawer">
                 <div class="drawer-header">
-                    <span class="drawer-title">Треды</span>
-                    <button class="close-btn" @click=${this._close}>Закрыть</button>
+                    <span class="drawer-title">${this._tp('chat_view.threads_title')}</span>
+                    <button class="close-btn" @click=${this._close}>${this._tp('close')}</button>
                 </div>
                 <div class="drawer-body">
                     ${this._threadIds.length === 0 ? html`
-                        <div class="empty-text">Тредов пока нет.</div>
+                        <div class="empty-text">${this._tp('thread_drawer.no_threads')}</div>
                     ` : this._threadIds.map(tid => html`
                         <button class="thread-item" @click=${() => this._focusThread(tid)}>${tid}</button>
                     `)}

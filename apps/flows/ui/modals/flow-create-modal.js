@@ -4,49 +4,12 @@
 import { html, css } from 'lit';
 import { PlatformModal } from '@platform/lib/components/glass-modal.js';
 
-const FLOW_TEMPLATES = [
-    {
-        id: 'react',
-        name: 'React flow',
-        description: 'Flow с циклом ReAct: рассуждение + действие. Подходит для сложных задач с использованием инструментов.',
-        icon: 'ai',
-        color: 'linear-gradient(135deg, #10b981 0%, #06b6d4 100%)',
-    },
-    {
-        id: 'graph',
-        name: 'Graph flow',
-        description: 'Flow с графовой структурой выполнения. Подходит для последовательных задач с условными переходами.',
-        icon: 'workflow',
-        color: 'linear-gradient(135deg, #8b5cf6 0%, #ec4899 100%)',
-    },
-    {
-        id: 'multi_agent',
-        name: 'Multi-flow',
-        description: 'Несколько вложенных flow и llm_node. Для сложных многошаговых сценариев.',
-        icon: 'agent',
-        color: 'linear-gradient(135deg, #06b6d4 0%, #3b82f6 100%)',
-    },
-    {
-        id: 'function',
-        name: 'Function flow',
-        description: 'Flow на основе Python функций. Подходит для вычислений и трансформаций данных.',
-        icon: 'code',
-        color: 'linear-gradient(135deg, #84cc16 0%, #10b981 100%)',
-    },
-    {
-        id: 'tool',
-        name: 'Tool flow',
-        description: 'Узкий flow-инструмент. Выполняет одну задачу и может вызываться из других flow.',
-        icon: 'tool',
-        color: 'linear-gradient(135deg, #f97316 0%, #f59e0b 100%)',
-    },
-    {
-        id: 'external',
-        name: 'External flow',
-        description: 'Внешний flow (A2A). Подключается к существующему API или сервису через HTTP.',
-        icon: 'cloud',
-        color: 'linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%)',
-    },
+const TEMPLATE_IDS = [
+    { id: 'react', icon: 'ai', color: 'linear-gradient(135deg, #99A6F9 0%, #FF885C 100%)' },
+    { id: 'graph', icon: 'workflow', color: 'linear-gradient(135deg, #8b5cf6 0%, #ec4899 100%)' },
+    { id: 'multi_agent', icon: 'agent', color: 'linear-gradient(135deg, #06b6d4 0%, #3b82f6 100%)' },
+    { id: 'code', icon: 'code', color: 'linear-gradient(135deg, #84cc16 0%, #99A6F9 100%)' },
+    { id: 'external', icon: 'cloud', color: 'linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%)' },
 ];
 
 export class FlowCreateModal extends PlatformModal {
@@ -138,9 +101,20 @@ export class FlowCreateModal extends PlatformModal {
     constructor() {
         super();
         this.size = 'lg';
-        this.title = 'Создать flow';
-        this.subtitle = 'Выберите шаблон';
+        this.title = '';
+        this.subtitle = '';
         this.creating = false;
+    }
+
+    connectedCallback() {
+        super.connectedCallback();
+        this.title = this.i18n.t('flow_create.title');
+        this.subtitle = this.i18n.t('flow_create.subtitle');
+    }
+
+    _tagsFromGen(templateId) {
+        const raw = this.i18n.t(`flow_create.gen.${templateId}.tags`);
+        return raw.split(',').map((s) => s.trim()).filter(Boolean);
     }
 
     async _onTemplateSelect(template) {
@@ -154,7 +128,7 @@ export class FlowCreateModal extends PlatformModal {
             this.close();
         } catch (error) {
             console.error('[FlowCreateModal] Error selecting template:', error);
-            this.error(`Ошибка: ${error.message}`);
+            this.error(this.i18n.t('flow_create.err', { message: error.message }));
             this.creating = false;
         }
     }
@@ -162,19 +136,20 @@ export class FlowCreateModal extends PlatformModal {
     _generateDefaultConfig(template) {
         const timestamp = Date.now();
         const flowId = `${template.id}_flow_${timestamp}`;
-        
+        const g = (key) => this.i18n.t(`flow_create.gen.${template.id}.${key}`);
+
         switch (template.id) {
             case 'react':
                 return {
                     flow_id: flowId,
-                    name: `Новый ${template.name}`,
-                    description: 'Описание агента',
-                    tags: ['новый', 'react'],
+                    name: g('flow_name'),
+                    description: g('description'),
+                    tags: this._tagsFromGen('react'),
                     entry: 'main',
                     nodes: {
                         main: {
                             type: 'llm_node',
-                            prompt: 'Вы полезный ассистент, готовый помочь пользователю.',
+                            prompt: g('prompt'),
                             tools: [],
                             llm: {
                                 model: 'gpt-4o-mini',
@@ -191,9 +166,9 @@ export class FlowCreateModal extends PlatformModal {
             case 'graph':
                 return {
                     flow_id: flowId,
-                    name: `Новый ${template.name}`,
-                    description: 'Описание агента',
-                    tags: ['новый', 'graph'],
+                    name: g('flow_name'),
+                    description: g('description'),
+                    tags: this._tagsFromGen('graph'),
                     entry: 'start',
                     nodes: {
                         start: {
@@ -215,14 +190,14 @@ export class FlowCreateModal extends PlatformModal {
             case 'multi_agent':
                 return {
                     flow_id: flowId,
-                    name: `Новый ${template.name}`,
-                    description: 'Несколько вложенных flow',
-                    tags: ['новый', 'multi-flow'],
+                    name: g('flow_name'),
+                    description: g('description'),
+                    tags: this._tagsFromGen('multi_agent'),
                     entry: 'supervisor',
                     nodes: {
                         supervisor: {
                             type: 'llm_node',
-                            prompt: 'Вы супервизор, координирующий вложенные flow и tools. Делегируйте задачи подходящим нодам.',
+                            prompt: g('prompt'),
                             tools: [],
                             llm: {
                                 model: 'gpt-4o-mini',
@@ -236,50 +211,29 @@ export class FlowCreateModal extends PlatformModal {
                     variables: {}
                 };
             
-            case 'function':
+            case 'code':
                 return {
                     flow_id: flowId,
-                    name: `Новый ${template.name}`,
-                    description: 'Flow на основе функций',
-                    tags: ['новый', 'code'],
-                    entry: 'process',
+                    name: g('flow_name'),
+                    description: g('description'),
+                    tags: this._tagsFromGen('code'),
+                    entry: 'main',
                     nodes: {
-                        process: {
+                        main: {
                             type: 'code',
-                            code: 'def execute(args, state):\n    """Обработка данных"""\n    result = args.get("input", "")\n    return {"output": f"Обработано: {result}"}'
-                        }
+                            code: 'def execute(args, state):\n    """Process data"""\n    result = args.get("input", "")\n    return {"output": f"Processed: {result}"}',
+                        },
                     },
-                    edges: [
-                        { from_node: 'process', to_node: null }
-                    ],
-                    variables: {}
+                    edges: [{ from_node: 'main', to_node: null }],
+                    variables: {},
                 };
-            
-            case 'tool':
-                return {
-                    flow_id: flowId,
-                    name: `Новый ${template.name}`,
-                    description: 'Узкий flow-инструмент',
-                    tags: ['новый', 'code'],
-                    entry: 'tool_node',
-                    nodes: {
-                        tool_node: {
-                            type: 'code',
-                            code: 'def execute(args, state):\n    """Выполнение инструмента"""\n    return {"result": f"Результат: {args}"}',
-                        }
-                    },
-                    edges: [
-                        { from_node: 'tool_node', to_node: null }
-                    ],
-                    variables: {}
-                };
-            
+
             case 'external':
                 return {
                     flow_id: flowId,
-                    name: `Новый ${template.name}`,
-                    description: 'Внешний flow (A2A)',
-                    tags: ['новый', 'external'],
+                    name: g('flow_name'),
+                    description: g('description'),
+                    tags: this._tagsFromGen('external'),
                     type: 'external',
                     external_url: 'https://example.com/api/flow',
                     external_status: 'pending',
@@ -306,11 +260,11 @@ export class FlowCreateModal extends PlatformModal {
     renderBody() {
         return html`
             <div class="modal-message">
-                Выберите подходящий тип агента для вашей задачи
+                ${this.i18n.t('flow_create.intro')}
             </div>
             
             <div class="templates-grid">
-                ${FLOW_TEMPLATES.map(template => html`
+                ${TEMPLATE_IDS.map((template) => html`
                     <div 
                         class="template-card" 
                         style="--template-color: ${template.color}"
@@ -319,8 +273,8 @@ export class FlowCreateModal extends PlatformModal {
                         <div class="template-icon">
                             <platform-icon name="${template.icon}" size="32"></platform-icon>
                         </div>
-                        <div class="template-name">${template.name}</div>
-                        <div class="template-description">${template.description}</div>
+                        <div class="template-name">${this.i18n.t(`flow_create.templates.${template.id}.name`)}</div>
+                        <div class="template-description">${this.i18n.t(`flow_create.templates.${template.id}.description`)}</div>
                     </div>
                 `)}
             </div>
@@ -330,12 +284,10 @@ export class FlowCreateModal extends PlatformModal {
     renderFooter() {
         return html`
             <platform-button variant="secondary" @click=${() => this.close()}>
-                Отмена
+                ${this.i18n.t('flow_create.cancel')}
             </platform-button>
         `;
     }
 }
 
 customElements.define('flow-create-modal', FlowCreateModal);
-console.log('[FlowCreateModal] Custom element registered');
-

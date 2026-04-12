@@ -12,12 +12,12 @@ export function renderPanel(component) {
     return html`
         <div class="variables-panel-container">
             <div class="var-header">
-                <span class="var-header-title">Variables</span>
+                <span class="var-header-title">${component.i18n.t('variables_panel.title')}</span>
                 ${!isReadOnly ? html`
                     <button 
                         class="var-add-btn"
                         @click=${component._handleAdd}
-                        title="Добавить переменную"
+                        title=${component.i18n.t('variables_panel.add_title')}
                     >
                         <platform-icon name="plus" size="14"></platform-icon>
                     </button>
@@ -27,7 +27,7 @@ export function renderPanel(component) {
             <div class="var-list">
                 ${variables.length === 0 ? html`
                     <div class="var-empty">
-                        <span class="var-empty-text">Нет переменных</span>
+                        <span class="var-empty-text">${component.i18n.t('variables_panel.empty')}</span>
                     </div>
                 ` : ''}
 
@@ -54,7 +54,7 @@ export function renderPanel(component) {
                                 <button 
                                     class="var-delete"
                                     @click=${(e) => component._handleDelete(e, name)}
-                                    title="Удалить"
+                                    title=${component.i18n.t('variables_panel.delete_row_title')}
                                 >
                                     ×
                                 </button>

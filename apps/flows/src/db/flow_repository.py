@@ -8,15 +8,22 @@
 
 import json
 from datetime import datetime, timezone
-from typing import List, Optional
+from typing import Dict, List, Optional
 
 from apps.flows.src.models import FlowConfig
+from apps.flows.src.services.flow_contract_normalize import normalize_flow_config_dict
 
 from core.db import BaseRepository
 from core.db import Storage
 from core.logging import get_logger
 
 logger = get_logger(__name__)
+
+
+def _flow_config_from_storage_json(raw: str) -> FlowConfig:
+    payload = json.loads(raw)
+    normalized = normalize_flow_config_dict(payload)
+    return FlowConfig.model_validate(normalized)
 
 
 class FlowRepository(BaseRepository[FlowConfig]):
@@ -81,8 +88,13 @@ class FlowRepository(BaseRepository[FlowConfig]):
         """
         Получает последнюю версию из таблицы flows.
         """
-        # Используем базовый метод get из BaseRepository
-        return await super().get(flow_id)
+        base_key = self._get_key(flow_id)
+        final_key = self._build_final_key(base_key)
+        table_name = self._get_table_name()
+        data = await self._storage._get_with_session_and_table(final_key, table_name)
+        if data is None:
+            return None
+        return _flow_config_from_storage_json(data)
 
     async def get_version(self, flow_id: str, version: str) -> Optional[FlowConfig]:
         """
@@ -95,7 +107,7 @@ class FlowRepository(BaseRepository[FlowConfig]):
         if not data:
             return None
             
-        return self.model_class.model_validate_json(data)
+        return _flow_config_from_storage_json(data)
 
     async def list_versions(self, flow_id: str) -> List[str]:
         """
@@ -115,23 +127,34 @@ class FlowRepository(BaseRepository[FlowConfig]):
         
         return sorted(versions, reverse=True)
 
-    async def list_all(self, limit: int = 100) -> List[FlowConfig]:
-        """
-        Список всех flow (последние версии).
-        
-        Читает из таблицы flows.
-        """
-        # Получаем все ключи из flows (не flows_versions)
+    async def get_many(self, entity_ids: List[str]) -> Dict[str, FlowConfig]:
+        if not entity_ids:
+            return {}
+        table_name = self._get_table_name()
+        final_keys = [self._build_final_key(self._get_key(eid)) for eid in entity_ids]
+        all_data = await self._storage._get_many_with_table(final_keys, table_name)
+        result: Dict[str, FlowConfig] = {}
+        for i, entity_id in enumerate(entity_ids):
+            final_key = final_keys[i]
+            if final_key in all_data:
+                try:
+                    result[entity_id] = _flow_config_from_storage_json(all_data[final_key])
+                except Exception as e:
+                    logger.warning("Failed to parse flow %s: %s", entity_id, e)
+        return result
+
+    async def list(self, *, limit: int, offset: int = 0) -> list[FlowConfig]:
+        """Страница flow (последние версии). Читает из таблицы flows."""
         base_prefix = self._get_prefix()
         final_prefix = self._build_final_key(base_prefix)
         all_data = await self._storage._get_all_by_prefix_and_table(
-            final_prefix, self._get_table_name(), limit
+            final_prefix, self._get_table_name(), limit, offset
         )
         
         items: List[FlowConfig] = []
         for key, value in all_data.items():
             try:
-                cfg = self.model_class.model_validate_json(value)
+                cfg = _flow_config_from_storage_json(value)
                 items.append(cfg)
             except Exception as e:
                 logger.warning(f"Failed to parse flow from key {key}: {e}")

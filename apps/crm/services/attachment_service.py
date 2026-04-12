@@ -4,7 +4,7 @@
 Работает для ВСЕХ entities (любого типа).
 """
 
-from typing import Dict, Any, Optional, List
+from typing import Dict, Any, List, TYPE_CHECKING
 from datetime import datetime, timezone
 from io import BytesIO
 import json
@@ -12,6 +12,9 @@ import json
 from core.clients.service_client import ServiceClient
 from core.context import get_context
 from core.logging import get_logger
+
+if TYPE_CHECKING:
+    from apps.crm.db.repositories.entity_repository import EntityRepository
 
 logger = get_logger(__name__)
 
@@ -23,21 +26,15 @@ class AttachmentService:
     Работает через entity_id (независимо от типа).
     """
     
-    def __init__(self):
+    def __init__(self, entity_repository: "EntityRepository"):
         self._service_client = ServiceClient()
+        self._entity_repo = entity_repository
     
     def _get_company_id(self) -> str:
         context = get_context()
         if not context or not context.active_company:
             raise ValueError("Нет активной компании")
         return context.active_company.company_id
-    
-    def _get_entity_repo(self):
-        """Получает EntityRepository из контейнера"""
-        from apps.crm.container import get_crm_container
-        
-        container = get_crm_container()
-        return container.entity_repository
     
     async def add_attachment(
         self,
@@ -51,13 +48,11 @@ class AttachmentService:
         company_id = self._get_company_id()
         namespace_name = context.active_namespace
         
-        repo = self._get_entity_repo()
-        entity = await repo.get(entity_id)
+        entity = await self._entity_repo.get(entity_id)
         
         if not entity:
             raise ValueError(f"Entity not found: {entity_id}")
         
-        # Используем только namespace_name, RAG сервис сам добавит company_id
         namespace = namespace_name
         
         metadata = {
@@ -70,8 +65,6 @@ class AttachmentService:
         
         files = {"file": (filename, BytesIO(file_data), "application/octet-stream")}
         
-        # RAG API ожидает metadata как Form field
-        # При передаче files httpx автоматически установит multipart/form-data
         response = await self._service_client.post(
             service="rag",
             path=f"/rag/api/v1/namespaces/{namespace}/documents",
@@ -85,7 +78,7 @@ class AttachmentService:
             entity.attachment_ids.append(document_id)
         
         entity.updated_at = datetime.now(timezone.utc)
-        await repo.update(entity)
+        await self._entity_repo.update(entity)
         
         logger.info(
             f"Attachment added: {filename} -> {entity_id} "
@@ -110,8 +103,7 @@ class AttachmentService:
         company_id = self._get_company_id()
         namespace_name = context.active_namespace
         
-        repo = self._get_entity_repo()
-        entity = await repo.get(entity_id)
+        entity = await self._entity_repo.get(entity_id)
         
         if not entity or document_id not in entity.attachment_ids:
             logger.warning(f"Attachment not found: {document_id} for {entity_id}")
@@ -124,7 +116,7 @@ class AttachmentService:
         
         entity.attachment_ids.remove(document_id)
         entity.updated_at = datetime.now(timezone.utc)
-        await repo.update(entity)
+        await self._entity_repo.update(entity)
         
         logger.info(f"Attachment removed: {document_id} from {entity_id}")
         return True
@@ -139,8 +131,7 @@ class AttachmentService:
         company_id = self._get_company_id()
         namespace_name = context.active_namespace
         
-        repo = self._get_entity_repo()
-        entity = await repo.get(entity_id)
+        entity = await self._entity_repo.get(entity_id)
         
         if not entity:
             raise ValueError(f"Entity not found: {entity_id}")
@@ -155,12 +146,26 @@ class AttachmentService:
                     service="rag",
                     path=f"/rag/api/v1/documents/{doc_id}/status"
                 )
-                
+                if not isinstance(response, dict):
+                    raise ValueError(f"RAG document status must be dict, got {type(response)}")
+                display_name = (
+                    response.get("filename")
+                    or response.get("document_name")
+                )
+                extra = response.get("extra_metadata")
+                if not display_name and isinstance(extra, dict):
+                    candidate = extra.get("filename")
+                    if isinstance(candidate, str) and candidate.strip():
+                        display_name = candidate.strip()
+                if not display_name:
+                    display_name = "unknown"
+
                 attachments.append({
                     "document_id": doc_id,
-                    "filename": response.get("filename", "unknown"),
+                    "filename": display_name,
                     "status": response.get("status", "unknown"),
-                    "metadata": response.get("metadata", {})
+                    "metadata": extra if isinstance(extra, dict) else {},
+                    "download_url": f"/rag/api/v1/files/download/{doc_id}",
                 })
             except Exception as e:
                 logger.warning(f"Failed to get attachment info: {doc_id}, error: {e}")
@@ -168,7 +173,8 @@ class AttachmentService:
                     "document_id": doc_id,
                     "filename": "unknown",
                     "status": "error",
-                    "metadata": {}
+                    "metadata": {},
+                    "download_url": f"/rag/api/v1/files/download/{doc_id}",
                 })
         
         return attachments
@@ -178,8 +184,7 @@ class AttachmentService:
         entity_id: str
     ) -> int:
         """Удаляет все attachments entity (для каскадного удаления)"""
-        repo = self._get_entity_repo()
-        entity = await repo.get(entity_id)
+        entity = await self._entity_repo.get(entity_id)
         
         if not entity or not entity.attachment_ids:
             return 0
@@ -196,4 +201,3 @@ class AttachmentService:
         
         logger.info(f"Deleted {deleted_count} attachments for {entity_id}")
         return deleted_count
-

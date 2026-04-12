@@ -46,7 +46,7 @@ INLINE_FINISH = {
     "description": "Завершает агента и возвращает финальный ответ",
     "args_schema": {"answer": {"type": "string"}},
     "code": "async def execute(args: dict, state: dict = None):\n    return args.get('answer', '')",
-    "tool_type": "exit"
+    "react_role": "exit"
 }
 
 INLINE_REASON = {
@@ -70,7 +70,7 @@ INLINE_REASON = {
         })
     return f"Reasoning recorded: {args.get('next_action', '')}"
 """,
-    "tool_type": "reason"
+    "react_role": "reason"
 }
 
 INLINE_CUSTOM_THINK = {
@@ -84,7 +84,7 @@ INLINE_CUSTOM_THINK = {
         state["reasoning_history"].append({"thought": args.get("thought", "")})
     return f"Thought: {args.get('thought', '')}"
 """,
-    "tool_type": "reason"
+    "react_role": "reason"
 }
 
 INLINE_CUSTOM_COMPLETE = {
@@ -92,7 +92,7 @@ INLINE_CUSTOM_COMPLETE = {
     "description": "Кастомный завершающий инструмент",
     "args_schema": {"result": {"type": "string"}},
     "code": "async def execute(args: dict, state: dict = None):\n    return args.get('result', 'done')",
-    "tool_type": "exit"
+    "react_role": "exit"
 }
 
 
@@ -814,7 +814,7 @@ class TestExplicitModeWithReasonAndExit:
 class TestCustomReasonAndExitTools:
     """
     Тесты с КАСТОМНЫМИ reason и exit tools (не стандартные reason/finish).
-    Проверяет что tool_type корректно определяется.
+    Проверяет что react_role корректно определяется.
     """
 
     async def test_custom_reason_tool_works(
@@ -1179,18 +1179,19 @@ class TestExplicitModeStreaming:
         from apps.flows.src.runtime.runners.llm_runner import LlmNodeRunner
         from apps.flows.src.models.node_config import NodeConfig, NodeLLMOverride, ReactConfig
         from apps.flows.src.models import ReactLoopMode
-        from apps.flows.src.tools.base import InlineTool
+        from apps.flows.src.models.enums import ReactToolRole
+        from apps.flows.src.tools.base import CodeTool
         from apps.flows.src.models.tool_reference import CallParameter
 
         flow_id = f"explicit_streaming_{unique_id}"
         container = get_container()
         
-        finish_tool = InlineTool(
+        finish_tool = CodeTool(
             tool_id="finish",
             code="async def execute(args: dict, state: dict = None):\n    return args.get('answer', '')",
             description="Завершает агента",
             parameters={"answer": CallParameter(type="string", description="Ответ")},
-            tool_type="exit",
+            react_role=ReactToolRole.EXIT,
         )
 
         node_config = NodeConfig(

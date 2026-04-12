@@ -11,7 +11,7 @@ from typing import Any, Dict
 
 from apps.flows.src.runtime.nodes import CodeNode, create_node
 from apps.flows.src.mapping import MappingResolver
-from apps.flows.src.tools.base import BaseTool, InlineTool
+from apps.flows.src.tools.base import BaseTool
 from apps.flows.src.models.tool_reference import CallParameter
 
 
@@ -50,7 +50,7 @@ class TestCodeNode:
         node = CodeNode(
             node_id="test_node",
             config={
-                "code": """def execute(args, state):
+                "code": """async def execute(args, state):
     x = args.get("x", 0)
     y = args.get("y", 0)
     return {"result": x + y}""",
@@ -75,7 +75,7 @@ class TestCodeNode:
         node = CodeNode(
             node_id="test_node",
             config={
-                "code": """def execute(args, state):
+                "code": """async def execute(args, state):
     x = args.get("x", 0)
     y = args.get("y", 0)
     return {"sum": x + y}""",
@@ -105,7 +105,7 @@ class TestCodeNode:
         node = CodeNode(
             node_id="test_node",
             config={
-                "code": """def execute(args, state):
+                "code": """async def execute(args, state):
     x = args.get("x", 0)
     y = args.get("y", 0)
     return {"total": x + y}""",
@@ -134,7 +134,7 @@ class TestCodeNode:
         node = CodeNode(
             node_id="test_node",
             config={
-                "code": """def execute(args, state):
+                "code": """async def execute(args, state):
     x = args.get("x", 0)
     y = args.get("y", 0)
     return {"result": x + y}""",
@@ -164,7 +164,7 @@ class TestCodeNode:
         node = CodeNode(
             node_id="test_node",
             config={
-                "code": """def execute(args, state):
+                "code": """async def execute(args, state):
     x = args.get("x", 0)
     y = args.get("y", 0)
     return {"answer": x + y}""",
@@ -192,7 +192,7 @@ class TestCodeNode:
         node = CodeNode(
             node_id="test_node",
             config={
-                "code": """def execute(args, state):
+                "code": """async def execute(args, state):
     template = args.get("template", "")
     name = args.get("name", "")
     return {"greeting": template.format(name=name)}""",
@@ -221,7 +221,7 @@ class TestCodeNode:
         node = CodeNode(
             node_id="my_calculator",
             config={
-                "code": """def execute(args, state):
+                "code": """async def execute(args, state):
     x = args.get("x", 0)
     y = args.get("y", 0)
     return x + y""",
@@ -246,7 +246,7 @@ class TestCodeNode:
         node = CodeNode(
             node_id="test_node",
             config={
-                "code": """def execute(args, state):
+                "code": """async def execute(args, state):
     x = args.get("x", 0)
     y = args.get("y", 0)
     return {"result": x + y}""",
@@ -275,7 +275,7 @@ class TestCodeNode:
         node = CodeNode(
             node_id="my_tool_node",
             config={
-                "code": """def execute(args, state):
+                "code": """async def execute(args, state):
     x = args.get("x", 0)
     y = args.get("y", 0)
     return x + y""",
@@ -311,7 +311,7 @@ class TestInlineCodeNode:
         node = CodeNode(
             node_id="inline_node",
             config={
-                "code": "def execute(args, state):\n    return {'sum': args['a'] + args['b']}",
+                "code": "async def execute(args, state):\n    return {'sum': args['a'] + args['b']}",
                 "input_mapping": {"a": 100, "b": 200},
             },
         )
@@ -333,7 +333,7 @@ class TestInlineCodeNode:
         node = CodeNode(
             node_id="reader_node",
             config={
-                "code": "def execute(args, state):\n    return {'secret_value': state.get('secret', 'not found')}",
+                "code": "async def execute(args, state):\n    return {'secret_value': state.get('secret', 'not found')}",
                 "input_mapping": {},
             },
         )
@@ -356,7 +356,7 @@ class TestInlineCodeNode:
         node = CodeNode(
             node_id="greeting_node",
             config={
-                "code": "def execute(args, state):\n    return {'message': f\"Добро пожаловать в {args['company']}, {args['user']}!\"}",
+                "code": "async def execute(args, state):\n    return {'message': f\"Добро пожаловать в {args['company']}, {args['user']}!\"}",
                 "input_mapping": {
                     "company": "@var:company_name",
                     "user": "@state:user.name",
@@ -386,7 +386,7 @@ class TestCreateNodeTool:
         """create_node создает CodeNode из inline кода."""
         node_config = {
             "type": "code",
-            "code": "def execute(args, state):\n    return {'doubled': args['x'] * 2}",
+            "code": "async def execute(args, state):\n    return {'doubled': args['x'] * 2}",
             "args_schema": {
                 "x": {"type": "integer", "description": "Число для удвоения"},
             },
@@ -413,7 +413,7 @@ class TestCreateNodeTool:
         """create_node c inline tool и input_mapping."""
         node_config = {
             "type": "code",
-            "code": "def execute(args, state):\n    return {'formatted_order': f\"{args['prefix']}{args['value']}\"}",
+            "code": "async def execute(args, state):\n    return {'formatted_order': f\"{args['prefix']}{args['value']}\"}",
             "input_mapping": {
                 "prefix": "@var:order_prefix",
                 "value": "@state:order_id",

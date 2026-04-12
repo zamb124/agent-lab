@@ -33,16 +33,19 @@ from a2a.types import (
 from a2a.utils.message import get_message_text, new_agent_text_message
 
 from apps.flows.src.channels.base import BaseChannel
+from apps.flows.src.channels.types import PreparedTaskParams
 from apps.flows.src.container import get_container
+from apps.flows.src.state.cancellation import CANCEL_KEY_TTL
 from core.context import set_current_channel
+from apps.flows.config import settings
 from apps.flows.src.evaluation.service import EvaluationService
-from apps.flows.src.files import FileHandler
+from apps.flows.src.files import extract_incoming_a2a_files, format_a2a_files_content
 from core.logging import get_logger
 from apps.flows.src.services.push_notifications import dict_to_config
 from apps.flows.src.streaming import Emitter
 from core.state import ExecutionState
 from apps.flows.src.streaming.subscriber import EventSubscriber, StreamEvent
-from apps.flows.src.tasks.push_notification_tasks import (
+from apps.idle_worker.tasks.push_notification_tasks import (
     delete_config,
     get_config,
     list_configs,
@@ -228,17 +231,108 @@ class A2AChannel(BaseChannel):
         emitter = Emitter(container.redis_client, exec_state)
         await emitter.emit_text_chunk(content, append=False, last_chunk=True)
 
+    async def _handle_takeover_user_reply(
+        self,
+        prepared: PreparedTaskParams,
+    ) -> AsyncGenerator[Union[TaskStatusUpdateEvent], None]:
+        """A2A Section 3.4.3: follow-up при input-required с operator takeover.
+
+        Маршрутизирует текст пользователя в dialog_log без запуска flow.
+        Возвращает status-update input-required (задача остаётся в ожидании оператора).
+        """
+        container = get_container()
+        svc = container.operator_handoff_service
+
+        file_ids: list[str] = []
+        if prepared.files_data:
+            for fd in prepared.files_data:
+                fid = fd.get("file_id")
+                if fid:
+                    file_ids.append(str(fid))
+                    continue
+                path = fd.get("path")
+                if path and str(path).startswith(("http://", "https://")):
+                    continue
+                if path:
+                    raise ValueError(
+                        "Вложение A2A без file_id: ожидается персист через API (S3), "
+                        "локальные path в state.files не поддерживаются."
+                    )
+
+        await svc.receive_user_reply(
+            company_id=self.context.active_company.company_id,
+            task_id=prepared.takeover_operator_task_id,
+            text=prepared.content,
+            user_id=prepared.user_id,
+            file_ids=file_ids if file_ids else None,
+        )
+        logger.info(
+            "[on_message_stream] takeover user-reply routed to dialog_log, "
+            "task_id=%s, operator_task=%s",
+            prepared.task_id,
+            prepared.takeover_operator_task_id,
+        )
+        yield TaskStatusUpdateEvent(
+            taskId=prepared.task_id,
+            contextId=prepared.context_id,
+            status=TaskStatus(
+                state=TaskState.input_required,
+                message=new_agent_text_message(prepared.content),
+            ),
+            final=True,
+        )
+
+    async def _persist_incoming_a2a_files(self, message: Message) -> tuple[List[Dict[str, Any]], str]:
+        """Байты FileWithBytes -> S3 + FileRecord; FileWithUri -> только path в state."""
+        incoming = extract_incoming_a2a_files(message)
+        if not incoming:
+            return [], ""
+
+        if not self.context or not self.context.active_company:
+            raise ValueError(
+                "Загрузка вложений A2A требует active_company в контексте запроса"
+            )
+
+        company_id = self.context.active_company.company_id
+        user_id = self.context.user.user_id if self.context.user else None
+        prefix = f"/{settings.server.name}/api/v1/files/download"
+        container = get_container()
+        files_data: List[Dict[str, Any]] = []
+
+        for inc in incoming:
+            if inc.data is not None:
+                item = await container.file_processor.persist_uploaded_file_as_state_files_item(
+                    data=inc.data,
+                    original_name=inc.name,
+                    content_type=inc.mime_type,
+                    uploaded_by=user_id,
+                    company_id=company_id,
+                    public=False,
+                    download_url_prefix=prefix,
+                )
+                files_data.append(item)
+            else:
+                if not inc.uri:
+                    raise ValueError("FileWithUri без uri")
+                files_data.append(
+                    {
+                        "name": inc.name,
+                        "path": inc.uri,
+                        "mime_type": inc.mime_type,
+                        "size": inc.size,
+                    }
+                )
+
+        return files_data, format_a2a_files_content(files_data)
+
     async def _prepare_a2a_params(self, params: MessageSendParams):
         """Подготовка параметров специфичных для A2A."""
         message = params.message
         content = get_message_text(message)
 
-        file_handler = FileHandler()
-        files = file_handler.extract_and_save(message)
-        files_data = file_handler.files_to_state(files)
-
-        if files:
-            content += file_handler.format_files_for_content(files)
+        files_data, files_content_suffix = await self._persist_incoming_a2a_files(message)
+        if files_content_suffix:
+            content += files_content_suffix
 
         prepared = await self._prepare_task_params(
             content=content,
@@ -291,6 +385,18 @@ class A2AChannel(BaseChannel):
         await self.check_permissions(user_groups, skill_id)
 
         prepared = await self._prepare_a2a_params(params)
+
+        # A2A Section 3.4.3: follow-up при активном operator takeover
+        if prepared.is_takeover_user_reply:
+            events = [event async for event in self._handle_takeover_user_reply(prepared)]
+            return await _build_task_from_events(
+                events=events,
+                task_id=prepared.task_id,
+                context_id=prepared.context_id,
+                input_message=params.message,
+                flow_id=self.flow_id,
+            )
+
         container = get_container()
 
         # Таймаут короче для тестов
@@ -344,7 +450,7 @@ class A2AChannel(BaseChannel):
         task_id = str(uuid.uuid4())
         context_id = params.message.context_id or str(uuid.uuid4())
 
-        service = EvaluationService(container.evaluation_repository)
+        service = container.evaluation_service
 
         try:
             async for event in service.run_test_stream(
@@ -464,6 +570,10 @@ class A2AChannel(BaseChannel):
 
         ВАЖНО: подписка на канал ПЕРЕД киком задачи, иначе race condition.
 
+        A2A input-required follow-up (Section 3.4.3):
+        при активном operator takeover реплика пользователя маршрутизируется в dialog_log
+        без запуска flow; SSE отдаёт единственный status-update input-required.
+
         Args:
             params: параметры сообщения
             context: контекст с user_groups для проверки permissions
@@ -487,6 +597,13 @@ class A2AChannel(BaseChannel):
 
         logger.info(f"[on_message_stream] Starting for flow_id={self.flow_id}")
         prepared = await self._prepare_a2a_params(params)
+
+        # A2A Section 3.4.3: follow-up при активном operator takeover
+        if prepared.is_takeover_user_reply:
+            async for event in self._handle_takeover_user_reply(prepared):
+                yield event
+            return
+
         logger.info(f"[on_message_stream] Prepared task_id={prepared.task_id}, subscribing to Redis...")
         container = get_container()
 
@@ -525,8 +642,11 @@ class A2AChannel(BaseChannel):
         return task
 
     async def on_cancel_task(self, params: TaskIdParams, context: Any = None) -> Optional[Task]:
-        """Отмена задачи."""
+        """Отмена задачи. Ставит Redis-ключ для остановки воркера на следующем такте."""
         logger.info(f"Cancel task: {params.id}")
+
+        container = get_container()
+        await container.redis_client.set(f"cancel:{params.id}", "1", ttl=CANCEL_KEY_TTL)
 
         task = await self._cancel_task_in_state(params.id)
 

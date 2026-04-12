@@ -16,7 +16,7 @@ from typing import Optional, Dict, Any, List
 
 from sqlalchemy import String, Text, Boolean, Float, Date, DateTime, Index, UniqueConstraint, ForeignKey, Integer
 from sqlalchemy.orm import Mapped, mapped_column
-from sqlalchemy.dialects.postgresql import JSONB, ARRAY
+from sqlalchemy.dialects.postgresql import JSONB, ARRAY, TSVECTOR
 
 from core.db.models import Base
 
@@ -32,10 +32,10 @@ class CRMEntity(Base):
     __tablename__ = "crm_entities"
 
     entity_id: Mapped[str] = mapped_column(String(100), primary_key=True)
-    company_id: Mapped[str] = mapped_column(String(100), nullable=False, index=True)
+    company_id: Mapped[str] = mapped_column(String(100), nullable=False)
     namespace: Mapped[str] = mapped_column(String(100), default="default", nullable=False)
 
-    entity_type: Mapped[str] = mapped_column(String(100), nullable=False, index=True)
+    entity_type: Mapped[str] = mapped_column(String(100), nullable=False)
     entity_subtype: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
 
     name: Mapped[str] = mapped_column(String(500), nullable=False)
@@ -68,12 +68,18 @@ class CRMEntity(Base):
         onupdate=lambda: datetime.now(timezone.utc),
     )
 
+    search_vector: Mapped[Optional[str]] = mapped_column(TSVECTOR, nullable=True)
+
     __table_args__ = (
         Index("ix_crm_entities_company_type", "company_id", "entity_type"),
+        Index("ix_crm_entities_company_ns_type", "company_id", "namespace", "entity_type"),
+        Index("ix_crm_entities_company_status", "company_id", "status"),
+        Index("ix_crm_entities_company_user", "company_id", "user_id"),
         Index("ix_crm_entities_tags", "tags", postgresql_using="gin"),
         Index("ix_crm_entities_due_date", "due_date"),
         Index("ix_crm_entities_note_date", "note_date"),
         Index("ix_crm_entities_namespace", "company_id", "namespace"),
+        Index("ix_crm_entities_fts", "search_vector", postgresql_using="gin"),
     )
 
     @property
@@ -83,6 +89,8 @@ class CRMEntity(Base):
     @property
     def is_task(self) -> bool:
         return self.entity_type == "task"
+
+    access_level: str = "owner"
 
     @property
     def full_type(self) -> str:
@@ -163,7 +171,27 @@ class EntityType(Base):
         nullable=False,
         comment="Список namespace, где тип разрешен"
     )
-    
+    is_context_anchor: Mapped[bool] = mapped_column(
+        Boolean,
+        default=False,
+        nullable=False,
+        comment="Тип может быть якорем контекста для заметок (сделка, лид и т.д.)",
+    )
+    extractable: Mapped[bool] = mapped_column(
+        Boolean,
+        default=True,
+        nullable=False,
+        server_default="true",
+        comment="AI может создавать новые сущности этого типа при анализе",
+    )
+    is_voice_target: Mapped[bool] = mapped_column(
+        Boolean,
+        default=False,
+        nullable=False,
+        server_default="false",
+        comment="Сущности этого типа допустимы как голос (автор) заметки",
+    )
+
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         default=lambda: datetime.now(timezone.utc)
@@ -257,13 +285,17 @@ class Relationship(Base):
     __tablename__ = "relationships"
     
     relationship_id: Mapped[str] = mapped_column(String(100), primary_key=True)
-    company_id: Mapped[str] = mapped_column(String(100), nullable=False, index=True)
-    namespace: Mapped[str] = mapped_column(String(100), nullable=False, default="default", index=True)
-    
-    source_entity_id: Mapped[str] = mapped_column(String(100), nullable=False, index=True)
-    target_entity_id: Mapped[str] = mapped_column(String(100), nullable=False, index=True)
-    
-    relationship_type: Mapped[str] = mapped_column(String(100), nullable=False, index=True)
+    company_id: Mapped[str] = mapped_column(String(100), nullable=False)
+    namespace: Mapped[str] = mapped_column(String(100), nullable=False, default="default")
+
+    source_entity_id: Mapped[str] = mapped_column(
+        String(100), ForeignKey("crm_entities.entity_id", ondelete="CASCADE"), nullable=False,
+    )
+    target_entity_id: Mapped[str] = mapped_column(
+        String(100), ForeignKey("crm_entities.entity_id", ondelete="CASCADE"), nullable=False,
+    )
+
+    relationship_type: Mapped[str] = mapped_column(String(100), nullable=False)
     
     weight: Mapped[float] = mapped_column(Float, default=1.0)
     attributes: Mapped[Dict[str, Any]] = mapped_column(JSONB, default=dict)
@@ -279,10 +311,13 @@ class Relationship(Base):
     )
     
     __table_args__ = (
+        UniqueConstraint(
+            "company_id", "namespace", "source_entity_id", "target_entity_id", "relationship_type",
+            name="uq_relationships_unique_edge",
+        ),
         Index("idx_relationships_source", "source_entity_id"),
         Index("idx_relationships_target", "target_entity_id"),
         Index("idx_relationships_source_target", "source_entity_id", "target_entity_id"),
-        Index("idx_relationships_type", "relationship_type"),
         Index("idx_relationships_namespace", "company_id", "namespace"),
     )
     
@@ -513,6 +548,19 @@ class NamespaceTemplateType(Base):
     check_duplicates: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     weight_coefficient: Mapped[float] = mapped_column(Float, default=1.0, nullable=False)
     namespace_ids: Mapped[List[str]] = mapped_column(JSONB, default=list, nullable=False)
+    is_context_anchor: Mapped[bool] = mapped_column(
+        Boolean,
+        default=False,
+        nullable=False,
+        comment="При материализации в EntityType — якорь контекста",
+    )
+    is_voice_target: Mapped[bool] = mapped_column(
+        Boolean,
+        default=False,
+        nullable=False,
+        server_default="false",
+        comment="При материализации в EntityType — допустим как голос заметки",
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         default=lambda: datetime.now(timezone.utc),
@@ -532,3 +580,52 @@ class NamespaceTemplateType(Base):
 
     def __repr__(self) -> str:
         return f"<NamespaceTemplateType(template_key='{self.template_key}', type_id='{self.type_id}')>"
+
+
+class CRMTask(Base):
+    """
+    Единый журнал фоновых задач CRM: импорт знаний, анализ заметок и др.
+
+    Типо-специфичные поля хранятся в data JSONB.
+    task_type: 'knowledge_import' | 'note_analyze'
+    """
+
+    __tablename__ = "crm_tasks"
+
+    task_id: Mapped[str] = mapped_column(String(100), primary_key=True)
+    task_type: Mapped[str] = mapped_column(String(64), nullable=False)
+
+    status: Mapped[str] = mapped_column(String(32), nullable=False, default="pending", index=True)
+    stage: Mapped[str] = mapped_column(String(64), nullable=False, default="pending")
+    progress_pct: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+
+    error_message: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    data: Mapped[Dict[str, Any]] = mapped_column(JSONB, nullable=False, default=dict)
+
+    taskiq_task_id: Mapped[Optional[str]] = mapped_column(String(220), nullable=True)
+    cancel_requested: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+
+    company_id: Mapped[str] = mapped_column(String(100), nullable=False, index=True)
+    namespace: Mapped[str] = mapped_column(String(100), nullable=False, index=True)
+    user_id: Mapped[str] = mapped_column(String(100), nullable=False)
+
+    started_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    completed_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(timezone.utc),
+        nullable=False,
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(timezone.utc),
+        onupdate=lambda: datetime.now(timezone.utc),
+        nullable=False,
+    )
+
+    __table_args__ = (
+        Index("ix_crm_tasks_company_ns_status", "company_id", "namespace", "status"),
+    )
+
+    def __repr__(self) -> str:
+        return f"<CRMTask(task_id='{self.task_id}', task_type='{self.task_type}', status='{self.status}')>"

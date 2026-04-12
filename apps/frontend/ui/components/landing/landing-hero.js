@@ -2,9 +2,15 @@
  * Landing Hero - Главная секция лендинга
  */
 import { html, css } from 'lit';
+import { unsafeHTML } from 'lit/directives/unsafe-html.js';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
+import { I18nNs } from '@platform/services/i18n/i18n.service.js';
 
 export class LandingHero extends PlatformElement {
+    static properties = {
+        isAuthenticated: { type: Boolean },
+    };
+
     static styles = [
         PlatformElement.styles,
         css`
@@ -209,36 +215,72 @@ export class LandingHero extends PlatformElement {
         `
     ];
 
-    _handleCTA() {
-        const ctaSection = document.querySelector('landing-cta');
-        if (ctaSection) {
-            ctaSection.scrollIntoView({ behavior: 'smooth' });
+    constructor() {
+        super();
+        this.isAuthenticated = false;
+    }
+
+    connectedCallback() {
+        super.connectedCallback();
+        this._i18nUnsub = this.i18n.subscribe(() => this.requestUpdate());
+        void this._checkAuth();
+    }
+
+    disconnectedCallback() {
+        if (this._i18nUnsub) {
+            this._i18nUnsub();
+            this._i18nUnsub = null;
+        }
+        super.disconnectedCallback();
+    }
+
+    async _checkAuth() {
+        const response = await fetch('/frontend/api/auth/me', {
+            credentials: 'include',
+        });
+        if (response.ok) {
+            this.isAuthenticated = true;
+            this.requestUpdate();
         }
     }
 
+    _handleCTA = () => {
+        if (this.isAuthenticated) {
+            window.location.href = '/dashboard';
+            return;
+        }
+        this.dispatchEvent(
+            new CustomEvent('open-auth-modal', {
+                bubbles: true,
+                composed: true,
+            })
+        );
+    };
+
     render() {
+        const t = (key) => this.i18n.t(key, {}, I18nNs.LANDING);
         return html`
             <div class="hero-container">
                 <h1 class="hero-title">HUMANITEC</h1>
                 
                     <div class="hero-image-wrapper">
-                        <img 
-                            src="/static/frontend/assets/images/main_img.png" 
-                            alt="Humanitec Platform"
+                        <img
+                            src="/static/frontend/assets/images/main_img.png"
+                            alt=${t('hero.image_alt')}
                             class="hero-image"
                         />
                     </div>
                     
                 <p class="hero-text-left">
-                    Доверьте процессы<br>AI-агентам
+                    ${unsafeHTML(t('hero.trust_process'))}
                         </p>
                         
                         <button class="hero-cta" @click=${this._handleCTA}>
-                            Запустить цифровых сотрудников
+                            ${t('hero.start_button')}
                         </button>
                         
                 <p class="hero-text-right">
-                    Эволюция вашего<br>бизнеса уже здесь
+                    ${unsafeHTML(t('hero.evolution'))}
                         </p>
             </div>
         `;

@@ -15,7 +15,7 @@ from apps.flows.src.runtime.runners.llm_runner import LlmNodeRunner
 from apps.flows.src.models import NodeConfig, LLMConfig
 from apps.flows.src.models.node_config import NodeLLMOverride
 from core.state import ExecutionState
-from apps.flows.src.tools.base import ToolType
+from apps.flows.src.models.enums import ReactToolRole
 from apps.flows.tools import calculator, reason
 
 
@@ -88,7 +88,7 @@ class TestReasonToolInTools:
         )
 
         reason_tool = next(t for t in runner.tools if t.name == "reason")
-        assert reason_tool.tool_type == ToolType.REASON
+        assert reason_tool.react_role == ReactToolRole.REASON
 
 
 class TestReasonToolExecution:

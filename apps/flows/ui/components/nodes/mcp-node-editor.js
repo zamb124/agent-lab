@@ -80,7 +80,8 @@ export class MCPNodeEditor extends BaseNodeEditor {
 
     async _loadMCPServers() {
         try {
-            const servers = await this.a2a.get('/api/v1/mcp/servers');
+            const serversPage = await this.a2a.get('/api/v1/mcp/servers');
+            const servers = serversPage.items;
             this.mcpServers = servers || [];
             
             if (this.nodeConfig?.server_id) {
@@ -178,7 +179,7 @@ export class MCPNodeEditor extends BaseNodeEditor {
                 
                 <div class="form-group">
                     <div class="form-label">
-                        <span class="form-label-text">Имя</span>
+                        <span class="form-label-text">${this.i18n.t('node_modal.common.field_name')}</span>
                     </div>
                     <input 
                         type="text" 
@@ -191,14 +192,14 @@ export class MCPNodeEditor extends BaseNodeEditor {
             
             <div class="form-group">
                 <div class="form-label">
-                    <span class="form-label-text">MCP Сервер</span>
+                    <span class="form-label-text">${this.i18n.t('node_modal.mcp.server_label')}</span>
                 </div>
                 <select 
                     class="form-input form-select"
                     .value=${selectedServerId || ''}
                     @change=${this._onServerChange}
                 >
-                    <option value="">Выберите сервер...</option>
+                    <option value="">${this.i18n.t('node_modal.mcp.select_server')}</option>
                     ${this.mcpServers.map(server => html`
                         <option 
                             value=${server.server_id}
@@ -215,7 +216,7 @@ export class MCPNodeEditor extends BaseNodeEditor {
             
             <div class="form-group">
                 <div class="form-label">
-                    <span class="form-label-text">Tool</span>
+                    <span class="form-label-text">${this.i18n.t('node_modal.mcp.tool_label')}</span>
                 </div>
                 <select 
                     class="form-input form-select"
@@ -223,7 +224,7 @@ export class MCPNodeEditor extends BaseNodeEditor {
                     @change=${this._onToolChange}
                     ?disabled=${!selectedServerId}
                 >
-                    <option value="">Выберите tool...</option>
+                    <option value="">${this.i18n.t('node_modal.mcp.select_tool')}</option>
                     ${this.serverTools.map(tool => html`
                         <option 
                             value=${tool.name}
@@ -234,14 +235,14 @@ export class MCPNodeEditor extends BaseNodeEditor {
                     `)}
                 </select>
                 ${this.serverTools.length === 0 && selectedServerId ? html`
-                    <span class="form-hint">Синхронизируйте тулы на странице MCP серверов</span>
+                    <span class="form-hint">${this.i18n.t('node_modal.mcp.sync_tools_hint')}</span>
                 ` : ''}
             </div>
             
             ${this.selectedToolSchema && Object.keys(this.selectedToolSchema).length > 0 ? html`
                 <div class="form-group">
                     <div class="form-label">
-                        <span class="form-label-text">Параметры tool</span>
+                        <span class="form-label-text">${this.i18n.t('node_modal.mcp.tool_params_label')}</span>
                     </div>
                     <div class="tool-params">
                         ${Object.entries(this.selectedToolSchema).map(([name, param]) => html`
@@ -260,7 +261,7 @@ export class MCPNodeEditor extends BaseNodeEditor {
             
             <div class="form-group">
                 <div class="form-label">
-                    <span class="form-label-text">Headers (JSON)</span>
+                    <span class="form-label-text">${this.i18n.t('node_modal.mcp.headers_label')}</span>
                 </div>
                 <json-field-editor
                     .value=${config.headers ? JSON.stringify(config.headers, null, 2) : '{}'}
@@ -271,7 +272,7 @@ export class MCPNodeEditor extends BaseNodeEditor {
                         }
                     }}
                     min-height="60"
-                    hint="Дополнительные headers (переопределяют серверные)"
+                    hint=${this.i18n.t('node_modal.mcp.headers_hint')}
                 ></json-field-editor>
             </div>
             

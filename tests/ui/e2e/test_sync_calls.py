@@ -157,7 +157,7 @@ async def test_call_overlay_channel_chat_syncs_with_main_chat(
     tag="calls",
     title="Sync: ad-hoc звонок использует обычный видимый канал",
     description=(
-        "Кнопка «Создать Sync» создаёт канал встречи `meet_*`, чат в оверлее работает, "
+        "Кнопка «Создать Sync» создаёт канал встречи с читаемым именем (дата и время), чат в оверлее работает, "
         "а после переключения каналов сообщения встречи сохраняются в этом канале."
     ),
 )
@@ -202,8 +202,9 @@ async def test_adhoc_call_channel_is_visible_and_survives_channel_switch(
     )
 
     header_title = (await ui_page_system.locator("chat-view .header-title").first.inner_text()).strip()
-    assert header_title.startswith("meet_")
-    await scenario.step("Ad-hoc встреча создала видимый канал meet_*", ui_page_system)
+    assert not header_title.startswith("meet_")
+    assert any(ch.isdigit() for ch in header_title)
+    await scenario.step("Ad-hoc встреча создала видимый канал с именем по дате/времени", ui_page_system)
 
     await overlay.locator("button.ctrl-btn.hangup").click()
     await expect(ui_page_system.locator("sync-app")).not_to_have_attribute("data-call-active", "", timeout=30_000)

@@ -34,6 +34,7 @@ from httpx import ASGITransport, AsyncClient
 
 from tests.fixtures.test_database_env import TEST_DATABASE_ENV
 
+
 # Устанавливаем переменные окружения ДО импорта приложения
 os.environ["TESTING"] = "true"
 for _db_key, _db_val in TEST_DATABASE_ENV.items():
@@ -50,10 +51,16 @@ os.environ["SERVER__RAG_SERVICE_URL"] = "http://localhost:9002"
 os.environ["SERVER__CRM_SERVICE_URL"] = "http://localhost:9003"
 os.environ["SERVER__FRONTEND_SERVICE_URL"] = "http://localhost:9004"
 os.environ["SERVER__SYNC_SERVICE_URL"] = "http://localhost:9005"
+os.environ.setdefault("STT__PROVIDER", "mock")
+os.environ.setdefault("STT__MOCK_TRANSCRIPT_TEXT", "Тестовая транскрипция sync worker")
 # S3: дефолтный alias test-bucket и endpoint тестового MinIO (docker-compose-test: 19002).
 # В conf.json у test-bucket указан 19001 (dev); без override тесты создавали бакет на 19002, а приложение — на 19001.
 os.environ.setdefault("S3__DEFAULT_BUCKET", "test-bucket")
 os.environ.setdefault("S3__BUCKETS__TEST-BUCKET__ENDPOINT_URL", "http://localhost:19002")
+# OnlyOffice: локально после `make test-up` — порт 18088 (docker-compose-test). В контейнере tests_runner задаётся в compose.
+os.environ.setdefault("OFFICE__JWT_SECRET", "test-onlyoffice-jwt-secret")
+os.environ.setdefault("OFFICE__DOCUMENT_SERVER_PUBLIC_URL", "http://localhost:18088")
+os.environ.setdefault("OFFICE__CALLBACK_PUBLIC_BASE_URL", "http://testserver")
 # RAG config для тестов (pgvector в PostgreSQL)
 os.environ.setdefault("RAG__ENABLED", "true")
 os.environ.setdefault("RAG__DEFAULT_PROVIDER", "pgvector")
@@ -69,7 +76,7 @@ core.config.base._settings_instance = None
 from taskiq_redis import RedisStreamBroker, RedisAsyncResultBackend
 from core.tasks.session_lock import session_lock_middleware
 from core.config import get_settings
-import apps.broker.broker as platform_broker_module
+import apps.flows_worker.broker as platform_broker_module
 
 # Получаем settings с тестовыми env переменными
 test_settings = get_settings()
@@ -78,10 +85,10 @@ result_backend = RedisAsyncResultBackend(
     result_ex_time=3600
 )
 
-# Создаем broker с тестовыми настройками и queue_name="default" (как в задачах)
+# Создаем broker с тестовыми настройками и queue_name="flows_worker" (как в задачах flows)
 test_broker = RedisStreamBroker(
     url=test_settings.tasks.broker_url,
-    queue_name="default"
+    queue_name="flows_worker"
 ).with_result_backend(result_backend).with_middlewares(session_lock_middleware)
 
 print(f"🔧 TEST BROKER CREATED: url={test_settings.tasks.broker_url}, queue_name=default, broker_id={id(test_broker)}")
@@ -126,8 +133,74 @@ async def _alembic_version_ready(db_url: str) -> bool:
         await engine.dispose()
 
 
-async def _crm_schema_ready(db_url: str) -> bool:
-    """Проверяет, что в CRM схеме присутствуют ключевые таблицы и колонки."""
+async def _alembic_current_revision(db_url: str) -> str | None:
+    """Читает текущую ревизию alembic_version из БД. None если таблицы нет."""
+    from sqlalchemy.ext.asyncio import create_async_engine
+    from sqlalchemy import text
+
+    engine = create_async_engine(db_url, echo=False)
+    try:
+        async with engine.begin() as conn:
+            row = await conn.execute(text("SELECT version_num FROM alembic_version LIMIT 1"))
+            r = row.first()
+            return r[0] if r else None
+    except Exception:
+        return None
+    finally:
+        await engine.dispose()
+
+
+def _alembic_head_revision(script_location: str) -> str | None:
+    """Читает head ревизию из файлов Alembic (без подключения к БД)."""
+    from alembic.config import Config
+    from alembic.script import ScriptDirectory
+    from pathlib import Path
+
+    root = Path(__file__).parent.parent
+    ini_path = root / script_location / "alembic.ini"
+    if not ini_path.exists():
+        return None
+    cfg = Config(str(ini_path))
+    cfg.set_main_option("script_location", str(root / script_location))
+    directory = ScriptDirectory.from_config(cfg)
+    heads = directory.get_heads()
+    return heads[0] if heads else None
+
+
+async def _all_migrations_up_to_date() -> tuple[bool, list[str]]:
+    """
+    Сравнивает head в коде с current в БД для каждого сервиса из migration_manifest.
+    Возвращает (all_ok, list_of_stale_service_names).
+    """
+    from core.db.migration_manifest import load_migration_manifest, migration_entry_is_active
+
+    manifest = load_migration_manifest()
+    stale: list[str] = []
+
+    for entry in manifest["services"]:
+        if not migration_entry_is_active(entry):
+            continue
+        name = entry["name"]
+        script_loc = f"migrations/{name}"
+        head = _alembic_head_revision(script_loc)
+        if head is None:
+            continue
+
+        from core.config import get_settings
+        url_key = entry["database_url_key"]
+        db_url = getattr(get_settings().database, url_key)
+        if not db_url or not str(db_url).strip():
+            continue
+
+        current = await _alembic_current_revision(str(db_url))
+        if current != head:
+            stale.append(name)
+
+    return (len(stale) == 0, stale)
+
+
+async def _crm_base_schema_ready(db_url: str) -> bool:
+    """Базовая CRM-схема (без журнала knowledge import)."""
     from sqlalchemy.ext.asyncio import create_async_engine
     from sqlalchemy import text
 
@@ -184,33 +257,53 @@ async def _crm_schema_ready(db_url: str) -> bool:
         await engine.dispose()
 
 
-async def _shared_calendar_schema_ready(db_url: str) -> bool:
-    """Проверяет наличие таблиц календаря в shared схеме."""
+async def _crm_tasks_table_ready(db_url: str) -> bool:
     from sqlalchemy.ext.asyncio import create_async_engine
     from sqlalchemy import text
 
     engine = create_async_engine(db_url, echo=False)
     try:
         async with engine.begin() as conn:
-            events_table_row = await conn.execute(
+            row = await conn.execute(
                 text(
                     """
                     SELECT COUNT(*)
                     FROM information_schema.tables
-                    WHERE table_name = 'calendar_events'
+                    WHERE table_schema = 'public'
+                      AND table_name = 'crm_tasks'
                     """
                 )
             )
-            integrations_table_row = await conn.execute(
+            return (row.scalar() or 0) == 1
+    except Exception:
+        return False
+    finally:
+        await engine.dispose()
+
+
+async def _crm_schema_ready(db_url: str) -> bool:
+    """Полная готовность CRM-схемы для тестов."""
+    return await _crm_base_schema_ready(db_url) and await _crm_tasks_table_ready(db_url)
+
+
+async def _shared_calendar_schema_ready(db_url: str) -> bool:
+    """Проверяет наличие таблиц календаря и integration_credentials в shared схеме."""
+    from sqlalchemy.ext.asyncio import create_async_engine
+    from sqlalchemy import text
+
+    engine = create_async_engine(db_url, echo=False)
+    try:
+        async with engine.begin() as conn:
+            result = await conn.execute(
                 text(
                     """
                     SELECT COUNT(*)
                     FROM information_schema.tables
-                    WHERE table_name = 'calendar_integrations'
+                    WHERE table_name IN ('calendar_events', 'calendar_integrations', 'integration_credentials')
                     """
                 )
             )
-            return (events_table_row.scalar() or 0) == 1 and (integrations_table_row.scalar() or 0) == 1
+            return (result.scalar() or 0) == 3
     except Exception:
         return False
     finally:
@@ -241,18 +334,128 @@ async def _shared_scheduler_schema_ready(db_url: str) -> bool:
         await engine.dispose()
 
 
+async def _office_schema_ready(office_db_url: str) -> bool:
+    """platform_office: привязки, колонка catalog_id, таблица каталогов (миграции office_0002+)."""
+    if not office_db_url or not office_db_url.strip():
+        return True
+    from sqlalchemy.ext.asyncio import create_async_engine
+    from sqlalchemy import text
+
+    engine = create_async_engine(office_db_url, echo=False)
+    try:
+        async with engine.begin() as conn:
+            bindings = await conn.execute(
+                text(
+                    """
+                    SELECT COUNT(*)
+                    FROM information_schema.tables
+                    WHERE table_schema = 'public'
+                      AND table_name = 'office_document_bindings'
+                    """
+                )
+            )
+            if (bindings.scalar() or 0) != 1:
+                return False
+            ns_col = await conn.execute(
+                text(
+                    """
+                    SELECT COUNT(*)
+                    FROM information_schema.columns
+                    WHERE table_schema = 'public'
+                      AND table_name = 'office_document_bindings'
+                      AND column_name = 'namespace'
+                    """
+                )
+            )
+            if (ns_col.scalar() or 0) != 1:
+                return False
+            cat_col = await conn.execute(
+                text(
+                    """
+                    SELECT COUNT(*)
+                    FROM information_schema.columns
+                    WHERE table_schema = 'public'
+                      AND table_name = 'office_document_bindings'
+                      AND column_name = 'catalog_id'
+                    """
+                )
+            )
+            if (cat_col.scalar() or 0) != 1:
+                return False
+            catalogs = await conn.execute(
+                text(
+                    """
+                    SELECT COUNT(*)
+                    FROM information_schema.tables
+                    WHERE table_schema = 'public'
+                      AND table_name = 'office_document_catalogs'
+                    """
+                )
+            )
+            return (catalogs.scalar() or 0) == 1
+    except Exception:
+        return False
+    finally:
+        await engine.dispose()
+
+
+async def _tracing_schema_ready(tracing_db_url: str) -> bool:
+    """platform_tracing: таблица spans (миграции tracing)."""
+    if not tracing_db_url or not tracing_db_url.strip():
+        return True
+    from sqlalchemy.ext.asyncio import create_async_engine
+    from sqlalchemy import text
+
+    engine = create_async_engine(tracing_db_url, echo=False)
+    try:
+        async with engine.begin() as conn:
+            row = await conn.execute(
+                text(
+                    """
+                    SELECT COUNT(*)
+                    FROM information_schema.tables
+                    WHERE table_schema = 'public'
+                      AND table_name = 'spans'
+                    """
+                )
+            )
+            return (row.scalar() or 0) == 1
+    except Exception:
+        return False
+    finally:
+        await engine.dispose()
+
+
+async def _ensure_postgres_database(admin_url: str, database_name: str) -> None:
+    """CREATE DATABASE на том же инстансе, если базы ещё нет (admin_url → обычно …/postgres)."""
+    from sqlalchemy.ext.asyncio import create_async_engine
+    from sqlalchemy import text
+
+    engine = create_async_engine(admin_url, echo=False, isolation_level="AUTOCOMMIT")
+    async with engine.connect() as conn:
+        chk = await conn.execute(
+            text("SELECT 1 FROM pg_database WHERE datname = :name"),
+            {"name": database_name},
+        )
+        if chk.first() is None:
+            await conn.execute(text(f'CREATE DATABASE "{database_name}"'))
+    await engine.dispose()
+
+
 @pytest_asyncio.fixture(scope="session", autouse=True)
 async def setup_database_before_tests():
     """
     Глобальная фикстура для подготовки БД перед запуском тестов.
-    Если alembic_version уже есть и в ней ровно одна строка — дроп и миграции не выполняем
-    (другой процесс уже подготовил БД). Иначе под блокировкой: дроп таблиц и миграции.
+
+    Логика: сравнивает Alembic head (файлы) с current (БД) для каждого сервиса.
+    Если все актуальны — пропуск. Если отстают — инкрементальный upgrade по каждому.
+    Если БД пуста (нет alembic_version) — полный дроп + upgrade.
     """
     from sqlalchemy.ext.asyncio import create_async_engine
     from sqlalchemy import text
     from filelock import FileLock
 
-    test_ports = [9001, 9002, 9003, 9004]
+    test_ports = [9001, 9002, 9003, 9004, 9005]
     print(f"\n Освобождаем тестовые порты: {test_ports}...")
     for port in test_ports:
         try:
@@ -270,65 +473,77 @@ async def setup_database_before_tests():
     print("Все тестовые порты свободны!\n")
 
     shared_db_url = os.environ.get("DATABASE__SHARED_URL", TEST_DATABASE_ENV["DATABASE__SHARED_URL"])
-    crm_db_url = os.environ.get("DATABASE__CRM_URL", TEST_DATABASE_ENV["DATABASE__CRM_URL"])
+    tracing_db_url = os.environ.get(
+        "DATABASE__TRACING_URL",
+        TEST_DATABASE_ENV.get("DATABASE__TRACING_URL", ""),
+    )
 
-    if (
-        await _alembic_version_ready(shared_db_url)
-        and await _crm_schema_ready(crm_db_url)
-        and await _shared_calendar_schema_ready(shared_db_url)
-        and await _shared_scheduler_schema_ready(shared_db_url)
-    ):
-        print("БД уже подготовлена (alembic_version есть, одна ревизия), пропуск дропа и миграций.\n")
+    if tracing_db_url:
+        admin_url = shared_db_url.rsplit("/", 1)[0] + "/postgres"
+        await _ensure_postgres_database(admin_url, "platform_tracing")
+
+    from core.db.migration_manifest import bootstrap_migration_registry
+    from core.db.migrations import run_migrations_async
+
+    bootstrap_migration_registry()
+
+    all_ok, stale_services = await _all_migrations_up_to_date()
+
+    if all_ok:
+        print("Все миграции актуальны, пропуск.\n")
         yield
     else:
         lock = FileLock(_DB_SETUP_LOCK, timeout=_DB_SETUP_LOCK_TIMEOUT_SEC)
         with lock:
-            if (
-                await _alembic_version_ready(shared_db_url)
-                and await _crm_schema_ready(crm_db_url)
-                and await _shared_calendar_schema_ready(shared_db_url)
-                and await _shared_scheduler_schema_ready(shared_db_url)
-            ):
-                print("БД подготовлена другим процессом, пропуск.\n")
+            all_ok, stale_services = await _all_migrations_up_to_date()
+            if all_ok:
+                print("Миграции применены другим процессом, пропуск.\n")
                 yield
             else:
-                print("Подготовка БД для тестов...")
-                engine = create_async_engine(shared_db_url, echo=False)
-                async with engine.begin() as conn:
-                    result = await conn.execute(text("""
-                        SELECT tablename FROM pg_tables
-                        WHERE schemaname = 'public'
-                    """))
-                    tables = [row[0] for row in result.fetchall()]
-                    if tables:
-                        await conn.execute(text("SET session_replication_role = 'replica'"))
-                        for table in tables:
-                            await conn.execute(text(f'DROP TABLE IF EXISTS "{table}" CASCADE'))
-                        await conn.execute(text("SET session_replication_role = 'origin'"))
-                        print(f"   Удалено {len(tables)} таблиц")
-                await engine.dispose()
+                has_any_schema = await _alembic_version_ready(shared_db_url)
 
-                print("Применение миграций...")
-                from core.db.migration_manifest import bootstrap_migration_registry
-                from core.db.migrations import run_migrations_async
+                if has_any_schema:
+                    for svc_name in stale_services:
+                        print(f"Догрузка миграций сервиса {svc_name}...")
+                        await run_migrations_async(service=svc_name)
+                        print(f"Миграции {svc_name} применены!")
+                    print()
+                    yield
+                else:
+                    print("Подготовка БД для тестов (первичная инициализация)...")
+                    engine = create_async_engine(shared_db_url, echo=False)
+                    async with engine.begin() as conn:
+                        result = await conn.execute(text("""
+                            SELECT tablename FROM pg_tables
+                            WHERE schemaname = 'public'
+                        """))
+                        tables = [row[0] for row in result.fetchall()]
+                        if tables:
+                            await conn.execute(text("SET session_replication_role = 'replica'"))
+                            for table in tables:
+                                await conn.execute(text(f'DROP TABLE IF EXISTS "{table}" CASCADE'))
+                            await conn.execute(text("SET session_replication_role = 'origin'"))
+                            print(f"   Удалено {len(tables)} таблиц")
+                    await engine.dispose()
 
-                bootstrap_migration_registry()
-                await run_migrations_async()
-                print("Миграции применены!\n")
-                yield
+                    print("Применение всех миграций...")
+                    await run_migrations_async()
+                    print("Миграции применены!\n")
+                    yield
 
-    print(f"\nФинальная очистка портов...")
-    for port in test_ports:
-        try:
-            subprocess.run(
-                f"lsof -ti:{port} | xargs kill -9 2>/dev/null",
-                shell=True,
-                capture_output=True,
-                timeout=5
-            )
-        except Exception:
-            pass
-    print("Все порты очищены после тестов\n")
+    # Teardown: НЕ убиваем порты. При xdist каждый gw-worker имеет свою session,
+    # и teardown первого завершившего worker'а убивал серверы, нужные остальным.
+    # Стейл от текущего прогона очистится в startup следующего.
+
+
+@pytest_asyncio.fixture(scope="session", autouse=True)
+async def platform_notification_manager_redis(setup_database_before_tests):
+    """Redis Pub/Sub для notify_user; без этого CRM и др. падают до старта flows lifespan."""
+    from core.websocket.manager import notification_manager
+
+    redis_url = os.environ.get("DATABASE__REDIS_URL", "redis://localhost:63792/0")
+    await notification_manager.start_redis_listener(redis_url)
+    yield
 
 
 # Синхронизация session-scoped fixtures для pytest-xdist
@@ -359,8 +574,17 @@ def pytest_configure(config):
         _APP_INIT_DONE,
         _TASKIQ_WORKER_LOCK,
         _TASKIQ_WORKER_PID,
+        f"{_TASKIQ_WORKER_PID}.refs",
         _RAG_WORKER_LOCK,
         _RAG_WORKER_PID,
+        f"{_RAG_WORKER_PID}.refs",
+        "/tmp/platform_test_sync_taskiq_worker.pid.refs",
+        "/tmp/platform_test_crm_taskiq_worker.pid.refs",
+        "/tmp/platform_test_flows_server.pid.ref_count",
+        "/tmp/platform_test_rag_server.pid.ref_count",
+        "/tmp/platform_test_crm_server.pid.ref_count",
+        "/tmp/platform_test_frontend_server.pid.ref_count",
+        "/tmp/platform_test_sync_server.pid.ref_count",
     ]:
         path = pathlib.Path(marker)
         if path.exists():
@@ -526,13 +750,17 @@ def mock_llm_with_queue():
 
 
 @pytest_asyncio.fixture
-async def mock_llm_redis(container):
+async def mock_llm_redis(container, request):
     """
     Фабрика для создания MockLLM через Redis.
     Для интеграционных тестов с реальным worker.
-    
+
     НЕ использовать с sync_tools!
-    
+
+    Для real_taskiq тестов используется базовый ключ (без суффикса xdist worker),
+    т.к. TaskIQ worker subprocess не имеет PYTEST_XDIST_WORKER в env.
+    Все real_taskiq тесты сгруппированы в одну xdist_group, поэтому race невозможен.
+
     Usage:
         async def test_integration(mock_llm_redis):
             await mock_llm_redis([
@@ -540,13 +768,17 @@ async def mock_llm_redis(container):
             ])
     """
     from core.clients.llm.mock import setup_mock_responses_redis, clear_mock_responses_redis
-    
+
+    is_real_taskiq = request.node.get_closest_marker("real_taskiq") is not None
+    key_override = "mock_llm:responses" if is_real_taskiq else None
+
     async def _factory(responses: List[Any]) -> None:
-        await setup_mock_responses_redis(container.redis_client, responses)
-    
+        await clear_mock_responses_redis(container.redis_client, key_override=key_override)
+        await setup_mock_responses_redis(container.redis_client, responses, key_override=key_override)
+
     yield _factory
-    
-    await clear_mock_responses_redis(container.redis_client)
+
+    await clear_mock_responses_redis(container.redis_client, key_override=key_override)
 
 
 
@@ -638,18 +870,15 @@ def sync_tools(request, monkeypatch):
     - process_flow_task.kiq - выполняет agent tasks напрямую  
     - send_task_update.kiq - выполняет push notifications напрямую
     - send_webhook.kiq - выполняет webhooks напрямую
-    - Redis pub/sub - in-memory очередь для streaming событий
+
+    Redis Pub/Sub не подменяется: стриминг идёт через реальный Redis из контейнера.
     """
     # Пропускаем для тестов с маркером real_taskiq
     if request.node.get_closest_marker("real_taskiq"):
         yield
         return
-    import asyncio
     from apps.flows.src.tasks import flow_tasks, tool_tasks
-    from apps.flows.src.tasks import push_notification_tasks
-    
-    # In-memory pub/sub для streaming
-    _channels: Dict[str, asyncio.Queue] = {}
+    import apps.idle_worker.tasks.push_notification_tasks as push_notification_tasks
     
     class SyncTaskResult:
         """Имитация результата TaskIQ task."""
@@ -665,8 +894,14 @@ def sync_tools(request, monkeypatch):
     
     async def sync_tool_kiq(tool_id, args, state):
         """Выполняет tool синхронно."""
+        from core.context import get_context
+
+        ctx = get_context()
+        context_data = ctx.to_dict() if ctx is not None else None
         try:
-            result = await tool_tasks.execute_tool(tool_id, args, state)
+            result = await tool_tasks.execute_tool(
+                tool_id, args, state, context_data=context_data
+            )
             return SyncTaskResult(result)
         except Exception as e:
             return SyncTaskResult(error=e)
@@ -682,6 +917,7 @@ def sync_tools(request, monkeypatch):
             if "context_data" not in kwargs:
                 mock_ctx = Context(
                     user=User(user_id="test_user", name="Test User"),
+                    active_company=Company(company_id="system", name="System"),
                     session_id="test_session",
                     channel="test",
                     metadata={
@@ -714,41 +950,11 @@ def sync_tools(request, monkeypatch):
             # В реальном TaskIQ ретраи обрабатывают ошибки, здесь просто игнорируем
             return SyncTaskResult({"success": False})
     
-    async def mock_publish(self, channel: str, message: str) -> int:
-        """In-memory publish."""
-        if channel not in _channels:
-            _channels[channel] = asyncio.Queue()
-        await _channels[channel].put(message)
-        return 1
-    
-    async def mock_subscribe(self, channel: str, timeout: float = 300.0, ready_event=None):
-        """In-memory subscribe."""
-        if channel not in _channels:
-            _channels[channel] = asyncio.Queue()
-        
-        # Сигнализируем что подписка готова
-        if ready_event:
-            ready_event.set()
-        
-        queue = _channels[channel]
-        while True:
-            try:
-                message = await asyncio.wait_for(queue.get(), timeout=1.0)
-                yield message
-            except asyncio.TimeoutError:
-                if queue.empty():
-                    break
-    
     # Патчим kiq методы
     monkeypatch.setattr(tool_tasks.execute_tool, "kiq", sync_tool_kiq)
     monkeypatch.setattr(flow_tasks.process_flow_task, "kiq", sync_agent_kiq)
     monkeypatch.setattr(push_notification_tasks.send_task_update, "kiq", sync_send_task_update_kiq)
     monkeypatch.setattr(push_notification_tasks.send_webhook, "kiq", sync_send_webhook_kiq)
-    
-    # Патчим Redis pub/sub
-    from core.clients import RedisClient
-    monkeypatch.setattr(RedisClient, "publish", mock_publish)
-    monkeypatch.setattr(RedisClient, "subscribe", mock_subscribe)
     
     yield None
 
@@ -897,7 +1103,7 @@ def inline_tools():
             "description": "Завершает агента и возвращает финальный ответ",
             "args_schema": {"answer": {"type": "string", "description": "Финальный ответ"}},
             "code": "async def execute(args: dict, state: dict = None):\n    return args.get('answer', '')",
-            "tool_type": "exit"
+            "react_role": "exit"
         },
         "ask_user": {
             "tool_id": "ask_user",
@@ -905,7 +1111,10 @@ def inline_tools():
             "args_schema": {"question": {"type": "string", "description": "Вопрос для пользователя"}},
             "code": """async def execute(args: dict, state: dict = None):
     from apps.flows.src.runtime.exceptions import FlowInterrupt
-    raise FlowInterrupt(question=args.get('question', ''))
+    q = args.get("question")
+    if not q or not str(q).strip():
+        raise ValueError("ask_user: question обязателен")
+    raise FlowInterrupt(question=str(q).strip())
 """
         },
         "reason": {
@@ -913,7 +1122,7 @@ def inline_tools():
             "description": "Рассуждение агента",
             "args_schema": {"thought": {"type": "string", "description": "Ход мысли"}},
             "code": "async def execute(args: dict, state: dict = None):\n    return args.get('thought', '')",
-            "tool_type": "reason"
+            "react_role": "reason"
         }
     }
 
@@ -1256,7 +1465,7 @@ async def test_agent_for_tool(container, unique_id):
         entry="main",
         nodes={
             "main": {
-                "type": "function",
+                "type": "code",
                 "code": "async def run(state):\n    return state",
             }
         },

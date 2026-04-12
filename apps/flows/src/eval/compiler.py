@@ -8,7 +8,7 @@ import ast
 import re
 from typing import Any, Callable, Dict, Optional
 
-from apps.flows.src.eval.constants import BLOCKED_MODULES
+from apps.flows.src.eval.import_policy import validate_import_nodes
 from apps.flows.src.eval.namespace import PythonNamespaceBuilder
 from core.errors import SafeEvalError
 
@@ -20,21 +20,9 @@ def _validate_code(code: str) -> None:
     except SyntaxError as e:
         raise SafeEvalError(f"Syntax error: {e}")
 
+    validate_import_nodes(tree)
+
     for node in ast.walk(tree):
-        # Блокируем import запрещенных модулей
-        if isinstance(node, (ast.Import, ast.ImportFrom)):
-            module_name = None
-            if isinstance(node, ast.Import):
-                module_name = node.names[0].name
-            elif isinstance(node, ast.ImportFrom) and node.module:
-                module_name = node.module
-
-            if module_name:
-                base = module_name.split(".")[0]
-                if module_name in BLOCKED_MODULES or base in BLOCKED_MODULES:
-                    raise SafeEvalError(f"Import of '{module_name}' is not allowed")
-
-        # Блокируем доступ к dunder атрибутам
         if isinstance(node, ast.Attribute):
             if node.attr.startswith("__") and node.attr.endswith("__"):
                 raise SafeEvalError(f"Access to '{node.attr}' is not allowed")
@@ -128,12 +116,21 @@ class PythonCompiler:
         # Ищем функцию execute
         if "execute" in namespace:
             return namespace["execute"], False
-        
-        # Автопоиск последней функции (точка входа всегда последняя)
-        matches = re.findall(r"(?:async\s+)?def\s+(\w+)\s*\(", code)
-        if matches:
-            last_func_name = matches[-1]
-            if last_func_name in namespace:
-                return namespace[last_func_name], False
-        
+
+        try:
+            tree = ast.parse(code)
+        except SyntaxError as e:
+            raise SafeEvalError(f"Syntax error: {e}") from e
+
+        top_level_funcs = [
+            n
+            for n in tree.body
+            if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef))
+        ]
+        if top_level_funcs:
+            entry_name = top_level_funcs[-1].name
+            fn = namespace.get(entry_name)
+            if callable(fn):
+                return fn, False
+
         raise SafeEvalError("No function found in code")

@@ -54,6 +54,11 @@ def test_get_cookie_domain_ip_is_none() -> None:
     assert get_cookie_domain("127.0.0.1:8002") is None
 
 
+def test_get_cookie_domain_localhost_shared_across_subdomains() -> None:
+    assert get_cookie_domain("localhost:8002") == "localhost"
+    assert get_cookie_domain("company.localhost:8002") == "localhost"
+
+
 def test_extract_subdomain_on_ip() -> None:
     assert extract_subdomain("127.0.0.1:8002") is None
 

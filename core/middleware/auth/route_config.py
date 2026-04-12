@@ -11,10 +11,12 @@ from starlette.requests import Request
 # Префиксы, для которых нельзя подменять ответ SPA (API и служебные пути)
 SPA_FALLBACK_EXCLUDED_PREFIXES: tuple[str, ...] = (
     "/api/",
+    "/l/",
     "/flows/",
     "/crm/",
     "/rag/",
     "/sync/",
+    "/documents/",
     "/frontend/",
     "/static/",
     "/assets/",
@@ -81,6 +83,8 @@ SKIP_PATHS = [
     "/flows/health",
     "/crm/health",
     "/debug/*",
+    "/api/v1/payments/webhook/*",
+    "/frontend/api/v1/payments/webhook/*",
 ]
 
 ROUTE_RULES: List[RouteRule] = [
@@ -95,6 +99,7 @@ ROUTE_RULES: List[RouteRule] = [
     # Страница входа (redirect после истечения сессии: redirectToAuth() на apex-домене)
     RouteRule("/login", auth_required=False, context_type="anonymous"),
     RouteRule("/frontend/login", auth_required=False, context_type="anonymous"),
+    RouteRule("/l/*", auth_required=False, context_type="anonymous"),
     
     # Страницы продуктов (публичный доступ)
     RouteRule("/products/*", auth_required=False, context_type="anonymous"),
@@ -121,6 +126,10 @@ ROUTE_RULES: List[RouteRule] = [
     RouteRule("/*/api/auth/login/*", auth_required=False, context_type="anonymous"),
     RouteRule("/*/api/auth/callback", auth_required=False, context_type="anonymous"),
     RouteRule("/*/api/auth/logout", auth_required=False, context_type="anonymous"),
+    RouteRule("/*/api/v1/integrations/oauth/callback", auth_required=False, context_type="anonymous"),
+    RouteRule("/api/auth/demo/status", auth_required=False, context_type="anonymous"),
+    RouteRule("/frontend/api/auth/demo/status", auth_required=False, context_type="anonymous"),
+    RouteRule("/*/api/auth/demo/status", auth_required=False, context_type="anonymous"),
     
     # Публичные API
     RouteRule("/api/leads", auth_required=False, context_type="anonymous"),
@@ -129,6 +138,7 @@ ROUTE_RULES: List[RouteRule] = [
     RouteRule("/api/public/legal", auth_required=False, context_type="anonymous"),
     RouteRule("/frontend/api/public/legal", auth_required=False, context_type="anonymous"),
     RouteRule("/api/health", auth_required=False, context_type="anonymous"),
+    RouteRule("/api/platform/file-types", auth_required=False, context_type="anonymous"),
     
     # Документация
     RouteRule("/docs*", auth_required=False, context_type="anonymous"),
@@ -140,7 +150,12 @@ ROUTE_RULES: List[RouteRule] = [
     # Вебхуки (без JWT, используют свою аутентификацию)
     RouteRule("/flows/api/v1/webhook/telegram/*", auth_required=False, context_type="webhook", channel="telegram"),
     RouteRule("/flows/api/v1/webhook/whatsapp/*", auth_required=False, context_type="webhook", channel="whatsapp"),
-    RouteRule("/flows/api/v1/payments/webhook/*", skip=True),
+    RouteRule("/api/v1/payments/webhook/*", skip=True),
+    RouteRule("/frontend/api/v1/payments/webhook/*", skip=True),
+
+    # YooMoney OAuth callback (redirect из браузера после авторизации на yoomoney.ru)
+    RouteRule("/api/billing/yoomoney/callback", auth_required=False, context_type="anonymous"),
+    RouteRule("/frontend/api/billing/yoomoney/callback", auth_required=False, context_type="anonymous"),
     
     # API для встраивания - публичный доступ для встраиваемых виджетов
     RouteRule("/flows/api/v1/embed/*", auth_required=False, context_type="anonymous"),
@@ -174,9 +189,9 @@ ROUTE_RULES: List[RouteRule] = [
     RouteRule("/api/invites/*", context_type="api", auth_required=True),
     RouteRule("/frontend/api/invites/*", context_type="api", auth_required=True),
 
-    # API фронтенда для управления командой
+    # Core team API на всех сервисах
     RouteRule("/api/team/*", context_type="api", auth_required=True),
-    RouteRule("/frontend/api/team/*", context_type="api", auth_required=True),
+    RouteRule("/*/api/team/*", context_type="api", auth_required=True),
     
     # API фронтенда для управления API ключами
     RouteRule("/api/api-keys/*", context_type="api", auth_required=True),
@@ -195,6 +210,18 @@ ROUTE_RULES: List[RouteRule] = [
     # API фронтенда для управления scheduler задачами
     RouteRule("/api/scheduler/*", context_type="api", auth_required=True),
     RouteRule("/frontend/api/scheduler/*", context_type="api", auth_required=True),
+
+    # Заявки с лендинга (список; доступ system проверяется в обработчике)
+    RouteRule("/api/lead-requests", context_type="api", auth_required=True),
+    RouteRule("/frontend/api/lead-requests", context_type="api", auth_required=True),
+
+    # Админ трейсинг (доступ system проверяется в обработчике)
+    RouteRule("/api/platform-tracing/*", context_type="api", auth_required=True),
+    RouteRule("/frontend/api/platform-tracing/*", context_type="api", auth_required=True),
+
+    # Админ тарифы и usage (доступ system проверяется в обработчике)
+    RouteRule("/api/platform-billing/*", context_type="api", auth_required=True),
+    RouteRule("/frontend/api/platform-billing/*", context_type="api", auth_required=True),
     
     # Push Notifications API (публичный ключ без авторизации, подписка с авторизацией)
     RouteRule("/api/push/vapid-public-key", context_type="anonymous", auth_required=False),
@@ -239,6 +266,23 @@ ROUTE_RULES: List[RouteRule] = [
     RouteRule("/settings/*", context_type="frontend", auth_required=True),
     RouteRule("/settings", context_type="frontend", auth_required=True),
     RouteRule("/scheduler-tasks", context_type="frontend", auth_required=True),
+    RouteRule("/lead-requests", context_type="frontend", auth_required=True),
+    RouteRule("/platform-tracing", context_type="frontend", auth_required=True),
+    RouteRule("/platform-billing", context_type="frontend", auth_required=True),
+
+    # Те же страницы консоли, если путь приходит с префиксом сервиса (/frontend/...).
+    # Иначе refresh даёт 404: префикс /frontend/ исключён из анонимного SPA-fallback.
+    RouteRule("/frontend/dashboard", context_type="frontend", auth_required=True),
+    RouteRule("/frontend/team", context_type="frontend", auth_required=True),
+    RouteRule("/frontend/api-keys", context_type="frontend", auth_required=True),
+    RouteRule("/frontend/billing", context_type="frontend", auth_required=True),
+    RouteRule("/frontend/embed-configs", context_type="frontend", auth_required=True),
+    RouteRule("/frontend/settings/*", context_type="frontend", auth_required=True),
+    RouteRule("/frontend/settings", context_type="frontend", auth_required=True),
+    RouteRule("/frontend/scheduler-tasks", context_type="frontend", auth_required=True),
+    RouteRule("/frontend/lead-requests", context_type="frontend", auth_required=True),
+    RouteRule("/frontend/platform-tracing", context_type="frontend", auth_required=True),
+    RouteRule("/frontend/platform-billing", context_type="frontend", auth_required=True),
 
     # Scheduler service API
     RouteRule("/scheduler/api/v1/*", context_type="api", auth_required=True),
@@ -306,12 +350,22 @@ ROUTE_RULES: List[RouteRule] = [
     RouteRule("/sync", auth_required=False, context_type="anonymous"),
     RouteRule("/sync/", auth_required=False, context_type="anonymous"),
     RouteRule("/sync/*", auth_required=False, context_type="anonymous"),
+
+    # Documents (apps/office): BFF + Lit shell; OnlyOffice дергает download/callback по JWT в query / Bearer
+    RouteRule("/documents/ui/static/*", auth_required=False, context_type="anonymous"),
+    RouteRule("/documents/api/v1/office-download", auth_required=False, context_type="anonymous"),
+    RouteRule("/documents/api/v1/onlyoffice/callback", auth_required=False, context_type="anonymous"),
+    RouteRule("/documents/api/v1/*", context_type="session", auth_required=True),
+    RouteRule("/documents", auth_required=False, context_type="anonymous"),
+    RouteRule("/documents/", auth_required=False, context_type="anonymous"),
+    RouteRule("/documents/*", auth_required=False, context_type="anonymous"),
 ]
 
 # Страницы где разрешен доступ без субдомена
 NO_SUBDOMAIN_ALLOWED_PATHS = [
     "/select-company",
     "/join",
+    "/l/*",
     "/api/companies/check-slug",
     "/api/companies/me",
     "/api/companies",

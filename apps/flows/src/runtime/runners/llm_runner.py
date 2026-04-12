@@ -6,20 +6,30 @@ Stream-first: LLM ВСЕГДА вызывается как stream.
 """
 
 import time
-import uuid
 from typing import Any, AsyncGenerator, Dict, List, Optional
 
 from a2a.types import (
     Message,
-    Part,
-    Role,
     TaskArtifactUpdateEvent,
     TaskStatusUpdateEvent,
-    TextPart,
 )
 
-from apps.flows.src.runtime.exceptions import FlowInterrupt, ToolExecutionError
-from core.clients.llm import StreamEvent, get_llm_for_state
+from apps.flows.src.runtime.a2a_messages import (
+    build_assistant_message as new_assistant_message,
+    build_system_message as new_system_message,
+    build_tool_result_message as new_tool_result_message,
+    build_user_message as new_user_message,
+)
+from apps.flows.src.runtime.exceptions import FlowInterrupt
+from apps.flows.src.state.cancellation import check_cancellation
+from apps.flows.src.runtime.llm_override_params import (
+    split_llm_override_for_client,
+    stream_kwargs_from_override,
+)
+from core.billing.service import BALANCE_BLOCK_OPERATION_LLM
+from core.config import get_settings
+from core.context import get_context
+from core.clients.llm import LLMClient, MockLLM, StreamEvent, get_llm_for_state
 from apps.flows.src.container import get_container
 from core.logging import get_logger
 from apps.flows.src.models import ReactLoopMode
@@ -33,7 +43,7 @@ from apps.flows.src.variables import VariableResolver
 from core.errors import ToolExecutionError
 
 from .base_runner import BaseLlmNodeRunner
-from apps.flows.src.tools.base import BaseTool, ToolType
+from apps.flows.src.models.enums import ReactToolRole
 
 logger = get_logger(__name__)
 
@@ -44,82 +54,6 @@ def _get_trace_ctx_from_state() -> Optional[TraceContext]:
     if trace_data:
         return TraceContext.from_dict(trace_data)
     return None
-
-
-def new_user_message(
-    content: str,
-    source_node_id: str,
-    context_id: Optional[str] = None,
-    task_id: Optional[str] = None,
-) -> Message:
-    """Создаёт сообщение от пользователя."""
-    return Message(
-        message_id=str(uuid.uuid4()),
-        role=Role.user,
-        parts=[Part(root=TextPart(text=content))],
-        context_id=context_id,
-        task_id=task_id,
-        metadata={"node_id": source_node_id},
-    )
-
-
-def new_assistant_message(
-    content: str,
-    source_node_id: str,
-    tool_calls: Optional[List[Dict[str, Any]]] = None,
-    context_id: Optional[str] = None,
-    task_id: Optional[str] = None,
-) -> Message:
-    """Создаёт сообщение от ассистента."""
-    meta: Dict[str, Any] = {"node_id": source_node_id}
-    if tool_calls:
-        meta["tool_calls"] = tool_calls
-    return Message(
-        message_id=str(uuid.uuid4()),
-        role=Role.agent,
-        parts=[Part(root=TextPart(text=content))],
-        context_id=context_id,
-        task_id=task_id,
-        metadata=meta,
-    )
-
-
-def new_tool_result_message(
-    tool_call_id: str,
-    content: str,
-    source_node_id: str,
-    context_id: Optional[str] = None,
-    task_id: Optional[str] = None,
-) -> Message:
-    """Создаёт сообщение с результатом tool."""
-    return Message(
-        message_id=str(uuid.uuid4()),
-        role=Role.agent,
-        parts=[Part(root=TextPart(text=content))],
-        context_id=context_id,
-        task_id=task_id,
-        metadata={"tool_call_id": tool_call_id, "node_id": source_node_id},
-    )
-
-
-def new_system_message(
-    content: str,
-    context_id: Optional[str] = None,
-    task_id: Optional[str] = None,
-    source_node_id: Optional[str] = None,
-) -> Message:
-    """Создаёт системное сообщение (для LLM-запроса или для записи в state.messages)."""
-    meta: Dict[str, Any] = {"system": True}
-    if source_node_id is not None:
-        meta["node_id"] = source_node_id
-    return Message(
-        message_id=str(uuid.uuid4()),
-        role=Role.agent,
-        parts=[Part(root=TextPart(text=content))],
-        context_id=context_id,
-        task_id=task_id,
-        metadata=meta,
-    )
 
 
 def _get_message_metadata(msg) -> Dict[str, Any]:
@@ -178,15 +112,17 @@ class LlmNodeRunner(BaseLlmNodeRunner):
 
         if interrupt_path:
             if user_content:
-                resumed = await self._handle_resume(
+                await self._handle_resume(
                     state, user_content, interrupt_path, context_id, task_id
                 )
-                if not resumed:
-                    return
             else:
                 InterruptManager.clear_interrupt_path(state)
         elif user_content:
-            state.messages.append(new_user_message(user_content, sid, context_id, task_id))
+            state.messages.append(
+                new_user_message(
+                    user_content, sid, context_id=context_id, task_id=task_id
+                )
+            )
 
         async for event in self._react_loop(
             state, llm_node_label, context_id, task_id, emitter
@@ -211,27 +147,6 @@ class LlmNodeRunner(BaseLlmNodeRunner):
             react = self.node_config.react
             return react.loop_mode, react.exit_tool, react.max_iterations, react.strict, react.reminder_message
         return ReactLoopMode.AUTO, "finish", self.MAX_ITERATIONS, True, None
-
-    def _get_reason_tool_name(self) -> Optional[str]:
-        """Находит имя reasoning tool по tool_type."""
-        for tool in self.tools:
-            if getattr(tool, "tool_type", None) == ToolType.REASON:
-                return tool.name
-        return None
-
-    def _get_exit_tool_name(self) -> Optional[str]:
-        """Находит имя exit tool по tool_type."""
-        for tool in self.tools:
-            if getattr(tool, "tool_type", None) == ToolType.EXIT:
-                return tool.name
-        return None
-
-    def _find_tool_by_type(self, tool_type: ToolType) -> Optional[BaseTool]:
-        """Находит tool по tool_type."""
-        for tool in self.tools:
-            if getattr(tool, "tool_type", None) == tool_type:
-                return tool
-        return None
 
     def _find_exit_tool_call(
         self, tool_calls: List[Dict[str, Any]], exit_tool: str
@@ -274,7 +189,9 @@ class LlmNodeRunner(BaseLlmNodeRunner):
                         return
                 break
         state.messages.append(
-            new_assistant_message("", sid, [tool_call], context_id, task_id)
+            new_assistant_message(
+                "", sid, [tool_call], context_id=context_id, task_id=task_id
+            )
         )
 
     async def _handle_resume(
@@ -284,10 +201,10 @@ class LlmNodeRunner(BaseLlmNodeRunner):
         interrupt_path: List[InterruptPathItem],
         context_id: str,
         task_id: Optional[str] = None,
-    ) -> bool:
+    ) -> None:
         """Обрабатывает resume после interrupt."""
         if not interrupt_path:
-            return True
+            return
 
         next_call = interrupt_path[0]
         call_type = next_call.type
@@ -318,23 +235,34 @@ class LlmNodeRunner(BaseLlmNodeRunner):
                 for tr in tool_results:
                     state.messages.append(
                         new_tool_result_message(
-                            tr["tool_call_id"], tr["content"], sid, context_id, task_id
+                            tr["tool_call_id"],
+                            tr["content"],
+                            sid,
+                            context_id=context_id,
+                            task_id=task_id,
                         )
                     )
                 InterruptManager.clear_interrupt_path(state)
             except FlowInterrupt as e:
-                InterruptManager.set_interrupt(state, e.question, tool_call)
+                InterruptManager.apply_interrupt(
+                    state, e.body, tool_call, getattr(e, "correlation_id", None)
+                )
                 raise
         else:
             self._ensure_assistant_tool_calls(
                 state, tool_call_id, tool_call, context_id, task_id
             )
             state.messages.append(
-                new_tool_result_message(tool_call_id, user_answer, sid, context_id, task_id)
+                new_tool_result_message(
+                    tool_call_id,
+                    user_answer,
+                    sid,
+                    context_id=context_id,
+                    task_id=task_id,
+                )
             )
 
         InterruptManager.clear_interrupt_path(state)
-        return True
 
     async def _react_loop(
         self,
@@ -350,6 +278,19 @@ class LlmNodeRunner(BaseLlmNodeRunner):
         trace_ctx = _get_trace_ctx_from_state()
         tracer = get_tracer()
         model = self.node_config.llm_override.model if self.node_config and self.node_config.llm_override else "unknown"
+
+        actx = get_context()
+        if actx is None or actx.active_company is None:
+            raise ValueError("Контекст с active_company обязателен для LLM-ноды")
+        if actx.user is None or not str(actx.user.user_id).strip():
+            raise ValueError("Контекст с user обязателен для LLM-ноды (биллинг и уведомления)")
+        container = get_container()
+        await container.billing_service.require_balance_for_billable_operation(
+            actx.active_company.company_id,
+            str(actx.user.user_id).strip(),
+            operation_code=BALANCE_BLOCK_OPERATION_LLM,
+            notification_service="flows",
+        )
 
         # Определяем режим: structured_output или tools
         structured_output = self.node_config.structured_output if self.node_config else False
@@ -371,10 +312,14 @@ class LlmNodeRunner(BaseLlmNodeRunner):
             response_format = None
 
         loop_mode, exit_tool, max_iterations, strict, reminder_message = self._get_react_config()
-        reason_tool_name = self._get_reason_tool_name()
-        exit_tool_name = self._get_exit_tool_name() or exit_tool
+        reason_tool = self._find_tool_by_react_role(ReactToolRole.REASON)
+        reason_tool_name = reason_tool.name if reason_tool else None
+        exit_tool_obj = self._find_tool_by_react_role(ReactToolRole.EXIT)
+        exit_tool_name = (exit_tool_obj.name if exit_tool_obj else None) or exit_tool
 
-        system_msg = new_system_message(system_prompt, context_id, task_id)
+        system_msg = new_system_message(
+            system_prompt, context_id=context_id, task_id=task_id
+        )
 
         iteration = 0
         final_response = ""
@@ -383,6 +328,9 @@ class LlmNodeRunner(BaseLlmNodeRunner):
             try:
                 while iteration < max_iterations:
                     iteration += 1
+
+                    await check_cancellation()
+
                     logger.debug(f"[llm_node:{llm_node_label}] ReAct iteration {iteration} (streaming)")
 
                     messages = self._messages_for_llm_context(state)
@@ -396,15 +344,32 @@ class LlmNodeRunner(BaseLlmNodeRunner):
                         llm_start = time.time()
                         input_tokens = 0
                         output_tokens = 0
+                        provider_reported_cost: Optional[float] = None
+                        provider_upstream_inference_cost: Optional[float] = None
+                        settlement_quantity_rub: Optional[int] = None
+
+                        llm, stream_kw, max_tok = self._resolve_llm_client(state)
+                        llm_provider = getattr(llm, "llm_provider", None)
 
                         async with tracer.llm_call_span(
-                            model, len(llm_messages), len(tools_schema) if tools_schema else 0, trace_ctx=trace_ctx
+                            model,
+                            len(llm_messages),
+                            len(tools_schema) if tools_schema else 0,
+                            trace_ctx=trace_ctx,
+                            llm_provider=llm_provider,
                         ) as llm_span:
                             llm_messages_for_trace = self._messages_to_dict(llm_messages)
                             tracer.record_llm_request(llm_span, llm_messages_for_trace, tools_schema, response_format)
                             
                             async for event in self._call_llm(
-                                llm_messages, tools_schema, context_id, task_id, state, response_format
+                                llm,
+                                stream_kw,
+                                max_tok,
+                                llm_messages,
+                                tools_schema,
+                                context_id,
+                                task_id,
+                                response_format,
                             ):
                                 should_yield = True
                                 
@@ -423,11 +388,30 @@ class LlmNodeRunner(BaseLlmNodeRunner):
 
                                 if isinstance(event, TaskStatusUpdateEvent):
                                     if event.status.message and event.status.message.metadata:
-                                        tool_calls = event.status.message.metadata.get("tool_calls")
-                                        usage = event.status.message.metadata.get("usage")
+                                        md = event.status.message.metadata
+                                        tc = md.get("tool_calls")
+                                        if tc:
+                                            tool_calls = tc
+                                        usage = md.get("usage")
                                         if usage:
                                             input_tokens = usage.get("input_tokens", 0)
                                             output_tokens = usage.get("output_tokens", 0)
+                                            prc = usage.get("provider_reported_cost")
+                                            if isinstance(prc, (int, float)):
+                                                provider_reported_cost = float(prc)
+                                            puc = usage.get("provider_upstream_inference_cost")
+                                            if isinstance(puc, (int, float)):
+                                                provider_upstream_inference_cost = float(puc)
+
+                            if (
+                                llm_provider == "openrouter"
+                                and provider_reported_cost is not None
+                                and provider_reported_cost > 0
+                            ):
+                                rate = get_settings().billing.usd_to_rub_rate
+                                rub = int(round(provider_reported_cost * rate))
+                                if rub >= 1:
+                                    settlement_quantity_rub = rub
 
                             llm_duration = (time.time() - llm_start) * 1000
                             tracer.record_llm_response(
@@ -438,6 +422,10 @@ class LlmNodeRunner(BaseLlmNodeRunner):
                                 duration_ms=llm_duration,
                                 response_content=content,
                                 tool_calls=tool_calls,
+                                llm_provider=llm_provider,
+                                provider_reported_cost=provider_reported_cost,
+                                provider_upstream_inference_cost=provider_upstream_inference_cost,
+                                settlement_quantity_rub=settlement_quantity_rub,
                             )
 
                         if tool_calls:
@@ -457,15 +445,25 @@ class LlmNodeRunner(BaseLlmNodeRunner):
                                 )
                                 
                                 state.messages.append(
-                                    new_assistant_message(content, sid, tool_calls, context_id, task_id)
+                                    new_assistant_message(
+                                        content,
+                                        sid,
+                                        tool_calls,
+                                        context_id=context_id,
+                                        task_id=task_id,
+                                    )
                                 )
-                                
+
                                 exit_call_id = exit_call.get("id", exit_tool_name)
                                 await emitter.emit_tool_call(exit_tool_name, exit_args, exit_call_id)
                                 
                                 state.messages.append(
                                     new_tool_result_message(
-                                        exit_call_id, final_response, sid, context_id, task_id
+                                        exit_call_id,
+                                        final_response,
+                                        sid,
+                                        context_id=context_id,
+                                        task_id=task_id,
                                     )
                                 )
                                 await emitter.emit_tool_result(exit_tool_name, final_response, exit_call_id)
@@ -475,7 +473,13 @@ class LlmNodeRunner(BaseLlmNodeRunner):
                                 break
 
                             state.messages.append(
-                                new_assistant_message(content, sid, tool_calls, context_id, task_id)
+                                new_assistant_message(
+                                    content,
+                                    sid,
+                                    tool_calls,
+                                    context_id=context_id,
+                                    task_id=task_id,
+                                )
                             )
 
                             for tc in tool_calls:
@@ -484,9 +488,15 @@ class LlmNodeRunner(BaseLlmNodeRunner):
                                 tool_args = tc.get("arguments", {})
                                 
                                 tool_obj = next((t for t in self.tools if t.name == tool_name), None)
-                                tool_type = tool_obj.tool_type.value if tool_obj else "tool"
-                                
-                                await emitter.emit_tool_call(tool_name, tool_args, tool_call_id, tool_type)
+                                react_role = (
+                                    tool_obj.react_role.value
+                                    if tool_obj
+                                    else ReactToolRole.STANDARD.value
+                                )
+
+                                await emitter.emit_tool_call(
+                                    tool_name, tool_args, tool_call_id, react_role
+                                )
 
                             try:
                                 tool_results = await self._execute_tools_parallel(
@@ -496,7 +506,11 @@ class LlmNodeRunner(BaseLlmNodeRunner):
                                 for tr in tool_results:
                                     state.messages.append(
                                         new_tool_result_message(
-                                            tr["tool_call_id"], tr["content"], sid, context_id, task_id
+                                            tr["tool_call_id"],
+                                            tr["content"],
+                                            sid,
+                                            context_id=context_id,
+                                            task_id=task_id,
                                         )
                                     )
                                     tool_call_id = tr["tool_call_id"]
@@ -538,8 +552,11 @@ class LlmNodeRunner(BaseLlmNodeRunner):
                                             ),
                                         )
                                     
-                                    InterruptManager.set_interrupt(
-                                        state, e.question, interrupted_tc
+                                    InterruptManager.apply_interrupt(
+                                        state,
+                                        e.body,
+                                        interrupted_tc,
+                                        getattr(e, "correlation_id", None),
                                     )
                                 raise
                         else:
@@ -615,8 +632,8 @@ class LlmNodeRunner(BaseLlmNodeRunner):
                                 state.messages.append(
                                     new_system_message(
                                         reminder_message or default_reminder,
-                                        context_id,
-                                        task_id,
+                                        context_id=context_id,
+                                        task_id=task_id,
                                         source_node_id=sid,
                                     )
                                 )
@@ -628,21 +645,45 @@ class LlmNodeRunner(BaseLlmNodeRunner):
                     state.response = final_response
                     tracer.record_state_snapshot(llm_node_span, state)
 
+    def _resolve_llm_client(
+        self, state: ExecutionState
+    ) -> tuple[LLMClient | MockLLM, Dict[str, Any], Optional[int]]:
+        override = self.node_config.llm_override if self.node_config else None
+        model, temp, provider, api_key, base_url, max_tok = split_llm_override_for_client(override)
+        llm = get_llm_for_state(
+            state,
+            model_name=model,
+            temperature=temp,
+            provider=provider,
+            api_key=api_key,
+            base_url=base_url,
+            max_tokens=max_tok,
+        )
+        stream_kw = stream_kwargs_from_override(override)
+        return llm, stream_kw, max_tok
+
     async def _call_llm(
         self,
+        llm: LLMClient | MockLLM,
+        stream_kw: Dict[str, Any],
+        max_tok: Optional[int],
         messages: List[Message],
         tools: Optional[List[Dict[str, Any]]],
         context_id: str,
         task_id: str,
-        state: ExecutionState,
         response_format: Optional[Dict[str, Any]] = None,
     ) -> AsyncGenerator[StreamEvent, None]:
         """Вызывает LLM - ТОЛЬКО STREAM."""
-        model = self.node_config.llm_override.model if self.node_config and self.node_config.llm_override else None
-        temp = self.node_config.llm_override.temperature if self.node_config and self.node_config.llm_override else None
-        llm = get_llm_for_state(state, model_name=model, temperature=temp)
-
-        async for event in llm.stream(messages, tools, response_format, task_id, context_id):
+        async for event in llm.stream(
+            messages,
+            tools,
+            response_format,
+            task_id,
+            context_id,
+            max_tokens=max_tok,
+            **stream_kw,
+        ):
+            await check_cancellation()
             yield event
 
     async def _execute_tools_parallel(

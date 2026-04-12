@@ -10,11 +10,14 @@ app/i18n/
 │   ├── ru/                    # Русский язык
 │   │   ├── _meta.json         # Метаданные языка (версия, статистика)
 │   │   ├── common.json        # Общие переводы (save, cancel, delete...)
-│   │   ├── dashboard.json     # Дашборд
+│   │   ├── sync.json          # Sync /sync
+│   │   ├── crm.json           # CRM /crm (в т.ч. шаблоны пространств)
+│   │   ├── rag.json           # RAG /rag
+│   │   ├── frontend.json      # Кабинет /frontend (основной бандл SPA)
 │   │   ├── landing.json       # Лендинг
 │   │   ├── bots.json          # Боты
 │   │   ├── chats.json         # Чаты
-│   │   ├── builder.json       # Agent Builder
+│   │   ├── flows.json         # Flows /flows
 │   │   ├── billing.json       # Биллинг и тарифы
 │   │   ├── admin.json         # Админ панель
 │   │   ├── auth.json          # Авторизация
@@ -32,7 +35,7 @@ app/i18n/
 │   ├── en/                    # Английский язык (такая же структура)
 │   │   ├── _meta.json
 │   │   ├── common.json
-│   │   ├── dashboard.json
+│   │   ├── frontend.json
 │   │   └── ...
 │   │
 │   └── translations_backup/   # Бэкап старых монолитных файлов
@@ -75,6 +78,17 @@ app/i18n/
 - **Меньше конфликтов** - каждый работает со своим модулем
 - **Быстрая загрузка** - можно загружать только нужные модули
 
+### HTTP API и Lit SPA
+
+- Эндпоинт **`GET /api/i18n/{locale}`** (`locale`: `ru` | `en`) подключается в **`create_service_app`** через **`core/app/i18n_routes.py`** на всех сервисах; тело — объединение всех `*.json` из **`core/i18n/translations/{locale}/`** (файлы с префиксом `_` не отдаются). Ключ верхнего уровня в ответе = **имя файла без `.json`** (namespace для `i18n.t`).
+- Основной бандл SPA сервиса с префиксом **`/{slug}`** называйте **`{slug}.json`** (например **`sync.json`**, **`frontend.json`**, **`crm.json`**) — дефолтный namespace на клиенте задаётся из **`PlatformApp.getBaseUrl()`** через **`i18nDefaultNamespaceForBaseUrl`** ([`i18n-default-namespace.js`](../../frontend/static/services/i18n/i18n-default-namespace.js)).
+- Клиентский движок: **`core/frontend/static/services/i18n/i18n.service.js`**, регистрация в **`ServiceRegistry.registerCore`** как **`i18n`**, в компонентах — **`this.i18n`** (`PlatformElement`).
+- Смена языка в UI: **`localStorage`** (`locale`), cookie **`language`**, атриут **`lang`** у `<html>` — в одну линию с определением языка в **`core/middleware/auth/context_factory.py`** (cookie `language` и `Accept-Language`).
+
+### Python API
+
+- Строки для пользователей из бэкенда — через **`TranslationManager`** / **`t()`** в **`core/i18n/service.py`**; язык запроса — **`get_context().language`**, если контекст установлен (после выставления cookie из SPA язык совпадает с UI).
+
 ### Ручное редактирование
 
 Редактируйте нужный модуль напрямую:
@@ -115,7 +129,7 @@ app/i18n/
 ### Соответствие ключей и модулей
 
 - `common.save` → `translations/ru/common.json`
-- `dashboard.title` → `translations/ru/dashboard.json`
+- `frontend.console_home.welcome_title` → `translations/ru/frontend.json`
 - `models.agent.fields.name` → `translations/ru/models/agent.json`
 - `billing.current_plan.title` → `translations/ru/billing.json`
 

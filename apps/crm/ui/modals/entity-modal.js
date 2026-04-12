@@ -10,6 +10,7 @@ import { CRMStore } from '../store/crm.store.js';
 import '@platform/lib/components/tag-input.js';
 import '@platform/lib/components/platform-icon.js';
 import '@platform/lib/components/platform-date-picker.js';
+import '@platform/lib/components/fields/platform-field.js';
 
 export class EntityModal extends PlatformModal {
     static properties = {
@@ -21,6 +22,7 @@ export class EntityModal extends PlatformModal {
         _selectedType: { state: true },
         _saving: { state: true },
         _attributeRows: { state: true },
+        _fieldErrors: { state: true },
     };
 
     static styles = [
@@ -81,10 +83,82 @@ export class EntityModal extends PlatformModal {
                 display: flex;
                 gap: var(--space-2);
                 margin-bottom: var(--space-2);
+                flex-wrap: wrap;
             }
 
             .attribute-row input {
                 flex: 1;
+            }
+
+            .field-error {
+                border-color: #ef4444 !important;
+                box-shadow: 0 0 0 2px rgba(239, 68, 68, 0.2);
+            }
+
+            .field-error-text {
+                width: 100%;
+                font-size: 11px;
+                color: #ef4444;
+                margin-top: -4px;
+            }
+
+            .field-badge {
+                display: inline-flex;
+                align-items: center;
+                padding: 1px 6px;
+                border-radius: var(--radius-sm);
+                font-size: 10px;
+                font-weight: 600;
+                text-transform: uppercase;
+                letter-spacing: 0.03em;
+                line-height: 16px;
+                flex-shrink: 0;
+            }
+
+            .field-badge.required {
+                background: rgba(239, 68, 68, 0.12);
+                color: #ef4444;
+            }
+
+            .field-badge.optional {
+                background: rgba(59, 130, 246, 0.10);
+                color: #3b82f6;
+            }
+
+            .field-badge.public {
+                background: rgba(34, 197, 94, 0.10);
+                color: #22c55e;
+            }
+
+            .field-section-title {
+                display: flex;
+                align-items: center;
+                gap: var(--space-2);
+                font-size: var(--text-sm);
+                font-weight: 600;
+                color: var(--text-secondary);
+                margin-bottom: var(--space-2);
+                margin-top: var(--space-4);
+            }
+
+            .field-section-title:first-child {
+                margin-top: 0;
+            }
+
+            .field-label-row {
+                display: flex;
+                align-items: center;
+                gap: var(--space-2);
+                min-width: 0;
+                flex: 1;
+            }
+
+            .field-label-text {
+                font-size: var(--text-sm);
+                color: var(--text-secondary);
+                white-space: nowrap;
+                overflow: hidden;
+                text-overflow: ellipsis;
             }
 
             .add-attribute-btn {
@@ -128,43 +202,6 @@ export class EntityModal extends PlatformModal {
                 width: 100%;
             }
 
-            .btn {
-                padding: var(--space-2) var(--space-4);
-                border-radius: var(--radius-lg);
-                font-size: var(--text-sm);
-                font-weight: 500;
-                cursor: pointer;
-                transition: all var(--duration-fast);
-            }
-
-            .btn-secondary {
-                background: var(--crm-button-secondary-bg);
-                border: 1px solid var(--crm-button-secondary-bg);
-                color: var(--crm-button-secondary-text);
-            }
-
-            .btn-secondary:hover {
-                background: var(--crm-button-secondary-hover);
-                border-color: var(--crm-button-secondary-hover);
-                color: var(--crm-button-secondary-text);
-            }
-
-            .btn-primary {
-                background: var(--crm-button-primary-bg);
-                border: 1px solid var(--crm-button-primary-bg);
-                color: var(--crm-button-primary-text);
-            }
-
-            .btn-primary:hover:not(:disabled) {
-                background: var(--crm-button-primary-hover);
-                border-color: var(--crm-button-primary-hover);
-            }
-
-            .btn-primary:disabled {
-                opacity: 0.5;
-                cursor: not-allowed;
-            }
-
             .no-types-message {
                 padding: var(--space-3);
                 background: var(--glass-solid-subtle);
@@ -203,6 +240,7 @@ export class EntityModal extends PlatformModal {
         this._selectedType = 'note';
         this._saving = false;
         this._attributeRows = [];
+        this._fieldErrors = {};
 
         this._unsubscribe = CRMStore.subscribe(state => {
             this._entityTypes = state.entities.entityTypes || [];
@@ -230,6 +268,7 @@ export class EntityModal extends PlatformModal {
                 ...this._formData,
                 entity_type: defaultType.type_id,
             };
+            this._ensureSchemaRows();
         }
         
         if (this.entity) {
@@ -247,6 +286,7 @@ export class EntityModal extends PlatformModal {
             this._attributeRows = Object.entries(this.entity.attributes || {}).map(
                 ([key, value]) => ({ key, value })
             );
+            this._ensureSchemaRows();
         }
     }
 
@@ -255,7 +295,9 @@ export class EntityModal extends PlatformModal {
     }
 
     renderHeader() {
-        return this._isEditing ? 'Редактировать сущность' : 'Новая сущность';
+        return this._isEditing
+            ? this.i18n.t('entity_modal.header_edit')
+            : this.i18n.t('entity_modal.header_create');
     }
 
     _getBaseTypes() {
@@ -273,6 +315,7 @@ export class EntityModal extends PlatformModal {
             entity_type: typeId,
             entity_subtype: null,
         };
+        this._ensureSchemaRows();
     }
 
     _onSubtypeSelect(subtypeId) {
@@ -280,6 +323,7 @@ export class EntityModal extends PlatformModal {
             ...this._formData,
             entity_subtype: this._formData.entity_subtype === subtypeId ? null : subtypeId,
         };
+        this._ensureSchemaRows();
     }
 
     _onNameInput(e) {
@@ -324,7 +368,7 @@ export class EntityModal extends PlatformModal {
 
     async _onSave() {
         if (!this._formData.name.trim()) {
-            this.error('Название обязательно');
+            this.error(this.i18n.t('entity_modal.err_name_required'));
             return;
         }
 
@@ -353,16 +397,19 @@ export class EntityModal extends PlatformModal {
 
             if (this._isEditing) {
                 await CRMStore.updateEntity(crmApi, this.entityId, data);
-                this.success('Сущность обновлена');
+                this.success(this.i18n.t('entity_modal.success_updated'));
             } else {
                 await CRMStore.createEntity(crmApi, data);
-                this.success('Сущность создана');
+                this.success(this.i18n.t('entity_modal.success_created'));
             }
 
             this.dispatchEvent(new CustomEvent('saved'));
             this.close();
         } catch (error) {
-            const message = error instanceof Error ? error.message : 'Ошибка сохранения сущности';
+            const message = error instanceof Error
+                ? error.message
+                : this.i18n.t('entity_modal.err_save');
+            this._fieldErrors = this._parseFieldErrors(message);
             this.error(message);
             throw error;
         } finally {
@@ -370,11 +417,207 @@ export class EntityModal extends PlatformModal {
         }
     }
 
+    _parseFieldErrors(errorMessage) {
+        const errors = {};
+        const parts = errorMessage.split('; ');
+        for (const part of parts) {
+            const colonIdx = part.indexOf(':');
+            if (colonIdx > 0) {
+                const field = part.substring(0, colonIdx).trim();
+                errors[field] = part.substring(colonIdx + 1).trim();
+            }
+        }
+        return errors;
+    }
+
+    _getFieldSpec(fieldKey) {
+        const typeId = this._formData.entity_subtype || this._formData.entity_type;
+        const entityType = this._entityTypes.find(t => t.type_id === typeId);
+        if (!entityType) return null;
+        const spec = entityType.required_fields?.[fieldKey]
+            || entityType.optional_fields?.[fieldKey];
+        return spec || null;
+    }
+
+    _getFieldType(fieldKey) {
+        const spec = this._getFieldSpec(fieldKey);
+        return spec?.type || 'string';
+    }
+
+    _getFieldConfig(fieldKey) {
+        const spec = this._getFieldSpec(fieldKey);
+        if (!spec) return {};
+        if (spec.type === 'enum') {
+            return { values: spec.values || [] };
+        }
+        return {};
+    }
+
+    _getSelectedEntityType() {
+        const typeId = this._formData.entity_subtype || this._formData.entity_type;
+        return this._entityTypes.find(t => t.type_id === typeId) || null;
+    }
+
+    _getRequiredFieldNames() {
+        const entityType = this._getSelectedEntityType();
+        if (!entityType?.required_fields) return [];
+        return Object.keys(entityType.required_fields);
+    }
+
+    _getOptionalFieldNames() {
+        const entityType = this._getSelectedEntityType();
+        if (!entityType?.optional_fields) return [];
+        return Object.keys(entityType.optional_fields);
+    }
+
+    _getPublicFieldNames() {
+        const entityType = this._getSelectedEntityType();
+        return entityType?.public_fields || [];
+    }
+
+    _getFieldLabel(fieldKey) {
+        const spec = this._getFieldSpec(fieldKey);
+        return spec?.label || fieldKey;
+    }
+
+    _isFieldRequired(fieldKey) {
+        const entityType = this._getSelectedEntityType();
+        return Boolean(entityType?.required_fields?.[fieldKey]);
+    }
+
+    _isFieldOptional(fieldKey) {
+        const entityType = this._getSelectedEntityType();
+        return Boolean(entityType?.optional_fields?.[fieldKey]);
+    }
+
+    _isFieldPublic(fieldKey) {
+        return this._getPublicFieldNames().includes(fieldKey);
+    }
+
+    _ensureSchemaRows() {
+        const requiredKeys = this._getRequiredFieldNames();
+        const optionalKeys = this._getOptionalFieldNames();
+        const existingKeys = new Set(this._attributeRows.map(r => r.key.trim()));
+        const toAdd = [];
+        for (const key of requiredKeys) {
+            if (!existingKeys.has(key)) {
+                toAdd.push({ key, value: '' });
+            }
+        }
+        for (const key of optionalKeys) {
+            if (!existingKeys.has(key)) {
+                toAdd.push({ key, value: '' });
+            }
+        }
+        if (toAdd.length > 0) {
+            this._attributeRows = [...this._attributeRows, ...toAdd];
+        }
+    }
+
+    _renderFieldBadges(fieldKey) {
+        const badges = [];
+        if (this._isFieldRequired(fieldKey)) {
+            badges.push(html`<span class="field-badge required">${this.i18n.t('entity_card.badge_required')}</span>`);
+        } else if (this._isFieldOptional(fieldKey)) {
+            badges.push(html`<span class="field-badge optional">${this.i18n.t('entity_card.badge_optional')}</span>`);
+        }
+        if (this._isFieldPublic(fieldKey)) {
+            badges.push(html`<span class="field-badge public">${this.i18n.t('entity_card.badge_public')}</span>`);
+        }
+        return badges;
+    }
+
+    _renderAttributeRow(row, index, isSchemaField) {
+        return html`
+            <div class="attribute-row">
+                ${isSchemaField ? html`
+                    <div class="field-label-row">
+                        <span class="field-label-text">${this._getFieldLabel(row.key)}</span>
+                        ${this._renderFieldBadges(row.key)}
+                    </div>
+                ` : html`
+                    <input
+                        type="text"
+                        class="form-input ${this._fieldErrors[row.key] ? 'field-error' : ''}"
+                        placeholder=${this.i18n.t('ai_entity_card.attr_key_placeholder')}
+                        .value=${row.key}
+                        @input=${(e) => this._onAttributeKeyChange(index, e.target.value)}
+                    />
+                `}
+                <platform-field
+                    .type=${this._getFieldType(row.key)}
+                    .value=${row.value}
+                    .config=${this._getFieldConfig(row.key)}
+                    mode="edit"
+                    style="flex: 1;"
+                    @change=${(e) => this._onAttributeValueChange(index, e.detail.value)}
+                ></platform-field>
+                ${!isSchemaField ? html`
+                    <button
+                        type="button"
+                        class="remove-btn"
+                        @click=${() => this._onRemoveAttribute(index)}
+                    >
+                        <platform-icon name="close" size="14"></platform-icon>
+                    </button>
+                ` : ''}
+                ${this._fieldErrors[row.key] ? html`
+                    <span class="field-error-text">${this._fieldErrors[row.key]}</span>
+                ` : ''}
+            </div>
+        `;
+    }
+
+    _renderAttributeGroups() {
+        const requiredKeys = new Set(this._getRequiredFieldNames());
+        const optionalKeys = new Set(this._getOptionalFieldNames());
+
+        const requiredRows = [];
+        const optionalRows = [];
+        const customRows = [];
+
+        for (let i = 0; i < this._attributeRows.length; i++) {
+            const row = this._attributeRows[i];
+            const key = row.key.trim();
+            if (requiredKeys.has(key)) {
+                requiredRows.push({ row, index: i });
+            } else if (optionalKeys.has(key)) {
+                optionalRows.push({ row, index: i });
+            } else {
+                customRows.push({ row, index: i });
+            }
+        }
+
+        return html`
+            ${requiredRows.length > 0 ? html`
+                <div class="field-section-title">
+                    ${this.i18n.t('entity_modal.label_required_fields')}
+                </div>
+                ${requiredRows.map(({ row, index }) => this._renderAttributeRow(row, index, true))}
+            ` : ''}
+            ${optionalRows.length > 0 ? html`
+                <div class="field-section-title">
+                    ${this.i18n.t('entity_modal.label_optional_fields')}
+                </div>
+                ${optionalRows.map(({ row, index }) => this._renderAttributeRow(row, index, true))}
+            ` : ''}
+            ${customRows.length > 0 ? html`
+                <div class="field-section-title">
+                    ${this.i18n.t('entity_modal.label_custom_fields')}
+                </div>
+                ${customRows.map(({ row, index }) => this._renderAttributeRow(row, index, false))}
+            ` : ''}
+        `;
+    }
+
     _resolveIconName(iconName) {
+        if (iconName === 'file') {
+            return 'folder';
+        }
         if (typeof iconName === 'string' && /^[a-z0-9-]+$/i.test(iconName)) {
             return iconName;
         }
-        return 'file';
+        return 'folder';
     }
 
     renderBody() {
@@ -385,7 +628,7 @@ export class EntityModal extends PlatformModal {
         return html`
             <div class="form-grid">
                 <div class="form-group">
-                    <label class="form-label">Тип</label>
+                    <label class="form-label">${this.i18n.t('entity_modal.label_type')}</label>
                     ${baseTypes.length > 0 ? html`
                         <div class="type-chips">
                             ${baseTypes.map(type => html`
@@ -400,13 +643,13 @@ export class EntityModal extends PlatformModal {
                             `)}
                         </div>
                     ` : html`
-                        <div class="no-types-message">Загрузка типов...</div>
+                        <div class="no-types-message">${this.i18n.t('entity_modal.loading_types')}</div>
                     `}
                 </div>
 
                 ${subtypes.length > 0 ? html`
                     <div class="form-group">
-                        <label class="form-label">Подтип</label>
+                        <label class="form-label">${this.i18n.t('entity_modal.label_subtype')}</label>
                         <div class="type-chips">
                             ${subtypes.map(type => html`
                                 <button
@@ -423,32 +666,32 @@ export class EntityModal extends PlatformModal {
                 ` : ''}
 
                 <div class="form-group">
-                    <label class="form-label">Название *</label>
+                    <label class="form-label">${this.i18n.t('entity_modal.label_name')}</label>
                     <input
                         type="text"
                         class="form-input"
-                        placeholder="Введите название"
+                        placeholder=${this.i18n.t('entity_modal.placeholder_name')}
                         .value=${this._formData.name}
                         @input=${this._onNameInput}
                     />
                 </div>
 
                 <div class="form-group">
-                    <label class="form-label">Описание</label>
+                    <label class="form-label">${this.i18n.t('entity_modal.label_description')}</label>
                     <textarea
                         class="form-textarea"
                         rows="4"
-                        placeholder="Введите описание"
+                        placeholder=${this.i18n.t('entity_modal.placeholder_description')}
                         .value=${this._formData.description}
                         @input=${this._onDescriptionInput}
                     ></textarea>
                 </div>
 
                 <div class="form-group">
-                    <label class="form-label">Теги</label>
+                    <label class="form-label">${this.i18n.t('entity_modal.label_tags')}</label>
                     <tag-input
                         .tags=${this._formData.tags}
-                        placeholder="Введите тег и нажмите Enter"
+                        placeholder=${this.i18n.t('tasks.tags_placeholder')}
                         @change=${this._onTagsChange}
                     ></tag-input>
                 </div>
@@ -456,7 +699,7 @@ export class EntityModal extends PlatformModal {
                 ${isTask ? html`
                     <div class="form-row">
                         <div class="form-group">
-                            <label class="form-label">Дедлайн</label>
+                            <label class="form-label">${this.i18n.t('entity_modal.label_due')}</label>
                             <platform-date-picker
                                 class="task-date-picker"
                                 mode="date"
@@ -466,59 +709,45 @@ export class EntityModal extends PlatformModal {
                             ></platform-date-picker>
                         </div>
                         <div class="form-group">
-                            <label class="form-label">Приоритет</label>
+                            <label class="form-label">${this.i18n.t('entity_modal.label_priority')}</label>
                             <select
                                 class="form-select"
                                 .value=${this._formData.priority || ''}
                                 @change=${this._onPriorityChange}
                             >
-                                <option value="">Не указан</option>
-                                <option value="low">Низкий</option>
-                                <option value="medium">Средний</option>
-                                <option value="high">Высокий</option>
-                                <option value="urgent">Срочный</option>
+                                <option value="">${this.i18n.t('entity_modal.priority_unset')}</option>
+                                <option value="low">${this.i18n.t('tasks.priority_low')}</option>
+                                <option value="medium">${this.i18n.t('tasks.priority_medium')}</option>
+                                <option value="high">${this.i18n.t('tasks.priority_high')}</option>
+                                <option value="urgent">${this.i18n.t('tasks.priority_urgent')}</option>
                             </select>
                         </div>
                     </div>
                 ` : ''}
 
                 <div class="attributes-section">
-                    <label class="form-label">Дополнительные атрибуты</label>
-                    ${this._attributeRows.map((row, index) => html`
-                        <div class="attribute-row">
-                            <input
-                                type="text"
-                                class="form-input"
-                                placeholder="Ключ"
-                                .value=${row.key}
-                                @input=${(e) => this._onAttributeKeyChange(index, e.target.value)}
-                            />
-                            <input
-                                type="text"
-                                class="form-input"
-                                placeholder="Значение"
-                                .value=${row.value}
-                                @input=${(e) => this._onAttributeValueChange(index, e.target.value)}
-                            />
-                            <button
-                                type="button"
-                                class="remove-btn"
-                                @click=${() => this._onRemoveAttribute(index)}
-                            >
-                                <platform-icon name="close" size="14"></platform-icon>
-                            </button>
-                        </div>
-                    `)}
+                    ${this._renderAttributeGroups()}
                     <button
                         type="button"
                         class="add-attribute-btn"
                         @click=${this._onAddAttribute}
                     >
-                        + Добавить атрибут
+                        ${this.i18n.t('entity_modal.add_attribute')}
                     </button>
                 </div>
             </div>
         `;
+    }
+
+    renderSaveHeaderButton() {
+        const title = this._saving
+            ? this.i18n.t('entity_modal.saving')
+            : this.i18n.t('save', {}, 'common');
+        return this._renderHeaderSaveIcon({
+            onClick: () => this._onSave(),
+            disabled: this._saving,
+            title,
+        });
     }
 
     renderFooter() {
@@ -529,15 +758,7 @@ export class EntityModal extends PlatformModal {
                     class="btn btn-secondary"
                     @click=${() => this.close()}
                 >
-                    Отмена
-                </button>
-                <button
-                    type="button"
-                    class="btn btn-primary"
-                    ?disabled=${this._saving}
-                    @click=${this._onSave}
-                >
-                    ${this._saving ? 'Сохранение...' : 'Сохранить'}
+                    ${this.i18n.t('cancel', {}, 'common')}
                 </button>
             </div>
         `;

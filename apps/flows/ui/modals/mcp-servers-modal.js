@@ -4,11 +4,13 @@
  */
 import { html, css } from 'lit';
 import { PlatformModal } from '@platform/lib/components/glass-modal.js';
+import { buttonStyles } from '@platform/lib/styles/shared/button.styles.js';
 import '@platform/lib/components/platform-icon.js';
 
 export class MCPServersModal extends PlatformModal {
     static styles = [
         PlatformModal.styles,
+        buttonStyles,
         css`
             .modal-container {
                 width: 900px;
@@ -232,36 +234,6 @@ export class MCPServersModal extends PlatformModal {
                 gap: var(--space-2);
             }
             
-            .btn {
-                padding: var(--space-2) var(--space-4);
-                border-radius: var(--radius-md);
-                border: none;
-                font-size: var(--text-sm);
-                cursor: pointer;
-                transition: all var(--duration-fast);
-                display: inline-flex;
-                align-items: center;
-                gap: var(--space-2);
-            }
-            
-            .btn-primary {
-                background: var(--accent);
-                color: white;
-            }
-            
-            .btn-primary:hover {
-                background: var(--accent-hover);
-            }
-            
-            .btn-secondary {
-                background: var(--glass-solid-subtle);
-                color: var(--text-secondary);
-            }
-            
-            .btn-secondary:hover {
-                background: var(--glass-solid-medium);
-            }
-            
             .btn-warning {
                 background: var(--warning-bg);
                 color: var(--warning);
@@ -270,11 +242,6 @@ export class MCPServersModal extends PlatformModal {
             .btn-warning:hover {
                 background: var(--warning);
                 color: white;
-            }
-            
-            .btn:disabled {
-                opacity: 0.5;
-                cursor: not-allowed;
             }
             
             .headers-editor {
@@ -349,7 +316,7 @@ export class MCPServersModal extends PlatformModal {
 
     constructor() {
         super();
-        this.title = 'MCP Серверы';
+        this.title = '';
         this.servers = [];
         this.loading = true;
         this.showAddForm = false;
@@ -360,6 +327,7 @@ export class MCPServersModal extends PlatformModal {
     }
 
     async showModal() {
+        this.title = this.i18n.t('mcp_servers.modal_title');
         super.showModal();
         await this._loadServers();
     }
@@ -367,9 +335,10 @@ export class MCPServersModal extends PlatformModal {
     async _loadServers() {
         this.loading = true;
         try {
-            this.servers = await this.a2a.get('/api/v1/mcp/servers');
+            const res = await this.a2a.get('/api/v1/mcp/servers');
+            this.servers = res.items;
         } catch (error) {
-            this.error(`Ошибка загрузки: ${error.message}`);
+            this.error(this.i18n.t('mcp_servers.err_load', { message: error.message }));
             this.servers = [];
         }
         this.loading = false;
@@ -398,7 +367,7 @@ export class MCPServersModal extends PlatformModal {
         const headersRaw = formData.get('headers').trim();
         
         if (!url) {
-            this.error('Укажите URL');
+            this.error(this.i18n.t('mcp_servers.err_url_required'));
             return;
         }
         
@@ -407,7 +376,7 @@ export class MCPServersModal extends PlatformModal {
             try {
                 headers = JSON.parse(headersRaw);
             } catch {
-                this.error('Неверный формат Headers JSON');
+                this.error(this.i18n.t('mcp_servers.err_headers_json'));
                 return;
             }
         }
@@ -430,12 +399,12 @@ export class MCPServersModal extends PlatformModal {
                 const result = await this.a2a.post(`/api/v1/mcp/servers/${tempId}/test`);
                 this.testResult = {
                     success: true,
-                    message: `Подключение успешно! Найдено ${result.tools_count} tools`,
+                    message: this.i18n.t('mcp_servers.test_ok_tools', { count: result.tools_count }),
                 };
             } catch (testError) {
                 this.testResult = {
                     success: false,
-                    message: `Ошибка подключения: ${testError.message}`,
+                    message: this.i18n.t('mcp_servers.test_fail_connection', { message: testError.message }),
                 };
             }
             
@@ -444,7 +413,7 @@ export class MCPServersModal extends PlatformModal {
         } catch (error) {
             this.testResult = {
                 success: false,
-                message: `Ошибка: ${error.message}`,
+                message: this.i18n.t('mcp_servers.err_with_message', { message: error.message }),
             };
         }
         
@@ -467,7 +436,7 @@ export class MCPServersModal extends PlatformModal {
         const description = formData.get('description')?.trim() || '';
         
         if (!serverId || !name || !url) {
-            this.error('Заполните обязательные поля');
+            this.error(this.i18n.t('mcp_servers.err_required_fields'));
             return;
         }
         
@@ -476,7 +445,7 @@ export class MCPServersModal extends PlatformModal {
             try {
                 headers = JSON.parse(headersRaw);
             } catch {
-                this.error('Неверный формат Headers JSON');
+                this.error(this.i18n.t('mcp_servers.err_headers_json'));
                 return;
             }
         }
@@ -490,7 +459,7 @@ export class MCPServersModal extends PlatformModal {
                     headers,
                     description,
                 });
-                this.success(`Сервер "${name}" обновлён`);
+                this.success(this.i18n.t('mcp_servers.server_updated', { name }));
             } else {
                 await this.a2a.post('/api/v1/mcp/servers', {
                     server_id: serverId,
@@ -500,7 +469,7 @@ export class MCPServersModal extends PlatformModal {
                     headers,
                     description,
                 });
-                this.success(`Сервер "${name}" добавлен`);
+                this.success(this.i18n.t('mcp_servers.server_added', { name }));
             }
             
             this.showAddForm = false;
@@ -509,7 +478,7 @@ export class MCPServersModal extends PlatformModal {
             form.reset();
             await this._loadServers();
         } catch (error) {
-            this.error(`Ошибка: ${error.message}`);
+            this.error(this.i18n.t('mcp_servers.err_with_message', { message: error.message }));
         }
     }
 
@@ -523,10 +492,10 @@ export class MCPServersModal extends PlatformModal {
         this.syncingId = serverId;
         try {
             const result = await this.a2a.post(`/api/v1/mcp/servers/${serverId}/sync`);
-            this.success(`Синхронизировано ${result.tools_count} tools`);
+            this.success(this.i18n.t('mcp_servers.synced_tools', { count: result.tools_count }));
             await this._loadServers();
         } catch (error) {
-            this.error(`Ошибка синхронизации: ${error.message}`);
+            this.error(this.i18n.t('mcp_servers.err_sync', { message: error.message }));
         }
         this.syncingId = null;
     }
@@ -534,17 +503,17 @@ export class MCPServersModal extends PlatformModal {
     async _testServer(serverId) {
         try {
             const result = await this.a2a.post(`/api/v1/mcp/servers/${serverId}/test`);
-            this.success(`Подключение успешно! ${result.tools_count} tools`);
+            this.success(this.i18n.t('mcp_servers.test_ok_short', { count: result.tools_count }));
         } catch (error) {
-            this.error(`Ошибка подключения: ${error.message}`);
+            this.error(this.i18n.t('mcp_servers.err_test_connection', { message: error.message }));
         }
     }
 
     async _deleteServer(serverId, serverName) {
         const modal = document.createElement('confirm-modal');
-        modal.title = 'Удалить MCP сервер?';
-        modal.message = `Удалить сервер "${serverName}"? Все связанные tools будут удалены.`;
-        modal.confirmText = 'Удалить';
+        modal.title = this.i18n.t('mcp_servers.delete_confirm_title');
+        modal.message = this.i18n.t('mcp_servers.delete_confirm_message', { name: serverName });
+        modal.confirmText = this.i18n.t('mcp_servers.delete_confirm_ok');
         modal.confirmVariant = 'danger';
         document.body.appendChild(modal);
         
@@ -555,10 +524,10 @@ export class MCPServersModal extends PlatformModal {
         
         try {
             await this.a2a.delete(`/api/v1/mcp/servers/${serverId}`);
-            this.success('Сервер удален');
+            this.success(this.i18n.t('mcp_servers.server_deleted'));
             await this._loadServers();
         } catch (error) {
-            this.error(`Ошибка: ${error.message}`);
+            this.error(this.i18n.t('mcp_servers.err_with_message', { message: error.message }));
         }
     }
 
@@ -573,7 +542,7 @@ export class MCPServersModal extends PlatformModal {
             return html`
                 <div class="empty-state">
                     <div class="loading-spinner"></div>
-                    <div>Загрузка...</div>
+                    <div>${this.i18n.t('mcp_servers.loading')}</div>
                 </div>
             `;
         }
@@ -588,9 +557,9 @@ export class MCPServersModal extends PlatformModal {
             ${this.servers.length === 0 && !this.showAddForm ? html`
                 <div class="empty-state">
                     <platform-icon name="server" size="48"></platform-icon>
-                    <div>Нет MCP серверов</div>
+                    <div>${this.i18n.t('mcp_servers.empty_title')}</div>
                     <div style="font-size: var(--text-sm); margin-top: var(--space-2);">
-                        Добавьте MCP сервер чтобы использовать внешние tools в агентах
+                        ${this.i18n.t('mcp_servers.empty_hint')}
                     </div>
                 </div>
             ` : !this.showAddForm ? html`
@@ -607,11 +576,11 @@ export class MCPServersModal extends PlatformModal {
         
         return html`
             <form class="add-form" @submit=${this._addServer}>
-                <div class="form-title">${isEdit ? 'Редактирование' : 'Новый'} MCP сервер</div>
+                <div class="form-title">${isEdit ? this.i18n.t('mcp_servers.form_title_edit') : this.i18n.t('mcp_servers.form_title_new')}</div>
                 
                 <div class="form-row">
                     <div>
-                        <label class="form-label">ID сервера *</label>
+                        <label class="form-label">${this.i18n.t('mcp_servers.field_server_id')}</label>
                         <input 
                             type="text" 
                             name="server_id" 
@@ -622,10 +591,10 @@ export class MCPServersModal extends PlatformModal {
                             ?readonly=${isEdit}
                             required 
                         />
-                        <div class="form-hint">Латинские буквы, цифры, _ и -</div>
+                        <div class="form-hint">${this.i18n.t('mcp_servers.hint_server_id')}</div>
                     </div>
                     <div>
-                        <label class="form-label">Название *</label>
+                        <label class="form-label">${this.i18n.t('mcp_servers.field_name')}</label>
                         <input 
                             type="text" 
                             name="name" 
@@ -639,7 +608,7 @@ export class MCPServersModal extends PlatformModal {
                 
                 <div class="form-row full">
                     <div>
-                        <label class="form-label">URL *</label>
+                        <label class="form-label">${this.i18n.t('mcp_servers.field_url')}</label>
                         <input 
                             type="url" 
                             name="url" 
@@ -648,26 +617,26 @@ export class MCPServersModal extends PlatformModal {
                             .value=${server?.url || ''}
                             required 
                         />
-                        <div class="form-hint">MCP JSON-RPC endpoint</div>
+                        <div class="form-hint">${this.i18n.t('mcp_servers.hint_mcp_endpoint')}</div>
                     </div>
                 </div>
                 
                 <div class="form-row">
                     <div>
-                        <label class="form-label">Транспорт</label>
+                        <label class="form-label">${this.i18n.t('mcp_servers.field_transport')}</label>
                         <select name="transport_type" class="form-select">
                             <option value="http" ?selected=${server?.transport_type === 'http'}>HTTP (POST)</option>
                             <option value="sse" ?selected=${server?.transport_type === 'sse'}>SSE (Server-Sent Events)</option>
                         </select>
-                        <div class="form-hint">Большинство серверов используют HTTP</div>
+                        <div class="form-hint">${this.i18n.t('mcp_servers.hint_transport')}</div>
                     </div>
                     <div>
-                        <label class="form-label">Описание</label>
+                        <label class="form-label">${this.i18n.t('mcp_servers.field_description')}</label>
                         <input 
                             type="text" 
                             name="description" 
                             class="form-input" 
-                            placeholder="Описание сервера"
+                            placeholder=${this.i18n.t('mcp_servers.placeholder_server_description')}
                             .value=${server?.description || ''}
                         />
                     </div>
@@ -675,9 +644,9 @@ export class MCPServersModal extends PlatformModal {
                 
                 <div class="form-row full">
                     <div>
-                        <label class="form-label">Headers (JSON)</label>
+                        <label class="form-label">${this.i18n.t('mcp_servers.field_headers_json')}</label>
                         <div class="auth-presets">
-                            <span style="font-size: var(--text-xs); color: var(--text-tertiary);">Пресеты:</span>
+                            <span style="font-size: var(--text-xs); color: var(--text-tertiary);">${this.i18n.t('mcp_servers.presets_label')}</span>
                             <button type="button" class="auth-preset" @click=${() => this._applyAuthPreset('bearer')}>Bearer Token</button>
                             <button type="button" class="auth-preset" @click=${() => this._applyAuthPreset('apikey')}>API Key</button>
                             <button type="button" class="auth-preset" @click=${() => this._applyAuthPreset('basic')}>Basic Auth</button>
@@ -688,7 +657,7 @@ export class MCPServersModal extends PlatformModal {
                             placeholder='{"Authorization": "Bearer @var:api_key"}'
                         >${server?.headers ? JSON.stringify(server.headers, null, 2) : ''}</textarea>
                         <div class="form-hint">
-                            Используйте <code>@var:имя_переменной</code> для секретов из Переменных агента
+                            ${this.i18n.t('mcp_servers.hint_agent_variables')}
                         </div>
                     </div>
                 </div>
@@ -708,13 +677,13 @@ export class MCPServersModal extends PlatformModal {
                             ?disabled=${this.testingForm}
                         >
                             <platform-icon name="check" size="14"></platform-icon>
-                            ${this.testingForm ? 'Проверка...' : 'Проверить подключение'}
+                            ${this.testingForm ? this.i18n.t('mcp_servers.test_checking') : this.i18n.t('mcp_servers.test_connection')}
                         </button>
                     </div>
                     <div class="form-actions-right">
-                        <button type="button" class="btn btn-secondary" @click=${this._toggleAddForm}>Отмена</button>
+                        <button type="button" class="btn btn-secondary" @click=${this._toggleAddForm}>${this.i18n.t('mcp_servers.cancel')}</button>
                         <button type="submit" class="btn btn-primary">
-                            ${isEdit ? 'Сохранить' : 'Добавить'}
+                            ${isEdit ? this.i18n.t('mcp_servers.save') : this.i18n.t('mcp_servers.add')}
                         </button>
                     </div>
                 </div>
@@ -736,14 +705,14 @@ export class MCPServersModal extends PlatformModal {
                     <div class="server-actions">
                         <button 
                             class="action-btn test" 
-                            title="Проверить подключение"
+                            title=${this.i18n.t('mcp_servers.title_test')}
                             @click=${() => this._testServer(server.server_id)}
                         >
                             <platform-icon name="check" size="16"></platform-icon>
                         </button>
                         <button 
                             class="action-btn sync ${isSyncing ? 'syncing' : ''}" 
-                            title="Синхронизировать tools"
+                            title=${this.i18n.t('mcp_servers.title_sync')}
                             @click=${() => this._syncServer(server.server_id)}
                             ?disabled=${isSyncing}
                         >
@@ -751,14 +720,14 @@ export class MCPServersModal extends PlatformModal {
                         </button>
                         <button 
                             class="action-btn edit" 
-                            title="Редактировать"
+                            title=${this.i18n.t('mcp_servers.title_edit')}
                             @click=${() => this._editServer(server)}
                         >
                             <platform-icon name="edit" size="16"></platform-icon>
                         </button>
                         <button 
                             class="action-btn delete" 
-                            title="Удалить"
+                            title=${this.i18n.t('mcp_servers.title_delete')}
                             @click=${() => this._deleteServer(server.server_id, server.name)}
                         >
                             <platform-icon name="trash" size="16"></platform-icon>
@@ -771,14 +740,14 @@ export class MCPServersModal extends PlatformModal {
                 <div class="server-url">${server.url}</div>
                 <div class="server-meta">
                     <span class="transport-badge">${server.transport_type}</span>
-                    <span class="tools-count">${server.cached_tools.length} tools</span>
+                    <span class="tools-count">${this.i18n.t('mcp_servers.tools_count', { count: server.cached_tools.length })}</span>
                     ${server.last_sync_at ? html`
-                        <span>Синхронизация: ${new Date(server.last_sync_at).toLocaleString()}</span>
+                        <span>${this.i18n.t('mcp_servers.last_sync')} ${new Date(server.last_sync_at).toLocaleString()}</span>
                     ` : ''}
                 </div>
                 ${hasHeaders ? html`
                     <div class="server-headers">
-                        Headers: ${Object.keys(server.headers).join(', ')}
+                        ${this.i18n.t('mcp_servers.headers_label')} ${Object.keys(server.headers).join(', ')}
                     </div>
                 ` : ''}
             </div>

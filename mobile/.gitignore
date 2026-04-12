@@ -1,0 +1,15 @@
+.env
+.env.local
+*.jks
+*.keystore
+*.pem
+*.p12
+*.mobileprovision
+*.ipa
+*.aab
+*.apk
+android/twa-project/
+android/bubblewrap-output/
+node_modules/
+.DS_Store
+lighthouse-reports/

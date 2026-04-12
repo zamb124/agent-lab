@@ -10,26 +10,22 @@ from typing import List, Optional
 
 from fastapi import APIRouter, Query
 
-from apps.flows.src.container import get_container
+from core.pagination import OffsetPage
+from apps.flows.src.dependencies import ContainerDep
 from apps.flows.src.models import EvaluationResult
 
 router = APIRouter(tags=["evaluation"])
 
 
-@router.get("/results", response_model=List[EvaluationResult])
+@router.get("/results", response_model=OffsetPage[EvaluationResult])
 async def get_evaluation_results(
+    container: ContainerDep,
     flow_id: str = Query(..., description="ID агента"),
     skill_id: str = Query("default", description="ID skill"),
     run_date: Optional[date] = Query(None, description="Дата запуска (по умолчанию сегодня)"),
-    limit: int = Query(50, ge=1, le=500, description="Лимит результатов"),
-) -> List[EvaluationResult]:
-    """
-    Получение результатов evaluation.
-
-    Возвращает последние результаты тестов для указанного агента/skill.
-    """
-    container = get_container()
-
+    limit: int = Query(50, ge=1, le=500),
+    offset: int = Query(0, ge=0),
+) -> OffsetPage[EvaluationResult]:
     if run_date:
         results = await container.evaluation_repository.get_by_run(
             flow_id=flow_id,
@@ -43,11 +39,13 @@ async def get_evaluation_results(
             limit=limit,
         )
 
-    return results
+    page = results[offset:offset + limit]
+    return OffsetPage[EvaluationResult](items=page, total=len(results), limit=limit, offset=offset)
 
 
 @router.get("/results/summary")
 async def get_evaluation_summary(
+    container: ContainerDep,
     flow_id: str = Query(..., description="ID агента"),
     skill_id: str = Query("default", description="ID skill"),
     run_date: Optional[date] = Query(None, description="Дата запуска"),
@@ -57,7 +55,6 @@ async def get_evaluation_summary(
 
     Возвращает статистику: всего тестов, пройдено, провалено, ошибки.
     """
-    container = get_container()
 
     if run_date:
         results = await container.evaluation_repository.get_by_run(
@@ -116,6 +113,7 @@ async def get_evaluation_summary(
 @router.get("/results/{test_case_id}")
 async def get_test_result(
     test_case_id: str,
+    container: ContainerDep,
     flow_id: str = Query(..., description="ID агента"),
     skill_id: str = Query("default", description="ID skill"),
     run_date: Optional[date] = Query(None, description="Дата запуска"),
@@ -125,7 +123,6 @@ async def get_test_result(
 
     Возвращает последний результат для указанного тест-кейса.
     """
-    container = get_container()
 
     if run_date:
         results = await container.evaluation_repository.get_by_run(
@@ -149,12 +146,12 @@ async def get_test_result(
 
 @router.delete("/results")
 async def delete_old_results(
+    container: ContainerDep,
     days: int = Query(30, ge=1, le=365, description="Удалить результаты старше N дней"),
 ):
     """
     Удаление старых результатов evaluation.
     """
-    container = get_container()
 
     deleted = await container.evaluation_repository.delete_old_results(
         days_to_keep=days,

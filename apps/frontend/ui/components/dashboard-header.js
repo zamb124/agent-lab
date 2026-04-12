@@ -1,6 +1,7 @@
 import { html, css } from 'lit';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
 import { Services } from '@platform/services/index.js';
+import { I18nNs } from '@platform/services/i18n/i18n.service.js';
 
 /**
  * Header для dashboard с навигацией между сервисами
@@ -119,10 +120,15 @@ export class DashboardHeader extends PlatformElement {
 
     connectedCallback() {
         super.connectedCallback();
+        this._i18nUnsub = this.i18n.subscribe(() => this.requestUpdate());
         window.addEventListener('popstate', this._handleLocationChange.bind(this));
     }
 
     disconnectedCallback() {
+        if (this._i18nUnsub) {
+            this._i18nUnsub();
+            this._i18nUnsub = null;
+        }
         super.disconnectedCallback();
         window.removeEventListener('popstate', this._handleLocationChange.bind(this));
     }
@@ -150,6 +156,7 @@ export class DashboardHeader extends PlatformElement {
             '/crm': '8003',
             '/rag': '8004',
             '/sync': '8005',
+            '/documents': '8002',
             '/dashboard': '8002',
             '/billing': '8002',
         };
@@ -184,6 +191,8 @@ export class DashboardHeader extends PlatformElement {
     }
 
     render() {
+        const td = (key, params) => this.i18n.t(key, params ?? {});
+        const tp = (key, params) => this.i18n.t(key, params ?? {}, I18nNs.PLATFORM);
         return html`
             <header class="header">
                 <a href="/dashboard" class="logo" @click=${(e) => this._handleNavigation('/dashboard', e)}>
@@ -213,18 +222,25 @@ export class DashboardHeader extends PlatformElement {
                         CRM
                     </a>
                     <a 
+                        href="/documents" 
+                        class="nav-link ${this._isActive('/documents') ? 'active' : ''}"
+                        @click=${(e) => this._handleNavigation('/documents', e)}
+                    >
+                        ${tp('apps.documents.name')}
+                    </a>
+                    <a 
                         href="/billing" 
                         class="nav-link ${this._isActive('/billing') ? 'active' : ''}"
                         @click=${(e) => this._handleNavigation('/billing', e)}
                     >
-                        Биллинг
+                        ${td('dashboard_header.billing')}
                     </a>
                 </nav>
 
                 <div class="user-menu">
                     <company-switcher></company-switcher>
                     <button class="user-button" @click=${this._handleLogout}>
-                        Выйти
+                        ${td('dashboard_header.logout')}
                     </button>
                 </div>
             </header>

@@ -13,11 +13,11 @@ export class FlowsCatalogService extends BaseService {
      */
     async listFlows() {
         const data = await this.get('/flows/api/v1/flows/');
-        if (!Array.isArray(data)) {
-            throw new Error(
-                `Ожидался массив flows от GET /flows/api/v1/flows/, получен ${typeof data}`,
-            );
-        }
-        return data;
+        return data.items;
+    }
+
+    async listTools() {
+        const data = await this.get('/flows/api/v1/tools/');
+        return data.items;
     }
 }

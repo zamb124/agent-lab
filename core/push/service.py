@@ -105,6 +105,8 @@ class WebPushService:
         expired_endpoints = []
         
         for subscription in subscriptions:
+            if subscription.endpoint.startswith("apns:"):
+                continue
             success = await self.send_push(
                 subscription=subscription,
                 title=title,

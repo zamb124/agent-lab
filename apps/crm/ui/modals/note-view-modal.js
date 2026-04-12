@@ -1,10 +1,12 @@
 import { html, css } from 'lit';
 import { PlatformModal } from '@platform/lib/components/glass-modal.js';
+import '@platform/lib/components/platform-icon.js';
 import { CRMStore } from '../store/crm.store.js';
 import './entity-modal.js';
 import './share-modal.js';
 import './ai-analysis-modal.js';
 import '../components/note-content.js';
+import './note-graph-modal.js';
 
 export class NoteViewModal extends PlatformModal {
     static properties = {
@@ -18,12 +20,17 @@ export class NoteViewModal extends PlatformModal {
         _noteSubtypes: { state: true },
         _relationshipTypes: { state: true },
         _attachments: { state: true },
-        _processingEntities: { state: true },
+        _storeAnalyzingNoteId: { state: true },
+        _pendingAttachmentFiles: { state: true },
         _processingAttachment: { state: true },
         _processingRelationship: { state: true },
         _deleting: { state: true },
         _editing: { state: true },
         _savingNote: { state: true },
+        _activeTaskId: { state: true },
+        _taskStage: { state: true },
+        _taskPct: { state: true },
+        _taskStatus: { state: true },
     };
 
     static styles = [
@@ -31,6 +38,7 @@ export class NoteViewModal extends PlatformModal {
         css`
             .note-view-shell {
                 display: flex;
+                flex-direction: column;
                 height: 100%;
                 min-height: 0;
                 overflow-y: auto;
@@ -43,10 +51,70 @@ export class NoteViewModal extends PlatformModal {
                 min-height: 0;
             }
 
+            .header-btn.graph-open-btn {
+                color: var(--text-secondary);
+            }
+
+            @media (max-width: 1279px) {
+                .note-view-shell {
+                    height: auto;
+                    min-height: 100%;
+                    overflow-y: visible;
+                }
+
+                .note-view-shell > note-content {
+                    flex: 0 0 auto;
+                    height: auto;
+                    min-height: 0;
+                }
+            }
+
             @media (max-width: 767px) {
                 .note-view-shell {
-                    padding: 4px 0 8px;
+                    padding: 0;
                 }
+            }
+            .analyze-progress-banner {
+                display: flex;
+                flex-direction: column;
+                gap: 8px;
+                background: var(--primary-soft, rgba(99,102,241,0.1));
+                border-radius: var(--radius-lg);
+                padding: 12px 16px;
+                margin: 8px;
+            }
+            .analyze-progress-row {
+                display: flex;
+                align-items: center;
+                justify-content: space-between;
+                font-size: var(--text-sm);
+                color: var(--text-secondary);
+            }
+            .analyze-progress-bar-wrap {
+                width: 100%;
+                height: 5px;
+                background: rgba(99,102,241,0.2);
+                border-radius: 3px;
+                overflow: hidden;
+            }
+            .analyze-progress-bar {
+                height: 100%;
+                background: var(--primary, #6366f1);
+                border-radius: 3px;
+                transition: width 0.5s ease;
+                position: relative;
+                min-width: 8px;
+            }
+            .analyze-progress-bar::after {
+                content: '';
+                position: absolute;
+                inset: 0;
+                background: linear-gradient(90deg, transparent 20%, rgba(255,255,255,0.4) 50%, transparent 80%);
+                animation: progress-shimmer 1.6s infinite;
+            }
+            @keyframes progress-shimmer {
+                0% { transform: translateX(-100%); }
+                100% { transform: translateX(200%); }
             }
         `,
     ];
@@ -63,16 +131,134 @@ export class NoteViewModal extends PlatformModal {
         this._noteSubtypes = [];
         this._relationshipTypes = [];
         this._attachments = [];
-        this._processingEntities = false;
+        this._storeAnalyzingNoteId = null;
+        this._pendingAttachmentFiles = [];
         this._processingAttachment = false;
         this._processingRelationship = false;
         this._deleting = false;
         this._editing = false;
         this._savingNote = false;
+        this._crmStoreUnsub = null;
+        this._activeTaskId = null;
+        this._taskStage = null;
+        this._taskPct = 0;
+        this._taskStatus = null;
+        this._handleTaskWsNotification = null;
     }
 
     renderHeader() {
-        return this._editing ? 'Редактирование заметки' : 'Просмотр заметки';
+        return this._editing
+            ? this.i18n.t('note_view_modal.header_edit')
+            : this.i18n.t('note_view_modal.header_view');
+    }
+
+    renderHeaderActions() {
+        if (!this.note || typeof this.note.entity_id !== 'string' || this.note.entity_id.trim().length === 0) {
+            return html``;
+        }
+        return html`
+            <button
+                class="header-btn graph-open-btn"
+                type="button"
+                title=${this.i18n.t('note_view_modal.graph_open_title')}
+                @click=${this._openNoteGraphModal}
+            >
+                <platform-icon name="network" size="16"></platform-icon>
+            </button>
+        `;
+    }
+
+    _openNoteGraphModal() {
+        if (!this.note || typeof this.note.entity_id !== 'string' || this.note.entity_id.trim().length === 0) {
+            throw new Error('Note entity_id is required for graph');
+        }
+        const modal = document.createElement('note-graph-modal');
+        modal.entityId = this.note.entity_id.trim();
+        const onEntityOpen = (event) => {
+            this._openEntityFromGraphNode(event);
+        };
+        modal.addEventListener('entity-open', onEntityOpen);
+        modal.addEventListener('close', () => {
+            modal.removeEventListener('entity-open', onEntityOpen);
+            modal.remove();
+        });
+        document.body.appendChild(modal);
+        modal.showModal();
+    }
+
+    _openEntityFromGraphNode(event) {
+        const entityId = event.detail?.entityId;
+        if (typeof entityId !== 'string' || entityId.trim().length === 0) {
+            throw new Error('entityId is required');
+        }
+        return this._openEntityModal({
+            detail: { entity: { entity_id: entityId.trim(), name: '' } },
+        });
+    }
+
+    connectedCallback() {
+        super.connectedCallback();
+        const syncAnalyzingNoteId = () => {
+            const aid = CRMStore.state.ai.analyzingNoteId;
+            const next = typeof aid === 'string' && aid.trim().length > 0 ? aid.trim() : null;
+            if (next !== this._storeAnalyzingNoteId) {
+                this._storeAnalyzingNoteId = next;
+            }
+        };
+        syncAnalyzingNoteId();
+        this._crmStoreUnsub = CRMStore.subscribe(() => {
+            syncAnalyzingNoteId();
+        });
+        this._handleTaskWsNotification = (event) => {
+            const n = event.detail;
+            if (!n || n.service !== 'crm' || n.type !== 'crm_task_updated') {
+                return;
+            }
+            if (n.data?.task_id !== this._activeTaskId) {
+                return;
+            }
+            this._taskStage = n.data?.stage || null;
+            this._taskPct = n.data?.progress_pct ?? 0;
+            this._taskStatus = n.data?.status || null;
+            if (n.data?.status === 'completed') {
+                this._activeTaskId = null;
+                this._taskStatus = 'completed';
+                void (async () => {
+                    try {
+                        const crmApi = this.crmApi;
+                        const fresh = await crmApi.getEntity(this.note?.entity_id);
+                        if (fresh && this.note) {
+                            this.note = fresh;
+                            CRMStore.setNoteInStore(fresh);
+                        }
+                        await this._loadRelatedEntities();
+                        // Открываем модалку черновика только если это analyze (черновик появился),
+                        // но не для apply (он уже применён)
+                        if (this._hasAnalysisDraft()) {
+                            this._handleOpenAnalysisDraft();
+                        }
+                    } catch (_e) {
+                        void this._loadRelatedEntities();
+                    }
+                })();
+            } else if (n.data?.status === 'failed') {
+                this._activeTaskId = null;
+                this._taskStatus = 'failed';
+                const msg = n.message || n.data?.error_message || 'Анализ завершился с ошибкой';
+                this.error(msg);
+            }
+        };
+        window.addEventListener('platform-notification-received', this._handleTaskWsNotification);
+    }
+
+    disconnectedCallback() {
+        super.disconnectedCallback();
+        this._crmStoreUnsub?.();
+        this._crmStoreUnsub = null;
+        if (this._handleTaskWsNotification) {
+            window.removeEventListener('platform-notification-received', this._handleTaskWsNotification);
+            this._handleTaskWsNotification = null;
+        }
     }
 
     async firstUpdated() {
@@ -81,6 +267,36 @@ export class NoteViewModal extends PlatformModal {
         await this._loadEntityTypes();
         await this._loadRelationshipTypes();
         await this._loadRelatedEntities();
+        await this._restoreActiveAnalyzeTask();
+    }
+
+    async _restoreActiveAnalyzeTask() {
+        if (!this.note || typeof this.note.entity_id !== 'string' || this.draftMode) {
+            return;
+        }
+        if (this._activeTaskId) {
+            return;
+        }
+        const crmApi = this.crmApi;
+        const ns = typeof this.note.namespace === 'string' && this.note.namespace.trim()
+            ? this.note.namespace.trim()
+            : 'default';
+        try {
+            const page = await crmApi.listTasks(ns, 10, 'note_analyze', this.note.entity_id);
+            const tasks = page?.items ?? [];
+            const active = tasks.find(
+                (t) => t.status === 'running' || t.status === 'pending',
+            );
+            if (!active) {
+                return;
+            }
+            this._activeTaskId = active.task_id;
+            this._taskStage = active.stage || 'pending';
+            this._taskPct = active.progress_pct ?? 0;
+            this._taskStatus = active.status;
+        } catch (_e) {
+            // не критично — просто не показываем прогресс
+        }
     }
 
     async _loadEntityTypes() {
@@ -116,10 +332,15 @@ export class NoteViewModal extends PlatformModal {
             throw new Error('Note entity_id is required');
         }
         const crmApi = this.crmApi;
-        const card = await CRMStore.loadEntityCard(crmApi, this.note.entity_id);
+        const card = await CRMStore.loadEntityCard(crmApi, this.note.entity_id, { updateStore: false });
+        if (!card) {
+            this._relatedEntities = [];
+            this._relationships = [];
+            this._attachments = [];
+            return;
+        }
         if (
-            !card
-            || !Array.isArray(card.related_entities)
+            !Array.isArray(card.related_entities)
             || !Array.isArray(card.relationships)
             || !Array.isArray(card.attachments)
         ) {
@@ -179,7 +400,6 @@ export class NoteViewModal extends PlatformModal {
             throw new Error('Note description is required for analysis');
         }
 
-        this._processingEntities = true;
         const analysisModal = document.createElement('ai-analysis-modal');
         analysisModal.loading = true;
         document.body.appendChild(analysisModal);
@@ -197,14 +417,13 @@ export class NoteViewModal extends PlatformModal {
             const mentionedEntityIds = this._relatedEntities
                 .map((entity) => entity?.entity_id)
                 .filter((entityId) => typeof entityId === 'string' && entityId.trim().length > 0);
-            await CRMStore.analyzeText(crmApi, noteText, this.note.entity_id, {
+            await CRMStore.analyzeNote(crmApi, this.note.entity_id, {
                 checkDuplicates: true,
                 extractEntityTypes,
                 extractRelationshipTypes,
                 mentionedEntityIds,
             });
         } finally {
-            this._processingEntities = false;
             analysisModal.loading = false;
         }
 
@@ -224,8 +443,29 @@ export class NoteViewModal extends PlatformModal {
         document.body.appendChild(analysisModal);
         analysisModal.showModal();
         analysisModal.addEventListener('close', () => analysisModal.remove());
+        // Перехватываем task_id apply-джобы до закрытия модалки.
+        // Дальше _handleTaskWsNotification отследит завершение через WebSocket.
+        analysisModal.addEventListener('apply-task-started', (e) => {
+            const taskId = e.detail?.taskId;
+            if (typeof taskId === 'string' && taskId.length > 0) {
+                this._activeTaskId = taskId;
+                this._taskStatus = 'running';
+                this._taskStage = 'applying';
+                this._taskPct = 85;
+                this.requestUpdate();
+            }
+        });
         analysisModal.addEventListener('saved', async () => {
-            this._syncNoteFromStore();
+            try {
+                const crmApi = this.crmApi;
+                const fresh = await crmApi.getEntity(this.note?.entity_id);
+                if (fresh && this.note) {
+                    this.note = fresh;
+                    CRMStore.setNoteInStore(fresh);
+                }
+            } catch (_e) {
+                this._syncNoteFromStore();
+            }
             await this._loadRelatedEntities();
         });
     }
@@ -257,10 +497,27 @@ export class NoteViewModal extends PlatformModal {
     }
 
     async _handleSummaryRefresh() {
+        if (!this.note || typeof this.note.entity_id !== 'string') {
+            throw new Error('note is required');
+        }
+        if (this._activeTaskId && (this._taskStatus === 'running' || this._taskStatus === 'pending')) {
+            this.warning(this.i18n.t('note_view_modal.analyze_already_running'));
+            return;
+        }
+        const crmApi = this.crmApi;
         try {
-            await this._refreshEntitiesFromNote();
+            const task = await crmApi.startNoteAnalyzeTask(this.note.entity_id, {});
+            if (!task || typeof task.task_id !== 'string') {
+                throw new Error('Задача анализа не создана');
+            }
+            this._activeTaskId = task.task_id;
+            this._taskStage = task.stage || 'pending';
+            this._taskPct = task.progress_pct ?? 0;
+            this._taskStatus = task.status;
         } catch (error) {
-            const message = error instanceof Error ? error.message : 'Ошибка обновления сводки';
+            const message = error instanceof Error
+                ? error.message
+                : this.i18n.t('note_view_modal.err_summary_refresh');
             this.error(message);
             throw error;
         }
@@ -283,7 +540,12 @@ export class NoteViewModal extends PlatformModal {
             throw new Error('Attachment file is required');
         }
         if (this.draftMode) {
-            throw new Error('Attachment upload is not available in draft mode');
+            const pendingId = `pending-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+            this._pendingAttachmentFiles = [
+                ...this._pendingAttachmentFiles,
+                { file, _pendingId: pendingId, filename: file.name, content_type: file.type },
+            ];
+            return;
         }
         if (!this.note || typeof this.note !== 'object' || typeof this.note.entity_id !== 'string') {
             throw new Error('Note entity_id is required');
@@ -314,8 +576,11 @@ export class NoteViewModal extends PlatformModal {
         if (!attachment || typeof attachment !== 'object') {
             throw new Error('Attachment payload is required');
         }
-        if (this.draftMode) {
-            throw new Error('Attachment delete is not available in draft mode');
+        if (typeof attachment._pendingId === 'string') {
+            this._pendingAttachmentFiles = this._pendingAttachmentFiles.filter(
+                (p) => p._pendingId !== attachment._pendingId,
+            );
+            return;
         }
         if (!this.note || typeof this.note !== 'object' || typeof this.note.entity_id !== 'string') {
             throw new Error('Note entity_id is required');
@@ -359,6 +624,35 @@ export class NoteViewModal extends PlatformModal {
         } finally {
             this._processingRelationship = false;
         }
+    }
+
+    async _buildVoiceContextPayload(crmApi, detail, options) {
+        if (!detail || typeof detail !== 'object') {
+            throw new Error('save-note detail is required');
+        }
+        const isUpdate = Boolean(options && options.isUpdate);
+        const out = {};
+        const mode = detail.voiceMode;
+        if (mode === 'none') {
+            out.voice_entity_id = null;
+        } else if (mode === 'self') {
+            const person = await crmApi.getPersonEntitySelf();
+            out.voice_entity_id = person.entity_id;
+        } else if (mode === 'manual') {
+            const raw = typeof detail.voiceEntityId === 'string' ? detail.voiceEntityId.trim() : '';
+            if (raw.length > 0) {
+                out.voice_entity_id = raw;
+            } else {
+                out.voice_entity_id = null;
+            }
+        }
+        const ctx = typeof detail.contextEntityId === 'string' ? detail.contextEntityId.trim() : '';
+        if (ctx.length > 0) {
+            out.context_entity_id = ctx;
+        } else if (isUpdate) {
+            out.context_entity_id = null;
+        }
+        return out;
     }
 
     _handleEditNote() {
@@ -406,6 +700,7 @@ export class NoteViewModal extends PlatformModal {
             try {
                 const crmApi = this.crmApi;
                 if (this.draftMode) {
+                    const voiceExtra = await this._buildVoiceContextPayload(crmApi, detail, { isUpdate: false });
                     const createdNote = await CRMStore.createNote(crmApi, {
                         name: noteName.trim(),
                         description: noteDescription,
@@ -413,15 +708,21 @@ export class NoteViewModal extends PlatformModal {
                             ? entitySubtype.trim()
                             : null,
                         note_date: noteDate.trim(),
+                        ...voiceExtra,
                     });
                     this.note = createdNote;
                     this.draftMode = false;
+                    for (const pending of this._pendingAttachmentFiles) {
+                        await CRMStore.uploadEntityAttachment(crmApi, createdNote.entity_id, pending.file);
+                    }
+                    this._pendingAttachmentFiles = [];
                     this.dispatchEvent(new CustomEvent('note-created', {
                         detail: { noteId: createdNote.entity_id },
                         bubbles: true,
                         composed: true,
                     }));
                 } else {
+                    const voiceExtra = await this._buildVoiceContextPayload(crmApi, detail, { isUpdate: true });
                     await CRMStore.updateNote(crmApi, this.note.entity_id, {
                         name: noteName.trim(),
                         description: noteDescription,
@@ -429,10 +730,13 @@ export class NoteViewModal extends PlatformModal {
                             ? entitySubtype.trim()
                             : null,
                         note_date: noteDate.trim(),
+                        ...voiceExtra,
                     });
                 }
             } catch (error) {
-                const message = error instanceof Error ? error.message : 'Ошибка сохранения заметки';
+                const message = error instanceof Error
+                    ? error.message
+                    : this.i18n.t('note_view_modal.err_save_note');
                 this.error(message);
                 throw error;
             }
@@ -517,7 +821,10 @@ export class NoteViewModal extends PlatformModal {
         if (!attrs || typeof attrs !== 'object') {
             return false;
         }
-        return typeof attrs.ai_analysis_draft === 'object' && attrs.ai_analysis_draft !== null;
+        const draft = attrs.ai_analysis_draft;
+        return typeof draft === 'object'
+            && draft !== null
+            && typeof draft.draft_version === 'number';
     }
 
     _getAnalysisDraftGeneratedAt() {
@@ -529,10 +836,10 @@ export class NoteViewModal extends PlatformModal {
             return '';
         }
         const draft = attrs.ai_analysis_draft;
-        if (!draft || typeof draft !== 'object' || typeof draft.saved_at !== 'string') {
+        if (!draft || typeof draft !== 'object' || typeof draft.updated_at !== 'string') {
             return '';
         }
-        const parsedDate = new Date(draft.saved_at);
+        const parsedDate = new Date(draft.updated_at);
         if (Number.isNaN(parsedDate.getTime())) {
             return '';
         }
@@ -541,11 +848,34 @@ export class NoteViewModal extends PlatformModal {
         return `${hours}:${minutes}`;
     }
 
+    _isNoteAiAnalyzing() {
+        if (!this.note || typeof this.note !== 'object') {
+            return false;
+        }
+        const id = this.note.entity_id;
+        if (typeof id !== 'string' || id.trim().length === 0) {
+            return false;
+        }
+        return this._storeAnalyzingNoteId === id.trim();
+    }
+
     renderBody() {
         if (!this.note || typeof this.note !== 'object') {
             throw new Error('note is required');
         }
+        const isAnalyzing = Boolean(this._activeTaskId) && this._taskStatus !== 'completed' && this._taskStatus !== 'failed';
         return html`
+            ${isAnalyzing ? html`
+                <div class="analyze-progress-banner">
+                    <div class="analyze-progress-row">
+                        <span>${this.i18n.t(`task.stage.${this._taskStage || 'pending'}`, {}, 'crm') || this._taskStage || '...'}</span>
+                        <span>${this._taskPct ?? 0}%</span>
+                    </div>
+                    <div class="analyze-progress-bar-wrap">
+                        <div class="analyze-progress-bar" style="width: ${this._taskPct ?? 0}%"></div>
+                    </div>
+                </div>
+            ` : ''}
             <div class="note-view-shell">
                 <note-content
                     .note=${this.note}
@@ -554,13 +884,13 @@ export class NoteViewModal extends PlatformModal {
                     .entityTypes=${this._entityTypes}
                     .noteSubtypes=${this._noteSubtypes}
                     .relationshipTypes=${this._relationshipTypes}
-                    .attachments=${this._attachments}
+                    .attachments=${[...this._attachments, ...this._pendingAttachmentFiles]}
                     .summaryText=${this._getNoteSummaryText()}
                     .summaryGeneratedAt=${this._getNoteSummaryGeneratedAt()}
                     .summaryEntities=${this._getNoteSummaryEntities()}
                     .hasAnalysisDraft=${this._hasAnalysisDraft()}
                     .analysisDraftGeneratedAt=${this._getAnalysisDraftGeneratedAt()}
-                    .processingEntities=${this._processingEntities}
+                    .processingEntities=${this._isNoteAiAnalyzing()}
                     .deletingNote=${this._deleting}
                     .editable=${this._editing}
                     .savingNote=${this._savingNote}

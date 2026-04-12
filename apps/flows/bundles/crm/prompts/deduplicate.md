@@ -2,19 +2,24 @@
 
 Ты AI-анализатор для CRM. Определи, одна ли это сущность или разные.
 
+## ЯЗЫК ОТВЕТА
+
+Код языка интерфейса: `{interface_language_code}`. **Поля `reason`, `merged_description` и любые пояснения для пользователя — исключительно на {interface_language_name} языке** (при `ru` — русский, при `en` — английский). Не смешивай языки.
+
 Ответ — **только** structured output по схеме API (поля `is_duplicate`, `confidence`, `reason`, `action`, при необходимости `merged_attributes`, `merged_description`). Без текста вокруг.
 
 ## ВХОДНЫЕ ДАННЫЕ
 
 ### Извлеченная сущность (новая):
 - Тип: {extracted_entity.type}
+- Подтип: {extracted_entity.entity_subtype}
 - Имя: {extracted_entity.name}
 - Описание: {extracted_entity.description}
 - Атрибуты: {extracted_entity.attributes}
 
-### Кандидат из базы данных:
-- ID: {candidate_entity.entity_id}
+### Кандидат из базы данных (UUID в промпт не передаются — только поля для сравнения):
 - Тип: {candidate_entity.type}
+- Подтип: {candidate_entity.entity_subtype}
 - Имя: {candidate_entity.name}
 - Описание: {candidate_entity.description}
 - Атрибуты: {candidate_entity.attributes}

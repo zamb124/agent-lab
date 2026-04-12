@@ -3,9 +3,13 @@
  */
 import { html, css } from 'lit';
 import { PlatformApp, renderPlatformAppShell } from '@platform/lib/base/PlatformApp.js';
+import { AppEvents } from '@platform/lib/utils/types.js';
 import { A2AService } from '../services/a2a.service.js';
 import { FlowsStore } from '../store/flows.store.js';
+import { readUrlState, updateUrl, removeUrlParams } from '../utils/url-sync.js';
+import { canManageOperatorWorkbench } from '../utils/operator-workbench-access.js';
 import '../components/sidebar/flows-sidebar.js';
+import '../features/operator/operator-workbench-page.js';
 
 export class FlowsApp extends PlatformApp {
     static styles = [
@@ -32,8 +36,55 @@ export class FlowsApp extends PlatformApp {
                 margin-left: 0.5rem;
             }
 
+            operator-workbench-page {
+                flex: 1;
+                min-width: 0;
+                height: calc(var(--app-vh, 100vh) - 2rem);
+                margin: 1rem;
+            }
+
+            .operator-access-denied {
+                text-align: center;
+                max-width: 28rem;
+                margin: 0 auto;
+            }
+
+            .operator-access-denied .denied-title {
+                font-size: var(--text-lg);
+                color: var(--text-primary);
+                margin-bottom: var(--space-3);
+            }
+
+            .operator-access-denied .denied-text {
+                font-size: var(--text-sm);
+                color: var(--text-muted);
+                margin-bottom: var(--space-4);
+            }
+
+            .operator-access-denied .denied-link {
+                display: inline-flex;
+                align-items: center;
+                justify-content: center;
+                padding: var(--space-2) var(--space-4);
+                border-radius: var(--radius-lg);
+                font-size: var(--text-sm);
+                color: var(--text-primary);
+                background: var(--glass-solid-subtle);
+                border: 1px solid var(--glass-border-medium);
+                text-decoration: none;
+            }
+
+            .operator-access-denied .denied-link:hover {
+                background: var(--glass-solid-medium);
+            }
+
             @media (max-width: 768px) {
                 platform-chat {
+                    margin: 0;
+                    height: var(--app-vh, 100vh);
+                }
+
+                operator-workbench-page {
                     margin: 0;
                     height: var(--app-vh, 100vh);
                 }
@@ -44,6 +95,21 @@ export class FlowsApp extends PlatformApp {
     static properties = {
         ...PlatformApp.properties,
     };
+
+    constructor() {
+        super();
+        this._onOperatorAuthChange = () => this.requestUpdate();
+    }
+
+    async connectedCallback() {
+        await super.connectedCallback();
+        window.addEventListener(AppEvents.AUTH_CHANGE, this._onOperatorAuthChange);
+    }
+
+    disconnectedCallback() {
+        window.removeEventListener(AppEvents.AUTH_CHANGE, this._onOperatorAuthChange);
+        super.disconnectedCallback();
+    }
 
     _toggleMobileMenu() {
         const sidebar = this.shadowRoot.querySelector('flows-sidebar');
@@ -66,7 +132,8 @@ export class FlowsApp extends PlatformApp {
     async initServices() {
         await super.initServices();
         
-        this.services.register('a2a', new A2AService('/flows'));
+        const a2a = new A2AService('/flows');
+        this.services.register('a2a', a2a);
         
         this.state = this.use(s => {
             const currentFlow = s.flows.list.find(a => a.flow_id === s.flows.currentId);
@@ -79,12 +146,125 @@ export class FlowsApp extends PlatformApp {
             };
         });
         
-        const urlParts = window.location.pathname.split('/');
-        const flowIdFromUrl = urlParts[urlParts.length - 1];
-        
-        if (flowIdFromUrl && flowIdFromUrl !== 'flows') {
-            FlowsStore.setCurrentFlow(flowIdFromUrl);
+        const path = window.location.pathname.replace(/\/$/, '') || '';
+        this._operatorWorkbench = path.endsWith('/operator');
+
+        if (this._operatorWorkbench) return;
+
+        const urlState = readUrlState();
+        const flowId = urlState.flowId;
+
+        if (flowId) {
+            if (urlState.skillId) {
+                FlowsStore.setCurrentFlowAndSkill(flowId, urlState.skillId);
+            } else {
+                FlowsStore.setCurrentFlow(flowId);
+            }
         }
+
+        if (flowId && urlState.sessionId) {
+            this._restoreSessionFromUrl(a2a, urlState.sessionId, flowId);
+        }
+
+        if (flowId && urlState.edit) {
+            this._pendingEditFlowId = flowId;
+            this._pendingEditSkillId = urlState.skillId;
+        }
+
+        this._setupUrlSync();
+        this._setupChatSessionUrlSync();
+    }
+
+    /**
+     * После первого сообщения в чате добавляет в URL session={flow_id}:{context_id},
+     * чтобы ссылку можно было передать. Пустой чат — параметр session убирается.
+     */
+    _setupChatSessionUrlSync() {
+        let lastSig = '';
+
+        FlowsStore.subscribe(() => {
+            const s = FlowsStore.state;
+            const flowId = s.flows.currentId;
+            const skillId = s.app.currentSkillId;
+            const contextId = s.chat.contextId;
+            const msgLen = s.chat.messages.length;
+
+            if (!flowId) return;
+
+            const params = new URLSearchParams(window.location.search);
+            const edit = params.get('edit') === '1';
+
+            const sessionId =
+                msgLen > 0 && contextId ? `${flowId}:${contextId}` : null;
+
+            const sig = `${flowId}|${skillId ?? ''}|${sessionId ?? ''}|${edit}|${msgLen}`;
+            if (sig === lastSig) return;
+            lastSig = sig;
+
+            updateUrl({
+                flowId,
+                skillId,
+                sessionId,
+                edit,
+            });
+        });
+    }
+
+    /**
+     * Восстановить сессию из URL-параметра session=...
+     */
+    async _restoreSessionFromUrl(a2a, sessionId, flowId) {
+        try {
+            const state = await a2a.getSessionState(sessionId);
+            const messages = state?.messages || [];
+            const taskId = state?.task_id || null;
+            FlowsStore.loadSession(sessionId, messages, flowId, taskId);
+        } catch (err) {
+            console.error('[FlowsApp] Failed to restore session from URL:', err);
+        }
+    }
+
+    _openEditorFromUrl(flowId, skillId) {
+        const modal = document.createElement('flow-edit-modal');
+        modal.flowId = flowId;
+        if (skillId) modal.skillId = skillId;
+        document.body.appendChild(modal);
+        requestAnimationFrame(() => modal.setAttribute('open', ''));
+        modal.addEventListener('close', () => {
+            modal.remove();
+            removeUrlParams('edit');
+        });
+    }
+
+    _setupUrlSync() {
+        let prevFlowId = FlowsStore.state.flows.currentId;
+        let prevSkillId = FlowsStore.state.app.currentSkillId;
+
+        FlowsStore.subscribe(() => {
+            const s = FlowsStore.state;
+            const flowId = s.flows.currentId;
+            const skillId = s.app.currentSkillId;
+
+            if (flowId === prevFlowId && skillId === prevSkillId) return;
+
+            const flowChanged = flowId !== prevFlowId;
+            prevFlowId = flowId;
+            prevSkillId = skillId;
+
+            if (!flowId) return;
+
+            const params = new URLSearchParams(window.location.search);
+            const keepEdit = params.get('edit') === '1';
+            // При смене flow сессия становится невалидной
+            const keepSession = flowChanged ? null : params.get('session');
+
+            updateUrl({
+                flowId,
+                skillId,
+                sessionId: keepSession,
+                edit: keepEdit,
+            });
+        });
     }
 
     async checkAuth() {
@@ -107,7 +287,7 @@ export class FlowsApp extends PlatformApp {
             return html`
                 <div class="loading-container">
                     <div class="loading-spinner"></div>
-                    <div class="loading-text">Загрузка Flows Builder...</div>
+                    <div class="loading-text">${this.i18n.t('flows_app.loading')}</div>
                 </div>
             `;
         }
@@ -115,9 +295,28 @@ export class FlowsApp extends PlatformApp {
         if (!this._isAuthenticated) {
             return html`
                 <div class="loading-container">
-                    <div class="loading-text">Redirecting to authentication...</div>
+                    <div class="loading-text">${this.i18n.t('flows_app.redirect_auth')}</div>
                 </div>
             `;
+        }
+
+        if (this._operatorWorkbench) {
+            if (!canManageOperatorWorkbench(this.auth)) {
+                return html`
+                    <div class="loading-container operator-access-denied">
+                        <p class="denied-title">${this.i18n.t('flows_app.operator_denied_title')}</p>
+                        <p class="denied-text">${this.i18n.t('flows_app.operator_denied_body')}</p>
+                        <a class="denied-link" href="/flows/example_react">${this.i18n.t('flows_app.operator_denied_back')}</a>
+                    </div>
+                `;
+            }
+            return html`<operator-workbench-page></operator-workbench-page>`;
+        }
+
+        if (this._pendingEditFlowId) {
+            this._openEditorFromUrl(this._pendingEditFlowId, this._pendingEditSkillId);
+            this._pendingEditFlowId = null;
+            this._pendingEditSkillId = null;
         }
 
         const { currentFlowId, currentFlowName, currentSkillId, currentSkillName } = this.state.value;

@@ -4,7 +4,15 @@
 
 from typing import Optional
 
-from .service import BillingService
+from .exceptions import BillingBalanceBlockedError
+from .service import (
+    BALANCE_BLOCK_OPERATION_EMBEDDING,
+    BALANCE_BLOCK_OPERATION_LIVEKIT_EGRESS,
+    BALANCE_BLOCK_OPERATION_LIVEKIT_ROOM,
+    BALANCE_BLOCK_OPERATION_LLM,
+    BALANCE_BLOCK_OPERATION_VISION,
+    BillingService,
+)
 
 _billing_service: Optional[BillingService] = None
 
@@ -36,5 +44,15 @@ def get_billing_service() -> BillingService:
     return _billing_service
 
 
-__all__ = ["BillingService", "get_billing_service", "set_billing_service"]
+__all__ = [
+    "BALANCE_BLOCK_OPERATION_EMBEDDING",
+    "BALANCE_BLOCK_OPERATION_LIVEKIT_EGRESS",
+    "BALANCE_BLOCK_OPERATION_LIVEKIT_ROOM",
+    "BALANCE_BLOCK_OPERATION_LLM",
+    "BALANCE_BLOCK_OPERATION_VISION",
+    "BillingBalanceBlockedError",
+    "BillingService",
+    "get_billing_service",
+    "set_billing_service",
+]
 

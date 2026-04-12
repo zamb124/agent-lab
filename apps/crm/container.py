@@ -89,7 +89,7 @@ class CRMContainer(BaseContainer):
     @lazy
     def attachment_service(self):
         from apps.crm.services.attachment_service import AttachmentService
-        return AttachmentService()
+        return AttachmentService(entity_repository=self.entity_repository)
 
     @lazy
     def daily_summary_cache_service(self):
@@ -98,6 +98,12 @@ class CRMContainer(BaseContainer):
 
         settings = get_settings()
         return DailySummaryCacheService(redis_url=settings.database.redis_url)
+
+    @lazy
+    def daily_summary_artifact_service(self):
+        from apps.crm.services.daily_summary_artifact_service import DailySummaryArtifactService
+
+        return DailySummaryArtifactService()
     
     @lazy
     def company_init_service(self):
@@ -106,6 +112,9 @@ class CRMContainer(BaseContainer):
             entity_type_repo=self.entity_type_repository,
             relationship_type_repo=self.relationship_type_repository,
             namespace_template_repo=self.namespace_template_repository,
+            entity_repo=self.entity_repository,
+            company_repo=self.company_repository,
+            relationship_repo=self.relationship_repository,
         )
 
     @lazy
@@ -116,6 +125,17 @@ class CRMContainer(BaseContainer):
             entity_type_repo=self.entity_type_repository,
             namespace_repo=self.namespace_repository,
             entity_repo=self.entity_repository,
+            company_init_service=self.company_init_service,
+        )
+
+    @lazy
+    def user_person_service(self):
+        from apps.crm.services.user_person_service import UserPersonService
+        return UserPersonService(
+            entity_repo=self.entity_repository,
+            entity_type_repo=self.entity_type_repository,
+            user_repository=self.user_repository,
+            relationship_repo=self.relationship_repository,
         )
     
     @lazy
@@ -131,13 +151,14 @@ class CRMContainer(BaseContainer):
             attachment_service=self.attachment_service,
             a2a_client=A2AClient(timeout=300.0),
             daily_summary_cache_service=self.daily_summary_cache_service,
-        )
-    
-    @lazy
-    def entity_type_service(self):
-        from apps.crm.services.entity_type_service import EntityTypeService
-        return EntityTypeService(
-            entity_type_repository=self.entity_type_repository
+            daily_summary_artifact_service=self.daily_summary_artifact_service,
+            user_person_service=self.user_person_service,
+            access_grant_repo=self.access_grant_repository,
+            access_request_repo=self.access_request_repository,
+            company_mapping_repo=self.company_mapping_repository,
+            company_repo=self.company_repository,
+            access_control=self.access_control_service,
+            task_repository=self.task_repository,
         )
     
     @lazy
@@ -175,6 +196,36 @@ class CRMContainer(BaseContainer):
             access_control=self.access_control_service
         )
 
+    @lazy
+    def note_processing_service(self):
+        from apps.crm.services.note_processing_service import NoteProcessingService
+        return NoteProcessingService(entity_service=self.entity_service)
+
+    @lazy
+    def task_repository(self):
+        from apps.crm.db.repositories.task_repository import TaskRepository
+
+        return TaskRepository(db=self.crm_db)
+
+    @lazy
+    def task_service(self):
+        from apps.crm.services.task_service import TaskService
+
+        return TaskService(
+            task_repo=self.task_repository,
+            entity_service=self.entity_service,
+            relationship_repo=self.relationship_repository,
+        )
+
+    @lazy
+    def lara_workspace_service(self):
+        from apps.crm.services.lara_workspace_service import LaraWorkspaceService
+
+        return LaraWorkspaceService(
+            task_repo=self.task_repository,
+            entity_repo=self.entity_repository,
+        )
+
 
 # === Глобальный контейнер ===
 
@@ -195,7 +246,7 @@ def get_crm_container() -> CRMContainer:
 
         _crm_container = CRMContainer(
             db_url=settings.database.crm_url,
-            shared_db_url=settings.database.shared_url
+            shared_db_url=settings.database.shared_url,
         )
         logger.info(f"CRMContainer инициализирован с БД: {settings.database.crm_url[:50]}...")
     return _crm_container

@@ -24,7 +24,7 @@ class TestCodeNodeOverrides:
                 "nodes": {
                     "classifier": {
                         "type": "code",
-                        "code": "def run(state):\n    state.route = 'default'\n    return state"
+                        "code": "async def run(state):\n    state.route = 'default'\n    return state"
                     }
                 },
                 "edges": [{"from": "classifier", "to": None}]
@@ -50,7 +50,7 @@ class TestCodeNodeOverrides:
                 "nodes": {
                     "classifier": {
                         "type": "code",
-                        "code": "def run(state):\n    state.route = 'custom'\n    return state"
+                        "code": "async def run(state):\n    state.route = 'custom'\n    return state"
                     }
                 },
                 "edges": [{"from": "classifier", "to": None}]
@@ -79,7 +79,7 @@ class TestCodeNodeOverrides:
                 "classifier": {
                     "type": "code",
                     "code": """
-def run(state):
+async def run(state):
     content = (getattr(state, 'content', None) or '').lower()
     if 'заказ' in content:
         state.route = 'order'
@@ -90,9 +90,9 @@ def run(state):
     return state
 """
                 },
-                "order": {"type": "code", "code": "def run(state): state.result = 'order'; return state"},
-                "complaint": {"type": "code", "code": "def run(state): state.result = 'complaint'; return state"},
-                "general": {"type": "code", "code": "def run(state): state.result = 'general'; return state"}
+                "order": {"type": "code", "code": "async def run(state): state.result = 'order'; return state"},
+                "complaint": {"type": "code", "code": "async def run(state): state.result = 'complaint'; return state"},
+                "general": {"type": "code", "code": "async def run(state): state.result = 'general'; return state"}
             },
             "edges": [
                 {"from": "classifier", "to": "order", "condition": "route == 'order'"},
@@ -126,7 +126,7 @@ def run(state):
                 "classifier": {
                     "type": "code",
                     "code": """
-def run(state):
+async def run(state):
     content = (getattr(state, 'content', None) or '').lower()
     if 'заказ' in content:
         state.route = 'order'
@@ -135,8 +135,8 @@ def run(state):
     return state
 """
                 },
-                "order": {"type": "code", "code": "def run(state): state.result = 'order'; return state"},
-                "general": {"type": "code", "code": "def run(state): state.result = 'general'; return state"}
+                "order": {"type": "code", "code": "async def run(state): state.result = 'order'; return state"},
+                "general": {"type": "code", "code": "async def run(state): state.result = 'general'; return state"}
             },
             "edges": [
                 {"from": "classifier", "to": "order", "condition": "route == 'order'"},
@@ -175,7 +175,7 @@ class TestVariablesOverrideE2E:
                     "main": {
                         "type": "code",
                         "code": """
-def run(state):
+async def run(state):
     vars = getattr(state, 'variables', {})
     state.company = vars.get('company_name', 'unknown')
     state.max_len = vars.get('max_length', 0)
@@ -211,7 +211,7 @@ def run(state):
                     "main": {
                         "type": "code",
                         "code": """
-def run(state):
+async def run(state):
     vars = getattr(state, 'variables', {})
     state.max_len = vars.get('max_length', 0)
     return state
@@ -241,7 +241,7 @@ def run(state):
                     "main": {
                         "type": "code",
                         "code": """
-def run(state):
+async def run(state):
     vars = getattr(state, 'variables', {})
     state.max_len = vars.get('max_length', 0)
     return state
@@ -271,11 +271,11 @@ class TestEntryOverrideE2E:
         config_nodes = {
             "default_start": {
                 "type": "code",
-                "code": "def run(state): state.path = 'default'; return state"
+                "code": "async def run(state): state.path = 'default'; return state"
             },
             "skill_start": {
                 "type": "code",
-                "code": "def run(state): state.path = 'skill'; return state"
+                "code": "async def run(state): state.path = 'skill'; return state"
             }
         }
 
@@ -342,7 +342,7 @@ class TestExternalApiNodeOverridesE2E:
                     "mock_api": {
                         "type": "code",
                         "code": """
-def run(state):
+async def run(state):
     # Симулируем API response
     api_response = {'fact': 'Cats sleep 16 hours', 'length': 20}
     # Применяем state_mapping
@@ -383,7 +383,7 @@ class TestNestedOverridesE2E:
                     "main": {
                         "type": "code",
                         "code": """
-def run(state):
+async def run(state):
     # В реальности LLM config используется в LlmNode
     # Здесь проверяем что конфиг правильно передан
     state.config_passed = True
@@ -419,15 +419,15 @@ class TestGraphOverridesE2E:
             "nodes": {
                 "classifier": {
                     "type": "code",
-                    "code": "def run(state): state.route = 'order'; state.step = ['classifier']; return state"
+                    "code": "async def run(state): state.route = 'order'; state.step = ['classifier']; return state"
                 },
                 "processor": {
                     "type": "code",
-                    "code": "def run(state): state.step.append('processor'); return state"
+                    "code": "async def run(state): state.step.append('processor'); return state"
                 },
                 "formatter": {
                     "type": "code",
-                    "code": "def run(state): state.step.append('formatter'); return state"
+                    "code": "async def run(state): state.step.append('formatter'); return state"
                 }
             },
             "edges": [
@@ -455,11 +455,11 @@ class TestGraphOverridesE2E:
             "nodes": {
                 "classifier": {
                     "type": "code",
-                    "code": "def run(state): state.route = 'order'; state.step = ['classifier']; return state"
+                    "code": "async def run(state): state.route = 'order'; state.step = ['classifier']; return state"
                 },
                 "processor": {
                     "type": "code",
-                        "code": "def run(state): state.step.append('processor'); return state"
+                        "code": "async def run(state): state.step.append('processor'); return state"
                 }
             },
             "edges": [
@@ -491,11 +491,11 @@ class TestGraphOverridesE2E:
                 "nodes": {
                     "start": {
                         "type": "code",
-                        "code": "def run(state): state.route = getattr(state, 'input_route', 'a'); return state"
+                        "code": "async def run(state): state.route = getattr(state, 'input_route', 'a'); return state"
                     },
-                    "path_a": {"type": "code", "code": "def run(state): state.result = 'A'; return state"},
-                    "path_b": {"type": "code", "code": "def run(state): state.result = 'B'; return state"},
-                    "path_c": {"type": "code", "code": "def run(state): state.result = 'C'; return state"}
+                    "path_a": {"type": "code", "code": "async def run(state): state.result = 'A'; return state"},
+                    "path_b": {"type": "code", "code": "async def run(state): state.result = 'B'; return state"},
+                    "path_c": {"type": "code", "code": "async def run(state): state.result = 'C'; return state"}
                 },
                 "edges": [
                     {"from": "start", "to": "path_a", "condition": "route == 'a'"},
@@ -527,10 +527,10 @@ class TestGraphOverridesE2E:
                 "nodes": {
                     "start": {
                         "type": "code",
-                        "code": "def run(state): state.route = 'c' if getattr(state, 'input_route', None) == 'b' else getattr(state, 'input_route', 'a'); return state"
+                        "code": "async def run(state): state.route = 'c' if getattr(state, 'input_route', None) == 'b' else getattr(state, 'input_route', 'a'); return state"
                     },
-                    "path_a": {"type": "code", "code": "def run(state): state.result = 'A'; return state"},
-                    "path_c": {"type": "code", "code": "def run(state): state.result = 'C'; return state"}
+                    "path_a": {"type": "code", "code": "async def run(state): state.result = 'A'; return state"},
+                    "path_c": {"type": "code", "code": "async def run(state): state.result = 'C'; return state"}
                 },
                 "edges": [
                     {"from": "start", "to": "path_a", "condition": "route == 'a'"},
@@ -565,9 +565,9 @@ class TestMultipleNodesOverrideE2E:
                 "name": "Test",
                 "entry": "step1",
                 "nodes": {
-                    "step1": {"type": "code", "code": "def run(state): state.v1 = 'base1'; return state"},
-                    "step2": {"type": "code", "code": "def run(state): state.v2 = 'base2'; return state"},
-                    "step3": {"type": "code", "code": "def run(state): state.v3 = 'base3'; return state"}
+                    "step1": {"type": "code", "code": "async def run(state): state.v1 = 'base1'; return state"},
+                    "step2": {"type": "code", "code": "async def run(state): state.v2 = 'base2'; return state"},
+                    "step3": {"type": "code", "code": "async def run(state): state.v3 = 'base3'; return state"}
                 },
                 "edges": [
                     {"from": "step1", "to": "step2"},
@@ -595,9 +595,9 @@ class TestMultipleNodesOverrideE2E:
                 "name": "Test",
                 "entry": "step1",
                 "nodes": {
-                    "step1": {"type": "code", "code": "def run(state): state.v1 = 'override1'; return state"},
-                    "step2": {"type": "code", "code": "def run(state): state.v2 = 'base2'; return state"},
-                    "step3": {"type": "code", "code": "def run(state): state.v3 = 'override3'; return state"}
+                    "step1": {"type": "code", "code": "async def run(state): state.v1 = 'override1'; return state"},
+                    "step2": {"type": "code", "code": "async def run(state): state.v2 = 'base2'; return state"},
+                    "step3": {"type": "code", "code": "async def run(state): state.v3 = 'override3'; return state"}
                 },
                 "edges": [
                     {"from": "step1", "to": "step2"},
@@ -628,8 +628,8 @@ class TestMultipleNodesOverrideE2E:
                 "name": "Test",
                 "entry": "first",
                 "nodes": {
-                    "first": {"type": "code", "code": "def run(state): state.steps = ['first']; return state"},
-                    "last": {"type": "code", "code": "def run(state): state.steps.append('last'); return state"}
+                    "first": {"type": "code", "code": "async def run(state): state.steps = ['first']; return state"},
+                    "last": {"type": "code", "code": "async def run(state): state.steps.append('last'); return state"}
                 },
                 "edges": [
                     {"from": "first", "to": "last"},
@@ -654,9 +654,9 @@ class TestMultipleNodesOverrideE2E:
                 "name": "Test",
                 "entry": "first",
                 "nodes": {
-                    "first": {"type": "code", "code": "def run(state): state.steps = ['first']; return state"},
-                    "middle": {"type": "code", "code": "def run(state): state.steps.append('middle'); return state"},
-                    "last": {"type": "code", "code": "def run(state): state.steps.append('last'); return state"}
+                    "first": {"type": "code", "code": "async def run(state): state.steps = ['first']; return state"},
+                    "middle": {"type": "code", "code": "async def run(state): state.steps.append('middle'); return state"},
+                    "last": {"type": "code", "code": "async def run(state): state.steps.append('last'); return state"}
                 },
                 "edges": [
                     {"from": "first", "to": "middle"},

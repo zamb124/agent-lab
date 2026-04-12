@@ -4,6 +4,9 @@
 
 import pytest
 
+from apps.flows.src.models.tool_reference import CallParameter
+from apps.flows.src.tools.json_schema_parameters import call_parameters_to_parameters_schema
+
 
 class TestFlowsAPI:
     """Тесты /api/v1/flows"""
@@ -13,9 +16,10 @@ class TestFlowsAPI:
         """Список flows."""
         response = await client.get("/flows/api/v1/flows/", headers=auth_headers_system)
         assert response.status_code == 200
-        data = response.json()
+        page = response.json()
+        assert "items" in page
+        data = page["items"]
         assert isinstance(data, list)
-        # Должны быть загруженные flows из registry
         assert len(data) >= 3
 
     @pytest.mark.asyncio
@@ -316,9 +320,10 @@ class TestFlowsAPI:
         """Список flows."""
         response = await client.get("/flows/api/v1/flows/", headers=auth_headers_system)
         assert response.status_code == 200
-        data = response.json()
+        page = response.json()
+        assert "items" in page
+        data = page["items"]
         assert isinstance(data, list)
-        # Должны быть загруженные flows
         assert len(data) > 0
 
     @pytest.mark.asyncio
@@ -504,7 +509,9 @@ class TestToolsAPI:
         """Список tools."""
         response = await client.get("/flows/api/v1/tools/")
         assert response.status_code == 200
-        data = response.json()
+        page = response.json()
+        assert "items" in page
+        data = page["items"]
         assert isinstance(data, list)
 
     @pytest.mark.asyncio
@@ -521,6 +528,53 @@ class TestToolsAPI:
         """404 для несуществующего tool."""
         response = await client.get("/flows/api/v1/tools/nonexistent_tool", headers=auth_headers_system)
         assert response.status_code == 404
+
+    @pytest.mark.asyncio
+    async def test_draft_parameters_schema_matches_call_parameters_helper(
+        self, client, app, auth_headers_system
+    ):
+        payload = {
+            "args_schema": {
+                "q": {"type": "string", "description": "Query", "required": True},
+                "limit": {"type": "integer", "description": "", "required": False},
+            }
+        }
+        expected = call_parameters_to_parameters_schema(
+            {
+                "q": CallParameter(type="string", description="Query", required=True),
+                "limit": CallParameter(type="integer", description="", required=False),
+            }
+        )
+        response = await client.post(
+            "/flows/api/v1/tools/draft-parameters-schema",
+            headers=auth_headers_system,
+            json=payload,
+        )
+        assert response.status_code == 200
+        data = response.json()
+        assert data["parameters_schema"] == expected
+
+    @pytest.mark.asyncio
+    async def test_draft_parameters_schema_empty_args_422(
+        self, client, app, auth_headers_system
+    ):
+        response = await client.post(
+            "/flows/api/v1/tools/draft-parameters-schema",
+            headers=auth_headers_system,
+            json={"args_schema": {}},
+        )
+        assert response.status_code == 422
+
+    @pytest.mark.asyncio
+    async def test_draft_parameters_schema_invalid_entry_422(
+        self, client, app, auth_headers_system
+    ):
+        response = await client.post(
+            "/flows/api/v1/tools/draft-parameters-schema",
+            headers=auth_headers_system,
+            json={"args_schema": {"x": "not-an-object"}},
+        )
+        assert response.status_code == 422
 
 
 class TestTasksAPI:

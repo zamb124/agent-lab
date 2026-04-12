@@ -20,10 +20,8 @@ class TestAuthMeFrontend:
     @pytest.mark.asyncio
     async def test_auth_me_success(self, frontend_client, auth_token):
         """Успешный запрос с валидным токеном"""
-        response = await frontend_client.get(
-            "/frontend/api/auth/me",
-            cookies={"auth_token": auth_token}
-        )
+        frontend_client.cookies.set("auth_token", auth_token)
+        response = await frontend_client.get("/frontend/api/auth/me")
         
         assert response.status_code == 200
         data = response.json()
@@ -49,10 +47,8 @@ class TestAuthMeFrontend:
     @pytest.mark.asyncio
     async def test_auth_me_invalid_token(self, frontend_client):
         """Невалидный токен возвращает 401"""
-        response = await frontend_client.get(
-            "/frontend/api/auth/me",
-            cookies={"auth_token": "invalid.token.here"}
-        )
+        frontend_client.cookies.set("auth_token", "invalid.token.here")
+        response = await frontend_client.get("/frontend/api/auth/me")
         
         assert response.status_code == 401
         print("✅ /api/auth/me с невалидным токеном корректно возвращает 401")
@@ -73,10 +69,8 @@ class TestAuthMeFrontend:
             algorithm="HS256"
         )
         
-        response = await frontend_client.get(
-            "/frontend/api/auth/me",
-            cookies={"auth_token": expired_token}
-        )
+        frontend_client.cookies.set("auth_token", expired_token)
+        response = await frontend_client.get("/frontend/api/auth/me")
         
         assert response.status_code == 401
         print("✅ /api/auth/me с истекшим токеном корректно возвращает 401")
@@ -84,10 +78,10 @@ class TestAuthMeFrontend:
     @pytest.mark.asyncio
     async def test_auth_me_with_subdomain(self, frontend_client, auth_token):
         """Запрос с субдоменом (полноценный контекст компании)"""
+        frontend_client.cookies.set("auth_token", auth_token)
         response = await frontend_client.get(
             "/frontend/api/auth/me",
-            cookies={"auth_token": auth_token},
-            headers={"Host": f"test.localhost:8002"}
+            headers={"Host": f"test.localhost:8002"},
         )
         
         assert response.status_code == 200
@@ -100,10 +94,8 @@ class TestAuthMeFrontend:
     @pytest.mark.asyncio
     async def test_auth_me_response_structure(self, frontend_client, auth_token):
         """Проверка структуры ответа"""
-        response = await frontend_client.get(
-            "/frontend/api/auth/me",
-            cookies={"auth_token": auth_token}
-        )
+        frontend_client.cookies.set("auth_token", auth_token)
+        response = await frontend_client.get("/frontend/api/auth/me")
         
         assert response.status_code == 200
         data = response.json()
@@ -124,10 +116,10 @@ class TestAuthMeFrontend:
     @pytest.mark.asyncio
     async def test_auth_me_no_subdomain_allowed(self, frontend_client, auth_token):
         """Эндпоинт доступен без субдомена (пользователь может быть авторизован без выбранной компании)"""
+        frontend_client.cookies.set("auth_token", auth_token)
         response = await frontend_client.get(
             "/frontend/api/auth/me",
-            cookies={"auth_token": auth_token},
-            headers={"Host": "localhost:8002"}
+            headers={"Host": "localhost:8002"},
         )
         
         assert response.status_code == 200

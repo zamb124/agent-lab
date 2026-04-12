@@ -13,15 +13,16 @@ class TestEntityTypes:
     @pytest.mark.asyncio
     async def test_system_types_initialized(self, crm_client, auth_headers_system):
         """Системные типы минимального ядра (note, task) инициализированы"""
-        response = await crm_client.get("/crm/api/v1/entity-types/", headers=auth_headers_system)
+        response = await crm_client.get("/crm/api/v1/entity-types/", headers=auth_headers_system, params={"limit": 1000})
         assert response.status_code == 200
         
-        types = response.json()
+        page = response.json()
+        types = page["items"]
         type_ids = [t["type_id"] for t in types]
-        
+
         assert "note" in type_ids
         assert "task" in type_ids
-        
+
         for entity_type in types:
             assert entity_type["company_id"] is not None, "Все типы должны иметь company_id"
     
@@ -81,8 +82,8 @@ class TestEntityTypes:
             "prompt": "Воркшоп с практическими заданиями"
         }, headers=auth_headers_system)
         
-        types_resp = await crm_client.get("/crm/api/v1/entity-types/", headers=auth_headers_system)
-        types = types_resp.json()
+        types_resp = await crm_client.get("/crm/api/v1/entity-types/", headers=auth_headers_system, params={"limit": 1000})
+        types = types_resp.json()["items"]
         
         workshop = next((t for t in types if t["type_id"] == f"workshop_{unique_id}"), None)
         assert workshop is not None
@@ -144,6 +145,34 @@ class TestEntityTypes:
         assert updated["icon"] == "📝"
 
     @pytest.mark.asyncio
+    async def test_update_entity_type_is_context_anchor(self, crm_client, unique_id, auth_headers_system):
+        """Флаг якоря контекста на типе: запись и чтение."""
+        type_id = f"anchor_flag_{unique_id}"
+        create_resp = await crm_client.post(
+            "/crm/api/v1/entity-types/",
+            json={
+                "type_id": type_id,
+                "name": "Тип якоря",
+                "namespace_ids": ["default"],
+                "is_context_anchor": False,
+            },
+            headers=auth_headers_system,
+        )
+        assert create_resp.status_code == 200
+        assert create_resp.json().get("is_context_anchor") is False
+
+        update_resp = await crm_client.put(
+            f"/crm/api/v1/entity-types/{type_id}",
+            json={"is_context_anchor": True},
+            headers=auth_headers_system,
+        )
+        assert update_resp.status_code == 200
+        assert update_resp.json().get("is_context_anchor") is True
+
+        get_resp = await crm_client.get(f"/crm/api/v1/entity-types/{type_id}", headers=auth_headers_system)
+        assert get_resp.json().get("is_context_anchor") is True
+
+    @pytest.mark.asyncio
     async def test_create_namespace_from_template(self, crm_client, unique_id, auth_headers_system):
         create_template_response = await crm_client.post("/crm/api/v1/namespaces/templates", json={
             "template_id": f"sales_{unique_id}",
@@ -198,7 +227,7 @@ class TestEntityTypes:
 
         types_response = await crm_client.get(f"/crm/api/v1/entity-types/by-namespace/{namespace_name}", headers=auth_headers_system)
         assert types_response.status_code == 200
-        types = types_response.json()
+        types = types_response.json()["items"]
         assert isinstance(types, list)
         assert len(types) >= 1
 
@@ -315,12 +344,13 @@ class TestEntityTypes:
             headers=auth_headers_system,
         )
         assert types_by_namespace_resp.status_code == 200
-        type_ids = [item["type_id"] for item in types_by_namespace_resp.json()]
+        type_ids = [item["type_id"] for item in types_by_namespace_resp.json()["items"]]
         assert type_alpha in type_ids
         assert type_beta not in type_ids
 
     @pytest.mark.asyncio
-    async def test_namespace_allowed_types_locked_when_entities_exist(self, crm_client, unique_id, auth_headers_system):
+    async def test_namespace_granular_editability_with_entities(self, crm_client, unique_id, auth_headers_system):
+        """Гранулярная editability: используемые типы залочены, неиспользуемые можно убрать, новые добавить"""
         template_id = f"sales_{unique_id}"
         namespace_name = f"sales_ns_{unique_id}"
         type_lead = f"lead_{unique_id}"
@@ -333,23 +363,15 @@ class TestEntityTypes:
         }, headers=auth_headers_system)
         assert create_template_resp.status_code == 201
 
-        create_type_lead_resp = await crm_client.post(f"/crm/api/v1/namespaces/templates/{template_id}/types", json={
-            "type_id": type_lead,
-            "name": "Лид",
-            "required_fields": {"source": {"type": "string"}},
-            "optional_fields": {},
-            "namespace_ids": [],
-        }, headers=auth_headers_system)
-        assert create_type_lead_resp.status_code == 201
-
-        create_type_deal_resp = await crm_client.post(f"/crm/api/v1/namespaces/templates/{template_id}/types", json={
-            "type_id": type_deal,
-            "name": "Сделка",
-            "required_fields": {"amount": {"type": "number"}},
-            "optional_fields": {},
-            "namespace_ids": [],
-        }, headers=auth_headers_system)
-        assert create_type_deal_resp.status_code == 201
+        for type_id, type_name in [(type_lead, "Лид"), (type_deal, "Сделка")]:
+            resp = await crm_client.post(f"/crm/api/v1/namespaces/templates/{template_id}/types", json={
+                "type_id": type_id,
+                "name": type_name,
+                "required_fields": {"field": {"type": "string"}},
+                "optional_fields": {},
+                "namespace_ids": [],
+            }, headers=auth_headers_system)
+            assert resp.status_code == 201
 
         create_namespace_resp = await crm_client.post("/crm/api/v1/namespaces", json={
             "name": namespace_name,
@@ -362,6 +384,7 @@ class TestEntityTypes:
             "entity_type": type_lead,
             "name": f"Lead {unique_id}",
             "namespace": namespace_name,
+            "attributes": {"field": "test"},
         }, headers=auth_headers_system)
         assert create_entity_resp.status_code == 200
 
@@ -372,14 +395,24 @@ class TestEntityTypes:
         assert editability_resp.status_code == 200
         editability = editability_resp.json()
         assert editability["entity_count"] >= 1
-        assert editability["can_update_allowed_types"] is False
+        assert editability["can_add_types"] is True
+        assert type_lead in editability["locked_type_ids"]
+        assert type_deal in editability["removable_type_ids"]
+        assert type_lead not in editability["removable_type_ids"]
 
-        update_types_resp = await crm_client.put(
+        remove_locked_resp = await crm_client.put(
             f"/crm/api/v1/namespaces/{namespace_name}",
             json={"allowed_type_ids": [type_deal]},
             headers=auth_headers_system,
         )
-        assert update_types_resp.status_code == 422
+        assert remove_locked_resp.status_code == 422
+
+        remove_unused_resp = await crm_client.put(
+            f"/crm/api/v1/namespaces/{namespace_name}",
+            json={"allowed_type_ids": [type_lead]},
+            headers=auth_headers_system,
+        )
+        assert remove_unused_resp.status_code == 200
 
         update_description_resp = await crm_client.put(
             f"/crm/api/v1/namespaces/{namespace_name}",

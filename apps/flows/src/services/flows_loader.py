@@ -14,9 +14,10 @@ import importlib
 import inspect
 import json
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Type
 
 import yaml
+from pydantic import BaseModel
 
 from apps.flows.src.db import NodeRepository, FlowRepository, ToolRepository
 from core.context import get_context
@@ -24,10 +25,63 @@ from core.logging import get_logger
 from apps.flows.src.models import NodeConfig, FlowConfig, ToolReference
 from apps.flows.src.models.node_config import NodeLLMOverride
 from apps.flows.src.models.tool_reference import CallParameter
-from apps.flows.src.tools.base import BaseTool, ToolType
+from apps.flows.src.models.enums import ReactToolRole
+from apps.flows.src.tools.base import BaseTool
 from apps.flows.src.tools.decorator import FunctionTool
+from apps.flows.src.tools.json_schema_parameters import (
+    call_parameters_to_parameters_schema,
+    pydantic_model_to_parameters_schema,
+)
+from apps.flows.src.eval.inline_tool_sanitize import strip_forbidden_platform_import_lines
 
 logger = get_logger(__name__)
+
+
+def _call_parameters_from_pydantic_model(model: Type[BaseModel]) -> Dict[str, CallParameter]:
+    """Собирает CallParameter из JSON Schema Pydantic-модели (для tool_repository при load_tools_to_db)."""
+
+    schema = model.model_json_schema()
+    properties = schema.get("properties") or {}
+    required_names = set(schema.get("required") or [])
+
+    def prop_type(info: dict[str, Any]) -> str:
+        t = info.get("type")
+        if isinstance(t, list):
+            non_null = [x for x in t if x != "null"]
+            if len(non_null) == 1:
+                t = non_null[0]
+            else:
+                return "string"
+        if t == "integer":
+            return "integer"
+        if t == "number":
+            return "number"
+        if t == "boolean":
+            return "boolean"
+        if t == "array":
+            return "array"
+        if t == "object":
+            return "object"
+        any_of = info.get("anyOf")
+        if isinstance(any_of, list):
+            for br in any_of:
+                if isinstance(br, dict) and br.get("type") not in (None, "null"):
+                    return prop_type(br)
+        return "string"
+
+    out: Dict[str, CallParameter] = {}
+    for name, raw in properties.items():
+        if not isinstance(raw, dict):
+            continue
+        desc = raw.get("description", "")
+        if not isinstance(desc, str):
+            desc = str(desc)
+        out[name] = CallParameter(
+            type=prop_type(raw),
+            description=desc,
+            required=name in required_names,
+        )
+    return out
 
 
 class FlowsLoader:
@@ -121,21 +175,23 @@ class FlowsLoader:
         await self._load_nodes(bundle_dir, nodes_path)
 
     async def _load_tools_cache(self) -> None:
-        """Загружает все tools из БД в кеш для инлайнинга."""
-        tools = await self.tool_repository.list_all()
+        """Загружает inline tools из БД в кеш. MCP-тулы пропускаются — они проксируются через MCP-сервер."""
+        tools = await self.tool_repository.list(limit=10000)
         for tool in tools:
+            if tool.tool_id.startswith("mcp:"):
+                continue
             if not tool.code:
                 raise ValueError(
                     f"Tool '{tool.tool_id}' в БД не имеет code. "
                     f"Все tools должны иметь inline code для изоляции flow."
                 )
             self._tools_cache[tool.tool_id] = tool
-        
-        logger.info(f"Загружен кеш из {len(self._tools_cache)} tools")
+
+        logger.info(f"Загружен кеш из {len(self._tools_cache)} inline tools")
 
     async def _load_nodes_cache(self) -> None:
         """Загружает все nodes из БД в кеш для инлайнинга."""
-        nodes = await self.node_repository.list_all()
+        nodes = await self.node_repository.list(limit=10000)
         for node in nodes:
             self._nodes_cache[node.node_id] = node
         logger.info(f"Загружен кеш из {len(self._nodes_cache)} nodes")
@@ -260,7 +316,11 @@ class FlowsLoader:
                 if "args_schema" in tool_data:
                     args_schema = tool_data.pop("args_schema")
                     tool_data["args_schema"] = {
-                        k: CallParameter(type=v.get("type", "string"), description=v.get("description", ""))
+                        k: CallParameter(
+                            type=v.get("type", "string"),
+                            description=v.get("description", ""),
+                            required=v.get("required", True),
+                        )
                         for k, v in args_schema.items()
                     }
                 result.append(ToolReference(**tool_data))
@@ -483,7 +543,7 @@ class FlowsLoader:
         
         Для каждой ноды:
         1. Заменяет tool_id на полные конфиги с кодом
-        2. Валидирует уникальность reason/exit tools по tool_type
+        2. Валидирует уникальность reason/exit tools по react_role
         3. Для нод типа tool с tool_id инлайнит код из tools_cache
         """
         for node_id, node_config in nodes.items():
@@ -503,6 +563,10 @@ class FlowsLoader:
                                 k: {"type": v.type, "description": v.description}
                                 for k, v in tool_ref.args_schema.items()
                             }
+                        if tool_ref.parameters_schema and not node_config.get(
+                            "parameters_schema"
+                        ):
+                            node_config["parameters_schema"] = tool_ref.parameters_schema
                         logger.debug(f"Node '{node_id}': инлайнен код tool '{tool_id}'")
                     else:
                         raise ValueError(
@@ -571,17 +635,24 @@ class FlowsLoader:
 
         elif isinstance(tool, dict):
             tool_id = tool.get("tool_id")
-            tool_type = tool.get("type")
+            exec_kind = tool.get("type")
             
             # Если это llm_node (агент как инструмент) - рекурсивно инлайним его tools
-            if tool_type == "llm_node" or tool.get("prompt"):
+            if exec_kind == "llm_node" or tool.get("prompt"):
                 return self._inline_llm_node_tool(tool, context, depth)
             
             # Tool с tool_id без code - ищем в caches
             # Полностью определённые inline tools (не требуют поиска в кэшах)
-            inline_node_types = {"channel", "flow", "mcp", "external_api", "remote_flow", "code"}
-            if tool_type in inline_node_types:
-                logger.debug(f"{context}: inline tool '{tool_id}' с type='{tool_type}'")
+            inline_node_types = {
+                "channel",
+                "flow",
+                "mcp",
+                "external_api",
+                "remote_flow",
+                "code",
+            }
+            if exec_kind in inline_node_types:
+                logger.debug(f"{context}: inline tool '{tool_id}' с type='{exec_kind}'")
                 return tool
             
             if tool_id and not tool.get("code"):
@@ -694,8 +765,8 @@ class FlowsLoader:
         Raises:
             ValueError: Если найдено более 1 reasoning или exit tool
         """
-        reason_tools = [t for t in tools if t.get("tool_type") == "reason"]
-        exit_tools = [t for t in tools if t.get("tool_type") == "exit"]
+        reason_tools = [t for t in tools if t.get("react_role") == "reason"]
+        exit_tools = [t for t in tools if t.get("react_role") == "exit"]
         
         if len(reason_tools) > 1:
             names = [t.get("tool_id") or t.get("name") for t in reason_tools]
@@ -806,6 +877,35 @@ class FlowsLoader:
         
         return stats
 
+    async def reload_flow_bundle(self, bundle_id: str) -> str:
+        """
+        Перезаписывает один flow и связанные nodes из каталога ``bundles/<bundle_id>/`` в БД.
+
+        Использует тот же путь, что и полная загрузка registry: кеш tools/nodes, defaults из registry.
+        """
+        await self._load_tools_cache()
+        await self._load_nodes_cache()
+
+        if not self.registry_path.exists():
+            raise ValueError(f"Registry не найден: {self.registry_path}")
+
+        with open(self.registry_path, "r", encoding="utf-8") as f:
+            self._registry = yaml.safe_load(f) or {}
+        self._defaults = self._registry.get("defaults", {})
+
+        bundle_dir = self.bundles_dir / bundle_id
+        config_path = bundle_dir / "flow.json"
+        if not config_path.exists():
+            raise ValueError(
+                f"Каталог bundle '{bundle_id}' не найден или в нём нет flow.json: {bundle_dir}"
+            )
+
+        await self._preload_nodes_to_cache(bundle_id)
+        loaded_flow_id = await self._load_flow_bundle(bundle_id)
+        if not loaded_flow_id:
+            raise ValueError(f"Не удалось загрузить bundle '{bundle_id}' в БД")
+        return loaded_flow_id
+
 
 async def load_flows_to_db(
     flow_repository: FlowRepository,
@@ -887,11 +987,21 @@ async def load_tools_to_db(
                     if stripped.startswith("async def ") or stripped.startswith("def "):
                         func_start = i
                         break
-                source_code = "\n".join(lines[func_start:])
+                source_code = strip_forbidden_platform_import_lines("\n".join(lines[func_start:]))
                 
-                # args_schema из _parameters
-                args_schema_dict: Dict[str, CallParameter] = dict(tool_instance._parameters)
-                
+                if tool_instance.args_schema is not None:
+                    args_schema_dict = _call_parameters_from_pydantic_model(tool_instance.args_schema)
+                    parameters_schema_full = pydantic_model_to_parameters_schema(
+                        tool_instance.args_schema
+                    )
+                else:
+                    args_schema_dict = dict(tool_instance._parameters)
+                    parameters_schema_full = (
+                        call_parameters_to_parameters_schema(args_schema_dict)
+                        if args_schema_dict
+                        else None
+                    )
+
                 # mock_response
                 mock_map = None
                 if tool_instance._mock_response is not None:
@@ -905,12 +1015,13 @@ async def load_tools_to_db(
                     title=tool_id,
                     description=tool_instance.description,
                     code=source_code,
+                    parameters_schema=parameters_schema_full,
                     args_schema=args_schema_dict,
                     mock_map=mock_map,
                     tags=tool_instance.tags,
-                    tool_type=tool_instance.tool_type.value,
+                    react_role=tool_instance.react_role,
                 )
-                
+
                 await tool_repository.set(tool_ref)
                 loaded.append(tool_id)
                 logger.info(f"  {tool_id}: FunctionTool")
@@ -924,33 +1035,31 @@ async def load_tools_to_db(
                 # Извлекаем исходный код класса
                 source_code = inspect.getsource(tool_class)
 
-                # args_schema из Pydantic модели
                 args_schema_dict: Dict[str, CallParameter] = {}
+                parameters_schema_full = None
                 if tool_class.args_schema:
-                    schema = tool_class.args_schema.model_json_schema()
-                    properties = schema.get("properties", {})
-                    for param_name, param_info in properties.items():
-                        args_schema_dict[param_name] = CallParameter(
-                            type=param_info.get("type", "string"),
-                            description=param_info.get("description", ""),
-                        )
+                    args_schema_dict = _call_parameters_from_pydantic_model(tool_class.args_schema)
+                    parameters_schema_full = pydantic_model_to_parameters_schema(
+                        tool_class.args_schema
+                    )
 
                 mock_map = None
                 if hasattr(tool_class, "mock_response"):
                     mock_map = {"default_response": tool_class.mock_response}
 
                 tags = getattr(tool_class, "tags", [])
-                tool_type = getattr(tool_class, "tool_type", ToolType.TOOL)
+                react_role = getattr(tool_class, "react_role", ReactToolRole.STANDARD)
 
                 tool_ref = ToolReference(
                     tool_id=tool_id,
                     title=tool_class.__name__,
                     description=tool_class.description,
                     code=source_code,
+                    parameters_schema=parameters_schema_full,
                     args_schema=args_schema_dict,
                     mock_map=mock_map,
                     tags=tags,
-                    tool_type=tool_type.value if hasattr(tool_type, "value") else "tool",
+                    react_role=react_role,
                 )
 
                 await tool_repository.set(tool_ref)
@@ -971,5 +1080,5 @@ async def get_all_flows(flow_repository: FlowRepository) -> Dict[str, FlowConfig
     Returns:
         Словарь {flow_id: FlowConfig}
     """
-    rows = await flow_repository.list_all()
+    rows = await flow_repository.list(limit=10000)
     return {fc.flow_id: fc for fc in rows}

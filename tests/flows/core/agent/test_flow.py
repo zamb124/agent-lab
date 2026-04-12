@@ -25,7 +25,7 @@ class TestCodeNode:
         """CodeNode выполняет синхронную функцию."""
 
         node = CodeNode("test", config={
-            "code": """def execute(args, state):
+            "code": """async def execute(args, state):
     state.result = "done"
     return {"result": "done"}"""
         })
@@ -53,7 +53,7 @@ class TestCodeNode:
         """CodeNode может менять stage."""
 
         node = CodeNode("test", config={
-            "code": """def execute(args, state):
+            "code": """async def execute(args, state):
     state.stage = "next"
     return {"stage": "next"}"""
         })
@@ -71,7 +71,7 @@ class TestCreateNode:
         """create_node создает CodeNode."""
         config = {
             "type": "code",
-            "code": "def run(state):\n    state['initialized'] = True\n    return state",
+            "code": "async def run(state):\n    state['initialized'] = True\n    return state",
         }
 
         node = await create_node("init", config)
@@ -111,12 +111,12 @@ class TestFlowWithEdges:
 
         nodes = {
             "step1": CodeNode("step1", config={
-                "code": """def execute(args, state):
+                "code": """async def execute(args, state):
     state.step1 = True
     return {"step1": True}"""
             }),
             "step2": CodeNode("step2", config={
-                "code": """def execute(args, state):
+                "code": """async def execute(args, state):
     state.step2 = True
     return {"step2": True}"""
             }),
@@ -151,17 +151,17 @@ class TestFlowWithEdges:
 
         nodes = {
             "check": CodeNode("check", config={
-                "code": """def execute(args, state):
+                "code": """async def execute(args, state):
     state.valid = True
     return {"valid": True}"""
             }),
             "valid_path": CodeNode("valid_path", config={
-                "code": """def execute(args, state):
+                "code": """async def execute(args, state):
     state.path = "valid"
     return {"path": "valid"}"""
             }),
             "invalid_path": CodeNode("invalid_path", config={
-                "code": """def execute(args, state):
+                "code": """async def execute(args, state):
     state.path = "invalid"
     return {"path": "invalid"}"""
             }),
@@ -196,17 +196,17 @@ class TestFlowWithEdges:
 
         nodes = {
             "check": CodeNode("check", config={
-                "code": """def execute(args, state):
+                "code": """async def execute(args, state):
     state.valid = False
     return {"valid": False}"""
             }),
             "valid_path": CodeNode("valid_path", config={
-                "code": """def execute(args, state):
+                "code": """async def execute(args, state):
     state.path = "valid"
     return {"path": "valid"}"""
             }),
             "invalid_path": CodeNode("invalid_path", config={
-                "code": """def execute(args, state):
+                "code": """async def execute(args, state):
     state.path = "invalid"
     return {"path": "invalid"}"""
             }),
@@ -241,12 +241,12 @@ class TestFlowWithEdges:
 
         nodes = {
             "init": CodeNode("init", config={
-                "code": """def execute(args, state):
+                "code": """async def execute(args, state):
     state.validation = {"valid": True}
     return {"validation": {"valid": True}}"""
             }),
             "success": CodeNode("success", config={
-                "code": """def execute(args, state):
+                "code": """async def execute(args, state):
     state.result = "success"
     return {"result": "success"}"""
             }),
@@ -279,12 +279,12 @@ class TestFlowWithEdges:
 
         nodes = {
             "step1": CodeNode("step1", config={
-                "code": """def execute(args, state):
+                "code": """async def execute(args, state):
     state.step1 = True
     return {"step1": True}"""
             }),
             "step2": CodeNode("step2", config={
-                "code": """def execute(args, state):
+                "code": """async def execute(args, state):
     state.step2 = True
     return {"step2": True}"""
             }),
@@ -318,7 +318,7 @@ class TestFlowWithEdges:
 
         nodes = {
             "start": CodeNode("start", config={
-                "code": """def execute(args, state):
+                "code": """async def execute(args, state):
     return {}"""
             }),
         }
@@ -346,11 +346,11 @@ class TestFlowWithEdges:
 
         nodes = {
             "a": CodeNode("a", config={
-                "code": """def execute(args, state):
+                "code": """async def execute(args, state):
     return {}"""
             }),
             "b": CodeNode("b", config={
-                "code": """def execute(args, state):
+                "code": """async def execute(args, state):
     return {}"""
             }),
         }
@@ -386,7 +386,7 @@ class TestFlowWithEdges:
             "nodes": {
                 "init": {
                     "type": "code",
-                    "code": "def run(state):\n    state['initialized'] = True\n    return state",
+                    "code": "async def run(state):\n    state['initialized'] = True\n    return state",
                 },
             },
             "edges": [
@@ -411,7 +411,7 @@ class TestFlowVariables:
 
         nodes = {
             "main": CodeNode("main", config={
-                "code": """def execute(args, state):
+                "code": """async def execute(args, state):
     state.captured_variables = dict(state.variables)
     return {"captured_variables": dict(state.variables)}""",
             }),
@@ -442,7 +442,7 @@ class TestFlowVariables:
 
         nodes = {
             "main": CodeNode("main", config={
-                "code": """def execute(args, state):
+                "code": """async def execute(args, state):
     variables = state.variables
     company = variables.get('company', 'Unknown')
     state.greeting = f"Welcome to {company}"
@@ -479,7 +479,7 @@ class TestFlowVariables:
             "nodes": {
                 "main": {
                     "type": "code",
-                    "code": "def run(state):\n    state['initialized'] = True\n    return state",
+                    "code": "async def run(state):\n    state['initialized'] = True\n    return state",
                 },
             },
             "edges": [{"from": "main", "to": None}],
@@ -571,12 +571,12 @@ class TestFlowConditionEvaluation:
 
         nodes = {
             "init": CodeNode("init", config={
-                "code": """def execute(args, state):
+                "code": """async def execute(args, state):
     state.status = "active"
     return {"status": "active"}"""
             }),
             "active": CodeNode("active", config={
-                "code": """def execute(args, state):
+                "code": """async def execute(args, state):
     state.result = "is_active"
     return {"result": "is_active"}"""
             }),
@@ -609,17 +609,17 @@ class TestFlowConditionEvaluation:
 
         nodes = {
             "init": CodeNode("init", config={
-                "code": """def execute(args, state):
+                "code": """async def execute(args, state):
     state.count = 5
     return {"count": 5}"""
             }),
             "high": CodeNode("high", config={
-                "code": """def execute(args, state):
+                "code": """async def execute(args, state):
     state.level = "high"
     return {"level": "high"}"""
             }),
             "low": CodeNode("low", config={
-                "code": """def execute(args, state):
+                "code": """async def execute(args, state):
     state.level = "low"
     return {"level": "low"}"""
             }),

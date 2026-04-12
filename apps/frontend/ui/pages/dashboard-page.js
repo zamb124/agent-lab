@@ -1,9 +1,12 @@
 import { html, css } from 'lit';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
+import { I18nNs } from '@platform/services/i18n/i18n.service.js';
 import { FrontendStore } from '../store/frontend.store.js';
+import { openUrlSameWindowOrTab } from '@platform/lib/utils/native-app-shell.js';
 import '@platform/lib/components/company-modal.js';
 import '@platform/lib/components/layout/page-header.js';
 import '@platform/lib/components/platform-icon.js';
+import '@platform/lib/components/glass-spinner.js';
 
 export class DashboardPage extends PlatformElement {
     static styles = [
@@ -14,7 +17,53 @@ export class DashboardPage extends PlatformElement {
                 flex-direction: column;
                 height: 100%;
             }
-            
+
+            .top-row {
+                display: flex;
+                align-items: center;
+                justify-content: space-between;
+                gap: var(--space-4);
+                margin-bottom: var(--space-8);
+            }
+
+            .stats-strip {
+                display: flex;
+                align-items: center;
+                gap: 0;
+                background: var(--glass-solid-medium);
+                border: 1px solid var(--border-subtle);
+                border-radius: var(--radius-lg);
+                backdrop-filter: blur(20px);
+                flex-shrink: 0;
+            }
+
+            .stat-cell {
+                display: flex;
+                flex-direction: column;
+                align-items: center;
+                padding: var(--space-3) var(--space-5);
+                border-right: 1px solid var(--border-subtle);
+            }
+
+            .stat-cell:last-child {
+                border-right: none;
+            }
+
+            .stat-value {
+                font-size: var(--text-base);
+                font-weight: var(--font-bold);
+                color: var(--accent);
+                white-space: nowrap;
+                line-height: 1.2;
+            }
+
+            .stat-label {
+                font-size: 10px;
+                color: var(--text-tertiary);
+                margin-top: 2px;
+                white-space: nowrap;
+            }
+
             .services-grid {
                 display: grid;
                 grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
@@ -143,43 +192,12 @@ export class DashboardPage extends PlatformElement {
                 margin: 0;
             }
 
-            .stats-section {
-                background: var(--glass-solid-medium);
-                border: 1px solid var(--border-subtle);
-                border-radius: var(--radius-lg);
-                padding: var(--space-8);
-                backdrop-filter: blur(20px);
-                margin-bottom: var(--space-8);
-            }
-
-            .stats-grid {
-                display: grid;
-                grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-                gap: var(--space-8);
-                margin-top: var(--space-6);
-            }
-
-            .stat-item {
-                text-align: center;
-            }
-
-            .stat-value {
-                font-size: var(--text-4xl);
-                font-weight: var(--font-bold);
-                color: var(--accent);
-                margin: 0 0 var(--space-2) 0;
-            }
-
-            .stat-label {
-                font-size: var(--text-sm);
-                color: var(--text-secondary);
-                margin: 0;
-            }
-
-            .loading-state {
-                text-align: center;
-                padding: var(--space-12);
-                color: var(--text-secondary);
+            .page-loading {
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                flex: 1;
+                min-height: 200px;
             }
 
             .section-title {
@@ -190,6 +208,15 @@ export class DashboardPage extends PlatformElement {
             }
 
             @media (max-width: 768px) {
+                .top-row {
+                    flex-direction: column;
+                    align-items: stretch;
+                }
+
+                .stats-strip {
+                    justify-content: center;
+                }
+
                 .services-grid,
                 .quick-actions {
                     grid-template-columns: 1fr;
@@ -211,19 +238,23 @@ export class DashboardPage extends PlatformElement {
 
     connectedCallback() {
         super.connectedCallback();
+        this._i18nUnsub = this.i18n.subscribe(() => this.requestUpdate());
         this._loadData();
     }
 
+    disconnectedCallback() {
+        if (this._i18nUnsub) {
+            this._i18nUnsub();
+            this._i18nUnsub = null;
+        }
+        super.disconnectedCallback();
+    }
+
     async _loadData() {
-        const { servicesStatus, subscription } = this.state.value;
-        
-        if (Object.keys(servicesStatus).length === 0) {
-            await this._loadServicesStatus();
-        }
-        
-        if (!subscription) {
-            await this._loadBilling();
-        }
+        await Promise.all([
+            this._loadServicesStatus(),
+            this._loadBilling(),
+        ]);
         
         const user = this.auth.user;
         if (user && !user.active_company_id) {
@@ -233,8 +264,8 @@ export class DashboardPage extends PlatformElement {
 
     async _loadServicesStatus() {
         FrontendStore.setServicesLoading(true);
-        const statuses = await this.services.get('servicesStatus').getStatus();
-        FrontendStore.setServicesStatus(statuses);
+        const page = await this.services.get('servicesStatus').getStatus();
+        FrontendStore.setServicesStatus(page.items);
     }
 
     async _loadBilling() {
@@ -256,11 +287,12 @@ export class DashboardPage extends PlatformElement {
 
     render() {
         const { servicesLoading, billingLoading } = this.state.value;
-        
+        const td = (key, params) => this.i18n.t(key, params ?? {});
+
         if (servicesLoading && billingLoading) {
             return html`
-                <div class="loading-state">
-                    <p>Загрузка...</p>
+                <div class="page-loading">
+                    <glass-spinner size="lg"></glass-spinner>
                 </div>
             `;
         }
@@ -268,50 +300,87 @@ export class DashboardPage extends PlatformElement {
         const user = this.auth.user;
 
         return html`
-            <page-header 
-                title="Добро пожаловать" 
-                subtitle="${user?.name ?? 'Пользователь'}"
-            ></page-header>
+            <div class="top-row">
+                <page-header 
+                    title=${td('console_home.welcome_title')}
+                    subtitle="${user?.name ?? td('console_home.user_fallback')}"
+                ></page-header>
+                ${this._renderStatsStrip()}
+            </div>
             
             ${this._renderServices()}
             ${this._renderQuickActions()}
-            ${this._renderStats()}
             
             <company-modal></company-modal>
         `;
     }
 
+    _renderStatsStrip() {
+        const { subscription } = this.state.value;
+        const td = (key, params) => this.i18n.t(key, params ?? {});
+
+        const balance = subscription?.balance ?? 0;
+        const spent = subscription?.current_month_spent ?? 0;
+        const plan = subscription?.plan ?? 'FREE';
+        const cur = td('console_home.currency_rub');
+
+        return html`
+            <div class="stats-strip">
+                <div class="stat-cell">
+                    <div class="stat-value">${balance.toFixed(2)} ${cur}</div>
+                    <div class="stat-label">${td('console_home.stat_balance')}</div>
+                </div>
+                <div class="stat-cell">
+                    <div class="stat-value">${spent.toFixed(2)} ${cur}</div>
+                    <div class="stat-label">${td('console_home.stat_spent_month')}</div>
+                </div>
+                <div class="stat-cell">
+                    <div class="stat-value">${plan.toUpperCase()}</div>
+                    <div class="stat-label">${td('console_home.stat_plan')}</div>
+                </div>
+            </div>
+        `;
+    }
+
     _renderServices() {
+        const tp = (key, params) => this.i18n.t(key, params ?? {}, I18nNs.PLATFORM);
+        const td = (key, params) => this.i18n.t(key, params ?? {});
         const services = [
             {
-                id: 'flows',
-                name: 'Flows',
-                logo: '/static/core/assets/service_logos/agents_logo.svg',
-                description: 'Конструктор flow: графы, skills и интеграции',
+                id: 'sync',
+                name: tp('apps.sync.name'),
+                logo: '/static/core/assets/service_logos/sync_logo.svg',
+                description: tp('apps.sync.description'),
             },
             {
                 id: 'crm',
-                name: 'NetWorkle',
+                name: tp('apps.crm.name'),
                 logo: '/static/core/assets/service_logos/crm_logo.svg',
-                description: 'Управление контактами и Knowledge Graph',
+                description: tp('apps.crm.description'),
+            },
+            {
+                id: 'flows',
+                name: tp('apps.flows.name'),
+                logo: '/static/core/assets/service_logos/agents_logo.svg',
+                description: tp('apps.flows.description'),
             },
             {
                 id: 'rag',
-                name: 'RAG',
+                name: tp('apps.rag.name'),
                 logo: '/static/core/assets/service_logos/rag_logo.svg',
-                description: 'Управление документами и поиск',
+                description: tp('apps.rag.description'),
             },
             {
-                id: 'sync',
-                name: 'Sync',
-                logo: '/static/core/assets/service_logos/sync_logo.svg',
-                description: 'Инженерный чат с Git-интеграцией',
+                id: 'documents',
+                name: tp('apps.documents.name'),
+                logo: '/static/core/assets/service_logos/documents_logo.svg',
+                description: tp('apps.documents.description'),
             },
         ];
 
         return html`
             <div class="services-section">
-                <h2 class="section-title">Сервисы</h2>
+                <h2 class="section-title">${td('console_home.services_title')}</h2>
                 <div class="services-grid">
                     ${services.map((service) => this._renderServiceCard(service))}
                 </div>
@@ -321,14 +390,12 @@ export class DashboardPage extends PlatformElement {
 
     _renderServiceCard(service) {
         return html`
-            <div class="service-card" @click=${() => window.open(this._buildServiceUrl(service.id), '_blank')}>
+            <div class="service-card" @click=${() => openUrlSameWindowOrTab(this._buildServiceUrl(service.id))}>
                 <div class="service-header">
                     <span class="service-icon">
                         <img src="${service.logo}" alt="${service.name}">
                     </span>
-                    <svg class="service-go-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <polyline points="9 18 15 12 9 6"></polyline>
-                    </svg>
+                    <platform-icon class="service-go-icon" name="chevron-right" size="20"></platform-icon>
                 </div>
                 <h3 class="service-name">${service.name}</h3>
                 <p class="service-description">${service.description}</p>
@@ -348,11 +415,12 @@ export class DashboardPage extends PlatformElement {
             crm: '8003',
             rag: '8004',
             sync: '8005',
+            documents: '8002',
         };
 
         const targetPort = servicePortById[serviceId];
         if (!targetPort) {
-            throw new Error(`Неизвестный сервис для dashboard ссылки: ${serviceId}`);
+            throw new Error(this.i18n.t('console_home.err_unknown_service', { id: serviceId }));
         }
 
         if (window.location.port === targetPort) {
@@ -371,36 +439,37 @@ export class DashboardPage extends PlatformElement {
     }
 
     _renderQuickActions() {
+        const td = (key, params) => this.i18n.t(key, params ?? {});
         const actions = [
             {
                 iconName: 'share',
-                title: 'Пригласить участника',
-                description: 'Добавить нового члена команды',
+                title: td('console_home.quick_invite_title'),
+                description: td('console_home.quick_invite_desc'),
                 action: () => FrontendStore.setCurrentView('team'),
             },
             {
                 iconName: 'key',
-                title: 'Создать API ключ',
-                description: 'Новый ключ для интеграций',
+                title: td('console_home.quick_api_title'),
+                description: td('console_home.quick_api_desc'),
                 action: () => FrontendStore.setCurrentView('api-keys'),
             },
             {
                 iconName: 'chat',
-                title: 'Добавить Embed виджет',
-                description: 'Создать новый чат-виджет',
+                title: td('console_home.quick_embed_title'),
+                description: td('console_home.quick_embed_desc'),
                 action: () => FrontendStore.setCurrentView('embed-configs'),
             },
             {
-                iconName: 'clipboard',
-                title: 'Пополнить баланс',
-                description: 'Управление биллингом',
-                action: () => FrontendStore.setCurrentView('billing'),
+                iconName: 'settings',
+                title: td('console_home.quick_settings_title'),
+                description: td('console_home.quick_settings_desc'),
+                action: () => FrontendStore.setCurrentView('settings'),
             },
         ];
 
         return html`
             <div class="quick-actions-section">
-                <h2 class="section-title">Быстрые действия</h2>
+                <h2 class="section-title">${td('console_home.quick_actions_title')}</h2>
                 <div class="quick-actions">
                     ${actions.map((action) => html`
                         <div class="action-card" @click=${action.action}>
@@ -413,42 +482,6 @@ export class DashboardPage extends PlatformElement {
                             </div>
                         </div>
                     `)}
-                </div>
-            </div>
-        `;
-    }
-
-    _renderStats() {
-        const { subscription, servicesStatus } = this.state.value;
-        
-        const balance = subscription?.balance ?? 0;
-        const spent = subscription?.current_month_spent ?? 0;
-        const plan = subscription?.plan ?? 'FREE';
-        
-        const statuses = Object.values(servicesStatus);
-        const healthyCount = statuses.filter((s) => s.status === 'healthy').length;
-        const totalCount = statuses.length;
-        
-        return html`
-            <div class="stats-section">
-                <h2 class="section-title">Статистика использования</h2>
-                <div class="stats-grid">
-                    <div class="stat-item">
-                        <div class="stat-value">${balance.toFixed(0)} Р</div>
-                        <div class="stat-label">Баланс</div>
-                    </div>
-                    <div class="stat-item">
-                        <div class="stat-value">${spent.toFixed(0)} Р</div>
-                        <div class="stat-label">Потрачено в месяце</div>
-                    </div>
-                    <div class="stat-item">
-                        <div class="stat-value">${plan.toUpperCase()}</div>
-                        <div class="stat-label">Тарифный план</div>
-                    </div>
-                    <div class="stat-item">
-                        <div class="stat-value">${healthyCount}/${totalCount}</div>
-                        <div class="stat-label">Сервисы онлайн</div>
-                    </div>
                 </div>
             </div>
         `;

@@ -7,10 +7,12 @@
 import { html, css } from 'lit';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
 import { FlowsStore } from '../../store/flows.store.js';
+import { setUrlParam } from '../../utils/url-sync.js';
 import { injectEditorStyles } from './flow-editor-styles.js';
-import '../../modals/confirm-modal.js';
+import { confirm } from '../../modals/confirm-modal.js';
 import '../../modals/code-modal.js';
 import '../../modals/trigger-editor-modal.js';
+import '../../modals/tool-picker-modal.js';
 import './resource-property-panel.js';
 
 export class FlowEditorPage extends PlatformElement {
@@ -51,6 +53,7 @@ export class FlowEditorPage extends PlatformElement {
         
         this._panelEntering = false;
         this._confirmModal = null;
+        this._reloadFromBundleBusy = false;
     }
 
     async connectedCallback() {
@@ -75,7 +78,7 @@ export class FlowEditorPage extends PlatformElement {
                 }
             } catch (error) {
                 console.error('[FlowEditorPage] Failed to load flow:', error);
-                this.error('Ошибка загрузки агента: ' + error.message);
+                this.error(this.i18n.t('editor.load_agent_error', { message: error.message }));
             }
         } else {
             console.warn('[FlowEditorPage] No flowId provided!');
@@ -263,11 +266,18 @@ export class FlowEditorPage extends PlatformElement {
         
         this._updateCanvasDirectly(data, inherited);
 
+        const urlSkillId = (skillId && skillId !== 'base') ? skillId : null;
+        setUrlParam('skill', urlSkillId);
+
         if (this.flowId) {
             await FlowsStore.refreshPreviewExecutionState(this.flowId, this.a2a, skillId);
         }
         
-        this.success(`Переключено на ${skillId === 'base' ? 'базовый флоу' : 'skill: ' + skillId}`);
+        if (skillId === 'base') {
+            this.success(this.i18n.t('editor.skill_switched_base'));
+        } else {
+            this.success(this.i18n.t('editor.skill_switched_named', { id: skillId }));
+        }
     }
 
     _onSaveCurrentSkillData(e) {
@@ -371,7 +381,7 @@ export class FlowEditorPage extends PlatformElement {
             canvas.showNodeError(nodeId, error);
         }
         
-        this.error(`Ошибка в ноде "${nodeId}"`);
+        this.error(this.i18n.t('editor.node_error', { nodeId }));
     }
 
     _onBreakpointHit(e) {
@@ -401,7 +411,7 @@ export class FlowEditorPage extends PlatformElement {
             FlowsStore.setPreviewExecutionStateFromBreakpoint(stateSnapshot);
         }
         
-        this.info(`Breakpoint hit на ноде "${nodeId}". Нажмите "Продолжить выполнение" для resume.`);
+        this.info(this.i18n.t('editor.breakpoint_hit', { nodeId }));
     }
 
     _onExecutionComplete(e) {
@@ -411,7 +421,7 @@ export class FlowEditorPage extends PlatformElement {
         
         if (executionPanel) {
             executionPanel.setRunning(false);
-            executionPanel.showResult(result || 'Выполнение завершено');
+            executionPanel.showResult(result || this.i18n.t('editor.execution_done_fallback'));
             executionPanel.clearBreakpoint();
         }
         FlowsStore.setAgentExecutionRunning(false);
@@ -433,7 +443,7 @@ export class FlowEditorPage extends PlatformElement {
             });
         }
         
-        this.success('Выполнение завершено');
+        this.success(this.i18n.t('editor.execution_finished_toast'));
     }
 
     _onInputRequired(e) {
@@ -480,7 +490,7 @@ export class FlowEditorPage extends PlatformElement {
             });
         }
         
-        this.error('Ошибка выполнения');
+        this.error(this.i18n.t('editor.execution_error'));
     }
 
     _onBreakpointsChanged(e) {
@@ -519,7 +529,7 @@ export class FlowEditorPage extends PlatformElement {
         
         FlowsStore.updateVariables(newVariables);
         this._checkForChanges();
-        this.success(`Переменная "${name}" удалена`);
+        this.success(this.i18n.t('editor.variable_deleted', { name }));
     }
 
     _onVariableSaved(e) {
@@ -550,7 +560,7 @@ export class FlowEditorPage extends PlatformElement {
         }
 
         this._checkForChanges();
-        this.success(`Переменная "${name}" сохранена`);
+        this.success(this.i18n.t('editor.variable_saved', { name }));
     }
 
     _onBreakpointCleared(e) {
@@ -564,7 +574,7 @@ export class FlowEditorPage extends PlatformElement {
 
     _onShowState(e) {
         const { contextId, taskId } = e.detail;
-        this.info(`Opening state viewer for context: ${contextId}, task: ${taskId}`);
+        this.info(this.i18n.t('editor.state_viewer_opening', { contextId, taskId }));
         
         const modal = document.createElement('state-modal');
         modal.contextId = contextId;
@@ -676,6 +686,96 @@ export class FlowEditorPage extends PlatformElement {
         console.log('[FlowEditorPage] Node added, syncing with store');
         this._syncCanvasToFlowsStore();
         this._checkForChanges();
+    }
+
+    async _addGraphCodeNodeAfterDrop(canvas, item, posX, posY, nodeConfig) {
+        let addedNodeId = null;
+        canvas.addEventListener(
+            'node-added',
+            (ev) => {
+                addedNodeId = ev.detail.nodeId;
+            },
+            { once: true },
+        );
+        await canvas._addNode(item, posX, posY);
+        if (!addedNodeId) {
+            throw new Error('[FlowEditorPage] code-node-drop: node-added without nodeId');
+        }
+        if (nodeConfig) {
+            this._onNodeUpdated({ detail: { nodeId: addedNodeId, nodeConfig } });
+        }
+        FlowsStore.selectNode(addedNodeId);
+    }
+
+    async _fillCodeNodeFromCatalogTool(canvas, item, posX, posY, toolIds) {
+        if (!toolIds.length) {
+            await this._addGraphCodeNodeAfterDrop(canvas, item, posX, posY, null);
+            return;
+        }
+        const toolId = toolIds[0];
+        const toolData = await this.a2a.get(`/api/v1/tools/${encodeURIComponent(toolId)}`);
+        const code = toolData?.code;
+        if (!code || !String(code).trim()) {
+            throw new Error(
+                `[FlowEditorPage] Tool "${toolId}" has no inline code; graph code node requires Python code`,
+            );
+        }
+        const title = typeof toolData.title === 'string' ? toolData.title.trim() : '';
+        const nodeConfig = {
+            type: 'code',
+            name: title || toolData.tool_id,
+            code,
+            language: 'python',
+        };
+        if (toolData.args_schema && typeof toolData.args_schema === 'object') {
+            nodeConfig.args_schema = toolData.args_schema;
+        }
+        if (toolData.parameters_schema && typeof toolData.parameters_schema === 'object') {
+            nodeConfig.parameters_schema = toolData.parameters_schema;
+        }
+        if (typeof toolData.description === 'string' && toolData.description.trim()) {
+            nodeConfig.description = toolData.description.trim();
+        }
+        if (typeof toolData.tool_id === 'string' && toolData.tool_id.trim()) {
+            nodeConfig.tool_id = toolData.tool_id.trim();
+        }
+        await this._addGraphCodeNodeAfterDrop(canvas, item, posX, posY, nodeConfig);
+    }
+
+    _onCodeNodeDrop(e) {
+        const { item, posX, posY } = e.detail;
+        const canvas = this.querySelector('flow-canvas');
+        if (!canvas) {
+            throw new Error('[FlowEditorPage] flow-canvas not found for code-node-drop');
+        }
+
+        const modal = document.createElement('tool-picker-modal');
+        modal.codeNodePlacement = true;
+        modal.initialSelection = [];
+
+        let committed = false;
+
+        const onToolsSelected = (ev) => {
+            committed = true;
+            const toolIds = ev.detail?.tools || [];
+            void this._fillCodeNodeFromCatalogTool(canvas, item, posX, posY, toolIds).catch((err) => {
+                this.error(err instanceof Error ? err.message : String(err));
+            });
+        };
+
+        const onClose = () => {
+            modal.removeEventListener('tools-selected', onToolsSelected);
+            if (!committed) {
+                void this._addGraphCodeNodeAfterDrop(canvas, item, posX, posY, null);
+            }
+            modal.remove();
+        };
+
+        modal.addEventListener('tools-selected', onToolsSelected);
+        modal.addEventListener('close', onClose, { once: true });
+
+        document.body.appendChild(modal);
+        modal.showModal();
     }
 
     _onResourceSelected(e) {
@@ -795,6 +895,49 @@ export class FlowEditorPage extends PlatformElement {
         this.emit('flow-changed');
     }
 
+    async _completeReloadFromBundle(flowId) {
+        if (!flowId) {
+            return;
+        }
+        await FlowsStore.loadFlow(flowId, this.a2a, this.state.value.currentSkillId);
+        const editorState = FlowsStore.state.editor;
+        await this._updateCanvasDirectly(editorState.skillsData, editorState.inheritedData);
+        this._initialConfigHash = this._calculateConfigHash();
+        this._hasUnsavedChanges = false;
+        this.success(this.i18n.t('editor.reinit_success'));
+    }
+
+    async _onReloadFromBundleRequested() {
+        const flowId = this.flowId;
+        if (!flowId || this.state.value.flowConfig?.source !== 'file') {
+            return;
+        }
+        const agreed = await confirm(
+            this.i18n.t('editor.reinit_confirm_message'),
+            {
+                title: this.i18n.t('editor.reinit_confirm_title'),
+                variant: 'warning',
+                confirmText: this.i18n.t('editor.reinit_confirm_ok'),
+                cancelText: this.i18n.t('editor.cancel'),
+            },
+        );
+        if (!agreed) {
+            return;
+        }
+        this._reloadFromBundleBusy = true;
+        this.requestUpdate();
+        try {
+            await this.a2a.reloadFlowFromBundle(flowId);
+            await this._completeReloadFromBundle(flowId);
+        } catch (err) {
+            console.error('[FlowEditorPage] reload from bundle (header):', err);
+            this.error(err.message || String(err));
+        } finally {
+            this._reloadFromBundleBusy = false;
+            this.requestUpdate();
+        }
+    }
+
     _onNodeDeleted(e) {
         const { nodeId } = e.detail;
         
@@ -840,7 +983,7 @@ export class FlowEditorPage extends PlatformElement {
             }
             
             this._checkForChanges();
-            this.success(`Node ID: ${oldId} → ${newId}`);
+            this.success(this.i18n.t('editor.node_id_renamed', { oldId, newId }));
         }
     }
 
@@ -884,17 +1027,17 @@ export class FlowEditorPage extends PlatformElement {
             
             await this.a2a.saveFlowConfig(this.flowId, updatedConfig);
             
-            this.success('Flow сохранён, перезагрузка...');
+            this.success(this.i18n.t('editor.save_reloading'));
             
             const currentSkillId = this.state.value.currentSkillId;
             await FlowsStore.loadFlow(this.flowId, this.a2a, currentSkillId);
             
             FlowsStore.setDirty(false);
-            this.success('Flow успешно обновлён');
+            this.success(this.i18n.t('editor.save_updated'));
             this.emit('flow-saved', { flowId: this.flowId });
         } catch (error) {
             console.error('[FlowEditorPage] Save error:', error);
-            this.error('Ошибка сохранения: ' + error.message);
+            this.error(this.i18n.t('editor.save_error', { message: error.message }));
         }
     }
 
@@ -921,22 +1064,21 @@ export class FlowEditorPage extends PlatformElement {
         }
         
         this._confirmModal.showModal({
-            title: 'Несохраненные изменения',
-            subtitle: 'У вас есть несохраненные изменения',
-            message: 'Вы хотите сохранить изменения перед выходом из редактора?',
+            title: this.i18n.t('editor.unsaved_title'),
+            subtitle: this.i18n.t('editor.unsaved_subtitle'),
+            message: this.i18n.t('editor.unsaved_message'),
             variant: 'warning',
-            confirmText: 'Сохранить и выйти',
-            cancelText: 'Отменить',
+            confirmText: this.i18n.t('editor.unsaved_confirm'),
+            cancelText: this.i18n.t('editor.unsaved_cancel'),
             confirmVariant: 'primary',
         });
         
-        // Добавляем третью кнопку "Выйти без сохранения"
         const footer = this._confirmModal.shadowRoot.querySelector('.modal-footer');
         if (footer && !footer.querySelector('.discard-btn')) {
             const discardBtn = document.createElement('button');
             discardBtn.type = 'button';
             discardBtn.className = 'modal-btn danger discard-btn';
-            discardBtn.textContent = 'Выйти без сохранения';
+            discardBtn.textContent = this.i18n.t('editor.unsaved_discard');
             discardBtn.addEventListener('click', () => {
                 this._confirmModal.close();
                 this._closeEditor();
@@ -991,7 +1133,13 @@ export class FlowEditorPage extends PlatformElement {
             });
             return null;
         }
-        
+
+        const canvas = this.querySelector('flow-canvas');
+        const allowNodeIdRenameOnce =
+            typeof canvas?.getAllowNodeIdRenameOnce === 'function'
+                ? canvas.getAllowNodeIdRenameOnce(selectedNodeId)
+                : false;
+
         console.log('[FlowEditorPage] Rendering panel for node:', selectedNode);
         
         const color = selectedNode.color || '#6b7280';
@@ -999,7 +1147,7 @@ export class FlowEditorPage extends PlatformElement {
         
         const panelClasses = ['floating-panel'];
         if (panelExpanded) panelClasses.push('expanded');
-        if (this._panelEntering) panelClasses.push('entering');
+        if (this._panelEntering && !panelExpanded) panelClasses.push('entering');
 
         return html`
             <div 
@@ -1018,18 +1166,18 @@ export class FlowEditorPage extends PlatformElement {
                         <button 
                             class="floating-panel-btn expand-btn" 
                             @click=${this._toggleExpanded} 
-                            title="${panelExpanded ? 'Свернуть' : 'Развернуть'}"
+                            title="${panelExpanded ? this.i18n.t('editor.panel_collapse') : this.i18n.t('editor.panel_expand')}"
                         >
                             <platform-icon name="${panelExpanded ? 'minimize' : 'maximize'}" size="16"></platform-icon>
                         </button>
-                        <button class="floating-panel-btn" @click=${this._closePanel} title="Закрыть">
+                        <button class="floating-panel-btn" @click=${this._closePanel} title="${this.i18n.t('editor.panel_close')}">
                             <platform-icon name="x" size="16"></platform-icon>
                         </button>
                     </div>
                 </div>
                 <div class="floating-panel-body">
                     <property-panel
-                        .node=${{ id: selectedNodeId, ...selectedNode }}
+                        .node=${{ id: selectedNodeId, ...selectedNode, allowNodeIdRenameOnce }}
                         .flowId=${this.flowId}
                         .skillId=${currentSkillId}
                         .flowConfig=${flowConfig}
@@ -1061,7 +1209,7 @@ export class FlowEditorPage extends PlatformElement {
         
         const panelClasses = ['floating-panel'];
         if (panelExpanded) panelClasses.push('expanded');
-        if (this._panelEntering) panelClasses.push('entering');
+        if (this._panelEntering && !panelExpanded) panelClasses.push('entering');
 
         return html`
             <div 
@@ -1080,11 +1228,11 @@ export class FlowEditorPage extends PlatformElement {
                         <button 
                             class="floating-panel-btn expand-btn" 
                             @click=${this._toggleExpanded} 
-                            title="${panelExpanded ? 'Свернуть' : 'Развернуть'}"
+                            title="${panelExpanded ? this.i18n.t('editor.panel_collapse') : this.i18n.t('editor.panel_expand')}"
                         >
                             <platform-icon name="${panelExpanded ? 'minimize' : 'maximize'}" size="16"></platform-icon>
                         </button>
-                        <button class="floating-panel-btn" @click=${this._closePanel} title="Закрыть">
+                        <button class="floating-panel-btn" @click=${this._closePanel} title="${this.i18n.t('editor.panel_close')}">
                             <platform-icon name="x" size="16"></platform-icon>
                         </button>
                     </div>
@@ -1143,6 +1291,8 @@ export class FlowEditorPage extends PlatformElement {
             <div class="editor-layout">
                 <editor-header
                     flow-name=${flowConfig?.name || 'New Flow'}
+                    flow-source=${flowConfig?.source || ''}
+                    ?reload-from-bundle-loading=${this._reloadFromBundleBusy}
                     ?saving=${isSaving}
                     .mode=${this.editorMode}
                     ?agent-execution-running=${this.state.value.agentExecutionRunning}
@@ -1151,6 +1301,7 @@ export class FlowEditorPage extends PlatformElement {
                     @mode-changed=${this._onModeChanged}
                     @stop-agent-requested=${this._onStopAgent}
                     @show-code=${this._onShowCode}
+                    @reload-from-bundle-requested=${this._onReloadFromBundleRequested}
                 ></editor-header>
                 
                 <skills-tabs-bar
@@ -1172,6 +1323,8 @@ export class FlowEditorPage extends PlatformElement {
                         <flow-canvas
                             @node-selected=${this._onNodeSelected}
                             @node-unselected=${this._onNodeUnselected}
+                            @node-updated=${this._onNodeUpdated}
+                            @code-node-drop=${this._onCodeNodeDrop}
                             @node-added=${this._onNodeAdded}
                             @resource-selected=${this._onResourceSelected}
                             @resource-added=${this._onResourceAdded}
@@ -1300,7 +1453,7 @@ export class FlowEditorPage extends PlatformElement {
             await this.a2a.saveFlowConfig(this.flowId, updatedConfig);
             await FlowsStore.loadFlow(this.flowId, this.a2a, this.state.value.currentSkillId);
             
-            this.success(`Триггер ${enabled ? 'включен' : 'отключен'}`);
+            this.success(enabled ? this.i18n.t('editor.trigger_enabled') : this.i18n.t('editor.trigger_disabled'));
         }
     }
 
@@ -1316,7 +1469,7 @@ export class FlowEditorPage extends PlatformElement {
             await this.a2a.saveFlowConfig(this.flowId, updatedConfig);
             await FlowsStore.loadFlow(this.flowId, this.a2a, this.state.value.currentSkillId);
             
-            this.success(`Триггер "${triggerId}" удален`);
+            this.success(this.i18n.t('editor.trigger_deleted', { id: triggerId }));
         }
     }
 
@@ -1333,7 +1486,7 @@ export class FlowEditorPage extends PlatformElement {
         await this.a2a.saveFlowConfig(this.flowId, updatedConfig);
         await FlowsStore.loadFlow(this.flowId, this.a2a, this.state.value.currentSkillId);
         
-        this.success(`Триггер "${triggerId}" сохранен`);
+        this.success(this.i18n.t('editor.trigger_saved', { id: triggerId }));
     }
 
     _renderHiddenComponents() {

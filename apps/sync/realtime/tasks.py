@@ -3,491 +3,83 @@
 from __future__ import annotations
 
 import asyncio
+import json
 from datetime import UTC, datetime
-import mimetypes
 from pathlib import Path
-import subprocess
-import tempfile
 from typing import Any
 from urllib.parse import urlparse
+from uuid import uuid4
 
-import httpx
+import redis.asyncio as redis_async
+
 from apps.sync.container import get_sync_container
-from apps.sync.db.models import SyncCallSpeakerSegment, SyncFile
-from apps.sync.models.meetings import CallMeetingRead
+from apps.sync.db.models import SyncCallRecording, SyncFile
+from apps.sync.message_read_helpers import message_read_from_entity
+from apps.sync.models.meetings import CallRecordingRead
 from apps.sync.models.messages import (
+    SYNC_MESSAGE_TEXT_MAX_CHARS,
     AudioAttachmentContent,
     AudioTranscriptionStatus,
+    CallTranscriptContent,
+    CallTranscriptEntry,
     MessageContentModel,
     MessageContentType,
+    MessageCreate,
+    TextPlainContent,
 )
-from apps.sync.models.common import UserBrief
 from apps.sync.realtime.broker import broker
 from apps.sync.realtime.command_dispatch import dispatch_sync_command
-from apps.sync.realtime.commands import CommandEnvelope
-from apps.sync.realtime.events import (
-    event_call_export_crm_done,
-    event_call_export_crm_failed,
-    event_call_summary_ready,
-    event_call_summary_failed,
-    event_call_transcript_failed,
-    event_call_transcript_ready,
-    event_message_updated,
-)
-from apps.sync.message_read_helpers import message_read_from_entity
+from apps.sync.realtime.commands import CommandEnvelope, MessagesSendPayload
+from apps.sync.realtime.events import event_call_recording_failed, event_message_updated
 from apps.sync.realtime.publish_events import publish_realtime_events
+from apps.sync.sender_display import guest_display_name_from_sender_id, sender_brief_for_message
 from core.calls.livekit_client import LiveKitClient
-from core.clients.a2a_client import A2AClient
-from core.clients.stt_client import STTClientFactory
 from core.config import get_settings
+from core.files.media.audio_extract import extract_audio_from_video
+from core.files.media.chunked_stt import transcribe_audio_with_chunking
+from core.files.models import FileRecord, FileStatus, VideoAttachmentContent
 from core.files.s3_client import S3ClientFactory
 from core.http import get_httpx_client
 from core.logging import get_logger
+from core.tracing import attributes as trace_attributes
+from core.tracing.operation_span import traced_operation
 from core.utils.tokens import get_token_service
 
 logger = get_logger(__name__)
 
 
-def _normalize_mime_type(raw_mime_type: str | None) -> str | None:
-    if raw_mime_type is None:
-        return None
-    if raw_mime_type == "":
-        return None
-    return raw_mime_type.split(";", 1)[0].strip().lower()
+_TRANSCRIBE_AUDIO_LOCK_RELEASE_LUA = """
+if redis.call('get', KEYS[1]) == ARGV[1] then
+  return redis.call('del', KEYS[1])
+else
+  return 0
+end
+"""
 
 
-def _looks_like_text_error_payload(payload: bytes) -> str | None:
-    if len(payload) == 0:
-        return "пустое тело ответа"
-    probe = payload[:4096]
-    try:
-        text = probe.decode("utf-8", errors="ignore").strip()
-    except UnicodeDecodeError:
-        return None
-    if text == "":
-        return None
-    normalized = text.lower()
-    error_markers = (
-        "error opening <_io.bytesio object>",
-        "format not recognised",
-        "<html",
-        "<!doctype html",
-        "<?xml",
-        "<error>",
-        "<code>nosuchkey</code>",
-        "accessdenied",
-        "\"error\"",
-        "\"errors\"",
-    )
-    for marker in error_markers:
-        if marker in normalized:
-            compact = " ".join(text.split())
-            snippet = compact[:200]
-            return f"вместо медиаданных получен текст ошибки: {snippet}"
-    return None
 
 
-def _validate_recording_media_payload(
-    *,
-    payload: bytes,
-    response_content_type: str | None,
-    source_url: str,
-) -> None:
-    normalized_mime_type = _normalize_mime_type(response_content_type)
-    if normalized_mime_type is not None:
-        if (
-            not normalized_mime_type.startswith("audio/")
-            and not normalized_mime_type.startswith("video/")
-            and normalized_mime_type != "application/octet-stream"
-        ):
-            raise ValueError(
-                "Источник записи вернул неподдерживаемый content-type: "
-                f"{normalized_mime_type}. source_url={source_url}"
-            )
-    error_description = _looks_like_text_error_payload(payload)
-    if error_description is not None:
-        raise ValueError(
-            f"Источник записи вернул невалидный файл ({error_description}). source_url={source_url}"
-        )
-
-
-async def _download_recording_bytes(*, source_url: str, timeout_seconds: float) -> tuple[bytes, str | None]:
-    """Скачивает запись с коротким ожиданием появления файла после stop recording."""
-    wait_timeout_seconds = 90.0
-    poll_interval_seconds = 3.0
-    elapsed_seconds = 0.0
-    last_status_code: int | None = None
-
-    while True:
-        logger.info(
-            "download_recording_bytes poll: source_url=%s elapsed=%.1fs timeout=%.1fs",
-            source_url,
-            elapsed_seconds,
-            wait_timeout_seconds,
-        )
-        async with get_httpx_client(timeout=timeout_seconds) as client:
-            response = await client.get(source_url)
-        last_status_code = response.status_code
-        logger.info(
-            "download_recording_bytes response: source_url=%s status=%s bytes=%s",
-            source_url,
-            response.status_code,
-            len(response.content),
-        )
-        if response.status_code == 200:
-            if not response.content:
-                raise ValueError("Источник записи вернул пустое тело.")
-            _validate_recording_media_payload(
-                payload=response.content,
-                response_content_type=response.headers.get("content-type"),
-                source_url=source_url,
-            )
-            return response.content, response.headers.get("content-type")
-        if response.status_code != 404:
-            response.raise_for_status()
-        if elapsed_seconds >= wait_timeout_seconds:
-            break
-        await asyncio.sleep(poll_interval_seconds)
-        elapsed_seconds += poll_interval_seconds
-
-    raise RuntimeError(
-        "Файл записи не появился после остановки звонка. "
-        f"source_url={source_url}, last_status={last_status_code}. "
-        "Проверьте egress-пайплайн LiveKit и путь выгрузки записи."
-    )
-
-
-def _host_aliases(hostname: str) -> set[str]:
-    aliases = {hostname}
-    if hostname == "localhost" or hostname == "127.0.0.1":
-        aliases.add("host.docker.internal")
-    if hostname == "host.docker.internal":
-        aliases.update({"localhost", "127.0.0.1"})
-    return aliases
-
-
-async def _try_download_recording_bytes_from_s3(source_url: str) -> tuple[bytes, str | None] | None:
-    parsed = urlparse(source_url)
-    if parsed.scheme not in {"http", "https"}:
-        return None
-    if parsed.hostname is None:
-        return None
-    if parsed.path == "" or parsed.path == "/":
-        return None
-    path_without_slash = parsed.path.lstrip("/")
-    if "/" not in path_without_slash:
-        return None
-    bucket_from_url, object_key = path_without_slash.split("/", 1)
-    if bucket_from_url == "" or object_key == "":
-        return None
-
-    settings = get_settings()
-    source_hosts = _host_aliases(parsed.hostname)
-    source_port = parsed.port
-
-    for bucket_alias, bucket_config in settings.s3.buckets.items():
-        real_bucket_name = bucket_config.bucket_name or bucket_alias
-        if real_bucket_name != bucket_from_url:
-            continue
-        endpoint_url = bucket_config.endpoint_url
-        if endpoint_url is None or endpoint_url == "":
-            continue
-        endpoint_parsed = urlparse(endpoint_url)
-        if endpoint_parsed.scheme == "":
-            continue
-        if endpoint_parsed.hostname is None:
-            continue
-        endpoint_hosts = _host_aliases(endpoint_parsed.hostname)
-        endpoint_port = endpoint_parsed.port
-        if source_hosts.isdisjoint(endpoint_hosts):
-            continue
-        if source_port != endpoint_port:
-            continue
-
-        s3_client = S3ClientFactory.create_client_for_bucket(bucket_alias)
-        try:
-            payload = await s3_client.download_bytes(key=object_key, bucket=real_bucket_name)
-        finally:
-            await s3_client.close()
-        content_type, _ = mimetypes.guess_type(object_key)
-        _validate_recording_media_payload(
-            payload=payload,
-            response_content_type=content_type,
-            source_url=source_url,
-        )
-        return payload, content_type
-
-    return None
-
-
-def _validate_stt_result_text(
-    *,
-    transcript_result: Any,
-    meeting_id: str,
-    context: str,
-) -> str:
-    if transcript_result.status != AudioTranscriptionStatus.DONE:
-        raise ValueError(
-            "STT вернул неуспешный статус транскрипции "
-            f"для встречи {meeting_id}: {transcript_result.status.value}. context={context}"
-        )
-    transcript_text = transcript_result.text
-    if transcript_text.strip() == "":
-        raise ValueError(f"STT вернул пустую транскрипцию для встречи {meeting_id}. context={context}")
-    return transcript_text
-
-
-def _is_stt_format_not_recognized_error(error: Exception) -> bool:
-    message = str(error).lower()
-    return (
-        "format not recognised" in message
-        or "format not recognized" in message
-        or "error opening <_io.bytesio object>" in message
-    )
-
-
-def _audio_input_extension(file_name: str, mime_type: str) -> str:
-    if file_name == "":
-        raise ValueError("file_name не может быть пустым.")
-    if mime_type == "":
-        raise ValueError("mime_type не может быть пустым.")
-    suffix = Path(file_name).suffix.lower().lstrip(".")
-    if suffix != "":
-        return suffix
-    normalized_mime_type = _normalize_mime_type(mime_type)
-    if normalized_mime_type is None:
-        return "bin"
-    if "/" not in normalized_mime_type:
-        return "bin"
-    subtype = normalized_mime_type.split("/", 1)[1]
-    subtype_map = {
-        "x-m4a": "m4a",
-        "mpeg": "mp3",
-    }
-    return subtype_map.get(subtype, subtype)
-
-
-def _split_audio_for_stt_chunks(
-    *,
-    audio_bytes: bytes,
-    file_name: str,
-    mime_type: str,
-    max_upload_bytes: int,
-    chunk_duration_seconds: int,
-    chunk_bitrate_kbps: int,
-    chunk_sample_rate_hz: int,
-    chunk_channels: int,
-) -> list[tuple[str, bytes, str]]:
-    if not audio_bytes:
-        raise ValueError("audio_bytes не может быть пустым.")
-    if max_upload_bytes <= 0:
-        raise ValueError("max_upload_bytes должен быть больше 0.")
-    if chunk_duration_seconds <= 0:
-        raise ValueError("chunk_duration_seconds должен быть больше 0.")
-    if chunk_bitrate_kbps <= 0:
-        raise ValueError("chunk_bitrate_kbps должен быть больше 0.")
-    if chunk_sample_rate_hz <= 0:
-        raise ValueError("chunk_sample_rate_hz должен быть больше 0.")
-    if chunk_channels <= 0:
-        raise ValueError("chunk_channels должен быть больше 0.")
-    input_extension = _audio_input_extension(file_name=file_name, mime_type=mime_type)
-    file_stem = Path(file_name).stem
-    if file_stem == "":
-        file_stem = "recording"
-    chunks: list[tuple[str, bytes, str]] = []
-    with tempfile.TemporaryDirectory(prefix="sync-stt-chunks-") as work_dir:
-        source_path = Path(work_dir) / f"source.{input_extension}"
-        source_path.write_bytes(audio_bytes)
-        segment_pattern = Path(work_dir) / "segment-%04d.mp3"
-        ffmpeg_cmd = [
-            "ffmpeg",
-            "-hide_banner",
-            "-loglevel",
-            "error",
-            "-y",
-            "-i",
-            str(source_path),
-            "-vn",
-            "-ac",
-            str(chunk_channels),
-            "-ar",
-            str(chunk_sample_rate_hz),
-            "-b:a",
-            f"{chunk_bitrate_kbps}k",
-            "-f",
-            "segment",
-            "-segment_time",
-            str(chunk_duration_seconds),
-            "-reset_timestamps",
-            "1",
-            str(segment_pattern),
-        ]
-        ffmpeg_result = subprocess.run(
-            ffmpeg_cmd,
-            check=False,
-            capture_output=True,
-            text=True,
-        )
-        if ffmpeg_result.returncode != 0:
-            stderr = ffmpeg_result.stderr.strip()
-            raise RuntimeError(
-                "Не удалось подготовить аудио чанки для STT через ffmpeg. "
-                f"return_code={ffmpeg_result.returncode}; stderr={stderr}"
-            )
-        segment_files = sorted(Path(work_dir).glob("segment-*.mp3"))
-        if len(segment_files) == 0:
-            raise RuntimeError("ffmpeg не сформировал ни одного STT чанка.")
-        for chunk_index, segment_file in enumerate(segment_files, start=1):
-            chunk_bytes = segment_file.read_bytes()
-            if len(chunk_bytes) == 0:
-                raise ValueError(f"STT chunk #{chunk_index} получился пустым.")
-            if len(chunk_bytes) > max_upload_bytes:
-                raise ValueError(
-                    "STT chunk превышает допустимый размер upload. "
-                    f"chunk_index={chunk_index} size={len(chunk_bytes)} max={max_upload_bytes}. "
-                    "Уменьшите stt.cloud_ru.chunk_duration_seconds или chunk_bitrate_kbps."
-                )
-            chunk_file_name = f"{file_stem}-part-{chunk_index:04d}.mp3"
-            chunks.append((chunk_file_name, chunk_bytes, "audio/mpeg"))
-    if len(chunks) == 0:
-        raise ValueError("Не удалось сформировать чанки для STT.")
-    return chunks
-
-
-async def _transcribe_audio_with_chunking(
-    *,
-    meeting_id: str,
-    audio_bytes: bytes,
-    file_name: str,
-    mime_type: str,
-    language: str,
-) -> str:
-    settings = get_settings()
-    cloud_config = settings.stt.cloud_ru
-    max_upload_bytes = cloud_config.max_upload_bytes
-    chunk_duration_seconds = cloud_config.chunk_duration_seconds
-    chunk_bitrate_kbps = cloud_config.chunk_bitrate_kbps
-    chunk_sample_rate_hz = cloud_config.chunk_sample_rate_hz
-    chunk_channels = cloud_config.chunk_channels
-    stt_client = STTClientFactory.create_client()
-
-    should_chunk_first = len(audio_bytes) > max_upload_bytes
-    if not should_chunk_first:
-        try:
-            transcript_result = await stt_client.transcribe_audio(
-                audio_bytes=audio_bytes,
-                file_name=file_name,
-                mime_type=mime_type,
-                language=language,
-            )
-            return _validate_stt_result_text(
-                transcript_result=transcript_result,
-                meeting_id=meeting_id,
-                context="single_request",
-            )
-        except httpx.HTTPStatusError as exc:
-            if exc.response.status_code != 413:
-                raise
-            logger.warning(
-                "STT single request returned 413; switching to chunked mode: meeting_id=%s file=%s bytes=%s",
-                meeting_id,
-                file_name,
-                len(audio_bytes),
-            )
-        except ValueError as exc:
-            if not _is_stt_format_not_recognized_error(exc):
-                raise
-            logger.warning(
-                "STT single request returned format error; switching to chunked mode: meeting_id=%s file=%s mime=%s error=%s",
-                meeting_id,
-                file_name,
-                mime_type,
-                str(exc),
-            )
-
-    chunks = _split_audio_for_stt_chunks(
-        audio_bytes=audio_bytes,
-        file_name=file_name,
-        mime_type=mime_type,
-        max_upload_bytes=max_upload_bytes,
-        chunk_duration_seconds=chunk_duration_seconds,
-        chunk_bitrate_kbps=chunk_bitrate_kbps,
-        chunk_sample_rate_hz=chunk_sample_rate_hz,
-        chunk_channels=chunk_channels,
-    )
-    chunk_texts: list[str] = []
-    for index, (chunk_file_name, chunk_bytes, chunk_mime_type) in enumerate(chunks, start=1):
-        transcript_result = await stt_client.transcribe_audio(
-            audio_bytes=chunk_bytes,
-            file_name=chunk_file_name,
-            mime_type=chunk_mime_type,
-            language=language,
-        )
-        chunk_text = _validate_stt_result_text(
-            transcript_result=transcript_result,
-            meeting_id=meeting_id,
-            context=f"chunk_{index}",
-        ).strip()
-        if chunk_text != "":
-            chunk_texts.append(chunk_text)
-    if len(chunk_texts) == 0:
-        raise ValueError(f"STT вернул пустые транскрипции для всех чанков встречи {meeting_id}.")
-    return "\n".join(chunk_texts)
-
-
-async def build_call_transcript_text(meeting_id: str, source_url: str) -> str:
-    """Строит текст транскрипта из источника записи."""
-    if not isinstance(source_url, str) or source_url == "":
-        raise ValueError("source_url обязателен для транскрипции.")
-    if not source_url.startswith("http://") and not source_url.startswith("https://"):
-        raise ValueError(f"Неподдерживаемый source_url для STT: {source_url}")
-
-    parsed = urlparse(source_url)
-    file_name = parsed.path.rsplit("/", 1)[-1]
-    if file_name == "":
-        raise ValueError(f"Не удалось определить имя файла из source_url: {source_url}")
-
-    settings = get_settings()
-    timeout_seconds = settings.stt.cloud_ru.timeout
-    if timeout_seconds <= 0:
-        raise ValueError("stt.cloud_ru.timeout должен быть больше 0.")
-
-    downloaded_from_s3 = await _try_download_recording_bytes_from_s3(source_url)
-    if downloaded_from_s3 is None:
-        audio_bytes, response_content_type = await _download_recording_bytes(
-            source_url=source_url,
-            timeout_seconds=timeout_seconds,
-        )
-    else:
-        audio_bytes, response_content_type = downloaded_from_s3
-
-    guessed_mime_type, _ = mimetypes.guess_type(file_name)
-    mime_type = response_content_type or guessed_mime_type
-    if not isinstance(mime_type, str) or mime_type == "":
-        raise ValueError(f"Не удалось определить mime type записи: {file_name}")
-
-    transcript_text = await _transcribe_audio_with_chunking(
-        meeting_id=meeting_id,
-        audio_bytes=audio_bytes,
-        file_name=file_name,
-        mime_type=mime_type,
-        language=settings.stt.cloud_ru.language,
-    )
-    return transcript_text
+def _sync_call_aggregate_empty_body() -> str:
+    """Текст сообщения в ленте, если нечего агрегировать (строка из core/i18n/translations/ru/sync.json)."""
+    path = Path(__file__).resolve().parents[3] / "core" / "i18n" / "translations" / "ru" / "sync.json"
+    data = json.loads(path.read_text(encoding="utf-8"))
+    key = "call_aggregate_empty_body"
+    text = data.get(key)
+    if not isinstance(text, str) or text.strip() == "":
+        raise ValueError(f"i18n ru/sync.json: обязательный корневой ключ {key!r}.")
+    return text.strip()
 
 
 def _build_interservice_auth_headers(actor_user_id: str, company_id: str) -> dict[str, str]:
-    """Строит auth заголовки для межсервисных вызовов из worker-задач."""
+    """Authorization + компания. Без X-User-Id: в httpx заголовки — latin-1, guest id может содержать Unicode."""
     token = get_token_service().create_token(actor_user_id, company_id=company_id)
     return {
         "Authorization": f"Bearer {token}",
         "X-Company-Id": company_id,
-        "X-User-Id": actor_user_id,
     }
 
 
 def _normalize_http_base_url(url: str) -> str:
-    """Нормализует URL источника записи к HTTP(S)."""
     if not isinstance(url, str) or url == "":
         raise ValueError("URL источника записи обязателен.")
     if url.startswith("ws://"):
@@ -546,11 +138,11 @@ async def _resolve_livekit_egress_result(
     if expected_egress_id is not None and expected_egress_id == "":
         raise ValueError("expected_egress_id не может быть пустой строкой.")
 
-    wait_timeout_seconds = 90.0
-    poll_interval_seconds = 3.0
+    settings = get_settings()
+    wait_timeout_seconds = float(timeout_seconds)
+    poll_interval_seconds = settings.calls.finalize_recording_egress_poll_interval_seconds
     elapsed_seconds = 0.0
     last_observed = "none"
-    settings = get_settings()
     livekit_client = LiveKitClient(
         url=settings.calls.livekit_url,
         api_key=settings.calls.livekit_api_key,
@@ -616,6 +208,11 @@ async def _resolve_livekit_egress_result(
                     )
                     return egress_id, location
                 if ended_at > 0:
+                    error_str = str(error) if error else ""
+                    if "stop called before pipeline could start" in error_str.lower():
+                        raise RuntimeError(
+                            "Запись слишком короткая — файл не был создан. Попробуйте записать дольше."
+                        )
                     raise RuntimeError(
                         "LiveKit egress завершился без location. "
                         f"room_name={room_name}, egress_id={egress_id}, status={status}, error={error}."
@@ -634,7 +231,26 @@ async def _resolve_livekit_egress_result(
     )
 
 
-async def _load_message_read(container, *, message_id: str, company_id: str):
+def _recording_read_from_entity(recording: SyncCallRecording) -> CallRecordingRead:
+    return CallRecordingRead(
+        recording_id=recording.recording_id,
+        call_id=recording.call_id,
+        channel_id=recording.channel_id,
+        space_id=recording.space_id,
+        started_by_user_id=recording.started_by_user_id,
+        status=recording.status,  # type: ignore[arg-type]
+        provider_job_id=recording.provider_job_id,
+        raw_file_id=recording.raw_file_id,
+        raw_file_storage_url=None,
+        raw_file_download_url=None,
+        started_at=recording.started_at,
+        ended_at=recording.ended_at,
+        created_at=recording.created_at,
+        error=recording.error,
+    )
+
+
+async def _load_message_read(container: Any, *, message_id: str, company_id: str) -> Any:
     message_entity = await container.message_repository.get_by_id_for_company(message_id, company_id)
     if message_entity is None:
         raise ValueError(f"Сообщение {message_id} не найдено.")
@@ -643,20 +259,7 @@ async def _load_message_read(container, *, message_id: str, company_id: str):
         MessageContentModel.model_validate({"type": row.type, "data": row.data, "order": row.order})
         for row in rows
     ]
-    users_by_id = await container.user_repository.get_many([message_entity.sender_user_id])
-    sender_user = users_by_id.get(message_entity.sender_user_id)
-    if sender_user is None:
-        sender = UserBrief(
-            user_id=message_entity.sender_user_id,
-            display_name=message_entity.sender_user_id,
-            avatar_url=None,
-        )
-    else:
-        sender = UserBrief(
-            user_id=sender_user.user_id,
-            display_name=sender_user.name,
-            avatar_url=sender_user.avatar_url,
-        )
+    sender = await sender_brief_for_message(container.user_repository, message_entity.sender_user_id)
     return message_read_from_entity(m=message_entity, contents=contents, sender=sender)
 
 
@@ -691,6 +294,7 @@ def _replace_audio_transcription(
                     transcription_status=status,
                     transcription_text=transcription_text,
                     transcription_error=transcription_error,
+                    source_speech_to_chat=block.data.source_speech_to_chat,
                 ),
                 order=block.order,
             )
@@ -712,20 +316,171 @@ def _extract_audio_info(contents: list[MessageContentModel]) -> AudioAttachmentC
     raise ValueError("Сообщение не содержит file/audio.")
 
 
+def _replace_video_transcription(
+    *,
+    contents: list[MessageContentModel],
+    status: AudioTranscriptionStatus,
+    transcription_text: str | None,
+    transcription_error: str | None,
+) -> list[MessageContentModel]:
+    replaced = False
+    next_contents: list[MessageContentModel] = []
+    for block in contents:
+        if block.type != MessageContentType.FILE_VIDEO:
+            next_contents.append(block)
+            continue
+        if replaced:
+            next_contents.append(block)
+            continue
+        if not isinstance(block.data, VideoAttachmentContent):
+            raise ValueError("file/video: ожидается VideoAttachmentContent.")
+        next_contents.append(
+            MessageContentModel(
+                type=block.type,
+                data=VideoAttachmentContent(
+                    file_id=block.data.file_id,
+                    filename=block.data.filename,
+                    mime_type=block.data.mime_type,
+                    size=block.data.size,
+                    duration_ms=block.data.duration_ms,
+                    transcription_status=status,
+                    transcription_text=transcription_text,
+                    transcription_error=transcription_error,
+                ),
+                order=block.order,
+            )
+        )
+        replaced = True
+    if not replaced:
+        raise ValueError("Сообщение не содержит file/video.")
+    return next_contents
+
+
+def _extract_video_info(contents: list[MessageContentModel]) -> VideoAttachmentContent:
+    ordered = sorted(contents, key=lambda item: item.order)
+    for block in ordered:
+        if block.type != MessageContentType.FILE_VIDEO:
+            continue
+        if not isinstance(block.data, VideoAttachmentContent):
+            raise ValueError("file/video: ожидается VideoAttachmentContent.")
+        return block.data
+    raise ValueError("Сообщение не содержит file/video.")
+
+
+
+
+def _utc_iso_z(dt: datetime) -> str:
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=UTC)
+    return dt.astimezone(UTC).isoformat().replace("+00:00", "Z")
+
+
+def _split_text_plain_chunks(full_text: str) -> list[str]:
+    if full_text == "":
+        return []
+    lines = full_text.split("\n")
+    chunks: list[str] = []
+    buf = ""
+    for line in lines:
+        candidate = line if buf == "" else f"{buf}\n{line}"
+        if len(candidate) > SYNC_MESSAGE_TEXT_MAX_CHARS:
+            if buf != "":
+                chunks.append(buf)
+                buf = line
+            while len(buf) > SYNC_MESSAGE_TEXT_MAX_CHARS:
+                chunks.append(buf[:SYNC_MESSAGE_TEXT_MAX_CHARS])
+                buf = buf[SYNC_MESSAGE_TEXT_MAX_CHARS:]
+            continue
+        buf = candidate
+    if buf != "":
+        chunks.append(buf)
+    return chunks
+
+
 @broker.task
 async def handle_command(cmd: dict[str, Any]) -> dict[str, Any]:
-    """Обработка realtime команды в sync-worker."""
     command = CommandEnvelope.model_validate(cmd)
     logger.info(
         "task handle_command started: id=%s type=%s actor=%s company=%s",
-        command.id, command.type, command.actor_user_id, command.company_id,
+        command.id,
+        command.type,
+        command.actor_user_id,
+        command.company_id,
     )
     return await dispatch_sync_command(command)
 
 
+def _call_recording_s3_object_key(*, company_id: str, call_id: str, recording_id: str) -> str:
+    """Тот же путь, что при call.recording.start (RoomComposite egress в S3)."""
+    return f"sync-recordings/{company_id}/{call_id}/{recording_id}.mp4"
+
+
+async def _register_platform_file_record_for_call_recording(
+    *,
+    raw_file_id: str,
+    company_id: str,
+    call_id: str,
+    recording_id: str,
+    started_by_user_id: str,
+    raw_original_name: str,
+    raw_storage_url: str,
+) -> int:
+    """
+    Единый GET /sync/api/v1/files/download/{id} читает FileRepository (shared), не sync_files.
+    Без записи здесь — 404 для плеера, скачивания и transcribe_video.
+    """
+    settings = get_settings()
+    bucket_key = settings.s3.default_bucket
+    if not settings.s3.enabled or bucket_key == "":
+        raise ValueError("S3 не настроен: нельзя зарегистрировать запись встречи в FileRepository.")
+
+    s3_key = _call_recording_s3_object_key(
+        company_id=company_id,
+        call_id=call_id,
+        recording_id=recording_id,
+    )
+    s3_client = S3ClientFactory.create_client_for_bucket(bucket_key)
+    meta = await s3_client.get_object_metadata(s3_key)
+    provider_name = s3_client.provider_name
+    logical_bucket_key = s3_client.require_bucket_config_key()
+    s3_endpoint_url = s3_client.endpoint_url
+    await s3_client.close()
+
+    content_length = meta.get("content_length")
+    if not isinstance(content_length, int) or content_length < 0:
+        raise ValueError(f"S3 head_object для записи встречи: неверный ContentLength: {content_length!r}")
+    raw_ct = meta.get("content_type")
+    content_type = (
+        raw_ct.strip()
+        if isinstance(raw_ct, str) and raw_ct.strip() != ""
+        else "video/mp4"
+    )
+
+    api_prefix = f"/{settings.server.name}/api/v1"
+    download_prefix = f"{api_prefix.rstrip('/')}/files/download"
+    file_record = FileRecord(
+        file_id=raw_file_id,
+        provider=provider_name,
+        original_name=raw_original_name,
+        s3_key=s3_key,
+        s3_bucket=logical_bucket_key,
+        s3_endpoint=s3_endpoint_url,
+        storage_url=raw_storage_url,
+        content_type=content_type,
+        file_size=content_length,
+        status=FileStatus.READY,
+        uploaded_by=started_by_user_id,
+        company_id=company_id,
+        is_public=True,
+        download_url=f"{download_prefix}/{raw_file_id}",
+    )
+    container = get_sync_container()
+    await container.file_repository.set(file_record)
+    return content_length
+
+
 @broker.task
 async def sync_finalize_recording_task(recording_id: str, company_id: str, actor_user_id: str) -> None:
-    """Финализирует запись: создает raw файл, встречу и запускает транскрипцию."""
     logger.info(
         "sync_finalize_recording_task start: recording_id=%s company_id=%s actor=%s",
         recording_id,
@@ -739,613 +494,161 @@ async def sync_finalize_recording_task(recording_id: str, company_id: str, actor
     call = await container.call_repository.get_call(recording.call_id, company_id)
     if call.livekit_room_name is None:
         raise ValueError(f"У звонка {call.call_id} отсутствует livekit_room_name.")
+    if recording.started_by_user_id is None or recording.started_by_user_id == "":
+        raise ValueError("У записи не задан started_by_user_id.")
 
-    try:
-        settings = get_settings()
-        raw_file_id = recording.raw_file_id or recording.recording_id
-        egress_timeout_seconds = settings.stt.cloud_ru.timeout
-        if recording.provider_job_id is None or recording.provider_job_id == "":
-            raise ValueError(
-                f"У записи {recording.recording_id} отсутствует provider_job_id для поиска egress результата."
-            )
-        provider_job_id, raw_storage_url = await _resolve_livekit_egress_result(
-            room_name=call.livekit_room_name,
-            timeout_seconds=egress_timeout_seconds,
-            expected_egress_id=recording.provider_job_id,
-        )
-        raw_storage_url = _normalize_storage_url_for_worker(
-            storage_url=raw_storage_url,
-            testing=bool(getattr(settings, "testing", False)),
-        )
-        logger.info(
-            "sync_finalize_recording_task egress resolved: recording_id=%s egress_id=%s raw_storage_url=%s",
-            recording.recording_id,
-            provider_job_id,
-            raw_storage_url,
-        )
-        parsed_storage_url = urlparse(raw_storage_url)
-        raw_original_name = parsed_storage_url.path.rsplit("/", 1)[-1]
-        if raw_original_name == "":
-            raise ValueError(f"Не удалось определить имя файла egress из URL: {raw_storage_url}")
-        raw_file = SyncFile(
-            file_id=raw_file_id,
-            company_id=company_id,
-            original_name=raw_original_name,
-            mime_type="video/mp4",
-            size_bytes=0,
-            storage_url=raw_storage_url,
-            checksum=None,
-        )
-        existing_raw = await container.sync_file_repository.get(raw_file_id)
-        if existing_raw is None:
-            await container.sync_file_repository.create(raw_file)
-        else:
-            existing_raw.original_name = raw_original_name
-            existing_raw.mime_type = "video/mp4"
-            existing_raw.size_bytes = 0
-            existing_raw.storage_url = raw_storage_url
-            existing_raw.checksum = None
-            await container.sync_file_repository.update(existing_raw)
-
-        await container.call_recording_repository.mark_status(
-            recording.recording_id,
-            status="uploaded",
-            provider_job_id=provider_job_id,
-            raw_file_id=raw_file_id,
-        )
-
-        meeting = await container.call_meeting_repository.get_by_recording(recording.recording_id, company_id)
-        if meeting is None:
-            from uuid import uuid4
-            from datetime import UTC, datetime
-            meeting = await container.call_meeting_repository.create(
-                container.call_meeting_repository.model_class(
-                    meeting_id=uuid4().hex,
-                    call_id=recording.call_id,
-                    recording_id=recording.recording_id,
-                    company_id=company_id,
-                    channel_id=recording.channel_id,
-                    space_id=recording.space_id,
-                    summary_json={},
-                    export_status="pending",
-                    created_at=datetime.now(UTC),
-                    updated_at=datetime.now(UTC),
+    async with traced_operation(
+        "sync.calls.finalize_recording",
+        event_type="sync.calls",
+        operation_category="livekit_egress",
+        resource_type="sync_call_recording",
+        resource_id=recording_id,
+        extra_attributes={
+            trace_attributes.ATTR_TENANT_COMPANY_ID: company_id,
+            trace_attributes.ATTR_USER_ID: recording.started_by_user_id,
+            trace_attributes.ATTR_CALL_ID: recording.call_id,
+            trace_attributes.ATTR_CHANNEL_ID: recording.channel_id,
+            trace_attributes.ATTR_LIVEKIT_ROOM: call.livekit_room_name or "",
+        },
+    ) as finalize_span:
+        try:
+            settings = get_settings()
+            raw_file_id = recording.raw_file_id or recording.recording_id
+            egress_timeout_seconds = settings.calls.finalize_recording_egress_wait_timeout_seconds
+            if recording.provider_job_id is None or recording.provider_job_id == "":
+                raise ValueError(
+                    f"У записи {recording.recording_id} отсутствует provider_job_id для поиска egress результата."
                 )
+            provider_job_id, raw_storage_url = await _resolve_livekit_egress_result(
+                room_name=call.livekit_room_name,
+                timeout_seconds=egress_timeout_seconds,
+                expected_egress_id=recording.provider_job_id,
             )
-
-        await sync_transcribe_recording_task.kiq(
-            meeting_id=meeting.meeting_id,
-            company_id=company_id,
-            actor_user_id=actor_user_id,
-        )
-        logger.info(
-            "sync_finalize_recording_task queued transcribe: meeting_id=%s recording_id=%s",
-            meeting.meeting_id,
-            recording.recording_id,
-        )
-    except Exception as exc:
-        logger.error(
-            "sync_finalize_recording_task failed: recording_id=%s error=%s",
-            recording_id,
-            str(exc),
-            exc_info=True,
-        )
-        await container.call_recording_repository.mark_status(
-            recording.recording_id,
-            status="failed",
-            error=str(exc),
-        )
-        failed_meeting = await container.call_meeting_repository.get_by_recording(recording.recording_id, company_id)
-        if failed_meeting is not None:
-            await container.call_meeting_repository.set_export_status(
-                failed_meeting.meeting_id,
-                status="failed",
-                target_namespace=failed_meeting.export_target_namespace,
+            finalize_span.set_attribute(trace_attributes.ATTR_LIVEKIT_EGRESS_ID, provider_job_id)
+            raw_storage_url = _normalize_storage_url_for_worker(
+                storage_url=raw_storage_url,
+                testing=bool(getattr(settings, "testing", False)),
             )
-            failed_meeting = await container.call_meeting_repository.get(failed_meeting.meeting_id)
-            if failed_meeting is not None:
-                failed_payload = CallMeetingRead(
-                    meeting_id=failed_meeting.meeting_id,
-                    call_id=failed_meeting.call_id,
-                    recording_id=failed_meeting.recording_id,
-                    channel_id=failed_meeting.channel_id,
-                    space_id=failed_meeting.space_id,
-                    transcript_file_id=failed_meeting.transcript_file_id,
-                    transcript_text_file_id=failed_meeting.transcript_text_file_id,
-                    summary_json=failed_meeting.summary_json or {},
-                    export_status=failed_meeting.export_status,
-                    export_target_namespace=failed_meeting.export_target_namespace,
-                    created_at=failed_meeting.created_at,
-                    updated_at=failed_meeting.updated_at,
-                )
-                await publish_realtime_events(
-                    [event_call_transcript_failed(failed_payload, str(exc))]
-                )
-        raise
-
-
-@broker.task
-async def sync_transcribe_recording_task(meeting_id: str, company_id: str, actor_user_id: str) -> None:
-    """Создает текст транскрипта и сегменты речи, затем запускает summary."""
-    logger.info(
-        "sync_transcribe_recording_task start: meeting_id=%s company_id=%s actor=%s",
-        meeting_id,
-        company_id,
-        actor_user_id,
-    )
-    container = get_sync_container()
-    meeting = await container.call_meeting_repository.get(meeting_id)
-    if meeting is None or meeting.company_id != company_id:
-        raise ValueError(f"Встреча {meeting_id} не найдена.")
-    try:
-        if meeting.recording_id is None:
-            raise ValueError(f"У встречи {meeting_id} отсутствует recording_id.")
-        recording = await container.call_recording_repository.get(meeting.recording_id)
-        if recording is None or recording.company_id != company_id:
-            raise ValueError(f"Запись {meeting.recording_id} не найдена.")
-        if recording.raw_file_id is None:
-            raise ValueError(f"У записи {recording.recording_id} отсутствует raw_file_id.")
-        raw_file = await container.sync_file_repository.get(recording.raw_file_id)
-        if raw_file is None:
-            raise ValueError(f"Файл {recording.raw_file_id} не найден.")
-
-        transcript_text = await build_call_transcript_text(
-            meeting_id=meeting.meeting_id,
-            source_url=raw_file.storage_url,
-        )
-        logger.info(
-            "sync_transcribe_recording_task transcript ready: meeting_id=%s chars=%s source_url=%s",
-            meeting.meeting_id,
-            len(transcript_text),
-            raw_file.storage_url,
-        )
-        if transcript_text.strip() == "":
-            raise ValueError(f"Пустой транскрипт для встречи {meeting.meeting_id}.")
-        settings = get_settings()
-        if not settings.s3.enabled:
-            raise ValueError("S3 отключен: сохранение транскрипта недоступно.")
-        default_bucket_key = settings.s3.default_bucket
-        if default_bucket_key == "":
-            raise ValueError("s3.default_bucket не настроен.")
-        if default_bucket_key not in settings.s3.buckets:
-            raise ValueError(f"Конфиг S3 bucket '{default_bucket_key}' не найден.")
-        bucket_config = settings.s3.buckets[default_bucket_key]
-        if not bucket_config.enabled:
-            raise ValueError(f"S3 bucket '{default_bucket_key}' выключен.")
-        real_bucket_name = bucket_config.bucket_name or default_bucket_key
-        if real_bucket_name == "":
-            raise ValueError("Имя S3 bucket для транскрипта не может быть пустым.")
-        transcript_s3_key = f"sync-meetings/{company_id}/{meeting.meeting_id}/transcript.txt"
-        transcript_bytes = transcript_text.encode("utf-8")
-        s3_client = S3ClientFactory.create_client_for_bucket(default_bucket_key)
-        await s3_client.upload_bytes(
-            data=transcript_bytes,
-            key=transcript_s3_key,
-            bucket=real_bucket_name,
-            content_type="text/plain; charset=utf-8",
-        )
-        transcript_storage_url = s3_client.get_public_url(transcript_s3_key, bucket=real_bucket_name)
-        transcript_file_id = f"{meeting.meeting_id}-transcript-txt"
-        transcript_file = SyncFile(
-            file_id=transcript_file_id,
-            company_id=company_id,
-            original_name=f"{meeting.meeting_id}.txt",
-            mime_type="text/plain",
-            size_bytes=len(transcript_bytes),
-            storage_url=transcript_storage_url,
-            checksum=None,
-        )
-        existing_transcript_file = await container.sync_file_repository.get(transcript_file_id)
-        if existing_transcript_file is None:
-            await container.sync_file_repository.create(transcript_file)
-        else:
-            existing_transcript_file.original_name = transcript_file.original_name
-            existing_transcript_file.mime_type = transcript_file.mime_type
-            existing_transcript_file.size_bytes = transcript_file.size_bytes
-            existing_transcript_file.storage_url = transcript_file.storage_url
-            existing_transcript_file.checksum = transcript_file.checksum
-            await container.sync_file_repository.update(existing_transcript_file)
-
-        from datetime import UTC, datetime
-        from sqlalchemy import update
-        async with container.sync_db.session() as session:
-            await session.execute(
-                update(container.call_meeting_repository.model_class)
-                .where(container.call_meeting_repository.model_class.meeting_id == meeting.meeting_id)
-                .values(
-                    transcript_file_id=transcript_file_id,
-                    transcript_text_file_id=transcript_file_id,
-                    updated_at=datetime.now(UTC),
-                )
+            logger.info(
+                "sync_finalize_recording_task egress resolved: recording_id=%s egress_id=%s raw_storage_url=%s",
+                recording.recording_id,
+                provider_job_id,
+                raw_storage_url,
             )
-            await session.commit()
-        updated_meeting = await container.call_meeting_repository.get(meeting.meeting_id)
-        if updated_meeting is None:
-            raise RuntimeError(f"Встреча {meeting.meeting_id} не найдена после записи транскрипта.")
-        meeting_payload = CallMeetingRead(
-            meeting_id=updated_meeting.meeting_id,
-            call_id=updated_meeting.call_id,
-            recording_id=updated_meeting.recording_id,
-            channel_id=updated_meeting.channel_id,
-            space_id=updated_meeting.space_id,
-            transcript_file_id=updated_meeting.transcript_file_id,
-            transcript_text_file_id=updated_meeting.transcript_text_file_id,
-            summary_json=updated_meeting.summary_json or {},
-            export_status=updated_meeting.export_status,
-            export_target_namespace=updated_meeting.export_target_namespace,
-            created_at=updated_meeting.created_at,
-            updated_at=updated_meeting.updated_at,
-        )
-        await publish_realtime_events([event_call_transcript_ready(meeting_payload)])
-
-        segments = [
-            SyncCallSpeakerSegment(
-                segment_id=f"{meeting.meeting_id}-seg-1",
-                meeting_id=meeting.meeting_id,
+            parsed_storage_url = urlparse(raw_storage_url)
+            raw_original_name = parsed_storage_url.path.rsplit("/", 1)[-1]
+            if raw_original_name == "":
+                raise ValueError(f"Не удалось определить имя файла egress из URL: {raw_storage_url}")
+            recording_file_size = await _register_platform_file_record_for_call_recording(
+                raw_file_id=raw_file_id,
                 company_id=company_id,
-                speaker_identity="system",
-                speaker_type="user",
-                speaker_user_id="system",
-                speaker_guest_name=None,
-                started_ms=0,
-                ended_ms=1500,
-                text="Начат автоматический pipeline транскрипции.",
+                call_id=recording.call_id,
+                recording_id=recording.recording_id,
+                started_by_user_id=recording.started_by_user_id,
+                raw_original_name=raw_original_name,
+                raw_storage_url=raw_storage_url,
             )
-        ]
-        await container.call_speaker_segment_repository.replace_for_meeting(
-            meeting_id=meeting.meeting_id,
-            company_id=company_id,
-            segments=segments,
-        )
-        await sync_summarize_transcript_task.kiq(
-            meeting_id=meeting.meeting_id,
-            company_id=company_id,
-            actor_user_id=actor_user_id,
-        )
-        logger.info(
-            "sync_transcribe_recording_task queued summary: meeting_id=%s",
-            meeting.meeting_id,
-        )
-    except Exception as exc:
-        logger.error(
-            "sync_transcribe_recording_task failed: meeting_id=%s error=%s",
-            meeting_id,
-            str(exc),
-            exc_info=True,
-        )
-        if meeting.recording_id is not None:
+            raw_file = SyncFile(
+                file_id=raw_file_id,
+                company_id=company_id,
+                original_name=raw_original_name,
+                mime_type="video/mp4",
+                size_bytes=recording_file_size,
+                storage_url=raw_storage_url,
+                checksum=None,
+            )
+            existing_raw = await container.sync_file_repository.get(raw_file_id)
+            if existing_raw is None:
+                await container.sync_file_repository.create(raw_file)
+            else:
+                existing_raw.original_name = raw_original_name
+                existing_raw.mime_type = "video/mp4"
+                existing_raw.size_bytes = recording_file_size
+                existing_raw.storage_url = raw_storage_url
+                existing_raw.checksum = None
+                await container.sync_file_repository.update(existing_raw)
+
             await container.call_recording_repository.mark_status(
-                meeting.recording_id,
+                recording.recording_id,
+                status="uploaded",
+                provider_job_id=provider_job_id,
+                raw_file_id=raw_file_id,
+            )
+
+            video_body = MessageCreate(
+                thread_id=None,
+                parent_message_id=None,
+                contents=[
+                    MessageContentModel(
+                        type=MessageContentType.FILE_VIDEO,
+                        data=VideoAttachmentContent(
+                            file_id=raw_file_id,
+                            filename=raw_original_name,
+                            mime_type="video/mp4",
+                            size=recording_file_size,
+                            duration_ms=None,
+                            transcription_status=AudioTranscriptionStatus.IDLE,
+                            transcription_text=None,
+                            transcription_error=None,
+                        ),
+                        order=0,
+                    )
+                ],
+                mentioned_user_ids=None,
+                call_id=recording.call_id,
+            )
+            send_payload = MessagesSendPayload(channel_id=recording.channel_id, body=video_body)
+            cmd = CommandEnvelope(
+                id=uuid4().hex,
+                type="messages.send",
+                actor_user_id=recording.started_by_user_id,
+                company_id=company_id,
+                payload=send_payload.model_dump(mode="json"),
+            )
+            await dispatch_sync_command(cmd)
+            logger.info(
+                "sync_finalize_recording_task posted video message: recording_id=%s channel_id=%s",
+                recording.recording_id,
+                recording.channel_id,
+            )
+        except Exception as exc:
+            logger.error(
+                "sync_finalize_recording_task failed: recording_id=%s error=%s",
+                recording_id,
+                str(exc),
+                exc_info=True,
+            )
+            await container.call_recording_repository.mark_status(
+                recording.recording_id,
                 status="failed",
                 error=str(exc),
             )
-        failed_meeting = await container.call_meeting_repository.get(meeting_id)
-        if failed_meeting is not None:
-            await container.call_meeting_repository.set_export_status(
-                failed_meeting.meeting_id,
-                status="failed",
-                target_namespace=failed_meeting.export_target_namespace,
-            )
-            failed_meeting = await container.call_meeting_repository.get(meeting_id)
-        if failed_meeting is not None:
-            failed_payload = CallMeetingRead(
-                meeting_id=failed_meeting.meeting_id,
-                call_id=failed_meeting.call_id,
-                recording_id=failed_meeting.recording_id,
-                channel_id=failed_meeting.channel_id,
-                space_id=failed_meeting.space_id,
-                transcript_file_id=failed_meeting.transcript_file_id,
-                transcript_text_file_id=failed_meeting.transcript_text_file_id,
-                summary_json=failed_meeting.summary_json or {},
-                export_status=failed_meeting.export_status,
-                export_target_namespace=failed_meeting.export_target_namespace,
-                created_at=failed_meeting.created_at,
-                updated_at=failed_meeting.updated_at,
-            )
-            await publish_realtime_events(
-                [event_call_transcript_failed(failed_payload, str(exc))]
-            )
-        raise
-
-
-@broker.task
-async def sync_summarize_transcript_task(meeting_id: str, company_id: str, actor_user_id: str) -> None:
-    """Строит summary через Flows A2A skill и при необходимости запускает автоэкспорт в CRM."""
-    logger.info(
-        "sync_summarize_transcript_task start: meeting_id=%s company_id=%s actor=%s",
-        meeting_id,
-        company_id,
-        actor_user_id,
-    )
-    container = get_sync_container()
-    meeting = await container.call_meeting_repository.get(meeting_id)
-    if meeting is None or meeting.company_id != company_id:
-        raise ValueError(f"Встреча {meeting_id} не найдена.")
-    try:
-        if meeting.transcript_text_file_id is None:
-            raise ValueError(f"У встречи {meeting_id} отсутствует transcript_text_file_id.")
-        transcript_file = await container.sync_file_repository.get(meeting.transcript_text_file_id)
-        if transcript_file is None:
-            raise ValueError(f"Файл {meeting.transcript_text_file_id} не найден.")
-
-        settings = get_settings()
-        flows_url = settings.server.get_flows_service_url()
-        if not isinstance(flows_url, str) or flows_url == "":
-            raise ValueError("service_urls.flows не задан.")
-        flows_a2a_url = f"{flows_url.rstrip('/')}/flows/api/v1/crm"
-        auth_headers = _build_interservice_auth_headers(
-            actor_user_id=actor_user_id,
-            company_id=company_id,
-        )
-
-        a2a_timeout_seconds = settings.summary_a2a_timeout_seconds
-        if a2a_timeout_seconds <= 0:
-            raise ValueError("summary_a2a_timeout_seconds должен быть больше 0.")
-        a2a = A2AClient(timeout=a2a_timeout_seconds)
-        response = await a2a.send_task(
-            base_url=flows_a2a_url,
-            skill_id="call_summary",
-            content=(
-                "Сформируй структурированное summary по встрече.\n"
-                f"meeting_id={meeting.meeting_id}\n"
-                f"transcript_ref={transcript_file.storage_url}"
-            ),
-            metadata={"meeting_id": meeting.meeting_id, "company_id": company_id},
-            auth_headers=auth_headers,
-        )
-        logger.info(
-            "sync_summarize_transcript_task a2a done: meeting_id=%s response_keys=%s",
-            meeting.meeting_id,
-            list(response.keys()),
-        )
-
-        summary = {
-            "short_summary": response.get("response", ""),
-            "decisions": [],
-            "action_items": [],
-            "open_questions": [],
-            "risks": [],
-        }
-        await container.call_meeting_repository.update_summary(meeting.meeting_id, summary)
-        after_summary = await container.call_meeting_repository.get(meeting.meeting_id)
-        if after_summary is None:
-            raise RuntimeError(f"Встреча {meeting.meeting_id} не найдена после summary.")
-        auto_export_enabled = False
-        if meeting.space_id is not None:
-            space = await container.space_repository.get(meeting.space_id)
-            if space is not None:
-                auto_export_enabled = bool(space.auto_export_summary_to_crm or space.auto_export_transcript_to_crm)
-        if not auto_export_enabled:
-            await container.call_meeting_repository.set_export_status(
-                meeting.meeting_id,
-                status="done",
-                target_namespace=after_summary.export_target_namespace,
-            )
-            after_summary = await container.call_meeting_repository.get(meeting.meeting_id)
-            if after_summary is None:
-                raise RuntimeError(f"Встреча {meeting.meeting_id} не найдена после обновления статуса.")
-        summary_payload = CallMeetingRead(
-            meeting_id=after_summary.meeting_id,
-            call_id=after_summary.call_id,
-            recording_id=after_summary.recording_id,
-            channel_id=after_summary.channel_id,
-            space_id=after_summary.space_id,
-            transcript_file_id=after_summary.transcript_file_id,
-            transcript_text_file_id=after_summary.transcript_text_file_id,
-            summary_json=after_summary.summary_json or {},
-            export_status=after_summary.export_status,
-            export_target_namespace=after_summary.export_target_namespace,
-            created_at=after_summary.created_at,
-            updated_at=after_summary.updated_at,
-        )
-        await publish_realtime_events([event_call_summary_ready(summary_payload)])
-
-        if auto_export_enabled:
-            if meeting.space_id is None:
-                raise ValueError("space_id обязателен для автоэкспорта встречи.")
-            space = await container.space_repository.get(meeting.space_id)
-            if space is None:
-                raise ValueError(f"Пространство {meeting.space_id} не найдено для автоэкспорта встречи.")
-            if space.namespace is None:
-                raise ValueError("Для автоэкспорта встречи требуется namespace пространства.")
-            await sync_export_meeting_to_crm_task.kiq(
-                meeting_id=meeting.meeting_id,
-                company_id=company_id,
-                actor_user_id=actor_user_id,
-                namespace=space.namespace,
-            )
-    except Exception as exc:
-        logger.error(
-            "sync_summarize_transcript_task failed: meeting_id=%s error=%s",
-            meeting_id,
-            str(exc),
-            exc_info=True,
-        )
-        failed_meeting = await container.call_meeting_repository.get(meeting_id)
-        if failed_meeting is not None:
-            await container.call_meeting_repository.set_export_status(
-                failed_meeting.meeting_id,
-                status="failed",
-                target_namespace=failed_meeting.export_target_namespace,
-            )
-            failed_meeting = await container.call_meeting_repository.get(meeting_id)
-        if failed_meeting is not None:
-            failed_payload = CallMeetingRead(
-                meeting_id=failed_meeting.meeting_id,
-                call_id=failed_meeting.call_id,
-                recording_id=failed_meeting.recording_id,
-                channel_id=failed_meeting.channel_id,
-                space_id=failed_meeting.space_id,
-                transcript_file_id=failed_meeting.transcript_file_id,
-                transcript_text_file_id=failed_meeting.transcript_text_file_id,
-                summary_json=failed_meeting.summary_json or {},
-                export_status=failed_meeting.export_status,
-                export_target_namespace=failed_meeting.export_target_namespace,
-                created_at=failed_meeting.created_at,
-                updated_at=failed_meeting.updated_at,
-            )
-            await publish_realtime_events(
-                [event_call_summary_failed(failed_payload, str(exc))]
-            )
-        raise
-
-
-@broker.task
-async def sync_export_meeting_to_crm_task(
-    meeting_id: str,
-    company_id: str,
-    actor_user_id: str,
-    namespace: str,
-) -> None:
-    """Экспортирует встречу в CRM как note:call."""
-    if not isinstance(namespace, str) or namespace.strip() == "":
-        raise ValueError("namespace обязателен.")
-    container = get_sync_container()
-    meeting = await container.call_meeting_repository.get(meeting_id)
-    if meeting is None or meeting.company_id != company_id:
-        raise ValueError(f"Встреча {meeting_id} не найдена.")
-    recording = None
-    if meeting.recording_id is not None:
-        recording = await container.call_recording_repository.get(meeting.recording_id)
-    call_participants = await container.call_repository.list_participants(meeting.call_id)
-    registered_users: list[dict[str, str]] = []
-    guests: list[dict[str, str]] = []
-    for participant in call_participants:
-        identity = participant.user_id
-        if identity.startswith("guest:"):
-            parts = identity.split(":", 2)
-            guests.append(
-                {
-                    "guest_identity": identity,
-                    "guest_name": parts[2] if len(parts) >= 3 else "guest",
-                }
-            )
-        else:
-            registered_users.append(
-                {
-                    "user_id": identity,
-                    "display_name": identity,
-                }
-            )
-    segments = await container.call_speaker_segment_repository.list_for_meeting(meeting.meeting_id, company_id)
-    speaker_segments = [
-        {
-            "speaker_identity": s.speaker_identity,
-            "speaker_type": s.speaker_type,
-            "speaker_user_id": s.speaker_user_id,
-            "speaker_guest_name": s.speaker_guest_name,
-            "started_ms": s.started_ms,
-            "ended_ms": s.ended_ms,
-            "text": s.text,
-        }
-        for s in segments
-    ]
-
-    from core.clients import ServiceClient
-
-    service_client = ServiceClient()
-    auth_headers = _build_interservice_auth_headers(
-        actor_user_id=actor_user_id,
-        company_id=company_id,
-    )
-    payload = {
-        "entity_type": "note",
-        "entity_subtype": "call",
-        "name": f"Встреча {meeting.meeting_id}",
-        "description": "Автоматически экспортировано из Sync.",
-        "namespace": namespace,
-        "attributes": {
-            "meeting_id": meeting.meeting_id,
-            "call_id": meeting.call_id,
-            "channel_id": meeting.channel_id,
-            "space_id": meeting.space_id,
-            "recording_id": meeting.recording_id,
-            "raw_file_id": recording.raw_file_id if recording is not None else None,
-            "transcript_file_id": meeting.transcript_file_id,
-            "summary": meeting.summary_json,
-            "participants": {
-                "registered_users": registered_users,
-                "guests": guests,
-            },
-            "speaker_segments": speaker_segments,
-        },
-    }
-    try:
-        await service_client.post(
-            "crm",
-            "/crm/api/v1/entities/",
-            json=payload,
-            headers=auth_headers,
-        )
-    except Exception:
-        await container.call_meeting_repository.set_export_status(
-            meeting.meeting_id,
-            status="failed",
-            target_namespace=namespace,
-        )
-        failed = await container.call_meeting_repository.get(meeting.meeting_id)
-        if failed is None:
-            raise RuntimeError("Встреча пропала после ошибки экспорта.")
-        await publish_realtime_events(
-            [
-                event_call_export_crm_failed(
-                    CallMeetingRead(
-                        meeting_id=failed.meeting_id,
-                        call_id=failed.call_id,
-                        recording_id=failed.recording_id,
-                        channel_id=failed.channel_id,
-                        space_id=failed.space_id,
-                        transcript_file_id=failed.transcript_file_id,
-                        transcript_text_file_id=failed.transcript_text_file_id,
-                        summary_json=failed.summary_json or {},
-                        export_status=failed.export_status,
-                        export_target_namespace=failed.export_target_namespace,
-                        created_at=failed.created_at,
-                        updated_at=failed.updated_at,
-                    )
+            failed_row = await container.call_recording_repository.get(recording_id)
+            if failed_row is not None:
+                failed_read = _recording_read_from_entity(failed_row)
+                fail_recipients = await container.channel_repository.list_member_user_ids(
+                    failed_read.channel_id,
+                    company_id=company_id,
                 )
-            ]
-        )
-        raise
-    await container.call_meeting_repository.set_export_status(
-        meeting.meeting_id,
-        status="done",
-        target_namespace=namespace,
-    )
-    done = await container.call_meeting_repository.get(meeting.meeting_id)
-    if done is None:
-        raise RuntimeError("Встреча пропала после экспорта.")
-    await publish_realtime_events(
-        [
-            event_call_export_crm_done(
-                CallMeetingRead(
-                    meeting_id=done.meeting_id,
-                    call_id=done.call_id,
-                    recording_id=done.recording_id,
-                    channel_id=done.channel_id,
-                    space_id=done.space_id,
-                    transcript_file_id=done.transcript_file_id,
-                    transcript_text_file_id=done.transcript_text_file_id,
-                    summary_json=done.summary_json or {},
-                    export_status=done.export_status,
-                    export_target_namespace=done.export_target_namespace,
-                    created_at=done.created_at,
-                    updated_at=done.updated_at,
+                await publish_realtime_events(
+                    [
+                        event_call_recording_failed(
+                            failed_read,
+                            company_id=company_id,
+                            recipient_user_ids=fail_recipients,
+                        ),
+                    ],
                 )
-            )
-        ]
-    )
+            raise
 
 
-@broker.task
-async def sync_transcribe_audio_message_task(
+async def transcribe_audio_message_core(
     *,
     channel_id: str,
     message_id: str,
     company_id: str,
     actor_user_id: str,
 ) -> None:
-    """Расшифровывает аудиосообщение и публикует обновление message.updated."""
     if channel_id == "":
         raise ValueError("channel_id обязателен.")
     if message_id == "":
@@ -1378,6 +681,10 @@ async def sync_transcribe_audio_message_task(
         raise ValueError("file/audio.mime_type обязателен.")
 
     settings = get_settings()
+    redis_url = settings.database.redis_url
+    if redis_url is None or redis_url.strip() == "":
+        raise ValueError("database.redis_url обязателен для sync_transcribe_audio_message_task.")
+
     timeout_seconds = settings.stt.cloud_ru.timeout
     if timeout_seconds <= 0:
         raise ValueError("stt.cloud_ru.timeout должен быть больше 0.")
@@ -1385,50 +692,250 @@ async def sync_transcribe_audio_message_task(
     sync_base_url = settings.server.get_service_url("sync")
     if not isinstance(sync_base_url, str) or sync_base_url == "":
         raise ValueError("URL sync сервиса не задан.")
-    file_download_url = (
-        f"{sync_base_url.rstrip('/')}/sync/api/v1/files/download/{audio_info.file_id}"
+    file_download_url = f"{sync_base_url.rstrip('/')}/sync/api/v1/files/download/{audio_info.file_id}"
+    auth_headers = _build_interservice_auth_headers(
+        actor_user_id=actor_user_id,
+        company_id=company_id,
     )
+
+    r = redis_async.from_url(redis_url)
+    lock_key = f"sync:transcribe_audio:{company_id}:{message_id}"
+    token = uuid4().hex
+    lock_ttl = settings.transcribe_audio_redis_lock_ttl_seconds
+    acquired = await r.set(lock_key, token, nx=True, ex=lock_ttl)
+    if not acquired:
+        await r.aclose()
+        logger.info(
+            "transcribe_audio: пропуск, сообщение уже обрабатывается другим воркером message_id=%s",
+            message_id,
+        )
+        return
+    try:
+        try:
+            async with traced_operation(
+                "sync.stt.transcribe_audio_message",
+                event_type="sync.stt",
+                operation_category="stt",
+                resource_type="sync_message",
+                resource_id=message_id,
+                extra_attributes={
+                    trace_attributes.ATTR_TENANT_COMPANY_ID: company_id,
+                    trace_attributes.ATTR_USER_ID: actor_user_id,
+                    trace_attributes.ATTR_CHANNEL_ID: channel_id,
+                },
+            ) as stt_span:
+                stt_span.set_attribute(trace_attributes.ATTR_STT_PROVIDER, settings.stt.provider)
+                async with get_httpx_client(timeout=timeout_seconds) as client:
+                    response = await client.get(file_download_url, headers=auth_headers)
+                response.raise_for_status()
+                if not response.content:
+                    raise ValueError("Файл аудиосообщения пустой.")
+                audio_len = len(response.content)
+                stt_span.set_attribute(trace_attributes.ATTR_STT_AUDIO_BYTES, audio_len)
+
+                transcript_text = await transcribe_audio_with_chunking(
+                    job_id=message_id,
+                    audio_bytes=response.content,
+                    file_name=audio_info.filename,
+                    mime_type=audio_info.mime_type,
+                    language=settings.stt.cloud_ru.language,
+                )
+                if transcript_text.strip() == "":
+                    raise ValueError("STT вернул пустую транскрипцию аудиосообщения.")
+
+                done_contents = _replace_audio_transcription(
+                    contents=source_contents,
+                    status=AudioTranscriptionStatus.DONE,
+                    transcription_text=transcript_text,
+                    transcription_error=None,
+                )
+                await container.message_repository.replace_message_contents(
+                    message_id=message_id,
+                    contents=done_contents,
+                    edited_at=datetime.now(tz=UTC),
+                )
+                done_message = await _load_message_read(
+                    container,
+                    message_id=message_id,
+                    company_id=company_id,
+                )
+                done_recipients = await container.channel_repository.list_member_user_ids(
+                    channel_id,
+                    company_id=company_id,
+                )
+                await publish_realtime_events(
+                    [
+                        event_message_updated(
+                            done_message,
+                            company_id=company_id,
+                            recipient_user_ids=done_recipients,
+                        ),
+                    ],
+                )
+        except Exception as exc:
+            failed_contents = _replace_audio_transcription(
+                contents=source_contents,
+                status=AudioTranscriptionStatus.FAILED,
+                transcription_text=None,
+                transcription_error=str(exc),
+            )
+            await container.message_repository.replace_message_contents(
+                message_id=message_id,
+                contents=failed_contents,
+                edited_at=datetime.now(tz=UTC),
+            )
+            failed_message = await _load_message_read(
+                container,
+                message_id=message_id,
+                company_id=company_id,
+            )
+            fail_audio_recipients = await container.channel_repository.list_member_user_ids(
+                channel_id,
+                company_id=company_id,
+            )
+            await publish_realtime_events(
+                [
+                    event_message_updated(
+                        failed_message,
+                        company_id=company_id,
+                        recipient_user_ids=fail_audio_recipients,
+                    ),
+                ],
+            )
+            logger.warning(
+                "Расшифровка аудиосообщения завершилась ошибкой: channel_id=%s message_id=%s error=%s",
+                channel_id,
+                message_id,
+                str(exc),
+            )
+    finally:
+        await r.eval(_TRANSCRIBE_AUDIO_LOCK_RELEASE_LUA, 1, lock_key, token)
+        await r.aclose()
+
+
+@broker.task
+async def sync_transcribe_audio_message_task(
+    *,
+    channel_id: str,
+    message_id: str,
+    company_id: str,
+    actor_user_id: str,
+) -> None:
+    await transcribe_audio_message_core(
+        channel_id=channel_id,
+        message_id=message_id,
+        company_id=company_id,
+        actor_user_id=actor_user_id,
+    )
+
+
+async def transcribe_video_message_core(
+    *,
+    channel_id: str,
+    message_id: str,
+    company_id: str,
+    actor_user_id: str,
+) -> None:
+    container = get_sync_container()
+    source_message = await container.message_repository.get_by_id_for_company(message_id, company_id)
+    if source_message is None:
+        raise ValueError(f"Сообщение {message_id} не найдено.")
+    if source_message.channel_id != channel_id:
+        raise ValueError("Сообщение не принадлежит указанному каналу.")
+    if source_message.deleted_at is not None:
+        raise ValueError("Нельзя расшифровать удалённое сообщение.")
+
+    rows = await container.message_repository.list_contents(message_id)
+    source_contents = [
+        MessageContentModel.model_validate({"type": row.type, "data": row.data, "order": row.order})
+        for row in rows
+    ]
+    video_info = _extract_video_info(source_contents)
+    if video_info.file_id == "":
+        raise ValueError("file/video.file_id обязателен.")
+    if video_info.filename == "":
+        raise ValueError("file/video.filename обязателен.")
+
+    settings = get_settings()
+    timeout_seconds = settings.stt.cloud_ru.timeout
+    if timeout_seconds <= 0:
+        raise ValueError("stt.cloud_ru.timeout должен быть больше 0.")
+
+    sync_base_url = settings.server.get_service_url("sync")
+    if not isinstance(sync_base_url, str) or sync_base_url == "":
+        raise ValueError("URL sync сервиса не задан.")
+    file_download_url = f"{sync_base_url.rstrip('/')}/sync/api/v1/files/download/{video_info.file_id}"
     auth_headers = _build_interservice_auth_headers(
         actor_user_id=actor_user_id,
         company_id=company_id,
     )
 
     try:
-        async with get_httpx_client(timeout=timeout_seconds) as client:
-            response = await client.get(file_download_url, headers=auth_headers)
-        response.raise_for_status()
-        if not response.content:
-            raise ValueError("Файл аудиосообщения пустой.")
+        async with traced_operation(
+            "sync.stt.transcribe_video_message",
+            event_type="sync.stt",
+            operation_category="stt",
+            resource_type="sync_message",
+            resource_id=message_id,
+            extra_attributes={
+                trace_attributes.ATTR_TENANT_COMPANY_ID: company_id,
+                trace_attributes.ATTR_USER_ID: actor_user_id,
+                trace_attributes.ATTR_CHANNEL_ID: channel_id,
+            },
+        ) as video_stt_span:
+            video_stt_span.set_attribute(trace_attributes.ATTR_STT_PROVIDER, settings.stt.provider)
+            async with get_httpx_client(timeout=timeout_seconds) as client:
+                response = await client.get(file_download_url, headers=auth_headers)
+            response.raise_for_status()
+            if not response.content:
+                raise ValueError("Файл видеосообщения пустой.")
+            video_stt_span.set_attribute(trace_attributes.ATTR_STT_AUDIO_BYTES, len(response.content))
 
-        transcript_text = await _transcribe_audio_with_chunking(
-            meeting_id=message_id,
-            audio_bytes=response.content,
-            file_name=audio_info.filename,
-            mime_type=audio_info.mime_type,
-            language=settings.stt.cloud_ru.language,
-        )
-        if transcript_text.strip() == "":
-            raise ValueError("STT вернул пустую транскрипцию аудиосообщения.")
+            audio_bytes, audio_name = extract_audio_from_video(
+                video_bytes=response.content,
+                base_name=video_info.filename,
+            )
+            transcript_text = await transcribe_audio_with_chunking(
+                job_id=message_id,
+                audio_bytes=audio_bytes,
+                file_name=audio_name,
+                mime_type="audio/mpeg",
+                language=settings.stt.cloud_ru.language,
+            )
+            if transcript_text.strip() == "":
+                raise ValueError("STT вернул пустую транскрипцию видеосообщения.")
 
-        done_contents = _replace_audio_transcription(
-            contents=source_contents,
-            status=AudioTranscriptionStatus.DONE,
-            transcription_text=transcript_text,
-            transcription_error=None,
-        )
-        await container.message_repository.replace_message_contents(
-            message_id=message_id,
-            contents=done_contents,
-            edited_at=datetime.now(tz=UTC),
-        )
-        done_message = await _load_message_read(
-            container,
-            message_id=message_id,
-            company_id=company_id,
-        )
-        await publish_realtime_events([event_message_updated(done_message)])
+            done_contents = _replace_video_transcription(
+                contents=source_contents,
+                status=AudioTranscriptionStatus.DONE,
+                transcription_text=transcript_text,
+                transcription_error=None,
+            )
+            await container.message_repository.replace_message_contents(
+                message_id=message_id,
+                contents=done_contents,
+                edited_at=datetime.now(tz=UTC),
+            )
+            done_message = await _load_message_read(
+                container,
+                message_id=message_id,
+                company_id=company_id,
+            )
+            done_video_recipients = await container.channel_repository.list_member_user_ids(
+                channel_id,
+                company_id=company_id,
+            )
+            await publish_realtime_events(
+                [
+                    event_message_updated(
+                        done_message,
+                        company_id=company_id,
+                        recipient_user_ids=done_video_recipients,
+                    ),
+                ],
+            )
     except Exception as exc:
-        failed_contents = _replace_audio_transcription(
+        failed_contents = _replace_video_transcription(
             contents=source_contents,
             status=AudioTranscriptionStatus.FAILED,
             transcription_text=None,
@@ -1444,10 +951,243 @@ async def sync_transcribe_audio_message_task(
             message_id=message_id,
             company_id=company_id,
         )
-        await publish_realtime_events([event_message_updated(failed_message)])
+        fail_video_recipients = await container.channel_repository.list_member_user_ids(
+            channel_id,
+            company_id=company_id,
+        )
+        await publish_realtime_events(
+            [
+                event_message_updated(
+                    failed_message,
+                    company_id=company_id,
+                    recipient_user_ids=fail_video_recipients,
+                ),
+            ],
+        )
         logger.warning(
-            "Расшифровка аудиосообщения завершилась ошибкой: channel_id=%s message_id=%s error=%s",
+            "Расшифровка видеосообщения завершилась ошибкой: channel_id=%s message_id=%s error=%s",
             channel_id,
             message_id,
             str(exc),
+        )
+
+
+@broker.task
+async def sync_transcribe_video_message_task(
+    *,
+    channel_id: str,
+    message_id: str,
+    company_id: str,
+    actor_user_id: str,
+) -> None:
+    await transcribe_video_message_core(
+        channel_id=channel_id,
+        message_id=message_id,
+        company_id=company_id,
+        actor_user_id=actor_user_id,
+    )
+
+
+@broker.task
+async def sync_aggregate_call_transcript_task(
+    *,
+    channel_id: str,
+    call_id: str,
+    company_id: str,
+    actor_user_id: str,
+) -> None:
+    if channel_id == "" or call_id == "" or company_id == "" or actor_user_id == "":
+        raise ValueError("channel_id, call_id, company_id и actor_user_id обязательны.")
+
+    async with traced_operation(
+        "sync.calls.aggregate_transcript",
+        event_type="sync.calls",
+        operation_category="sync_command",
+        resource_type="sync_call",
+        resource_id=call_id,
+        extra_attributes={
+            trace_attributes.ATTR_TENANT_COMPANY_ID: company_id,
+            trace_attributes.ATTR_USER_ID: actor_user_id,
+            trace_attributes.ATTR_CHANNEL_ID: channel_id,
+            trace_attributes.ATTR_CALL_ID: call_id,
+        },
+    ) as aggregate_span:
+        container = get_sync_container()
+        rows = await container.message_repository.list_root_lane_by_call(
+            channel_id=channel_id,
+            call_id=call_id,
+            company_id=company_id,
+        )
+        aggregate_span.set_attribute("platform.sync.call_aggregate_lane_count", len(rows))
+        for m in rows:
+            content_rows = await container.message_repository.list_contents(m.message_id)
+            contents = [
+                MessageContentModel.model_validate({"type": r.type, "data": r.data, "order": r.order})
+                for r in content_rows
+            ]
+            has_audio = any(c.type == MessageContentType.FILE_AUDIO for c in contents)
+            has_video = any(c.type == MessageContentType.FILE_VIDEO for c in contents)
+            if has_audio:
+                audio = _extract_audio_info(contents)
+                if audio.transcription_status != AudioTranscriptionStatus.DONE:
+                    await transcribe_audio_message_core(
+                        channel_id=channel_id,
+                        message_id=m.message_id,
+                        company_id=company_id,
+                        actor_user_id=actor_user_id,
+                    )
+            if has_video:
+                video = _extract_video_info(
+                    [
+                        MessageContentModel.model_validate({"type": r.type, "data": r.data, "order": r.order})
+                        for r in await container.message_repository.list_contents(m.message_id)
+                    ]
+                )
+                if video.transcription_status != AudioTranscriptionStatus.DONE:
+                    await transcribe_video_message_core(
+                        channel_id=channel_id,
+                        message_id=m.message_id,
+                        company_id=company_id,
+                        actor_user_id=actor_user_id,
+                    )
+
+        transcript_entries: list[CallTranscriptEntry] = []
+        fresh_rows = await container.message_repository.list_root_lane_by_call(
+            channel_id=channel_id,
+            call_id=call_id,
+            company_id=company_id,
+        )
+        for m in fresh_rows:
+            content_rows = await container.message_repository.list_contents(m.message_id)
+            contents = [
+                MessageContentModel.model_validate({"type": r.type, "data": r.data, "order": r.order})
+                for r in content_rows
+            ]
+            only_boundary = (
+                len(contents) == 1
+                and contents[0].type == MessageContentType.CALL_BOUNDARY
+            )
+            if only_boundary:
+                continue
+
+            sender = await sender_brief_for_message(container.user_repository, m.sender_user_id)
+            parts: list[str] = []
+            for c in sorted(contents, key=lambda x: x.order):
+                if c.type == MessageContentType.TEXT_PLAIN:
+                    if isinstance(c.data, TextPlainContent) and c.data.body.strip() != "":
+                        parts.append(c.data.body.strip())
+                elif c.type == MessageContentType.FILE_AUDIO:
+                    if isinstance(c.data, AudioAttachmentContent):
+                        if c.data.transcription_text and c.data.transcription_text.strip() != "":
+                            parts.append(c.data.transcription_text.strip())
+                elif c.type == MessageContentType.FILE_VIDEO:
+                    if isinstance(c.data, VideoAttachmentContent):
+                        if c.data.transcription_text and c.data.transcription_text.strip() != "":
+                            parts.append(c.data.transcription_text.strip())
+            if len(parts) == 0:
+                continue
+            body = " ".join(parts)
+            is_guest = guest_display_name_from_sender_id(m.sender_user_id) is not None
+            transcript_entries.append(
+                CallTranscriptEntry(
+                    user_id=m.sender_user_id,
+                    display_name=sender.display_name,
+                    avatar_url=sender.avatar_url,
+                    is_guest=is_guest,
+                    timestamp=m.sent_at,
+                    text=body,
+                )
+            )
+
+        if len(transcript_entries) == 0:
+            empty_text = _sync_call_aggregate_empty_body()
+            content_blocks: list[MessageContentModel] = [
+                MessageContentModel(
+                    type=MessageContentType.TEXT_PLAIN,
+                    data=TextPlainContent(body=empty_text, mentions=None),
+                    order=0,
+                ),
+            ]
+        else:
+            content_blocks = [
+                MessageContentModel(
+                    type=MessageContentType.CALL_TRANSCRIPT,
+                    data=CallTranscriptContent(call_id=call_id, entries=transcript_entries),
+                    order=0,
+                ),
+            ]
+
+        agg_body = MessageCreate(
+            thread_id=None,
+            parent_message_id=None,
+            contents=content_blocks,
+            mentioned_user_ids=None,
+            call_id=call_id,
+        )
+        send_payload = MessagesSendPayload(channel_id=channel_id, body=agg_body)
+        cmd = CommandEnvelope(
+            id=uuid4().hex,
+            type="messages.send",
+            actor_user_id=actor_user_id,
+            company_id=company_id,
+            payload=send_payload.model_dump(mode="json"),
+        )
+        await dispatch_sync_command(cmd)
+
+
+def _speech_to_chat_poll_sleep_seconds(*, is_continuation: bool) -> float:
+    stc = get_settings().calls.speech_to_chat
+    return float(stc.poll_interval_seconds if is_continuation else stc.poll_initial_delay_seconds)
+
+
+@broker.task
+async def sync_speech_to_chat_poll_task(
+    *,
+    call_id: str,
+    company_id: str,
+    is_continuation: bool = False,
+    delay_override_seconds: float | None = None,
+) -> None:
+    """Keyword-only args: иначе SessionLockMiddleware принимает company_id за session_id.
+
+    Первый kiq (после invite) ждёт POLL_INITIAL; следующие тики — POLL_INTERVAL.
+    delay_override_seconds — если lock poll занят, следующий тик с backoff из конфига.
+    """
+    if delay_override_seconds is not None:
+        await asyncio.sleep(delay_override_seconds)
+    else:
+        await asyncio.sleep(_speech_to_chat_poll_sleep_seconds(is_continuation=is_continuation))
+    from apps.sync.realtime.speech_to_chat_workflow import run_speech_to_chat_poll_cycle
+
+    container = get_sync_container()
+    call_row = await container.call_repository.get_call(call_id, company_id)
+    if call_row is None:
+        raise ValueError(f"Звонок {call_id} не найден для speech_to_chat poll.")
+    poll_user_id = call_row.created_by_user_id
+
+    async with traced_operation(
+        "sync.speech_to_chat.poll_cycle",
+        event_type="sync.speech_to_chat",
+        operation_category="sync_command",
+        resource_type="sync_call",
+        resource_id=call_id,
+        extra_attributes={
+            trace_attributes.ATTR_TENANT_COMPANY_ID: company_id,
+            trace_attributes.ATTR_USER_ID: poll_user_id,
+            trace_attributes.ATTR_CALL_ID: call_id,
+        },
+    ):
+        outcome = await run_speech_to_chat_poll_cycle(call_id=call_id, company_id=company_id)
+    if outcome.schedule_next:
+        stc = get_settings().calls.speech_to_chat
+        next_delay = (
+            stc.poll_lock_busy_retry_seconds
+            if outcome.next_delay == "lock_busy"
+            else None
+        )
+        await sync_speech_to_chat_poll_task.kiq(
+            call_id=call_id,
+            company_id=company_id,
+            is_continuation=True,
+            delay_override_seconds=next_delay,
         )

@@ -7,19 +7,15 @@ import '../components/editors/json-field-editor.js';
 import '../components/editors/state-mapping-editor.js';
 import '../components/editors/variable-input.js';
 
-const TRIGGER_TYPES = [
-    { id: 'telegram', name: 'Telegram Bot', icon: 'send', color: '#0088cc', description: 'Запуск по сообщению в Telegram боте' },
-    { id: 'cron', name: 'Cron Schedule', icon: 'clock', color: '#f59e0b', description: 'Запуск по расписанию' },
-    { id: 'webhook', name: 'HTTP Webhook', icon: 'globe', color: '#8b5cf6', description: 'Запуск по POST запросу' },
-    { id: 'email', name: 'Email', icon: 'mail', color: '#ea4335', description: 'Запуск при получении письма' },
-    { id: 'redis', name: 'Redis Pub/Sub', icon: 'database', color: '#dc382d', description: 'Запуск по событию в Redis' },
+const TRIGGER_TYPE_IDS = [
+    { id: 'telegram', icon: 'send', color: '#0088cc' },
+    { id: 'cron', icon: 'clock', color: '#f59e0b' },
+    { id: 'webhook', icon: 'globe', color: '#8b5cf6' },
+    { id: 'email', icon: 'mail', color: '#ea4335' },
+    { id: 'redis', icon: 'database', color: '#dc382d' },
 ];
 
-const CHANNEL_TYPES = [
-    { id: 'telegram', name: 'Telegram' },
-    { id: 'email', name: 'Email' },
-    { id: 'webhook', name: 'Webhook' },
-];
+const CHANNEL_IDS = ['telegram', 'email', 'webhook'];
 
 export class TriggerEditorModal extends PlatformFormModal {
     static styles = [
@@ -205,7 +201,9 @@ export class TriggerEditorModal extends PlatformFormModal {
     }
 
     getModalTitle() {
-        return this.triggerId ? 'Редактировать триггер' : 'Создать триггер';
+        return this.triggerId
+            ? this.i18n.t('trigger_editor.title_edit')
+            : this.i18n.t('trigger_editor.title_create');
     }
 
     showModal(triggerId = '', config = {}) {
@@ -273,9 +271,9 @@ export class TriggerEditorModal extends PlatformFormModal {
         const config = this.triggerConfig.config || {};
         return html`
             <div class="config-section">
-                <div class="config-section-title">Telegram Bot</div>
+                <div class="config-section-title">${this.i18n.t('trigger_editor.telegram.section')}</div>
                 <div class="form-group">
-                    <label class="form-label">Bot Token</label>
+                    <label class="form-label">${this.i18n.t('trigger_editor.telegram.bot_token')}</label>
                     <variable-input
                         name="config.bot_token"
                         .value=${config.bot_token || ''}
@@ -283,10 +281,10 @@ export class TriggerEditorModal extends PlatformFormModal {
                         placeholder="@var:telegram_bot_token"
                         @change=${(e) => this._onConfigChange('bot_token', e.target.value)}
                     ></variable-input>
-                    <span class="form-hint">Токен бота. Введите @ для выбора переменной</span>
+                    <span class="form-hint">${this.i18n.t('trigger_editor.telegram.bot_token_hint')}</span>
                 </div>
                 <div class="form-group">
-                    <label class="form-label">Разрешенные пользователи (ID)</label>
+                    <label class="form-label">${this.i18n.t('trigger_editor.telegram.allowed_users')}</label>
                     <input 
                         type="text" 
                         class="form-input"
@@ -294,7 +292,7 @@ export class TriggerEditorModal extends PlatformFormModal {
                         .value=${(config.allowed_users || []).join(', ')}
                         placeholder="123456789, 987654321"
                     />
-                    <span class="form-hint">Через запятую. Пусто = все пользователи</span>
+                    <span class="form-hint">${this.i18n.t('trigger_editor.telegram.allowed_users_hint')}</span>
                 </div>
             </div>
         `;
@@ -304,9 +302,9 @@ export class TriggerEditorModal extends PlatformFormModal {
         const config = this.triggerConfig.config || {};
         return html`
             <div class="config-section">
-                <div class="config-section-title">Cron Schedule</div>
+                <div class="config-section-title">${this.i18n.t('trigger_editor.cron.section')}</div>
                 <div class="form-group">
-                    <label class="form-label">Cron выражение</label>
+                    <label class="form-label">${this.i18n.t('trigger_editor.cron.cron')}</label>
                     <input 
                         type="text" 
                         class="form-input"
@@ -314,10 +312,10 @@ export class TriggerEditorModal extends PlatformFormModal {
                         .value=${config.cron || ''}
                         placeholder="0 9 * * *"
                     />
-                    <span class="form-hint">Формат: минуты часы день_месяца месяц день_недели</span>
+                    <span class="form-hint">${this.i18n.t('trigger_editor.cron.cron_hint')}</span>
                 </div>
                 <div class="form-group">
-                    <label class="form-label">Timezone</label>
+                    <label class="form-label">${this.i18n.t('trigger_editor.cron.timezone')}</label>
                     <input 
                         type="text" 
                         class="form-input"
@@ -327,7 +325,7 @@ export class TriggerEditorModal extends PlatformFormModal {
                     />
                 </div>
                 <div class="form-group">
-                    <label class="form-label">Начальный content</label>
+                    <label class="form-label">${this.i18n.t('trigger_editor.cron.initial_content')}</label>
                     <input 
                         type="text" 
                         class="form-input"
@@ -344,9 +342,9 @@ export class TriggerEditorModal extends PlatformFormModal {
         const config = this.triggerConfig.config || {};
         return html`
             <div class="config-section">
-                <div class="config-section-title">Webhook</div>
+                <div class="config-section-title">${this.i18n.t('trigger_editor.webhook.section')}</div>
                 <div class="form-group">
-                    <label class="form-label">Secret Token</label>
+                    <label class="form-label">${this.i18n.t('trigger_editor.webhook.secret')}</label>
                     <input 
                         type="text" 
                         class="form-input"
@@ -354,10 +352,10 @@ export class TriggerEditorModal extends PlatformFormModal {
                         .value=${config.secret_token || ''}
                         placeholder="your_secret_token"
                     />
-                    <span class="form-hint">Для верификации запросов (header X-Secret-Token)</span>
+                    <span class="form-hint">${this.i18n.t('trigger_editor.webhook.secret_hint')}</span>
                 </div>
                 <div class="form-group">
-                    <label class="form-label">Разрешенные IP</label>
+                    <label class="form-label">${this.i18n.t('trigger_editor.webhook.allowed_ips')}</label>
                     <input 
                         type="text" 
                         class="form-input"
@@ -365,7 +363,7 @@ export class TriggerEditorModal extends PlatformFormModal {
                         .value=${(config.allowed_ips || []).join(', ')}
                         placeholder="192.168.1.1, 10.0.0.0/8"
                     />
-                    <span class="form-hint">Через запятую. Пусто = все IP</span>
+                    <span class="form-hint">${this.i18n.t('trigger_editor.webhook.allowed_ips_hint')}</span>
                 </div>
             </div>
         `;
@@ -375,16 +373,16 @@ export class TriggerEditorModal extends PlatformFormModal {
         const config = this.triggerConfig.config || {};
         return html`
             <div class="config-section">
-                <div class="config-section-title">Email</div>
+                <div class="config-section-title">${this.i18n.t('trigger_editor.email.section')}</div>
                 <div class="form-group">
-                    <label class="form-label">Провайдер</label>
+                    <label class="form-label">${this.i18n.t('trigger_editor.email.provider')}</label>
                     <select class="form-input form-select" name="config.provider">
                         <option value="imap" ?selected=${config.provider === 'imap'}>IMAP</option>
                         <option value="mailgun" ?selected=${config.provider === 'mailgun'}>Mailgun</option>
                     </select>
                 </div>
                 <div class="form-group">
-                    <label class="form-label">IMAP Host</label>
+                    <label class="form-label">${this.i18n.t('trigger_editor.email.imap_host')}</label>
                     <input 
                         type="text" 
                         class="form-input"
@@ -394,7 +392,7 @@ export class TriggerEditorModal extends PlatformFormModal {
                     />
                 </div>
                 <div class="form-group">
-                    <label class="form-label">IMAP User</label>
+                    <label class="form-label">${this.i18n.t('trigger_editor.email.imap_user')}</label>
                     <input 
                         type="text" 
                         class="form-input"
@@ -404,7 +402,7 @@ export class TriggerEditorModal extends PlatformFormModal {
                     />
                 </div>
                 <div class="form-group">
-                    <label class="form-label">IMAP Password</label>
+                    <label class="form-label">${this.i18n.t('trigger_editor.email.imap_password')}</label>
                     <input 
                         type="password" 
                         class="form-input"
@@ -421,9 +419,9 @@ export class TriggerEditorModal extends PlatformFormModal {
         const config = this.triggerConfig.config || {};
         return html`
             <div class="config-section">
-                <div class="config-section-title">Redis Pub/Sub</div>
+                <div class="config-section-title">${this.i18n.t('trigger_editor.redis.section')}</div>
                 <div class="form-group">
-                    <label class="form-label">Channel</label>
+                    <label class="form-label">${this.i18n.t('trigger_editor.redis.channel')}</label>
                     <input 
                         type="text" 
                         class="form-input"
@@ -439,9 +437,9 @@ export class TriggerEditorModal extends PlatformFormModal {
                             name="config.pattern"
                             ?checked=${config.pattern}
                         />
-                        Pattern subscribe
+                        ${this.i18n.t('trigger_editor.redis.pattern_subscribe')}
                     </label>
-                    <span class="form-hint">Использовать pattern matching для channel</span>
+                    <span class="form-hint">${this.i18n.t('trigger_editor.redis.pattern_hint')}</span>
                 </div>
             </div>
         `;
@@ -469,9 +467,9 @@ export class TriggerEditorModal extends PlatformFormModal {
                             .value=${action.channel}
                             @change=${(e) => this._updateOutputAction(index, 'channel', e.target.value)}
                         >
-                            ${CHANNEL_TYPES.map(ch => html`
-                                <option value=${ch.id} ?selected=${ch.id === action.channel}>
-                                    ${ch.name}
+                            ${CHANNEL_IDS.map((cid) => html`
+                                <option value=${cid} ?selected=${cid === action.channel}>
+                                    ${this.i18n.t(`trigger_editor.channels.${cid}`)}
                                 </option>
                             `)}
                         </select>
@@ -481,13 +479,13 @@ export class TriggerEditorModal extends PlatformFormModal {
                             .value=${action.action}
                             @change=${(e) => this._updateOutputAction(index, 'action', e.target.value)}
                         >
-                            <option value="send_message">Отправить сообщение</option>
-                            <option value="send_photo">Отправить фото</option>
-                            <option value="send_document">Отправить документ</option>
+                            <option value="send_message">${this.i18n.t('node_modal.channel.actions.send_message')}</option>
+                            <option value="send_photo">${this.i18n.t('node_modal.channel.actions.send_photo')}</option>
+                            <option value="send_document">${this.i18n.t('node_modal.channel.actions.send_document')}</option>
                         </select>
                     </div>
                     <div class="form-group">
-                        <label class="form-label">Mapping (JSON)</label>
+                        <label class="form-label">${this.i18n.t('trigger_editor.output_action.mapping_json')}</label>
                         <json-field-editor
                             .value=${JSON.stringify(action.mapping || {}, null, 2)}
                             @change=${(e) => {
@@ -500,7 +498,7 @@ export class TriggerEditorModal extends PlatformFormModal {
                         ></json-field-editor>
                     </div>
                     <div class="form-group">
-                        <label class="form-label">Условие</label>
+                        <label class="form-label">${this.i18n.t('trigger_editor.output_action.condition')}</label>
                         <input 
                             type="text" 
                             class="form-input"
@@ -513,7 +511,7 @@ export class TriggerEditorModal extends PlatformFormModal {
                 <button 
                     class="output-action-remove"
                     @click=${() => this._removeOutputAction(index)}
-                    title="Удалить"
+                    title=${this.i18n.t('trigger_editor.output_action.remove_title')}
                 >
                     <platform-icon name="x" size="16"></platform-icon>
                 </button>
@@ -529,11 +527,11 @@ export class TriggerEditorModal extends PlatformFormModal {
         const name = formData.get('name')?.trim() || '';
         
         if (!triggerId) {
-            throw new Error('Trigger ID обязателен');
+            throw new Error(this.i18n.t('trigger_editor.err_trigger_id'));
         }
         
         if (!this.selectedType) {
-            throw new Error('Выберите тип триггера');
+            throw new Error(this.i18n.t('trigger_editor.err_type'));
         }
         
         // Начинаем с сохраненных значений из triggerConfig.config (для variable-input и др.)
@@ -595,27 +593,27 @@ export class TriggerEditorModal extends PlatformFormModal {
                         class="tab ${this.activeTab === 'config' ? 'active' : ''}"
                         @click=${() => this._setActiveTab('config')}
                     >
-                        Конфигурация
+                        ${this.i18n.t('trigger_editor.tabs_config')}
                     </button>
                     <button 
                         type="button"
                         class="tab ${this.activeTab === 'mapping' ? 'active' : ''}"
                         @click=${() => this._setActiveTab('mapping')}
                     >
-                        Input Mapping
+                        ${this.i18n.t('trigger_editor.tabs_mapping')}
                     </button>
                     <button 
                         type="button"
                         class="tab ${this.activeTab === 'output' ? 'active' : ''}"
                         @click=${() => this._setActiveTab('output')}
                     >
-                        Output Actions
+                        ${this.i18n.t('trigger_editor.tabs_output')}
                     </button>
                 </div>
                 
                 ${this.activeTab === 'config' ? html`
                     <div class="form-group">
-                        <label class="form-label">Trigger ID</label>
+                        <label class="form-label">${this.i18n.t('trigger_editor.field_trigger_id')}</label>
                         <input 
                             type="text" 
                             class="form-input ${isEdit ? 'readonly' : ''}"
@@ -628,7 +626,7 @@ export class TriggerEditorModal extends PlatformFormModal {
                     </div>
                     
                     <div class="form-group">
-                        <label class="form-label">Название</label>
+                        <label class="form-label">${this.i18n.t('trigger_editor.field_name')}</label>
                         <input 
                             type="text" 
                             class="form-input"
@@ -639,9 +637,9 @@ export class TriggerEditorModal extends PlatformFormModal {
                     </div>
                     
                     <div class="form-group">
-                        <label class="form-label">Тип триггера</label>
+                        <label class="form-label">${this.i18n.t('trigger_editor.field_trigger_type')}</label>
                         <div class="trigger-type-selector">
-                            ${TRIGGER_TYPES.map(type => html`
+                            ${TRIGGER_TYPE_IDS.map((type) => html`
                                 <div 
                                     class="trigger-type-option ${this.selectedType === type.id ? 'active' : ''}"
                                     @click=${() => this._onTypeSelect(type.id)}
@@ -649,8 +647,8 @@ export class TriggerEditorModal extends PlatformFormModal {
                                     <div class="trigger-type-icon" style="background: ${type.color}20; color: ${type.color};">
                                         <platform-icon name="${type.icon}" size="24"></platform-icon>
                                     </div>
-                                    <div class="trigger-type-name">${type.name}</div>
-                                    <div class="trigger-type-desc">${type.description}</div>
+                                    <div class="trigger-type-name">${this.i18n.t(`trigger_editor.types.${type.id}.name`)}</div>
+                                    <div class="trigger-type-desc">${this.i18n.t(`trigger_editor.types.${type.id}.description`)}</div>
                                 </div>
                             `)}
                         </div>
@@ -661,10 +659,9 @@ export class TriggerEditorModal extends PlatformFormModal {
                 
                 ${this.activeTab === 'mapping' ? html`
                     <div class="config-section">
-                        <div class="config-section-title">Output Mapping</div>
+                        <div class="config-section-title">${this.i18n.t('trigger_editor.mapping_output_title')}</div>
                         <p style="font-size: var(--text-sm); color: var(--text-secondary); margin-bottom: var(--space-3);">
-                            Маппинг данных триггера в state агента.
-                            Слева - путь в state, справа - путь в payload.
+                            ${this.i18n.t('trigger_editor.mapping_hint')}
                         </p>
                         <state-mapping-editor
                             mode="input"
@@ -675,16 +672,16 @@ export class TriggerEditorModal extends PlatformFormModal {
                     </div>
                     
                     <div class="config-section">
-                        <div class="config-section-title">Примеры путей для ${this.selectedType || 'триггера'}</div>
+                        <div class="config-section-title">${this.i18n.t('trigger_editor.mapping_examples_title', { type: this.selectedType || '—' })}</div>
                         ${this._renderMappingExamples()}
                     </div>
                 ` : ''}
                 
                 ${this.activeTab === 'output' ? html`
                     <div class="output-actions-section">
-                        <div class="config-section-title">Output Actions</div>
+                        <div class="config-section-title">${this.i18n.t('trigger_editor.output_title')}</div>
                         <p style="font-size: var(--text-sm); color: var(--text-secondary); margin-bottom: var(--space-3);">
-                            Действия, выполняемые после завершения агента. Обычно - отправка ответа в канал.
+                            ${this.i18n.t('trigger_editor.output_hint')}
                         </p>
                         
                         ${this.outputActions.map((action, index) => 
@@ -697,7 +694,7 @@ export class TriggerEditorModal extends PlatformFormModal {
                             @click=${this._addOutputAction}
                         >
                             <platform-icon name="plus" size="16"></platform-icon>
-                            Добавить действие
+                            ${this.i18n.t('trigger_editor.add_action')}
                         </button>
                     </div>
                 ` : ''}
@@ -706,61 +703,56 @@ export class TriggerEditorModal extends PlatformFormModal {
     }
 
     _renderMappingExamples() {
-        const examples = {
+        const ROWS = {
             telegram: [
-                { path: 'message.text', desc: 'Текст сообщения' },
-                { path: 'message.chat.id', desc: 'ID чата' },
-                { path: 'message.from.id', desc: 'ID отправителя' },
-                { path: 'message.from.username', desc: 'Username отправителя' },
+                { path: 'message.text', key: 'message_text' },
+                { path: 'message.chat.id', key: 'message_chat_id' },
+                { path: 'message.from.id', key: 'message_from_id' },
+                { path: 'message.from.username', key: 'message_from_username' },
             ],
             webhook: [
-                { path: 'body.data', desc: 'Данные из body' },
-                { path: 'headers.X-Custom', desc: 'Header' },
-                { path: 'query.param', desc: 'Query параметр' },
+                { path: 'body.data', key: 'body_data' },
+                { path: 'headers.X-Custom', key: 'headers_x_custom' },
+                { path: 'query.param', key: 'query_param' },
             ],
-            cron: [
-                { path: 'scheduled_time', desc: 'Время запуска' },
-            ],
+            cron: [{ path: 'scheduled_time', key: 'scheduled_time' }],
             email: [
-                { path: 'from', desc: 'Email отправителя' },
-                { path: 'subject', desc: 'Тема письма' },
-                { path: 'body', desc: 'Тело письма' },
+                { path: 'from', key: 'from' },
+                { path: 'subject', key: 'subject' },
+                { path: 'body', key: 'body' },
             ],
             redis: [
-                { path: 'channel', desc: 'Redis channel' },
-                { path: 'data', desc: 'Данные сообщения' },
+                { path: 'channel', key: 'channel' },
+                { path: 'data', key: 'data' },
             ],
         };
-        
-        const typeExamples = examples[this.selectedType] || [];
-        
-        if (typeExamples.length === 0) {
-            return html`<p style="color: var(--text-tertiary);">Выберите тип триггера</p>`;
+        const rows = ROWS[this.selectedType] || [];
+        if (rows.length === 0) {
+            return html`<p style="color: var(--text-tertiary);">${this.i18n.t('trigger_editor.mapping_select_type')}</p>`;
         }
-        
+        const st = this.selectedType;
         return html`
             <div style="font-size: var(--text-sm); font-family: var(--font-mono);">
-                ${typeExamples.map(ex => html`
+                ${rows.map((row) => html`
                     <div style="padding: var(--space-1) 0; display: flex; gap: var(--space-3);">
-                        <code style="color: var(--accent);">${ex.path}</code>
-                        <span style="color: var(--text-tertiary);">— ${ex.desc}</span>
+                        <code style="color: var(--accent);">${row.path}</code>
+                        <span style="color: var(--text-tertiary);">— ${this.i18n.t(`trigger_editor.ex.${st}.${row.key}`)}</span>
                     </div>
                 `)}
             </div>
         `;
     }
 
+    _saveHeaderTitle() {
+        return this.triggerId
+            ? this.i18n.t('inline_tool_modal.save')
+            : this.i18n.t('inline_tool_modal.create');
+    }
+
     renderFooter() {
         return html`
             <platform-button variant="secondary" @click=${this.close}>
-                Отмена
-            </platform-button>
-            <platform-button 
-                variant="primary" 
-                ?loading=${this.loading}
-                @click=${this._onSubmit}
-            >
-                ${this.triggerId ? 'Сохранить' : 'Создать'}
+                ${this.i18n.t('editor.cancel')}
             </platform-button>
         `;
     }

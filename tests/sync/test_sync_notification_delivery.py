@@ -9,7 +9,9 @@ from __future__ import annotations
 import asyncio
 import json
 import os
+import time
 import uuid
+from typing import Any
 from unittest.mock import AsyncMock, patch
 
 import pytest
@@ -56,6 +58,25 @@ async def _seed_topic_channel(
     await channel_repo.upsert_member(channel_id, owner_user_id, "owner", company_id=company_id)
     await channel_repo.upsert_member(channel_id, recipient_user_id, "member", company_id=company_id)
     return space_id, channel_id
+
+
+async def _redis_envelope_for_message_id(
+    pubsub: Any,
+    *,
+    message_id: str,
+    deadline_monotonic: float,
+) -> dict:
+    """Слушает общий канал platform:notifications; отбрасывает чужие сообщения (параллельные тесты)."""
+    while time.monotonic() < deadline_monotonic:
+        raw = await pubsub.get_message(ignore_subscribe_messages=True, timeout=0.5)
+        if raw is None or raw.get("type") != "message":
+            continue
+        envelope = json.loads(raw["data"])
+        notif = envelope.get("notification") or {}
+        data = notif.get("data") or {}
+        if data.get("message_id") == message_id:
+            return envelope
+    raise AssertionError(f"Не получено сообщение Redis с message_id={message_id}")
 
 
 @pytest.mark.asyncio
@@ -204,8 +225,6 @@ async def test_deliver_notify_user_publishes_to_redis(
     )
     message_id = uuid.uuid4().hex
 
-    r = aioredis.from_url(redis_url)
-    notification_manager._redis_client = r
     sub = aioredis.from_url(redis_url)
     pubsub = sub.pubsub()
     await pubsub.subscribe(REDIS_CHANNEL)
@@ -217,8 +236,6 @@ async def test_deliver_notify_user_publishes_to_redis(
             new_callable=AsyncMock,
             return_value=False,
         ):
-            from core.websocket.publisher import notify_user as real_notify
-
             await deliver_fn(
                 recipient_user_id=recipient,
                 channel_id=channel_id,
@@ -229,10 +246,11 @@ async def test_deliver_notify_user_publishes_to_redis(
                 body_preview="Text",
             )
 
-        raw = await asyncio.wait_for(pubsub.get_message(ignore_subscribe_messages=True), timeout=5.0)
-        assert raw is not None
-        assert raw["type"] == "message"
-        envelope = json.loads(raw["data"])
+        envelope = await _redis_envelope_for_message_id(
+            pubsub,
+            message_id=message_id,
+            deadline_monotonic=time.monotonic() + 8.0,
+        )
         assert envelope["user_id"] == recipient
         assert envelope["notification"]["type"] == NotificationType.SYNC_NEW_MESSAGE.value
         assert envelope["notification"]["data"]["channel_id"] == channel_id
@@ -240,8 +258,6 @@ async def test_deliver_notify_user_publishes_to_redis(
         await pubsub.unsubscribe(REDIS_CHANNEL)
         await pubsub.aclose()
         await sub.aclose()
-        notification_manager._redis_client = None
-        await r.aclose()
 
 
 @pytest.mark.asyncio
@@ -286,8 +302,6 @@ async def test_deliver_triggers_webpush_when_vapid_configured(
         platform="desktop",
     )
 
-    r = aioredis.from_url(redis_url)
-    notification_manager._redis_client = r
     try:
         with patch(
             "apps.sync.realtime.notification_tasks.is_user_sync_ws_online",
@@ -310,6 +324,4 @@ async def test_deliver_triggers_webpush_when_vapid_configured(
 
         mock_webpush.assert_called()
     finally:
-        notification_manager._redis_client = None
-        await r.aclose()
         await push_repository.delete_subscription(recipient, endpoint)

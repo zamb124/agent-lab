@@ -4,16 +4,18 @@ API для запросов доступа к entities.
 User Story: Запрос доступа к чужим entities с указанием причины.
 """
 
+import asyncio
 from typing import List, Optional
-from fastapi import APIRouter, HTTPException, Depends, Query
 
-from apps.crm.services.access_request_service import AccessRequestService
+from fastapi import APIRouter, HTTPException, Query
+
+from core.pagination import OffsetPage
 from apps.crm.models.access_request_models import (
     AccessRequestCreate,
     AccessRequestUpdate,
     AccessRequestResponse
 )
-from apps.crm.dependencies import get_access_request_service
+from apps.crm.dependencies import ContainerDep
 from core.context import get_context
 
 router = APIRouter(prefix="/access-requests", tags=["Access Requests"])
@@ -22,7 +24,7 @@ router = APIRouter(prefix="/access-requests", tags=["Access Requests"])
 @router.post("", response_model=AccessRequestResponse)
 async def request_access(
     data: AccessRequestCreate,
-    service: AccessRequestService = Depends(get_access_request_service)
+    container: ContainerDep,
 ):
     """Создать запрос на доступ к entity"""
     ctx = get_context()
@@ -30,7 +32,7 @@ async def request_access(
         raise HTTPException(status_code=401, detail="Authentication required")
     
     try:
-        request = await service.create_request(
+        request = await container.access_request_service.create_request(
             entity_id=data.resource_id,
             requester_user_id=ctx.user.user_id,
             requester_company_id=ctx.active_company.company_id if ctx.active_company else "system",
@@ -48,10 +50,10 @@ async def request_access(
 @router.get("/{request_id}", response_model=AccessRequestResponse)
 async def get_access_request(
     request_id: str,
-    service: AccessRequestService = Depends(get_access_request_service)
+    container: ContainerDep,
 ):
     """Получить статус запроса на доступ"""
-    request = await service.get_request(request_id)
+    request = await container.access_request_service.get_request(request_id)
     if not request:
         raise HTTPException(status_code=404, detail="Request not found")
     
@@ -62,7 +64,7 @@ async def get_access_request(
 async def update_access_request(
     request_id: str,
     data: AccessRequestUpdate,
-    service: AccessRequestService = Depends(get_access_request_service)
+    container: ContainerDep,
 ):
     """Одобрить/отклонить запрос на доступ"""
     ctx = get_context()
@@ -71,13 +73,13 @@ async def update_access_request(
     
     try:
         if data.status == "approved":
-            await service.approve_request(request_id, ctx.user.user_id)
+            await container.access_request_service.approve_request(request_id, ctx.user.user_id)
         elif data.status == "rejected":
-            await service.reject_request(request_id, ctx.user.user_id)
+            await container.access_request_service.reject_request(request_id, ctx.user.user_id)
         else:
             raise HTTPException(status_code=400, detail="Invalid status")
         
-        request = await service.get_request(request_id)
+        request = await container.access_request_service.get_request(request_id)
         return AccessRequestResponse.model_validate(request)
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
@@ -85,22 +87,26 @@ async def update_access_request(
         raise HTTPException(status_code=403, detail=str(e))
 
 
-@router.get("", response_model=List[AccessRequestResponse])
+@router.get("", response_model=OffsetPage[AccessRequestResponse])
 async def list_pending_requests(
+    container: ContainerDep,
     status: Optional[str] = Query(None),
-    service: AccessRequestService = Depends(get_access_request_service)
-):
-    """Получить список ожидающих запросов"""
+    limit: int = Query(100, ge=1, le=200),
+    offset: int = Query(0, ge=0),
+) -> OffsetPage[AccessRequestResponse]:
     ctx = get_context()
     if not ctx or not ctx.user:
         raise HTTPException(status_code=401, detail="Authentication required")
-    
-    company_id = ctx.active_company.company_id if ctx.active_company else "system"
-    
-    requests = await service.list_requests(
-        company_id=company_id,
-        status=status
-    )
-    
-    return [AccessRequestResponse.model_validate(r) for r in requests]
 
+    company_id = ctx.active_company.company_id if ctx.active_company else "system"
+
+    requests, total = await asyncio.gather(
+        container.access_request_service.list_requests(company_id=company_id, status=status, limit=limit, offset=offset),
+        container.access_request_service.count_requests(company_id=company_id, status=status),
+    )
+    return OffsetPage[AccessRequestResponse](
+        items=[AccessRequestResponse.model_validate(r) for r in requests],
+        total=total,
+        limit=limit,
+        offset=offset,
+    )

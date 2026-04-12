@@ -12,8 +12,14 @@ OpenTelemetry трейсинг для Platform.
 from .config import TracingConfig
 from .context import TraceContext, get_current_trace_context, set_current_trace_context
 from .provider import setup_tracing, is_tracing_enabled, set_tracing_enabled
-from .tracer import PlatformTracer, get_tracer, set_span_repository
+from .tracer import (
+    PlatformTracer,
+    get_tracer,
+    set_span_repository,
+    set_tracing_service_name,
+)
 from .middleware import TracingMiddleware
+from .operation_span import traced_operation
 from .repository import SpanRepository
 
 __all__ = [
@@ -27,7 +33,9 @@ __all__ = [
     "PlatformTracer",
     "get_tracer",
     "set_span_repository",
+    "set_tracing_service_name",
     "TracingMiddleware",
     "SpanRepository",
+    "traced_operation",
 ]
 

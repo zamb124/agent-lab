@@ -14,15 +14,16 @@ from urllib.parse import urlparse
 import httpx
 
 from apps.flows.src.mapping import MappingResolver
+from core.errors import ExternalAPIError
 from core.http import get_httpx_client
 from core.logging import get_logger
+from core.tracing.operation_span import traced_operation
 from apps.flows.src.models.external_api import (
     ExternalAPIConfig,
     ParameterLocation,
     ResponseStatus,
     ResponseType,
 )
-from core.errors import ExternalAPIError
 
 logger = get_logger(__name__)
 
@@ -87,7 +88,16 @@ class ExternalAPIClient:
             else:
                 request_kwargs["data"] = body
 
-        response = await self._request_with_proxy_fallback(config.timeout, request_kwargs)
+        async with traced_operation(
+            "flows.external_api.call",
+            event_type="external_api.call",
+            operation_category="external_api",
+            extra_attributes={
+                "platform.external_api.url": url,
+                "platform.external_api.method": config.method.value,
+            },
+        ):
+            response = await self._request_with_proxy_fallback(config.timeout, request_kwargs)
 
         if response.status_code >= 400:
             raise ExternalAPIError(f"HTTP {response.status_code}: {response.text}")

@@ -1,33 +1,75 @@
-"""Конкретные реализации tools"""
+"""
+Конкретные реализации tools.
 
-from .calculator import calculator
-from .final_answer import final_answer
-from .finish import finish
-from .nsis_api import nsis_api
-from .ocr_document import vision_analyze
-from .reason import reason
-from .self_check import self_check
-from .user_input import ask_user
+Публичный список __all__ — источник имён для inline namespace (PythonNamespaceBuilder):
+все перечисленные объекты попадают в eval по имени. Добавляя tool, включи имя в __all__.
+"""
+
+from .agent_session_tools import (
+    ask_user,
+    final_answer,
+    finish,
+    hitl_operator_task,
+    reason,
+    self_check,
+)
+from .docx_template import fill_docx_template
+from .files import create_file, read_file
+from .google_docs import (
+    gdocs_append_text,
+    gdocs_create_document,
+    gdocs_delete_range,
+    gdocs_find_replace,
+    gdocs_insert_text,
+    gdocs_read_document,
+    gdocs_share_document,
+)
+from .lara_crm import (
+    crm_analyze_note_text,
+    crm_create_note,
+    crm_create_note_and_analyze,
+    crm_search_entities,
+    push_embed_blocks,
+)
+from .math_tools import calculator
+from .rag import rag_add_text, rag_create_namespace, rag_search
 from .scheduling import (
+    cancel_scheduled_task,
+    list_scheduled_tasks,
     schedule_cron_task,
     schedule_interval_task,
     schedule_one_time_task,
-    list_scheduled_tasks,
-    cancel_scheduled_task,
 )
 
 __all__ = [
+    "ask_user",
+    "hitl_operator_task",
     "calculator",
+    "crm_analyze_note_text",
+    "crm_create_note",
+    "crm_create_note_and_analyze",
+    "crm_search_entities",
+    "cancel_scheduled_task",
+    "create_file",
+    "fill_docx_template",
     "final_answer",
+    "gdocs_append_text",
+    "gdocs_create_document",
+    "gdocs_delete_range",
+    "gdocs_find_replace",
+    "gdocs_insert_text",
+    "gdocs_read_document",
+    "gdocs_share_document",
     "finish",
-    "nsis_api",
-    "vision_analyze",
+    "list_scheduled_tasks",
+    "push_embed_blocks",
+    "rag_add_text",
+    "rag_create_namespace",
+    "rag_search",
+    "read_file",
     "reason",
     "self_check",
-    "ask_user",
     "schedule_cron_task",
     "schedule_interval_task",
     "schedule_one_time_task",
-    "list_scheduled_tasks",
-    "cancel_scheduled_task",
 ]

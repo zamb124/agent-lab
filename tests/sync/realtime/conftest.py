@@ -2,25 +2,40 @@
 
 from __future__ import annotations
 
-import os
-
 import pytest
 import pytest_asyncio
 
+from apps.sync.container import get_sync_container
+from apps.sync.db.base import SyncDatabase
 from core.context import clear_context, set_context
 from core.models.context_models import Context
 from core.models.i18n_models import Language
 from core.models.identity_models import Company, User
-from core.websocket.manager import notification_manager
 
 
-@pytest_asyncio.fixture(scope="session", autouse=True)
-async def _realtime_notification_manager() -> None:
-    """Инициализирует notification_manager с реальным Redis для тестов call_handlers."""
-    redis_url = os.environ.get("DATABASE__REDIS_URL", "redis://localhost:63792/0")
-    await notification_manager.start_redis_listener(redis_url)
-    yield
-    await notification_manager.stop_redis_listener()
+@pytest_asyncio.fixture(autouse=True)
+async def _ensure_company_for_realtime(
+    company_id: str,
+    sync_database: SyncDatabase,
+    sync_user_id: str,
+) -> None:
+    """Компания в shared-хранилище для биллинга (баланс) и membership-проверок в хендлерах."""
+    container = get_sync_container()
+    members: dict[str, list[str]] = {
+        "u1": ["owner"],
+        "member1": ["member"],
+        "u_other": ["member"],
+        sync_user_id: ["owner", "admin"],
+    }
+    await container.company_repository.set(
+        Company(
+            company_id=company_id,
+            name=company_id,
+            owner_user_id="u1",
+            members=members,
+            balance=1000.0,
+        )
+    )
 
 
 @pytest.fixture(autouse=True)

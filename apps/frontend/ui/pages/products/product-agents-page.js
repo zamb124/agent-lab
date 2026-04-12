@@ -3,6 +3,9 @@
  */
 import { html, css } from 'lit';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
+import { I18nNs } from '@platform/services/i18n/i18n.service.js';
+import { buildServiceEntryUrl } from '@platform/lib/utils/last-visited-service.js';
+import { landFlowsAbilityUrl } from '../../utils/land-product-images.js';
 import '@platform/lib/components/auth-modal.js';
 
 export class ProductAgentsPage extends PlatformElement {
@@ -53,16 +56,20 @@ export class ProductAgentsPage extends PlatformElement {
                 background-clip: text;
             }
             
-            .hero-icon {
-                width: 80px;
-                height: 80px;
-                margin: 0 auto 24px;
+            .hero-shot {
+                max-width: 1000px;
+                margin: 0 auto 32px;
+                border-radius: 20px;
+                overflow: hidden;
+                border: 1px solid rgba(255, 255, 255, 0.1);
+                box-shadow: 0 24px 64px rgba(0, 0, 0, 0.45);
             }
             
-            .hero-icon img {
+            .hero-shot img {
                 width: 100%;
-                height: 100%;
-                object-fit: contain;
+                height: auto;
+                display: block;
+                vertical-align: top;
             }
             
             .hero-description {
@@ -116,14 +123,19 @@ export class ProductAgentsPage extends PlatformElement {
                 transition: all 0.3s;
             }
             
+            .feature-card::before {
+                content: '';
+                display: block;
+                width: 44px;
+                height: 4px;
+                border-radius: 2px;
+                margin-bottom: 20px;
+                background: linear-gradient(90deg, var(--landing-primary, #5768fe), #8b9dff);
+            }
+            
             .feature-card:hover {
                 border-color: rgba(87, 104, 254, 0.3);
                 transform: translateY(-4px);
-            }
-            
-            .feature-icon {
-                font-size: 48px;
-                margin-bottom: 20px;
             }
             
             .feature-title {
@@ -175,16 +187,17 @@ export class ProductAgentsPage extends PlatformElement {
                 gap: 20px;
             }
             
-            .benefit-icon {
+            .benefit-marker {
                 flex-shrink: 0;
-                width: 56px;
-                height: 56px;
-                display: flex;
-                align-items: center;
-                justify-content: center;
-                background: rgba(87, 104, 254, 0.15);
-                border-radius: 16px;
-                font-size: 28px;
+                width: 4px;
+                min-height: 52px;
+                border-radius: 2px;
+                margin-top: 4px;
+                background: linear-gradient(
+                    180deg,
+                    var(--landing-primary, #5768fe),
+                    rgba(139, 157, 255, 0.85)
+                );
             }
             
             .benefit-content h3 {
@@ -278,12 +291,17 @@ export class ProductAgentsPage extends PlatformElement {
 
     connectedCallback() {
         super.connectedCallback();
+        this._i18nUnsub = this.i18n.subscribe(() => this.requestUpdate());
         this.addEventListener('open-auth-modal', this._handleOpenAuthModal);
     }
 
     disconnectedCallback() {
-        super.disconnectedCallback();
+        if (this._i18nUnsub) {
+            this._i18nUnsub();
+            this._i18nUnsub = null;
+        }
         this.removeEventListener('open-auth-modal', this._handleOpenAuthModal);
+        super.disconnectedCallback();
     }
 
     _handleOpenAuthModal = () => {
@@ -293,62 +311,71 @@ export class ProductAgentsPage extends PlatformElement {
         }
     };
 
+    _handleProductCtaClick = async () => {
+        const response = await fetch('/frontend/api/auth/me', {
+            credentials: 'include',
+        });
+        if (response.ok) {
+            window.location.href = buildServiceEntryUrl('flows');
+            return;
+        }
+        this._handleOpenAuthModal();
+    };
+
     render() {
+        const t = (key) => this.i18n.t(key, {}, I18nNs.FRONTEND_PRODUCTS);
+        const heroSrc = landFlowsAbilityUrl(this.i18n.getCurrentLocale());
         return html`
+            <landing-header></landing-header>
             <div class="page-container">
-                <landing-header></landing-header>
-                
                 <section class="hero">
-                    <div class="hero-icon">
-                        <img src="/static/core/assets/service_logos/agents_logo.svg" alt="AI Studio" />
+                    <span class="hero-badge">${t('agents.hero_badge')}</span>
+                    <h1 class="hero-title">${t('agents.hero_title')}</h1>
+                    <div class="hero-shot">
+                        <img
+                            src=${heroSrc}
+                            alt=${t('agents.hero_visual_alt')}
+                            width="1200"
+                            height="675"
+                            loading="eager"
+                            decoding="async"
+                        />
                     </div>
-                    <span class="hero-badge">Конструктор AI-агентов</span>
-                    <h1 class="hero-title">AI Studio</h1>
                     <p class="hero-description">
-                        Создавайте умных помощников для вашего бизнеса без программирования. 
-                        Визуальный конструктор позволяет собрать агента за несколько часов, 
-                        а не месяцев разработки.
+                        ${t('agents.hero_description')}
                     </p>
-                    <button class="cta-btn" @click=${this._handleOpenAuthModal}>
-                        Попробовать бесплатно
+                    <button class="cta-btn" @click=${this._handleProductCtaClick}>
+                        ${t('agents.cta_try')}
                     </button>
                 </section>
                 
                 <section class="features">
                     <div class="features-grid">
                         <div class="feature-card">
-                            <div class="feature-icon">🎨</div>
-                            <h3 class="feature-title">Визуальный редактор</h3>
+                            <h3 class="feature-title">${t('agents.f1_title')}</h3>
                             <p class="feature-description">
-                                Собирайте сценарии из готовых блоков. Не нужно писать код — 
-                                просто соединяйте элементы на холсте.
+                                ${t('agents.f1_desc')}
                             </p>
                         </div>
                         
                         <div class="feature-card">
-                            <div class="feature-icon">💬</div>
-                            <h3 class="feature-title">Telegram и WhatsApp</h3>
+                            <h3 class="feature-title">${t('agents.f2_title')}</h3>
                             <p class="feature-description">
-                                Запускайте агентов там, где ваши клиенты. Интеграция с мессенджерами 
-                                за пару кликов.
+                                ${t('agents.f2_desc')}
                             </p>
                         </div>
                         
                         <div class="feature-card">
-                            <div class="feature-icon">🔌</div>
-                            <h3 class="feature-title">Готовые интеграции</h3>
+                            <h3 class="feature-title">${t('agents.f3_title')}</h3>
                             <p class="feature-description">
-                                CRM, базы знаний, внешние API — подключайте источники данных 
-                                без технических сложностей.
+                                ${t('agents.f3_desc')}
                             </p>
                         </div>
                         
                         <div class="feature-card">
-                            <div class="feature-icon">📊</div>
-                            <h3 class="feature-title">Аналитика диалогов</h3>
+                            <h3 class="feature-title">${t('agents.f4_title')}</h3>
                             <p class="feature-description">
-                                Отслеживайте эффективность агентов. Смотрите историю разговоров 
-                                и улучшайте сценарии.
+                                ${t('agents.f4_desc')}
                             </p>
                         </div>
                     </div>
@@ -356,53 +383,53 @@ export class ProductAgentsPage extends PlatformElement {
                 
                 <section class="benefits">
                     <div class="benefits-container">
-                        <h2 class="benefits-title">Почему предприниматели выбирают AI Studio</h2>
+                        <h2 class="benefits-title">${t('agents.benefits_title')}</h2>
                         <div class="benefits-grid">
                             <div class="benefit-item">
-                                <div class="benefit-icon">⏱️</div>
+                                <div class="benefit-marker" aria-hidden="true"></div>
                                 <div class="benefit-content">
-                                    <h3>Запуск за часы</h3>
-                                    <p>Первого агента можно запустить уже сегодня. Без найма разработчиков и месяцев ожидания.</p>
+                                    <h3>${t('agents.b1_h')}</h3>
+                                    <p>${t('agents.b1_p')}</p>
                                 </div>
                             </div>
                             
                             <div class="benefit-item">
-                                <div class="benefit-icon">💰</div>
+                                <div class="benefit-marker" aria-hidden="true"></div>
                                 <div class="benefit-content">
-                                    <h3>Экономия на персонале</h3>
-                                    <p>Один агент заменяет 2-3 менеджеров на типовых задачах: ответы на вопросы, сбор заявок, консультации.</p>
+                                    <h3>${t('agents.b2_h')}</h3>
+                                    <p>${t('agents.b2_p')}</p>
                                 </div>
                             </div>
                             
                             <div class="benefit-item">
-                                <div class="benefit-icon">🌙</div>
+                                <div class="benefit-marker" aria-hidden="true"></div>
                                 <div class="benefit-content">
-                                    <h3>Работа 24/7</h3>
-                                    <p>Агенты не спят, не болеют и не уходят в отпуск. Клиенты получают ответы в любое время.</p>
+                                    <h3>${t('agents.b3_h')}</h3>
+                                    <p>${t('agents.b3_p')}</p>
                                 </div>
                             </div>
                             
                             <div class="benefit-item">
-                                <div class="benefit-icon">📈</div>
+                                <div class="benefit-marker" aria-hidden="true"></div>
                                 <div class="benefit-content">
-                                    <h3>Масштабирование</h3>
-                                    <p>Обрабатывайте 10 или 10 000 обращений — стоимость агента не растет с объемом.</p>
+                                    <h3>${t('agents.b4_h')}</h3>
+                                    <p>${t('agents.b4_p')}</p>
                                 </div>
                             </div>
                             
                             <div class="benefit-item">
-                                <div class="benefit-icon">🎯</div>
+                                <div class="benefit-marker" aria-hidden="true"></div>
                                 <div class="benefit-content">
-                                    <h3>Стабильное качество</h3>
-                                    <p>Агент не устает и не ошибается. Каждый клиент получает одинаково хороший сервис.</p>
+                                    <h3>${t('agents.b5_h')}</h3>
+                                    <p>${t('agents.b5_p')}</p>
                                 </div>
                             </div>
                             
                             <div class="benefit-item">
-                                <div class="benefit-icon">🔧</div>
+                                <div class="benefit-marker" aria-hidden="true"></div>
                                 <div class="benefit-content">
-                                    <h3>Полный контроль</h3>
-                                    <p>Редактируйте сценарии в реальном времени. Изменения применяются мгновенно.</p>
+                                    <h3>${t('agents.b6_h')}</h3>
+                                    <p>${t('agents.b6_p')}</p>
                                 </div>
                             </div>
                         </div>
@@ -410,18 +437,18 @@ export class ProductAgentsPage extends PlatformElement {
                 </section>
                 
                 <section class="cta-section">
-                    <h2 class="cta-title">Готовы автоматизировать общение с клиентами?</h2>
-                    <p class="cta-subtitle">Создайте первого агента бесплатно и оцените результат</p>
-                    <button class="cta-btn" @click=${this._handleOpenAuthModal}>
-                        Начать сейчас
+                    <h2 class="cta-title">${t('agents.cta_title')}</h2>
+                    <p class="cta-subtitle">${t('agents.cta_subtitle')}</p>
+                    <button class="cta-btn" @click=${this._handleProductCtaClick}>
+                        ${t('agents.cta_button')}
                     </button>
-                    <a href="/" class="back-link">← Вернуться на главную</a>
+                    <a href="/" class="back-link">${t('agents.back_home')}</a>
                 </section>
                 
                 <landing-footer></landing-footer>
             </div>
             
-            <auth-modal></auth-modal>
+            <auth-modal return-path=${buildServiceEntryUrl('flows')}></auth-modal>
         `;
     }
 }

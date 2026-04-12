@@ -119,6 +119,19 @@
           "type": "image/png"
         }
       ]
+    },
+    {
+      "name": "Documents",
+      "short_name": "Documents",
+      "description": "Совместное редактирование документов",
+      "url": "/documents",
+      "icons": [
+        {
+          "src": "/static/core/pwa/icons/shortcut-rag.png",
+          "sizes": "96x96",
+          "type": "image/png"
+        }
+      ]
     }
   ],
   "related_applications": [],

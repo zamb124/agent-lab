@@ -6,8 +6,9 @@ from datetime import datetime, timezone
 
 import redis.asyncio as redis
 
+from core.config import get_settings
+
 SYNC_WS_PRESENCE_PREFIX = "sync:ws:presence:"
-SYNC_WS_PRESENCE_TTL_SEC = 120
 
 SYNC_LAST_SEEN_PREFIX = "sync:last_seen:"
 SYNC_LAST_SEEN_TTL_SEC = 365 * 24 * 3600
@@ -22,9 +23,10 @@ def sync_last_seen_key(user_id: str) -> str:
 
 
 async def refresh_sync_ws_presence(redis_url: str, user_id: str) -> None:
+    ttl = get_settings().ws_presence_ttl_seconds
     r = redis.from_url(redis_url)
     try:
-        await r.set(sync_ws_presence_key(user_id), "1", ex=SYNC_WS_PRESENCE_TTL_SEC)
+        await r.set(sync_ws_presence_key(user_id), "1", ex=ttl)
     finally:
         await r.aclose()
 

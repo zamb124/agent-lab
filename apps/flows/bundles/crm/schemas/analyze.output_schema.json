@@ -9,7 +9,7 @@
           "properties": {
             "entity_type": { "type": "string" },
             "name": { "type": "string" },
-            "description": { "type": "string" },
+            "description": { "type": "string", "minLength": 12 },
             "attributes": {
               "type": "object",
               "additionalProperties": { "type": "string" }
@@ -28,7 +28,7 @@
         "properties": {
           "entity_type": { "type": "string" },
           "name": { "type": "string" },
-          "description": { "type": "string" },
+          "description": { "type": "string", "minLength": 12 },
           "attributes": {
             "type": "object",
             "additionalProperties": { "type": "string" }
@@ -80,8 +80,20 @@
       },
       "required": ["dates_mentioned", "places_mentioned", "key_topics"],
       "additionalProperties": false
+    },
+    "attachment_summaries": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "filename": { "type": "string" },
+          "summary": { "type": "string", "minLength": 10 }
+        },
+        "required": ["filename", "summary"],
+        "additionalProperties": false
+      }
     }
   },
-  "required": ["note", "entities", "relationships", "metadata"],
+  "required": ["note", "entities", "relationships", "metadata", "attachment_summaries"],
   "additionalProperties": false
 }

@@ -8,9 +8,12 @@ from __future__ import annotations
 
 import inspect
 import os
-from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional, get_type_hints
+from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional, Type, get_type_hints
 
-from apps.flows.src.tools.base import BaseTool, ToolType
+from pydantic import BaseModel
+
+from apps.flows.src.models.enums import ReactToolRole
+from apps.flows.src.tools.base import BaseTool
 from apps.flows.src.mock import get_mock_for_tool
 from apps.flows.src.models.tool_reference import CallParameter
 from core.logging import get_logger
@@ -41,11 +44,12 @@ class FunctionTool(BaseTool):
         tags: List[str],
         mock_response: Any = None,
         permission: Optional[str] = None,
-        tool_type: ToolType = ToolType.TOOL,
+        react_role: ReactToolRole = ReactToolRole.STANDARD,
         cost: float = 0.0,
         billing_name: Optional[str] = None,
         free_for_plans: Optional[List[str]] = None,
         tariff_limits: Optional[Dict[str, int]] = None,
+        args_schema: Optional[Type[BaseModel]] = None,
     ):
         self._func = func
         self.name = name
@@ -53,9 +57,9 @@ class FunctionTool(BaseTool):
         self.tags = tags
         self._mock_response = mock_response
         self.permission = permission
-        self.tool_type = tool_type
-        self.args_schema = None
-        self._parameters = self._extract_parameters(func)
+        self.react_role = react_role
+        self.args_schema = args_schema
+        self._parameters = {} if args_schema is not None else self._extract_parameters(func)
         
         self.cost = cost
         self.billing_name = billing_name or name
@@ -90,8 +94,6 @@ class FunctionTool(BaseTool):
             }
             type_name = type_mapping.get(param_type, "string")
             
-            # Описание из docstring если есть
-            doc = func.__doc__ or ""
             description = f"Параметр {param_name}"
             
             # Проверяем обязательность параметра
@@ -108,9 +110,14 @@ class FunctionTool(BaseTool):
     @property
     def parameters(self) -> Dict[str, Any]:
         """JSON схема параметров для LLM."""
+        if self.args_schema is not None:
+            schema = self.args_schema.model_json_schema()
+            schema.pop("title", None)
+            return schema
+
         properties = {}
         required = []
-        
+
         for name, param in self._parameters.items():
             properties[name] = {
                 "type": param.type,
@@ -118,7 +125,7 @@ class FunctionTool(BaseTool):
             }
             if param.required:
                 required.append(name)
-        
+
         return {"type": "object", "properties": properties, "required": required}
     
     async def run(self, args: Dict[str, Any], state: "ExecutionState") -> Any:
@@ -153,17 +160,22 @@ class FunctionTool(BaseTool):
     async def _run_impl(self, args: Dict[str, Any], state: "ExecutionState") -> Any:
         """Выполняет функцию. State передается как ExecutionState."""
         sig = inspect.signature(self._func)
-        
+        if self.args_schema is not None:
+            validated = self.args_schema.model_validate(args)
+            call_kw = validated.model_dump()
+        else:
+            call_kw = dict(args)
+
         if "state" in sig.parameters:
             if inspect.iscoroutinefunction(self._func):
-                result = await self._func(**args, state=state)
+                result = await self._func(**call_kw, state=state)
             else:
-                result = self._func(**args, state=state)
+                result = self._func(**call_kw, state=state)
             return result
-        
+
         if inspect.iscoroutinefunction(self._func):
-            return await self._func(**args)
-        return self._func(**args)
+            return await self._func(**call_kw)
+        return self._func(**call_kw)
     
     def get_source_code(self) -> str:
         """Возвращает исходный код функции."""
@@ -176,11 +188,12 @@ def tool(
     tags: List[str],
     mock_response: Any = None,
     permission: Optional[str] = None,
-    tool_type: ToolType = ToolType.TOOL,
+    react_role: ReactToolRole = ReactToolRole.STANDARD,
     cost: float = 0.0,
     billing_name: Optional[str] = None,
     free_for_plans: Optional[List[str]] = None,
     tariff_limits: Optional[Dict[str, int]] = None,
+    args_schema: Optional[Type[BaseModel]] = None,
 ) -> Callable[[Callable], FunctionTool]:
     """
     Декоратор для создания tool из функции.
@@ -191,12 +204,14 @@ def tool(
         tags: Теги/категории (обязательный)
         mock_response: Mock ответ - строка, dict или callable
         permission: Группа с доступом к tool
-        tool_type: Тип tool (TOOL, REASON, EXIT)
+        react_role: Роль в ReAct (standard, reason, exit)
         cost: Стоимость использования tool (для биллинга)
         billing_name: Имя для биллинга (по умолчанию = name)
         free_for_plans: Список тарифов с бесплатным доступом
         tariff_limits: Лимиты использования по тарифам
-    
+        args_schema: Pydantic-модель аргументов — JSON Schema для LLM (`Field(description=...)`)
+            и `model_validate` перед вызовом функции; без схемы — разбор сигнатуры как раньше.
+
     Использование:
         @tool(
             name="calculator",
@@ -219,11 +234,12 @@ def tool(
             tags=tags,
             mock_response=mock_response,
             permission=permission,
-            tool_type=tool_type,
+            react_role=react_role,
             cost=cost,
             billing_name=billing_name,
             free_for_plans=free_for_plans,
             tariff_limits=tariff_limits,
+            args_schema=args_schema,
         )
     return decorator
 

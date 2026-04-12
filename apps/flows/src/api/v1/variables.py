@@ -5,10 +5,11 @@ API endpoints для переменных.
 from datetime import datetime
 from typing import Any, List
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel
 
-from apps.flows.src.container import FlowContainer, get_container
+from core.pagination import OffsetPage
+from apps.flows.src.dependencies import ContainerDep
 from core.context import get_context
 from core.db.repositories.variable_repository import Variable
 from core.logging import get_logger
@@ -17,11 +18,6 @@ from core.variables import VariableResolver
 logger = get_logger(__name__)
 
 router = APIRouter(tags=["variables"])
-
-
-async def get_container_dep() -> FlowContainer:
-    """Dependency для получения контейнера"""
-    return get_container()
 
 
 class VariableCreateRequest(BaseModel):
@@ -41,19 +37,18 @@ class VariableResponse(BaseModel):
     system: bool = False
 
 
-@router.get("/", response_model=List[VariableResponse])
+@router.get("/", response_model=OffsetPage[VariableResponse])
 async def list_variables(
-    container: FlowContainer = Depends(get_container_dep),
-) -> List[VariableResponse]:
-    """Список всех переменных (включая системные)"""
-    # Получаем пользовательские переменные из БД
-    db_variables = await container.variable_repository.list_all()
+    container: ContainerDep,
+    limit: int = Query(200, ge=1, le=1000),
+    offset: int = Query(0, ge=0),
+) -> OffsetPage[VariableResponse]:
+    db_variables = await container.variable_repository.list(limit=limit, offset=offset)
     result = [
         VariableResponse(key=v.key, value="***" if v.secret else v.value, secret=v.secret, system=False)
         for v in db_variables
     ]
-    
-    # Добавляем системные переменные (всегда доступны)
+
     now = datetime.now()
     system_variables = {
         "current_date": now.strftime("%Y-%m-%d"),
@@ -63,34 +58,25 @@ async def list_variables(
         "current_month": now.month,
         "current_day": now.day,
     }
-    
+
     for key, value in system_variables.items():
-        result.append(
-            VariableResponse(key=key, value=value, secret=False, system=True)
-        )
-    
-    # Добавляем переменные пользователя (из контекста, если доступны)
+        result.append(VariableResponse(key=key, value=value, secret=False, system=True))
+
     context = get_context()
     if context and context.user:
-        result.append(
-            VariableResponse(key="user_id", value=context.user.user_id, secret=False, system=True)
-        )
-        result.append(
-            VariableResponse(key="user_name", value=context.user.name, secret=False, system=True)
-        )
+        result.append(VariableResponse(key="user_id", value=context.user.user_id, secret=False, system=True))
+        result.append(VariableResponse(key="user_name", value=context.user.name, secret=False, system=True))
         if context.metadata.get("email"):
-            result.append(
-                VariableResponse(key="user_email", value=context.metadata["email"], secret=False, system=True)
-            )
-    
-    return result
+            result.append(VariableResponse(key="user_email", value=context.metadata["email"], secret=False, system=True))
+
+    return OffsetPage[VariableResponse](items=result, total=len(result), limit=limit, offset=offset)
 
 
 @router.get("/{key}", response_model=VariableResponse)
 async def get_variable(
-    key: str, 
+    key: str,
+    container: ContainerDep,
     unmask: bool = False,
-    container: FlowContainer = Depends(get_container_dep)
 ) -> VariableResponse:
     """Получает переменную по ключу (включая системные)
     
@@ -140,7 +126,7 @@ async def get_variable(
 
 @router.post("/", response_model=VariableResponse)
 async def create_variable(
-    request: VariableCreateRequest, container: FlowContainer = Depends(get_container_dep)
+    request: VariableCreateRequest, container: ContainerDep
 ) -> VariableResponse:
     """Создает переменную
     
@@ -168,7 +154,7 @@ async def create_variable(
 
 @router.delete("/{key}")
 async def delete_variable(
-    key: str, container: FlowContainer = Depends(get_container_dep)
+    key: str, container: ContainerDep
 ) -> dict:
     """Удаляет переменную
     

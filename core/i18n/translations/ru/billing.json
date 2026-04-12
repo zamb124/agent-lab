@@ -80,7 +80,16 @@
   "status": {
     "success": "Успешно",
     "pending": "Ожидание",
+    "failed": "Ошибка",
+    "cancelled": "Отменён",
+    "refunded": "Возврат",
     "error": "Ошибка"
+  },
+  "history_table": {
+    "date": "Дата",
+    "amount": "Сумма",
+    "status": "Статус",
+    "provider": "Провайдер"
   },
   "payment_methods": {
     "yoomoney": "ЮMoney",
@@ -97,5 +106,60 @@
     "how_it_works": "Как это работает:",
     "process_description": "После нажатия кнопки вы будете перенаправлены на страницу ЮMoney для безопасной оплаты. После успешной оплаты средства автоматически зачислятся на баланс компании.",
     "proceed_to_payment": "Перейти к оплате"
+  },
+  "notifications": {
+    "balance_blocked_title": "Недостаточно средств",
+    "balance_blocked_message": "Операция «{operation}» не запущена: у компании «{company_name}» неположительный баланс ({balance} ₽). Пополните баланс в разделе «Тарифы и оплата».",
+    "balance_blocked_api_detail": "Недостаточно средств: компания {company_id}, баланс {balance} ₽. Операция: {operation}.",
+    "blocked_operation": {
+      "llm": "Запрос к языковой модели",
+      "embedding": "Индексация (эмбеддинги)",
+      "vision": "Распознавание изображения (vision)",
+      "livekit_room": "Создание комнаты звонка",
+      "livekit_egress": "Запись или экспорт звонка (egress)"
+    }
+  },
+  "frontend_console": {
+    "loading": "Загрузка...",
+    "page_title": "Биллинг",
+    "balance_title": "Баланс",
+    "balance_available": "Доступно на счете",
+    "top_up": "Пополнить баланс",
+    "plan_title": "Тарифный план",
+    "upgrade_pro": "Перейти на Pro",
+    "budget_title": "Месячный лимит",
+    "spent": "Потрачено",
+    "limit": "Лимит",
+    "limit_not_set": "Не установлен",
+    "change_limit": "Изменить лимит",
+    "set_limit": "Установить лимит",
+    "usage_title": "Статистика использования",
+    "total_spent": "Всего потрачено",
+    "total_calls": "Всего вызовов",
+    "resources_used": "Использовано ресурсов",
+    "resource_calls": "{{count}} вызовов",
+    "currency_rub": "Р",
+    "topup_success": "Баланс пополнен",
+    "upgrade_wip": "Функция смены тарифа в разработке",
+    "budget_wip": "Функция установки лимита в разработке",
+    "plan_FREE_description": "Бесплатный тариф для начала работы",
+    "plan_FREE_f1": "100 запросов в месяц",
+    "plan_FREE_f2": "Базовые агенты",
+    "plan_FREE_f3": "Community поддержка",
+    "plan_BASIC_description": "Для небольших проектов",
+    "plan_BASIC_f1": "10,000 запросов в месяц",
+    "plan_BASIC_f2": "Все типы агентов",
+    "plan_BASIC_f3": "Email поддержка",
+    "plan_BASIC_f4": "API доступ",
+    "plan_PREMIUM_description": "Для профессионалов",
+    "plan_PREMIUM_f1": "100,000 запросов в месяц",
+    "plan_PREMIUM_f2": "Приоритетная поддержка",
+    "plan_PREMIUM_f3": "Расширенная аналитика",
+    "plan_PREMIUM_f4": "Кастомизация",
+    "plan_ENTERPRISE_description": "Для крупных компаний",
+    "plan_ENTERPRISE_f1": "Неограниченные запросы",
+    "plan_ENTERPRISE_f2": "24/7 поддержка",
+    "plan_ENTERPRISE_f3": "SLA гарантии",
+    "plan_ENTERPRISE_f4": "Персональный менеджер"
   }
 }

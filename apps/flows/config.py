@@ -9,7 +9,7 @@ from pydantic import BaseModel, Field
 
 from core.config import BaseSettings
 from core.config.loader import load_merged_config
-from core.config.models import LLMConfig, S3Config
+from core.config.models import LLMConfig, PushConfig as CorePushConfig, S3Config
 
 
 class ExternalFlowConfig(BaseModel):
@@ -34,23 +34,17 @@ class ExternalFlowsConfig(BaseModel):
     )
 
 
-class FilesConfig(BaseModel):
-    """Конфигурация для хранения файлов"""
-
-    temp_dir: str = Field(default="tmp", description="Директория для временных файлов")
-
-
-class PushConfig(BaseModel):
-    """Конфигурация Web Push уведомлений"""
+class PushConfig(CorePushConfig):
+    """Push: VAPID и APNs; дефолты VAPID для локальной разработки flows."""
 
     enabled: bool = Field(default=True, description="Включить push уведомления")
     vapid_public_key: str = Field(
         default="BJBAqLwOEE7A7gIDCXW7vzmEwh23-ug6-1qpiuotzwROEDX_ZiVUk2BO3_eINDqXxBvxG2uRfukXVVBse167BAM",
-        description="VAPID публичный ключ (URL-safe Base64)"
+        description="VAPID публичный ключ (URL-safe Base64)",
     )
     vapid_private_key: str = Field(
         default="n6oh3YpjV9APhmtdZ-p18P4YGLtBRLATLbprkXWAldA",
-        description="VAPID приватный ключ (URL-safe Base64)"
+        description="VAPID приватный ключ (URL-safe Base64)",
     )
     vapid_email: str = Field(
         default="admin@platform.local",
@@ -94,9 +88,23 @@ class FlowSettings(BaseSettings):
     llm: LLMConfig = Field(default_factory=LLMConfig)
     s3: S3Config = Field(default_factory=S3Config)
     external_flows: ExternalFlowsConfig = Field(default_factory=ExternalFlowsConfig)
-    files: FilesConfig = Field(default_factory=FilesConfig)
     mock: MockConfig = Field(default_factory=MockConfig)
     push: PushConfig = Field(default_factory=PushConfig)
+
+    cors_allow_origins: List[str] = Field(
+        default_factory=list,
+        description=(
+            "Явные Origin для CORS (embed/A2A с fetch credentials или Authorization). "
+            "Прод: домены партнёрских сайтов. См. также cors_allow_origin_regex."
+        ),
+    )
+    cors_allow_origin_regex: Optional[str] = Field(
+        default=None,
+        description=(
+            "Regex для разрешённого Origin. Если None и server.debug — в apps/flows/main.py "
+            "подставляется dev-паттерн localhost и *.lvh.me."
+        ),
+    )
 
 
 _settings: Optional[FlowSettings] = None

@@ -8,6 +8,7 @@ import inspect
 from typing import Any, Dict, Optional, Tuple, TYPE_CHECKING
 
 from apps.flows.src.eval.compiler import PythonCompiler
+from apps.flows.src.eval.inline_tool_sanitize import strip_forbidden_platform_import_lines
 from apps.flows.src.eval.namespace import PythonNamespaceBuilder
 from apps.flows.src.runners.base import BaseCodeRunner
 from core.errors import SafeEvalError
@@ -28,6 +29,7 @@ class PythonCodeRunner(BaseCodeRunner):
         context: Optional[Any] = None,
         variables: Optional[Dict[str, Any]] = None,
         resources: Optional[Dict[str, Any]] = None,
+        base_tool_class: Optional[type] = None,
     ):
         self.context = context
         self.variables = variables or {}
@@ -36,6 +38,7 @@ class PythonCodeRunner(BaseCodeRunner):
             context=context,
             variables=self.variables,
             resources=self.resources,
+            base_tool_class=base_tool_class,
         )
         self.compiler = PythonCompiler(namespace_builder=self.namespace_builder)
     
@@ -56,8 +59,8 @@ class PythonCodeRunner(BaseCodeRunner):
         Returns:
             Результат выполнения
         """
+        code = strip_forbidden_platform_import_lines(code)
         func = self.compiler.compile(code, func_name, auto_find=True)
-        
         if inspect.iscoroutinefunction(func):
             return await func(state)
         return func(state)
@@ -72,8 +75,8 @@ class PythonCodeRunner(BaseCodeRunner):
         Выполняет код tool.
         
         Поддерживает два формата:
-        1. Функция: def execute(args, state) или async def execute(args, state)
-        2. Класс: class MyTool(BaseTool) с методом execute
+        1. Функция: def execute(args, state) или async def execute(args, state) (или последняя top-level функция)
+        2. Класс: class MyTool(BaseTool) с async run
         
         Args:
             code: Python код
@@ -86,7 +89,8 @@ class PythonCodeRunner(BaseCodeRunner):
         # Обновляем variables из state для доступа в коде
         if state is not None:
             self.namespace_builder.variables = dict(state.variables)
-        
+
+        code = strip_forbidden_platform_import_lines(code)
         target, is_class = self.compiler.compile_tool(code)
         
         if is_class:

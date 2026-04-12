@@ -6,6 +6,7 @@ from typing import Any
 
 from apps.rag_worker.tasks.indexing_tasks import delete_document_task, index_rag_document_s3_task
 from apps.rag_worker.tasks.maintenance_tasks import cleanup_namespace_task, list_documents_task
+from core.context import get_context
 from core.logging import get_logger
 from core.rag.rag_worker_tasks_port import RagWorkerTasksPort
 
@@ -43,9 +44,20 @@ class RagWorkerTasksAdapter(RagWorkerTasksPort):
         namespace_id: str,
         document_id: str,
     ) -> dict[str, Any]:
+        ctx = get_context()
+        if ctx is None or ctx.active_company is None or ctx.user is None:
+            raise ValueError(
+                "enqueue_delete_document: нужен контекст с active_company и user"
+            )
+        company_id = ctx.active_company.company_id
+        user_id = str(ctx.user.user_id).strip()
+        if not user_id:
+            raise ValueError("enqueue_delete_document: user_id в контексте пуст")
         task = await delete_document_task.kiq(
             namespace_id=namespace_id,
             document_id=document_id,
+            company_id=company_id,
+            user_id=user_id,
         )
         logger.info("RAG: задача удаления %s, task_id=%s", document_id, task.task_id)
         return {

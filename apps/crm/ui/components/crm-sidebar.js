@@ -1,12 +1,12 @@
 /**
- * CRM Sidebar - Навигация в стиле Apple Notes
- * Использует platform-sidebar с collapsed/mobile режимами
+ * CRM Sidebar — навигация; оболочка platform-service-sidebar.
  */
 import { html, css } from 'lit';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
 import { sidebarStyles, sidebarNavItemStyles } from '@platform/lib/styles/shared/sidebar.styles.js';
 import { CRMStore } from '../store/crm.store.js';
-import '@platform/lib/components/layout/platform-sidebar.js';
+import { readShellSidebarCollapsed } from '@platform/lib/utils/shell-sidebar-preference.js';
+import '@platform/lib/components/layout/platform-service-sidebar.js';
 import '@platform/lib/components/platform-user.js';
 import '@platform/lib/components/platform-icon.js';
 import '@platform/lib/components/platform-notification-manager.js';
@@ -22,11 +22,19 @@ export class CRMSidebar extends PlatformElement {
                 height: 100%;
             }
 
-            platform-sidebar {
+            platform-service-sidebar {
                 --sidebar-logo-text-weight: 700;
                 --sidebar-logo-text-gradient: var(--crm-main-gradient);
                 --sidebar-logo-text-clip: text;
                 --sidebar-logo-text-fill: transparent;
+            }
+
+            .crm-sidebar-header-slot {
+                display: block;
+                width: 100%;
+                min-width: 0;
+                max-width: 100%;
+                box-sizing: border-box;
             }
 
             .namespace-selector {
@@ -38,7 +46,11 @@ export class CRMSidebar extends PlatformElement {
                 background: var(--crm-surface-muted);
                 border: 1px solid var(--crm-stroke);
                 border-radius: var(--radius-lg);
+                width: 100%;
                 min-width: 0;
+                max-width: 100%;
+                box-sizing: border-box;
+                flex-shrink: 0;
             }
 
             .namespace-label {
@@ -62,6 +74,8 @@ export class CRMSidebar extends PlatformElement {
                 cursor: pointer;
                 outline: none;
                 padding: var(--space-1) var(--space-2);
+                overflow: hidden;
+                text-overflow: ellipsis;
             }
 
             .namespace-selector select option {
@@ -76,7 +90,7 @@ export class CRMSidebar extends PlatformElement {
                 width: 24px;
                 height: 24px;
                 border: none;
-                background: var(--crm-button-primary-bg);
+                background: var(--accent);
                 color: var(--text-inverse);
                 border-radius: var(--radius-md);
                 cursor: pointer;
@@ -85,7 +99,7 @@ export class CRMSidebar extends PlatformElement {
             }
 
             .namespace-add-btn:hover {
-                background: var(--crm-button-primary-hover);
+                background: var(--platform-btn-primary-hover);
                 transform: scale(1.05);
             }
 
@@ -191,32 +205,27 @@ export class CRMSidebar extends PlatformElement {
                 min-width: 0;
             }
 
-            /* Collapsed mode */
-            :host([collapsed]) .namespace-selector,
-            :host([collapsed]) .nav-label,
-            :host([collapsed]) .nav-count,
-            :host([collapsed]) .nav-title {
+            platform-service-sidebar[collapsed] .namespace-selector,
+            platform-service-sidebar[collapsed] .nav-label,
+            platform-service-sidebar[collapsed] .nav-count,
+            platform-service-sidebar[collapsed] .nav-title {
                 display: none;
             }
 
-            :host([collapsed]) .nav-item {
+            platform-service-sidebar[collapsed] .nav-item {
                 justify-content: center;
                 padding: var(--space-3);
             }
 
-            :host([collapsed]) .user-section-row {
+            platform-service-sidebar[collapsed] .user-section-row {
                 flex-direction: column;
                 align-items: center;
             }
 
-            :host([collapsed]) .user-section-row platform-user {
+            platform-service-sidebar[collapsed] .user-section-row platform-user {
                 flex: 0 0 auto;
                 width: 100%;
                 min-width: 0;
-            }
-
-            :host([collapsed]) platform-notification-manager {
-                display: none;
             }
 
             /* Light theme */
@@ -241,7 +250,7 @@ export class CRMSidebar extends PlatformElement {
 
     constructor() {
         super();
-        this.collapsed = false;
+        this.collapsed = readShellSidebarCollapsed();
         this.mobileOpen = false;
         this._currentView = 'notes';
         this._notesCount = 0;
@@ -273,24 +282,12 @@ export class CRMSidebar extends PlatformElement {
         this._unsubscribe?.();
     }
 
-    toggleCollapse() {
-        this.collapsed = !this.collapsed;
-        this.emit('collapse-change', { collapsed: this.collapsed });
-    }
-
-    toggleMobile() {
-        this.mobileOpen = !this.mobileOpen;
-        this.emit('mobile-change', { open: this.mobileOpen });
+    _shell() {
+        return this.renderRoot?.querySelector('platform-service-sidebar');
     }
 
     closeMobile() {
-        if (this.mobileOpen) {
-            this.mobileOpen = false;
-            this.emit('mobile-change', { open: false });
-            window.dispatchEvent(new CustomEvent('platform-sidebar-mobile-change', {
-                detail: { open: false },
-            }));
-        }
+        this._shell()?.closeMobile();
     }
 
     _navigate(view) {
@@ -327,19 +324,23 @@ export class CRMSidebar extends PlatformElement {
 
     render() {
         return html`
-            <platform-sidebar
+            <platform-service-sidebar
                 logo-src="/crm/ui/static/assets/icons/networkle_logo.svg"
                 logo-text="NetWorkle"
                 ?collapsed=${this.collapsed}
                 ?mobile-open=${this.mobileOpen}
-                @collapse-change=${(e) => this.collapsed = e.detail.collapsed}
-                @mobile-change=${(e) => this.mobileOpen = e.detail.open}
+                @collapse-change=${(e) => {
+                    this.collapsed = e.detail.collapsed;
+                }}
+                @mobile-change=${(e) => {
+                    this.mobileOpen = e.detail.open;
+                }}
             >
-                <div slot="header">
+                <div slot="header" class="crm-sidebar-header-slot">
                     <div class="namespace-selector" data-hide-collapsed>
-                        <span class="namespace-label">Пространство</span>
+                        <span class="namespace-label">${this.i18n.t('app_shell.sidebar.namespace')}</span>
                         <select @change=${this._onNamespaceChange}>
-                            <option value="">Все</option>
+                            <option value="">${this.i18n.t('filters.all')}</option>
                             ${this._namespaces.map(ns => html`
                                 <option
                                     value=${ns.name}
@@ -352,7 +353,7 @@ export class CRMSidebar extends PlatformElement {
                         <button
                             class="namespace-add-btn"
                             @click=${this._openNamespaceModal}
-                            title="Создать пространство"
+                            title=${this.i18n.t('app_shell.sidebar.create_space')}
                         >
                             <platform-icon name="plus" size="14"></platform-icon>
                         </button>
@@ -367,7 +368,7 @@ export class CRMSidebar extends PlatformElement {
                         <div class="nav-icon-wrapper notes">
                             <platform-icon name="list" size="18"></platform-icon>
                         </div>
-                        <span class="nav-label">Заметки</span>
+                        <span class="nav-label">${this.i18n.t('nav.notes')}</span>
                         ${this._notesCount > 0 ? html`
                             <span class="nav-count">${this._notesCount}</span>
                         ` : ''}
@@ -379,7 +380,7 @@ export class CRMSidebar extends PlatformElement {
                         <div class="nav-icon-wrapper entities">
                             <platform-icon name="database" size="18"></platform-icon>
                         </div>
-                        <span class="nav-label">Сущности</span>
+                        <span class="nav-label">${this.i18n.t('nav.entities')}</span>
                     </button>
                     <button
                         class="nav-item ${this._currentView === 'graph' ? 'active' : ''}"
@@ -388,12 +389,12 @@ export class CRMSidebar extends PlatformElement {
                         <div class="nav-icon-wrapper graph">
                             <platform-icon name="share" size="18"></platform-icon>
                         </div>
-                        <span class="nav-label">Граф связей</span>
+                        <span class="nav-label">${this.i18n.t('pages.graph')}</span>
                     </button>
                 </div>
 
                 <div class="nav-section">
-                    <div class="nav-title">Организация</div>
+                    <div class="nav-title">${this.i18n.t('app_shell.sidebar.org_section')}</div>
                     <button
                         class="nav-item ${this._currentView === 'tasks' ? 'active' : ''}"
                         @click=${() => this._navigate('tasks')}
@@ -401,36 +402,37 @@ export class CRMSidebar extends PlatformElement {
                         <div class="nav-icon-wrapper tasks">
                             <platform-icon name="check" size="18"></platform-icon>
                         </div>
-                        <span class="nav-label">Задачи</span>
+                        <span class="nav-label">${this.i18n.t('nav.tasks')}</span>
                     </button>
                     <button
-                        class="nav-item ${this._currentView === 'calendar' ? 'active' : ''}"
-                        @click=${() => this._navigate('calendar')}
+                        class="nav-item ${this._currentView === 'namespace_imports' ? 'active' : ''}"
+                        @click=${() => this._navigate('namespace_imports')}
                     >
-                        <div class="nav-icon-wrapper calendar">
-                            <platform-icon name="calendar" size="18"></platform-icon>
+                        <div class="nav-icon-wrapper ai">
+                            <platform-icon name="ai" size="18"></platform-icon>
                         </div>
-                        <span class="nav-label">Календарь</span>
+                        <span class="nav-label">${this.i18n.t('nav.ai_analysis')}</span>
                     </button>
                     <button
-                        class="nav-item ${this._currentView === 'settings' ? 'active' : ''}"
+                        class="nav-item ${['settings', 'templates', 'spaces'].includes(this._currentView) ? 'active' : ''}"
                         @click=${() => this._navigate('settings')}
                     >
                         <div class="nav-icon-wrapper settings">
                             <platform-icon name="settings" size="18"></platform-icon>
                         </div>
-                        <span class="nav-label">Настройки</span>
+                        <span class="nav-label">${this.i18n.t('nav.settings')}</span>
                     </button>
                 </div>
 
                 <div slot="footer" class="user-section">
                     <div class="user-section-row">
-                        <platform-user block></platform-user>
-                        <platform-notification-manager></platform-notification-manager>
+                        <platform-user block>
+                            <platform-notification-manager slot="user-toolbar"></platform-notification-manager>
+                        </platform-user>
                     </div>
                     <platform-deployment-version base-url="/crm" footer></platform-deployment-version>
                 </div>
-            </platform-sidebar>
+            </platform-service-sidebar>
         `;
     }
 }

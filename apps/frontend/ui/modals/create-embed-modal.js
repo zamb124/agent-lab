@@ -57,7 +57,7 @@ export class CreateEmbedModal extends PlatformModal {
 
             .position-option.selected {
                 background: var(--accent-subtle);
-                border-color: rgba(16, 185, 129, 0.4);
+                border-color: rgba(153, 166, 249, 0.4);
             }
 
             .position-icon {
@@ -169,11 +169,35 @@ export class CreateEmbedModal extends PlatformModal {
         this._flowsLoading = true;
         this._position = 'bottom-right';
         this._theme = 'dark';
+        this._editConfig = null;
+    }
+
+    setEditConfig(config) {
+        this._editConfig = config;
+        this._name = config.name;
+        this._flowId = config.flow_id;
+        this._skillId = config.skill_id || 'default';
+        this._position = config.position || 'bottom-right';
+        this._theme = config.theme || 'dark';
+        this.requestUpdate();
+    }
+
+    get _isEditMode() {
+        return this._editConfig !== null;
     }
 
     async connectedCallback() {
         super.connectedCallback();
+        this._i18nUnsub = this.i18n.subscribe(() => this.requestUpdate());
         await this._loadFlows();
+    }
+
+    disconnectedCallback() {
+        if (this._i18nUnsub) {
+            this._i18nUnsub();
+            this._i18nUnsub = null;
+        }
+        super.disconnectedCallback();
     }
 
     async _loadFlows() {
@@ -233,19 +257,20 @@ export class CreateEmbedModal extends PlatformModal {
     }
 
     async _handleCreate() {
+        const td = (k, p) => this.i18n.t(k, p ?? {});
         if (!this._name.trim()) {
-            this.error('Введите название виджета');
+            this.error(td('embed_create_modal.err_name'));
             return;
         }
 
         if (!this._flowId.trim()) {
-            this.error('Выберите flow');
+            this.error(td('embed_create_modal.err_flow'));
             return;
         }
 
         const flow = this._selectedFlow();
         if (!flow) {
-            this.error('Выберите корректный flow');
+            this.error(td('embed_create_modal.err_flow_invalid'));
             return;
         }
 
@@ -257,30 +282,34 @@ export class CreateEmbedModal extends PlatformModal {
         this._loading = true;
         this.requestUpdate();
 
-        try {
-            await this.services.get('embed').create({
-                name: this._name.trim(),
-                flow_id: this._flowId.trim(),
-                skill_id: skillId,
-                position: this._position,
-                theme: this._theme,
-                status: 'active',
-            });
+        const payload = {
+            name: this._name.trim(),
+            flow_id: this._flowId.trim(),
+            skill_id: skillId,
+            position: this._position,
+            theme: this._theme,
+            status: 'active',
+        };
 
-            FrontendStore.setEmbedLoading(true);
-            const configs = await this.services.get('embed').list();
-            FrontendStore.setEmbedConfigs(configs);
+        const embedService = this.services.get('embed');
 
-            this.success('Виджет успешно создан');
-            this._handleClose();
-            this.dispatchEvent(new CustomEvent('created'));
-        } catch (e) {
-            const msg = e instanceof Error ? e.message : String(e);
-            this.error(msg);
-        } finally {
-            this._loading = false;
-            this.requestUpdate();
+        if (this._isEditMode) {
+            await embedService.update(this._editConfig.embed_id, payload);
+        } else {
+            await embedService.create(payload);
         }
+
+        FrontendStore.setEmbedLoading(true);
+        const page = await embedService.listConfigs();
+        FrontendStore.setEmbedConfigs(page.items);
+
+        const toastKey = this._isEditMode ? 'embed_create_modal.toast_updated' : 'embed_create_modal.toast_created';
+        this.success(td(toastKey));
+        this._handleClose();
+        this.dispatchEvent(new CustomEvent(this._isEditMode ? 'updated' : 'created'));
+
+        this._loading = false;
+        this.requestUpdate();
     }
 
     close() {
@@ -294,12 +323,14 @@ export class CreateEmbedModal extends PlatformModal {
     }
 
     renderHeader() {
-        return 'Создать виджет';
+        const key = this._isEditMode ? 'embed_create_modal.header_edit' : 'embed_create_modal.header';
+        return this.i18n.t(key, {});
     }
 
     renderBody() {
+        const td = (k, p) => this.i18n.t(k, p ?? {});
         if (this._flowsLoading) {
-            return html`<div class="loading-hint">Загрузка списка flows...</div>`;
+            return html`<div class="loading-hint">${td('embed_create_modal.loading_flows')}</div>`;
         }
 
         const skillEntries = this._skillChoices();
@@ -307,41 +338,41 @@ export class CreateEmbedModal extends PlatformModal {
 
         return html`
             <div class="form-group">
-                <label class="form-label">Название виджета</label>
+                <label class="form-label">${td('embed_create_modal.label_name')}</label>
                 <input
                     class="form-input"
                     type="text"
-                    placeholder="Чат-поддержка"
+                    placeholder=${td('embed_create_modal.placeholder_name')}
                     .value=${this._name}
                     @input=${(e) => { this._name = e.target.value; this.requestUpdate(); }}
                     ?disabled=${this._loading}
                 />
-                <div class="form-hint">Краткое описание виджета</div>
+                <div class="form-hint">${td('embed_create_modal.name_hint')}</div>
             </div>
 
             <div class="flow-skill-row ${showSkill ? 'flow-skill-row--split' : ''}">
                 <div class="form-group">
-                    <label class="form-label">Flow (агент)</label>
+                    <label class="form-label">${td('embed_create_modal.label_flow')}</label>
                     <select
                         class="form-select"
                         .value=${this._flowId}
                         @change=${(e) => this._onFlowChange(e)}
                         ?disabled=${this._loading}
                     >
-                        <option value="">Выберите flow</option>
+                        <option value="">${td('embed_create_modal.flow_placeholder')}</option>
                         ${this._flowsList().map(
                             (f) => html`
                                 <option value=${f.flow_id}>${f.name} (${f.flow_id})</option>
                             `,
                         )}
                     </select>
-                    <div class="form-hint">Список из сервиса flows для текущей компании</div>
+                    <div class="form-hint">${td('embed_create_modal.flow_hint')}</div>
                 </div>
 
                 ${showSkill
                     ? html`
                           <div class="form-group">
-                              <label class="form-label">Skill</label>
+                              <label class="form-label">${td('embed_create_modal.label_skill')}</label>
                               <select
                                   class="form-select"
                                   .value=${this._skillId}
@@ -356,42 +387,55 @@ export class CreateEmbedModal extends PlatformModal {
                                       `,
                                   )}
                               </select>
-                              <div class="form-hint">Точка входа внутри flow</div>
+                              <div class="form-hint">${td('embed_create_modal.skill_hint')}</div>
                           </div>
                       `
                     : this._flowId
                       ? html`
                             <div class="form-group flows-hint">
-                                Skill: default (внешний flow или нет skills в конфиге).
+                                ${td('embed_create_modal.skill_default_hint')}
                             </div>
                         `
                       : html``}
             </div>
 
             <div class="form-group">
-                <label class="form-label">Позиция на странице</label>
+                <label class="form-label">${td('embed_create_modal.position_label')}</label>
                 <div class="position-options">
-                    ${this._renderPositionOption('bottom-right', '↘', 'Справа внизу')}
-                    ${this._renderPositionOption('bottom-left', '↙', 'Слева внизу')}
-                    ${this._renderPositionOption('center', '◎', 'По центру')}
-                    ${this._renderPositionOption('fullscreen', '⛶', 'На весь экран')}
+                    ${this._renderPositionOption('bottom-right', '↘', td('embed_create_modal.pos_br'))}
+                    ${this._renderPositionOption('bottom-left', '↙', td('embed_create_modal.pos_bl'))}
+                    ${this._renderPositionOption('center', '◎', td('embed_create_modal.pos_center'))}
+                    ${this._renderPositionOption('fullscreen', '⛶', td('embed_create_modal.pos_full'))}
                 </div>
             </div>
 
             <div class="form-group">
                 <div class="theme-label-row">
-                    <span class="form-label">Тема оформления</span>
-                    <div class="theme-chips" role="group" aria-label="Тема оформления виджета">
-                        ${this._renderThemeChip('light', 'sun', 'Светлая')}
-                        ${this._renderThemeChip('dark', 'moon', 'Тёмная')}
-                        ${this._renderThemeChip('auto', 'theme-auto', 'Как в системе')}
+                    <span class="form-label">${td('embed_create_modal.theme_label')}</span>
+                    <div class="theme-chips" role="group" aria-label=${td('embed_create_modal.theme_group_aria')}>
+                        ${this._renderThemeChip('light', 'sun', td('embed_create_modal.theme_light'))}
+                        ${this._renderThemeChip('dark', 'moon', td('embed_create_modal.theme_dark'))}
+                        ${this._renderThemeChip('auto', 'theme-auto', td('embed_create_modal.theme_auto'))}
                     </div>
                 </div>
             </div>
         `;
     }
 
+    renderSaveHeaderButton() {
+        const td = (k, p) => this.i18n.t(k, p ?? {});
+        const loadingKey = this._isEditMode ? 'embed_create_modal.saving' : 'embed_create_modal.creating';
+        const submitKey = this._isEditMode ? 'embed_create_modal.save' : 'embed_create_modal.submit';
+        const title = this._loading ? td(loadingKey) : td(submitKey);
+        return this._renderHeaderSaveIcon({
+            onClick: () => this._handleCreate(),
+            disabled: this._loading || this._flowsLoading,
+            title,
+        });
+    }
+
     renderFooter() {
+        const td = (k, p) => this.i18n.t(k, p ?? {});
         return html`
             <div class="actions-row">
                 <button
@@ -399,14 +443,7 @@ export class CreateEmbedModal extends PlatformModal {
                     @click=${this._handleClose}
                     ?disabled=${this._loading}
                 >
-                    Отмена
-                </button>
-                <button
-                    class="btn btn-primary"
-                    @click=${this._handleCreate}
-                    ?disabled=${this._loading || this._flowsLoading}
-                >
-                    ${this._loading ? 'Создание...' : 'Создать виджет'}
+                    ${td('embed_create_modal.cancel')}
                 </button>
             </div>
         `;

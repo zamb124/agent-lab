@@ -42,9 +42,13 @@ class CodeResourceProvider(BaseResourceProvider):
             raise ValueError(f"Code resource only supports Python, got: {language}")
         
         # Компилируем код
+        from apps.flows.src.container import get_container
         from apps.flows.src.eval.namespace import PythonNamespaceBuilder
-        
-        namespace_builder = PythonNamespaceBuilder(variables=variables)
+
+        namespace_builder = PythonNamespaceBuilder(
+            variables=variables,
+            base_tool_class=get_container().base_tool_class,
+        )
         namespace = namespace_builder.build()
         
         try:

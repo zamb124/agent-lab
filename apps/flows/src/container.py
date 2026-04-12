@@ -51,11 +51,6 @@ class FlowContainer(BaseContainer):
         return client
 
     @lazy
-    def variable_repository(self):
-        from core.db.repositories import VariableRepository
-        return VariableRepository(storage=self.shared_storage)
-
-    @lazy
     def evaluation_repository(self):
         from apps.flows.src.db import EvaluationRepository
         return EvaluationRepository(storage=self.storage)
@@ -78,6 +73,16 @@ class FlowContainer(BaseContainer):
         return ResourceRepository(storage=self.storage)
 
     @lazy
+    def operator_repository(self):
+        from apps.flows.src.db.operator_repository import OperatorRepository
+        return OperatorRepository(storage=self.storage)
+
+    @lazy
+    def operator_handoff_service(self):
+        from apps.flows.src.services.operator_handoff_service import OperatorHandoffService
+        return OperatorHandoffService(repository=self.operator_repository)
+
+    @lazy
     def resource_resolver(self):
         from apps.flows.src.resources import ResourceResolver
         return ResourceResolver(
@@ -94,7 +99,7 @@ class FlowContainer(BaseContainer):
 
     @lazy
     def evaluation_service(self):
-        from apps.flows.src.evaluation import EvaluationService
+        from apps.flows.src.evaluation.service import EvaluationService
         return EvaluationService(evaluation_repository=self.evaluation_repository)
 
     # push сервис перенесен в core/push/service.py и инициализируется в factory.py
@@ -164,6 +169,12 @@ class FlowContainer(BaseContainer):
         from apps.flows.src.tools.base import BaseTool
         return BaseTool
 
+    @lazy
+    def python_code_runner(self):
+        """Stateless PythonCodeRunner для валидации кода."""
+        from apps.flows.src.runners.python import PythonCodeRunner
+        return PythonCodeRunner()
+
     def get_code_runner(self, language: str = "python", resources: dict = None):
         """Возвращает runner для указанного языка."""
         from core.context import get_context
@@ -171,7 +182,11 @@ class FlowContainer(BaseContainer):
         
         if language == "python":
             from apps.flows.src.runners.python import PythonCodeRunner
-            return PythonCodeRunner(context=context, resources=resources)
+            return PythonCodeRunner(
+                context=context,
+                resources=resources,
+                base_tool_class=self.base_tool_class,
+            )
         elif language == "javascript":
             from apps.flows.src.runners.javascript import JavaScriptCodeRunner
             return JavaScriptCodeRunner()

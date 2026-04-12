@@ -10,7 +10,7 @@ from typing import Tuple, Optional
 
 from core.config.models import AuthProviderConfig
 from core.models.identity_models import AuthProvider, ProviderUserInfo
-from core.http import get_httpx_client
+from core.http import request_public_oauth
 
 logger = logging.getLogger(__name__)
 
@@ -62,12 +62,15 @@ class BaseAuthProvider(ABC):
         pass
 
     @abstractmethod
-    async def get_user_info(self, access_token: str) -> ProviderUserInfo:
+    async def get_user_info(
+        self, access_token: str, first_login_user_json: Optional[str] = None
+    ) -> ProviderUserInfo:
         """
         Получает информацию о пользователе по токену доступа.
 
         Args:
-            access_token: Токен доступа
+            access_token: Токен доступа (у Apple — id_token)
+            first_login_user_json: Apple: JSON из параметра user при первой авторизации
 
         Returns:
             Информация о пользователе
@@ -96,10 +99,9 @@ class BaseAuthProvider(ABC):
             "client_secret": self.client_secret,
         }
 
-        async with get_httpx_client(timeout=30.0) as client:
-            response = await client.post(self.token_url, data=data)
-            response.raise_for_status()
-            token_data = response.json()
+        response = await request_public_oauth("POST", self.token_url, timeout=30.0, data=data)
+        response.raise_for_status()
+        token_data = response.json()
 
         access_token = token_data.get("access_token")
         new_refresh_token = token_data.get("refresh_token", refresh_token)

@@ -18,20 +18,27 @@ from __future__ import annotations
 import asyncio
 import operator
 import re
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, Dict, List, Optional, Set, Tuple, Union
 
 from opentelemetry import trace
 
 from apps.flows.src.runtime.exceptions import FlowInterrupt, BreakpointInterrupt, NodeCallLimitError
 from apps.flows.src.container import get_container
-from core.state import ExecutionState, InterruptData
+from apps.flows.src.state.cancellation import check_cancellation
+from apps.flows.src.state.interrupt_manager import InterruptManager
+from core.state import ExecutionState
+from core.state.interrupt import OperatorTaskInterrupt
 from apps.flows.src.streaming import Emitter
 from apps.flows.src.mapping import MappingResolver
 from core.logging import get_logger
 from core.tracing import get_tracer
 from core.tracing.context import TraceContext, get_current_trace_context
 from core.tracing.provider import is_tracing_enabled
-from core.errors import FlowInfiniteLoopError, NodeCallLimitError
+from core.errors import (
+    FlowInfiniteLoopError,
+    FlowPrematureCompletionError,
+    NodeCallLimitError,
+)
 
 from .nodes import BaseNode, create_node
 
@@ -87,28 +94,82 @@ class Flow:
                 self._edges_by_from[from_node] = []
             self._edges_by_from[from_node].append(edge)
 
+        self._join_required = self._build_join_required_predecessors()
+
     def _normalize_edges(self, edges: List[Any]) -> List[Dict[str, Any]]:
         """Нормализует edges в list of dicts."""
         result = []
         for edge in edges:
             if isinstance(edge, dict):
+                cj = edge.get("contributes_to_join")
+                contributes = True if cj is None else bool(cj)
                 result.append(
                     {
                         "from": edge.get("from"),
                         "to": edge.get("to"),
                         "condition": edge.get("condition"),
+                        "contributes_to_join": contributes,
                     }
                 )
             else:
-                # Объект Edge
+                contributes = bool(getattr(edge, "contributes_to_join", True))
                 result.append(
                     {
                         "from": edge.from_node,
                         "to": edge.to_node,
                         "condition": edge.condition,
+                        "contributes_to_join": contributes,
                     }
                 )
         return result
+
+    def _build_join_required_predecessors(self) -> Dict[str, frozenset[str]]:
+        """Для incoming_policy=all: множество предков по рёбрам с contributes_to_join=True."""
+        acc: Dict[str, Set[str]] = {}
+        for edge in self.edges:
+            to_n = edge.get("to")
+            from_n = edge.get("from")
+            if not to_n or not from_n:
+                continue
+            if not edge.get("contributes_to_join", True):
+                continue
+            acc.setdefault(to_n, set()).add(from_n)
+        return {k: frozenset(v) for k, v in acc.items()}
+
+    @staticmethod
+    def _edge_contributes_to_join(edge: Dict[str, Any]) -> bool:
+        return bool(edge.get("contributes_to_join", True))
+
+    def _incoming_policy(self, node_id: str) -> str:
+        node = self.nodes.get(node_id)
+        if not node:
+            return "any"
+        policy = node.config.get("incoming_policy", "any")
+        if policy not in ("any", "all"):
+            raise ValueError(
+                f"Node '{node_id}': incoming_policy must be 'any' or 'all', got {policy!r}"
+            )
+        return policy
+
+    def _iter_active_transitions(
+        self, from_node: str, state: ExecutionState
+    ) -> List[Tuple[str, bool]]:
+        """Исходящие переходы, для которых условие ребра выполнено: (to_node, contributes_to_join)."""
+        edges = self._edges_by_from.get(from_node, [])
+        out: List[Tuple[str, bool]] = []
+        for edge in edges:
+            to_node = edge.get("to")
+            if to_node is None:
+                continue
+            condition = edge.get("condition")
+            if condition is None:
+                ok = True
+            elif self._evaluate_condition(condition, state):
+                ok = True
+            else:
+                continue
+            out.append((to_node, self._edge_contributes_to_join(edge)))
+        return out
 
     async def run(self, state: ExecutionState) -> ExecutionState:
         """
@@ -127,6 +188,11 @@ class Flow:
         if state.interrupt and state.content:
             # Resume: есть interrupt и новый контент (ответ пользователя)
             logger.info(f"Flow {self.flow_id}: resume with answer='{state.content[:50]}...'")
+            ir = state.interrupt
+            if ir.correlation_id is not None and isinstance(
+                ir.body, OperatorTaskInterrupt
+            ):
+                state.hitl_handoff_correlation_id = str(ir.correlation_id)
             state.interrupt = None
         elif not state.current_nodes:
             # Start: новый запуск
@@ -160,6 +226,8 @@ class Flow:
                         max_iterations=MAX_ITERATIONS
                     )
 
+                await check_cancellation()
+
                 # Валидация и подготовка нод
                 for node_id in current_nodes:
                     if node_id not in self.nodes:
@@ -178,23 +246,53 @@ class Flow:
                     logger.debug(f"Flow {self.flow_id}: executing node '{node_id}' (type={node_type})")
 
                 # Выполнение всех нод текущего уровня
-                async def _run(node_id: str) -> ExecutionState:
+                async def _run(node_id: str, run_state: ExecutionState) -> ExecutionState:
                     node_type = self.nodes[node_id].config.get("type", "function")
                     async with tracer.node_span(node_id, node_type, trace_ctx):
-                        return await self.nodes[node_id].run.kiq(state)
+                        await emitter.emit_node_start(node_id, node_type)
+                        try:
+                            result_state = await self.nodes[node_id].run.kiq(run_state)
+                        except (FlowInterrupt, BreakpointInterrupt):
+                            raise
+                        except Exception as exc:
+                            await emitter.emit_node_error(node_id, str(exc))
+                            raise
+                        preview = ""
+                        if result_state.response:
+                            preview = str(result_state.response)
+                        elif result_state.result is not None:
+                            preview = str(result_state.result)
+                        await emitter.emit_node_complete(node_id, preview)
+                        return result_state
 
                 try:
-                    tasks = [_run(node_id) for node_id in current_nodes]
+                    run_states: Dict[str, ExecutionState] = {}
+                    if len(current_nodes) > 1:
+                        for nid in current_nodes:
+                            run_states[nid] = ExecutionState.model_validate(
+                                state.model_dump(exclude_none=False)
+                            )
+                    else:
+                        for nid in current_nodes:
+                            run_states[nid] = state
+
+                    tasks = [
+                        _run(node_id, run_states[node_id])
+                        for node_id in current_nodes
+                    ]
                     results = await asyncio.gather(*tasks)
                     state = self._merge_results(state, results)
                 except FlowInterrupt as e:
                     node_id = current_nodes[0]  # interrupt от первой ноды
                     logger.info(f"Flow {self.flow_id}: interrupt at '{node_id}': {e.question}")
-                    state.interrupt = InterruptData(question=e.question)
+                    InterruptManager.apply_interrupt(
+                        state,
+                        e.body,
+                        e.tool_call,
+                        getattr(e, "correlation_id", None),
+                    )
                     state.current_nodes = current_nodes
                     return state
-                except Exception as e:
-                    raise
 
                 for node_id in current_nodes:
                     node = self.nodes[node_id]
@@ -207,13 +305,10 @@ class Flow:
                     state.current_nodes = current_nodes
                     return state
 
-                # Собираем все next_nodes от всех выполненных
-                next_nodes = set()
-                for node_id in current_nodes:
-                    for next_id in self._find_next_nodes(node_id, state):
-                        next_nodes.add(next_id)
+                next_nodes = self._collect_next_wave_targets(current_nodes, state)
 
                 if not next_nodes:
+                    self._raise_if_premature_completion(current_nodes, state)
                     logger.debug(f"Flow {self.flow_id}: completed")
                     state.current_nodes = []
                     return state
@@ -242,7 +337,7 @@ class Flow:
 
             # Остальные поля — из атрибутов result, чтобы сохранять типы (например List[PromptHistoryItem])
             for field in ExecutionState.model_fields:
-                if field in ("messages", "nested_states"):
+                if field in ("messages", "nested_states", "join_arrived_preds"):
                     continue
                 value = getattr(result, field)
                 if value is not None:
@@ -251,8 +346,116 @@ class Flow:
                     else:
                         setattr(merged, field, value)
 
+            extra = getattr(result, "__pydantic_extra__", None) or {}
+            for key, value in extra.items():
+                setattr(merged, key, value)
+
+        self._merge_join_arrived_preds(merged, results)
         return merged
 
+    def _merge_join_arrived_preds(
+        self, merged: ExecutionState, results: List[ExecutionState]
+    ) -> None:
+        acc: Dict[str, Set[str]] = {}
+        for result in results:
+            for target, preds in (result.join_arrived_preds or {}).items():
+                acc.setdefault(target, set()).update(preds)
+        merged.join_arrived_preds = {k: sorted(v) for k, v in acc.items()}
+
+    def _collect_next_wave_targets(
+        self, completed_ids: List[str], state: ExecutionState
+    ) -> Set[str]:
+        """
+        Следующая волна нод: incoming_policy=all ждёт всех предков
+        (рёбра с contributes_to_join); иначе — как раньше (первый пришедший).
+        """
+        pending: Dict[str, Set[str]] = {
+            t: set(preds) for t, preds in (state.join_arrived_preds or {}).items()
+        }
+        immediate: Set[str] = set()
+
+        for pred_id in completed_ids:
+            for target, contributes in self._iter_active_transitions(pred_id, state):
+                policy = self._incoming_policy(target)
+                if policy == "any":
+                    immediate.add(target)
+                    continue
+                if not contributes:
+                    immediate.add(target)
+                    continue
+                required = self._join_required.get(target, frozenset())
+                if not required:
+                    immediate.add(target)
+                    continue
+                arrived = pending.setdefault(target, set())
+                arrived.add(pred_id)
+                if required <= arrived:
+                    immediate.add(target)
+                    pending.pop(target, None)
+
+        state.join_arrived_preds = {k: sorted(v) for k, v in pending.items()}
+        return immediate
+
+    def _node_has_structural_successor(self, node_id: str) -> bool:
+        """Есть ли исходящее ребро к ноде (to не null); связи только в END (to null) не считаются."""
+        for edge in self._edges_by_from.get(node_id, []):
+            if edge.get("to") is not None:
+                return True
+        return False
+
+    def _all_structural_outgoing_edges_are_conditional(self, node_id: str) -> bool:
+        """Все переходы к нодам (to не null) с условием; иначе есть безусловный выход на ноду."""
+        structural: List[Dict[str, Any]] = [
+            e
+            for e in self._edges_by_from.get(node_id, [])
+            if e.get("to") is not None
+        ]
+        if not structural:
+            return False
+        return all(e.get("condition") is not None for e in structural)
+
+    def _raise_if_premature_completion(
+        self,
+        completed_ids: List[str],
+        state: ExecutionState,
+    ) -> None:
+        """
+        Нельзя тихо завершить flow, если остался незакрытый AND-join
+        или нода с несработавшими исходящими рёбрами к другим нодам.
+        """
+        pending = state.join_arrived_preds or {}
+        if pending:
+            details: List[Dict[str, Any]] = []
+            for target in sorted(pending.keys()):
+                arrived = set(pending.get(target) or [])
+                required = set(self._join_required.get(target, frozenset()))
+                details.append(
+                    {
+                        "target": target,
+                        "arrived": sorted(arrived),
+                        "required": sorted(required),
+                    }
+                )
+            raise FlowPrematureCompletionError(
+                self.flow_id,
+                "incomplete_and_join",
+                last_nodes=list(completed_ids),
+                extra={"pending_joins": details},
+            )
+
+        for node_id in completed_ids:
+            if not self._node_has_structural_successor(node_id):
+                continue
+            active = self._iter_active_transitions(node_id, state)
+            if not active:
+                if self._all_structural_outgoing_edges_are_conditional(node_id):
+                    continue
+                raise FlowPrematureCompletionError(
+                    self.flow_id,
+                    "no_active_outgoing_edge",
+                    last_nodes=list(completed_ids),
+                    extra={"stuck_at": node_id},
+                )
 
     async def _check_breakpoint(
         self,
@@ -322,7 +525,7 @@ class Flow:
         state.node_history[node_id]["calls"].append(
             {
                 "response": state.response,
-                "validation": getattr(state, "validation", None),
+                "validation": state.validation,
             }
         )
 
@@ -334,24 +537,13 @@ class Flow:
         Edge без condition - безусловный переход.
         Если несколько нод - параллельное выполнение.
         """
-        edges = self._edges_by_from.get(from_node, [])
-
-        if not edges:
-            return []
-
-        result = []
-        for edge in edges:
-            to_node = edge.get("to")
-            if to_node is None:
-                continue
-            
-            condition = edge.get("condition")
-            if condition is None:
-                result.append(to_node)
-            elif self._evaluate_condition(condition, state):
-                result.append(to_node)
-
-        return result
+        seen: Set[str] = set()
+        ordered: List[str] = []
+        for to_node, _ in self._iter_active_transitions(from_node, state):
+            if to_node not in seen:
+                seen.add(to_node)
+                ordered.append(to_node)
+        return ordered
 
     def _evaluate_condition(self, condition: Any, state: ExecutionState) -> bool:
         """
@@ -373,10 +565,12 @@ class Flow:
         
         if condition_type == "simple":
             return self._evaluate_simple_condition(condition, state)
-        elif condition_type == "python":
+        if condition_type == "python":
             return self._evaluate_python_condition(condition.get("code", ""), state)
-        
-        return True
+
+        raise ValueError(
+            f"Неизвестный type условия ребра: {condition_type!r}, ожидаются 'simple' или 'python'"
+        )
 
     def _evaluate_simple_condition(self, condition: Dict[str, Any], state: ExecutionState) -> bool:
         """Вычисляет простое условие: variable operator value."""
@@ -400,8 +594,11 @@ class Flow:
         
         try:
             return op(left, right)
-        except TypeError:
-            return False
+        except TypeError as e:
+            raise ValueError(
+                f"Условие ребра: несовместимые типы для variable={variable!r} "
+                f"op={op_str!r} left={left!r} right={right!r}"
+            ) from e
 
     def _evaluate_python_condition(self, code: str, state: ExecutionState) -> bool:
         """
@@ -412,32 +609,32 @@ class Flow:
         from core.errors import SafeEvalError
         
         if not code or "def check" not in code:
-            logger.warning(f"Invalid Python condition: missing check function")
-            return False
-        
+            raise ValueError(
+                "Python-условие ребра: требуется непустой код с функцией check(state)"
+            )
+
         state_dict = state.model_dump(exclude_none=False)
-        
+
         try:
             evaluator = SafeEval(variables=state.variables)
             check_fn = evaluator._compile(code, "check", auto_find=False)
             result = check_fn(state_dict)
             return bool(result)
         except SafeEvalError as e:
-            logger.error(f"Python condition SafeEval error: {e}")
-            return False
+            raise ValueError(f"Python-условие ребра: ошибка SafeEval: {e}") from e
         except Exception as e:
-            logger.error(f"Python condition execution error: {e}")
-            return False
+            raise ValueError(f"Python-условие ребра: ошибка выполнения check(state): {e}") from e
 
     def _evaluate_condition_string(self, condition: str, state: ExecutionState) -> bool:
         """Вычисляет условие в legacy строковом формате."""
+        # Двухсимвольные операторы раньше односимвольных: иначе "count <= 3" матчится как "count" > "= 3".
         patterns = [
             (r"(.+?)\s*==\s*(.+)", operator.eq),
             (r"(.+?)\s*!=\s*(.+)", operator.ne),
-            (r"(.+?)\s*>\s*(.+)", operator.gt),
-            (r"(.+?)\s*<\s*(.+)", operator.lt),
             (r"(.+?)\s*>=\s*(.+)", operator.ge),
             (r"(.+?)\s*<=\s*(.+)", operator.le),
+            (r"(.+?)\s*>\s*(.+)", operator.gt),
+            (r"(.+?)\s*<\s*(.+)", operator.lt),
         ]
 
         for pattern, op in patterns:
@@ -451,8 +648,11 @@ class Flow:
 
                 try:
                     return op(left, right)
-                except TypeError:
-                    return False
+                except TypeError as e:
+                    raise ValueError(
+                        f"Строковое условие ребра: несовместимые типы "
+                        f"left_path={left_path!r} right={right_value!r} left={left!r} right={right!r}"
+                    ) from e
 
         value = MappingResolver.get_nested_value(state, condition.strip())
         return bool(value)
@@ -477,15 +677,11 @@ class Flow:
         ):
             return value[1:-1]
 
-        # Number
-        try:
-            if "." in value:
-                return float(value)
+        if re.fullmatch(r"-?\d+", value):
             return int(value)
-        except ValueError:
-            pass
+        if re.fullmatch(r"-?\d+\.\d+", value):
+            return float(value)
 
-        # Как есть
         return value
 
     @classmethod

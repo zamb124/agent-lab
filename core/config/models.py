@@ -2,12 +2,28 @@
 Модели конфигурации для различных компонентов системы.
 """
 
+from __future__ import annotations
+
 from typing import Any, Dict, List, Literal, Optional
 
 from pydantic import AliasChoices, BaseModel, ConfigDict, Field, PrivateAttr, model_validator
 
 from core.config.openai_v1_base_url import normalize_openai_v1_base_url
 from core.rag_indexing_schema import IndexProfileConfig
+
+
+class DemoAuthConfig(BaseModel):
+    """
+    Демо-вход (логин + пароль) для App Review и тестовых сценариев.
+    Выключается через auth.demo.login_enabled: false в conf.json / conf.local.json.
+    """
+
+    login_enabled: bool = False
+    email: str = "demo@demo.ru"
+    company_id: str = "demo"
+    subdomain: str = "demo"
+    company_name: str = "Demo"
+    password: Optional[str] = None
 
 
 class AuthProviderConfig(BaseModel):
@@ -20,6 +36,9 @@ class AuthProviderConfig(BaseModel):
     userinfo_url: str = ""
     scope: str = "openid profile email"
     enabled: bool = True
+    apple_team_id: Optional[str] = None
+    apple_key_id: Optional[str] = None
+    apple_private_key: Optional[str] = None
 
 
 class AuthConfig(BaseModel):
@@ -31,6 +50,7 @@ class AuthConfig(BaseModel):
     jwt_secret_key: Optional[str] = None
     session_timeout: int = 3600
     providers: Dict[str, AuthProviderConfig] = Field(default_factory=dict)
+    demo: DemoAuthConfig = Field(default_factory=DemoAuthConfig)
 
 
 class DatabaseConfig(BaseModel):
@@ -48,6 +68,11 @@ class DatabaseConfig(BaseModel):
     crm_url: Optional[str] = None
     sync_url: Optional[str] = None
     rag_url: Optional[str] = None
+    office_url: Optional[str] = None
+    tracing_url: Optional[str] = Field(
+        default=None,
+        description="PostgreSQL platform_tracing (spans); отдельно от shared",
+    )
     redis_url: str = "redis://localhost:8099"
 
 
@@ -89,6 +114,19 @@ class ServerConfig(BaseModel):
     rag_service_url: Optional[str] = None
     sync_service_url: Optional[str] = None
     scheduler_service_url: Optional[str] = None
+    office_service_url: Optional[str] = None
+    platform_public_base_url: Optional[str] = Field(
+        default="https://humanitec.ru",
+        description="Публичный origin без завершающего слэша для deep link (календарь, Sync join).",
+    )
+    document_server_dev_upstream_url: Optional[str] = Field(
+        default=None,
+        description=(
+            "development/test: реальный HTTP origin Document Server для DevInterServiceProxy "
+            "(/web-apps, /common, /cache, /fonts, /sdkjs). Публичный origin в editor-config — "
+            "office.document_server_public_url (тот же host, что shell, например :8002)."
+        ),
+    )
 
     # Порты по умолчанию для каждого сервиса
     _default_ports: Dict[str, int] = {
@@ -98,6 +136,7 @@ class ServerConfig(BaseModel):
         "rag": 8004,
         "sync": 8005,
         "scheduler": 8006,
+        "office": 8008,
     }
 
     def get_service_url(self, service: Optional[str] = None) -> str:
@@ -105,7 +144,7 @@ class ServerConfig(BaseModel):
         Возвращает URL сервиса.
 
         Args:
-            service: Имя сервиса (flows, crm, frontend, rag). Если None - URL текущего сервиса.
+            service: Имя сервиса (flows, crm, office, …). Если None — URL текущего сервиса.
         """
         if service is None:
             return f"http://localhost:{self.port}"
@@ -242,11 +281,26 @@ class ProxyConfig(BaseModel):
             self._current_index = 0
 
 
+class PaymentProviderConfigEntry(BaseModel):
+    """Конфигурация одного платежного провайдера (для env-override через Pydantic)"""
+    model_config = ConfigDict(extra="allow")
+
+    provider_type: str = "yoomoney"
+    enabled: bool = True
+    account_number: Optional[str] = None
+    notification_secret: Optional[str] = None
+    quickpay_url: str = "https://yoomoney.ru/quickpay/confirm.xml"
+    client_id: Optional[str] = None
+    client_secret: Optional[str] = None
+
+
 class PaymentProvidersConfig(BaseModel):
     """Конфигурация платежных провайдеров"""
 
     default_provider: Optional[str] = None
-    providers: Dict[str, Any] = Field(
+    sync_enabled: bool = Field(default=False, description="Включена ли периодическая сверка транзакций")
+    sync_cron: str = Field(default="*/30 * * * *", description="Cron-расписание для сверки транзакций")
+    providers: Dict[str, PaymentProviderConfigEntry] = Field(
         default_factory=dict, description="Платежные провайдеры (yoomoney_main, yukassa_main, etc.)"
     )
 
@@ -516,6 +570,9 @@ class CalendarSyncConfig(BaseModel):
     max_integrations_per_tick: int = 1000
     max_parallel_integrations: int = 10
     notification_dedup_ttl_seconds: int = 86400
+    sync_meeting_reminder_enabled: bool = True
+    sync_meeting_reminder_cron: str = "*/1 * * * *"
+    sync_meeting_reminder_limit: int = 500
 
 
 class OpenAIProviderConfig(BaseModel):
@@ -587,6 +644,81 @@ class S3Config(BaseModel):
     buckets: Dict[str, S3BucketConfig] = Field(default_factory=dict)
 
 
+class SpeechToChatConfig(BaseModel):
+    """Серверный egress «речь в ленту»: сегменты LiveKit и опрос TaskIQ в sync worker."""
+
+    segment_seconds: int = Field(
+        default=60,
+        ge=1,
+        description="Длительность одного сегмента segmented egress (сек). Дольше — реже сообщения в ленту.",
+    )
+    speech_segment_discard_below_max_volume_db: float = Field(
+        default=-45.0,
+        description="Если volumedetect max_volume (dB) строго меньше порога, сегмент не публикуется в канал.",
+    )
+    speech_segment_trim_silence_threshold_db: float = Field(
+        default=-50.0,
+        description="Порог silenceremove (dB) при обрезке тишины с начала и конца сегмента.",
+    )
+    speech_segment_trim_min_silence_sec: float = Field(
+        default=0.35,
+        ge=0.05,
+        description="Минимальная длительность участка тишины (сек), чтобы silenceremove считал её границей.",
+    )
+    speech_segment_min_post_duration_ms: int = Field(
+        default=200,
+        ge=0,
+        description="После volumedetect/trim не публиковать сегмент короче (мс).",
+    )
+    poll_initial_delay_seconds: float = Field(default=4.0, ge=0)
+    poll_interval_seconds: float = Field(default=4.0, ge=0)
+    poll_lock_ttl_seconds: int = Field(
+        default=900,
+        ge=60,
+        description="TTL Redis single-flight ключа sync:stc_poll:{company}:{call_id}; внутри тика периодически продлевается.",
+    )
+    poll_lock_refresh_interval_seconds: float = Field(
+        default=60.0,
+        ge=5.0,
+        description="Интервал EXPIRE для того же ключа, пока тик держит lock.",
+    )
+    poll_lock_busy_retry_seconds: float = Field(
+        default=8.0,
+        ge=0.5,
+        description="Задержка перед следующим kiq, если lock занят другим воркером.",
+    )
+    max_segments_per_poll_per_track: int = Field(
+        default=1,
+        ge=1,
+        le=128,
+        description="Сколько новых сегментов (сообщений) максимум выложить за один тик опроса на один микрофонный трек.",
+    )
+    livekit_client_timeout_seconds: float = Field(
+        default=60.0,
+        ge=5.0,
+        description="Таймаут aiohttp для Twirp LiveKit в тике poll и при stop_speech_egresses.",
+    )
+    segment_http_download_timeout_seconds: float = Field(
+        default=120.0,
+        ge=10.0,
+        description="Таймаут httpx при скачивании байт сегмента по URL (не S3 SDK).",
+    )
+    s3_segment_list_page_size: int = Field(
+        default=128,
+        ge=1,
+        le=1000,
+        description="Размер страницы list_objects_v2 по префиксу сегментов в S3.",
+    )
+
+    @model_validator(mode="after")
+    def _poll_lock_refresh_before_ttl(self) -> SpeechToChatConfig:
+        if self.poll_lock_refresh_interval_seconds >= self.poll_lock_ttl_seconds:
+            raise ValueError(
+                "poll_lock_refresh_interval_seconds должен быть меньше poll_lock_ttl_seconds"
+            )
+        return self
+
+
 class CallsConfig(BaseModel):
     """Конфигурация WebRTC звонков: LiveKit SFU и coturn TURN.
 
@@ -603,15 +735,32 @@ class CallsConfig(BaseModel):
     turn_port: int = 3478
     turn_secret: str = ""
     turn_credential_ttl: int = 86400
+    speech_to_chat: SpeechToChatConfig = Field(default_factory=SpeechToChatConfig)
+    finalize_recording_egress_poll_interval_seconds: float = Field(
+        default=3.0,
+        ge=0.5,
+        description="Интервал asyncio.sleep между опросами list_egress при finalize записи звонка.",
+    )
+    finalize_recording_egress_wait_timeout_seconds: float = Field(
+        default=600.0,
+        ge=30.0,
+        description="Сколько секунд ждать появления location у composite egress при finalize записи (не STT).",
+    )
 
 
 class PushConfig(BaseModel):
-    """Конфигурация Web Push уведомлений"""
+    """Web Push (VAPID) и APNs. Для APNs пустые apns_team_id / apns_key_id / apns_private_key
+    дополняются из auth.providers.apple при том же .p8 (ключ в Apple должен иметь capability APNs)."""
 
     enabled: bool = False
     vapid_public_key: Optional[str] = None
     vapid_private_key: Optional[str] = None
     vapid_email: str = "admin@humanitec.ru"
+    apns_team_id: Optional[str] = None
+    apns_key_id: Optional[str] = None
+    apns_private_key: Optional[str] = None
+    apns_bundle_id: Optional[str] = None
+    apns_use_sandbox: bool = False
 
 
 class LegalConfig(BaseModel):
@@ -637,3 +786,126 @@ class LegalConfig(BaseModel):
     cloud_region: str = "EU/RU"
     analytics_tools: str = "Internal analytics"
     billing_provider: Optional[str] = None
+
+
+def default_billing_resource_base_prices() -> Dict[str, Dict[str, float]]:
+    """
+    Базовый каталог цен до merge с shared storage и пер-компанией.
+
+    Каждое значение — цена в условных рублях за одну единицу списания (что именно считается
+    единицей, задаёт правило settlement: токены LLM, один вызов livekit и т.д.).
+    Итоговая цена = значение × множитель тарифа компании (см. DEFAULT_TARIFF_PRICES).
+
+    Ключи верхнего уровня — категория первого сегмента resource_name (формат category:resource).
+    Внутри категории: имя ресурса или "*" для цены по умолчанию.
+
+    - llm: модели (трейсы llm.*, flows.llm_resource.*, flows.llm.*). "*" — типично руб/токен.
+    - embedding: RAG эмбеддинги (rag.embed.*).
+    - billing:rub — единица = 1 ₽; quantity из platform.billing.settlement_quantity_rub (OpenRouter USD×usd_to_rub_rate).
+    - livekit: room_create, egress_composite, egress_segmented — см. core/calls/livekit_client.py; "*" — прочие livekit:*.
+
+    Категория tool в биллинге не используется (тулы flows бесплатны в учёте).
+    Подробнее: conf.json → billing._docs_ru, configuration.mdc, billing.mdc.
+    """
+    return {
+        "llm": {"*": 0.0001},
+        "embedding": {"*": 0.00005},
+        "billing": {"rub": 1.0},
+        "livekit": {
+            "room_create": 0.01,
+            "egress_composite": 0.05,
+            "egress_segmented": 0.02,
+            "*": 0.0,
+        },
+    }
+
+
+class BillingSpanSettlementConfig(BaseModel):
+    """Фоновое списание по spans с platform.billing.pending_settlement (idle worker)."""
+
+    enabled: bool = Field(
+        default=False,
+        description="Включить тик settlement на idle worker (создание usage из spans).",
+    )
+    cron: str = Field(
+        default="*/15 * * * *",
+        description="Cron выражение расписания тика span settlement.",
+    )
+    lookback_minutes: int = Field(
+        default=360,
+        ge=1,
+        description="За сколько минут назад искать необработанные spans (окно после простоя воркера).",
+    )
+    batch_limit: int = Field(
+        default=500,
+        ge=1,
+        description="Максимум spans, обрабатываемых за один тик.",
+    )
+    fallback_user_id: str = Field(
+        default="",
+        description="user_id для UsageRecord, если в span нет user_id (пусто — span пропускается, ошибка в логе).",
+    )
+
+
+class BillingConfig(BaseModel):
+    """Тарификация: базовые цены из конфига + override через API system; settlement по трейсам."""
+
+    balance_enforcement_enabled: bool = Field(
+        default=True,
+        description="Pre-flight: блокировать старт операций с pending_settlement при balance <= 0.",
+    )
+    balance_enforcement_exempt_company_ids: List[str] = Field(
+        default_factory=lambda: ["system"],
+        description="company_id без проверки баланса (например system и демо для локальной разработки).",
+    )
+    resource_base_prices: Dict[str, Dict[str, float]] = Field(
+        default_factory=default_billing_resource_base_prices,
+        description="Дерево category → resource → цена в руб./единицу списания; merge с storage override.",
+    )
+    usd_to_rub_rate: float = Field(
+        default=85.0,
+        gt=0.0,
+        description="Курс: USD из platform.llm.provider_reported_cost × rate → platform.billing.settlement_quantity_rub (целые рубли).",
+    )
+    span_settlement: BillingSpanSettlementConfig = Field(
+        default_factory=BillingSpanSettlementConfig,
+        description="Параметры фоновой джобы преобразования spans в usage.",
+    )
+
+
+class YouTubeConfig(BaseModel):
+    """Конфигурация скачивания аудио с YouTube через yt-dlp."""
+
+    max_duration_seconds: int = Field(
+        default=7200,
+        ge=60,
+        description="Максимальная длительность видео для скачивания (сек).",
+    )
+    preferred_codec: str = Field(
+        default="mp3",
+        description="Кодек для извлечения аудио (mp3, aac, wav).",
+    )
+    preferred_quality: str = Field(
+        default="64",
+        description="Качество аудио (kbps).",
+    )
+    socket_timeout: int = Field(
+        default=30,
+        ge=5,
+        description="Таймаут сетевых операций yt-dlp (сек).",
+    )
+
+
+class MediaTranscriberConfig(BaseModel):
+    """Конфигурация единого медиа-пайплайна транскрипции."""
+
+    max_file_size_bytes: int = Field(
+        default=500 * 1024 * 1024,
+        ge=1024,
+        description="Максимальный размер файла для транскрипции (байт).",
+    )
+    default_language: Optional[str] = Field(
+        default=None,
+        description="Язык по умолчанию для STT (None — из STT конфигурации).",
+    )
+    youtube: YouTubeConfig = Field(default_factory=YouTubeConfig)

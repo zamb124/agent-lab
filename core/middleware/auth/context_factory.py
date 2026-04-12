@@ -4,8 +4,10 @@
 
 import logging
 from typing import Optional, List
-from fastapi import Request
 
+from fastapi import HTTPException, Request
+
+from core.context import clear_context, set_context
 from core.models.context_models import Context
 from core.models.identity_models import User, Company, UserStatus, AuthProvider
 from core.models.i18n_models import Language
@@ -49,7 +51,24 @@ class ContextFactory:
         
         # Если анонимный контекст, но пользователь есть - используем его
         if context_type == "anonymous" and not user:
-            return self._create_anonymous_context(request, company, language, trace_id)
+            return await self._create_anonymous_context(request, company, language, trace_id)
+
+        if context_type == "api" and user is None and token_data is not None:
+            active_cid = ""
+            if company is not None:
+                active_cid = company.company_id
+            elif token_data.company_id:
+                active_cid = token_data.company_id
+            raw_name = token_data.user_id
+            display_name = raw_name if len(raw_name) <= 200 else raw_name[:200]
+            user = User(
+                user_id=token_data.user_id,
+                name=display_name,
+                status=UserStatus.ACTIVE,
+                groups=["guest"],
+                companies={active_cid: ["guest"]} if active_cid else {},
+                active_company_id=active_cid,
+            )
         
         user_companies = await self._get_user_companies(user) if user else []
         
@@ -60,7 +79,12 @@ class ContextFactory:
         
         if platform:
             metadata["platform"] = platform
-        
+
+        active_namespace = await self._resolve_active_namespace(
+            request, company, user, user_companies, language, host, metadata, token_data,
+            auth_token, trace_id, platform, context_type,
+        )
+
         return Context(
             user=user,
             host=host,
@@ -68,6 +92,7 @@ class ContextFactory:
             channel=platform or context_type,
             active_company=company,
             user_companies=user_companies,
+            active_namespace=active_namespace,
             language=language,
             metadata=metadata,
             auth_token=auth_token,
@@ -75,7 +100,7 @@ class ContextFactory:
             container=self.container,
         )
     
-    def _create_anonymous_context(
+    async def _create_anonymous_context(
         self,
         request: Request,
         company: Optional[Company],
@@ -97,18 +122,87 @@ class ContextFactory:
             active_company_id=company_id,
         )
         
+        active_namespace = await self._resolve_active_namespace(
+            request,
+            company,
+            anonymous_user,
+            [company] if company else [],
+            language,
+            request.headers.get("host", ""),
+            {"anonymous": True},
+            None,
+            None,
+            trace_id,
+            None,
+            "anonymous",
+        )
+
         return Context(
             user=anonymous_user,
             host=request.headers.get("host", ""),
             channel="anonymous",
             active_company=company,
             user_companies=[company] if company else [],
+            active_namespace=active_namespace,
             language=language,
             metadata={"anonymous": True},
             trace_id=trace_id,
             container=self.container,
         )
-    
+
+    async def _resolve_active_namespace(
+        self,
+        request: Request,
+        company: Optional[Company],
+        user: Optional[User],
+        user_companies: List[Company],
+        language: Language,
+        host: str,
+        metadata: dict,
+        token_data: Optional[TokenData],
+        auth_token: Optional[str],
+        trace_id: Optional[str],
+        platform: Optional[str],
+        context_type: str,
+    ) -> str:
+        if not company or not user:
+            return "default"
+        raw = (request.headers.get("X-Platform-Namespace") or "").strip()
+        if not raw or raw == "default":
+            return "default"
+
+        preliminary = Context(
+            user=user,
+            host=host,
+            session_id=token_data.session_id if token_data else None,
+            channel=platform or context_type,
+            active_company=company,
+            user_companies=user_companies,
+            active_namespace="default",
+            language=language,
+            metadata=metadata,
+            auth_token=auth_token,
+            trace_id=trace_id,
+            container=self.container,
+        )
+        set_context(preliminary)
+        try:
+            ns = await self.container.namespace_repository.get(raw)
+        finally:
+            clear_context()
+
+        if ns is None:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Namespace «{raw}» не найден",
+            )
+        if ns.company_id != company.company_id:
+            raise HTTPException(
+                status_code=403,
+                detail="Namespace не принадлежит активной компании",
+            )
+        return ns.name
+
     async def _get_user_companies(self, user: User) -> List[Company]:
         """Получает все компании пользователя"""
         company_repo = self.container.company_repository
@@ -144,5 +238,5 @@ class ContextFactory:
                     if lang.value == browser_lang:
                         return lang
         
-        return Language.RU
+        return Language.EN
 

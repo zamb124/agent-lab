@@ -116,13 +116,13 @@ export class NamespaceList extends PlatformElement {
             const currentProvider = RagStore.state.providers.current;
             
             await ragApi.createNamespace(data.name, data.description, currentProvider);
-            this.success(`Namespace "${data.name}" создан`);
+            this.success(this.i18n.t('notifications.namespace_created_with_name', { name: data.name }));
             
             await RagStore.loadNamespaces(ragApi);
         } catch (error) {
             if (error.message !== 'cancelled') {
                 console.error('[NamespaceList] Failed to create namespace:', error);
-                this.error('Не удалось создать namespace');
+                this.error(this.i18n.t('errors.create_namespace'));
                 throw error;
             }
         } finally {
@@ -137,19 +137,19 @@ export class NamespaceList extends PlatformElement {
             return html`
                 <div class="loading">
                     <div class="loading-spinner"></div>
-                    <div class="loading-text">Loading namespaces...</div>
+                    <div class="loading-text">${this.i18n.t('namespace_list.loading')}</div>
                 </div>
             `;
         }
         
         return html`
             <page-header 
-                title="Namespaces" 
-                subtitle="Manage your document namespaces"
+                title=${this.i18n.t('namespace_list.header_title')} 
+                subtitle=${this.i18n.t('namespace_list.header_subtitle')}
             >
                 <button slot="actions" class="btn btn-primary" @click=${this._createNamespace}>
                     <platform-icon name="plus" size="18"></platform-icon>
-                    <span>Создать namespace</span>
+                    <span>${this.i18n.t('namespace_list.create_button')}</span>
                 </button>
             </page-header>
             
@@ -166,8 +166,8 @@ export class NamespaceList extends PlatformElement {
                     <div class="empty-icon">
                         <platform-icon name="folder" size="64"></platform-icon>
                     </div>
-                    <div class="empty-text">No namespaces found</div>
-                    <div class="empty-hint">Create your first namespace to get started</div>
+                    <div class="empty-text">${this.i18n.t('empty.namespaces')}</div>
+                    <div class="empty-hint">${this.i18n.t('empty.namespaces_description')}</div>
                 </div>
             `}
         `;

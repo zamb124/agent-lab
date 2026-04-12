@@ -3,17 +3,11 @@
  */
 import { html, css } from 'lit';
 import { PlatformModal } from '@platform/lib/components/glass-modal.js';
+import '@platform/lib/components/platform-icon.js';
 import { formStyles } from '@platform/lib/styles/shared/form.styles.js';
 import { buttonStyles } from '@platform/lib/styles/shared/button.styles.js';
 
 const ALL_ROLES = ['owner', 'admin', 'developer', 'viewer'];
-
-const ROLE_LABELS = {
-    owner: 'Владелец',
-    admin: 'Администратор',
-    developer: 'Разработчик',
-    viewer: 'Наблюдатель',
-};
 
 export class EditTeamMemberModal extends PlatformModal {
     static styles = [
@@ -52,7 +46,7 @@ export class EditTeamMemberModal extends PlatformModal {
                 flex-shrink: 0;
                 margin: 0;
                 cursor: pointer;
-                accent-color: var(--accent, #10b981);
+                accent-color: var(--accent);
             }
 
             .role-input:disabled {
@@ -86,6 +80,19 @@ export class EditTeamMemberModal extends PlatformModal {
         this._ownerUserId = null;
         this._loadingSettings = false;
         this._saving = false;
+    }
+
+    connectedCallback() {
+        super.connectedCallback();
+        this._i18nUnsub = this.i18n.subscribe(() => this.requestUpdate());
+    }
+
+    disconnectedCallback() {
+        if (this._i18nUnsub) {
+            this._i18nUnsub();
+            this._i18nUnsub = null;
+        }
+        super.disconnectedCallback();
     }
 
     /**
@@ -135,13 +142,13 @@ export class EditTeamMemberModal extends PlatformModal {
         }
         const isCompanyOwner = this._ownerUserId && this._member.user_id === this._ownerUserId;
         if (isCompanyOwner && role === 'owner' && !checked) {
-            this.error('Роль владельца нельзя снять с владельца компании');
+            this.error(this.i18n.t('team_modal.err_owner_role', {}));
             this.requestUpdate();
             return;
         }
         if (!checked) {
             if (this._selectedRoles.length <= 1 && this._selectedRoles.includes(role)) {
-                this.error('Нужна хотя бы одна роль');
+                this.error(this.i18n.t('team_modal.err_one_role', {}));
                 this.requestUpdate();
                 return;
             }
@@ -153,9 +160,10 @@ export class EditTeamMemberModal extends PlatformModal {
     }
 
     async _handleSave() {
+        const td = (k, p) => this.i18n.t(k, p ?? {});
         const roles = this._orderedRoles();
         if (roles.length === 0) {
-            this.error('Нужна хотя бы одна роль');
+            this.error(td('team_modal.err_one_role'));
             return;
         }
 
@@ -164,7 +172,7 @@ export class EditTeamMemberModal extends PlatformModal {
 
         try {
             await this.services.get('team').updateMemberRole(this._member.user_id, roles);
-            this.success('Роли обновлены');
+            this.success(td('team_modal.toast_saved'));
             this.dispatchEvent(new CustomEvent('saved', { bubbles: true, composed: true }));
             this._handleClose();
         } catch (e) {
@@ -187,18 +195,33 @@ export class EditTeamMemberModal extends PlatformModal {
 
     renderHeader() {
         const name = this._member?.name ?? '';
-        return `Участник: ${name}`;
+        return this.i18n.t('team_modal.header', { name });
     }
 
     renderBody() {
+        const td = (k) => this.i18n.t(k, {});
         const isCompanyOwner =
             this._ownerUserId && this._member && this._member.user_id === this._ownerUserId;
         return this._loadingSettings
-            ? html`<div class="loading-inline">Загрузка...</div>`
+            ? html`<div class="loading-inline">${td('team_modal.loading')}</div>`
             : this._renderRoles(isCompanyOwner);
     }
 
+    renderSaveHeaderButton() {
+        if (this._loadingSettings) {
+            return html``;
+        }
+        const td = (k) => this.i18n.t(k, {});
+        const title = this._saving ? td('team_modal.saving') : td('team_modal.save');
+        return this._renderHeaderSaveIcon({
+            onClick: () => this._handleSave(),
+            disabled: this._saving,
+            title,
+        });
+    }
+
     renderFooter() {
+        const td = (k) => this.i18n.t(k, {});
         return this._loadingSettings
             ? html``
             : html`
@@ -208,14 +231,7 @@ export class EditTeamMemberModal extends PlatformModal {
                         @click=${this._handleClose}
                         ?disabled=${this._saving}
                     >
-                        Отмена
-                    </button>
-                    <button
-                        class="btn btn-primary"
-                        @click=${this._handleSave}
-                        ?disabled=${this._saving}
-                    >
-                        ${this._saving ? 'Сохранение...' : 'Сохранить'}
+                        ${td('team_modal.cancel')}
                     </button>
                 </div>
             `;
@@ -229,12 +245,14 @@ export class EditTeamMemberModal extends PlatformModal {
     }
 
     _renderRoles(isCompanyOwner) {
+        const roleTitle = (r) => this.i18n.t(`team_roles.${r}`, {});
+        const td = (k) => this.i18n.t(k, {});
         return html`
             ${this._member?.user_id
                 ? html`<p class="member-meta">ID: ${this._member.user_id}</p>`
                 : ''}
             <div class="form-group">
-                <label class="form-label">Роли в компании</label>
+                <label class="form-label">${td('team_modal.roles_label')}</label>
                 <div class="roles-list">
                     ${ALL_ROLES.map((role) => {
                         const checked = this._selectedRoles.includes(role);
@@ -252,10 +270,10 @@ export class EditTeamMemberModal extends PlatformModal {
                                         this._onRoleCheckbox(role, e.target.checked)}
                                 />
                                 <div class="form-item-content">
-                                    <div class="form-item-title">${ROLE_LABELS[role]}</div>
+                                    <div class="form-item-title">${roleTitle(role)}</div>
                                     ${isCompanyOwner && role === 'owner'
                                         ? html`<div class="owner-hint">
-                                              Роль владельца нельзя снять с владельца компании
+                                              ${td('team_modal.owner_hint')}
                                           </div>`
                                         : ''}
                                 </div>

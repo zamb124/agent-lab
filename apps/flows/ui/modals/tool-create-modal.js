@@ -83,9 +83,13 @@ export class ToolCreateModal extends PlatformModal {
 
     constructor() {
         super();
-        this.title = 'Добавить Tool';
         this.size = 'sm';
         this.position = { x: 0, y: 0 };
+    }
+
+    connectedCallback() {
+        super.connectedCallback();
+        this.title = this.i18n.t('tool_create.title');
     }
 
     renderHeader() {
@@ -109,16 +113,16 @@ export class ToolCreateModal extends PlatformModal {
                     <div class="option-icon">
                         <platform-icon name="plus" size="28"></platform-icon>
                     </div>
-                    <span class="option-title">Новый tool</span>
-                    <span class="option-description">Создать inline tool с кодом</span>
+                    <span class="option-title">${this.i18n.t('tool_create.option_new_title')}</span>
+                    <span class="option-description">${this.i18n.t('tool_create.option_new_desc')}</span>
                 </div>
                 
                 <div class="option-card existing" @click=${this._onExistingTool}>
                     <div class="option-icon">
                         <platform-icon name="folder" size="28"></platform-icon>
                     </div>
-                    <span class="option-title">Существующий</span>
-                    <span class="option-description">Выбрать из библиотеки</span>
+                    <span class="option-title">${this.i18n.t('tool_create.option_existing_title')}</span>
+                    <span class="option-description">${this.i18n.t('tool_create.option_existing_desc')}</span>
                 </div>
             </div>
         `;
@@ -127,7 +131,7 @@ export class ToolCreateModal extends PlatformModal {
     renderFooter() {
         return html`
             <button type="button" class="btn btn-secondary" @click=${this.close}>
-                Отмена
+                ${this.i18n.t('editor.cancel')}
             </button>
         `;
     }

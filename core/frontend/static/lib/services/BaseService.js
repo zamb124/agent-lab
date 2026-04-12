@@ -8,9 +8,36 @@ export class BaseService {
         this.baseUrl = baseUrl;
     }
 
-    async get(path, params = {}) {
+    async get(path, params = {}, fetchOptions = {}) {
         const url = this._buildUrlWithParams(path, params);
-        return this._fetch('GET', url, null, {});
+        return this._fetch('GET', url, null, fetchOptions);
+    }
+
+    /**
+     * GET запрос к OffsetPage-эндпоинту. Валидирует форму ответа.
+     * @param {string} path
+     * @param {{ limit?: number, offset?: number, [key: string]: unknown }} params
+     * @returns {Promise<{ items: Array, total: number, limit: number, offset: number }>}
+     */
+    async list(path, { limit = 200, offset = 0, ...params } = {}) {
+        const page = await this.get(path, { limit, offset, ...params });
+        if (!page || typeof page !== 'object' || !Array.isArray(page.items)) {
+            throw new Error(
+                `Expected OffsetPage from ${path}, got: ${JSON.stringify(page).slice(0, 200)}`,
+            );
+        }
+        return page;
+    }
+
+    async getBlob(path, params = {}) {
+        const pathWithParams = this._buildUrlWithParams(path, params);
+        const url = `${this.baseUrl}${pathWithParams}`;
+        const response = await fetch(url, { method: 'GET', credentials: 'include' });
+        if (!response.ok) {
+            const errorData = await response.json().catch(() => null);
+            throw new Error(this._formatError(errorData, response.status));
+        }
+        return response.blob();
     }
 
     _buildUrlWithParams(path, params) {
@@ -26,20 +53,21 @@ export class BaseService {
 
     _formatError(errorData, status) {
         if (!errorData) return `HTTP ${status}`;
-        
-        // Pydantic validation errors (422) - detail is array
+
         if (Array.isArray(errorData.detail)) {
             const messages = errorData.detail.map(err => {
+                if (err.field && err.error) {
+                    return `${err.field}: ${err.error}`;
+                }
                 const field = err.loc?.slice(1).join('.') || 'field';
                 return `${field}: ${err.msg}`;
             });
             return messages.join('; ');
         }
-        
-        // String detail or message
+
         if (typeof errorData.detail === 'string') return errorData.detail;
         if (typeof errorData.message === 'string') return errorData.message;
-        
+
         return `HTTP ${status}`;
     }
 
@@ -59,17 +87,27 @@ export class BaseService {
         return this._fetch('DELETE', path, null, options);
     }
 
-    async postStream(url, data, onEvent) {
+    async postStream(url, data, onEvent, { signal } = {}) {
         const response = await fetch(url, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             credentials: 'include',
             body: JSON.stringify(data),
+            signal,
         });
 
         if (!response.ok) {
             const errorData = await response.json().catch(() => null);
             throw new Error(this._formatError(errorData, response.status));
+        }
+
+        const contentType = response.headers.get('content-type') || '';
+        if (!contentType.includes('text/event-stream')) {
+            const body = await response.json().catch(() => null);
+            if (body?.error) {
+                throw new Error(body.error.message || JSON.stringify(body.error));
+            }
+            throw new Error(`Unexpected response content-type: ${contentType}`);
         }
 
         const reader = response.body.getReader();
@@ -98,18 +136,23 @@ export class BaseService {
         }
     }
 
-    async _fetch(method, path, data, options) {
+    async _fetch(method, path, data, options = {}) {
         const url = `${this.baseUrl}${path}`;
         const isFormData = data instanceof FormData;
-        
+        const {
+            headers: optionHeaders = {},
+            notFoundReturns: _notFoundReturns,
+            ...fetchInitOverrides
+        } = options;
+
         const config = {
             method,
             headers: {
                 ...(isFormData ? {} : { 'Content-Type': 'application/json' }),
-                ...options.headers
+                ...optionHeaders,
             },
             credentials: 'include',
-            ...options
+            ...fetchInitOverrides,
         };
 
         if (data) {
@@ -117,8 +160,11 @@ export class BaseService {
         }
 
         const response = await fetch(url, config);
-        
+
         if (!response.ok) {
+            if (response.status === 404 && Object.prototype.hasOwnProperty.call(options, 'notFoundReturns')) {
+                return options.notFoundReturns;
+            }
             if (response.status === 401) {
                 window.dispatchEvent(new CustomEvent(AppEvents.AUTH_UNAUTHORIZED, { bubbles: true }));
             }
@@ -130,15 +176,18 @@ export class BaseService {
             return {};
         }
 
-        const contentType = response.headers.get('content-type');
+        const contentType = response.headers.get('content-type') || '';
         const raw = await response.text();
         if (!raw || raw.trim() === '') {
             return {};
         }
         const trimmed = raw.trim();
         const looksJson = trimmed.startsWith('{') || trimmed.startsWith('[');
-        if (contentType && contentType.includes('application/json')) {
+        if (contentType.includes('application/json')) {
             return JSON.parse(raw);
+        }
+        if (contentType.includes('text/markdown') || contentType.includes('text/plain')) {
+            return raw;
         }
         if (looksJson) {
             return JSON.parse(raw);

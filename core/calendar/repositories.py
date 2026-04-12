@@ -6,21 +6,17 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from sqlalchemy import and_, delete, or_, select
+from sqlalchemy import and_, delete, select
 from sqlalchemy.dialects.postgresql import insert
 
 from core.db.database import get_session_factory
-from core.db.models import CalendarEventRecord, CalendarIntegrationRecord
+from core.db.models import CalendarEventRecord
 from core.models import (
     CalendarAttendee,
     CalendarEvent,
     CalendarEventSource,
     CalendarEventStatus,
     CalendarExternalRef,
-    CalendarIntegration,
-    CalendarIntegrationCredentials,
-    CalendarIntegrationSettings,
-    CalendarProvider,
 )
 
 
@@ -53,19 +49,6 @@ def _event_from_record(record: CalendarEventRecord) -> CalendarEvent:
         metadata={str(key): str(value) for key, value in record.metadata_json.items()},
         created_by_user_id=record.created_by_user_id,
         updated_by_user_id=record.updated_by_user_id,
-        created_at=record.created_at,
-        updated_at=record.updated_at,
-    )
-
-
-def _integration_from_record(record: CalendarIntegrationRecord) -> CalendarIntegration:
-    return CalendarIntegration(
-        integration_id=record.integration_id,
-        company_id=record.company_id,
-        user_id=record.user_id,
-        provider=CalendarProvider(record.provider),
-        credentials=CalendarIntegrationCredentials.model_validate(record.credentials),
-        settings=CalendarIntegrationSettings.model_validate(record.settings),
         created_at=record.created_at,
         updated_at=record.updated_at,
     )
@@ -119,6 +102,7 @@ class CalendarEventSqlRepository:
             "updated_at": event.updated_at,
         }
         stmt = insert(CalendarEventRecord).values(**values)
+        metadata_col = CalendarEventRecord.__table__.c.metadata
         stmt = stmt.on_conflict_do_update(
             index_elements=["event_id"],
             set_={
@@ -141,7 +125,7 @@ class CalendarEventSqlRepository:
                 "series_id": stmt.excluded.series_id,
                 "deep_link": stmt.excluded.deep_link,
                 "external_refs": stmt.excluded.external_refs,
-                "metadata": stmt.excluded["metadata"],
+                metadata_col: stmt.excluded.metadata,
                 "created_by_user_id": stmt.excluded.created_by_user_id,
                 "updated_by_user_id": stmt.excluded.updated_by_user_id,
                 "created_at": stmt.excluded.created_at,
@@ -179,103 +163,35 @@ class CalendarEventSqlRepository:
             rows = list(result.scalars().all())
             return [_event_from_record(item) for item in rows]
 
-
-class CalendarIntegrationSqlRepository:
-    def __init__(self, db_url: str) -> None:
-        self._db_url = db_url
-
-    async def list_by_user(self, company_id: str, user_id: str) -> list[CalendarIntegration]:
-        session_factory = await get_session_factory(self._db_url)
-        async with session_factory() as session:
-            result = await session.execute(
-                select(CalendarIntegrationRecord)
-                .where(
-                    CalendarIntegrationRecord.company_id == company_id,
-                    CalendarIntegrationRecord.user_id == user_id,
-                )
-                .order_by(CalendarIntegrationRecord.created_at.asc())
-            )
-            rows = list(result.scalars().all())
-            return [_integration_from_record(item) for item in rows]
-
-    async def list_sync_enabled(
+    async def list_platform_sync_meeting_reminder_window(
         self,
         *,
+        window_start: datetime,
+        window_end: datetime,
         limit: int,
-    ) -> list[CalendarIntegration]:
+    ) -> list[CalendarEvent]:
+        """
+        События platform с активной Sync-встречей, start_at в [window_start, window_end),
+        без отправленного напоминания (metadata.sync_join_reminder_sent_at пуст).
+        Окно в UTC: типично [now+14m, now+16m) для напоминания за 15 минут.
+        """
         session_factory = await get_session_factory(self._db_url)
+        meta = CalendarEventRecord.metadata_json
         async with session_factory() as session:
-            sync_enabled_expr = CalendarIntegrationRecord.settings["sync_enabled"].astext
             result = await session.execute(
-                select(CalendarIntegrationRecord)
+                select(CalendarEventRecord)
                 .where(
-                    CalendarIntegrationRecord.provider.in_(
-                        [
-                            CalendarProvider.GOOGLE.value,
-                            CalendarProvider.YANDEX.value,
-                        ]
-                    ),
-                    or_(sync_enabled_expr == "true", sync_enabled_expr.is_(None)),
+                    CalendarEventRecord.source == CalendarEventSource.PLATFORM.value,
+                    CalendarEventRecord.start_at >= window_start,
+                    CalendarEventRecord.start_at < window_end,
+                    meta["sync_link_token"].astext.isnot(None),
+                    meta["sync_meeting"].astext == "1",
+                    meta["sync_join_reminder_sent_at"].astext.is_(None),
                 )
-                .order_by(CalendarIntegrationRecord.updated_at.asc())
+                .order_by(CalendarEventRecord.start_at.asc())
                 .limit(limit)
             )
             rows = list(result.scalars().all())
-            return [_integration_from_record(item) for item in rows]
+            return [_event_from_record(item) for item in rows]
 
-    async def get_by_user_provider(self, company_id: str, user_id: str, provider: CalendarProvider) -> CalendarIntegration | None:
-        session_factory = await get_session_factory(self._db_url)
-        async with session_factory() as session:
-            result = await session.execute(
-                select(CalendarIntegrationRecord).where(
-                    CalendarIntegrationRecord.company_id == company_id,
-                    CalendarIntegrationRecord.user_id == user_id,
-                    CalendarIntegrationRecord.provider == provider.value,
-                )
-            )
-            row = result.scalar_one_or_none()
-            if row is None:
-                return None
-            return _integration_from_record(row)
 
-    async def upsert(self, integration: CalendarIntegration) -> None:
-        session_factory = await get_session_factory(self._db_url)
-        values = {
-            "integration_id": integration.integration_id,
-            "company_id": integration.company_id,
-            "user_id": integration.user_id,
-            "provider": _enum_value(integration.provider),
-            "credentials": integration.credentials.model_dump(mode="json"),
-            "settings": integration.settings.model_dump(mode="json"),
-            "created_at": integration.created_at,
-            "updated_at": integration.updated_at,
-        }
-        stmt = insert(CalendarIntegrationRecord).values(**values)
-        stmt = stmt.on_conflict_do_update(
-            index_elements=["integration_id"],
-            set_={
-                "company_id": stmt.excluded.company_id,
-                "user_id": stmt.excluded.user_id,
-                "provider": stmt.excluded.provider,
-                "credentials": stmt.excluded.credentials,
-                "settings": stmt.excluded.settings,
-                "created_at": stmt.excluded.created_at,
-                "updated_at": stmt.excluded.updated_at,
-            },
-        )
-        async with session_factory() as session:
-            await session.execute(stmt)
-            await session.commit()
-
-    async def delete(self, integration_id: str, company_id: str, user_id: str) -> bool:
-        session_factory = await get_session_factory(self._db_url)
-        async with session_factory() as session:
-            result = await session.execute(
-                delete(CalendarIntegrationRecord).where(
-                    CalendarIntegrationRecord.integration_id == integration_id,
-                    CalendarIntegrationRecord.company_id == company_id,
-                    CalendarIntegrationRecord.user_id == user_id,
-                )
-            )
-            await session.commit()
-            return result.rowcount > 0

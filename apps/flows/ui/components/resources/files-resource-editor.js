@@ -25,7 +25,7 @@ export class FilesResourceEditor extends BaseResourceEditor {
 
         return html`
             <div class="form-group">
-                <label class="form-label">Bucket</label>
+                <label class="form-label">${this.i18n.t('resource_editor.files.label_bucket')}</label>
                 <input 
                     type="text" 
                     class="form-input"
@@ -33,11 +33,11 @@ export class FilesResourceEditor extends BaseResourceEditor {
                     @input=${(e) => this._onInputChange('bucket', e.target.value)}
                     placeholder="my-bucket"
                 />
-                <span class="form-hint">S3 bucket name</span>
+                <span class="form-hint">${this.i18n.t('resource_editor.files.hint_bucket')}</span>
             </div>
             
             <div class="form-group">
-                <label class="form-label">Prefix</label>
+                <label class="form-label">${this.i18n.t('resource_editor.files.label_prefix')}</label>
                 <input 
                     type="text" 
                     class="form-input"
@@ -45,11 +45,11 @@ export class FilesResourceEditor extends BaseResourceEditor {
                     @input=${(e) => this._onInputChange('prefix', e.target.value)}
                     placeholder="uploads/"
                 />
-                <span class="form-hint">Префикс пути (опционально)</span>
+                <span class="form-hint">${this.i18n.t('resource_editor.files.hint_prefix')}</span>
             </div>
             
             <div class="form-group">
-                <label class="form-label">Endpoint URL</label>
+                <label class="form-label">${this.i18n.t('resource_editor.files.label_endpoint')}</label>
                 <input 
                     type="text" 
                     class="form-input"
@@ -57,11 +57,11 @@ export class FilesResourceEditor extends BaseResourceEditor {
                     @input=${(e) => this._onInputChange('endpoint_url', e.target.value)}
                     placeholder="http://minio:9000"
                 />
-                <span class="form-hint">S3 endpoint URL (для MinIO)</span>
+                <span class="form-hint">${this.i18n.t('resource_editor.files.hint_endpoint')}</span>
             </div>
             
             <div class="form-group">
-                <label class="form-label">Region</label>
+                <label class="form-label">${this.i18n.t('resource_editor.files.label_region')}</label>
                 <input 
                     type="text" 
                     class="form-input"

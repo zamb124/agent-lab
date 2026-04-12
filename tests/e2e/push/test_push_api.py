@@ -162,6 +162,7 @@ class TestPushAPIEndpoints:
                 response = client.post(
                     "/frontend/api/push/subscribe",
                     json={
+                        "transport": "web_vapid",
                         "endpoint": device["endpoint"],
                         "keys": {"p256dh": "key", "auth": "auth"},
                         "platform": device["platform"]
@@ -193,9 +194,32 @@ class TestPushAPIValidation:
             response = client.post(
                 "/frontend/api/push/subscribe",
                 json={
+                    "transport": "web_vapid",
                     "endpoint": "https://fcm.googleapis.com/valid"
                 },
                 headers={"Authorization": f"Bearer {auth_token_system}"}
             )
             
             assert response.status_code == 422
+
+    @pytest.mark.e2e
+    def test_subscribe_ios_apns(self, frontend_service, auth_token_system):
+        """Регистрация нативного APNs-токена (endpoint apns:<hex>)."""
+        token = "a" * 64
+        endpoint = f"apns:{token}"
+        with httpx.Client(base_url=FRONTEND_URL, timeout=30.0) as client:
+            headers = {"Authorization": f"Bearer {auth_token_system}"}
+            response = client.post(
+                "/frontend/api/push/subscribe",
+                json={
+                    "transport": "ios_apns",
+                    "keys": {"device_token": token},
+                },
+                headers=headers,
+            )
+            assert response.status_code == 200, response.text
+            client.delete(
+                "/frontend/api/push/unsubscribe",
+                params={"endpoint": endpoint},
+                headers=headers,
+            )

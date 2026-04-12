@@ -22,6 +22,8 @@ class PreparedTaskParams:
         message: Optional[Message],
         metadata: Optional[Dict],
         user_id: Optional[str] = None,
+        is_takeover_user_reply: bool = False,
+        takeover_operator_task_id: Optional[str] = None,
     ):
         self.task_id = task_id
         self.context_id = context_id
@@ -33,4 +35,6 @@ class PreparedTaskParams:
         self.message = message
         self.metadata = metadata
         self.user_id = user_id or context_id
+        self.is_takeover_user_reply = is_takeover_user_reply
+        self.takeover_operator_task_id = takeover_operator_task_id
 

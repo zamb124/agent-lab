@@ -36,8 +36,8 @@ class TestLegacyStringConditions:
             "name": "Test",
             "entry": "start",
             "nodes": {
-                "start": {"type": "code", "code": "def run(state): state.route = 'order'; return state"},
-                "order": {"type": "code", "code": "def run(state): state.result = 'order_node'; return state"},
+                "start": {"type": "code", "code": "async def run(state): state.route = 'order'; return state"},
+                "order": {"type": "code", "code": "async def run(state): state.result = 'order_node'; return state"},
             },
             "edges": [
                 {"from": "start", "to": "order", "condition": "route == 'order'"}
@@ -57,8 +57,8 @@ class TestLegacyStringConditions:
             "name": "Test",
             "entry": "start",
             "nodes": {
-                "start": {"type": "code", "code": "def run(state): state.count = 5; return state"},
-                "five": {"type": "code", "code": "def run(state): state.result = 'five'; return state"},
+                "start": {"type": "code", "code": "async def run(state): state.count = 5; return state"},
+                "five": {"type": "code", "code": "async def run(state): state.result = 'five'; return state"},
             },
             "edges": [
                 {"from": "start", "to": "five", "condition": "count == 5"}
@@ -78,8 +78,8 @@ class TestLegacyStringConditions:
             "name": "Test",
             "entry": "start",
             "nodes": {
-                "start": {"type": "code", "code": "def run(state): state.status = 'ok'; return state"},
-                "proceed": {"type": "code", "code": "def run(state): state.result = 'proceeded'; return state"},
+                "start": {"type": "code", "code": "async def run(state): state.status = 'ok'; return state"},
+                "proceed": {"type": "code", "code": "async def run(state): state.result = 'proceeded'; return state"},
             },
             "edges": [
                 {"from": "start", "to": "proceed", "condition": "status != 'error'"}
@@ -99,8 +99,8 @@ class TestLegacyStringConditions:
             "name": "Test",
             "entry": "start",
             "nodes": {
-                "start": {"type": "code", "code": "def run(state): state.score = 85; return state"},
-                "pass": {"type": "code", "code": "def run(state): state.result = 'passed'; return state"},
+                "start": {"type": "code", "code": "async def run(state): state.score = 85; return state"},
+                "pass": {"type": "code", "code": "async def run(state): state.result = 'passed'; return state"},
             },
             "edges": [
                 {"from": "start", "to": "pass", "condition": "score > 80"}
@@ -120,8 +120,8 @@ class TestLegacyStringConditions:
             "name": "Test",
             "entry": "start",
             "nodes": {
-                "start": {"type": "code", "code": "def run(state): state.user = {'role': 'admin'}; return state"},
-                "admin": {"type": "code", "code": "def run(state): state.result = 'admin_access'; return state"},
+                "start": {"type": "code", "code": "async def run(state): state.user = {'role': 'admin'}; return state"},
+                "admin": {"type": "code", "code": "async def run(state): state.result = 'admin_access'; return state"},
             },
             "edges": [
                 {"from": "start", "to": "admin", "condition": "user.role == 'admin'"}
@@ -141,8 +141,8 @@ class TestLegacyStringConditions:
             "name": "Test",
             "entry": "start",
             "nodes": {
-                "start": {"type": "code", "code": "def run(state): state.route = 'other'; return state"},
-                "order": {"type": "code", "code": "def run(state): state.result = 'order_node'; return state"},
+                "start": {"type": "code", "code": "async def run(state): state.route = 'other'; return state"},
+                "order": {"type": "code", "code": "async def run(state): state.result = 'order_node'; return state"},
             },
             "edges": [
                 {"from": "start", "to": "order", "condition": "route == 'order'"}
@@ -167,8 +167,8 @@ class TestSimpleObjectConditions:
             "name": "Test",
             "entry": "start",
             "nodes": {
-                "start": {"type": "code", "code": "def run(state): state.route = 'complaint'; return state"},
-                "complaint": {"type": "code", "code": "def run(state): state.result = 'complaint_handler'; return state"},
+                "start": {"type": "code", "code": "async def run(state): state.route = 'complaint'; return state"},
+                "complaint": {"type": "code", "code": "async def run(state): state.result = 'complaint_handler'; return state"},
             },
             "edges": [
                 {
@@ -197,8 +197,8 @@ class TestSimpleObjectConditions:
             "name": "Test",
             "entry": "start",
             "nodes": {
-                "start": {"type": "code", "code": "def run(state): state.status = 'active'; return state"},
-                "proceed": {"type": "code", "code": "def run(state): state.result = 'ok'; return state"},
+                "start": {"type": "code", "code": "async def run(state): state.status = 'active'; return state"},
+                "proceed": {"type": "code", "code": "async def run(state): state.result = 'ok'; return state"},
             },
             "edges": [
                 {
@@ -227,8 +227,8 @@ class TestSimpleObjectConditions:
             "name": "Test",
             "entry": "start",
             "nodes": {
-                "start": {"type": "code", "code": "def run(state): state.priority = 10; return state"},
-                "high": {"type": "code", "code": "def run(state): state.result = 'high_priority'; return state"},
+                "start": {"type": "code", "code": "async def run(state): state.priority = 10; return state"},
+                "high": {"type": "code", "code": "async def run(state): state.result = 'high_priority'; return state"},
             },
             "edges": [
                 {
@@ -257,8 +257,8 @@ class TestSimpleObjectConditions:
             "name": "Test",
             "entry": "start",
             "nodes": {
-                "start": {"type": "code", "code": "def run(state): state.count = 2; return state"},
-                "few": {"type": "code", "code": "def run(state): state.result = 'few_items'; return state"},
+                "start": {"type": "code", "code": "async def run(state): state.count = 2; return state"},
+                "few": {"type": "code", "code": "async def run(state): state.result = 'few_items'; return state"},
             },
             "edges": [
                 {
@@ -291,8 +291,8 @@ class TestPythonConditions:
             "name": "Test",
             "entry": "start",
             "nodes": {
-                "start": {"type": "code", "code": "def run(state): state.category = 'urgent'; return state"},
-                "urgent": {"type": "code", "code": "def run(state): state.result = 'urgent_handler'; return state"},
+                "start": {"type": "code", "code": "async def run(state): state.category = 'urgent'; return state"},
+                "urgent": {"type": "code", "code": "async def run(state): state.result = 'urgent_handler'; return state"},
             },
             "edges": [
                 {
@@ -319,8 +319,8 @@ class TestPythonConditions:
             "name": "Test",
             "entry": "start",
             "nodes": {
-                "start": {"type": "code", "code": "def run(state): state.score = 85; state.verified = True; return state"},
-                "approved": {"type": "code", "code": "def run(state): state.result = 'approved'; return state"},
+                "start": {"type": "code", "code": "async def run(state): state.score = 85; state.verified = True; return state"},
+                "approved": {"type": "code", "code": "async def run(state): state.result = 'approved'; return state"},
             },
             "edges": [
                 {
@@ -351,8 +351,8 @@ class TestPythonConditions:
             "name": "Test",
             "entry": "start",
             "nodes": {
-                "start": {"type": "code", "code": "def run(state): state.tags = ['vip', 'premium']; return state"},
-                "vip": {"type": "code", "code": "def run(state): state.result = 'vip_treatment'; return state"},
+                "start": {"type": "code", "code": "async def run(state): state.tags = ['vip', 'premium']; return state"},
+                "vip": {"type": "code", "code": "async def run(state): state.result = 'vip_treatment'; return state"},
             },
             "edges": [
                 {
@@ -379,8 +379,8 @@ class TestPythonConditions:
             "name": "Test",
             "entry": "start",
             "nodes": {
-                "start": {"type": "code", "code": "def run(state): state.value = 10; return state"},
-                "target": {"type": "code", "code": "def run(state): state.result = 'reached'; return state"},
+                "start": {"type": "code", "code": "async def run(state): state.value = 10; return state"},
+                "target": {"type": "code", "code": "async def run(state): state.result = 'reached'; return state"},
             },
             "edges": [
                 {
@@ -401,62 +401,58 @@ class TestPythonConditions:
         assert not hasattr(result, 'result') or result.result is None
 
     @pytest.mark.asyncio
-    async def test_python_invalid_code_returns_false(self, app):
-        """Python условие с ошибкой - возвращает False, не падает."""
+    async def test_python_invalid_code_raises(self, app):
+        """Python условие с ошибкой выполнения check — ValueError."""
         agent = await Flow.from_config({
             "id": "test",
             "name": "Test",
             "entry": "start",
             "nodes": {
-                "start": {"type": "code", "code": "def run(state): return state"},
-                "target": {"type": "code", "code": "def run(state): state.result = 'reached'; return state"},
+                "start": {"type": "code", "code": "async def run(state): return state"},
+                "target": {"type": "code", "code": "async def run(state): state.result = 'reached'; return state"},
             },
             "edges": [
                 {
-                    "from": "start", 
-                    "to": "target", 
+                    "from": "start",
+                    "to": "target",
                     "condition": {
                         "type": "python",
-                        "code": "def check(state):\n    return undefined_variable"
-                    }
+                        "code": "def check(state):\n    return undefined_variable",
+                    },
                 }
-            ]
+            ],
         })
-        
+
         state = make_state()
-        # Не должен падать - ошибка в условии логируется, возвращает False
-        result = await agent.run(state)
-        
-        assert not hasattr(result, 'result') or result.result is None
+        with pytest.raises(ValueError, match="Python-условие ребра"):
+            await agent.run(state)
 
     @pytest.mark.asyncio
-    async def test_python_missing_check_function(self, app):
-        """Python условие без функции check - возвращает False."""
+    async def test_python_missing_check_function_raises(self, app):
+        """Python условие без функции check — ValueError."""
         agent = await Flow.from_config({
             "id": "test",
             "name": "Test",
             "entry": "start",
             "nodes": {
-                "start": {"type": "code", "code": "def run(state): return state"},
-                "target": {"type": "code", "code": "def run(state): state.result = 'reached'; return state"},
+                "start": {"type": "code", "code": "async def run(state): return state"},
+                "target": {"type": "code", "code": "async def run(state): state.result = 'reached'; return state"},
             },
             "edges": [
                 {
-                    "from": "start", 
-                    "to": "target", 
+                    "from": "start",
+                    "to": "target",
                     "condition": {
                         "type": "python",
-                        "code": "def wrong_name(state):\n    return True"
-                    }
+                        "code": "def wrong_name(state):\n    return True",
+                    },
                 }
-            ]
+            ],
         })
-        
+
         state = make_state()
-        result = await agent.run(state)
-        
-        # Функция check не найдена - возвращает False
-        assert not hasattr(result, 'result') or result.result is None
+        with pytest.raises(ValueError, match="функцией check"):
+            await agent.run(state)
 
 
 class TestUnconditionalEdges:
@@ -470,8 +466,8 @@ class TestUnconditionalEdges:
             "name": "Test",
             "entry": "start",
             "nodes": {
-                "start": {"type": "code", "code": "def run(state): return state"},
-                "next": {"type": "code", "code": "def run(state): state.result = 'next_executed'; return state"},
+                "start": {"type": "code", "code": "async def run(state): return state"},
+                "next": {"type": "code", "code": "async def run(state): state.result = 'next_executed'; return state"},
             },
             "edges": [
                 {"from": "start", "to": "next"}
@@ -491,8 +487,8 @@ class TestUnconditionalEdges:
             "name": "Test",
             "entry": "start",
             "nodes": {
-                "start": {"type": "code", "code": "def run(state): return state"},
-                "next": {"type": "code", "code": "def run(state): state.result = 'executed'; return state"},
+                "start": {"type": "code", "code": "async def run(state): return state"},
+                "next": {"type": "code", "code": "async def run(state): state.result = 'executed'; return state"},
             },
             "edges": [
                 {"from": "start", "to": "next", "condition": None}
@@ -516,9 +512,9 @@ class TestMultipleEdges:
             "name": "Test",
             "entry": "start",
             "nodes": {
-                "start": {"type": "code", "code": "def run(state): state.route = 'order'; return state"},
-                "order": {"type": "code", "code": "def run(state): state.result = 'order_handler'; return state"},
-                "complaint": {"type": "code", "code": "def run(state): state.result = 'complaint_handler'; return state"},
+                "start": {"type": "code", "code": "async def run(state): state.route = 'order'; return state"},
+                "order": {"type": "code", "code": "async def run(state): state.result = 'order_handler'; return state"},
+                "complaint": {"type": "code", "code": "async def run(state): state.result = 'complaint_handler'; return state"},
             },
             "edges": [
                 {"from": "start", "to": "order", "condition": "route == 'order'"},
@@ -539,9 +535,9 @@ class TestMultipleEdges:
             "name": "Test",
             "entry": "start",
             "nodes": {
-                "start": {"type": "code", "code": "def run(state): state.route = 'unknown'; return state"},
-                "known": {"type": "code", "code": "def run(state): state.result = 'known'; return state"},
-                "fallback": {"type": "code", "code": "def run(state): state.result = 'fallback'; return state"},
+                "start": {"type": "code", "code": "async def run(state): state.route = 'unknown'; return state"},
+                "known": {"type": "code", "code": "async def run(state): state.result = 'known'; return state"},
+                "fallback": {"type": "code", "code": "async def run(state): state.result = 'fallback'; return state"},
             },
             "edges": [
                 {"from": "start", "to": "known", "condition": "route == 'order'"},

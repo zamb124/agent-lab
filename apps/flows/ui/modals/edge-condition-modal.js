@@ -8,13 +8,13 @@ import '../components/editors/code-editor.js';
 
 const DEFAULT_PYTHON_CODE = `def check(state):
     """
-    Проверка условия перехода.
-    
+    Edge transition condition.
+
     Args:
-        state: dict - текущее состояние
-        
+        state: dict - current execution state
+
     Returns:
-        bool - True если условие выполнено
+        bool - True when the condition is met
     """
     return state.get('route') == 'expected_value'
 `;
@@ -247,11 +247,11 @@ export class EdgeConditionModal extends PlatformFormModal {
         this.pythonCode = DEFAULT_PYTHON_CODE;
         this.preview = '';
         
-        this.title = 'Условие перехода';
     }
 
     connectedCallback() {
         super.connectedCallback();
+        this.title = this.i18n.t('edge_condition_modal.title');
         this._parseExistingCondition();
         this._updatePreview();
     }
@@ -377,7 +377,7 @@ export class EdgeConditionModal extends PlatformFormModal {
 
     _buildPreviewString() {
         if (this.mode === 'python') {
-            return 'Python: check(state) -> bool';
+            return this.i18n.t('edge_condition_modal.preview_python');
         }
         
         if (!this.selectedVariable || !this.conditionValue) {
@@ -432,17 +432,17 @@ export class EdgeConditionModal extends PlatformFormModal {
         
         if (this.mode === 'simple') {
             if (!this.selectedVariable && this.conditionValue) {
-                errors.variable = 'Выберите переменную';
+                errors.variable = this.i18n.t('edge_condition_modal.err_variable');
             }
             
             if (this.selectedVariable && !this.conditionValue) {
-                errors.value = 'Введите значение';
+                errors.value = this.i18n.t('edge_condition_modal.err_value');
             }
         }
         
         if (this.mode === 'python') {
             if (!this.pythonCode || !this.pythonCode.includes('def check')) {
-                errors.code = 'Код должен содержать функцию check(state)';
+                errors.code = this.i18n.t('edge_condition_modal.err_code');
             }
         }
         
@@ -466,7 +466,7 @@ export class EdgeConditionModal extends PlatformFormModal {
         
         return html`
             <div class="condition-header">
-                <h3>Условие перехода</h3>
+                <h3>${this.i18n.t('edge_condition_modal.heading')}</h3>
                 <div class="condition-subtitle">
                     ${this.fromNode} → ${this.toNode}
                 </div>
@@ -478,14 +478,14 @@ export class EdgeConditionModal extends PlatformFormModal {
                     class="mode-tab ${this.mode === 'simple' ? 'active' : ''}"
                     @click=${() => this._onModeChange('simple')}
                 >
-                    Простой режим
+                    ${this.i18n.t('edge_condition_modal.mode_simple')}
                 </button>
                 <button 
                     type="button"
                     class="mode-tab ${this.mode === 'python' ? 'active' : ''}"
                     @click=${() => this._onModeChange('python')}
                 >
-                    Python код
+                    ${this.i18n.t('edge_condition_modal.mode_python')}
                 </button>
             </div>
             
@@ -493,7 +493,7 @@ export class EdgeConditionModal extends PlatformFormModal {
                 ${this.mode === 'simple' ? this._renderSimpleMode(allVariables) : this._renderPythonMode()}
                 
                 <div class="condition-preview">
-                    <div class="preview-label">Результат:</div>
+                    <div class="preview-label">${this.i18n.t('edge_condition_modal.preview_label')}</div>
                     <div class="preview-code ${!this.preview ? 'preview-empty' : ''}">
                         ${this.preview || '—'}
                     </div>
@@ -501,7 +501,7 @@ export class EdgeConditionModal extends PlatformFormModal {
                 
                 <div class="skip-condition">
                     <span class="skip-link" @click=${this._skipCondition}>
-                        Пропустить (без условия)
+                        ${this.i18n.t('edge_condition_modal.skip_no_condition')}
                     </span>
                 </div>
             </form>
@@ -513,13 +513,13 @@ export class EdgeConditionModal extends PlatformFormModal {
             <div class="condition-builder">
                 <div class="builder-row">
                     <div class="form-field">
-                        <label for="variable">Переменная</label>
+                        <label for="variable">${this.i18n.t('edge_condition_modal.label_variable')}</label>
                         <select 
                             id="variable"
                             .value=${this.selectedVariable}
                             @change=${this._onVariableChange}
                         >
-                            <option value="">-- выберите --</option>
+                            <option value="">${this.i18n.t('edge_condition_modal.select_placeholder')}</option>
                             ${allVariables.map(v => html`
                                 <option value="${v}" ?selected=${v === this.selectedVariable}>
                                     ${v}
@@ -546,7 +546,7 @@ export class EdgeConditionModal extends PlatformFormModal {
                     </div>
                     
                     <div class="form-field">
-                        <label for="value">Значение</label>
+                        <label for="value">${this.i18n.t('edge_condition_modal.label_value')}</label>
                         <input
                             id="value"
                             type="text"
@@ -561,7 +561,7 @@ export class EdgeConditionModal extends PlatformFormModal {
             
             ${this.sourceNodeConfig ? html`
                 <div class="variables-hint">
-                    <strong>Доступные переменные:</strong> ${allVariables.slice(0, 5).join(', ')}${allVariables.length > 5 ? '...' : ''}
+                    <strong>${this.i18n.t('edge_condition_modal.variables_available')}</strong> ${allVariables.slice(0, 5).join(', ')}${allVariables.length > 5 ? '...' : ''}
                 </div>
             ` : ''}
         `;
@@ -582,25 +582,22 @@ export class EdgeConditionModal extends PlatformFormModal {
                     @change=${this._onPythonCodeChange}
                 ></code-editor>
                 <div class="python-hint">
-                    Функция <code>check(state)</code> должна возвращать <code>True</code> или <code>False</code>.
-                    <br>state - это dict со всеми переменными текущего состояния.
+                    ${this.i18n.t('edge_condition_modal.python_hint_1')}
+                    <br>${this.i18n.t('edge_condition_modal.python_hint_2')}
                 </div>
                 ${this.renderFieldError('code')}
             </div>
         `;
     }
 
+    _saveHeaderTitle() {
+        return this.i18n.t('edge_condition_modal.apply');
+    }
+
     renderFooter() {
         return html`
             <platform-button variant="secondary" @click=${this.close}>
-                Отмена
-            </platform-button>
-            <platform-button 
-                variant="primary" 
-                ?loading=${this.loading}
-                @click=${this._onSubmit}
-            >
-                Применить
+                ${this.i18n.t('editor.cancel')}
             </platform-button>
         `;
     }

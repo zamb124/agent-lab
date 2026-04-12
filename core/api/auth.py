@@ -7,16 +7,16 @@ API эндпоинты для авторизации.
 
 import logging
 from typing import Annotated, Optional, List, Dict, Any
-from fastapi import APIRouter, HTTPException, Request, Depends
+from fastapi import APIRouter, HTTPException, Request, Depends, Form, Query
 from fastapi.responses import RedirectResponse, JSONResponse
-from pydantic import BaseModel
+from pydantic import BaseModel, Field as PydanticField
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
 from core.config import get_settings
 from core.models import AuthProvider, AuthRequest
 from core.identity import AuthService
-from core.utils.tokens import get_token_service
-from core.utils.domain import get_cookie_domain
+from core.utils.tokens import TokenService, get_token_service
+from core.utils.domain import get_cookie_domain, build_url
 
 logger = logging.getLogger(__name__)
 
@@ -25,18 +25,25 @@ router = APIRouter(tags=["auth"])
 
 class UserUpdate(BaseModel):
     """Обновление данных пользователя"""
-    name: Optional[str] = None
+    name: Optional[str] = PydanticField(None, max_length=200)
+    first_name: Optional[str] = PydanticField(None, max_length=100)
+    last_name: Optional[str] = PydanticField(None, max_length=100)
     emails: Optional[List[str]] = None
     phones: Optional[List[str]] = None
     messengers: Optional[Dict[str, str]] = None
     avatar_url: Optional[str] = None
-    bio: Optional[str] = None
+    bio: Optional[str] = PydanticField(None, max_length=4000)
     ui_preferences: Optional[Dict[str, Any]] = None
 
 
 class SwitchCompanyRequest(BaseModel):
     """Переключение активной компании пользователя"""
     company_id: str
+
+
+class DemoLoginRequest(BaseModel):
+    email: str
+    password: str
 
 
 def get_auth_service(request: Request) -> AuthService:
@@ -47,12 +54,102 @@ def get_auth_service(request: Request) -> AuthService:
 AuthServiceDep = Annotated[AuthService, Depends(get_auth_service)]
 
 
+def _clear_platform_auth_cookies(response: JSONResponse, request: Request) -> None:
+    """
+    Удаляет куки входа с теми же path/domain/secure/samesite (и httponly для auth_token),
+    с какими они выставляются в login/demo, OAuth callback и switch-company.
+    """
+    settings = get_settings()
+    is_production = settings.server.env == "production"
+    host = request.headers.get("host", "")
+    cookie_domain = get_cookie_domain(host)
+    for httponly_auth in (False, True):
+        response.delete_cookie(
+            key="auth_token",
+            path="/",
+            domain=cookie_domain,
+            secure=is_production,
+            httponly=httponly_auth,
+            samesite="lax",
+        )
+    response.delete_cookie(
+        key="session_id",
+        path="/",
+        domain=cookie_domain,
+        secure=is_production,
+        httponly=True,
+        samesite="lax",
+    )
+
+
 def _append_query(url: str, params: Dict[str, str]) -> str:
     parsed = urlsplit(url)
     query = dict(parse_qsl(parsed.query, keep_blank_values=True))
     query.update(params)
     next_query = urlencode(query)
     return urlunsplit((parsed.scheme, parsed.netloc, parsed.path, next_query, parsed.fragment))
+
+
+@router.get("/demo/status")
+async def demo_auth_status():
+    """Публичный флаг: включён ли демо-вход (без утечки email, если выключено)."""
+    settings = get_settings()
+    demo = settings.auth.demo
+    if not demo.login_enabled:
+        return {"enabled": False}
+    return {"enabled": True, "email": demo.email}
+
+
+@router.post("/login/demo")
+async def login_demo(
+    request: Request,
+    body: DemoLoginRequest,
+    auth_service: AuthServiceDep,
+):
+    """Вход демо-пользователя (cookies как после OAuth)."""
+    settings = get_settings()
+    result = await auth_service.login_demo(body.email, body.password)
+
+    if not result.success or not result.session or not result.token or not result.user:
+        raise HTTPException(
+            status_code=401,
+            detail=result.error_message or "Неверные учётные данные",
+        )
+
+    target_host = request.headers.get("host", "")
+    redirect_url = build_url(
+        target_host,
+        "/dashboard",
+        settings.auth.demo.subdomain,
+    )
+
+    response = JSONResponse(
+        content={"redirect_url": redirect_url, "success": True},
+    )
+    is_production = settings.server.env == "production"
+    cookie_domain = get_cookie_domain(target_host)
+    cookie_max_age = TokenService.SESSION_EXPIRES
+
+    response.set_cookie(
+        key="session_id",
+        value=result.session.session_id,
+        domain=cookie_domain,
+        httponly=True,
+        secure=is_production,
+        samesite="lax",
+        max_age=cookie_max_age,
+    )
+    response.set_cookie(
+        key="auth_token",
+        value=result.token,
+        domain=cookie_domain,
+        httponly=False,
+        secure=is_production,
+        samesite="lax",
+        max_age=cookie_max_age,
+    )
+
+    return response
 
 
 @router.get("/providers")
@@ -102,6 +199,12 @@ async def start_auth(
             status_code=400, detail=f"Неподдерживаемый провайдер: {provider_name}"
         )
 
+    if provider == AuthProvider.DEMO:
+        raise HTTPException(
+            status_code=400,
+            detail="Для демо-входа используйте POST /login/demo с полями email и password",
+        )
+
     # Сохраняем оригинальный хост для редиректа после авторизации
     original_host = request.headers.get("host", "localhost:8002")
     
@@ -140,28 +243,20 @@ async def start_auth(
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.get("/callback/{provider_name}")
-async def auth_callback(
+async def _complete_oauth_callback(
     request: Request,
     provider_name: str,
-    code: str,
-    state: str,
-    auth_service: AuthServiceDep,
-    error: str = None,
-):
-    """
-    Обрабатывает callback от провайдера авторизации.
-
-    Args:
-        provider_name: Имя провайдера
-        code: Код авторизации от провайдера
-        state: State для CSRF защиты
-        error: Ошибка от провайдера (если есть)
-    """
+    code: Optional[str],
+    state: Optional[str],
+    auth_service: AuthService,
+    error: Optional[str] = None,
+    oauth_first_login_user_json: Optional[str] = None,
+) -> RedirectResponse:
+    """Общая логика GET/POST callback (Apple form_post передаёт поля в теле формы)."""
     from core.utils.domain import get_cookie_domain
-    
+
     settings = get_settings()
-    
+
     if error:
         logger.error(f"Ошибка авторизации от {provider_name}: {error}")
         raise HTTPException(status_code=400, detail=f"Ошибка авторизации: {error}")
@@ -178,54 +273,56 @@ async def auth_callback(
             status_code=400, detail=f"Неподдерживаемый провайдер: {provider_name}"
         )
 
-    # Получаем state с оригинальным хостом и redirect_uri
     auth_state = await auth_service._get_auth_state(state)
     if not auth_state:
         if provider_name == AuthProvider.GOOGLE.value:
             calendar_service = request.app.state.container.calendar_service
             try:
                 return_path = await calendar_service.complete_google_oauth(state=state, code=code)
-            except ValueError as error:
-                raise HTTPException(status_code=400, detail=str(error)) from error
-            except Exception as error:
-                raise HTTPException(status_code=500, detail=str(error)) from error
+            except ValueError as err:
+                raise HTTPException(status_code=400, detail=str(err)) from err
             redirect_url = _append_query(
                 return_path,
                 {
-                    "calendar_provider": "google",
-                    "calendar_status": "connected",
+                    "integration_provider": "google",
+                    "integration_service": "calendar",
+                    "integration_status": "connected",
                 },
             )
             return RedirectResponse(url=redirect_url)
         raise HTTPException(status_code=400, detail="Недействительный state")
-    
+
     original_host = auth_state.get("original_host")
     redirect_uri = auth_state.get("redirect_uri")
 
     logger.info(f"auth_callback: redirect_uri={redirect_uri}, original_host={original_host}")
 
     auth_request = AuthRequest(
-        provider=provider, code=code, state=state, redirect_uri=redirect_uri
+        provider=provider,
+        code=code,
+        state=state,
+        redirect_uri=redirect_uri,
+        oauth_first_login_user_json=oauth_first_login_user_json,
     )
 
     result = await auth_service.complete_auth(auth_request)
-    
+
     logger.info(f"Результат авторизации: success={result.success}, error={result.error_message}")
 
     if not result.success:
         logger.error(f"Ошибка завершения авторизации: {result.error_message}")
         raise HTTPException(status_code=400, detail=result.error_message)
 
-    # Используем оригинальный хост для редиректа
     target_host = original_host or request.headers.get("host", "")
-    
+
     response = RedirectResponse(url="/select-company")
     is_production = settings.server.env == "production"
-    
+
     cookie_domain = get_cookie_domain(target_host)
 
     logger.info(f"Устанавливаем cookies: session_id={result.session.session_id}, auth_token={result.token[:8]}..., domain={cookie_domain}, secure={is_production}")
 
+    cookie_max_age = TokenService.SESSION_EXPIRES
     response.set_cookie(
         key="session_id",
         value=result.session.session_id,
@@ -233,6 +330,7 @@ async def auth_callback(
         httponly=True,
         secure=is_production,
         samesite="lax",
+        max_age=cookie_max_age,
     )
     response.set_cookie(
         key="auth_token",
@@ -241,29 +339,77 @@ async def auth_callback(
         httponly=False,
         secure=is_production,
         samesite="lax",
+        max_age=cookie_max_age,
     )
 
     logger.info(f"Успешная авторизация пользователя {result.user.user_id}")
     return response
 
 
+@router.get("/callback/{provider_name}")
+async def auth_callback(
+    request: Request,
+    provider_name: str,
+    code: str,
+    state: str,
+    auth_service: AuthServiceDep,
+    error: str = None,
+    user: Optional[str] = None,
+):
+    """Callback после OAuth (query); Apple при scope name/email шлёт POST form_post."""
+    return await _complete_oauth_callback(
+        request,
+        provider_name,
+        code,
+        state,
+        auth_service,
+        error=error,
+        oauth_first_login_user_json=user,
+    )
+
+
+@router.post("/callback/{provider_name}")
+async def auth_callback_post(
+    request: Request,
+    provider_name: str,
+    auth_service: AuthServiceDep,
+    code: str = Form(...),
+    state: str = Form(...),
+    error: Optional[str] = Form(None),
+    user: Optional[str] = Form(None),
+):
+    """Sign in with Apple: response_mode=form_post — code/state/user в application/x-www-form-urlencoded."""
+    return await _complete_oauth_callback(
+        request,
+        provider_name,
+        code,
+        state,
+        auth_service,
+        error=error,
+        oauth_first_login_user_json=user,
+    )
+
+
 @router.post("/logout")
-async def logout(session_id: str, auth_service: AuthServiceDep):
+async def logout(
+    request: Request,
+    auth_service: AuthServiceDep,
+    session_id: Annotated[Optional[str], Query()] = None,
+):
     """
-    Завершает сессию пользователя.
-
-    Args:
-        session_id: ID сессии для завершения
+    Завершает сессию: берёт session_id из query (опционально) или из JWT в cookie,
+    удаляет запись сессии и снимает auth_token/session_id в браузере.
     """
-    if not session_id:
-        raise HTTPException(status_code=400, detail="Не указан session_id")
+    token_data = getattr(request.state, "token_data", None)
+    resolved_session_id = session_id or (
+        token_data.session_id if token_data and token_data.session_id else None
+    )
+    if resolved_session_id:
+        await auth_service.logout(resolved_session_id)
 
-    success = await auth_service.logout(session_id)
-
-    if success:
-        return {"success": True, "message": "Сессия завершена"}
-    else:
-        raise HTTPException(status_code=500, detail="Ошибка завершения сессии")
+    response = JSONResponse({"success": True, "message": "Сессия завершена"})
+    _clear_platform_auth_cookies(response, request)
+    return response
 
 
 @router.get("/me")
@@ -286,6 +432,8 @@ async def get_current_user(request: Request, auth_service: AuthServiceDep):
     return {
         "user_id": user.user_id,
         "name": user.name,
+        "first_name": user.first_name,
+        "last_name": user.last_name,
         "status": user.status,
         "groups": user.groups,
         "companies": user.companies,
@@ -344,7 +492,7 @@ async def switch_company(
         httponly=True,
         secure=settings.server.env == "production",
         samesite="lax",
-        max_age=7200,
+        max_age=TokenService.SESSION_EXPIRES,
     )
     return response
 
@@ -372,10 +520,19 @@ async def update_current_user(
         raise HTTPException(status_code=404, detail="User not found")
     
     update_data = updates.model_dump(exclude_none=True)
-    
+
     for field, value in update_data.items():
         setattr(user, field, value)
-    
+
+    if "first_name" in update_data or "last_name" in update_data:
+        parts: list[str] = []
+        if user.first_name and user.first_name.strip():
+            parts.append(user.first_name.strip())
+        if user.last_name and user.last_name.strip():
+            parts.append(user.last_name.strip())
+        if parts:
+            user.name = " ".join(parts)
+
     user.updated_at = datetime.now(timezone.utc)
     await user_repo.set(user)
     

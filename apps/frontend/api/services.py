@@ -1,63 +1,83 @@
 """
 API для проверки статуса микросервисов
 """
+import asyncio
 import logging
 import time
 from typing import List
-from fastapi import APIRouter, HTTPException
+
+import httpx
+from fastapi import APIRouter, Query
+
+from core.pagination import OffsetPage
 from apps.frontend.dependencies import ContainerDep
 from apps.frontend.models import ServiceStatus
+from core.clients.service_client import ServiceClientError
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/services", tags=["services"])
 
+SERVICES = [
+    {"name": "flows", "url": "/flows/api/v1/health"},
+    {"name": "crm", "url": "/crm/api/v1/health"},
+    {"name": "rag", "url": "/rag/api/health"},
+    {"name": "sync", "url": "/sync/api/health"},
+    {"name": "office", "url": "/documents/api/health"},
+]
 
-@router.get("/status", response_model=List[ServiceStatus])
-async def get_services_status(container: ContainerDep):
-    """
-    Получить статус всех микросервисов
-    
-    Returns:
-        Список сервисов с их статусом
-    """
-    services_config = [
-        {"name": "flows", "url": "/flows/api/v1/health"},
-        {"name": "crm", "url": "/crm/api/v1/health"},
-        {"name": "rag", "url": "/rag/api/health"},
-    ]
-    
-    statuses = []
+_NETWORK_ERRORS = (
+    httpx.ConnectError,
+    httpx.TimeoutException,
+    httpx.HTTPStatusError,
+    ConnectionError,
+    OSError,
+    ServiceClientError,
+)
+
+
+async def _check_service(service_client: object, name: str, health_url: str) -> ServiceStatus:
+    display_url = "/flows" if name == "flows" else f"/{name}"
+    start = time.time()
+    await service_client.get(name, health_url)
+    elapsed_ms = (time.time() - start) * 1000
+    return ServiceStatus(
+        name=name,
+        status="healthy",
+        url=display_url,
+        response_time=round(elapsed_ms, 2),
+    )
+
+
+@router.get("/status", response_model=OffsetPage[ServiceStatus])
+async def get_services_status(
+    container: ContainerDep,
+    limit: int = Query(50, ge=1, le=100),
+    offset: int = Query(0, ge=0),
+):
     service_client = container.service_client
-    
-    for service_conf in services_config:
-        service_name = service_conf["name"]
-        health_url = service_conf["url"]
-        
-        try:
-            start_time = time.time()
-            response = await service_client.get(service_name, health_url)
-            response_time = (time.time() - start_time) * 1000
-            
-            display_url = "/flows" if service_name == "flows" else f"/{service_name}"
-            status = ServiceStatus(
-                name=service_name,
-                status="healthy",
-                url=display_url,
-                response_time=round(response_time, 2)
-            )
-        except Exception as e:
-            logger.warning(f"Сервис {service_name} недоступен: {e}")
-            display_url = "/flows" if service_name == "flows" else f"/{service_name}"
-            status = ServiceStatus(
-                name=service_name,
+
+    tasks = [
+        _check_service(service_client, svc["name"], svc["url"])
+        for svc in SERVICES
+    ]
+    results = await asyncio.gather(*tasks, return_exceptions=True)
+
+    statuses: list[ServiceStatus] = []
+    for svc, result in zip(SERVICES, results):
+        if isinstance(result, ServiceStatus):
+            statuses.append(result)
+        elif isinstance(result, _NETWORK_ERRORS):
+            logger.warning("Сервис %s недоступен: %s", svc["name"], result)
+            display_url = "/flows" if svc["name"] == "flows" else f"/{svc['name']}"
+            statuses.append(ServiceStatus(
+                name=svc["name"],
                 status="unhealthy",
                 url=display_url,
-                response_time=None
-            )
-        
-        statuses.append(status)
-    
-    return statuses
+                response_time=None,
+            ))
+        else:
+            raise result
 
-
+    page = statuses[offset:offset + limit]
+    return OffsetPage[ServiceStatus](items=page, total=len(statuses), limit=limit, offset=offset)

@@ -22,7 +22,7 @@ export class RemoteFlowEditor extends BaseNodeEditor {
                 
                 <div class="form-group">
                     <div class="form-label">
-                        <span class="form-label-text">Имя</span>
+                        <span class="form-label-text">${this.i18n.t('node_modal.common.field_name')}</span>
                     </div>
                     <input 
                         type="text" 
@@ -35,7 +35,7 @@ export class RemoteFlowEditor extends BaseNodeEditor {
             
             <div class="form-group">
                 <div class="form-label">
-                    <span class="form-label-text">URL</span>
+                    <span class="form-label-text">${this.i18n.t('node_modal.remote_flow.url_label')}</span>
                 </div>
                 <input 
                     type="text" 
@@ -44,12 +44,12 @@ export class RemoteFlowEditor extends BaseNodeEditor {
                     @change=${(e) => this._onInputChange('url', e.target.value)}
                     placeholder="http://agent:8080"
                 />
-                <span class="form-label-hint">Поддерживает @var:path</span>
+                <span class="form-label-hint">${this.i18n.t('node_modal.remote_flow.url_hint')}</span>
             </div>
             
             <div class="form-group">
                 <div class="form-label">
-                    <span class="form-label-text">Skill ID</span>
+                    <span class="form-label-text">${this.i18n.t('node_modal.remote_flow.skill_id_label')}</span>
                 </div>
                 <input 
                     type="text" 
@@ -61,7 +61,7 @@ export class RemoteFlowEditor extends BaseNodeEditor {
             
             <div class="form-group">
                 <div class="form-label">
-                    <span class="form-label-text">Auth Headers (JSON)</span>
+                    <span class="form-label-text">${this.i18n.t('node_modal.remote_flow.auth_headers_label')}</span>
                 </div>
                 <json-field-editor
                     .value=${config.auth_headers ? JSON.stringify(config.auth_headers, null, 2) : '{}'}

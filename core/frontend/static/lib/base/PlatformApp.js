@@ -7,6 +7,8 @@ import { ServiceRegistry } from '../services/ServiceRegistry.js';
 import { AppEvents } from '../utils/types.js';
 import { redirectToLogin } from '../utils/auth-redirect.js';
 import { nextModalLayerZIndex } from '../utils/modal-z-stack.js';
+import { serviceIdFromBaseUrl, setLastVisitedService } from '../utils/last-visited-service.js';
+import { i18nDefaultNamespaceForBaseUrl } from '../../services/i18n/i18n-default-namespace.js';
 
 // PWA Install Banner для iOS/Android
 import '../components/pwa-install-banner.js';
@@ -92,6 +94,8 @@ export class PlatformApp extends PlatformElement {
         /** @private Слушатель window toast-show: один раз на экземпляр, до await initServices */
         this._toastListenerAttached = false;
         this._handleToast = this._handleToast.bind(this);
+        this._pushAuthListenerAttached = false;
+        this._onAuthChangeForPush = this._onAuthChangeForPush.bind(this);
     }
 
     _handleToast(e) {
@@ -134,6 +138,10 @@ export class PlatformApp extends PlatformElement {
         }
         
         await ServiceRegistry.registerCore(this.getBaseUrl());
+        const i18nNs = i18nDefaultNamespaceForBaseUrl(this.getBaseUrl());
+        if (i18nNs.length > 0) {
+            ServiceRegistry.get('i18n').setDefaultNamespace(i18nNs);
+        }
     }
 
     /**
@@ -178,6 +186,32 @@ export class PlatformApp extends PlatformElement {
 
     _renderShellPages() {
         return renderPlatformAppShell(this);
+    }
+
+    _recordLastVisitedServiceFromApp() {
+        const id = serviceIdFromBaseUrl(this.getBaseUrl());
+        if (id) {
+            setLastVisitedService(id);
+        }
+    }
+
+    _maybeRegisterPushSubscriptions() {
+        if (!this._isAuthenticated || !ServiceRegistry.isInitialized || !ServiceRegistry.has('pwa')) {
+            return;
+        }
+        queueMicrotask(() => {
+            ServiceRegistry.get('pwa')
+                .ensurePushRegistration()
+                .catch((err) => {
+                    console.error('[PlatformApp] ensurePushRegistration:', err);
+                });
+        });
+    }
+
+    _onAuthChangeForPush(ev) {
+        if (ev.detail?.isAuthenticated) {
+            this._maybeRegisterPushSubscriptions();
+        }
     }
 
     async connectedCallback() {
@@ -225,6 +259,13 @@ export class PlatformApp extends PlatformElement {
                     this.redirectToAuth();
                     return;
                 }
+
+                this._recordLastVisitedServiceFromApp();
+                this._maybeRegisterPushSubscriptions();
+                if (!this._pushAuthListenerAttached) {
+                    window.addEventListener(AppEvents.AUTH_CHANGE, this._onAuthChangeForPush);
+                    this._pushAuthListenerAttached = true;
+                }
             }
 
             const routes = this.setupRoutes();
@@ -247,6 +288,10 @@ export class PlatformApp extends PlatformElement {
     }
 
     disconnectedCallback() {
+        if (this._pushAuthListenerAttached) {
+            window.removeEventListener(AppEvents.AUTH_CHANGE, this._onAuthChangeForPush);
+            this._pushAuthListenerAttached = false;
+        }
         if (this._toastListenerAttached) {
             window.removeEventListener(AppEvents.TOAST_SHOW, this._handleToast);
             this._toastListenerAttached = false;

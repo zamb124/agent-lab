@@ -1,0 +1,137 @@
+---
+description: "Трейсинг: OTEL-дерево, platform_tracing, API записи/чтения, среды и деплой"
+alwaysApply: false
+---
+# Трейсинг
+
+## Зачем
+
+- **Дерево OTEL:** общий `trace_id`, родитель–ребёнок через `parent_span_id` — иерархия выполнения (flow → ноды → LLM/tools) и любые вложенные операции.
+- **Журнал по сущности:** колонки `event_type`, `resource_type`, `resource_id` + индекс по `(company_id, resource_type, resource_id, start_time)` — выборка «всё по чату / сессии / документу» без потери дерева (дети того же `trace_id`).
+
+Обе модели совместимы: корневой span сущности (`resource_root_span`) задаёт ресурс и контекст; внутри него вложенные `flow_span` / `node_span` / … наследуют `trace_id` и `parent_span_id`.
+
+## Конфигурация
+
+| Уровень | Поле / ENV |
+|---------|------------|
+| Включить трейсинг | `tracing.enabled` |
+| Писать spans в Postgres | `tracing.postgres_enabled` |
+| URL БД spans | `database.tracing_url` / **`DATABASE__TRACING_URL`** |
+
+Если **`postgres_enabled=true`** и **`tracing_url` пустой** — процесс **падает на старте** (HTTP в `core/app/factory.py`, воркеры `flows_worker`, `idle_worker`, `crm_worker`, `sync_worker` в `apps/sync/realtime/broker.py`, `rag_worker`).
+
+Домен flows (`flow_id`, `task_id`, `node_id`, …) живёт в **`attributes`** с префиксом `platform.*` — см. `core/tracing/attributes.py`. Отдельных колонок под flow в таблице нет.
+
+## SaaS: значимые операции и биллинг
+
+**`operation_name`:** стабильная строка `service.area.action` (например `rag.embed.batch`, `sync.stt.transcribe_audio`, `sync.livekit.egress.start`, `crm.search.semantic`).
+
+**Категории (`platform.operation.category`):** `llm`, `embedding`, `stt`, `livekit`, `livekit_egress`, `flow_run`, `sync_command`, `rag_ingest`, `crm_search`, `storage`, `office_document`.
+
+**Связь с биллингом (в `attributes`, без дублирования логики цен):**
+
+| Атрибут | Назначение |
+|---------|------------|
+| `platform.billing.usage_type` | Строковое значение `UsageType` из `core/models/billing_models.py` (`llm_request`, `embedding_request`, …) |
+| `platform.billing.resource_name` | Ключ цены для `BillingService` / `record_usage`: формат **`category:resource`** (как в `get_resource_cost_for_company`), например `llm:gpt-4`, `embedding:pgvector` |
+| `platform.billing.quantity` | Целое число единиц списания (умножается на unit cost); по умолчанию 1 |
+| `platform.billing.pending_settlement` | `true` — span участвует в **фоновом** списании (`span_billing_settlement_tick` на idle); без этого атрибута span только для наблюдаемости |
+
+Удобная обёртка: **`traced_operation(...)`** в [`core/tracing/operation_span.py`](core/tracing/operation_span.py); низкоуровнево — **`PlatformTracer.platform_operation_span`**.
+
+Идемпотентность джобы: после успешного `record_usage` в shared storage пишется `billing:settled_span:{span_id}` → `usage_id` (см. **`billing.mdc`**).
+
+**Колонки `company_id` / `namespace` в БД:** при сохранении span, если в итоговых атрибутах есть **`platform.tenant.company_id`** или **`platform.tenant.namespace`** (непустые строки), они задают колонки **поверх** значений из `get_context()`. Так воркеры и фоновые задачи фиксируют tenant без HTTP-контекста.
+
+**Обязательные атрибуты для платформенного журнала (админ-трейсинг, разрез по тенанту и субъекту):** у span, сохраняемого в `platform_tracing`, должны быть непустые **`platform.tenant.company_id`** и **`platform.user.id`** (константы `ATTR_TENANT_COMPANY_ID` / `ATTR_USER_ID` в `core/tracing/attributes.py`). При сохранении, если в итоговых атрибутах ещё нет `platform.user.id`, он **дописывается из `get_context().user.user_id`** (аналогично подстановке компании из контекста). Операции без HTTP-контекста (воркеры, LiveKit из sync) обязаны передавать оба id в **`extra_attributes`** `traced_operation` или в вызываемом API (например **`LiveKitClient`**: обязательные `company_id` и `user_id` на всех трейсируемых методах). Фоновые задачи без пользователя в payload должны явно задавать субъект (например инициатор или зарезервированный id), а не оставлять пустое поле в UI.
+
+## Инициализация процесса (запись возможна только после этого)
+
+1. **`setup_tracing(settings.tracing)`** — OTLP/экспортеры по `TracingConfig`.
+2. **`set_tracing_service_name(name)`** один раз: для HTTP — `settings.server.name`, для воркера — осмысленное имя процесса (`flows_worker`, `idle_worker`). В **`save_span`** колонка `service_name` обязательна.
+3. **`set_span_repository(container.span_repository)`** — связь с `platform_tracing`.
+
+Репозиторий и storage: **`BaseContainer.span_repository`** → `SpanRepository(tracing_storage)`; **`tracing_storage`** требует заданный `DATABASE__TRACING_URL`.
+
+## API записи (сервисы / flows)
+
+Импорт: **`from core.tracing import get_tracer, …`** (см. `core/tracing/__init__.py`).
+
+- **`tracer = get_tracer()`** — `PlatformTracer`.
+- Контекст для подстановки в атрибуты: **`TraceContext`** + **`get_current_trace_context` / `set_current_trace_context`** (проброс TaskIQ и т.д.).
+- Типовые **async context manager**’ы на `PlatformTracer` (внутри — OpenTelemetry `start_as_current_span`, при выходе — flush в БД через репозиторий):
+
+| Метод | Назначение |
+|-------|------------|
+| `resource_root_span` | Корень сущности: `resource_type`, `resource_id`, `event_type` (сессия flow, чат, …) |
+| `flow_span` | Выполнение flow |
+| `node_span` | Нода графа |
+| `llm_node_span` | ReAct-нода целиком |
+| `react_iteration_span` | Итерация ReAct |
+| `llm_call_span` | Вызов LLM |
+| `tool_call_span` | Вызов tool |
+| `interrupt_span` | Прерывание (ask_user и т.п.) |
+| `prompt_build_span` | Сборка промпта |
+| `request_span` | HTTP-запрос (если используется) |
+| `platform_operation_span` | Любая значимая операция сервиса (RAG, Sync, CRM) с произвольными `attributes` |
+
+**`traced_operation`** — то же + автоматически `platform.billing.*` / `platform.operation.category` при передаче параметров.
+
+Вспомогательно: **`record_llm_request` / `record_llm_response`**, **`record_tool_result`**, **`record_prompt_result`**, **`record_state_snapshot`**, **`set_error`**.
+
+**LLM span (flows ReAct):** при наличии конфигурации провайдера на клиенте в атрибутах span выставляется **`platform.llm.provider`** (`openrouter`, `bothub`, `openai`, `mock`, …). Если провайдер вернул расширенный **`usage`** (как у OpenRouter: `cost`, опционально `cost_details.upstream_inference_cost`), в span попадают **`platform.llm.provider_reported_cost`** и **`platform.llm.provider_upstream_inference_cost`** (только когда значения численные в ответе API). Парсинг — `core/clients/llm/factory.py` (`_merge_openai_compatible_usage_into_usage_data`); **settlement по умолчанию** по-прежнему от **`platform.billing.quantity`** (токены × прайс), см. **`billing.mdc`**.
+
+Кастомные поля: атрибуты на span OTEL; доменные ключи — через константы в `core/tracing/attributes.py`, чтобы совпадали с фильтрами репозитория.
+
+## API чтения
+
+Только через **`SpanRepository`** (например `container.span_repository`). Прямых SQL из сервисов не плодить — один контракт.
+
+| Метод | Назначение |
+|-------|------------|
+| `get_span_by_id(span_id)` | Одна операция по id span (первичный ключ) |
+| `list_spans_for_service` | Фильтр **`service_name`** (обязательно), опц. `company_id`, `namespace`, **`operation_name`**, **`event_type`**; сортировка по времени; **курсор** `cursor` + `limit` для следующей страницы (возврат `(items, next_cursor)`) |
+| `get_trace(trace_id)` | Все spans трассы по времени (построение дерева по `parent_span_id` на клиенте) |
+| `list_spans_for_resource` | Хронология по `company_id` + `resource_type` + `resource_id` (+ опц. `event_type`) |
+| `get_spans_by_task` | По `platform.task_id` в `attributes` |
+| `get_spans_by_session` | По колонке `session_agent` |
+| `get_spans_by_user` | По `user_id`, опционально интервал времени |
+| `get_spans_by_flow` / `get_spans_by_agent` | По `platform.flow_id` в `attributes` |
+| `search_traces` | Фильтры user/session/flow + пагинация; группировка по `trace_id` |
+| `admin_search_spans` | Админ-список: точные `company_id`, `user_id`, `namespace`, `service_name`; ILIKE `*_query` для company/user/operation/event/**namespace**/**service** (мин. 2 символа для query); при заданном точном `namespace` / `service_name` соответствующий `*_query` не применяется; интервал времени; курсор `(start_time, span_id)` |
+| `admin_facet_distinct_*` | Подсказки distinct: компании, пользователи, сервисы, типы событий, **namespaces**, **operation_name**; опционально сужение по `company_id` и (кроме facet namespaces) по `namespace` |
+| `list_spans_pending_billing_settlement` | Окно `[from_time, to_time)` по `start_time`: есть `platform.billing.resource_name` и `pending_settlement`; сортировка по времени; лимит пачки для джобы |
+
+## Админ UI (frontend)
+
+- Доступ только при **активной компании `system`** (`SYSTEM_COMPANY_ID`), иначе **403**.
+- HTTP API сервиса **frontend**: префикс **`/frontend/api/platform-tracing`** (роутер `apps/frontend/api/platform_tracing.py`): `GET /facets/companies`, `/facets/users` — ответ **`items: [{ value, label }]`** (имя из shared + короткий id); остальные фасеты — **`items: string[]`**; `GET /spans` и **`GET /traces/{trace_id}`** добавляют к каждому span **`company_name`**, **`user_display_name`** (резолв через репозитории; для пользователя без записи в БД — fallback на колонку **`user_name`** span); `namespace_query`, `service_name_query` и прочие фильтры из `admin_search_spans`.
+- UI **`tracing-page.js`**: таблица показывает имя компании/пользователя и вторичную строку с id; фасеты company/user показывают **`label`**, в фильтр уходит **`value`**.
+- Если **`database.tracing_url` пустой** или **`tracing.postgres_enabled=false`** — эндпоинты отвечают **503** (без пустых данных).
+- Страница консоли: **`apps/frontend/ui/pages/admin/tracing-page.js`**, пункт меню в сайдбаре только для `system`.
+- Пути **`/frontend/api/platform-tracing/*`** и **`/platform-tracing`** зарегистрированы в **`core/middleware/auth/route_config.py`** (иначе AuthMiddleware отдаёт 404).
+
+Сериализация строки репозитория — плоский dict с полями модели + `flow_id`/`task_id`/… из `attributes` (см. `_serialize_span`).
+
+## БД и миграции
+
+- Физическая БД: **`platform_tracing`**, таблица **`spans`**.
+- Манифест: **`migrations/services.json`** (сервис `tracing`, ключ `tracing_url`).
+- Дерево Alembic: **`migrations/tracing/`**. Общий upgrade: **`uv run python -m scripts.db_migrate upgrade`** (после `bootstrap_migration_registry` / как в CI и init-контейнере).
+
+Модель SQLAlchemy: **`core/db/models/tracing.py`**. Репозиторий: **`core/tracing/repository.py`**.
+
+## Dev / test / prod: создание БД
+
+1. **Новый том Postgres:** `migrations/postgres/init.sql` монтируется в `docker-entrypoint-initdb.d` (**`docker-compose-dev.yaml`**, **`docker-compose-test.yaml`**, **`docker-compose-prod.yaml`**) — в скрипте есть **`CREATE DATABASE platform_tracing`** и **`GRANT`** для `platform_user`.
+2. **Уже существующий кластер** (старый volume, init не перезапускался): идемпотентно **`migrations/postgres/bootstrap_idempotent.sql`** (локально удобно **`make dev-bootstrap-postgres`**, см. **`migrations.mdc`**).
+3. **Переменные окружения:** в compose для стеков с полным набором БД задан **`DATABASE__TRACING_URL`** (тот же хост/порт/пользователь, путь `/platform_tracing`), иначе контейнеры не поднимутся при `postgres_enabled` + записи spans.
+
+После появления БД — **миграции сервиса `tracing`** до `head`.
+
+**Pytest:** `tests/conftest.py` создаёт БД `platform_tracing` при отсутствии (через подключение к `…/postgres`) и при необходимости догружает только дерево **`tracing`** без дропа shared.
+
+## Ключевые файлы
+
+`core/tracing/tracer.py`, `core/tracing/repository.py`, `core/tracing/span_tree.py`, `core/tracing/context.py`, `core/tracing/attributes.py`, `core/app/factory.py` (lifespan), `apps/frontend/api/platform_tracing.py`, `apps/flows_worker/broker.py`, `apps/idle_worker/broker.py`, `core/container/base.py`, `tests/fixtures/test_database_env.py`, `tests/core/tracing/test_span_repository_service_api.py`, `tests/frontend/api/test_platform_tracing_api.py`.

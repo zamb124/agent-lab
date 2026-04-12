@@ -1,0 +1,124 @@
+"""
+Узкие точки входа к сервисам платформы для inline-кода и платформенных тулов.
+
+Контейнер целиком в namespace не передаётся: только явно перечисленные сервисы.
+Каждая функция возвращает минимально необходимый объект, не контейнер.
+"""
+
+from __future__ import annotations
+
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from apps.flows.src.services.operator_handoff_service import OperatorHandoffService
+    from apps.flows.src.services.schedule_service import ScheduleService
+    from core.integrations.oauth_service import OAuthService
+    from core.state import ExecutionState
+
+
+def get_operator_handoff_service() -> "OperatorHandoffService":
+    from apps.flows.src.container import get_container
+
+    return get_container().operator_handoff_service
+
+
+def get_schedule_service() -> "ScheduleService":
+    from apps.flows.src.container import get_container
+
+    return get_container().schedule_service
+
+
+def get_oauth_service() -> "OAuthService":
+    from apps.flows.src.container import get_container
+
+    return get_container().oauth_service
+
+
+async def get_file_bytes(file_id: str) -> bytes:
+    """Скачивает содержимое файла по ID из хранилища платформы (FileRepository + S3)."""
+    from apps.flows.src.container import get_container
+    from core.files import S3ClientFactory
+
+    container = get_container()
+    record = await container.file_repository.get(file_id)
+    if record is None:
+        raise ValueError(f"Файл {file_id} не найден в хранилище")
+    s3 = S3ClientFactory.create_client_for_bucket(record.s3_bucket)
+    return await s3.download_bytes(record.s3_key)
+
+
+async def get_google_oauth_token(state: "ExecutionState", service: str) -> str:
+    """
+    Per-user OAuth для Google API.
+
+    Ищет сохранённый токен в БД. Если нет — бросает FlowInterrupt с ссылкой
+    на авторизацию Google. Flow ставится на паузу и автоматически
+    продолжается после OAuth callback.
+
+    Args:
+        state: ExecutionState текущего flow
+        service: идентификатор сервиса (docs, calendar, drive, ...)
+
+    Returns:
+        access_token (строка)
+    """
+    from apps.flows.src.runtime.exceptions import FlowInterrupt
+    from core.context import get_context
+    from core.integrations.models import IntegrationProvider
+    from core.logging import get_logger
+    from core.state.interrupt import OAuthInterrupt
+    from core.tracing.context import get_current_trace_context
+
+    logger = get_logger(__name__)
+
+    scopes = [
+        "https://www.googleapis.com/auth/documents",
+        "https://www.googleapis.com/auth/drive",
+    ]
+
+    ctx = get_context()
+    if ctx is None or ctx.active_company is None or ctx.user is None:
+        raise ValueError("Контекст с активной компанией обязателен для Google OAuth")
+
+    oauth = get_oauth_service()
+    credential = await oauth.get_valid_token(
+        company_id=ctx.active_company.company_id,
+        user_id=ctx.user.user_id,
+        provider=IntegrationProvider.GOOGLE,
+        service=service,
+    )
+    if credential:
+        logger.debug("Google OAuth: credential found, user=%s, service=%s", ctx.user.user_id, service)
+        return credential.access_token
+
+    flow_context: dict[str, Any] = {
+        "flow_id": state.session_flow_id,
+        "session_id": state.session_id,
+        "task_id": state.task_id,
+        "context_id": state.context_id,
+        "skill_id": state.skill_id,
+        "channel": "a2a",
+        "user_id": ctx.user.user_id,
+        "context_data": ctx.model_dump(mode="json"),
+    }
+    saved_trace_context = get_current_trace_context()
+    if saved_trace_context is not None:
+        flow_context["trace_context"] = saved_trace_context
+
+    auth_url = await oauth.build_auth_url(
+        provider=IntegrationProvider.GOOGLE,
+        service=service,
+        scopes=scopes,
+        user_id=ctx.user.user_id,
+        company_id=ctx.active_company.company_id,
+        flow_context=flow_context,
+    )
+    logger.info("Google OAuth: no credential, raising OAuthInterrupt for user=%s, service=%s", ctx.user.user_id, service)
+    raise FlowInterrupt(
+        body=OAuthInterrupt(
+            question="Для работы с Google необходима авторизация",
+            auth_url=auth_url,
+            provider="google",
+            service=service,
+        ),
+    )

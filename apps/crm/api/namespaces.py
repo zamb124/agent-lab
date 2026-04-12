@@ -1,16 +1,16 @@
 """API для управления namespaces и их шаблонами в CRM."""
 
+import asyncio
 from typing import List
-from fastapi import APIRouter, Depends, HTTPException
+
+from fastapi import APIRouter, HTTPException, Query
 
 from core.logging import get_logger
-from core.context import get_context
-from apps.crm.container import CRMContainer
-from apps.crm.dependencies import get_container_dep
+from core.pagination import OffsetPage
+from apps.crm.dependencies import ContainerDep
 from apps.crm.models.api import (
     NamespaceCreateRequest,
     NamespaceEditabilityResponse,
-    NamespaceListResponse,
     NamespaceResponse,
     NamespaceTemplateCreateRequest,
     NamespaceTemplateDetailsResponse,
@@ -72,41 +72,64 @@ def _normalize_allowed_type_ids(raw_value: list[str]) -> list[str]:
     return normalized
 
 
-@router.get("", response_model=NamespaceListResponse)
+async def _collect_company_type_ids(container: ContainerDep) -> set[str]:
+    page_limit = 200
+    offset = 0
+    type_ids: set[str] = set()
+    while True:
+        page = await container.entity_type_repository.get_all_for_company(
+            limit=page_limit,
+            offset=offset,
+        )
+        if not page:
+            return type_ids
+        type_ids.update(item.type_id for item in page)
+        if len(page) < page_limit:
+            return type_ids
+        offset += page_limit
+
+
+@router.get("", response_model=OffsetPage[NamespaceResponse])
 async def list_namespaces(
-    container: CRMContainer = Depends(get_container_dep)
-) -> NamespaceListResponse:
-    """
-    Список всех namespaces текущей компании.
-    Если пусто - автоматически создается default.
-    """
-    context = get_context()
-    company_id = context.active_company.company_id
-    
+    container: ContainerDep,
+    limit: int = Query(200, ge=1, le=1000),
+    offset: int = Query(0, ge=0),
+) -> OffsetPage[NamespaceResponse]:
+    """Список всех namespaces текущей компании."""
     namespace_repo = container.namespace_repository
-    namespaces = await namespace_repo.list_all()
-    
-    return NamespaceListResponse(
-        namespaces=[
+    namespaces, total = await asyncio.gather(
+        namespace_repo.list(limit=limit, offset=offset),
+        namespace_repo.count_all(),
+    )
+    return OffsetPage[NamespaceResponse](
+        items=[
             NamespaceResponse(
                 name=ns.name,
                 company_id=ns.company_id,
                 description=ns.description,
-                is_default=ns.is_default
+                is_default=ns.is_default,
+                crm_settings=ns.crm_settings,
             )
             for ns in namespaces
         ],
-        company_id=company_id
+        total=total,
+        limit=limit,
+        offset=offset,
     )
 
 
-@router.get("/templates", response_model=List[NamespaceTemplateResponse])
+@router.get("/templates", response_model=OffsetPage[NamespaceTemplateResponse])
 async def list_namespace_templates(
-    container: CRMContainer = Depends(get_container_dep)
-) -> List[NamespaceTemplateResponse]:
+    container: ContainerDep,
+    limit: int = Query(200, ge=1, le=1000),
+    offset: int = Query(0, ge=0),
+) -> OffsetPage[NamespaceTemplateResponse]:
     """Список шаблонов namespace из БД."""
     template_repo = container.namespace_template_repository
-    templates = await template_repo.list_for_company()
+    templates, total = await asyncio.gather(
+        template_repo.list_for_company(limit=limit, offset=offset),
+        template_repo.count_all(),
+    )
     responses: list[NamespaceTemplateResponse] = []
     for template in templates:
         template_types = await template_repo.list_types(template.template_key)
@@ -120,12 +143,17 @@ async def list_namespace_templates(
                 entity_type_ids=[item.type_id for item in template_types],
             )
         )
-    return responses
+    return OffsetPage[NamespaceTemplateResponse](
+        items=responses,
+        total=total,
+        limit=limit,
+        offset=offset,
+    )
 
 
 @router.get("/templates/schema/options", response_model=NamespaceTemplateSchemaOptionsResponse)
 async def get_template_schema_options(
-    container: CRMContainer = Depends(get_container_dep),
+    container: ContainerDep,
 ) -> NamespaceTemplateSchemaOptionsResponse:
     """Динамические опции конструктора полей для UI."""
     _ = container
@@ -135,7 +163,7 @@ async def get_template_schema_options(
 @router.post("/templates", response_model=NamespaceTemplateResponse, status_code=201)
 async def create_namespace_template(
     request: NamespaceTemplateCreateRequest,
-    container: CRMContainer = Depends(get_container_dep),
+    container: ContainerDep,
 ) -> NamespaceTemplateResponse:
     template_repo = container.namespace_template_repository
     existing = await template_repo.get_by_template_id(request.template_id)
@@ -161,7 +189,7 @@ async def create_namespace_template(
 @router.get("/templates/{template_id}", response_model=NamespaceTemplateDetailsResponse)
 async def get_namespace_template(
     template_id: str,
-    container: CRMContainer = Depends(get_container_dep),
+    container: ContainerDep,
 ) -> NamespaceTemplateDetailsResponse:
     template_repo = container.namespace_template_repository
     template = await template_repo.get_by_template_id(template_id)
@@ -190,6 +218,8 @@ async def get_namespace_template(
                 check_duplicates=item.check_duplicates,
                 weight_coefficient=item.weight_coefficient,
                 namespace_ids=item.namespace_ids,
+                is_context_anchor=item.is_context_anchor,
+                is_voice_target=item.is_voice_target,
             )
             for item in template_types
         ],
@@ -200,7 +230,7 @@ async def get_namespace_template(
 async def update_namespace_template(
     template_id: str,
     request: NamespaceTemplateUpdateRequest,
-    container: CRMContainer = Depends(get_container_dep),
+    container: ContainerDep,
 ) -> NamespaceTemplateResponse:
     template_repo = container.namespace_template_repository
     template = await template_repo.get_by_template_id(template_id)
@@ -227,7 +257,7 @@ async def update_namespace_template(
 @router.delete("/templates/{template_id}", status_code=204)
 async def delete_namespace_template(
     template_id: str,
-    container: CRMContainer = Depends(get_container_dep),
+    container: ContainerDep,
 ) -> None:
     template_repo = container.namespace_template_repository
     template = await template_repo.get_by_template_id(template_id)
@@ -242,7 +272,7 @@ async def delete_namespace_template(
 async def upsert_template_type(
     template_id: str,
     request: NamespaceTemplateTypeUpsertRequest,
-    container: CRMContainer = Depends(get_container_dep),
+    container: ContainerDep,
 ) -> NamespaceTemplateTypeResponse:
     template_repo = container.namespace_template_repository
     template = await template_repo.get_by_template_id(template_id)
@@ -263,6 +293,8 @@ async def upsert_template_type(
         check_duplicates=request.check_duplicates,
         weight_coefficient=request.weight_coefficient,
         namespace_ids=request.namespace_ids,
+        is_context_anchor=request.is_context_anchor,
+        is_voice_target=request.is_voice_target,
     )
     return NamespaceTemplateTypeResponse(
         type_id=item.type_id,
@@ -278,6 +310,8 @@ async def upsert_template_type(
         check_duplicates=item.check_duplicates,
         weight_coefficient=item.weight_coefficient,
         namespace_ids=item.namespace_ids,
+        is_context_anchor=item.is_context_anchor,
+        is_voice_target=item.is_voice_target,
     )
 
 
@@ -285,7 +319,7 @@ async def upsert_template_type(
 async def delete_template_type(
     template_id: str,
     type_id: str,
-    container: CRMContainer = Depends(get_container_dep),
+    container: ContainerDep,
 ) -> None:
     template_repo = container.namespace_template_repository
     template = await template_repo.get_by_template_id(template_id)
@@ -299,7 +333,7 @@ async def delete_template_type(
 @router.post("", status_code=201, response_model=NamespaceResponse)
 async def create_namespace(
     request: NamespaceCreateRequest,
-    container: CRMContainer = Depends(get_container_dep)
+    container: ContainerDep,
 ) -> NamespaceResponse:
     """Создает namespace и применяет DB-шаблон."""
     try:
@@ -320,14 +354,15 @@ async def create_namespace(
         name=namespace.name,
         company_id=namespace.company_id,
         description=namespace.description,
-        is_default=namespace.is_default
+        is_default=namespace.is_default,
+        crm_settings=namespace.crm_settings,
     )
 
 
 @router.get("/{namespace_name}/editability", response_model=NamespaceEditabilityResponse)
 async def get_namespace_editability(
     namespace_name: str,
-    container: CRMContainer = Depends(get_container_dep),
+    container: ContainerDep,
 ) -> NamespaceEditabilityResponse:
     normalized_namespace_name = namespace_name.strip()
     if not normalized_namespace_name:
@@ -346,7 +381,7 @@ async def get_namespace_editability(
 async def update_namespace(
     namespace_name: str,
     request: NamespaceUpdateRequest,
-    container: CRMContainer = Depends(get_container_dep),
+    container: ContainerDep,
 ) -> NamespaceResponse:
     normalized_namespace_name = namespace_name.strip()
     if not normalized_namespace_name:
@@ -359,8 +394,7 @@ async def update_namespace(
     allowed_type_ids = None
     if request.allowed_type_ids is not None:
         allowed_type_ids = _normalize_allowed_type_ids(request.allowed_type_ids)
-        all_types = await container.entity_type_repository.get_all_for_company()
-        all_type_ids = {item.type_id for item in all_types}
+        all_type_ids = await _collect_company_type_ids(container)
         unknown_type_ids = [item for item in allowed_type_ids if item not in all_type_ids]
         if unknown_type_ids:
             raise HTTPException(
@@ -369,13 +403,15 @@ async def update_namespace(
             )
 
     editability = await container.namespace_template_service.get_namespace_editability(normalized_namespace_name)
-    current_allowed_type_ids = set(editability["current_allowed_type_ids"])
-    requested_allowed_type_ids = set(allowed_type_ids or []) if allowed_type_ids is not None else None
-    is_allowed_types_changed = (
-        requested_allowed_type_ids is not None and requested_allowed_type_ids != current_allowed_type_ids
-    )
-    if is_allowed_types_changed and not editability["can_update_allowed_types"]:
-        raise HTTPException(status_code=422, detail=editability["lock_reason"])
+    if allowed_type_ids is not None:
+        locked_type_ids = set(editability["locked_type_ids"])
+        requested_set = set(allowed_type_ids)
+        missing_locked = locked_type_ids - requested_set
+        if missing_locked:
+            raise HTTPException(
+                status_code=422,
+                detail=f"Нельзя убрать типы с существующими сущностями: {', '.join(sorted(missing_locked))}",
+            )
 
     service = container.namespace_template_service
     updated_namespace = await service.update_existing_namespace(
@@ -385,9 +421,18 @@ async def update_namespace(
         allowed_type_ids=allowed_type_ids,
     )
 
+    if request.crm_settings is not None:
+        ns = await container.namespace_repository.get(normalized_namespace_name)
+        if ns is None:
+            raise HTTPException(status_code=404, detail=f"Namespace {normalized_namespace_name} not found")
+        ns.crm_settings = request.crm_settings
+        await container.namespace_repository.set(ns)
+        updated_namespace = ns
+
     return NamespaceResponse(
         name=updated_namespace.name,
         company_id=updated_namespace.company_id,
         description=updated_namespace.description,
         is_default=updated_namespace.is_default,
+        crm_settings=updated_namespace.crm_settings,
     )

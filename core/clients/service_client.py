@@ -6,6 +6,7 @@
 - Authorization
 - X-Company-Id  
 - X-User-Id
+- X-Platform-Namespace (если не default)
 """
 
 import logging
@@ -22,6 +23,7 @@ logger = logging.getLogger(__name__)
 TRACE_ID_HEADER = "X-Trace-Id"
 COMPANY_ID_HEADER = "X-Company-Id"
 USER_ID_HEADER = "X-User-Id"
+NAMESPACE_HEADER = "X-Platform-Namespace"
 
 
 class ServiceClientError(Exception):
@@ -70,7 +72,10 @@ class ServiceClient:
         
         if context.user:
             headers[USER_ID_HEADER] = context.user.user_id
-        
+
+        if context.active_namespace and context.active_namespace != "default":
+            headers[NAMESPACE_HEADER] = context.active_namespace
+
         return headers
     
     async def request(
@@ -136,6 +141,10 @@ class ServiceClient:
         """PUT запрос к сервису"""
         return await self.request(service, "PUT", path, **kwargs)
     
+    async def patch(self, service: str, path: str, **kwargs) -> Any:
+        """PATCH запрос к сервису"""
+        return await self.request(service, "PATCH", path, **kwargs)
+
     async def delete(self, service: str, path: str, **kwargs) -> Any:
         """DELETE запрос к сервису"""
         return await self.request(service, "DELETE", path, **kwargs)

@@ -2,7 +2,8 @@
 Alembic env для БД сервиса flows.
 
 Таблицы: flows, flows_versions, nodes, tools, states,
-evaluation_results, scheduled_tasks, resources, stores, flow_states.
+evaluation_results, scheduled_tasks, resources, stores, flow_states,
+operator_queues, operator_queue_members, operator_tasks.
 """
 
 import asyncio
@@ -20,6 +21,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspa
 from apps.flows.src.db.models import (  # noqa: F401
     Base, Flows, FlowsVersions, Nodes, Tools, States,
     EvaluationResults, ScheduledTasks, Resources, Stores, FlowStates,
+    OperatorQueues, OperatorQueueMembers, OperatorTasks,
 )
 
 config = context.config
@@ -34,6 +36,7 @@ MANAGED_TABLES = {
     "flows", "flows_versions", "nodes", "tools", "states",
     "evaluation_results", "scheduled_tasks", "resources",
     "stores", "flow_states",
+    "operator_queues", "operator_queue_members", "operator_tasks",
 }
 
 

@@ -7,6 +7,7 @@ from typing import Dict, Any
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
+from apps.flows.src.dependencies import ContainerDep
 from apps.flows.src.tasks.company_init_tasks import init_company_resources
 from core.logging import get_logger
 
@@ -30,7 +31,7 @@ class InitCompanyResponse(BaseModel):
 
 
 @router.post("/init", response_model=InitCompanyResponse)
-async def init_company(request: InitCompanyRequest) -> InitCompanyResponse:
+async def init_company(container: ContainerDep, request: InitCompanyRequest) -> InitCompanyResponse:
     """
     Инициализирует агенты и тулы для новой компании.
     
@@ -44,6 +45,7 @@ async def init_company(request: InitCompanyRequest) -> InitCompanyResponse:
     Returns:
         task_id для отслеживания выполнения
     """
+    _ = container
     logger.info(f"Запрос инициализации компании: {request.company_id}")
     
     # Запрещаем инициализацию system через API

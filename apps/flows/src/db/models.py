@@ -4,7 +4,7 @@
 
 from datetime import datetime, timezone, date
 from typing import Any, Optional
-from sqlalchemy import String, Index, UniqueConstraint, Integer, Date, DateTime
+from sqlalchemy import String, Index, UniqueConstraint, Integer, Date, DateTime, ForeignKey
 from sqlalchemy.orm import Mapped, mapped_column
 from sqlalchemy.dialects.postgresql import JSONB
 
@@ -285,4 +285,97 @@ class FlowStates(Base):
 
     def __repr__(self) -> str:
         return f"<FlowStates(session_id='{self.session_id}', store_id='{self.store_id}')>"
+
+
+class OperatorQueues(Base):
+    """
+    Очередь назначения задач оператору (поддержка, эскалация).
+    """
+
+    __tablename__ = "operator_queues"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    company_id: Mapped[str] = mapped_column(String(255), index=True, nullable=False)
+    name: Mapped[str] = mapped_column(String(512), nullable=False)
+    slug: Mapped[str] = mapped_column(String(255), nullable=False)
+    description: Mapped[Optional[str]] = mapped_column(String(2048), default=None)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), insert_default=utc_now)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), insert_default=utc_now, onupdate=utc_now
+    )
+
+    __table_args__ = (
+        UniqueConstraint("company_id", "slug", name="uq_operator_queues_company_slug"),
+        Index("ix_operator_queues_company_id", "company_id"),
+    )
+
+    def __repr__(self) -> str:
+        return f"<OperatorQueues(id='{self.id}', slug='{self.slug}')>"
+
+
+class OperatorQueueMembers(Base):
+    """Участник очереди (оператор)."""
+
+    __tablename__ = "operator_queue_members"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    queue_id: Mapped[str] = mapped_column(
+        String(36),
+        ForeignKey("operator_queues.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    user_id: Mapped[str] = mapped_column(String(255), nullable=False)
+    role: Mapped[str] = mapped_column(String(64), nullable=False, default="agent")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), insert_default=utc_now)
+
+    __table_args__ = (
+        UniqueConstraint("queue_id", "user_id", name="uq_operator_queue_members_queue_user"),
+        Index("ix_operator_queue_members_user_id", "user_id"),
+    )
+
+    def __repr__(self) -> str:
+        return f"<OperatorQueueMembers(queue_id='{self.queue_id}', user_id='{self.user_id}')>"
+
+
+class OperatorTasks(Base):
+    """
+    Задача оператора, созданная при interrupt (operator_task).
+    """
+
+    __tablename__ = "operator_tasks"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    company_id: Mapped[str] = mapped_column(String(255), index=True, nullable=False)
+    queue_id: Mapped[str] = mapped_column(
+        String(36),
+        ForeignKey("operator_queues.id", ondelete="RESTRICT"),
+        nullable=False,
+        index=True,
+    )
+    status: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    session_id: Mapped[str] = mapped_column(String(512), nullable=False, index=True)
+    end_user_id: Mapped[str] = mapped_column(String(255), nullable=False)
+    flow_id: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
+    skill_id: Mapped[str] = mapped_column(String(255), nullable=False, default="default")
+    a2a_task_id: Mapped[Optional[str]] = mapped_column(String(255), default=None)
+    context_id: Mapped[Optional[str]] = mapped_column(String(255), default=None)
+    correlation_id: Mapped[Optional[str]] = mapped_column(String(36), default=None, index=True)
+    interrupt_snapshot: Mapped[Optional[dict[str, Any]]] = mapped_column(JSONB, default=None)
+    claimed_by_user_id: Mapped[Optional[str]] = mapped_column(String(255), default=None)
+    resolution_payload: Mapped[Optional[dict[str, Any]]] = mapped_column(JSONB, default=None)
+    dialog_log: Mapped[Optional[list]] = mapped_column(JSONB, default=None)
+    context_data_snapshot: Mapped[Optional[dict[str, Any]]] = mapped_column(JSONB, default=None)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), insert_default=utc_now)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), insert_default=utc_now, onupdate=utc_now
+    )
+
+    __table_args__ = (
+        Index("ix_operator_tasks_queue_status", "queue_id", "status"),
+        UniqueConstraint("company_id", "correlation_id", name="uq_operator_tasks_company_correlation"),
+    )
+
+    def __repr__(self) -> str:
+        return f"<OperatorTasks(id='{self.id}', status='{self.status}')>"
 

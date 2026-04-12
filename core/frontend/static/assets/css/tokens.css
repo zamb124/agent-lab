@@ -11,6 +11,12 @@
     --breakpoint-tablet: 768px;
     --breakpoint-desktop: 1024px;
     --breakpoint-wide: 1440px;
+
+    /* iOS/Android вырезы; с meta viewport-fit=cover */
+    --platform-safe-top: env(safe-area-inset-top, 0px);
+    --platform-safe-right: env(safe-area-inset-right, 0px);
+    --platform-safe-bottom: env(safe-area-inset-bottom, 0px);
+    --platform-safe-left: env(safe-area-inset-left, 0px);
     
     /* ========== ЦВЕТОВАЯ ПАЛИТРА ========== */
     
@@ -93,18 +99,19 @@
     
     /* ========== АКЦЕНТНЫЕ ЦВЕТА ========== */
     
-    /* Основной акцент (изумрудный) */
-    --accent: #10b981;
-    --accent-hover: #34d399;
-    --accent-active: #059669;
-    --accent-subtle: rgba(16, 185, 129, 0.15);
-    --accent-glow: 0 0 24px rgba(16, 185, 129, 0.4);
-    --accent-gradient: linear-gradient(135deg, #10b981 0%, #06b6d4 100%);
+    /* Основной акцент (violet) */
+    --accent: #99A6F9;
+    --accent-hover: #8794F0;
+    --accent-active: #7682E0;
+    --accent-subtle: rgba(153, 166, 249, 0.15);
+    --accent-glow: 0 0 24px rgba(153, 166, 249, 0.4);
+    --accent-gradient: linear-gradient(258.06deg, #FAD17A 13.41%, #FF9A76 50.99%, #99A6F9 95.5%);
     
-    /* Вторичный акцент (голубой) */
-    --accent-secondary: #06b6d4;
-    --accent-secondary-hover: #22d3ee;
-    --accent-secondary-subtle: rgba(6, 182, 212, 0.15);
+    /* Вторичный акцент (orange) */
+    --accent-secondary: #FF885C;
+    --accent-secondary-hover: #F2784A;
+    --accent-secondary-subtle: rgba(255, 136, 92, 0.15);
+    --accent-secondary-glow: 0 0 24px rgba(255, 136, 92, 0.4);
     
     /* Третичный акцент (фиолетовый) */
     --accent-tertiary: #8b5cf6;
@@ -157,7 +164,7 @@
     
     /* ========== ТИПОГРАФИКА ========== */
     
-    --font-sans: 'SF Pro Display', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    --font-sans: 'Onest', 'Inter', 'SF Pro Display', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
     --font-mono: 'SF Mono', 'JetBrains Mono', 'Fira Code', monospace;
     
     --text-xs: 0.75rem;
@@ -253,8 +260,45 @@
     /* ========== СПЕЦИАЛЬНЫЕ ЭФФЕКТЫ ========== */
     
     /* Hover glow для интерактивных элементов */
-    --hover-glow: 0 0 0 4px rgba(16, 185, 129, 0.15);
-    --focus-ring: 0 0 0 3px rgba(16, 185, 129, 0.4);
+    --hover-glow: 0 0 0 4px rgba(153, 166, 249, 0.15);
+    --focus-ring: 0 0 0 3px rgba(153, 166, 249, 0.4);
+
+    /* ========== PLATFORM BUTTON TOKENS ========== */
+
+    --btn-radius: 22px;
+    --btn-padding: 8px 24px;
+    --btn-font-size: 16px;
+    --btn-line-height: 20px;
+    --btn-font-weight: 400;
+
+    --platform-btn-primary-bg: var(--accent);
+    --platform-btn-primary-bg-hover: var(--accent-hover);
+    --platform-btn-primary-text: #ffffff;
+    --platform-btn-primary-border: var(--accent);
+    --platform-btn-primary-border-hover: var(--accent-hover);
+    --platform-btn-primary-shadow: none;
+    --platform-btn-primary-shadow-hover: 0 0 10px rgba(153, 166, 249, 0.6);
+
+    --platform-btn-accent-bg: var(--accent-secondary);
+    --platform-btn-accent-bg-hover: var(--accent-secondary-hover);
+    --platform-btn-accent-text: #ffffff;
+    --platform-btn-accent-border: var(--accent-secondary);
+    --platform-btn-accent-border-hover: var(--accent-secondary-hover);
+    --platform-btn-accent-shadow: none;
+    --platform-btn-accent-shadow-hover: 0 0 10px rgba(255, 136, 92, 0.6);
+
+    --platform-btn-secondary-bg: rgba(153, 166, 249, 0.15);
+    --platform-btn-secondary-bg-hover: rgba(153, 166, 249, 0.1);
+    --platform-btn-secondary-text: var(--accent);
+    --platform-btn-secondary-border: transparent;
+    --platform-btn-secondary-border-hover: transparent;
+    --platform-btn-secondary-shadow: none;
+    --platform-btn-secondary-shadow-hover: 0 0 10px rgba(153, 166, 249, 0.2);
+
+    --platform-btn-accent-secondary-bg: rgba(255, 136, 92, 0.15);
+    --platform-btn-accent-secondary-bg-hover: rgba(255, 136, 92, 0.1);
+    --platform-btn-accent-secondary-text: #FF9A76;
+    --platform-btn-accent-secondary-shadow-hover: 0 0 10px rgba(255, 136, 92, 0.2);
 
     /* ========== CRM SEMANTIC TOKENS ========== */
 
@@ -295,14 +339,14 @@
 
     --crm-daily-notes-cta-bg: #8f9cf6;
     --crm-daily-notes-cta-hover: #7f8eec;
-    --crm-button-primary-bg: #99A6F9;
-    --crm-button-primary-hover: #8794F0;
-    --crm-button-primary-text: #ffffff;
-    --crm-button-secondary-bg: #FF885C;
-    --crm-button-secondary-hover: #F2784A;
-    --crm-button-secondary-text: #ffffff;
+    --crm-button-primary-bg: var(--platform-btn-primary-bg);
+    --crm-button-primary-hover: var(--platform-btn-primary-bg-hover);
+    --crm-button-primary-text: var(--platform-btn-primary-text);
+    --crm-button-secondary-bg: var(--platform-btn-accent-bg);
+    --crm-button-secondary-hover: var(--platform-btn-accent-bg-hover);
+    --crm-button-secondary-text: var(--platform-btn-accent-text);
 
-    --crm-main-gradient: linear-gradient(258.06deg, #FAD17A 13.41%, #FF9A76 50.99%, #99A6F9 95.5%);
+    --crm-main-gradient: var(--accent-gradient);
     --crm-summary-bg: rgba(95, 101, 150, 0.26);
     --crm-summary-stroke: rgba(136, 145, 204, 0.42);
     --crm-summary-title-gradient: var(--crm-main-gradient);
@@ -312,6 +356,19 @@
     --crm-summary-chip-orange-bg: rgba(255, 171, 120, 0.3);
     --crm-summary-chip-rose-bg: rgba(250, 176, 187, 0.32);
     
+    /* ========== SYNC SEMANTIC TOKENS ========== */
+
+    --sync-bubble-own-bg: linear-gradient(135deg, rgba(153, 166, 249, 0.18) 0%, rgba(255, 136, 92, 0.10) 100%);
+    --sync-bubble-own-border: rgba(153, 166, 249, 0.30);
+    --sync-bubble-other-bg: linear-gradient(135deg, rgba(147, 197, 253, 0.22) 0%, rgba(96, 165, 250, 0.14) 100%);
+    --sync-bubble-other-border: rgba(96, 165, 250, 0.24);
+    --sync-bubble-radius: var(--radius-md);
+    --sync-bubble-radius-grouped: 6px;
+    --sync-header-blur: var(--glass-blur-strong);
+    --sync-composer-bg: var(--glass-solid-subtle);
+    --sync-video-radius: var(--radius-lg);
+    --sync-active-row-bg: linear-gradient(135deg, rgba(153, 166, 249, 0.14) 0%, rgba(255, 136, 92, 0.08) 100%);
+
     /* Shimmer эффект для загрузки */
     --shimmer-gradient: linear-gradient(
         90deg,
@@ -407,12 +464,23 @@
     --platform-date-picker-range-text: var(--accent-secondary);
     
     /* Акценты для светлой темы */
-    --accent: #059669;
-    --accent-hover: #10b981;
-    --accent-subtle: rgba(5, 150, 105, 0.1);
-    --accent-glow: 0 0 24px rgba(5, 150, 105, 0.25);
+    --accent: #8794F0;
+    --accent-hover: #99A6F9;
+    --accent-subtle: rgba(135, 148, 240, 0.12);
+    --accent-glow: 0 0 24px rgba(135, 148, 240, 0.25);
+    --accent-secondary: #F2784A;
+    --accent-secondary-hover: #FF885C;
+    --accent-secondary-subtle: rgba(242, 120, 74, 0.12);
     --accent-quaternary-subtle: rgba(245, 158, 11, 0.12);
     
+    /* Sync semantic tokens (light) */
+    --sync-bubble-own-bg: linear-gradient(135deg, rgba(153, 166, 249, 0.22) 0%, rgba(135, 148, 240, 0.14) 100%);
+    --sync-bubble-own-border: rgba(135, 148, 240, 0.25);
+    --sync-bubble-other-bg: linear-gradient(135deg, rgba(219, 234, 254, 0.85) 0%, rgba(191, 219, 254, 0.65) 100%);
+    --sync-bubble-other-border: rgba(59, 130, 246, 0.22);
+    --sync-composer-bg: rgba(255, 255, 255, 0.85);
+    --sync-active-row-bg: linear-gradient(135deg, rgba(153, 166, 249, 0.15) 0%, rgba(135, 148, 240, 0.08) 100%);
+
     /* Shimmer для светлой темы */
     --shimmer-gradient: linear-gradient(
         90deg,
@@ -458,14 +526,14 @@
 
     --crm-daily-notes-cta-bg: #8f9cf6;
     --crm-daily-notes-cta-hover: #7f8eec;
-    --crm-button-primary-bg: #99A6F9;
-    --crm-button-primary-hover: #8794F0;
-    --crm-button-primary-text: #ffffff;
-    --crm-button-secondary-bg: #FF885C;
-    --crm-button-secondary-hover: #F2784A;
-    --crm-button-secondary-text: #ffffff;
+    --crm-button-primary-bg: var(--platform-btn-primary-bg);
+    --crm-button-primary-hover: var(--platform-btn-primary-bg-hover);
+    --crm-button-primary-text: var(--platform-btn-primary-text);
+    --crm-button-secondary-bg: var(--platform-btn-accent-bg);
+    --crm-button-secondary-hover: var(--platform-btn-accent-bg-hover);
+    --crm-button-secondary-text: var(--platform-btn-accent-text);
 
-    --crm-main-gradient: linear-gradient(258.06deg, #FAD17A 13.41%, #FF9A76 50.99%, #99A6F9 95.5%);
+    --crm-main-gradient: var(--accent-gradient);
     --crm-summary-bg: rgba(174, 180, 224, 0.28);
     --crm-summary-stroke: rgba(141, 149, 205, 0.45);
     --crm-summary-title-gradient: var(--crm-main-gradient);
@@ -474,6 +542,20 @@
     --crm-summary-chip-cyan-bg: rgba(117, 219, 246, 0.32);
     --crm-summary-chip-orange-bg: rgba(255, 171, 120, 0.35);
     --crm-summary-chip-rose-bg: rgba(250, 176, 187, 0.38);
+}
+
+/* ========== Office / Documents service palette ========== */
+:root {
+    --documents-gradient: linear-gradient(105deg, #3ec9d8 0%, #6cb1e1 42%, #737ce9 100%);
+    --documents-gradient-hover: linear-gradient(105deg, #48d4e2 0%, #78b9ea 42%, #828df0 100%);
+    --documents-selected-bg: #dff3f9;
+    --documents-selected-stroke: rgba(120, 127, 246, 0.38);
+    --documents-selected-text: #4659b8;
+    --documents-surface-muted: #eef8fc;
+    --documents-stroke: rgba(100, 170, 215, 0.45);
+    --documents-link-hover: #3585c4;
+    --documents-btn-shadow: 0 2px 14px rgba(70, 89, 184, 0.22);
+    --documents-btn-shadow-hover: 0 4px 20px rgba(70, 89, 184, 0.32);
 }
 
 /* ========== УТИЛИТЫ ========== */
@@ -519,10 +601,10 @@
     background: var(--accent-gradient);
     color: white;
     border: none;
-    box-shadow: 0 4px 16px rgba(16, 185, 129, 0.3);
+    box-shadow: 0 4px 16px rgba(153, 166, 249, 0.3);
 }
 
 .gradient-accent:hover {
-    box-shadow: 0 6px 24px rgba(16, 185, 129, 0.4);
+    box-shadow: 0 6px 24px rgba(153, 166, 249, 0.4);
     transform: translateY(-2px);
 }

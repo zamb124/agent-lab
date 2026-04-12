@@ -156,11 +156,15 @@ export class TracingModal extends PlatformModal {
 
     constructor() {
         super();
-        this.title = 'Tracing';
         this.flowId = '';
         this.taskId = '';
         this.spans = [];
         this.loading = false;
+    }
+
+    connectedCallback() {
+        super.connectedCallback();
+        this.title = this.i18n.t('tracing_modal.title');
     }
 
     async showModal() {
@@ -292,7 +296,7 @@ export class TracingModal extends PlatformModal {
             return html`
                 <div class="empty-state">
                     <platform-spinner variant="ai" size="48"></platform-spinner>
-                    <p>Загрузка трейсинга...</p>
+                    <p>${this.i18n.t('tracing_modal.loading')}</p>
                 </div>
             `;
         }
@@ -301,8 +305,8 @@ export class TracingModal extends PlatformModal {
             return html`
                 <div class="empty-state">
                     <platform-icon name="terminal" size="48"></platform-icon>
-                    <p>Нет данных трейсинга</p>
-                    <p style="font-size: var(--text-sm);">Трейсы появятся после выполнения задач</p>
+                    <p>${this.i18n.t('tracing_modal.no_data')}</p>
+                    <p style="font-size: var(--text-sm);">${this.i18n.t('tracing_modal.empty_hint')}</p>
                 </div>
             `;
         }

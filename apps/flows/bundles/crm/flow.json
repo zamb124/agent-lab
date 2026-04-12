@@ -4,6 +4,10 @@
   "description": "Единый flow для CRM: skills (анализ, резюмирование и др.)",
   "version": "1.0.0",
   "entry": "main",
+  "variables": {
+    "interface_language_code": "ru",
+    "interface_language_name": "русском"
+  },
   "nodes": {
     "main": {
       "type": "llm_node",
@@ -56,20 +60,77 @@
       },
       "edges": []
     },
-    "call_summary": {
-      "name": "Call Summary",
-      "description": "Структурированное summary встречи по транскрипту",
+    "summarize_chunk": {
+      "name": "Daily Summary Chunk",
+      "description": "Map-reduce: сводка по чанку до 5 карточек заметок",
       "nodes": {
         "main": {
           "type": "llm_node",
-          "prompt": "prompts/call_summary.md",
+          "prompt": "prompts/summarize_chunk.md",
+          "llm": {
+            "model": "qwen/qwen3.5-397b-a17b",
+            "temperature": 0.3
+          },
+          "tools": [],
+          "structured_output": true,
+          "output_schema_file": "schemas/summarize.output_schema.json",
+          "output_key": "response"
+        }
+      },
+      "edges": []
+    },
+    "summarize_merge": {
+      "name": "Daily Summary Merge",
+      "description": "Map-reduce: слияние промежуточных сводок за день",
+      "nodes": {
+        "main": {
+          "type": "llm_node",
+          "prompt": "prompts/summarize_merge.md",
+          "llm": {
+            "model": "qwen/qwen3.5-397b-a17b",
+            "temperature": 0.2
+          },
+          "tools": [],
+          "structured_output": true,
+          "output_schema_file": "schemas/summarize.output_schema.json",
+          "output_key": "response"
+        }
+      },
+      "edges": []
+    },
+    "period_summarize_merge": {
+      "name": "Period Summary Merge",
+      "description": "Слияние дневных CRM-сводок в сводку за диапазон дат",
+      "nodes": {
+        "main": {
+          "type": "llm_node",
+          "prompt": "prompts/period_summarize_merge.md",
+          "llm": {
+            "model": "qwen/qwen3.5-397b-a17b",
+            "temperature": 0.2
+          },
+          "tools": [],
+          "structured_output": true,
+          "output_schema_file": "schemas/summarize.output_schema.json",
+          "output_key": "response"
+        }
+      },
+      "edges": []
+    },
+    "summarize_attachment": {
+      "name": "Attachment Summarization",
+      "description": "Сжатие большого файла до фактов для CRM-анализа",
+      "nodes": {
+        "main": {
+          "type": "llm_node",
+          "prompt": "prompts/summarize_attachment.md",
           "llm": {
             "model": "qwen/qwen3.5-397b-a17b",
             "temperature": 0.1
           },
           "tools": [],
           "structured_output": true,
-          "output_schema_file": "schemas/call_summary.output_schema.json",
+          "output_schema_file": "schemas/summarize_attachment.output_schema.json",
           "output_key": "response"
         }
       },
@@ -89,6 +150,25 @@
           "tools": [],
           "structured_output": true,
           "output_schema_file": "schemas/deduplicate.output_schema.json",
+          "output_key": "response"
+        }
+      },
+      "edges": []
+    },
+    "deduplicate_batch": {
+      "name": "Deduplicate Batch",
+      "description": "Пакетное сравнение нескольких пар извлечённая сущность vs кандидат из БД",
+      "nodes": {
+        "main": {
+          "type": "llm_node",
+          "prompt": "prompts/deduplicate_batch.md",
+          "llm": {
+            "model": "qwen/qwen3.5-397b-a17b",
+            "temperature": 0.1
+          },
+          "tools": [],
+          "structured_output": true,
+          "output_schema_file": "schemas/deduplicate_batch.output_schema.json",
           "output_key": "response"
         }
       },

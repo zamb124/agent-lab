@@ -44,14 +44,18 @@ async def ensure_system_admin_membership(
     container: object,
     *,
     user_email: str = SYSTEM_ADMIN_EMAIL,
-) -> tuple[Company, User]:
-    """Гарантирует, что пользователь user_email имеет admin в system-компании."""
+) -> tuple[Company, User | None]:
+    """Гарантирует system-компанию и при наличии пользователя user_email — роль admin в ней."""
     system_company = await ensure_system_company_exists(container)
 
-    users = await container.user_repository.list_all(limit=10000)
+    users = await container.user_repository.list(limit=10000)
     matched_users = [user for user in users if user_email in user.emails]
     if not matched_users:
-        raise ValueError(f"User with email {user_email} not found")
+        logger.warning(
+            "Bootstrap skipped admin grant: user with email %s not found",
+            user_email,
+        )
+        return system_company, None
     if len(matched_users) > 1:
         matched_user_ids = ", ".join(user.user_id for user in matched_users)
         raise ValueError(f"Multiple users found for {user_email}: {matched_user_ids}")

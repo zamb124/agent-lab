@@ -12,13 +12,7 @@ from pydantic import Field, field_serializer, field_validator, model_validator
 
 from a2a.types import Message
 from core.models import FlexibleBaseModel
-
-
-class InterruptData(FlexibleBaseModel):
-    """Данные прерывания выполнения"""
-    
-    question: str = Field(..., description="Вопрос к пользователю")
-    context: Optional[Dict[str, Any]] = Field(default=None, description="Контекст прерывания")
+from core.state.interrupt import InterruptData
 
 
 class InterruptPathItem(FlexibleBaseModel):
@@ -181,6 +175,10 @@ class ExecutionState(FlexibleBaseModel):
         default=None,
         description="Произвольный результат ноды или tool (CodeNode, inline execute)",
     )
+    validation: Optional[Dict[str, Any]] = Field(
+        default=None,
+        description="Данные валидации ноды (условия рёбер вида validation.valid == true)",
+    )
     messages: List[Message] = Field(default_factory=list, description="История сообщений")
     user_groups: List[str] = Field(default_factory=list, description="Группы пользователя")
     
@@ -219,7 +217,14 @@ class ExecutionState(FlexibleBaseModel):
         default_factory=list,
         description="Путь к месту прерывания"
     )
-    
+    hitl_handoff_correlation_id: Optional[str] = Field(
+        default=None,
+        description=(
+            "При resume после operator handoff: correlation_id задачи до сброса interrupt, "
+            "чтобы hitl_node один раз завершилась и граф пошёл дальше по рёбрам"
+        ),
+    )
+
     @field_validator("interrupt", mode="before")
     @classmethod
     def validate_interrupt(cls, v: Any) -> Optional[InterruptData]:
@@ -323,6 +328,13 @@ class ExecutionState(FlexibleBaseModel):
     scheduled_tasks: List[Dict[str, Any]] = Field(
         default_factory=list,
         description="Scheduled tasks созданные в текущей сессии"
+    )
+
+    join_arrived_preds: Dict[str, List[str]] = Field(
+        default_factory=dict,
+        description=(
+            "AND-join (incoming_policy=all): target_node_id -> предки, уже пришедшие в текущем цикле ожидания"
+        ),
     )
     
     # ========================================================================

@@ -8,25 +8,25 @@
     python scripts/run.py crm         # Запуск crm сервиса
     python scripts/run.py rag         # Запуск rag сервиса
     python scripts/run.py sync        # Запуск sync сервиса
-    python scripts/run.py worker      # Запуск TaskIQ worker
+    python scripts/run.py office      # Запуск office (Documents / OnlyOffice BFF + UI)
+    python scripts/run.py flows_worker # Запуск TaskIQ flows_worker
     python scripts/run.py scheduler   # Запуск TaskIQ scheduler
     python scripts/run.py scheduler-api  # Запуск scheduler API
-    python scripts/run.py rag-worker  # Запуск RAG worker
-    python scripts/run.py provider-litserve  # LitServe provider_litserve (эмбеддинги + реранк), порт 8014; uv: --group reranker-model
-    python scripts/run.py sync-worker # Запуск Sync worker
-    python scripts/run.py crm-worker  # Запуск CRM worker
-    python scripts/run.py all         # Все сервисы параллельно (make app); при наличии ``uv`` дочерние процессы идут через ``uv run python`` (зависимости из lockfile)
-    python scripts/run.py all --kill  # то же, после SIGKILL процессов на портах 8001–8006
+    python scripts/run.py rag_worker  # Запуск RAG worker
+    python scripts/run.py sync_worker # Запуск Sync worker
+    python scripts/run.py crm_worker  # Запуск CRM worker
+    python scripts/run.py idle_worker # Запуск Idle worker
+    python scripts/run.py all         # Все сервисы параллельно (make app)
+    python scripts/run.py all --kill  # то же, после SIGKILL процессов на портах HTTP-сервисов
     python scripts/run.py kill-ports  # только освободить порты HTTP-сервисов
 
 Конфигурация загружается из conf.json и conf.local.json.
 Переменные окружения имеют приоритет над конфигами.
 """
 import os
-import shutil
 import signal
-import subprocess
 import sys
+import subprocess
 import threading
 import time
 from pathlib import Path
@@ -64,39 +64,44 @@ SERVICES = {
         "app": "apps.app_runtime_targets:sync_app",
         "port": "8005",
     },
+    "office": {
+        "type": "uvicorn",
+        "app": "apps.app_runtime_targets:office_app",
+        "port": "8008",
+    },
     "scheduler-api": {
         "type": "uvicorn",
         "app": "apps.app_runtime_targets:scheduler_app",
         "port": "8006",
     },
-
+    
     # TaskIQ workers
-    "worker": {
+    "flows_worker": {
         "type": "taskiq-worker",
-        "broker": "apps.app_runtime_targets:flows_taskiq_broker",
+        "worker_app": "apps.app_runtime_targets:flows_taskiq_worker_app",
         "workers": "1",
     },
-    "rag-worker": {
+    "rag_worker": {
         "type": "taskiq-worker",
-        "broker": "apps.app_runtime_targets:rag_taskiq_broker",
+        "worker_app": "apps.app_runtime_targets:rag_taskiq_worker_app",
         "workers": "1",
     },
-    "provider-litserve": {
-        "type": "python-module",
-        "module": "apps.provider_litserve.main",
-        "port": "8014",
-    },
-    "sync-worker": {
+    "sync_worker": {
         "type": "taskiq-worker",
-        "broker": "apps.app_runtime_targets:sync_taskiq_broker",
+        "worker_app": "apps.app_runtime_targets:sync_taskiq_worker_app",
         "workers": "1",
     },
-    "crm-worker": {
+    "crm_worker": {
         "type": "taskiq-worker",
-        "broker": "apps.app_runtime_targets:crm_taskiq_broker",
+        "worker_app": "apps.app_runtime_targets:crm_taskiq_worker_app",
         "workers": "1",
     },
-
+    "idle_worker": {
+        "type": "taskiq-worker",
+        "worker_app": "apps.app_runtime_targets:idle_taskiq_worker_app",
+        "workers": "1",
+    },
+    
     # TaskIQ scheduler
     "scheduler": {
         "type": "taskiq-scheduler",
@@ -105,26 +110,14 @@ SERVICES = {
 }
 
 
-def _python_cmd_prefix() -> list[str]:
-    """
-    Предпочитать ``uv run python``: зависимости из lockfile даже если родительский
-    процесс запущен не из venv (иначе ``No module named uvicorn`` / ``taskiq``).
-    """
-    uv_exe = shutil.which("uv")
-    if uv_exe:
-        return [uv_exe, "run", "python"]
-    return [sys.executable]
-
-
 def build_command(service: str) -> list[str]:
     if service not in SERVICES:
         raise ValueError(f"Неизвестный сервис: {service}")
     config = SERVICES[service]
     service_type = config["type"]
-    py = _python_cmd_prefix()
     if service_type == "uvicorn":
         return [
-            *py,
+            sys.executable,
             "-u",
             "-m",
             "uvicorn",
@@ -138,38 +131,25 @@ def build_command(service: str) -> list[str]:
         ]
     if service_type == "taskiq-worker":
         cmd = [
-            *py,
+            sys.executable,
             "-u",
             "-m",
             "taskiq",
             "worker",
-            config["broker"],
+            config["worker_app"],
             "--workers",
             config["workers"],
         ]
         return cmd
     if service_type == "taskiq-scheduler":
         return [
-            *py,
+            sys.executable,
             "-u",
             "-m",
             "taskiq",
             "scheduler",
             config["scheduler"],
         ]
-    if service_type == "python-module":
-        module_args = [
-            "-u",
-            "-m",
-            config["module"],
-            "--port",
-            config["port"],
-        ]
-        if service == "provider-litserve":
-            uv_exe = shutil.which("uv")
-            if uv_exe:
-                return [uv_exe, "run", "--group", "reranker-model", "python", *module_args]
-        return [*py, *module_args]
     raise ValueError(f"Неизвестный тип сервиса: {service_type}")
 
 

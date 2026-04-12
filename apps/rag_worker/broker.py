@@ -13,6 +13,8 @@ from core.tasks.broker import (
     register_worker_events,
 )
 from core.logging import get_logger, setup_logging
+from core.tracing import setup_tracing
+from core.tracing.tracer import set_span_repository, set_tracing_service_name
 
 logger = get_logger(__name__)
 
@@ -25,13 +27,30 @@ broker.on_event("startup")(recovery_handler)
 
 async def rag_worker_startup(state: TaskiqState) -> None:
     """Инициализация RAG Worker при старте."""
+    from apps.rag.container import get_rag_container
     from apps.rag_worker.config import get_settings
-    from core.rag.factory import get_default_rag_provider
 
-    setup_logging(service_name="rag-worker")
+    setup_logging(service_name="rag_worker")
 
     settings = get_settings()
-    provider = get_default_rag_provider()
+    container = get_rag_container()
+    state.container = container
+
+    from core.files.processors import initialize_default_processors
+
+    initialize_default_processors(container.file_repository)
+
+    if settings.tracing.enabled:
+        setup_tracing(settings.tracing)
+        if settings.tracing.postgres_enabled and hasattr(container, "span_repository"):
+            if not settings.database.tracing_url:
+                raise ValueError(
+                    "tracing.postgres_enabled требует database.tracing_url (DATABASE__TRACING_URL)"
+                )
+            set_tracing_service_name("rag_worker")
+            set_span_repository(container.span_repository)
+        logger.info("RAG Worker: трейсинг инициализирован")
+    provider = container.rag_provider
     state.rag_provider = provider
 
     logger.info("RAG Worker: RAG provider инициализирован")

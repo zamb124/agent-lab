@@ -11,6 +11,7 @@ import json
 import uuid
 from abc import ABC, abstractmethod
 from typing import Any, AsyncGenerator, Dict, List, Optional, Union
+from uuid import UUID
 
 from a2a.types import (
     AgentCapabilities,
@@ -39,14 +40,18 @@ from apps.flows.src.mock import check_mock_permission, resolve_mock_config
 from apps.flows.src.models.flow_config import Edge, SkillConfig
 from apps.flows.src.models.enums import NodeType
 from apps.flows.src.services.flow_validator import FlowValidator, ValidationSeverity
-from apps.flows.src.state import create_initial_state
+from apps.flows.src.state import collect_flow_node_files, create_initial_state
+from apps.flows.src.state.cancellation import CancellationToken, FlowCancelled, set_cancellation_token
+from apps.flows.src.state.interrupt_manager import InterruptManager
 from apps.flows.src.streaming import Emitter
 from core.state import ExecutionState
-from apps.flows.src.tasks.push_notification_tasks import send_task_update
+from core.state.interrupt import HandoffMode, OperatorTaskInterrupt, interrupt_to_response_dict
+from apps.idle_worker.tasks.push_notification_tasks import send_task_update
 from core.tracing import get_tracer
 from core.tracing.provider import is_tracing_enabled
 from apps.flows.src.utils import extract_json_from_response
 from apps.flows.src.variables import VariableResolver
+from apps.flows.src.channels.request_context_variables import flow_variables_from_request_context
 
 logger = get_logger(__name__)
 
@@ -209,7 +214,31 @@ class BaseChannel(ABC):
         """Сохраняет state в StateManager."""
         container = get_container()
         await container.state_manager.save_state(session_id, state)
-    
+
+    async def _resolve_active_takeover_task(self, correlation_id: "UUID") -> Optional[str]:
+        """Проверяет, есть ли активная (CLAIMED/USER_DIALOG) задача оператора по correlation_id.
+
+        Возвращает operator_task_id или None (задача уже завершена / не найдена).
+        """
+        from apps.flows.src.models.operator_schemas import OperatorTaskStatus
+
+        container = get_container()
+        ctx = get_context()
+        if ctx is None or ctx.active_company is None:
+            return None
+        company_id = ctx.active_company.company_id
+        task = await container.operator_repository.get_task_by_correlation(
+            company_id, str(correlation_id)
+        )
+        if task is None:
+            return None
+        if task.status not in (
+            OperatorTaskStatus.CLAIMED.value,
+            OperatorTaskStatus.USER_DIALOG.value,
+        ):
+            return None
+        return task.id
+
     async def _prepare_task_params(
         self,
         content: str,
@@ -241,6 +270,9 @@ class BaseChannel(ABC):
         
         state = await self._get_state(session_id)
         
+        is_takeover_user_reply = False
+        takeover_operator_task_id: str | None = None
+
         if state is None:
             skill_id = "default"
             if metadata and "skill" in metadata:
@@ -252,9 +284,24 @@ class BaseChannel(ABC):
             is_resume = bool(state.interrupt) or bool(state.breakpoint_hit)
             
             if state.interrupt:
-                saved_task_id = state.interrupt.context.get("task_id") if state.interrupt.context else None
+                saved_task_id = state.interrupt.system.task_id
                 if saved_task_id:
                     task_id = saved_task_id
+
+                # A2A input-required follow-up: при активном takeover
+                # реплика пользователя маршрутизируется в dialog_log,
+                # flow НЕ возобновляется до complete_handoff оператором.
+                if (
+                    isinstance(state.interrupt.body, OperatorTaskInterrupt)
+                    and state.interrupt.body.handoff_mode == HandoffMode.TAKEOVER
+                    and state.interrupt.correlation_id is not None
+                ):
+                    op_task = await self._resolve_active_takeover_task(
+                        state.interrupt.correlation_id
+                    )
+                    if op_task is not None:
+                        is_takeover_user_reply = True
+                        takeover_operator_task_id = op_task
         
         # Объединяем metadata из Context канала с переданным metadata
         final_metadata = metadata or {}
@@ -272,6 +319,8 @@ class BaseChannel(ABC):
             message=message,
             metadata=final_metadata,
             user_id=user_id or context_id,
+            is_takeover_user_reply=is_takeover_user_reply,
+            takeover_operator_task_id=takeover_operator_task_id,
         )
     
     async def create_task(self, params: PreparedTaskParams) -> None:
@@ -360,9 +409,7 @@ class BaseChannel(ABC):
         saved_task_id = None
         if saved_state and saved_state.interrupt is not None:
             ir = saved_state.interrupt
-            ctx = ir.context if ir.context is not None else None
-            if isinstance(ctx, dict):
-                saved_task_id = ctx.get("task_id")
+            saved_task_id = ir.system.task_id
         effective_task_id = saved_task_id or params.task_id
         
         logger.debug(f"[process_task] Starting task_id={effective_task_id} (from params: {params.task_id})")
@@ -422,7 +469,11 @@ class BaseChannel(ABC):
                 override_vars = final_override_vars
                 
                 runtime_flow.variables = {**runtime_flow.variables, **override_vars}
-            
+
+            identity_vars = flow_variables_from_request_context(self.context)
+            if identity_vars:
+                runtime_flow.variables = {**runtime_flow.variables, **identity_vars}
+
             user_id = self.context.user.user_id if self.context.user else params.user_id
             user_groups = self.context.metadata.get("grps", []) or []
             
@@ -437,6 +488,8 @@ class BaseChannel(ABC):
                     content=params.content,
                     skill_id=params.skill_id,
                 )
+                cfg_nodes = (runtime_flow.config or {}).get("nodes") or {}
+                state.files = collect_flow_node_files(cfg_nodes)
                 logger.info(f"[state] Created new state for session {params.session_id}")
             else:
                 messages_count = len(state.messages)
@@ -510,7 +563,18 @@ class BaseChannel(ABC):
             if params.is_resume and state.interrupt:
                 state.content = params.content
 
-            state = await runtime_flow.run(state)
+            cancellation_token = CancellationToken(effective_task_id, container.redis_client)
+            set_cancellation_token(cancellation_token)
+
+            try:
+                state = await runtime_flow.run(state)
+            except FlowCancelled:
+                logger.info(f"Flow cancelled: task_id={effective_task_id}")
+                await emitter.emit_cancelled()
+                return {"response": "", "status": "canceled"}
+            finally:
+                await cancellation_token.cleanup()
+                set_cancellation_token(None)
 
             final_response = state.response or ""
 
@@ -533,16 +597,17 @@ class BaseChannel(ABC):
                     "status": "input-required",
                 }
             if state.interrupt:
-                interrupt_context = state.interrupt.context or {}
-                state.interrupt.context = {
-                    **interrupt_context,
-                    "task_id": effective_task_id,
-                    "context_id": params.context_id,
-                }
-                question = state.interrupt.question
-                await emitter.emit_interrupt(question)
+                InterruptManager.enrich_system_from_channel(
+                    state,
+                    context_id=params.context_id,
+                    task_id=effective_task_id,
+                )
+                await emitter.emit_interrupt(state.interrupt)
                 await self._send_push_notification(
-                    params.task_id, params.context_id, "input-required", question
+                    params.task_id,
+                    params.context_id,
+                    "input-required",
+                    state.interrupt.question,
                 )
             else:
                 json_data = extract_json_from_response(final_response)
@@ -565,7 +630,7 @@ class BaseChannel(ABC):
             
             # Сериализация interrupt
             if state.interrupt:
-                interrupt_dict = state.interrupt.model_dump()
+                interrupt_dict = interrupt_to_response_dict(state.interrupt)
             else:
                 interrupt_dict = None
             
@@ -796,9 +861,8 @@ class BaseChannel(ABC):
         config = await container.flow_repository.get(self.flow_id)
         if config is None:
             raise ValueError(f"Flow '{self.flow_id}' not found")
-        
-        skills = await container.flow_factory.get_skills(self.flow_id)
-        if skill_id in skills:
+
+        if config.skills and skill_id in config.skills:
             raise ValueError(f"Skill '{skill_id}' already exists")
         
         skill_body = data.get("skill_body", {})
@@ -881,9 +945,8 @@ class BaseChannel(ABC):
         config = await container.flow_repository.get(self.flow_id)
         if config is None:
             raise ValueError(f"Flow '{self.flow_id}' not found")
-        
-        skills = await container.flow_factory.get_skills(self.flow_id)
-        if skill_id not in skills:
+
+        if not config.skills or skill_id not in config.skills:
             raise ValueError(f"Skill '{skill_id}' not found")
         
         skill_body = data.get("skill_body", {})
@@ -966,22 +1029,18 @@ class BaseChannel(ABC):
         config = await container.flow_repository.get(self.flow_id)
         if config is None:
             raise ValueError(f"Flow '{self.flow_id}' not found")
-        
-        skills = await container.flow_factory.get_skills(self.flow_id)
-        if skill_id not in skills:
+
+        if not config.skills or skill_id not in config.skills:
             raise ValueError(f"Skill '{skill_id}' not found")
-        
-        if config.skills and skill_id in config.skills:
-            del config.skills[skill_id]
-            await container.flow_repository.set(config)
-            logger.info(f"Deleted skill: {skill_id}")
-            return {
-                "status": "success",
-                "message": f"Skill '{skill_id}' deleted successfully",
-                "skill_id": skill_id,
-            }
-        
-        raise ValueError(f"Skill '{skill_id}' not found")
+
+        del config.skills[skill_id]
+        await container.flow_repository.set(config)
+        logger.info(f"Deleted skill: {skill_id}")
+        return {
+            "status": "success",
+            "message": f"Skill '{skill_id}' deleted successfully",
+            "skill_id": skill_id,
+        }
     
     # === Tools ===
     
@@ -1054,31 +1113,43 @@ class BaseChannel(ABC):
         
         # Добавляем inline tools
         for tool_id, tool_config in inline_tools.items():
-            tools_info.append({
-                "name": tool_id,
-                "type": "function",
-                "attributes": {
-                    "description": tool_config.get("description", ""),
-                    "code": tool_config.get("code", ""),
-                    "args_schema": tool_config.get("args_schema", {}),
-                    "source": "inline",
-                },
-            })
+            inline_attrs: dict = {
+                "description": tool_config.get("description", ""),
+                "code": tool_config.get("code", ""),
+                "args_schema": tool_config.get("args_schema", {}),
+                "source": "inline",
+            }
+            ps = tool_config.get("parameters_schema")
+            if ps:
+                inline_attrs["parameters_schema"] = ps
+            tools_info.append(
+                {
+                    "name": tool_id,
+                    "type": "function",
+                    "attributes": inline_attrs,
+                }
+            )
         
         # Добавляем referenced tools
         for tool_id in sorted(tools_set):
             tool_ref = await container.tool_repository.get(tool_id)
             if tool_ref:
                 info = tool_ref.to_registry_format()
-                tools_info.append({
-                    "name": tool_id,
-                    "type": "function",
-                    "attributes": {
-                        "description": info.get("description", ""),
-                        "source": "reference",
-                        "args_schema": info.get("attributes", {}).get("args_schema", {}),
-                    },
-                })
+                ref_attrs = info.get("attributes", {})
+                ref_payload: dict = {
+                    "description": ref_attrs.get("description", ""),
+                    "source": "reference",
+                    "args_schema": ref_attrs.get("args_schema", {}),
+                }
+                if ref_attrs.get("parameters_schema"):
+                    ref_payload["parameters_schema"] = ref_attrs["parameters_schema"]
+                tools_info.append(
+                    {
+                        "name": tool_id,
+                        "type": "function",
+                        "attributes": ref_payload,
+                    }
+                )
             else:
                 flow_config = await container.flow_repository.get(tool_id)
                 if flow_config:
@@ -1118,6 +1189,8 @@ class BaseChannel(ABC):
                     description = "Code нода"
                 elif node_type == NodeType.LLM_NODE.value:
                     description = "ReAct агент"
+                elif node_type == NodeType.HITL_NODE.value:
+                    description = "Оператор очереди"
                 
                 tools_info.append({
                     "name": node_id,

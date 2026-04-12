@@ -189,7 +189,7 @@ class TelegramDevProxy:
         triggers = []
         
         # Получаем все агенты
-        agents = await container.flow_repository.list_all()
+        agents = await container.flow_repository.list(limit=10000)
         
         for agent in agents:
             if not agent.triggers:

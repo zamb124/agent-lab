@@ -1,15 +1,1 @@
-<svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-  <defs>
-    <linearGradient id="sparkleMain" x1="5.25" y1="3.25" x2="18.75" y2="16.75" gradientUnits="userSpaceOnUse">
-      <stop offset="0" stop-color="#8B5CF6"/>
-      <stop offset="1" stop-color="#06B6D4"/>
-    </linearGradient>
-    <linearGradient id="sparkleSmall" x1="3" y1="3" x2="21.5" y2="21" gradientUnits="userSpaceOnUse">
-      <stop offset="0" stop-color="#A855F7"/>
-      <stop offset="1" stop-color="#22D3EE"/>
-    </linearGradient>
-  </defs>
-  <path d="M12 3.25L13.56 8.44L18.75 10L13.56 11.56L12 16.75L10.44 11.56L5.25 10L10.44 8.44L12 3.25Z" fill="url(#sparkleMain)"/>
-  <path d="M18.5 3L19.17 5.33L21.5 6L19.17 6.67L18.5 9L17.83 6.67L15.5 6L17.83 5.33L18.5 3Z" fill="url(#sparkleSmall)"/>
-  <path d="M6 15L6.67 17.33L9 18L6.67 18.67L6 21L5.33 18.67L3 18L5.33 17.33L6 15Z" fill="url(#sparkleSmall)"/>
-</svg>
+<svg xmlns="http://www.w3.org/2000/svg" height="24" viewBox="0 -960 960 960" width="24"><path d="m760-600-50-110-110-50 110-50 50-110 50 110 110 50-110 50-50 110Zm0 560-50-110-110-50 110-50 50-110 50 110 110 50-110 50-50 110ZM360-160 260-380 40-480l220-100 100-220 100 220 220 100-220 100-100 220Zm0-194 40-86 86-40-86-40-40-86-40 86-86 40 86 40 40 86Zm0-126Z"/></svg>

@@ -37,18 +37,18 @@ export class HTTPResourceEditor extends BaseResourceEditor {
 
         return html`
             <div class="form-group">
-                <label class="form-label">Base URL</label>
+                <label class="form-label">${this.i18n.t('resource_editor.http.label_base_url')}</label>
                 <input 
                     type="text" 
                     class="form-input"
                     .value=${baseUrl}
                     @input=${(e) => this._onInputChange('base_url', e.target.value)}
-                    placeholder="https://api.example.com"
+                    placeholder=${this.i18n.t('resource_editor.http.placeholder_base_url')}
                 />
             </div>
             
             <div class="form-group">
-                <label class="form-label">Headers (JSON)</label>
+                <label class="form-label">${this.i18n.t('resource_editor.http.label_headers')}</label>
                 <textarea 
                     class="form-input headers-textarea"
                     .value=${headersJson}
@@ -59,7 +59,7 @@ export class HTTPResourceEditor extends BaseResourceEditor {
             </div>
             
             <div class="form-group">
-                <label class="form-label">Timeout (sec)</label>
+                <label class="form-label">${this.i18n.t('resource_editor.http.label_timeout')}</label>
                 <input 
                     type="number" 
                     class="form-input"
@@ -71,30 +71,30 @@ export class HTTPResourceEditor extends BaseResourceEditor {
             </div>
             
             <div class="form-group">
-                <label class="form-label">Auth Type</label>
+                <label class="form-label">${this.i18n.t('resource_editor.http.label_auth_type')}</label>
                 <select 
                     class="form-select"
                     .value=${authType}
                     @change=${(e) => this._onInputChange('auth_type', e.target.value)}
                 >
-                    <option value="">None</option>
-                    <option value="bearer">Bearer Token</option>
-                    <option value="basic">Basic Auth</option>
-                    <option value="api_key">API Key</option>
+                    <option value="">${this.i18n.t('resource_editor.http.auth_none')}</option>
+                    <option value="bearer">${this.i18n.t('resource_editor.http.auth_bearer')}</option>
+                    <option value="basic">${this.i18n.t('resource_editor.http.auth_basic')}</option>
+                    <option value="api_key">${this.i18n.t('resource_editor.http.auth_api_key')}</option>
                 </select>
             </div>
             
             ${authType ? html`
                 <div class="form-group">
-                    <label class="form-label">Auth Value</label>
+                    <label class="form-label">${this.i18n.t('resource_editor.http.label_auth_value')}</label>
                     <input 
                         type="password" 
                         class="form-input"
                         .value=${authValue}
                         @input=${(e) => this._onInputChange('auth_value', e.target.value)}
-                        placeholder="@var:API_KEY"
+                        placeholder=${this.i18n.t('resource_editor.http.placeholder_auth_value')}
                     />
-                    <span class="form-hint">Токен или @var:SECRET_NAME</span>
+                    <span class="form-hint">${this.i18n.t('resource_editor.http.hint_auth_value')}</span>
                 </div>
             ` : ''}
         `;

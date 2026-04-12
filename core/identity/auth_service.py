@@ -25,6 +25,8 @@ from core.identity.base_provider import BaseAuthProvider
 from core.identity.providers.yandex import YandexProvider
 from core.identity.providers.google import GoogleProvider
 from core.identity.providers.github import GithubProvider
+from core.identity.providers.apple import AppleProvider
+from core.auth.utils import compare_passwords
 from core.config import get_settings
 from core.utils.tokens import get_token_service
 
@@ -69,6 +71,7 @@ class AuthService:
             AuthProvider.YANDEX: YandexProvider,
             AuthProvider.GOOGLE: GoogleProvider,
             AuthProvider.GITHUB: GithubProvider,
+            AuthProvider.APPLE: AppleProvider,
         }
 
         for provider_name, provider_class in provider_classes.items():
@@ -173,7 +176,9 @@ class AuthService:
                 return AuthResult(success=False, error_message=error_msg)
             raise
 
-        user_info = await provider.get_user_info(access_token)
+        user_info = await provider.get_user_info(
+            access_token, auth_request.oauth_first_login_user_json
+        )
 
         user = await self._get_or_create_user(auth_request.provider, user_info)
 
@@ -201,6 +206,52 @@ class AuthService:
         await self._cleanup_auth_state(auth_request.state)
 
         logger.info(f"Авторизация завершена для пользователя {user_info.email}")
+
+        return AuthResult(success=True, user=user, session=session, token=jwt_token)
+
+    async def login_demo(self, email: str, password: str) -> AuthResult:
+        settings = get_settings()
+        demo = settings.auth.demo
+        if not demo.login_enabled:
+            return AuthResult(success=False, error_message="Демо-вход отключён")
+
+        def norm(value: str) -> str:
+            return value.strip().lower()
+
+        if norm(email) != norm(demo.email):
+            return AuthResult(success=False, error_message="Неверные учётные данные")
+
+        users = await self._user_repository.list(limit=10000)
+        matched = [
+            u
+            for u in users
+            if any(norm(e) == norm(demo.email) for e in u.emails)
+        ]
+        if len(matched) != 1:
+            return AuthResult(success=False, error_message="Неверные учётные данные")
+
+        user = matched[0]
+        if not compare_passwords(password, user.password_hash):
+            return AuthResult(success=False, error_message="Неверные учётные данные")
+
+        company_id = demo.company_id
+        roles = user.companies.get(company_id)
+        if not roles:
+            return AuthResult(success=False, error_message="Неверные учётные данные")
+
+        if user.active_company_id != company_id:
+            user.active_company_id = company_id
+            await self._user_repository.set(user)
+
+        session = await self._create_session(user, AuthProvider.DEMO, "demo", None)
+
+        token_service = get_token_service()
+        jwt_token = token_service.create_token(
+            user_id=user.user_id,
+            company_id=company_id,
+            roles=roles,
+            session_id=session.session_id,
+        )
 
         return AuthResult(success=True, user=user, session=session, token=jwt_token)
 
@@ -274,9 +325,13 @@ class AuthService:
 
             await self._update_provider_data(user.user_id, provider, user_info)
 
-            logger.info(f"Обновлен пользователь {user_info.email}")
+            logger.info(f"Обновлен пользователь {user_info.email or user_id}")
             return user
         else:
+            if not user_info.email:
+                raise ValueError(
+                    f"Провайдер {provider.value} не вернул email; регистрация нового пользователя невозможна"
+                )
             user_id = f"user_{uuid.uuid4().hex[:12]}"
 
             user = User(

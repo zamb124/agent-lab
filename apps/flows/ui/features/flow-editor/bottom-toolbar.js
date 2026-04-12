@@ -105,7 +105,7 @@ export class BottomToolbar extends PlatformElement {
                 <button 
                     class="toolbar-btn ${activeTool === 'select' ? 'active' : ''}"
                     @click=${() => this._setTool('select')}
-                    title="Select (V)"
+                    title=${this.i18n.t('bottom_toolbar.title_select')}
                 >
                     <platform-icon name="cursor" size="20"></platform-icon>
                 </button>
@@ -113,7 +113,7 @@ export class BottomToolbar extends PlatformElement {
                 <button 
                     class="toolbar-btn ${activeTool === 'add' ? 'active' : ''}"
                     @click=${() => this._setTool('add')}
-                    title="Add Node (A)"
+                    title=${this.i18n.t('bottom_toolbar.title_add_node')}
                 >
                     <platform-icon name="plus" size="20"></platform-icon>
                 </button>
@@ -124,7 +124,7 @@ export class BottomToolbar extends PlatformElement {
                     class="toolbar-btn"
                     @click=${this._onUndo}
                     ?disabled=${!canUndo}
-                    title="Undo (Cmd+Z)"
+                    title=${this.i18n.t('bottom_toolbar.title_undo')}
                 >
                     <platform-icon name="undo" size="18"></platform-icon>
                 </button>
@@ -133,7 +133,7 @@ export class BottomToolbar extends PlatformElement {
                     class="toolbar-btn"
                     @click=${this._onRedo}
                     ?disabled=${!canRedo}
-                    title="Redo (Cmd+Shift+Z)"
+                    title=${this.i18n.t('bottom_toolbar.title_redo')}
                 >
                     <platform-icon name="redo" size="18"></platform-icon>
                 </button>
@@ -143,7 +143,7 @@ export class BottomToolbar extends PlatformElement {
                 <button 
                     class="toolbar-btn"
                     @click=${this._onToggleVariables}
-                    title="Variables"
+                    title=${this.i18n.t('bottom_toolbar.title_variables')}
                 >
                     <platform-icon name="code" size="18"></platform-icon>
                 </button>

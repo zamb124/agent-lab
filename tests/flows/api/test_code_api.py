@@ -53,6 +53,25 @@ class TestCodeCompletions:
         assert "loads" in json_methods
         assert "dumps" in json_methods
 
+        assert "platform_tools" in data
+        assert isinstance(data["platform_tools"], list)
+        tool_ids = {t["tool_id"] for t in data["platform_tools"]}
+        assert "calculator" in tool_ids
+
+    @pytest.mark.asyncio
+    async def test_get_documentation_markdown(self, client, app):
+        """GET /documentation отдаёт text/markdown."""
+        response = await client.get("/flows/api/v1/code/documentation")
+        assert response.status_code == 200
+        ct = response.headers.get("content-type", "")
+        assert "text/markdown" in ct
+        text = response.text
+        assert text.strip().startswith("#")
+        assert "llm" in text
+        assert "state" in text
+        assert "doc-platform-tools" in text
+        assert "calculator" in text
+
 
 class TestCodeValidate:
     """Тесты /api/v1/code/validate"""
@@ -61,7 +80,7 @@ class TestCodeValidate:
     async def test_validate_valid_sync_code(self, client, app):
         """Валидация корректного синхронного кода."""
         code = """
-def run(state):
+async def run(state):
     state['result'] = 'ok'
     return state
 """
@@ -118,7 +137,7 @@ def run(state)  # missing colon
         code = """
 import os
 
-def run(state):
+async def run(state):
     state['files'] = os.listdir('/')
     return state
 """
@@ -190,7 +209,7 @@ class TestCodeExecute:
     async def test_execute_simple_code(self, client, app):
         """Выполнение простого кода."""
         code = """
-def run(state):
+async def run(state):
     state['result'] = 'executed'
     state['doubled'] = state.get('value', 0) * 2
     return state
@@ -214,7 +233,7 @@ def run(state):
     async def test_execute_with_diff(self, client, app):
         """Выполнение кода с проверкой diff."""
         code = """
-def run(state):
+async def run(state):
     state['new_field'] = 'added'
     state['existing'] = 'modified'
     return state
@@ -230,12 +249,8 @@ def run(state):
         data = response.json()
         assert data["success"] is True
         
-        # Проверяем diff
-        diff = data["diff"]
-        assert len(diff) == 2
-        
-        # Найдём diff items
-        diff_by_path = {d["path"]: d for d in diff}
+        diff_by_path = {d["path"]: d for d in data["diff"]}
+        assert len(diff_by_path) == 2
         
         # new_field - добавлено
         assert "new_field" in diff_by_path
@@ -252,7 +267,7 @@ def run(state):
     async def test_execute_no_changes(self, client, app):
         """Выполнение кода без изменений state."""
         code = """
-def run(state):
+async def run(state):
     return state
 """
         state = {"value": 42}
@@ -271,7 +286,7 @@ def run(state):
     async def test_execute_with_variables(self, client, app):
         """Выполнение кода с доступом к variables."""
         code = """
-def run(state):
+async def run(state):
     greeting = variables.get('greeting', 'Hello')
     state['message'] = f"{greeting}, World!"
     return state
@@ -296,7 +311,7 @@ def run(state):
         code = """
 import json
 
-def run(state):
+async def run(state):
     data = json.loads(state.get('json_input', '{}'))
     state['parsed_name'] = data.get('name', 'unknown')
     return state
@@ -317,7 +332,7 @@ def run(state):
     async def test_execute_runtime_error(self, client, app):
         """Выполнение кода с runtime ошибкой."""
         code = """
-def run(state):
+async def run(state):
     raise ValueError("Intentional error")
 """
         response = await client.post(
@@ -337,7 +352,7 @@ def run(state):
         code = """
 import os
 
-def run(state):
+async def run(state):
     return state
 """
         response = await client.post(
@@ -372,7 +387,7 @@ async def run(state):
     async def test_execute_nested_state_diff(self, client, app):
         """Выполнение с изменением вложенных полей."""
         code = """
-def run(state):
+async def run(state):
     if 'user' not in state:
         state['user'] = {}
     state['user']['name'] = 'Alice'
@@ -479,7 +494,7 @@ class TestFlowWithInlineCodeAPI:
                 "router": {
                     "type": "code",
                     "code": """
-def run(state):
+async def run(state):
     content = state.get('content', '').lower()
     if 'order' in content:
         state['route'] = 'order'
@@ -509,7 +524,7 @@ def run(state):
         """Валидация inline кода перед созданием flow."""
         # Сначала валидируем код
         code = """
-def run(state):
+async def run(state):
     content = state.get('content', '').lower()
     if 'заказ' in content or 'order' in content:
         state['route'] = 'order'
@@ -532,7 +547,7 @@ def run(state):
     async def test_execute_inline_code_with_flow_variables(self, client, app, cleanup_flow):
         """Тестирование inline кода с переменными flow."""
         code = """
-def run(state):
+async def run(state):
     company = variables.get('company', 'Unknown')
     state['greeting'] = f"Welcome to {company}!"
     state['version'] = variables.get('version', '0.0')

@@ -11,12 +11,14 @@ from core.db.models.platform import (
     Variables,
     Usage,
     Namespaces,
-    Spans,
     PushSubscription,
     CalendarEventRecord,
     CalendarIntegrationRecord,
+    IntegrationCredentialRecord,
     SchedulerTaskRecord,
+    PlatformShortLink,
 )
+from core.db.models.tracing import Spans
 from core.db.models.rag import (
     DocumentProcessingStatus,
     VectorDocument,
@@ -33,7 +35,9 @@ __all__ = [
     "PushSubscription",
     "CalendarEventRecord",
     "CalendarIntegrationRecord",
+    "IntegrationCredentialRecord",
     "SchedulerTaskRecord",
+    "PlatformShortLink",
     "DocumentProcessingStatus",
     "VectorDocument",
 ]

@@ -11,7 +11,7 @@ from urllib.parse import urlencode
 from core.identity.base_provider import BaseAuthProvider
 from core.models.identity_models import AuthProvider, ProviderUserInfo
 from core.config.models import AuthProviderConfig
-from core.http import get_httpx_client
+from core.http import request_public_oauth
 
 logger = logging.getLogger(__name__)
 
@@ -39,70 +39,72 @@ class GoogleProvider(BaseAuthProvider):
         """Обменивает код на токены Google"""
         data = self._build_token_data(code, redirect_uri)
 
-        logger.info("Начинаем обмен кода на токены Google (без прокси)")
-        
-        async with get_httpx_client(timeout=30.0) as client:
-            response = await client.post(
-                self.token_url,
-                data=data,
-                headers={"Content-Type": "application/x-www-form-urlencoded"},
-            )
-            
-            if response.status_code != 200:
-                logger.error(f"Ошибка получения токена Google: {response.text}")
-                raise ValueError(f"Google вернул ошибку: {response.status_code}")
-            
-            token_data = response.json()
-            
-            access_token = token_data.get("access_token")
-            refresh_token = token_data.get("refresh_token")
-            
-            if not access_token:
-                raise ValueError("Google не вернул access_token")
-            
-            logger.info("Токены Google получены успешно")
-            return access_token, refresh_token
+        response = await request_public_oauth(
+            "POST",
+            self.token_url,
+            timeout=30.0,
+            data=data,
+            headers={"Content-Type": "application/x-www-form-urlencoded"},
+        )
 
-    async def get_user_info(self, access_token: str) -> ProviderUserInfo:
+        if response.status_code != 200:
+            logger.error(f"Ошибка получения токена Google: {response.text}")
+            raise ValueError(f"Google вернул ошибку: {response.status_code}")
+
+        token_data = response.json()
+
+        access_token = token_data.get("access_token")
+        refresh_token = token_data.get("refresh_token")
+
+        if not access_token:
+            raise ValueError("Google не вернул access_token")
+
+        logger.info("Токены Google получены успешно")
+        return access_token, refresh_token
+
+    async def get_user_info(
+        self, access_token: str, first_login_user_json: Optional[str] = None
+    ) -> ProviderUserInfo:
         """Получает информацию о пользователе из Google"""
         headers = {"Authorization": f"Bearer {access_token}"}
 
-        async with get_httpx_client(timeout=30.0) as client:
-            response = await client.get(self.userinfo_url, headers=headers)
-            
-            if response.status_code != 200:
-                logger.error(f"Ошибка получения данных пользователя Google: {response.text}")
-                raise ValueError(f"Не удалось получить данные пользователя: {response.status_code}")
-            
-            user_data = response.json()
-            logger.info(f"Ответ от Google UserInfo API: {user_data}")
-            
-            provider_user_id = user_data.get("sub") or user_data.get("id", "")
-            email = user_data.get("email", "")
-            name = user_data.get("name", "")
-            
-            if not name and email:
-                name = email.split("@")[0]
-            elif not name:
-                name = provider_user_id
-            
-            avatar_url = user_data.get("picture")
-            
-            if not provider_user_id:
-                logger.error(f"Google не вернул provider_user_id (sub/id). Данные: {user_data}")
-                raise ValueError("Google не предоставил обязательные данные пользователя (provider_user_id отсутствует)")
-            
-            if not email:
-                logger.error(f"Google не вернул email. Данные: {user_data}")
-                raise ValueError("Google не предоставил обязательные данные пользователя (email отсутствует)")
-            
-            logger.info(f"Данные пользователя Google получены: {email}")
-            
-            return ProviderUserInfo(
-                provider_user_id=provider_user_id,
-                email=email,
-                name=name,
-                avatar_url=avatar_url,
-                raw_data=user_data,
-            )
+        response = await request_public_oauth(
+            "GET", self.userinfo_url, timeout=30.0, headers=headers
+        )
+
+        if response.status_code != 200:
+            logger.error(f"Ошибка получения данных пользователя Google: {response.text}")
+            raise ValueError(f"Не удалось получить данные пользователя: {response.status_code}")
+
+        user_data = response.json()
+        logger.info(f"Ответ от Google UserInfo API: {user_data}")
+
+        provider_user_id = user_data.get("sub") or user_data.get("id", "")
+        email = user_data.get("email", "")
+        name = user_data.get("name", "")
+
+        if not name and email:
+            name = email.split("@")[0]
+        elif not name:
+            name = provider_user_id
+
+        avatar_url = user_data.get("picture")
+
+        if not provider_user_id:
+            logger.error(f"Google не вернул provider_user_id (sub/id). Данные: {user_data}")
+            raise ValueError("Google не предоставил обязательные данные пользователя (provider_user_id отсутствует)")
+
+        if not email:
+            logger.error(f"Google не вернул email. Данные: {user_data}")
+            raise ValueError("Google не предоставил обязательные данные пользователя (email отсутствует)")
+
+        logger.info(f"Данные пользователя Google получены: {email}")
+
+        return ProviderUserInfo(
+            provider_user_id=provider_user_id,
+            email=email,
+            name=name,
+            avatar_url=avatar_url,
+            raw_data=user_data,
+        )
 

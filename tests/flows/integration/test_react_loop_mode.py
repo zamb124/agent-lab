@@ -40,7 +40,7 @@ INLINE_FINISH = {
     "description": "Завершает агента",
     "args_schema": {"answer": {"type": "string"}},
     "code": "async def execute(args: dict, state: dict = None):\n    return args.get('answer', '')",
-    "tool_type": "exit"
+    "react_role": "exit"
 }
 
 INLINE_ASK_USER = {
@@ -49,7 +49,10 @@ INLINE_ASK_USER = {
     "args_schema": {"question": {"type": "string"}},
     "code": """async def execute(args: dict, state: dict = None):
     from apps.flows.src.runtime.exceptions import FlowInterrupt
-    raise FlowInterrupt(question=args.get('question', ''))
+    q = args.get("question")
+    if not q or not str(q).strip():
+        raise ValueError("ask_user: question обязателен")
+    raise FlowInterrupt(question=str(q).strip())
 """
 }
 

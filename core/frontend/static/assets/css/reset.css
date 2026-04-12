@@ -31,6 +31,7 @@ html {
     scroll-behavior: smooth;
     min-height: 100%;
     min-height: -webkit-fill-available;
+    background: var(--bg-gradient);
 }
 
 body {
@@ -45,6 +46,42 @@ body {
     line-height: var(--leading-normal);
     letter-spacing: var(--tracking-normal);
     overflow-x: hidden;
+}
+
+/* Lit SPA (CRM, Sync, RAG, Flows): iOS не должен скроллить document — иначе «едет» весь экран с хедером */
+html:has(body.platform-shell) {
+    height: 100%;
+    overflow: hidden;
+    /*
+     * Иначе window.scrollTo(0,0) из viewport-app-vh.js наследует scroll-behavior: smooth у html
+     * и визуально «тянет» экран вниз после скачка клавиатуры.
+     */
+    scroll-behavior: auto;
+}
+
+body.platform-shell {
+    height: 100%;
+    overflow: hidden;
+    overscroll-behavior: none;
+}
+
+/*
+ * Узкая ширина: высота документа = var(--app-vh) из visualViewport (viewport-app-vh.js).
+ * Иначе на iOS Safari height: 100% цепляется к layout viewport (полный экран), а shell — к
+ * уменьшенной видимой области при клавиатуре: пустой зазор и «улёт» композера вверх.
+ */
+@media (max-width: 767px) {
+    html:has(body.platform-shell) {
+        height: var(--app-vh, 100%);
+        min-height: var(--app-vh, 100%);
+        max-height: var(--app-vh, 100%);
+    }
+
+    body.platform-shell {
+        height: var(--app-vh, 100%);
+        min-height: var(--app-vh, 100%);
+        max-height: var(--app-vh, 100%);
+    }
 }
 
 /* Animated background orbs for depth */

@@ -3,7 +3,9 @@ import { PlatformModal } from './glass-modal.js';
 import { formStyles } from '../styles/shared/form.styles.js';
 import { buttonStyles } from '../styles/shared/button.styles.js';
 import './platform-icon.js';
+import { resolveFileIconKey } from '../../services/icon.service.js';
 import './platform-date-picker.js';
+import './platform-switch.js';
 
 const BASE_TIMEZONE_OPTIONS = [
     'UTC',
@@ -27,17 +29,11 @@ const BASE_TIMEZONE_OPTIONS = [
     'Australia/Sydney',
 ];
 
+import { COLOR_PALETTE } from '@platform/lib/utils/color-palette.js';
+
 const EVENT_COLOR_KEY = 'event_color';
 const DEFAULT_EVENT_COLOR = 'default';
-const EVENT_COLOR_OPTIONS = [
-    { key: 'default', dot: '#a2affb' },
-    { key: 'mint', dot: '#34c38f' },
-    { key: 'sky', dot: '#4ea8ff' },
-    { key: 'violet', dot: '#8f7bff' },
-    { key: 'amber', dot: '#f5b14c' },
-    { key: 'rose', dot: '#ef6f98' },
-    { key: 'gray', dot: '#8f96a3' },
-];
+const EVENT_COLOR_OPTIONS = COLOR_PALETTE;
 
 function pad2(value) {
     return String(value).padStart(2, '0');
@@ -45,6 +41,25 @@ function pad2(value) {
 
 function toDateInputValue(date) {
     return `${date.getFullYear()}-${pad2(date.getMonth() + 1)}-${pad2(date.getDate())}`;
+}
+
+/**
+ * Строка YYYY-MM-DD из состояния календаря — это календарный день в локальной зоне,
+ * а new Date('YYYY-MM-DD') в движке — полночь UTC, из‑за чего сетка дня и фильтр событий
+ * расходятся с подписью периода (особенно при отрицательном смещении от UTC).
+ */
+function parseDateInputLocal(isoDate) {
+    if (typeof isoDate !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(isoDate)) {
+        const parsed = new Date(isoDate);
+        if (Number.isNaN(parsed.getTime())) {
+            throw new Error(`Invalid calendar date: ${isoDate}`);
+        }
+        return new Date(parsed.getFullYear(), parsed.getMonth(), parsed.getDate(), 0, 0, 0, 0);
+    }
+    const y = Number(isoDate.slice(0, 4));
+    const m = Number(isoDate.slice(5, 7)) - 1;
+    const d = Number(isoDate.slice(8, 10));
+    return new Date(y, m, d, 0, 0, 0, 0);
 }
 
 function toDateTimeInputValue(date) {
@@ -201,6 +216,17 @@ function normalizeEventColor(colorKey) {
     return DEFAULT_EVENT_COLOR;
 }
 
+function eventMetadataHasSyncMeeting(metadata) {
+    if (!metadata || typeof metadata !== 'object') {
+        return false;
+    }
+    return metadata.sync_meeting === '1' || Boolean(metadata.sync_link_token);
+}
+
+const SYNC_LOGO_SRC = '/static/core/assets/service_logos/sync_logo.svg';
+const CALENDAR_VIEW_STORAGE_KEY = 'platform_calendar_view';
+const VALID_VIEWS = ['day', 'week', 'month'];
+
 export class PlatformCalendarModal extends PlatformModal {
     static properties = {
         ...PlatformModal.properties,
@@ -213,7 +239,8 @@ export class PlatformCalendarModal extends PlatformModal {
         _syncing: { state: true },
         _selectedEventId: { state: true },
         _activeProvider: { state: true },
-        _showAdvanced: { state: true },
+        _integrationsMenuOpen: { state: true },
+        _integrationModalProvider: { state: true },
         _eventDialogOpen: { state: true },
         _showDescriptionField: { state: true },
         _uploadingAttachments: { state: true },
@@ -228,6 +255,13 @@ export class PlatformCalendarModal extends PlatformModal {
         _attendeeDropdownOpen: { state: true },
         _eventForm: { state: true },
         _integrationForm: { state: true },
+        _isCompactLayout: { state: true },
+        _dateSheetOpen: { state: true },
+        _dateSheetMonthRef: { state: true },
+        _eventDeepLink: { state: true },
+        _dragEvent: { state: true },
+        _dragGhostTop: { state: true },
+        _dragGhostLeft: { state: true },
     };
 
     static styles = [
@@ -324,8 +358,8 @@ export class PlatformCalendarModal extends PlatformModal {
             }
 
             .view-segment button.active {
-                background: var(--accent-subtle);
-                color: var(--accent);
+                background: var(--accent-tertiary-subtle);
+                color: var(--accent-tertiary);
             }
 
             .calendar-panel {
@@ -335,6 +369,457 @@ export class PlatformCalendarModal extends PlatformModal {
                 min-height: 0;
                 overflow: auto;
                 padding: var(--space-2);
+            }
+
+            .calendar-panel--day {
+                border: none;
+                background: transparent;
+                padding: 0;
+                overflow: visible;
+            }
+
+            .btn-calendar-create {
+                width: 40px;
+                height: 40px;
+                min-width: 40px;
+                min-height: 40px;
+                padding: 0;
+                border-radius: 50%;
+                display: inline-flex;
+                align-items: center;
+                justify-content: center;
+                font-size: 22px;
+                line-height: 1;
+                font-weight: var(--font-semibold);
+            }
+
+            .btn.btn-primary.btn-calendar-create {
+                padding: 0;
+                background: var(--accent-tertiary);
+                color: #fff;
+            }
+
+            .btn.btn-primary.btn-calendar-create:hover {
+                background: color-mix(in srgb, var(--accent-tertiary) 85%, #000);
+            }
+
+            .calendar-fab {
+                display: none;
+            }
+
+            .toolbar--compact {
+                gap: var(--space-2);
+            }
+
+            .toolbar--compact .toolbar-left {
+                flex: 1 1 auto;
+                justify-content: center;
+                align-items: center;
+                gap: var(--space-2);
+                padding-left: max(var(--space-2), calc(env(safe-area-inset-left, 0px) + 10px));
+                box-sizing: border-box;
+            }
+
+            .toolbar--compact .toolbar-left .btn-icon {
+                touch-action: manipulation;
+                flex-shrink: 0;
+            }
+
+            .toolbar--compact .toolbar-right {
+                flex: 0 0 auto;
+                align-items: center;
+                padding-right: max(var(--space-2), env(safe-area-inset-right, 0px));
+            }
+
+            .toolbar--compact .view-segment {
+                display: none;
+            }
+
+            .toolbar--compact .title {
+                display: none;
+            }
+
+            .period-date-btn {
+                border: 1px solid var(--glass-border-subtle);
+                background: var(--glass-solid-medium);
+                border-radius: var(--radius-full);
+                padding: 8px 14px;
+                font-size: var(--text-sm);
+                font-weight: var(--font-medium);
+                color: var(--text-primary);
+                cursor: pointer;
+                max-width: min(100%, 280px);
+            }
+
+            .period-date-btn:hover {
+                border-color: var(--accent);
+            }
+
+            .date-sheet-overlay {
+                position: fixed;
+                inset: 0;
+                z-index: calc(var(--platform-modal-layer-z, var(--z-modal, 1000)) + 4);
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                padding: var(--space-4);
+                background: rgba(0, 0, 0, 0.2);
+                backdrop-filter: blur(4px);
+                -webkit-backdrop-filter: blur(4px);
+            }
+
+            .date-sheet-card {
+                width: min(340px, 100%);
+                max-height: min(86dvh, 520px);
+                overflow: auto;
+                border-radius: var(--radius-xl);
+                border: 1px solid var(--glass-border-subtle);
+                background: var(--glass-solid-strong);
+                box-shadow: var(--glass-shadow-medium);
+                padding: var(--space-3);
+                display: grid;
+                gap: var(--space-3);
+            }
+
+            .date-sheet-header {
+                display: flex;
+                align-items: center;
+                justify-content: space-between;
+                gap: var(--space-2);
+            }
+
+            .date-sheet-title {
+                font-size: var(--text-sm);
+                font-weight: var(--font-semibold);
+                color: var(--text-primary);
+            }
+
+            .date-sheet-nav {
+                display: flex;
+                gap: var(--space-1);
+            }
+
+            .date-sheet-grid {
+                display: grid;
+                grid-template-columns: repeat(7, minmax(0, 1fr));
+                gap: 4px;
+            }
+
+            .date-sheet-weekday {
+                text-align: center;
+                font-size: 10px;
+                color: var(--text-tertiary);
+                font-weight: var(--font-semibold);
+            }
+
+            .date-sheet-cell {
+                aspect-ratio: 1;
+                max-height: 40px;
+                border: 1px solid transparent;
+                border-radius: var(--radius-md);
+                background: transparent;
+                color: var(--text-primary);
+                font-size: var(--text-sm);
+                cursor: pointer;
+                padding: 0;
+            }
+
+            .date-sheet-cell.outside {
+                color: var(--text-tertiary);
+                opacity: 0.55;
+            }
+
+            .date-sheet-cell.today {
+                border-color: #99A6F9;
+                background: color-mix(in srgb, #99A6F9 12%, transparent);
+            }
+
+            .date-sheet-cell.selected {
+                background: var(--accent-subtle);
+                color: var(--accent);
+                border-color: var(--accent);
+            }
+
+            .day-timeline {
+                display: flex;
+                flex-direction: column;
+                gap: var(--space-2);
+                min-width: 0;
+            }
+
+            .day-all-day-row {
+                display: flex;
+                flex-wrap: wrap;
+                gap: var(--space-1);
+                padding-bottom: var(--space-2);
+                border-bottom: 1px solid var(--glass-border-subtle);
+            }
+
+            .day-timeline-scroll {
+                overflow-x: auto;
+                overflow-y: auto;
+                max-height: min(62dvh, 560px);
+                min-height: 280px;
+            }
+
+            .day-timeline-body {
+                display: grid;
+                grid-template-columns: 44px minmax(0, 1fr);
+                gap: 0;
+                align-items: start;
+                --day-hour-height: 52px;
+            }
+
+            .day-time-col {
+                display: flex;
+                flex-direction: column;
+                width: 44px;
+                flex-shrink: 0;
+            }
+
+            .day-time-label {
+                height: var(--day-hour-height);
+                font-size: 11px;
+                color: var(--text-tertiary);
+                padding-right: 6px;
+                text-align: right;
+                box-sizing: border-box;
+            }
+
+            .day-tracks {
+                position: relative;
+                min-width: 0;
+            }
+
+            .day-tracks-lines {
+                display: flex;
+                flex-direction: column;
+            }
+
+            .day-hour-slot {
+                height: var(--day-hour-height);
+                border-bottom: 1px solid var(--glass-border-subtle);
+                box-sizing: border-box;
+            }
+
+            .day-events-layer {
+                position: absolute;
+                left: 0;
+                right: 0;
+                top: 0;
+                height: calc(24 * var(--day-hour-height));
+                pointer-events: none;
+            }
+
+            .day-event-block {
+                pointer-events: auto;
+                position: absolute;
+                left: 4px;
+                right: 4px;
+                min-height: 24px;
+                border: none;
+                border-radius: var(--radius-md);
+                padding: 4px 8px;
+                text-align: left;
+                cursor: pointer;
+                font-size: var(--text-xs);
+                line-height: 1.3;
+                overflow: hidden;
+                display: flex;
+                flex-direction: row;
+                flex-wrap: wrap;
+                align-items: baseline;
+                gap: 0 4px;
+                box-sizing: border-box;
+                transition: top 0.2s ease, height 0.2s ease;
+            }
+
+            .day-event-block .event-chip-title {
+                display: inline;
+                -webkit-line-clamp: unset;
+                -webkit-box-orient: unset;
+                overflow: hidden;
+                text-overflow: ellipsis;
+                white-space: nowrap;
+                flex: 1 1 0;
+                min-width: 0;
+            }
+
+            .day-event-block .event-chip-time {
+                flex-shrink: 0;
+                white-space: nowrap;
+            }
+
+            .day-event-block.event-chip {
+                display: flex;
+            }
+
+            .day-now-line {
+                position: absolute;
+                left: 0;
+                right: 0;
+                height: 2px;
+                background: #e53935;
+                z-index: 2;
+                pointer-events: none;
+            }
+
+            .day-now-line::before {
+                content: '';
+                position: absolute;
+                left: -6px;
+                top: 50%;
+                width: 8px;
+                height: 8px;
+                border-radius: 50%;
+                background: #e53935;
+                transform: translateY(-50%);
+            }
+
+            .week-grid {
+                display: flex;
+                flex-direction: column;
+                min-height: 0;
+            }
+
+            .week-header {
+                display: grid;
+                grid-template-columns: 44px repeat(7, minmax(0, 1fr));
+                border-bottom: 1px solid var(--glass-border-subtle);
+                position: sticky;
+                top: 0;
+                z-index: 1;
+                background: var(--glass-solid-subtle);
+            }
+
+            .week-time-spacer {
+                width: 44px;
+            }
+
+            .week-day-header {
+                text-align: center;
+                padding: var(--space-1) 0;
+                font-size: var(--text-xs);
+                color: var(--text-secondary);
+                display: flex;
+                flex-direction: column;
+                align-items: center;
+                gap: 2px;
+            }
+
+            .week-day-header.today {
+                font-weight: var(--font-semibold);
+                background: color-mix(in srgb, #99A6F9 5%, transparent);
+            }
+
+            .week-day-header.today .week-day-number {
+                color: #fff;
+                background: #99A6F9;
+                border-radius: 999px;
+                width: 24px;
+                height: 24px;
+                display: inline-flex;
+                align-items: center;
+                justify-content: center;
+            }
+
+            .week-day-header.weekend {
+                color: var(--text-tertiary);
+            }
+
+            .week-day-number {
+                font-size: var(--text-sm);
+                font-weight: var(--font-semibold);
+            }
+
+            .week-body-scroll {
+                overflow: auto;
+                max-height: min(62dvh, 560px);
+                min-height: 280px;
+            }
+
+            .week-body {
+                display: grid;
+                grid-template-columns: 44px repeat(7, minmax(0, 1fr));
+                --week-hour-height: 48px;
+            }
+
+            .week-time-col {
+                display: flex;
+                flex-direction: column;
+                width: 44px;
+                flex-shrink: 0;
+            }
+
+            .week-time-label {
+                height: var(--week-hour-height);
+                font-size: 10px;
+                color: var(--text-tertiary);
+                padding-right: 4px;
+                text-align: right;
+                box-sizing: border-box;
+            }
+
+            .week-day-col {
+                position: relative;
+                border-left: 1px solid var(--glass-border-subtle);
+                min-width: 0;
+            }
+
+            .week-day-col.weekend {
+                background: rgba(34, 34, 34, 0.03);
+            }
+
+            .week-day-col.today {
+                background: color-mix(in srgb, #99A6F9 5%, transparent);
+            }
+
+            .week-day-lines {
+                display: flex;
+                flex-direction: column;
+            }
+
+            .week-hour-slot {
+                height: var(--week-hour-height);
+                border-bottom: 1px solid var(--glass-border-subtle);
+                box-sizing: border-box;
+            }
+
+            .week-day-events {
+                position: absolute;
+                left: 0;
+                right: 0;
+                top: 0;
+                height: calc(24 * var(--week-hour-height));
+                pointer-events: none;
+            }
+
+            .week-day-events .day-event-block {
+                pointer-events: auto;
+                left: 2px;
+                right: 2px;
+                font-size: 10px;
+            }
+
+            .week-all-day-row {
+                display: grid;
+                grid-template-columns: 44px repeat(7, minmax(0, 1fr));
+                border-bottom: 1px solid var(--glass-border-subtle);
+                padding: var(--space-1) 0;
+                gap: 2px;
+            }
+
+            .week-all-day-cell {
+                display: flex;
+                flex-wrap: wrap;
+                gap: 2px;
+                padding: 0 2px;
+                min-width: 0;
+            }
+
+            .week-all-day-cell .event-chip {
+                font-size: 10px;
+                padding: 3px 6px;
             }
 
             .month-grid {
@@ -351,20 +836,20 @@ export class PlatformCalendarModal extends PlatformModal {
             }
 
             .weekday.weekend {
-                color: var(--accent);
-                background: color-mix(in srgb, var(--accent) 10%, transparent);
-                border-radius: var(--radius-sm);
+                color: var(--text-tertiary);
             }
 
             .month-cell {
                 border: 1px solid var(--glass-border-subtle);
                 border-radius: var(--radius-md);
                 min-height: 114px;
+                max-height: 180px;
                 padding: var(--space-1) 6px;
                 display: flex;
                 flex-direction: column;
                 gap: var(--space-1);
                 background: var(--glass-solid-medium);
+                overflow: hidden;
             }
 
             .month-cell.outside {
@@ -372,13 +857,12 @@ export class PlatformCalendarModal extends PlatformModal {
             }
 
             .month-cell.weekend {
-                background: color-mix(in srgb, var(--accent) 10%, var(--glass-solid-medium));
-                border-color: color-mix(in srgb, var(--accent) 30%, var(--glass-border-subtle));
+                background: color-mix(in srgb, rgba(34, 34, 34, 0.05) 100%, var(--glass-solid-medium));
             }
 
             .month-cell.today {
-                border-color: color-mix(in srgb, #ef6f98 45%, var(--glass-border-subtle));
-                background: color-mix(in srgb, #ef6f98 8%, var(--glass-solid-medium));
+                border-color: color-mix(in srgb, #99A6F9 35%, var(--glass-border-subtle));
+                background: color-mix(in srgb, #99A6F9 6%, var(--glass-solid-medium));
             }
 
             .month-cell .date-label {
@@ -388,8 +872,8 @@ export class PlatformCalendarModal extends PlatformModal {
             }
 
             .month-cell.today .date-label {
-                color: #a7365e;
-                background: color-mix(in srgb, #ef6f98 18%, transparent);
+                color: #fff;
+                background: #99A6F9;
                 border-radius: 999px;
                 width: 22px;
                 height: 22px;
@@ -401,10 +885,13 @@ export class PlatformCalendarModal extends PlatformModal {
             .month-cell-events {
                 flex: 1;
                 min-height: 0;
-                display: grid;
-                gap: 6px;
-                grid-auto-rows: minmax(0, 1fr);
+                display: flex;
+                flex-direction: column;
+                gap: 4px;
+                overflow-y: auto;
+                scrollbar-width: thin;
             }
+
 
             .event-chip {
                 font-size: var(--text-xs);
@@ -419,7 +906,7 @@ export class PlatformCalendarModal extends PlatformModal {
                 display: grid;
                 gap: 6px;
                 min-width: 0;
-                min-height: 0;
+                flex-shrink: 0;
                 align-content: start;
             }
 
@@ -466,9 +953,17 @@ export class PlatformCalendarModal extends PlatformModal {
                 display: flex;
                 align-items: center;
                 justify-content: flex-start;
-                flex-wrap: wrap;
                 gap: 4px;
                 min-width: 0;
+                overflow-x: auto;
+                overflow-y: hidden;
+                scrollbar-width: none;
+                -ms-overflow-style: none;
+                flex-shrink: 0;
+            }
+
+            .event-chip-top::-webkit-scrollbar {
+                display: none;
             }
 
             .event-chip-title {
@@ -495,6 +990,7 @@ export class PlatformCalendarModal extends PlatformModal {
                 background: var(--glass-solid-medium);
                 color: var(--text-secondary);
                 font-size: 10px;
+                flex-shrink: 0;
                 font-weight: var(--font-medium);
                 line-height: 1;
                 white-space: nowrap;
@@ -530,44 +1026,104 @@ export class PlatformCalendarModal extends PlatformModal {
                 background: color-mix(in srgb, #fc3f1d 12%, var(--glass-solid-medium));
             }
 
-            .list-view {
-                display: grid;
-                gap: var(--space-2);
+            .event-badge-sync {
+                gap: 4px;
             }
 
-            .list-item {
-                border: 1px solid var(--glass-border-subtle);
+            .event-sync-logo-inline {
+                width: 14px;
+                height: 14px;
+                flex-shrink: 0;
+            }
+
+            .drag-ghost {
+                position: fixed;
+                pointer-events: none;
+                z-index: calc(var(--platform-modal-layer-z, var(--z-modal, 1000)) + 10);
+                opacity: 0.85;
                 border-radius: var(--radius-md);
-                background: var(--glass-solid-medium);
-                padding: var(--space-2) var(--space-3);
-                display: flex;
-                justify-content: space-between;
-                gap: var(--space-2);
-                cursor: pointer;
-            }
-
-            .list-item.active {
-                border-color: var(--accent);
-            }
-
-            .list-title {
-                font-size: var(--text-sm);
-                color: var(--text-primary);
-                font-weight: var(--font-medium);
-            }
-
-            .list-meta {
+                padding: 6px 10px;
                 font-size: var(--text-xs);
-                color: var(--text-tertiary);
+                line-height: 1.3;
+                color: #fff;
+                background: #99A6F9;
+                box-shadow: 0 6px 18px rgba(0, 0, 0, 0.18);
+                max-width: 200px;
+                white-space: nowrap;
+                overflow: hidden;
+                text-overflow: ellipsis;
+                transform: translate(-50%, -50%);
             }
 
-            .list-badges {
+            .month-cell.drag-over {
+                outline: 2px solid #99A6F9;
+                outline-offset: -2px;
+                background: color-mix(in srgb, #99A6F9 10%, var(--glass-solid-medium));
+            }
+
+            .week-day-col.drag-over,
+            .day-tracks.drag-over {
+                background: color-mix(in srgb, #99A6F9 8%, transparent);
+            }
+
+            .event-chip[data-dragging] {
+                opacity: 0.35;
+                transition: opacity 0.15s ease;
+            }
+
+            .event-compose-sync-head {
+                display: inline-flex;
+                align-items: center;
+                gap: var(--space-2);
+            }
+
+            .event-compose-sync-row {
                 display: flex;
+                flex-wrap: wrap;
+                align-items: center;
+                justify-content: space-between;
+                gap: var(--space-3);
+                width: 100%;
+            }
+
+            .event-compose-sync-row .event-compose-switch {
+                flex: 0 1 auto;
+                min-width: 0;
+            }
+
+            .event-compose-sync-hint-row {
+                flex-direction: column;
+                align-items: flex-start;
+            }
+
+            .event-compose-meeting-sync-hint {
+                margin: 0;
+                font-size: var(--text-sm);
+                color: var(--text-secondary, var(--glass-text-muted));
+                line-height: 1.45;
+            }
+
+            .event-compose-join-link {
+                display: inline-flex;
                 align-items: center;
                 gap: 6px;
-                flex-wrap: wrap;
-                margin-top: 4px;
+                color: var(--accent, #99a6f9);
+                font-size: var(--text-sm);
+                font-weight: var(--font-medium);
+                text-decoration: none;
+                white-space: nowrap;
+                flex: 0 0 auto;
             }
+
+            .event-compose-join-link:hover {
+                text-decoration: underline;
+            }
+
+            .event-compose-join-link platform-icon {
+                flex-shrink: 0;
+                color: var(--accent, #99a6f9);
+            }
+
 
             .section {
                 border: 1px solid var(--glass-border-subtle);
@@ -660,9 +1216,81 @@ export class PlatformCalendarModal extends PlatformModal {
                 gap: var(--space-2);
             }
 
-            .advanced-toggle {
+            .integrations-menu-anchor {
+                position: relative;
+            }
+
+            .integrations-dropdown {
+                position: absolute;
+                right: 0;
+                top: calc(100% + 4px);
+                z-index: 10;
+                min-width: 200px;
+                border: 1px solid var(--glass-border-medium);
+                border-radius: var(--radius-md);
+                background: var(--glass-solid-strong);
+                box-shadow: var(--glass-shadow-medium);
+                padding: var(--space-1);
+                display: grid;
+                gap: 2px;
+            }
+
+            .dropdown-item {
                 display: flex;
-                justify-content: flex-end;
+                align-items: center;
+                gap: var(--space-2);
+                padding: 8px 12px;
+                border: none;
+                background: transparent;
+                color: var(--text-primary);
+                font-size: var(--text-sm);
+                cursor: pointer;
+                border-radius: var(--radius-sm);
+                text-align: left;
+                width: 100%;
+            }
+
+            .dropdown-item:hover {
+                background: var(--glass-tint-medium);
+            }
+
+            .integration-modal-overlay {
+                position: fixed;
+                inset: 0;
+                background: rgba(0, 0, 0, 0.22);
+                backdrop-filter: blur(4px);
+                -webkit-backdrop-filter: blur(4px);
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                z-index: calc(var(--platform-modal-layer-z, var(--z-modal, 1000)) + 3);
+                padding: var(--space-4);
+            }
+
+            .integration-modal {
+                width: min(520px, 96vw);
+                max-height: min(80vh, 80dvh);
+                overflow: auto;
+                border: 1px solid var(--glass-border-subtle);
+                border-radius: var(--radius-xl);
+                background: var(--glass-solid-strong);
+                box-shadow: var(--glass-shadow-medium), 0 14px 34px rgba(0, 0, 0, 0.16);
+                padding: var(--space-4);
+                display: grid;
+                gap: var(--space-3);
+            }
+
+            .integration-modal-header {
+                display: flex;
+                align-items: center;
+                justify-content: space-between;
+                gap: var(--space-2);
+            }
+
+            .integration-modal-title {
+                font-size: var(--text-lg);
+                font-weight: var(--font-semibold);
+                color: var(--text-primary);
             }
 
             .event-dialog-overlay {
@@ -1049,18 +1677,21 @@ export class PlatformCalendarModal extends PlatformModal {
                 flex-wrap: wrap;
             }
 
-            .event-compose-check {
+            .event-compose-switch {
                 display: inline-flex;
                 align-items: center;
-                gap: 10px;
+                flex-shrink: 0;
                 color: var(--text-secondary);
                 font-size: var(--text-sm);
                 line-height: 1;
             }
 
-            .event-compose-check input[type='checkbox'] {
-                width: 18px;
-                height: 18px;
+            .event-compose-switch platform-switch {
+                --text-primary: var(--text-secondary);
+            }
+
+            .event-compose-switch--spaced {
+                margin-top: var(--space-2);
             }
 
             .event-compose-select {
@@ -1162,7 +1793,7 @@ export class PlatformCalendarModal extends PlatformModal {
                     font-size: var(--text-sm);
                 }
 
-                .event-compose-check {
+                .event-compose-switch {
                     font-size: var(--text-sm);
                 }
 
@@ -1235,7 +1866,7 @@ export class PlatformCalendarModal extends PlatformModal {
                     display: none;
                 }
 
-                .event-compose-check {
+                .event-compose-switch {
                     font-size: var(--text-sm);
                 }
 
@@ -1259,6 +1890,31 @@ export class PlatformCalendarModal extends PlatformModal {
                     font-size: var(--text-sm);
                 }
 
+                .calendar-fab {
+                    display: inline-flex;
+                    position: fixed;
+                    right: max(20px, env(safe-area-inset-right));
+                    bottom: max(24px, env(safe-area-inset-bottom));
+                    z-index: calc(var(--platform-modal-layer-z, var(--z-modal, 1000)) + 2);
+                    width: 52px;
+                    height: 52px;
+                    border-radius: 50%;
+                    border: none;
+                    align-items: center;
+                    justify-content: center;
+                    background: color-mix(in srgb, var(--accent-tertiary) 92%, #000);
+                    color: #fff;
+                    font-size: 26px;
+                    line-height: 1;
+                    font-weight: 400;
+                    cursor: pointer;
+                    box-shadow: 0 8px 22px rgba(0, 0, 0, 0.2);
+                }
+
+                .toolbar--compact .btn-calendar-create.toolbar-create {
+                    display: none;
+                }
+
                 .row.two {
                     grid-template-columns: 1fr;
                 }
@@ -1268,8 +1924,9 @@ export class PlatformCalendarModal extends PlatformModal {
 
     constructor() {
         super();
-        this.title = 'Календарь';
-        this._view = 'month';
+        this.title = '';
+        const savedView = localStorage.getItem(CALENDAR_VIEW_STORAGE_KEY);
+        this._view = VALID_VIEWS.includes(savedView) ? savedView : 'month';
         this._anchorDate = toDateInputValue(new Date());
         this._events = [];
         this._integrations = [];
@@ -1278,14 +1935,15 @@ export class PlatformCalendarModal extends PlatformModal {
         this._syncing = false;
         this._selectedEventId = null;
         this._activeProvider = 'google';
-        this._showAdvanced = false;
+        this._integrationsMenuOpen = false;
+        this._integrationModalProvider = null;
         this._eventDialogOpen = false;
         this._showDescriptionField = false;
         this._uploadingAttachments = false;
         this._eventAttachments = [];
         this._eventMetadata = {};
         this._selectedEventSource = 'platform';
-        this._selectedEventKind = 'event';
+        this._selectedEventKind = 'meeting';
         this._selectedEventNamespace = null;
         this._timezoneOptions = [...BASE_TIMEZONE_OPTIONS];
         this._teamMembers = [];
@@ -1299,7 +1957,7 @@ export class PlatformCalendarModal extends PlatformModal {
         const defaultEnd = addDays(now, 0);
         defaultEnd.setMinutes(defaultEnd.getMinutes() + 30);
         this._eventForm = {
-            kind: 'event',
+            kind: 'meeting',
             color: DEFAULT_EVENT_COLOR,
             title: '',
             description: '',
@@ -1311,6 +1969,7 @@ export class PlatformCalendarModal extends PlatformModal {
             attendees: [],
             recurrence: 'none',
         };
+        this._eventDeepLink = null;
         this._integrationForm = {
             username: '',
             app_password: '',
@@ -1320,20 +1979,72 @@ export class PlatformCalendarModal extends PlatformModal {
             sync_outbound_enabled: true,
             notifications_enabled: true,
         };
+        this._isCompactLayout = false;
+        this._dateSheetOpen = false;
+        const sheetMonth = new Date();
+        this._dateSheetMonthRef = toDateInputValue(new Date(sheetMonth.getFullYear(), sheetMonth.getMonth(), 1));
+        this._dragEvent = null;
+        this._dragGhostTop = 0;
+        this._dragGhostLeft = 0;
+        this._dragOrigin = null;
+        this._dragPointerId = null;
+        this._onDragMoveBound = this._onDragMove.bind(this);
+        this._onDragUpBound = this._onDragUp.bind(this);
+        this._dragJustFinished = false;
+    }
+
+    willUpdate(changedProperties) {
+        super.willUpdate(changedProperties);
+        this.title = this.i18n.t('title', {}, 'calendar');
+    }
+
+    _calT(key, params = {}) {
+        return this.i18n.t(key, params, 'calendar');
+    }
+
+    _calendarLocaleTag() {
+        const code = this.i18n.getCurrentLocale();
+        if (code === 'ru') {
+            return 'ru-RU';
+        }
+        return 'en-US';
     }
 
     async showModal() {
-        this._isFullscreen = true;
+        this._dateSheetOpen = false;
+        this._integrationsMenuOpen = false;
+        this._integrationModalProvider = null;
+        this._isCompactLayout = window.matchMedia('(max-width: 767px)').matches;
+        this._isFullscreen = !this._isCompactLayout;
+        if (this._isCompactLayout) {
+            this._view = 'day';
+            this.size = 'full';
+        } else {
+            this.size = 'md';
+        }
+        this._onDocumentClickBound = this._onDocumentClickBound || ((e) => {
+            if (!this._integrationsMenuOpen) {
+                return;
+            }
+            const anchor = this.renderRoot?.querySelector('.integrations-menu-anchor');
+            if (anchor && !anchor.contains(e.composedPath()[0])) {
+                this._integrationsMenuOpen = false;
+            }
+        });
+        document.addEventListener('click', this._onDocumentClickBound);
         super.showModal();
         await this._loadTeamMembers();
         await this._reload();
     }
 
-    async _loadTeamMembers() {
-        if (!this.services.has('team')) {
-            this._teamMembers = [];
-            return;
+    disconnectedCallback() {
+        super.disconnectedCallback();
+        if (this._onDocumentClickBound) {
+            document.removeEventListener('click', this._onDocumentClickBound);
         }
+    }
+
+    async _loadTeamMembers() {
         const teamMembers = await this.services.get('team').getMembers();
         if (!Array.isArray(teamMembers)) {
             throw new Error('Team members response must be array');
@@ -1341,8 +2052,11 @@ export class PlatformCalendarModal extends PlatformModal {
         this._teamMembers = teamMembers;
     }
 
-    async _reload() {
-        this._loading = true;
+    async _reload({ silent = false } = {}) {
+        let loaderTimer = null;
+        if (!silent) {
+            loaderTimer = setTimeout(() => { this._loading = true; }, 300);
+        }
         const range = this._viewRange();
         const result = await this.calendarApi.listEvents({
             startAt: range.start.toISOString(),
@@ -1350,16 +2064,22 @@ export class PlatformCalendarModal extends PlatformModal {
             includeSources: null,
             limit: 2000,
         });
+        if (loaderTimer !== null) {
+            clearTimeout(loaderTimer);
+        }
         if (!result || !Array.isArray(result.events) || !Array.isArray(result.integrations)) {
             throw new Error('Calendar API response is invalid');
         }
         this._events = result.events;
         this._integrations = result.integrations;
         this._loading = false;
+        if (this._view === 'day' || this._view === 'week') {
+            this._scrollToWorkZone();
+        }
     }
 
     _viewRange() {
-        const anchor = new Date(this._anchorDate);
+        const anchor = parseDateInputLocal(this._anchorDate);
         if (Number.isNaN(anchor.getTime())) {
             throw new Error(`Invalid anchor date: ${this._anchorDate}`);
         }
@@ -1368,6 +2088,7 @@ export class PlatformCalendarModal extends PlatformModal {
             const end = addDays(start, 1);
             return { start, end };
         }
+        anchor.setHours(12, 0, 0, 0);
         if (this._view === 'week') {
             return { start: startOfWeek(anchor), end: endOfWeek(anchor) };
         }
@@ -1378,20 +2099,22 @@ export class PlatformCalendarModal extends PlatformModal {
     }
 
     _periodLabel() {
-        const anchor = new Date(this._anchorDate);
+        const anchor = parseDateInputLocal(this._anchorDate);
         if (this._view === 'day') {
             return anchor.toLocaleDateString('ru-RU', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
         }
         if (this._view === 'week') {
+            anchor.setHours(12, 0, 0, 0);
             const start = startOfWeek(anchor);
             const end = addDays(start, 6);
             return `${start.toLocaleDateString('ru-RU', { day: 'numeric', month: 'short' })} - ${end.toLocaleDateString('ru-RU', { day: 'numeric', month: 'short', year: 'numeric' })}`;
         }
+        anchor.setHours(12, 0, 0, 0);
         return anchor.toLocaleDateString('ru-RU', { month: 'long', year: 'numeric' });
     }
 
-    _movePeriod(delta) {
-        const anchor = new Date(this._anchorDate);
+    async _movePeriod(delta) {
+        const anchor = parseDateInputLocal(this._anchorDate);
         if (this._view === 'day') {
             anchor.setDate(anchor.getDate() + delta);
         } else if (this._view === 'week') {
@@ -1400,12 +2123,266 @@ export class PlatformCalendarModal extends PlatformModal {
             anchor.setMonth(anchor.getMonth() + delta);
         }
         this._anchorDate = toDateInputValue(anchor);
-        this._reload();
+        await this._reload();
     }
 
     _onViewChange(view) {
         this._view = view;
+        localStorage.setItem(CALENDAR_VIEW_STORAGE_KEY, view);
         this._reload();
+    }
+
+    async _scrollToWorkZone() {
+        await this.updateComplete;
+        const selector = this._view === 'day' ? '.day-timeline-scroll' : '.week-body-scroll';
+        const container = this.renderRoot?.querySelector(selector);
+        if (!container) {
+            return;
+        }
+        const hourPx = this._view === 'day' ? 52 : 48;
+        const anchor = parseDateInputLocal(this._anchorDate);
+        const events = this._eventsForDate(anchor);
+        const now = new Date();
+
+        let targetHour = 8;
+
+        if (isSameDay(now, anchor)) {
+            targetHour = Math.max(0, now.getHours() - 1);
+        } else {
+            const timedEvents = events.filter((e) => !e.all_day);
+            if (timedEvents.length > 0) {
+                const earliestHour = Math.min(
+                    ...timedEvents.map((e) => new Date(e.start_at).getHours()),
+                );
+                targetHour = Math.max(0, earliestHour - 1);
+            }
+        }
+
+        container.scrollTop = targetHour * hourPx;
+    }
+
+    _onDragStart(event, pointerEvent) {
+        pointerEvent.preventDefault();
+        pointerEvent.stopPropagation();
+        const target = pointerEvent.currentTarget;
+        target.setPointerCapture(pointerEvent.pointerId);
+        this._dragPointerId = pointerEvent.pointerId;
+        this._dragOrigin = { x: pointerEvent.clientX, y: pointerEvent.clientY, started: false };
+        this._dragEvent = event;
+        target.addEventListener('pointermove', this._onDragMoveBound);
+        target.addEventListener('pointerup', this._onDragUpBound);
+        target.addEventListener('pointercancel', this._onDragUpBound);
+    }
+
+    _onDragMove(pointerEvent) {
+        if (!this._dragEvent) {
+            return;
+        }
+        const dx = pointerEvent.clientX - this._dragOrigin.x;
+        const dy = pointerEvent.clientY - this._dragOrigin.y;
+        if (!this._dragOrigin.started && Math.abs(dx) + Math.abs(dy) < 8) {
+            return;
+        }
+        this._dragOrigin.started = true;
+        this._dragGhostTop = pointerEvent.clientY;
+        this._dragGhostLeft = pointerEvent.clientX;
+        this._updateDropTarget(pointerEvent.clientX, pointerEvent.clientY);
+    }
+
+    _onDragUp(pointerEvent) {
+        const target = pointerEvent.currentTarget;
+        target.removeEventListener('pointermove', this._onDragMoveBound);
+        target.removeEventListener('pointerup', this._onDragUpBound);
+        target.removeEventListener('pointercancel', this._onDragUpBound);
+        if (this._dragPointerId !== null) {
+            target.releasePointerCapture(this._dragPointerId);
+            this._dragPointerId = null;
+        }
+        const wasDragging = this._dragOrigin?.started;
+        if (!wasDragging || !this._dragEvent) {
+            this._dragEvent = null;
+            this._dragOrigin = null;
+            this._clearDropTargets();
+            return;
+        }
+        this._dragJustFinished = true;
+        setTimeout(() => { this._dragJustFinished = false; }, 100);
+        const dropTarget = this._findDropTarget(pointerEvent.clientX, pointerEvent.clientY);
+        if (dropTarget) {
+            this._applyDrop(this._dragEvent, dropTarget);
+        }
+        this._dragEvent = null;
+        this._dragOrigin = null;
+        this._clearDropTargets();
+    }
+
+    _updateDropTarget(clientX, clientY) {
+        this._clearDropTargets();
+        const el = this._findDropElement(clientX, clientY);
+        if (el) {
+            el.classList.add('drag-over');
+        }
+    }
+
+    _clearDropTargets() {
+        const root = this.renderRoot;
+        if (!root) {
+            return;
+        }
+        root.querySelectorAll('.drag-over').forEach((el) => el.classList.remove('drag-over'));
+    }
+
+    _findDropElement(clientX, clientY) {
+        const root = this.renderRoot;
+        if (!root) {
+            return null;
+        }
+        if (this._view === 'month') {
+            const cells = root.querySelectorAll('.month-cell:not(.outside)');
+            for (const cell of cells) {
+                const rect = cell.getBoundingClientRect();
+                if (clientX >= rect.left && clientX <= rect.right && clientY >= rect.top && clientY <= rect.bottom) {
+                    return cell;
+                }
+            }
+            return null;
+        }
+        if (this._view === 'week') {
+            const cols = root.querySelectorAll('.week-day-col');
+            for (const col of cols) {
+                const rect = col.getBoundingClientRect();
+                if (clientX >= rect.left && clientX <= rect.right && clientY >= rect.top && clientY <= rect.bottom) {
+                    return col;
+                }
+            }
+            return null;
+        }
+        if (this._view === 'day') {
+            const tracks = root.querySelector('.day-tracks');
+            if (tracks) {
+                const rect = tracks.getBoundingClientRect();
+                if (clientX >= rect.left && clientX <= rect.right && clientY >= rect.top && clientY <= rect.bottom) {
+                    return tracks;
+                }
+            }
+            return null;
+        }
+        return null;
+    }
+
+    _findDropTarget(clientX, clientY) {
+        const root = this.renderRoot;
+        if (!root) {
+            return null;
+        }
+        if (this._view === 'month') {
+            const cells = root.querySelectorAll('.month-cell:not(.outside)');
+            for (const cell of cells) {
+                const rect = cell.getBoundingClientRect();
+                if (clientX >= rect.left && clientX <= rect.right && clientY >= rect.top && clientY <= rect.bottom) {
+                    const iso = cell.dataset.iso;
+                    if (iso) {
+                        return { date: iso };
+                    }
+                }
+            }
+            return null;
+        }
+        if (this._view === 'week') {
+            const cols = root.querySelectorAll('.week-day-col');
+            for (let i = 0; i < cols.length; i += 1) {
+                const col = cols[i];
+                const rect = col.getBoundingClientRect();
+                if (clientX >= rect.left && clientX <= rect.right && clientY >= rect.top && clientY <= rect.bottom) {
+                    const iso = col.dataset.iso;
+                    if (!iso) {
+                        return null;
+                    }
+                    const bodyRect = col.closest('.week-body')?.getBoundingClientRect();
+                    if (!bodyRect) {
+                        return { date: iso };
+                    }
+                    const relativeY = clientY - bodyRect.top;
+                    const hourPx = 48;
+                    const totalMinutes = Math.round((relativeY / hourPx) * 60);
+                    const snappedMinutes = Math.round(totalMinutes / 15) * 15;
+                    const clampedMinutes = Math.max(0, Math.min(snappedMinutes, 24 * 60 - 15));
+                    return { date: iso, minutes: clampedMinutes };
+                }
+            }
+            return null;
+        }
+        if (this._view === 'day') {
+            const tracks = root.querySelector('.day-tracks');
+            if (!tracks) {
+                return null;
+            }
+            const rect = tracks.getBoundingClientRect();
+            if (clientX < rect.left || clientX > rect.right || clientY < rect.top || clientY > rect.bottom) {
+                return null;
+            }
+            const relativeY = clientY - rect.top;
+            const hourPx = 52;
+            const totalMinutes = Math.round((relativeY / hourPx) * 60);
+            const snappedMinutes = Math.round(totalMinutes / 15) * 15;
+            const clampedMinutes = Math.max(0, Math.min(snappedMinutes, 24 * 60 - 15));
+            return { date: this._anchorDate, minutes: clampedMinutes };
+        }
+        return null;
+    }
+
+    async _applyDrop(event, dropTarget) {
+        const eventStart = new Date(event.start_at);
+        const eventEnd = new Date(event.end_at);
+        const durationMs = eventEnd.getTime() - eventStart.getTime();
+        const targetDate = parseDateInputLocal(dropTarget.date);
+
+        let startAt;
+        if (dropTarget.minutes !== undefined) {
+            const hours = Math.floor(dropTarget.minutes / 60);
+            const mins = dropTarget.minutes % 60;
+            startAt = new Date(targetDate.getFullYear(), targetDate.getMonth(), targetDate.getDate(), hours, mins, 0, 0);
+        } else {
+            startAt = new Date(
+                targetDate.getFullYear(), targetDate.getMonth(), targetDate.getDate(),
+                eventStart.getHours(), eventStart.getMinutes(), eventStart.getSeconds(), 0
+            );
+        }
+
+        const endAt = new Date(startAt.getTime() + durationMs);
+
+        if (startAt.getTime() === eventStart.getTime()) {
+            return;
+        }
+
+        this._events = this._events.map((ev) => {
+            if (ev.event_id !== event.event_id) {
+                return ev;
+            }
+            return { ...ev, start_at: startAt.toISOString(), end_at: endAt.toISOString() };
+        });
+
+        await this.calendarApi.updateEvent(event.event_id, {
+            title: event.title,
+            kind: event.kind,
+            source: event.source,
+            source_id: event.source_id ?? null,
+            namespace: event.namespace ?? null,
+            description: event.description ?? null,
+            location: event.location ?? null,
+            status: event.status ?? 'confirmed',
+            timezone: event.timezone ?? Intl.DateTimeFormat().resolvedOptions().timeZone,
+            all_day: Boolean(event.all_day),
+            start_at: startAt.toISOString(),
+            end_at: endAt.toISOString(),
+            attendees: event.attendees ?? [],
+            recurrence_rule: event.recurrence_rule ?? null,
+            recurrence_id: event.recurrence_id ?? null,
+            series_id: event.series_id ?? null,
+            deep_link: event.deep_link ?? null,
+            metadata: event.metadata ?? {},
+        });
+        await this._reload({ silent: true });
     }
 
     _eventsForDate(date) {
@@ -1419,7 +2396,8 @@ export class PlatformCalendarModal extends PlatformModal {
     }
 
     _monthCells() {
-        const anchor = new Date(this._anchorDate);
+        const anchor = parseDateInputLocal(this._anchorDate);
+        anchor.setHours(12, 0, 0, 0);
         const monthStart = startOfMonth(anchor);
         const firstVisible = startOfWeek(monthStart);
         const today = new Date();
@@ -1439,19 +2417,203 @@ export class PlatformCalendarModal extends PlatformModal {
         return cells;
     }
 
-    _listRows() {
-        const range = this._viewRange();
-        const rows = [];
-        let cursor = new Date(range.start.getTime());
-        while (cursor < range.end) {
-            rows.push({
-                iso: toDateInputValue(cursor),
-                label: cursor.toLocaleDateString('ru-RU', { weekday: 'short', day: 'numeric', month: 'short' }),
-                events: this._eventsForDate(cursor),
-            });
-            cursor = addDays(cursor, 1);
+    _compactPeriodLabel() {
+        const anchor = parseDateInputLocal(this._anchorDate);
+        if (Number.isNaN(anchor.getTime())) {
+            throw new Error(`Invalid anchor date: ${this._anchorDate}`);
         }
-        return rows;
+        return anchor.toLocaleDateString(this._calendarLocaleTag(), { weekday: 'short', day: 'numeric', month: 'long' });
+    }
+
+    _openDateSheet() {
+        const anchor = parseDateInputLocal(this._anchorDate);
+        if (Number.isNaN(anchor.getTime())) {
+            throw new Error(`Invalid anchor date: ${this._anchorDate}`);
+        }
+        this._dateSheetMonthRef = toDateInputValue(new Date(anchor.getFullYear(), anchor.getMonth(), 1));
+        this._dateSheetOpen = true;
+    }
+
+    _closeDateSheet() {
+        this._dateSheetOpen = false;
+    }
+
+    _shiftDateSheetMonth(delta) {
+        const ref = new Date(this._dateSheetMonthRef);
+        if (Number.isNaN(ref.getTime())) {
+            throw new Error(`Invalid date sheet month ref: ${this._dateSheetMonthRef}`);
+        }
+        const shifted = new Date(ref.getFullYear(), ref.getMonth() + delta, 1, 0, 0, 0, 0);
+        this._dateSheetMonthRef = toDateInputValue(shifted);
+    }
+
+    _selectDateFromSheet(iso) {
+        if (typeof iso !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(iso)) {
+            throw new Error(`Invalid sheet date: ${iso}`);
+        }
+        const parsed = new Date(iso);
+        if (Number.isNaN(parsed.getTime())) {
+            throw new Error(`Invalid sheet date: ${iso}`);
+        }
+        this._anchorDate = iso;
+        this._dateSheetOpen = false;
+        this._reload();
+    }
+
+    _monthCellsForDateSheet() {
+        const ref = new Date(this._dateSheetMonthRef);
+        if (Number.isNaN(ref.getTime())) {
+            throw new Error(`Invalid date sheet month ref: ${this._dateSheetMonthRef}`);
+        }
+        const monthStart = startOfMonth(ref);
+        const anchorMonth = ref.getMonth();
+        const firstVisible = startOfWeek(monthStart);
+        const today = new Date();
+        const cells = [];
+        for (let index = 0; index < 42; index += 1) {
+            const date = addDays(firstVisible, index);
+            cells.push({
+                date,
+                iso: toDateInputValue(date),
+                outside: date.getMonth() !== anchorMonth,
+                today: isSameDay(date, today),
+            });
+        }
+        return cells;
+    }
+
+    _renderDateSheet() {
+        if (!this._dateSheetOpen) {
+            return html``;
+        }
+        const weekdays = [1, 2, 3, 4, 5, 6, 7].map((i) => this._calT(`weekday_${i}`));
+        const cells = this._monthCellsForDateSheet();
+        const sheetMonth = new Date(this._dateSheetMonthRef);
+        if (Number.isNaN(sheetMonth.getTime())) {
+            throw new Error(`Invalid date sheet month ref: ${this._dateSheetMonthRef}`);
+        }
+        const monthTitle = sheetMonth.toLocaleDateString(this._calendarLocaleTag(), { month: 'long', year: 'numeric' });
+        return html`
+            <div class="date-sheet-overlay" @click=${() => this._closeDateSheet()}>
+                <div class="date-sheet-card" @click=${(e) => e.stopPropagation()}>
+                    <div class="date-sheet-header">
+                        <span class="date-sheet-title">${monthTitle}</span>
+                        <div class="date-sheet-nav">
+                            <button type="button" class="btn-icon" @click=${() => this._shiftDateSheetMonth(-1)} aria-label=${this._calT('sheet_prev_month')}>
+                                <platform-icon name="chevron-left" size="16"></platform-icon>
+                            </button>
+                            <button type="button" class="btn-icon" @click=${() => this._shiftDateSheetMonth(1)} aria-label=${this._calT('sheet_next_month')}>
+                                <platform-icon name="chevron-right" size="16"></platform-icon>
+                            </button>
+                            <button type="button" class="btn-icon" @click=${() => this._closeDateSheet()} aria-label=${this._calT('sheet_close')}>
+                                <platform-icon name="close" size="16"></platform-icon>
+                            </button>
+                        </div>
+                    </div>
+                    <div class="date-sheet-grid">
+                        ${weekdays.map((label) => html`<div class="date-sheet-weekday">${label}</div>`)}
+                        ${cells.map((cell) => html`
+                            <button
+                                type="button"
+                                class="date-sheet-cell ${cell.outside ? 'outside' : ''} ${cell.today ? 'today' : ''} ${cell.iso === this._anchorDate ? 'selected' : ''}"
+                                @click=${() => this._selectDateFromSheet(cell.iso)}
+                            >
+                                ${cell.date.getDate()}
+                            </button>
+                        `)}
+                    </div>
+                </div>
+            </div>
+        `;
+    }
+
+    _renderDayTimeline() {
+        const anchor = parseDateInputLocal(this._anchorDate);
+        if (Number.isNaN(anchor.getTime())) {
+            throw new Error(`Invalid anchor date: ${this._anchorDate}`);
+        }
+        const hourPx = 52;
+        const daySpanMin = 24 * 60;
+        const dayHeightPx = 24 * hourPx;
+        const events = this._eventsForDate(anchor);
+        const allDay = events.filter((e) => Boolean(e.all_day));
+        const timed = events.filter((e) => !e.all_day);
+        const dayStart = new Date(anchor.getFullYear(), anchor.getMonth(), anchor.getDate(), 0, 0, 0, 0);
+        const dayEndMs = addDays(dayStart, 1).getTime();
+        const layoutTimed = timed.map((event) => {
+            const startMs = new Date(event.start_at).getTime();
+            const endMs = new Date(event.end_at).getTime();
+            if (Number.isNaN(startMs) || Number.isNaN(endMs)) {
+                throw new Error('event must have valid start_at and end_at');
+            }
+            const startClamped = Math.max(startMs, dayStart.getTime());
+            const endClamped = Math.min(endMs, dayEndMs);
+            const startMin = (startClamped - dayStart.getTime()) / 60000;
+            const durMin = Math.max((endClamped - startClamped) / 60000, 15);
+            const top = (startMin / daySpanMin) * dayHeightPx;
+            const height = Math.max((durMin / daySpanMin) * dayHeightPx, 28);
+            const colorKey = normalizeEventColor(event.metadata?.[EVENT_COLOR_KEY]);
+            return { event, top, height, colorKey, visibleStartMs: startClamped };
+        });
+        const hours = Array.from({ length: 24 }, (_, h) => h);
+        const now = new Date();
+        const showNow = isSameDay(now, anchor);
+        const nowTop = showNow
+            ? (((now.getHours() * 60 + now.getMinutes()) / daySpanMin) * dayHeightPx)
+            : null;
+        return html`
+            <div class="day-timeline">
+                ${allDay.length > 0 ? html`
+                    <div class="day-all-day-row">
+                        ${allDay.map((event) => html`
+                            <button
+                                type="button"
+                                class="event-chip"
+                                data-color=${normalizeEventColor(event.metadata?.[EVENT_COLOR_KEY])}
+                                @click=${() => this._fillFormFromEvent(event)}
+                            >
+                                <span class="event-chip-title">${event.title}</span>
+                            </button>
+                        `)}
+                    </div>
+                ` : ''}
+                <div class="day-timeline-scroll">
+                    ${events.length === 0 ? html`<div class="hint" style="padding: var(--space-3);">${this._calT('events_empty')}</div>` : html`
+                        <div class="day-timeline-body">
+                            <div class="day-time-col">
+                                ${hours.map((h) => html`
+                                    <div class="day-time-label">${pad2(h)}:00</div>
+                                `)}
+                            </div>
+                            <div class="day-tracks">
+                                <div class="day-tracks-lines">
+                                    ${hours.map(() => html`<div class="day-hour-slot"></div>`)}
+                                </div>
+                                <div class="day-events-layer">
+                                    ${showNow && nowTop !== null ? html`
+                                        <div class="day-now-line" style=${`top:${nowTop}px`}></div>
+                                    ` : ''}
+                                    ${layoutTimed.map(({ event, top, height, colorKey, visibleStartMs }) => html`
+                                        <button
+                                            type="button"
+                                            class="day-event-block event-chip"
+                                            data-color=${colorKey}
+                                            ?data-dragging=${this._dragEvent?.event_id === event.event_id}
+                                            style=${`top:${top}px;height:${height}px;touch-action:none`}
+                                            @click=${() => this._fillFormFromEvent(event)}
+                                            @pointerdown=${(e) => this._onDragStart(event, e)}
+                                        >
+                                            <span class="event-chip-time">${this._formatWallClockFromMs(visibleStartMs)}</span>
+                                            <span class="event-chip-title">${event.title}</span>
+                                        </button>
+                                    `)}
+                                </div>
+                            </div>
+                        </div>
+                    `}
+                </div>
+            </div>
+        `;
     }
 
     _sourceKey(source) {
@@ -1465,7 +2627,7 @@ export class PlatformCalendarModal extends PlatformModal {
     _sourceLabel(source) {
         const key = this._sourceKey(source);
         if (key === 'platform') {
-            return 'Платформа';
+            return this._calT('source_platform');
         }
         if (key === 'crm') {
             return 'NetWorkle';
@@ -1482,31 +2644,42 @@ export class PlatformCalendarModal extends PlatformModal {
         if (key === 'yandex') {
             return 'Yandex';
         }
-        return key ? key.toUpperCase() : 'Неизвестно';
+        return key ? key.toUpperCase() : this._calT('unknown');
     }
 
     _kindLabel(kind) {
         const key = this._kindKey(kind);
         if (key === 'event') {
-            return 'Событие';
+            return this._calT('kind_event');
         }
         if (key === 'meeting') {
-            return 'Встреча';
+            return this._calT('kind_meeting');
         }
         if (key === 'task') {
-            return 'Задача';
+            return this._calT('kind_task');
         }
         if (key === 'note') {
-            return 'Заметка';
+            return this._calT('kind_note');
         }
         if (key === 'call') {
-            return 'Звонок';
+            return this._calT('kind_call');
         }
-        return key ? key : 'событие';
+        return key ? key : this._calT('kind_generic');
     }
 
     _isEventEditable(source) {
         return this._sourceKey(source) === 'platform';
+    }
+
+    _formatWallClockFromMs(ms) {
+        const instant = new Date(ms);
+        if (Number.isNaN(instant.getTime())) {
+            throw new Error('Invalid instant for wall clock');
+        }
+        return instant.toLocaleTimeString(this._calendarLocaleTag(), {
+            hour: '2-digit',
+            minute: '2-digit',
+        });
     }
 
     _eventStartTimeLabel(event) {
@@ -1514,13 +2687,13 @@ export class PlatformCalendarModal extends PlatformModal {
         if (Number.isNaN(startDate.getTime())) {
             throw new Error('event.start_at must be valid datetime');
         }
-        return startDate.toLocaleTimeString('ru-RU', {
-            hour: '2-digit',
-            minute: '2-digit',
-        });
+        return this._formatWallClockFromMs(startDate.getTime());
     }
 
     _fillFormFromEvent(event) {
+        if (this._dragJustFinished) {
+            return;
+        }
         this._ensureTimezoneOption(event.timezone);
         this._selectedEventId = event.event_id;
         this._showDescriptionField = Boolean(event.description);
@@ -1542,6 +2715,7 @@ export class PlatformCalendarModal extends PlatformModal {
             attendees: Array.isArray(event.attendees) ? event.attendees.map((item) => toAttendeeTag(item)) : [],
             recurrence: this._ruleToRecurrence(event.recurrence_rule),
         };
+        this._eventDeepLink = typeof event.deep_link === 'string' && event.deep_link !== '' ? event.deep_link : null;
         this._attendeeDraft = '';
         this._attendeeDropdownOpen = false;
         this._eventDialogOpen = true;
@@ -1574,10 +2748,23 @@ export class PlatformCalendarModal extends PlatformModal {
     }
 
     _onEventFormChange(field, value) {
-        this._eventForm = {
-            ...this._eventForm,
-            [field]: value,
-        };
+        const form = { ...this._eventForm, [field]: value };
+
+        if (field === 'start_at' || field === 'end_at') {
+            const startMs = new Date(form.start_at).getTime();
+            const endMs = new Date(form.end_at).getTime();
+
+            if (!Number.isNaN(startMs) && !Number.isNaN(endMs) && startMs >= endMs) {
+                const MIN_DURATION_MS = 15 * 60 * 1000;
+                if (field === 'start_at') {
+                    form.end_at = toDateTimeInputValue(new Date(startMs + MIN_DURATION_MS));
+                } else {
+                    form.start_at = toDateTimeInputValue(new Date(endMs - MIN_DURATION_MS));
+                }
+            }
+        }
+
+        this._eventForm = form;
     }
 
     _attendeeTags() {
@@ -1593,7 +2780,7 @@ export class PlatformCalendarModal extends PlatformModal {
             return;
         }
         if (!EMAIL_PATTERN.test(normalized)) {
-            this.error('Введите корректный email');
+            this.error(this._calT('error_email_invalid'));
             return;
         }
         const current = this._attendeeTags();
@@ -1682,7 +2869,10 @@ export class PlatformCalendarModal extends PlatformModal {
     }
 
     _openCreateEventDialog(date) {
-        const selectedDate = date instanceof Date ? new Date(date.getTime()) : new Date(this._anchorDate);
+        if (this._dragJustFinished) {
+            return;
+        }
+        const selectedDate = date instanceof Date ? new Date(date.getTime()) : parseDateInputLocal(this._anchorDate);
         if (Number.isNaN(selectedDate.getTime())) {
             throw new Error('Invalid date for event dialog');
         }
@@ -1700,7 +2890,7 @@ export class PlatformCalendarModal extends PlatformModal {
         this._selectedEventId = null;
         this._eventForm = {
             ...this._eventForm,
-            kind: 'event',
+            kind: 'meeting',
             color: DEFAULT_EVENT_COLOR,
             title: '',
             description: '',
@@ -1710,8 +2900,9 @@ export class PlatformCalendarModal extends PlatformModal {
             start_at: toDateTimeInputValue(startDate),
             end_at: toDateTimeInputValue(endDate),
         };
+        this._eventDeepLink = null;
         this._selectedEventSource = 'platform';
-        this._selectedEventKind = 'event';
+        this._selectedEventKind = 'meeting';
         this._selectedEventNamespace = null;
         this._eventMetadata = {};
         this._eventAttachments = [];
@@ -1780,7 +2971,7 @@ export class PlatformCalendarModal extends PlatformModal {
         this._saving = true;
         try {
             if (this._selectedEventId && !this._isEventEditable(this._selectedEventSource)) {
-                throw new Error(`События источника ${this._sourceLabel(this._selectedEventSource)} редактируются в своем сервисе`);
+                throw new Error(this._calT('err_edit_remote', { label: this._sourceLabel(this._selectedEventSource) }));
             }
             const payload = {
                 title: this._eventForm.title.trim(),
@@ -1809,13 +3000,13 @@ export class PlatformCalendarModal extends PlatformModal {
                 ),
             };
             if (!payload.title) {
-                throw new Error('Название события обязательно');
+                throw new Error(this._calT('err_title_required'));
             }
             if (!payload.kind) {
-                throw new Error('Тип события обязателен');
+                throw new Error(this._calT('err_kind_required'));
             }
             if (new Date(payload.start_at) >= new Date(payload.end_at)) {
-                throw new Error('Дата окончания должна быть позже даты начала');
+                throw new Error(this._calT('err_end_after_start'));
             }
             if (this._selectedEventId) {
                 await this.calendarApi.updateEvent(this._selectedEventId, payload);
@@ -1824,11 +3015,11 @@ export class PlatformCalendarModal extends PlatformModal {
             }
             this._selectedEventId = null;
             this._selectedEventSource = 'platform';
-            this._selectedEventKind = 'event';
+            this._selectedEventKind = 'meeting';
             this._selectedEventNamespace = null;
             this._eventForm = {
                 ...this._eventForm,
-                kind: 'event',
+                kind: 'meeting',
                 color: DEFAULT_EVENT_COLOR,
                 title: '',
                 description: '',
@@ -1837,13 +3028,14 @@ export class PlatformCalendarModal extends PlatformModal {
                 recurrence: 'none',
             };
             this._eventMetadata = {};
+            this._eventDeepLink = null;
             this._eventAttachments = [];
             this._attendeeDraft = '';
             this._attendeeDropdownOpen = false;
             this._eventDialogOpen = false;
             await this._reload();
         } catch (error) {
-            this.error(error instanceof Error ? error.message : 'Не удалось сохранить событие');
+            this.error(error instanceof Error ? error.message : this._calT('error_save_event'));
         } finally {
             this._saving = false;
         }
@@ -1851,18 +3043,19 @@ export class PlatformCalendarModal extends PlatformModal {
 
     async _deleteSelectedEvent() {
         if (!this._selectedEventId) {
-            throw new Error('Не выбрано событие для удаления');
+            throw new Error(this._calT('err_no_event_selected'));
         }
         if (!this._isEventEditable(this._selectedEventSource)) {
-            throw new Error(`События источника ${this._sourceLabel(this._selectedEventSource)} удаляются в своем сервисе`);
+            throw new Error(this._calT('err_delete_remote', { label: this._sourceLabel(this._selectedEventSource) }));
         }
         await this.calendarApi.deleteEvent(this._selectedEventId);
         this._selectedEventId = null;
         this._selectedEventSource = 'platform';
-        this._selectedEventKind = 'event';
+        this._selectedEventKind = 'meeting';
         this._selectedEventNamespace = null;
         this._eventMetadata = {};
         this._eventAttachments = [];
+        this._eventDeepLink = null;
         this._eventDialogOpen = false;
         await this._reload();
     }
@@ -1871,7 +3064,7 @@ export class PlatformCalendarModal extends PlatformModal {
         this._saving = true;
         if (this._activeProvider === 'google') {
             this._saving = false;
-            throw new Error('Google подключается через OAuth-кнопку');
+            throw new Error(this._calT('err_google_oauth_only'));
         }
         const payload = {
             provider: this._activeProvider,
@@ -1889,11 +3082,11 @@ export class PlatformCalendarModal extends PlatformModal {
         };
         if (!payload.username) {
             this._saving = false;
-            throw new Error('Username обязателен');
+            throw new Error(this._calT('err_username_required'));
         }
         if (!payload.access_token) {
             this._saving = false;
-            throw new Error('Пароль приложения обязателен');
+            throw new Error(this._calT('err_app_password_required'));
         }
         await this.calendarApi.connectIntegration(payload);
         this._saving = false;
@@ -1940,8 +3133,136 @@ export class PlatformCalendarModal extends PlatformModal {
         };
     }
 
+    _renderWeekGrid() {
+        const anchor = parseDateInputLocal(this._anchorDate);
+        anchor.setHours(12, 0, 0, 0);
+        const weekStart = startOfWeek(anchor);
+        const hourPx = 48;
+        const daySpanMin = 24 * 60;
+        const dayHeightPx = 24 * hourPx;
+        const hours = Array.from({ length: 24 }, (_, h) => h);
+        const now = new Date();
+        const today = new Date();
+        const weekdayNames = [1, 2, 3, 4, 5, 6, 7].map((i) => this._calT(`weekday_${i}`));
+
+        const days = Array.from({ length: 7 }, (_, i) => {
+            const date = addDays(weekStart, i);
+            const dayOfWeek = date.getDay();
+            return {
+                date,
+                iso: toDateInputValue(date),
+                label: weekdayNames[i],
+                number: date.getDate(),
+                today: isSameDay(date, today),
+                weekend: dayOfWeek === 0 || dayOfWeek === 6,
+                events: this._eventsForDate(date),
+            };
+        });
+
+        const hasAllDay = days.some((d) => d.events.some((e) => e.all_day));
+
+        const layoutForDay = (day) => {
+            const timed = day.events.filter((e) => !e.all_day);
+            const dayStart = new Date(day.date.getFullYear(), day.date.getMonth(), day.date.getDate(), 0, 0, 0, 0);
+            const dayEndMs = addDays(dayStart, 1).getTime();
+            return timed.map((event) => {
+                const startMs = new Date(event.start_at).getTime();
+                const endMs = new Date(event.end_at).getTime();
+                if (Number.isNaN(startMs) || Number.isNaN(endMs)) {
+                    throw new Error('event must have valid start_at and end_at');
+                }
+                const startClamped = Math.max(startMs, dayStart.getTime());
+                const endClamped = Math.min(endMs, dayEndMs);
+                const startMin = (startClamped - dayStart.getTime()) / 60000;
+                const durMin = Math.max((endClamped - startClamped) / 60000, 15);
+                const top = (startMin / daySpanMin) * dayHeightPx;
+                const height = Math.max((durMin / daySpanMin) * dayHeightPx, 22);
+                const colorKey = normalizeEventColor(event.metadata?.[EVENT_COLOR_KEY]);
+                return { event, top, height, colorKey, visibleStartMs: startClamped };
+            });
+        };
+
+        return html`
+            <div class="week-grid">
+                <div class="week-header">
+                    <div class="week-time-spacer"></div>
+                    ${days.map((day) => html`
+                        <div class="week-day-header ${day.today ? 'today' : ''} ${day.weekend ? 'weekend' : ''}">
+                            <span>${day.label}</span>
+                            <span class="week-day-number">${day.number}</span>
+                        </div>
+                    `)}
+                </div>
+                ${hasAllDay ? html`
+                    <div class="week-all-day-row">
+                        <div class="week-time-spacer"></div>
+                        ${days.map((day) => {
+                            const allDayEvents = day.events.filter((e) => e.all_day);
+                            return html`
+                                <div class="week-all-day-cell">
+                                    ${allDayEvents.map((event) => html`
+                                        <button
+                                            type="button"
+                                            class="event-chip"
+                                            data-color=${normalizeEventColor(event.metadata?.[EVENT_COLOR_KEY])}
+                                            @click=${() => this._fillFormFromEvent(event)}
+                                        >
+                                            <span class="event-chip-title">${event.title}</span>
+                                        </button>
+                                    `)}
+                                </div>
+                            `;
+                        })}
+                    </div>
+                ` : ''}
+                <div class="week-body-scroll">
+                    <div class="week-body">
+                        <div class="week-time-col">
+                            ${hours.map((h) => html`
+                                <div class="week-time-label">${pad2(h)}:00</div>
+                            `)}
+                        </div>
+                        ${days.map((day) => {
+                            const timedLayout = layoutForDay(day);
+                            const showNowLine = day.today && isSameDay(now, day.date);
+                            const nowTop = showNowLine
+                                ? (((now.getHours() * 60 + now.getMinutes()) / daySpanMin) * dayHeightPx)
+                                : null;
+                            return html`
+                                <div class="week-day-col ${day.today ? 'today' : ''} ${day.weekend ? 'weekend' : ''}" data-iso=${day.iso}>
+                                    <div class="week-day-lines">
+                                        ${hours.map(() => html`<div class="week-hour-slot"></div>`)}
+                                    </div>
+                                    <div class="week-day-events">
+                                        ${showNowLine && nowTop !== null ? html`
+                                            <div class="day-now-line" style=${`top:${nowTop}px`}></div>
+                                        ` : ''}
+                                        ${timedLayout.map(({ event, top, height, colorKey, visibleStartMs }) => html`
+                                            <button
+                                                type="button"
+                                                class="day-event-block event-chip"
+                                                data-color=${colorKey}
+                                                ?data-dragging=${this._dragEvent?.event_id === event.event_id}
+                                                style=${`top:${top}px;height:${height}px;touch-action:none`}
+                                                @click=${() => this._fillFormFromEvent(event)}
+                                                @pointerdown=${(e) => this._onDragStart(event, e)}
+                                            >
+                                                <span class="event-chip-time">${this._formatWallClockFromMs(visibleStartMs)}</span>
+                                                <span class="event-chip-title">${event.title}</span>
+                                            </button>
+                                        `)}
+                                    </div>
+                                </div>
+                            `;
+                        })}
+                    </div>
+                </div>
+            </div>
+        `;
+    }
+
     _renderMonth() {
-        const weekdays = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс'];
+        const weekdays = [1, 2, 3, 4, 5, 6, 7].map((i) => this._calT(`weekday_${i}`));
         const cells = this._monthCells();
         return html`
             <div class="month-grid">
@@ -1951,24 +3272,34 @@ export class PlatformCalendarModal extends PlatformModal {
                 ${cells.map((cell) => html`
                     <article
                         class="month-cell ${cell.outside ? 'outside' : ''} ${cell.weekend ? 'weekend' : ''} ${cell.today ? 'today' : ''}"
+                        data-iso=${cell.iso}
                         @click=${() => this._openCreateEventDialog(cell.date)}
                     >
                         <div class="date-label">${cell.date.getDate()}</div>
                         <div class="month-cell-events">
-                            ${cell.events.slice(0, 3).map((event) => html`
+                            ${cell.events.map((event) => html`
                                 <button
                                     class="event-chip ${this._selectedEventId === event.event_id ? 'active' : ''}"
                                     data-color=${normalizeEventColor(event.metadata?.[EVENT_COLOR_KEY])}
+                                    ?data-dragging=${this._dragEvent?.event_id === event.event_id}
                                     type="button"
                                     @click=${(e) => {
                                         e.stopPropagation();
                                         this._fillFormFromEvent(event);
                                     }}
+                                    @pointerdown=${(e) => this._onDragStart(event, e)}
                                     title=${`${this._sourceLabel(event.source)} • ${this._kindLabel(event.kind)}`}
+                                    style="touch-action: none;"
                                 >
                                     <span class="event-chip-top">
                                         <span class="event-badge" data-source=${this._sourceKey(event.source)}>${this._sourceLabel(event.source)}</span>
                                         <span class="event-badge">${this._kindLabel(event.kind)}</span>
+                                        ${eventMetadataHasSyncMeeting(event.metadata) ? html`
+                                            <span class="event-badge event-badge-sync" data-source="sync">
+                                                <img class="event-sync-logo-inline" src=${SYNC_LOGO_SRC} alt="" />
+                                                ${this._calT('tag_sync')}
+                                            </span>
+                                        ` : ''}
                                     </span>
                                     <span class="event-chip-title">
                                         <span class="event-chip-time">${this._eventStartTimeLabel(event)}</span>${event.title}
@@ -1982,45 +3313,15 @@ export class PlatformCalendarModal extends PlatformModal {
         `;
     }
 
-    _renderList() {
-        const rows = this._listRows();
-        return html`
-            <div class="list-view">
-                ${rows.map((row) => html`
-                    <article class="section">
-                        <div class="section-title">${row.label}</div>
-                        ${row.events.length === 0 ? html`
-                            <div class="hint">Событий нет</div>
-                        ` : row.events.map((event) => html`
-                            <button
-                                class="list-item ${this._selectedEventId === event.event_id ? 'active' : ''}"
-                                type="button"
-                                @click=${() => this._fillFormFromEvent(event)}
-                            >
-                                <div>
-                                    <div class="list-title">${event.title}</div>
-                                    <div class="list-meta">${new Date(event.start_at).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })}</div>
-                                    <div class="list-badges">
-                                        <span class="event-badge" data-source=${this._sourceKey(event.source)}>${this._sourceLabel(event.source)}</span>
-                                        <span class="event-badge">${this._kindLabel(event.kind)}</span>
-                                        ${event.namespace ? html`<span class="event-badge">${event.namespace}</span>` : ''}
-                                    </div>
-                                </div>
-                                <platform-icon name="calendar" size="14"></platform-icon>
-                            </button>
-                        `)}
-                    </article>
-                `)}
-            </div>
-        `;
-    }
-
     _renderEventForm() {
-        const submitLabel = this._saving ? 'Сохранение...' : (this._selectedEventId ? 'Сохранить' : 'Создать');
+        const submitLabel = this._saving
+            ? this._calT('compose_saving')
+            : (this._selectedEventId ? this._calT('compose_save') : this._calT('compose_create'));
+        const c = (key, params) => this._calT(key, params);
         return html`
             <div class="event-compose">
                 <div class="event-compose-row">
-                    <label class="event-compose-label">Название</label>
+                    <label class="event-compose-label">${c('label_title')}</label>
                     <div class="event-compose-control">
                         <input
                             class="event-compose-title-input"
@@ -2037,17 +3338,25 @@ export class PlatformCalendarModal extends PlatformModal {
                         <div class="event-compose-pills">
                             <button class="event-compose-pill" type="button" @click=${() => { this._showDescriptionField = !this._showDescriptionField; }}>
                                 <span>+</span>
-                                <small>Описание</small>
+                                <small>${c('label_description')}</small>
                             </button>
                             <button class="event-compose-pill" type="button" @click=${this._triggerAttachmentSelect} ?disabled=${this._uploadingAttachments}>
-                                <small>Прикрепить файл</small>
+                                <small>${c('label_attach')}</small>
                             </button>
                         </div>
                         ${this._eventAttachments.length > 0 ? html`
                             <div class="event-compose-attachments">
                                 ${this._eventAttachments.map((attachment) => html`
                                     <div class="event-compose-attachment">
-                                        <platform-icon class="event-compose-attachment-icon" name="attachment" size="14"></platform-icon>
+                                        <platform-icon
+                                            class="event-compose-attachment-icon"
+                                            file-icon
+                                            name=${resolveFileIconKey(
+                                                attachment.name,
+                                                typeof attachment.content_type === 'string' ? attachment.content_type : '',
+                                            )}
+                                            size="14"
+                                        ></platform-icon>
                                         <a
                                             class="event-compose-attachment-link"
                                             href=${attachment.url}
@@ -2061,7 +3370,7 @@ export class PlatformCalendarModal extends PlatformModal {
                                             class="event-compose-attachment-remove"
                                             type="button"
                                             @click=${() => this._removeAttachment(attachment.file_id)}
-                                            title="Убрать файл"
+                                            title=${c('remove_file')}
                                         >
                                             ×
                                         </button>
@@ -2074,7 +3383,7 @@ export class PlatformCalendarModal extends PlatformModal {
 
                 ${this._showDescriptionField ? html`
                     <div class="event-compose-row">
-                        <label class="event-compose-label">Описание</label>
+                        <label class="event-compose-label">${c('label_description')}</label>
                         <div class="event-compose-control">
                             <textarea
                                 class="event-compose-textarea"
@@ -2087,7 +3396,7 @@ export class PlatformCalendarModal extends PlatformModal {
                 ` : ''}
 
                 <div class="event-compose-row">
-                    <label class="event-compose-label">Участники</label>
+                    <label class="event-compose-label">${c('label_attendees')}</label>
                     <div class="event-compose-control">
                         <div class="attendees-picker">
                             <div class="attendees-tags">
@@ -2097,7 +3406,7 @@ export class PlatformCalendarModal extends PlatformModal {
                                         <button
                                             class="attendee-tag-remove"
                                             type="button"
-                                            title="Удалить участника"
+                                            title=${c('remove_attendee')}
                                             @click=${() => this._removeAttendee(attendee.email)}
                                         >
                                             ×
@@ -2118,7 +3427,7 @@ export class PlatformCalendarModal extends PlatformModal {
                                         this._attendeeDropdownOpen = true;
                                     }}
                                     @keydown=${(event) => this._onAttendeeInputKeyDown(event)}
-                                    placeholder="Введите email или выберите пользователя"
+                                    placeholder=${c('attendee_placeholder')}
                                 />
                             </div>
                             ${this._attendeeDropdownOpen && this._attendeeSuggestions().length > 0 ? html`
@@ -2136,7 +3445,7 @@ export class PlatformCalendarModal extends PlatformModal {
                 </div>
 
                 <div class="event-compose-row">
-                    <label class="event-compose-label">Время и дата</label>
+                    <label class="event-compose-label">${c('label_datetime')}</label>
                     <div class="event-compose-time-layout">
                         <div class="event-compose-time-row">
                             <platform-date-picker
@@ -2154,22 +3463,20 @@ export class PlatformCalendarModal extends PlatformModal {
                             ></platform-date-picker>
                         </div>
                         <div class="event-compose-options">
-                            <label class="event-compose-check">
-                                <input
-                                    type="checkbox"
+                            <div class="event-compose-switch">
+                                <platform-switch
                                     .checked=${Boolean(this._eventForm.all_day)}
-                                    @change=${(e) => this._onEventFormChange('all_day', e.target.checked)}
-                                />
-                                <span>Весь день</span>
-                            </label>
-                            <label class="event-compose-check">
-                                <input
-                                    type="checkbox"
+                                    .label=${c('all_day')}
+                                    @change=${(e) => this._onEventFormChange('all_day', e.detail.value)}
+                                ></platform-switch>
+                            </div>
+                            <div class="event-compose-switch">
+                                <platform-switch
                                     .checked=${this._eventForm.recurrence !== 'none'}
-                                    @change=${(e) => this._onEventFormChange('recurrence', e.target.checked ? 'weekly' : 'none')}
-                                />
-                                <span>Повторять</span>
-                            </label>
+                                    .label=${c('repeat')}
+                                    @change=${(e) => this._onEventFormChange('recurrence', e.detail.value ? 'weekly' : 'none')}
+                                ></platform-switch>
+                            </div>
                             <select
                                 class="event-compose-select"
                                 .value=${this._eventForm.timezone}
@@ -2184,7 +3491,7 @@ export class PlatformCalendarModal extends PlatformModal {
                 </div>
 
                 <div class="event-compose-row">
-                    <label class="event-compose-label">Цвет</label>
+                    <label class="event-compose-label">${c('label_color')}</label>
                     <div class="event-compose-control">
                         <div class="event-color-palette">
                             ${EVENT_COLOR_OPTIONS.map((color) => html`
@@ -2201,7 +3508,7 @@ export class PlatformCalendarModal extends PlatformModal {
                 </div>
 
                 <div class="event-compose-row">
-                    <label class="event-compose-label">Тип</label>
+                    <label class="event-compose-label">${c('label_type')}</label>
                     <div class="event-compose-control">
                         <select
                             class="event-compose-select"
@@ -2209,11 +3516,11 @@ export class PlatformCalendarModal extends PlatformModal {
                             @change=${(e) => this._onEventFormChange('kind', e.target.value)}
                             ?disabled=${this._selectedEventId && !this._isEventEditable(this._selectedEventSource)}
                         >
-                            <option value="event">Событие</option>
-                            <option value="meeting">Встреча</option>
-                            <option value="task">Задача</option>
-                            <option value="note">Заметка</option>
-                            <option value="call">Звонок</option>
+                            <option value="meeting">${c('kind_meeting')}</option>
+                            <option value="event">${c('kind_event')}</option>
+                            <option value="task">${c('kind_task')}</option>
+                            <option value="note">${c('kind_note')}</option>
+                            <option value="call">${c('kind_call')}</option>
                         </select>
                     </div>
                 </div>
@@ -2221,34 +3528,52 @@ export class PlatformCalendarModal extends PlatformModal {
                 <div class="event-compose-divider"></div>
 
                 <div class="event-compose-row">
-                    <label class="event-compose-label">Место</label>
+                    <label class="event-compose-label">${c('label_location')}</label>
                     <div class="event-compose-control">
                         <input
                             class="event-compose-input"
                             .value=${this._eventForm.location}
                             @input=${(e) => this._onEventFormChange('location', e.target.value)}
-                            placeholder="Введите адрес или место"
+                            placeholder=${c('location_placeholder')}
                         />
                     </div>
                 </div>
 
-                <div class="event-compose-row">
-                    <label class="event-compose-label">Телемост</label>
-                    <div class="event-compose-control">
-                        <button class="event-compose-pill" type="button">
-                            <small>Добавить видеовстречу</small>
-                        </button>
+                ${this._selectedEventSource === 'platform' && (!this._selectedEventId || this._isEventEditable(this._selectedEventSource)) && this._eventForm.kind === 'meeting' ? html`
+                    <div class="event-compose-row">
+                        <label class="event-compose-label">
+                            <span class="event-compose-sync-head">
+                                <img class="event-sync-logo-inline" src=${SYNC_LOGO_SRC} alt="" />
+                                ${c('tag_sync')}
+                            </span>
+                        </label>
+                        <div class="event-compose-control">
+                            <div class="event-compose-sync-row event-compose-sync-hint-row">
+                                <p class="event-compose-meeting-sync-hint">${c('meeting_sync_hint')}</p>
+                                ${this._eventDeepLink ? html`
+                                    <a
+                                        class="event-compose-join-link"
+                                        href=${this._eventDeepLink}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                    >
+                                        <platform-icon name="paperclip" size="16"></platform-icon>
+                                        <span>${c('sync_join_open')}</span>
+                                    </a>
+                                ` : ''}
+                            </div>
+                        </div>
                     </div>
-                </div>
+                ` : ''}
             </div>
 
             <div class="event-compose-footer">
                 <div class="event-compose-footer-left">
                     ${this._selectedEventId && this._isEventEditable(this._selectedEventSource) ? html`
-                        <button class="btn btn-danger" type="button" @click=${this._deleteSelectedEvent} ?disabled=${this._saving}>Удалить</button>
+                        <button class="btn btn-danger" type="button" @click=${this._deleteSelectedEvent} ?disabled=${this._saving}>${c('delete')}</button>
                     ` : ''}
                     ${this._selectedEventId && !this._isEventEditable(this._selectedEventSource) ? html`
-                        <span class="event-source-hint">Редактирование доступно в сервисе ${this._sourceLabel(this._selectedEventSource)}</span>
+                        <span class="event-source-hint">${c('edit_in_service', { source: this._sourceLabel(this._selectedEventSource) })}</span>
                     ` : ''}
                 </div>
                 <button
@@ -2263,118 +3588,154 @@ export class PlatformCalendarModal extends PlatformModal {
         `;
     }
 
-    _renderIntegrations() {
-        const providers = ['google', 'yandex'];
-        const activeIntegration = this._integrations.find((item) => item.provider === this._activeProvider) || null;
+    _openIntegrationModal(provider) {
+        this._integrationsMenuOpen = false;
+        this._activeProvider = provider;
+        this._onIntegrationProviderSelect(provider);
+        this._integrationModalProvider = provider;
+    }
+
+    _closeIntegrationModal() {
+        this._integrationModalProvider = null;
+    }
+
+    _renderIntegrationModal() {
+        if (!this._integrationModalProvider) {
+            return html``;
+        }
+        const c = (key, params) => this._calT(key, params);
+        const providerLabel = this._integrationModalProvider === 'google' ? 'Google' : 'Yandex';
         return html`
-            <section class="section">
-                <div class="section-title">Интеграции календаря</div>
-                <div class="integration-tabs">
-                    ${providers.map((provider) => html`
-                        <button
-                            type="button"
-                            class=${this._activeProvider === provider ? 'active' : ''}
-                            @click=${() => this._onIntegrationProviderSelect(provider)}
-                        >
-                            ${provider.toUpperCase()}
-                        </button>
-                    `)}
-                </div>
-
-                ${this._activeProvider === 'google' ? html`
-                    <div class="hint">
-                        Подключение Google выполняется через OAuth. После перехода откроется окно согласия Google.
-                    </div>
-                    <div class="hint">
-                        Автосинхронизация работает в фоне каждую минуту.
-                    </div>
-                    ${activeIntegration ? html`
-                        <div class="hint">
-                            Уведомления: ${activeIntegration.settings?.notifications_enabled === false ? 'выключены' : 'включены'}
+            <div class="integration-modal-overlay" @click=${() => this._closeIntegrationModal()}>
+                <div class="integration-modal" @click=${(e) => e.stopPropagation()}>
+                    <div class="integration-modal-header">
+                        <div class="integration-modal-title">
+                            <platform-icon name=${this._integrationModalProvider} size="20" colored></platform-icon>
+                            ${c('integration_provider_title', { provider: providerLabel })}
                         </div>
-                    ` : ''}
-                    <div class="actions">
-                        <button class="btn btn-primary" type="button" @click=${() => this._startGoogleConnect()}>
-                            ${activeIntegration ? 'Переподключить Google' : 'Подключить Google'}
+                        <button class="btn-icon" type="button" @click=${() => this._closeIntegrationModal()}>
+                            <platform-icon name="close" size="18"></platform-icon>
                         </button>
-                        <button class="btn btn-secondary" type="button" @click=${() => this._runSync('google')} ?disabled=${this._syncing || !activeIntegration}>
-                            ${this._syncing ? 'Синхронизация...' : 'Синхронизировать'}
-                        </button>
-                        ${activeIntegration ? html`
-                            <button class="btn btn-danger" type="button" @click=${() => this._disconnectIntegration('google')}>
-                                Отключить
-                            </button>
-                        ` : ''}
                     </div>
-                ` : html`
-                    <div class="row">
-                        <label class="form-label">Yandex username</label>
-                        <input
-                            class="form-input"
-                            .value=${this._integrationForm.username}
-                            @input=${(e) => this._integrationForm = { ...this._integrationForm, username: e.target.value }}
-                            placeholder="login@yandex.ru"
-                        />
-                    </div>
-                    <div class="row">
-                        <label class="form-label">Пароль приложения (CalDAV)</label>
-                        <input
-                            class="form-input"
-                            .value=${this._integrationForm.app_password}
-                            @input=${(e) => this._integrationForm = { ...this._integrationForm, app_password: e.target.value }}
-                            placeholder="Пароль приложения Yandex ID"
-                        />
-                    </div>
-                    <div class="row">
-                        <label class="form-label">Calendar id</label>
-                        <input
-                            class="form-input"
-                            .value=${this._integrationForm.default_calendar_id}
-                            @input=${(e) => this._integrationForm = { ...this._integrationForm, default_calendar_id: e.target.value }}
-                            placeholder="default"
-                        />
-                    </div>
-                    <label class="event-compose-check">
-                        <input
-                            type="checkbox"
-                            .checked=${Boolean(this._integrationForm.notifications_enabled)}
-                            @change=${(e) => this._integrationForm = { ...this._integrationForm, notifications_enabled: e.target.checked }}
-                        />
-                        <span>Уведомления о новых событиях</span>
-                    </label>
-                    <div class="hint">
-                        Автосинхронизация работает в фоне каждую минуту.
-                    </div>
-
-                    <div class="actions">
-                        <button class="btn btn-primary" type="button" @click=${this._saveIntegration} ?disabled=${this._saving}>
-                            Сохранить подключение
-                        </button>
-                        <button class="btn btn-secondary" type="button" @click=${() => this._runSync('yandex')} ?disabled=${this._syncing || !activeIntegration}>
-                            ${this._syncing ? 'Синхронизация...' : 'Синхронизировать'}
-                        </button>
-                        ${activeIntegration ? html`
-                            <button class="btn btn-danger" type="button" @click=${() => this._disconnectIntegration('yandex')}>
-                                Отключить
-                            </button>
-                        ` : ''}
-                    </div>
-                `}
-
-                <div class="integration-list">
-                    ${this._integrations.map((integration) => html`
-                        <div class="integration-item">
-                            <div>
-                                <div>${integration.provider.toUpperCase()} / ${integration.settings?.default_calendar_id || 'no-calendar'}</div>
-                                <div class="hint">updated: ${new Date(integration.updated_at).toLocaleString('ru-RU')}</div>
-                            </div>
-                            <button class="btn btn-danger" type="button" @click=${() => this._disconnectIntegration(integration.provider)}>Отключить</button>
-                        </div>
-                    `)}
+                    ${this._renderIntegrationContent()}
                 </div>
-            </section>
+            </div>
         `;
     }
+
+    _renderIntegrationContent() {
+        const c = (key, params) => this._calT(key, params);
+        const activeIntegration = this._integrations.find((item) => item.provider === this._activeProvider) || null;
+
+        if (this._activeProvider === 'google') {
+            return this._renderGoogleIntegration(c, activeIntegration);
+        }
+        return this._renderYandexIntegration(c, activeIntegration);
+    }
+
+    _renderGoogleIntegration(c, activeIntegration) {
+        return html`
+            <div class="hint">${c('google_oauth_hint')}</div>
+            <div class="hint">${c('autosync_hint')}</div>
+            ${activeIntegration ? html`
+                <div class="hint">
+                    ${c('notifications_label', {
+                        state: activeIntegration.settings?.notifications_enabled === false
+                            ? c('notifications_off')
+                            : c('notifications_on'),
+                    })}
+                </div>
+            ` : ''}
+            <div class="actions">
+                <button class="btn btn-primary" type="button" @click=${() => this._startGoogleConnect()}>
+                    ${activeIntegration ? c('reconnect_google') : c('connect_google')}
+                </button>
+                <button class="btn btn-secondary" type="button" @click=${() => this._runSync('google')} ?disabled=${this._syncing || !activeIntegration}>
+                    ${this._syncing ? c('syncing') : c('sync')}
+                </button>
+                ${activeIntegration ? html`
+                    <button class="btn btn-danger" type="button" @click=${() => this._disconnectIntegration('google')}>
+                        ${c('disconnect')}
+                    </button>
+                ` : ''}
+            </div>
+            ${this._renderIntegrationList()}
+        `;
+    }
+
+    _renderYandexIntegration(c, activeIntegration) {
+        return html`
+            <div class="row">
+                <label class="form-label">${c('yandex_app_password')}: username</label>
+                <input
+                    class="form-input"
+                    .value=${this._integrationForm.username}
+                    @input=${(e) => this._integrationForm = { ...this._integrationForm, username: e.target.value }}
+                    placeholder="login@yandex.ru"
+                />
+            </div>
+            <div class="row">
+                <label class="form-label">${c('yandex_app_password')}</label>
+                <input
+                    class="form-input"
+                    .value=${this._integrationForm.app_password}
+                    @input=${(e) => this._integrationForm = { ...this._integrationForm, app_password: e.target.value }}
+                    placeholder=${c('yandex_password_placeholder')}
+                />
+            </div>
+            <div class="row">
+                <label class="form-label">Calendar id</label>
+                <input
+                    class="form-input"
+                    .value=${this._integrationForm.default_calendar_id}
+                    @input=${(e) => this._integrationForm = { ...this._integrationForm, default_calendar_id: e.target.value }}
+                    placeholder="default"
+                />
+            </div>
+            <div class="event-compose-switch event-compose-switch--spaced">
+                <platform-switch
+                    .checked=${Boolean(this._integrationForm.notifications_enabled)}
+                    .label=${c('notifications_new_events')}
+                    @change=${(e) => {
+                        this._integrationForm = { ...this._integrationForm, notifications_enabled: e.detail.value };
+                    }}
+                ></platform-switch>
+            </div>
+            <div class="hint">${c('autosync_hint')}</div>
+            <div class="actions">
+                <button class="btn btn-primary" type="button" @click=${this._saveIntegration} ?disabled=${this._saving}>
+                    ${c('save_connection')}
+                </button>
+                <button class="btn btn-secondary" type="button" @click=${() => this._runSync('yandex')} ?disabled=${this._syncing || !activeIntegration}>
+                    ${this._syncing ? c('syncing') : c('sync')}
+                </button>
+                ${activeIntegration ? html`
+                    <button class="btn btn-danger" type="button" @click=${() => this._disconnectIntegration('yandex')}>
+                        ${c('disconnect')}
+                    </button>
+                ` : ''}
+            </div>
+            ${this._renderIntegrationList()}
+        `;
+    }
+
+    _renderIntegrationList() {
+        const c = (key, params) => this._calT(key, params);
+        return html`
+            <div class="integration-list">
+                ${this._integrations.map((integration) => html`
+                    <div class="integration-item">
+                        <div>
+                            <div>${integration.provider.toUpperCase()} / ${integration.settings?.default_calendar_id || 'no-calendar'}</div>
+                            <div class="hint">updated: ${new Date(integration.updated_at).toLocaleString('ru-RU')}</div>
+                        </div>
+                        <button class="btn btn-danger" type="button" @click=${() => this._disconnectIntegration(integration.provider)}>${c('disconnect')}</button>
+                    </div>
+                `)}
+            </div>
+        `;
+    }
+
 
     _renderEventDialog() {
         if (!this._eventDialogOpen) {
@@ -2385,11 +3746,17 @@ export class PlatformCalendarModal extends PlatformModal {
                 <section class="event-dialog" @click=${(e) => e.stopPropagation()}>
                     <div class="event-dialog-header">
                         <div>
-                            <div class="event-dialog-title">${this._selectedEventId ? 'Редактирование события' : 'Новое событие'}</div>
+                            <div class="event-dialog-title">${this._selectedEventId ? this._calT('dialog_edit') : this._calT('dialog_new')}</div>
                             ${this._selectedEventId ? html`
                                 <div class="event-dialog-subtitle">
                                     <span class="event-badge" data-source=${this._sourceKey(this._selectedEventSource)}>${this._sourceLabel(this._selectedEventSource)}</span>
                                     <span class="event-badge">${this._kindLabel(this._selectedEventKind)}</span>
+                                    ${eventMetadataHasSyncMeeting(this._eventMetadata) ? html`
+                                        <span class="event-badge event-badge-sync" data-source="sync">
+                                            <img class="event-sync-logo-inline" src=${SYNC_LOGO_SRC} alt="" />
+                                            ${this._calT('tag_sync')}
+                                        </span>
+                                    ` : ''}
                                     ${this._selectedEventNamespace ? html`<span class="event-badge">${this._selectedEventNamespace}</span>` : ''}
                                 </div>
                             ` : ''}
@@ -2408,51 +3775,101 @@ export class PlatformCalendarModal extends PlatformModal {
 
     _renderCalendarPanel() {
         if (this._loading) {
-            return html`<div class="hint">Загрузка календаря...</div>`;
+            return html`<div class="hint">${this._calT('loading')}</div>`;
         }
         if (this._view === 'month') {
             return this._renderMonth();
         }
-        return this._renderList();
+        if (this._view === 'day') {
+            return this._renderDayTimeline();
+        }
+        return this._renderWeekGrid();
     }
 
     renderBody() {
+        const v = (key) => this._calT(key);
+        const compact = this._isCompactLayout;
         return html`
             <div class="calendar-shell">
                 <section class="calendar-main">
-                    <div class="toolbar">
+                    <div class="toolbar ${compact ? 'toolbar--compact' : ''}">
                         <div class="toolbar-left">
-                            <div class="title">${this._periodLabel()}</div>
-                            <button class="btn-icon" type="button" @click=${() => this._movePeriod(-1)}>
-                                <platform-icon name="chevron-left" size="16"></platform-icon>
-                            </button>
-                            <button class="btn-icon" type="button" @click=${() => this._movePeriod(1)}>
-                                <platform-icon name="chevron-right" size="16"></platform-icon>
-                            </button>
+                            ${compact ? html`
+                                <button class="btn-icon" type="button" @click=${() => { void this._movePeriod(-1); }} aria-label=${v('sheet_prev_day')}>
+                                    <platform-icon name="chevron-left" size="16"></platform-icon>
+                                </button>
+                                <button class="period-date-btn" type="button" @click=${() => this._openDateSheet()} title=${v('pick_date_title')}>
+                                    ${this._compactPeriodLabel()}
+                                </button>
+                                <button class="btn-icon" type="button" @click=${() => { void this._movePeriod(1); }} aria-label=${v('sheet_next_day')}>
+                                    <platform-icon name="chevron-right" size="16"></platform-icon>
+                                </button>
+                            ` : html`
+                                <div class="title">${this._periodLabel()}</div>
+                                <button class="btn-icon" type="button" @click=${() => { void this._movePeriod(-1); }}>
+                                    <platform-icon name="chevron-left" size="16"></platform-icon>
+                                </button>
+                                <button class="btn-icon" type="button" @click=${() => { void this._movePeriod(1); }}>
+                                    <platform-icon name="chevron-right" size="16"></platform-icon>
+                                </button>
+                                <div class="view-segment">
+                                    <button class=${this._view === 'day' ? 'active' : ''} type="button" @click=${() => this._onViewChange('day')}>${v('view_day')}</button>
+                                    <button class=${this._view === 'week' ? 'active' : ''} type="button" @click=${() => this._onViewChange('week')}>${v('view_week')}</button>
+                                    <button class=${this._view === 'month' ? 'active' : ''} type="button" @click=${() => this._onViewChange('month')}>${v('view_month')}</button>
+                                </div>
+                            `}
                         </div>
                         <div class="toolbar-right">
-                            <button class="btn btn-primary" type="button" @click=${() => this._openCreateEventDialog(new Date(this._anchorDate))}>
-                                Создать событие
+                            <button
+                                class="btn btn-primary btn-calendar-create toolbar-create"
+                                type="button"
+                                title=${v('create_event')}
+                                aria-label=${v('create_event')}
+                                @click=${() => this._openCreateEventDialog(parseDateInputLocal(this._anchorDate))}
+                            >
+                                <platform-icon name="plus" size="20"></platform-icon>
                             </button>
-                            <div class="advanced-toggle">
-                                <button class="btn btn-secondary" type="button" @click=${() => { this._showAdvanced = !this._showAdvanced; }}>
-                                    ${this._showAdvanced ? 'Скрыть дополнительно' : 'Дополнительно'}
+                            <div class="integrations-menu-anchor">
+                                <button class="btn-icon" type="button" @click=${() => { this._integrationsMenuOpen = !this._integrationsMenuOpen; }} title=${v('integrations_menu')}>
+                                    <platform-icon name="more-vert" size="20"></platform-icon>
                                 </button>
-                            </div>
-                            <div class="view-segment">
-                                <button class=${this._view === 'day' ? 'active' : ''} type="button" @click=${() => this._onViewChange('day')}>День</button>
-                                <button class=${this._view === 'week' ? 'active' : ''} type="button" @click=${() => this._onViewChange('week')}>Неделя</button>
-                                <button class=${this._view === 'month' ? 'active' : ''} type="button" @click=${() => this._onViewChange('month')}>Месяц</button>
+                                ${this._integrationsMenuOpen ? html`
+                                    <div class="integrations-dropdown" @click=${(e) => e.stopPropagation()}>
+                                        <button class="dropdown-item" type="button" @click=${() => this._openIntegrationModal('google')}>
+                                            <platform-icon name="google" size="16" colored></platform-icon>
+                                            <span>${v('integration_google')}</span>
+                                        </button>
+                                        <button class="dropdown-item" type="button" @click=${() => this._openIntegrationModal('yandex')}>
+                                            <platform-icon name="yandex" size="16" colored></platform-icon>
+                                            <span>${v('integration_yandex')}</span>
+                                        </button>
+                                    </div>
+                                ` : ''}
                             </div>
                         </div>
                     </div>
-                    <div class="calendar-panel">
+                    <div class="calendar-panel ${this._view === 'day' ? 'calendar-panel--day' : ''}">
                         ${this._renderCalendarPanel()}
                     </div>
-                    ${this._showAdvanced ? this._renderIntegrations() : ''}
                 </section>
             </div>
+            ${compact ? html`
+                <button
+                    type="button"
+                    class="calendar-fab"
+                    title=${v('create_event')}
+                    aria-label=${v('create_event')}
+                    @click=${() => this._openCreateEventDialog(parseDateInputLocal(this._anchorDate))}
+                >+</button>
+            ` : ''}
+            ${this._renderDateSheet()}
             ${this._renderEventDialog()}
+            ${this._renderIntegrationModal()}
+            ${this._dragEvent && this._dragOrigin?.started ? html`
+                <div class="drag-ghost" style=${`top:${this._dragGhostTop}px;left:${this._dragGhostLeft}px`}>
+                    ${this._dragEvent.title}
+                </div>
+            ` : ''}
         `;
     }
 }

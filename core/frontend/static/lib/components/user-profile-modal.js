@@ -16,24 +16,30 @@ export class UserProfileModal extends PlatformFormModal {
         super();
         this.user = null;
         this.activeCompanyName = '';
-        this.title = 'Редактирование профиля';
+        this.title = '';
         this.maxWidth = '600px';
+    }
+
+    willUpdate(changedProperties) {
+        super.willUpdate(changedProperties);
+        this.title = this.i18n.t('profile.title', {}, 'shell');
     }
 
     validateForm() {
         const errors = {};
         const data = this.getFormData();
+        const tp = (key) => this.i18n.t(key, {}, 'shell');
 
         if (!data.name || data.name.trim().length === 0) {
-            errors.name = 'Имя обязательно';
+            errors.name = tp('profile.error_name_required');
         }
 
         if (data.name && data.name.length > 100) {
-            errors.name = 'Имя не должно превышать 100 символов';
+            errors.name = tp('profile.error_name_length');
         }
 
-        if (data.bio && data.bio.length > 500) {
-            errors.bio = 'Описание не должно превышать 500 символов';
+        if (data.bio && data.bio.length > 4000) {
+            errors.bio = tp('profile.error_bio_length');
         }
 
         return errors;
@@ -43,6 +49,8 @@ export class UserProfileModal extends PlatformFormModal {
         try {
             await this.auth.updateProfile({
                 name: data.name.trim(),
+                first_name: data.first_name?.trim() || null,
+                last_name: data.last_name?.trim() || null,
                 bio: data.bio?.trim() || null,
                 ui_preferences: {
                     ...this.user?.ui_preferences,
@@ -50,12 +58,12 @@ export class UserProfileModal extends PlatformFormModal {
                 }
             });
             
-            this.success('Профиль обновлен');
+            this.success(this.i18n.t('profile.success_updated', {}, 'shell'));
             this.emit('updated');
             this.close();
         } catch (error) {
             console.error('[UserProfileModal] Failed to update profile:', error);
-            this.error(`Ошибка обновления: ${error.message}`);
+            this.error(`${this.i18n.t('profile.error_update_prefix', {}, 'shell')} ${error.message}`);
             throw error;
         }
     }
@@ -65,10 +73,11 @@ export class UserProfileModal extends PlatformFormModal {
     }
 
     renderBody() {
+        const t = (key) => this.i18n.t(key, {}, 'shell');
         if (!this.user) {
             return html`
                 <div class="loading-state">
-                    <p>Загрузка данных пользователя...</p>
+                    <p>${t('profile.loading')}</p>
                 </div>
             `;
         }
@@ -76,21 +85,47 @@ export class UserProfileModal extends PlatformFormModal {
         return html`
             <form @submit=${this._onSubmit} @input=${this._onInput}>
                 <div class="form-group">
-                    <label for="name" class="form-label">Имя</label>
+                    <label for="first_name" class="form-label">${t('profile.first_name_label')}</label>
+                    <input
+                        type="text"
+                        id="first_name"
+                        name="first_name"
+                        class="form-input"
+                        .value=${this.user.first_name || ''}
+                        placeholder=${t('profile.first_name_placeholder')}
+                        maxlength="100"
+                    />
+                    ${this.renderFieldError('first_name')}
+                </div>
+                <div class="form-group">
+                    <label for="last_name" class="form-label">${t('profile.last_name_label')}</label>
+                    <input
+                        type="text"
+                        id="last_name"
+                        name="last_name"
+                        class="form-input"
+                        .value=${this.user.last_name || ''}
+                        placeholder=${t('profile.last_name_placeholder')}
+                        maxlength="100"
+                    />
+                    ${this.renderFieldError('last_name')}
+                </div>
+                <div class="form-group">
+                    <label for="name" class="form-label">${t('profile.display_name_label')}</label>
                     <input
                         type="text"
                         id="name"
                         name="name"
                         class="form-input"
                         .value=${this.user.name || ''}
-                        placeholder="Введите ваше имя"
+                        placeholder=${t('profile.display_name_placeholder')}
                         required
                     />
                     ${this.renderFieldError('name')}
                 </div>
 
                 <div class="form-group">
-                    <label for="email" class="form-label">Email</label>
+                    <label for="email" class="form-label">${t('profile.email_label')}</label>
                     <input
                         type="email"
                         id="email"
@@ -98,47 +133,47 @@ export class UserProfileModal extends PlatformFormModal {
                         .value=${this.user.emails?.[0] || ''}
                         disabled
                     />
-                    <small class="form-help">Email нельзя изменить</small>
+                    <small class="form-help">${t('profile.email_locked')}</small>
                 </div>
 
                 <div class="form-group">
-                    <label for="bio" class="form-label">О себе</label>
+                    <label for="bio" class="form-label">${t('profile.bio_label')}</label>
                     <textarea
                         id="bio"
                         name="bio"
                         class="form-textarea"
                         rows="4"
-                        placeholder="Расскажите о себе"
+                        placeholder=${t('profile.bio_placeholder')}
                         .value=${this.user.bio || ''}
                     ></textarea>
                     ${this.renderFieldError('bio')}
-                    <small class="form-help">Максимум 500 символов</small>
+                    <small class="form-help">${t('profile.bio_max_hint')}</small>
                 </div>
 
                 <div class="form-group">
-                    <label for="language" class="form-label">Язык интерфейса</label>
+                    <label for="language" class="form-label">${t('profile.language_label')}</label>
                     <select
                         id="language"
                         name="language"
                         class="form-select"
                     >
                         <option value="ru" ?selected=${this.user.ui_preferences?.language === 'ru'}>
-                            Русский
+                            ${t('profile.lang_ru')}
                         </option>
                         <option value="en" ?selected=${this.user.ui_preferences?.language === 'en'}>
-                            English
+                            ${t('profile.lang_en')}
                         </option>
                     </select>
                 </div>
 
                 <div class="info-section">
                     <div class="info-item">
-                        <span class="info-label">Компания:</span>
-                        <span class="info-value">${this.activeCompanyName || 'Не указана'}</span>
+                        <span class="info-label">${t('profile.company_label')}</span>
+                        <span class="info-value">${this.activeCompanyName || t('profile.company_empty')}</span>
                     </div>
                     ${this.user.roles && this.user.roles.length > 0 ? html`
                         <div class="info-item">
-                            <span class="info-label">Роли:</span>
+                            <span class="info-label">${t('profile.roles_label')}</span>
                             <span class="info-value">${this.user.roles.join(', ')}</span>
                         </div>
                     ` : ''}

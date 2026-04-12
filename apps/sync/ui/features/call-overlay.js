@@ -10,6 +10,8 @@
  */
 import { html, css } from 'lit';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
+import '@platform/lib/components/platform-icon.js';
+import { copyTextToClipboard } from '@platform/lib/utils/clipboard.js';
 import { nextModalLayerZIndex } from '@platform/lib/utils/modal-z-stack.js';
 import { SyncStore } from '../store/sync.store.js';
 import { hueFromString } from '../utils/sync-hue.js';
@@ -88,6 +90,7 @@ class CallOverlay extends PlatformElement {
         livekitToken: { type: String, attribute: 'livekit-token' },
         identity:    { type: String },
         names:       { type: Object },
+        minimized:   { type: Boolean, reflect: true },
         _status:      { state: true },
         _error:       { state: true },
         _participants: { state: true },
@@ -131,6 +134,29 @@ class CallOverlay extends PlatformElement {
             padding-left: env(safe-area-inset-left, 0px);
             pointer-events: auto;
             touch-action: manipulation;
+        }
+
+        /*
+         * pointer-events на :host не отключает hit-target у потомков в shadow (video, кнопки).
+         * Без * { pointer-events: none } свёрнутый оверлей перекрывает весь экран невидимой сеткой.
+         */
+        :host([minimized]:not([data-overlay-critical])) {
+            position: fixed !important;
+            left: -9999px !important;
+            top: 0 !important;
+            width: 4px !important;
+            height: 4px !important;
+            max-width: 4px !important;
+            max-height: 4px !important;
+            overflow: hidden !important;
+            opacity: 0 !important;
+            pointer-events: none !important;
+            padding: 0 !important;
+            clip-path: inset(50%) !important;
+        }
+
+        :host([minimized]:not([data-overlay-critical])) * {
+            pointer-events: none !important;
         }
 
         .video-grid {
@@ -731,8 +757,8 @@ class CallOverlay extends PlatformElement {
             position: absolute;
             right: calc(100% + 8px);
             left: auto;
-            top: 0;
-            bottom: auto;
+            top: auto;
+            bottom: 0;
             min-width: 260px;
             padding: var(--space-2) 0;
             font-family: var(--font-sans);
@@ -815,9 +841,11 @@ class CallOverlay extends PlatformElement {
             width: 46px;
             height: 28px;
             border-radius: var(--radius-full);
-            background: rgba(255, 255, 255, 0.14);
-            box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.2);
-            transition: background var(--duration-fast) var(--easing-default);
+            background: rgba(255, 255, 255, 0.28);
+            border: 1.5px solid rgba(255, 255, 255, 0.18);
+            box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.25);
+            transition: background var(--duration-fast) var(--easing-default),
+                        border-color var(--duration-fast) var(--easing-default);
             justify-self: end;
             align-self: center;
         }
@@ -826,22 +854,25 @@ class CallOverlay extends PlatformElement {
             content: '';
             position: absolute;
             top: 3px;
-            left: 4px;
+            left: 3px;
             width: 22px;
             height: 22px;
             border-radius: 50%;
-            background: #fff;
-            box-shadow: 0 2px 6px rgba(0, 0, 0, 0.25);
-            transition: transform var(--duration-fast) var(--easing-default);
+            background: rgba(255, 255, 255, 0.65);
+            box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3);
+            transition: transform var(--duration-fast) var(--easing-default),
+                        background var(--duration-fast) var(--easing-default);
         }
 
         .call-menu-toggle:has(.call-switch-input:checked) .call-switch-visual {
             background: var(--accent);
+            border-color: transparent;
             box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.15), var(--accent-glow);
         }
 
         .call-menu-toggle:has(.call-switch-input:checked) .call-switch-visual::after {
-            transform: translateX(16px);
+            transform: translateX(18px);
+            background: #fff;
         }
 
         .call-menu-toggle:has(.call-switch-input:focus-visible) .call-switch-visual {
@@ -1035,6 +1066,12 @@ class CallOverlay extends PlatformElement {
         this._storeUnsubscribe = null;
         /** @type {ReturnType<typeof setTimeout> | null} */
         this._copyLinkFeedbackTimerId = null;
+        /** @type {(() => void) | null} */
+        this._i18nUnsub = null;
+    }
+
+    _tp(key, params) {
+        return this.i18n.t(key, params ?? {});
     }
 
     _sfuMediaUiAvailable() {
@@ -1097,7 +1134,7 @@ class CallOverlay extends PlatformElement {
             return;
         }
         const fs = this._getFullscreenElement();
-        if (fs && this.shadowRoot?.contains(fs)) {
+        if (fs && (fs === this || this.shadowRoot?.contains(fs))) {
             this._exitTileFullscreenIfOurs();
             e.preventDefault();
         }
@@ -1296,22 +1333,31 @@ class CallOverlay extends PlatformElement {
         const el = this._getFullscreenElement();
         if (!el) {
             this._fullscreenTileKey = null;
-        } else if (!this.shadowRoot?.contains(el)) {
-            this._fullscreenTileKey = null;
         } else {
-            let key = el.getAttribute?.('data-tile-key');
-            if (!key && typeof el.closest === 'function') {
-                const tile = el.closest('.participant-tile');
-                key = tile?.getAttribute('data-tile-key') ?? null;
+            // Chrome reports document.fullscreenElement as the shadow host when the
+            // fullscreen element lives inside a shadow root. Resolve the actual element
+            // via shadowRoot.fullscreenElement in that case.
+            let fsEl = el;
+            if (el === this && this.shadowRoot) {
+                fsEl = this.shadowRoot.fullscreenElement ?? null;
             }
-            this._fullscreenTileKey = key;
+            if (!fsEl || !this.shadowRoot?.contains(fsEl)) {
+                this._fullscreenTileKey = null;
+            } else {
+                let key = fsEl.getAttribute?.('data-tile-key');
+                if (!key && typeof fsEl.closest === 'function') {
+                    const tile = fsEl.closest('.participant-tile');
+                    key = tile?.getAttribute('data-tile-key') ?? null;
+                }
+                this._fullscreenTileKey = key;
+            }
         }
         this.requestUpdate();
     }
 
     _exitTileFullscreenIfOurs() {
         const el = this._getFullscreenElement();
-        if (el && this.shadowRoot?.contains(el)) {
+        if (el && (el === this || this.shadowRoot?.contains(el))) {
             const d = document;
             if (d.exitFullscreen) {
                 d.exitFullscreen();
@@ -1339,7 +1385,12 @@ class CallOverlay extends PlatformElement {
         const tileKey = tile.getAttribute('data-tile-key');
         const doc = document;
         const current = this._getFullscreenElement();
-        if (current && (current === tile || tile.contains(current))) {
+        const tileIsFullscreen = current && (
+            current === tile ||
+            tile.contains(current) ||
+            (current === this && this._fullscreenTileKey === tileKey)
+        );
+        if (tileIsFullscreen) {
             if (doc.exitFullscreen) doc.exitFullscreen();
             else if (doc.webkitExitFullscreen) doc.webkitExitFullscreen();
             else if (doc.mozCancelFullScreen) doc.mozCancelFullScreen();
@@ -1402,12 +1453,12 @@ class CallOverlay extends PlatformElement {
             <button
                 type="button"
                 class="tile-fs-btn ${active ? 'active' : ''}"
-                title="${active ? 'Выйти из полного экрана' : 'На весь экран'}"
+                title=${active ? this._tp('call_overlay.fullscreen_exit') : this._tp('call_overlay.fullscreen_enter')}
                 @click=${this._onTileFullscreenClick}
             >
                 ${active
-                    ? html`<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3H5a2 2 0 00-2 2v3m18 0V5a2 2 0 00-2-2h-3m0 18h3a2 2 0 002-2v-3M3 16v3a2 2 0 002 2h3"/></svg>`
-                    : html`<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg>`
+                    ? html`<platform-icon name="minimize" size="18" aria-hidden="true"></platform-icon>`
+                    : html`<platform-icon name="fullscreen" size="18" aria-hidden="true"></platform-icon>`
                 }
             </button>
         `;
@@ -1415,6 +1466,7 @@ class CallOverlay extends PlatformElement {
 
     async connectedCallback() {
         super.connectedCallback();
+        this._i18nUnsub = this.i18n.subscribe(() => this.requestUpdate());
         this.style.setProperty(
             '--platform-modal-layer-z',
             String(nextModalLayerZIndex()),
@@ -1443,6 +1495,8 @@ class CallOverlay extends PlatformElement {
 
     disconnectedCallback() {
         super.disconnectedCallback();
+        this._i18nUnsub?.();
+        this._i18nUnsub = null;
         document.removeEventListener('fullscreenchange', this._onFullscreenChange);
         document.removeEventListener('webkitfullscreenchange', this._onFullscreenChange);
         document.removeEventListener('mozfullscreenchange', this._onFullscreenChange);
@@ -1485,7 +1539,7 @@ class CallOverlay extends PlatformElement {
 
     async _connectSFU() {
         if (!this.livekitToken || !this.livekitUrl) {
-            throw new Error('livekitToken и livekitUrl обязательны для SFU подключения.');
+            throw new Error(this._tp('call_overlay.err_livekit_required'));
         }
         // Предотвращаем двойной вызов (race condition в updated())
         if (this._connecting) return;
@@ -1539,14 +1593,13 @@ class CallOverlay extends PlatformElement {
     async _connectP2P() {
         if (!navigator.mediaDevices?.getUserMedia) {
             throw new Error(
-                'WebRTC недоступен: страница должна открываться через HTTPS или localhost. ' +
-                'Текущий адрес: ' + window.location.origin
+                this._tp('call_overlay.err_webrtc_https', { origin: window.location.origin }),
             );
         }
 
         const turnRes = await fetch('/sync/api/v1/calls/turn-credentials', { credentials: 'include' });
         if (!turnRes.ok) {
-            throw new Error(`Не удалось получить TURN credentials: ${turnRes.status}`);
+            throw new Error(this._tp('call_overlay.err_turn_credentials', { status: String(turnRes.status) }));
         }
         const turnData = await turnRes.json();
         const iceServers = [{ urls: turnData.uris, username: turnData.username, credential: turnData.credential }];
@@ -1655,7 +1708,7 @@ class CallOverlay extends PlatformElement {
 
     async _toggleCam() {
         if (this._room?.localParticipant?.isScreenShareEnabled) {
-            this._mediaSettingsError = 'Сначала остановите демонстрацию экрана, чтобы переключить камеру.';
+            this._mediaSettingsError = this._tp('call_overlay.media_stop_screen_for_cam');
             return;
         }
         this._camOff = !this._camOff;
@@ -1707,9 +1760,18 @@ class CallOverlay extends PlatformElement {
         }
     }
 
+    _requestMinimize() {
+        if (typeof this.channelId !== 'string' || this.channelId === '') {
+            return;
+        }
+        this.dispatchEvent(new CustomEvent('call-minimize-request', { bubbles: true, composed: true }));
+    }
+
     async _copyLink() {
         if (!this.callId) return;
-        const res = await fetch('/sync/api/v1/calls/links', {
+
+        let resolvedUrl = null;
+        const urlPromise = fetch('/sync/api/v1/calls/links', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             credentials: 'include',
@@ -1718,16 +1780,55 @@ class CallOverlay extends PlatformElement {
                 call_type: 'video',
                 call_id: this.callId,
             }),
+        }).then(res => {
+            if (!res.ok) throw new Error('fetch');
+            return res.json();
+        }).then(body => {
+            const url = body.join_url;
+            if (typeof url !== 'string' || url.trim() === '') throw new Error('fetch');
+            resolvedUrl = url;
+            return url;
         });
-        if (!res.ok) return;
-        const { join_url } = await res.json();
+
+        // ClipboardItem с deferred blob: clipboard.write() вызывается синхронно
+        // в рамках user gesture, данные резолвятся async — работает на mobile Safari/Chrome
+        if (typeof ClipboardItem !== 'undefined' && navigator.clipboard?.write) {
+            try {
+                const item = new ClipboardItem({
+                    'text/plain': urlPromise.then(u => new Blob([u], { type: 'text/plain' })),
+                });
+                await navigator.clipboard.write([item]);
+                this._onCopyLinkDone();
+                return;
+            } catch {
+                if (resolvedUrl === null) {
+                    this._mediaSettingsError = this._tp('call_overlay.copy_link_bad_response');
+                    this.requestUpdate();
+                    return;
+                }
+            }
+        }
+
+        if (resolvedUrl === null) {
+            try {
+                await urlPromise;
+            } catch {
+                this._mediaSettingsError = this._tp('call_overlay.copy_link_bad_response');
+                this.requestUpdate();
+                return;
+            }
+        }
         try {
-            await navigator.clipboard.writeText(join_url);
-        } catch (err) {
-            this._mediaSettingsError = err instanceof Error ? err.message : String(err);
+            await copyTextToClipboard(resolvedUrl);
+        } catch {
+            this._mediaSettingsError = this._tp('call_overlay.copy_link_clipboard_failed');
             this.requestUpdate();
             return;
         }
+        this._onCopyLinkDone();
+    }
+
+    _onCopyLinkDone() {
         this._clearCopyLinkFeedbackTimer();
         this._copyLinkFeedback = true;
         this.requestUpdate();
@@ -1757,7 +1858,7 @@ class CallOverlay extends PlatformElement {
         const start = this._recordingStatus === 'idle' || this._recordingStatus === 'failed';
         if (start) {
             if (!this._canTransferMeetingAdmin()) {
-                this._recordingError = 'Только админ встречи может включать запись.';
+                this._recordingError = this._tp('call_overlay.recording_admin_only');
                 return;
             }
             this._recordingStatus = 'starting';
@@ -1769,7 +1870,7 @@ class CallOverlay extends PlatformElement {
             return;
         }
         if (!this._canStopRecording()) {
-            this._recordingError = 'Остановить запись может админ встречи или пользователь, который её запустил.';
+            this._recordingError = this._tp('call_overlay.recording_stop_restricted');
             return;
         }
         this._recordingStatus = 'stopping';
@@ -1818,7 +1919,7 @@ class CallOverlay extends PlatformElement {
 
     _deviceLabel(d, index) {
         if (d.label && d.label.trim()) return d.label;
-        return `Устройство ${index + 1}`;
+        return this._tp('call_overlay.device_fallback', { n: index + 1 });
     }
 
     _formatDuration(sec) {
@@ -1847,7 +1948,7 @@ class CallOverlay extends PlatformElement {
                 return sender.id;
             }
         }
-        return 'Участник';
+        return this._tp('call_overlay.participant_fallback');
     }
 
     _chatSenderIdentity(message) {
@@ -1904,17 +2005,18 @@ class CallOverlay extends PlatformElement {
         if (Number.isNaN(dt.getTime())) {
             return '';
         }
-        return dt.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
+        const loc = this.i18n.getCurrentLocale() === 'ru' ? 'ru-RU' : 'en-US';
+        return dt.toLocaleTimeString(loc, { hour: '2-digit', minute: '2-digit' });
     }
 
     async _loadOverlayChat() {
         if (typeof this.channelId !== 'string' || this.channelId === '') {
-            this._chatError = 'Для звонка не задан channel_id.';
+            this._chatError = this._tp('call_overlay.chat_no_channel');
             return;
         }
         const syncApi = this.services.get('syncApi');
         if (!syncApi) {
-            this._chatError = 'Не удалось получить сервис сообщений.';
+            this._chatError = this._tp('call_overlay.chat_no_messages_service');
             return;
         }
         this._chatError = null;
@@ -1925,12 +2027,42 @@ class CallOverlay extends PlatformElement {
         }
     }
 
+    async _loadOlderOverlayHistory(listEl) {
+        if (typeof this.channelId !== 'string' || this.channelId === '') {
+            return;
+        }
+        const history = SyncStore.getCallOverlayHistoryState(this.channelId);
+        if (!history.hasMoreOlder || history.loadingOlder) {
+            return;
+        }
+        const syncApi = this.services.get('syncApi');
+        if (!syncApi) {
+            throw new Error(this._tp('message_list.err_sync_api'));
+        }
+        const prevHeight = listEl.scrollHeight;
+        const prevTop = listEl.scrollTop;
+        await SyncStore.loadOlderCallOverlayMessages(syncApi, this.channelId);
+        await this.updateComplete;
+        const nextHeight = listEl.scrollHeight;
+        const delta = nextHeight - prevHeight;
+        if (delta > 0) {
+            listEl.scrollTop = prevTop + delta;
+        }
+    }
+
+    _onOverlayChatScroll(e) {
+        const listEl = e.target;
+        if (listEl.scrollTop <= 60) {
+            void this._loadOlderOverlayHistory(listEl);
+        }
+    }
+
     _buildOverlayPendingMessage(commandId, text) {
         const senderId = this.currentUserId;
         if (typeof senderId !== 'string' || senderId === '') {
-            throw new Error('currentUserId обязателен для отправки сообщения.');
+            throw new Error(this._tp('call_overlay.err_current_user_send'));
         }
-        const senderName = this.names?.[senderId] || 'Вы';
+        const senderName = this.names?.[senderId] || this._tp('composer.you');
         return {
             id: `pending:${commandId}`,
             channel_id: this.channelId,
@@ -1950,12 +2082,12 @@ class CallOverlay extends PlatformElement {
             return;
         }
         if (typeof this.channelId !== 'string' || this.channelId === '') {
-            this._chatError = 'Не удалось отправить: channel_id отсутствует.';
+            this._chatError = this._tp('call_overlay.chat_send_no_channel');
             return;
         }
         const syncApi = this.services.get('syncApi');
         if (!syncApi) {
-            this._chatError = 'Не удалось получить сервис сообщений.';
+            this._chatError = this._tp('call_overlay.chat_no_messages_service');
             return;
         }
         const commandId = typeof crypto.randomUUID === 'function'
@@ -1998,14 +2130,14 @@ class CallOverlay extends PlatformElement {
             return html`
                 <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;height:100%;gap:20px;padding:32px;">
                     <div style="font-size:48px;">⚠️</div>
-                    <div style="color:#f87171;font-size:16px;font-weight:600;text-align:center;">Ошибка звонка</div>
+                    <div style="color:#f87171;font-size:16px;font-weight:600;text-align:center;">${this._tp('call_overlay.call_error_title')}</div>
                     <div style="color:rgba(255,255,255,0.6);font-size:13px;text-align:center;max-width:400px;">${this._error}</div>
-                    <button class="ctrl-btn hangup" @click=${this._hangup}>Закрыть</button>
+                    <button class="ctrl-btn hangup" @click=${this._hangup}>${this._tp('close')}</button>
                 </div>
             `;
         }
         if (this._status === 'ended') {
-            return html`<div style="display:flex;align-items:center;justify-content:center;height:100%;color:rgba(255,255,255,0.5);font-size:18px;">Звонок завершён</div>`;
+            return html`<div style="display:flex;align-items:center;justify-content:center;height:100%;color:rgba(255,255,255,0.5);font-size:18px;">${this._tp('call_overlay.call_ended')}</div>`;
         }
 
         const gridItems = this._room ? this._tiles : this._participants;
@@ -2016,14 +2148,26 @@ class CallOverlay extends PlatformElement {
         const canControlRecording = this._recordingStatus === 'recording'
             ? this._canStopRecording()
             : this._canTransferMeetingAdmin();
+        const overlayHistory = SyncStore.getCallOverlayHistoryState(this.channelId);
 
         return html`
             <div class="header">
                 <span>
                     ${this._status === 'active' ? html`<span class="status-dot"></span>` : ''}
-                    ${this._status === 'connecting' ? 'Подключение…' : this._formatDuration(this._duration)}
+                    ${this._status === 'connecting' ? this._tp('call_overlay.connecting') : this._formatDuration(this._duration)}
                 </span>
                 <div style="display:flex;align-items:center;gap:8px;">
+                    ${typeof this.channelId === 'string' && this.channelId !== '' ? html`
+                        <button
+                            type="button"
+                            class="ctrl-btn"
+                            style="width:36px;height:36px;"
+                            @click=${this._requestMinimize}
+                            title=${this._tp('call_overlay.minimize_title')}
+                        >
+                            <platform-icon name="chevron-down" size="18" aria-hidden="true"></platform-icon>
+                        </button>
+                    ` : ''}
                     ${this._recordingStatus !== 'idle' ? html`
                         <span
                             class="recording-badge"
@@ -2033,16 +2177,12 @@ class CallOverlay extends PlatformElement {
                             REC
                         </span>
                     ` : ''}
-                    <span style="opacity:0.5">${participantCount} уч.</span>
+                    <span style="opacity:0.5">${this._tp('call_overlay.participants_abbr', { n: participantCount })}</span>
                     ${this.callId ? html`
-                        <button class="ctrl-btn" style="width:36px;height:36px;font-size:14px;" @click=${this._copyLink} title="Скопировать ссылку на звонок">
+                        <button class="ctrl-btn" style="width:36px;height:36px;font-size:14px;" @click=${this._copyLink} title=${this._tp('call_overlay.copy_link_title')}>
                             ${this._copyLinkFeedback
-                                ? html`<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#22c55e" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>`
-                                : html`
-                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                                <path d="M10 13a5 5 0 007.54.54l3-3a5 5 0 00-7.07-7.07l-1.72 1.71"/>
-                                <path d="M14 11a5 5 0 00-7.54-.54l-3 3a5 5 0 007.07 7.07l1.71-1.71"/>
-                            </svg>`}
+                                ? html`<span style="color:#22c55e"><platform-icon name="check" size="16" aria-hidden="true"></platform-icon></span>`
+                                : html`<platform-icon name="copy" size="16" aria-hidden="true"></platform-icon>`}
                         </button>
                     ` : ''}
                 </div>
@@ -2055,24 +2195,24 @@ class CallOverlay extends PlatformElement {
                 ${this._chatPanelOpen ? html`
                 <section class="call-chat-panel">
                     <div class="call-chat-panel-header">
-                        <span class="call-chat-panel-title">Чат канала</span>
+                        <span class="call-chat-panel-title">${this._tp('call_overlay.chat_panel_title')}</span>
                         <button
                             type="button"
                             class="call-chat-panel-close"
-                            title="Скрыть чат"
+                            title=${this._tp('call_overlay.chat_hide')}
                             @click=${this._toggleChatPanel}
                         >
-                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round">
-                                <line x1="5" y1="5" x2="19" y2="19"></line>
-                                <line x1="19" y1="5" x2="5" y2="19"></line>
-                            </svg>
+                            <platform-icon name="close" size="14" aria-hidden="true"></platform-icon>
                         </button>
                     </div>
-                    <div class="call-chat-list">
+                    <div class="call-chat-list" @scroll=${this._onOverlayChatScroll}>
+                        ${overlayHistory.loadingOlder
+                            ? html`<div class="call-chat-state">${this._tp('call_overlay.loading_history')}</div>`
+                            : ''}
                         ${SyncStore.getCallOverlayLoading(this.channelId)
-                            ? html`<div class="call-chat-state">Загрузка сообщений…</div>`
+                            ? html`<div class="call-chat-state">${this._tp('call_overlay.loading_messages')}</div>`
                             : this._overlayChatMessages().length === 0
-                                ? html`<div class="call-chat-state">Пока нет сообщений.</div>`
+                                ? html`<div class="call-chat-state">${this._tp('call_overlay.no_messages_yet')}</div>`
                                 : this._overlayChatMessages().map((message) => {
                                     const text = this._chatText(message);
                                     if (text === '') {
@@ -2104,7 +2244,7 @@ class CallOverlay extends PlatformElement {
                             .value=${this._chatInput}
                             @input=${(e) => { this._chatInput = e.target.value; }}
                             @keydown=${this._onChatInputKeydown}
-                            placeholder="Введите сообщение"
+                            placeholder=${this._tp('call_overlay.message_placeholder')}
                             rows="2"
                         ></textarea>
                         <button
@@ -2113,7 +2253,7 @@ class CallOverlay extends PlatformElement {
                             ?disabled=${this._chatSending || this._chatInput.trim() === ''}
                             @click=${() => void this._sendOverlayChatMessage()}
                         >
-                            ${this._chatSending ? '...' : 'Отправить'}
+                            ${this._chatSending ? '...' : this._tp('call_overlay.send')}
                         </button>
                     </div>
                 </section>
@@ -2131,51 +2271,48 @@ class CallOverlay extends PlatformElement {
                             type="button"
                             class="ctrl-btn"
                             style="width:48px;height:48px;"
-                            title="Микрофон, камера, динамик"
+                            title=${this._tp('call_overlay.devices_settings_title')}
                             @click=${this._toggleDevicesMenu}
                         >
-                            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                                <circle cx="12" cy="12" r="3"/>
-                                <path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-2 2 2 2 0 01-2-2v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83 0 2 2 0 010-2.83l.06-.06a1.65 1.65 0 00.33-1.82 1.65 1.65 0 00-1.51-1H3a2 2 0 01-2-2 2 2 0 012-2h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 010-2.83 2 2 0 012.83 0l.06.06A1.65 1.65 0 009 4.6a1.65 1.65 0 001-1.51V3a2 2 0 012-2 2 2 0 012 2v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 0 2 2 0 010 2.83l-.06.06a1.65 1.65 0 00-.33 1.82V9a1.65 1.65 0 001.51 1H21a2 2 0 012 2 2 2 0 01-2 2h-.09a1.65 1.65 0 00-1.51 1z"/>
-                            </svg>
+                            <platform-icon name="settings" size="22" aria-hidden="true"></platform-icon>
                         </button>
                         ${this._devicesMenuOpen ? html`
                             <div class="call-menu call-menu--left" @click=${(e) => e.stopPropagation()}>
-                                <label>Микрофон</label>
+                                <label>${this._tp('call_overlay.label_mic')}</label>
                                 <select
                                     .value=${this._activeDeviceId('audioinput')}
                                     ?disabled=${this._deviceLists.audioinput.length === 0}
                                     @change=${this._onAudioInputChange}
                                 >
                                     ${this._deviceLists.audioinput.length === 0
-                                        ? html`<option value="">Нет устройств</option>`
+                                        ? html`<option value="">${this._tp('call_overlay.no_devices')}</option>`
                                         : this._deviceLists.audioinput.map((d, i) => html`
                                         <option value=${d.deviceId}>${this._deviceLabel(d, i)}</option>
                                     `)}
                                 </select>
                                 ${this.callType !== 'audio' ? html`
-                                    <label>Камера</label>
+                                    <label>${this._tp('call_overlay.label_camera')}</label>
                                     <select
                                         .value=${this._activeDeviceId('videoinput')}
                                         ?disabled=${this._deviceLists.videoinput.length === 0}
                                         @change=${this._onVideoInputChange}
                                     >
                                         ${this._deviceLists.videoinput.length === 0
-                                            ? html`<option value="">Нет устройств</option>`
+                                            ? html`<option value="">${this._tp('call_overlay.no_devices')}</option>`
                                             : this._deviceLists.videoinput.map((d, i) => html`
                                             <option value=${d.deviceId}>${this._deviceLabel(d, i)}</option>
                                         `)}
                                     </select>
                                 ` : ''}
                                 ${this._audioOutputSupported ? html`
-                                    <label>Динамик</label>
+                                    <label>${this._tp('call_overlay.label_speaker')}</label>
                                     <select
                                         .value=${this._activeDeviceId('audiooutput')}
                                         ?disabled=${this._deviceLists.audiooutput.length === 0}
                                         @change=${this._onAudioOutputChange}
                                     >
                                         ${this._deviceLists.audiooutput.length === 0
-                                            ? html`<option value="">Нет устройств</option>`
+                                            ? html`<option value="">${this._tp('call_overlay.no_devices')}</option>`
                                             : this._deviceLists.audiooutput.map((d, i) => html`
                                             <option value=${d.deviceId}>${this._deviceLabel(d, i)}</option>
                                         `)}
@@ -2186,58 +2323,45 @@ class CallOverlay extends PlatformElement {
                     ` : ''}
                 </div>
                 <div class="controls-slot controls-slot--center">
-                    <button class="ctrl-btn ${this._micMuted ? '' : 'active'}" @click=${this._toggleMic} title="${this._micMuted ? 'Включить' : 'Выключить'} микрофон">
+                    <button class="ctrl-btn ${this._micMuted ? '' : 'active'}" @click=${this._toggleMic} title=${this._micMuted ? this._tp('call_overlay.mic_enable') : this._tp('call_overlay.mic_disable')}>
                         ${this._micMuted
-                            ? html`<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="1" y1="1" x2="23" y2="23"/><path d="M9 9v3a3 3 0 005.12 2.12M15 9.34V4a3 3 0 00-5.94-.6"/><path d="M17 16.95A7 7 0 015 12v-2m14 0v2a7 7 0 01-.11 1.23"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>`
-                            : html`<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 1a3 3 0 00-3 3v8a3 3 0 006 0V4a3 3 0 00-3-3z"/><path d="M19 10v2a7 7 0 01-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>`
+                            ? html`<platform-icon name="mic-off" size="20" aria-hidden="true"></platform-icon>`
+                            : html`<platform-icon name="mic" size="20" aria-hidden="true"></platform-icon>`
                         }
                     </button>
                     <button
                         class="ctrl-btn ${this._camOff ? '' : 'active'}"
                         ?disabled=${screenOn}
                         @click=${this._toggleCam}
-                        title="${screenOn ? 'Сначала остановите демонстрацию экрана' : (this._camOff ? 'Включить' : 'Выключить') + ' камеру'}"
+                        title=${screenOn ? this._tp('call_overlay.cam_stop_screen_first') : (this._camOff ? this._tp('call_overlay.cam_enable') : this._tp('call_overlay.cam_disable'))}
                     >
                         ${this._camOff
-                            ? html`<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 16v1a2 2 0 01-2 2H3a2 2 0 01-2-2V7a2 2 0 012-2h2m5.66 0H14a2 2 0 012 2v3.34l1 1L23 7v10"/><line x1="1" y1="1" x2="23" y2="23"/></svg>`
-                            : html`<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2" ry="2"/></svg>`
+                            ? html`<platform-icon name="videocam-off" size="20" aria-hidden="true"></platform-icon>`
+                            : html`<platform-icon name="video-call" size="20" filled aria-hidden="true"></platform-icon>`
                         }
                     </button>
                     ${this._room && this._canScreenShare() ? html`
-                        <button class="ctrl-btn ${screenOn ? 'active' : ''}" @click=${this._toggleScreenShare} title="${screenOn ? 'Остановить экран' : 'Показать экран'}">
-                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                                <rect x="2" y="3" width="20" height="14" rx="2" ry="2"/>
-                                <line x1="8" y1="21" x2="16" y2="21"/>
-                                <line x1="12" y1="17" x2="12" y2="21"/>
-                            </svg>
+                        <button class="ctrl-btn ${screenOn ? 'active' : ''}" @click=${this._toggleScreenShare} title=${screenOn ? this._tp('call_overlay.screen_share_stop') : this._tp('call_overlay.screen_share_start')}>
+                            <platform-icon name="screen-share" size="20" aria-hidden="true"></platform-icon>
                         </button>
                     ` : ''}
                     <button
                         class="ctrl-btn recording-btn ${this._recordingStatus === 'recording' ? 'recording-btn--active' : ''}"
                         ?disabled=${!canControlRecording}
                         @click=${this._toggleRecording}
-                        title="${canControlRecording
-                            ? (this._recordingStatus === 'recording' ? 'Остановить запись' : 'Запись встречи')
+                        title=${canControlRecording
+                            ? (this._recordingStatus === 'recording' ? this._tp('call_overlay.recording_stop') : this._tp('call_overlay.recording_start_meeting'))
                             : (this._recordingStatus === 'recording'
-                                ? 'Остановить запись может админ встречи или пользователь, который её запустил'
-                                : 'Только админ встречи может включать запись')}"
+                                ? this._tp('call_overlay.recording_tooltip_stop_denied')
+                                : this._tp('call_overlay.recording_tooltip_start_denied'))}
                     >
                         ${this._recordingStatus === 'recording'
-                            ? html`
-                                <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-label="Stop recording">
-                                    <rect x="7" y="7" width="10" height="10" rx="2" fill="currentColor"></rect>
-                                </svg>
-                            `
-                            : html`
-                                <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
-                                    <circle cx="12" cy="12" r="6"></circle>
-                                </svg>
-                            `}
+                            ? html`<platform-icon name="stop" size="30" filled aria-hidden="true"></platform-icon>`
+                            : html`<platform-icon name="fiber-manual-record" size="24" filled aria-hidden="true"></platform-icon>`
+                        }
                     </button>
-                    <button class="ctrl-btn hangup" @click=${this._hangup} title="Завершить звонок">
-                        <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
-                            <path d="M6.6 10.8c1.4 2.8 3.8 5.1 6.6 6.6l2.2-2.2c.3-.3.7-.4 1-.2 1.1.4 2.3.6 3.6.6.6 0 1 .4 1 1V20c0 .6-.4 1-1 1C9.6 21 3 14.4 3 6c0-.6.4-1 1-1h3.5c.6 0 1 .4 1 1 0 1.3.2 2.5.6 3.6.1.3 0 .7-.2 1L6.6 10.8z"/>
-                        </svg>
+                    <button class="ctrl-btn hangup" @click=${this._hangup} title=${this._tp('call_overlay.hangup_title')}>
+                        <platform-icon name="phone-ended" size="24" filled aria-hidden="true"></platform-icon>
                     </button>
                 </div>
                 <div class="controls-slot controls-slot--right">
@@ -2245,40 +2369,32 @@ class CallOverlay extends PlatformElement {
                         type="button"
                         class="ctrl-btn chat-toggle-btn ${this._chatPanelOpen ? 'chat-toggle-btn--active' : ''}"
                         style="width:48px;height:48px;"
-                        title=${this._chatPanelOpen ? 'Скрыть чат' : 'Показать чат'}
+                        title=${this._chatPanelOpen ? this._tp('call_overlay.chat_hide') : this._tp('call_overlay.chat_show')}
                         @click=${this._toggleChatPanel}
                     >
-                        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                            <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
-                        </svg>
+                        <platform-icon name="chat" size="22" aria-hidden="true"></platform-icon>
                     </button>
                     ${this._sfuMediaUiAvailable() ? html`
                         <button
                             type="button"
                             class="ctrl-btn"
                             style="width:48px;height:48px;"
-                            title="Дополнительно"
+                            title=${this._tp('call_overlay.more_menu')}
                             @click=${this._toggleMoreMenu}
                         >
-                            <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor">
-                                <circle cx="5" cy="12" r="2"/>
-                                <circle cx="12" cy="12" r="2"/>
-                                <circle cx="19" cy="12" r="2"/>
-                            </svg>
+                            <platform-icon name="more-vert" size="22" filled aria-hidden="true"></platform-icon>
                         </button>
                         ${this._moreMenuOpen ? html`
                             <div class="call-menu call-menu--right" @click=${(e) => e.stopPropagation()}>
                                 <div class="call-menu-item--sub">
                                     <button type="button" class="call-menu-item" @click=${this._toggleAudioQualitySub}>
-                                        Качество звука
-                                        <svg class="call-menu-chevron" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                                            <path d="M9 18l6-6-6-6"/>
-                                        </svg>
+                                        ${this._tp('call_overlay.audio_quality')}
+                                        <platform-icon class="call-menu-chevron" name="chevron-right" size="16" aria-hidden="true"></platform-icon>
                                     </button>
                                     ${this._audioQualitySubOpen ? html`
                                         <div class="call-menu-flyout" @click=${(e) => e.stopPropagation()}>
                                             <label class="call-menu-toggle">
-                                                <span class="call-menu-toggle-label">Подавление шума</span>
+                                                <span class="call-menu-toggle-label">${this._tp('call_overlay.noise_suppression')}</span>
                                                 <input
                                                     type="checkbox"
                                                     class="call-switch-input"
@@ -2288,7 +2404,7 @@ class CallOverlay extends PlatformElement {
                                                 <span class="call-switch-visual" aria-hidden="true"></span>
                                             </label>
                                             <label class="call-menu-toggle">
-                                                <span class="call-menu-toggle-label">Эхоподавление</span>
+                                                <span class="call-menu-toggle-label">${this._tp('call_overlay.echo_cancellation')}</span>
                                                 <input
                                                     type="checkbox"
                                                     class="call-switch-input"
@@ -2298,7 +2414,7 @@ class CallOverlay extends PlatformElement {
                                                 <span class="call-switch-visual" aria-hidden="true"></span>
                                             </label>
                                             <label class="call-menu-toggle">
-                                                <span class="call-menu-toggle-label">Автогромкость</span>
+                                                <span class="call-menu-toggle-label">${this._tp('call_overlay.auto_gain')}</span>
                                                 <input
                                                     type="checkbox"
                                                     class="call-switch-input"
@@ -2326,7 +2442,7 @@ class CallOverlay extends PlatformElement {
         // Гость: "guest:{uuid}:{name}"
         if (identity.startsWith('guest:')) {
             const parts = identity.split(':');
-            return parts.slice(2).join(':') || 'Гость';
+            return parts.slice(2).join(':') || this._tp('call_overlay.guest');
         }
         // Зарегистрированный: смотрим в переданную карту имён
         return this.names?.[identity] || identity;
@@ -2335,7 +2451,7 @@ class CallOverlay extends PlatformElement {
     _renderTileAdminBadge(identity) {
         if (!this._isMeetingAdminUser(identity)) return html``;
         return html`
-            <span class="participant-admin-crown" title="Админ встречи">
+            <span class="participant-admin-crown" title=${this._tp('call_overlay.meeting_admin')}>
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
                     <path d="M3 19h18l-1.5-10-5.5 4-2-6-2 6-5.5-4L3 19z"></path>
                 </svg>
@@ -2352,14 +2468,10 @@ class CallOverlay extends PlatformElement {
             <button
                 type="button"
                 class="tile-action-btn"
-                title="Меню участника"
+                title=${this._tp('call_overlay.participant_menu')}
                 @click=${(e) => this._toggleParticipantMenu(e, identity)}
             >
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-                    <circle cx="5" cy="12" r="2"></circle>
-                    <circle cx="12" cy="12" r="2"></circle>
-                    <circle cx="19" cy="12" r="2"></circle>
-                </svg>
+                <platform-icon name="more-vert" size="16" filled aria-hidden="true"></platform-icon>
             </button>
             ${menuOpen ? html`
                 <div class="tile-action-menu">
@@ -2369,10 +2481,10 @@ class CallOverlay extends PlatformElement {
                             class="tile-action-menu-item"
                             @click=${(e) => this._assignMeetingAdmin(e, identity)}
                         >
-                            Назначить админом встречи
+                            ${this._tp('call_overlay.promote_meeting_admin')}
                         </button>
                     ` : html`
-                        <div class="tile-action-menu-item">Недоступно для этого участника</div>
+                        <div class="tile-action-menu-item">${this._tp('call_overlay.participant_action_unavailable')}</div>
                     `}
                 </div>
             ` : ''}
@@ -2381,8 +2493,8 @@ class CallOverlay extends PlatformElement {
 
     _renderTile(item, index) {
         if (this._room) {
-            const label = item.isLocal ? 'Вы' : this._resolveDisplayName(item.identity);
-            const displayLabel = item.isScreen ? `${label} — экран` : label;
+            const label = item.isLocal ? this._tp('composer.you') : this._resolveDisplayName(item.identity);
+            const displayLabel = item.isScreen ? this._tp('call_overlay.screen_tile_suffix', { label }) : label;
             const hasVideo = item.track != null;
             const tileClass = item.isScreen ? 'participant-tile screen' : 'participant-tile';
             const tileKey = item.key;
@@ -2402,7 +2514,7 @@ class CallOverlay extends PlatformElement {
             `;
         }
         const participant = item;
-        const label = participant.isLocal ? 'Вы' : this._resolveDisplayName(participant.identity);
+        const label = participant.isLocal ? this._tp('composer.you') : this._resolveDisplayName(participant.identity);
         const stream = participant.stream;
         const hasVideo = stream?.getVideoTracks().some((t) => t.readyState === 'live' && t.enabled);
         const tileKey = `p2p-${index}`;
@@ -2423,6 +2535,8 @@ class CallOverlay extends PlatformElement {
     }
 
     updated(changedProps) {
+        const critical = this._status === 'error' || this._status === 'ended';
+        this.toggleAttribute('data-overlay-critical', critical);
         if (changedProps.has('channelId')) {
             this._chatError = null;
             void this._loadOverlayChat();

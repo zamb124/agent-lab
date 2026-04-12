@@ -1,13 +1,18 @@
 /**
  * Entity Card - Детальная карточка сущности
  * Показывает: данные, связанные entities, attachments, grants panel
+ * Граф связей загружается лениво по кнопке пользователя
  */
 import { html, css } from 'lit';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
 import { buttonStyles } from '@platform/lib/styles/shared/button.styles.js';
+import { platformConfirm } from '@platform/lib/components/platform-confirm-modal.js';
+import { AppEvents } from '@platform/lib/utils/types.js';
 import { CRMStore } from '../store/crm.store.js';
+import { nextModalLayerZIndex } from '@platform/lib/utils/modal-z-stack.js';
 import './grants-panel.js';
 import '@platform/lib/components/platform-icon.js';
+import '@platform/lib/components/fields/platform-field.js';
 
 export class EntityCard extends PlatformElement {
     static properties = {
@@ -21,6 +26,13 @@ export class EntityCard extends PlatformElement {
         _pendingAccessRequests: { state: true },
         _requestsLoading: { state: true },
         _processingRequestId: { state: true },
+        _graphVisible: { state: true },
+        _deleting: { state: true },
+        _headerMenuOpen: { state: true },
+        _headerMenuAnchor: { state: true },
+        _headerMenuZ: { state: true },
+        _entityGrants: { state: true },
+        _entityCardNotFound: { state: true },
     };
 
     static styles = [
@@ -96,36 +108,121 @@ export class EntityCard extends PlatformElement {
 
             .action-btn {
                 padding: var(--space-2) var(--space-3);
-                background: var(--crm-button-secondary-bg);
-                border: 1px solid var(--crm-button-secondary-bg);
+                background: var(--accent-secondary);
+                border: 1px solid var(--accent-secondary);
                 border-radius: var(--radius-lg);
-                color: var(--crm-button-secondary-text);
+                color: var(--platform-btn-secondary-text);
                 font-size: var(--text-sm);
                 cursor: pointer;
                 transition: all var(--duration-fast);
             }
 
             .action-btn:hover {
-                background: var(--crm-button-secondary-hover);
-                border-color: var(--crm-button-secondary-hover);
-                color: var(--crm-button-secondary-text);
+                background: var(--platform-btn-secondary-hover);
+                border-color: var(--platform-btn-secondary-hover);
+                color: var(--platform-btn-secondary-text);
             }
 
             .action-btn.primary {
-                background: var(--crm-button-primary-bg);
-                border-color: var(--crm-button-primary-bg);
-                color: var(--crm-button-primary-text);
+                background: var(--accent);
+                border-color: var(--accent);
+                color: var(--platform-btn-primary-text);
             }
 
             .action-btn.primary:hover {
-                background: var(--crm-button-primary-hover);
-                border-color: var(--crm-button-primary-hover);
+                background: var(--platform-btn-primary-hover);
+                border-color: var(--platform-btn-primary-hover);
+            }
+
+            .icon-btn {
+                width: 36px;
+                height: 36px;
+                display: inline-flex;
+                align-items: center;
+                justify-content: center;
+                border-radius: var(--radius-lg);
+                border: 1px solid var(--crm-stroke);
+                background: var(--crm-surface-muted);
+                color: var(--text-secondary);
+                cursor: pointer;
+                transition: all var(--duration-fast);
+                padding: 0;
+                flex-shrink: 0;
+            }
+
+            .icon-btn:hover {
+                background: var(--crm-surface);
+                color: var(--text-primary);
+                border-color: var(--accent-subtle);
+            }
+
+            .icon-btn.danger {
+                border-color: rgba(244, 63, 94, 0.4);
+                color: var(--error, #f43f5e);
+            }
+
+            .icon-btn.danger:hover:not(:disabled) {
+                background: rgba(244, 63, 94, 0.12);
+                border-color: var(--error, #f43f5e);
+                color: var(--error, #f43f5e);
+            }
+
+            .icon-btn:disabled {
+                opacity: 0.5;
+                cursor: not-allowed;
+            }
+
+            .header-menu-root {
+                position: relative;
+            }
+
+            .header-dropdown {
+                min-width: 240px;
+                padding: var(--space-2);
+                background: var(--crm-surface);
+                border: 1px solid var(--crm-stroke-strong);
+                border-radius: var(--radius-lg);
+                box-shadow: 0 8px 32px rgba(0, 0, 0, 0.24);
+            }
+
+            .header-dropdown-item {
+                width: 100%;
+                display: flex;
+                align-items: center;
+                gap: var(--space-3);
+                padding: var(--space-2) var(--space-3);
+                border: none;
+                border-radius: var(--radius-md);
+                background: transparent;
+                color: var(--text-primary);
+                font-size: var(--text-sm);
+                text-align: left;
+                cursor: pointer;
+                transition: background var(--duration-fast);
+            }
+
+            .header-dropdown-item:hover {
+                background: var(--crm-surface-muted);
+            }
+
+            .header-dropdown-item.danger {
+                color: var(--error, #f43f5e);
+            }
+
+            .header-dropdown-item.danger:hover {
+                background: rgba(244, 63, 94, 0.1);
             }
 
             .content {
                 height: calc(100% - 85px);
                 overflow-y: auto;
                 padding: var(--space-4);
+                animation: card-fade-in 0.15s ease-out;
+            }
+
+            @keyframes card-fade-in {
+                from { opacity: 0; transform: translateY(4px); }
+                to { opacity: 1; transform: translateY(0); }
             }
 
             .section {
@@ -161,6 +258,9 @@ export class EntityCard extends PlatformElement {
             }
 
             .attribute-label {
+                display: flex;
+                align-items: center;
+                gap: var(--space-1);
                 font-size: var(--text-xs);
                 color: var(--text-tertiary);
                 margin-bottom: var(--space-1);
@@ -170,6 +270,34 @@ export class EntityCard extends PlatformElement {
                 font-size: var(--text-base);
                 color: var(--text-primary);
                 word-break: break-word;
+            }
+
+            .attr-badge {
+                display: inline-flex;
+                align-items: center;
+                padding: 0 4px;
+                border-radius: var(--radius-sm);
+                font-size: 9px;
+                font-weight: 600;
+                text-transform: uppercase;
+                letter-spacing: 0.03em;
+                line-height: 14px;
+                flex-shrink: 0;
+            }
+
+            .attr-badge.required {
+                background: rgba(239, 68, 68, 0.12);
+                color: #ef4444;
+            }
+
+            .attr-badge.optional {
+                background: rgba(59, 130, 246, 0.10);
+                color: #3b82f6;
+            }
+
+            .attr-badge.public {
+                background: rgba(34, 197, 94, 0.10);
+                color: #22c55e;
             }
 
             .related-list {
@@ -227,19 +355,7 @@ export class EntityCard extends PlatformElement {
                 height: 100%;
                 color: var(--text-tertiary);
                 text-align: center;
-            }
-
-            .empty-icon {
-                width: 80px;
-                height: 80px;
-                margin-bottom: var(--space-4);
-                opacity: 0.6;
-            }
-            
-            .empty-icon img {
-                width: 100%;
-                height: 100%;
-                object-fit: contain;
+                gap: var(--space-2);
             }
 
             .tags-list {
@@ -256,17 +372,25 @@ export class EntityCard extends PlatformElement {
                 color: var(--text-secondary);
             }
 
-            .request-access-section {
-                padding: var(--space-4);
+            .show-graph-btn {
+                width: 100%;
+                padding: var(--space-3);
                 background: var(--crm-surface-muted);
+                border: 1px dashed var(--crm-stroke);
                 border-radius: var(--radius-lg);
-                text-align: center;
-            }
-
-            .request-access-section p {
-                margin: 0 0 var(--space-3) 0;
                 color: var(--text-secondary);
                 font-size: var(--text-sm);
+                cursor: pointer;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                gap: var(--space-2);
+                transition: all var(--duration-fast);
+            }
+
+            .show-graph-btn:hover {
+                border-color: var(--accent-subtle);
+                color: var(--text-primary);
             }
 
             .requests-list {
@@ -313,8 +437,8 @@ export class EntityCard extends PlatformElement {
             }
 
             .request-btn.approve {
-                background: var(--crm-button-primary-bg);
-                color: var(--crm-button-primary-text);
+                background: var(--accent);
+                color: var(--platform-btn-primary-text);
             }
 
             .request-btn.reject {
@@ -327,10 +451,6 @@ export class EntityCard extends PlatformElement {
                 cursor: not-allowed;
             }
 
-            :host-context([data-theme="light"]) {
-                background: var(--crm-surface);
-            }
-            
             @media (max-width: 767px) {
                 :host {
                     border-radius: 0;
@@ -352,39 +472,195 @@ export class EntityCard extends PlatformElement {
         this._pendingAccessRequests = [];
         this._requestsLoading = false;
         this._processingRequestId = '';
+        this._graphVisible = false;
+        this._deleting = false;
+        this._headerMenuOpen = false;
+        this._headerMenuAnchor = null;
+        this._headerMenuZ = 0;
+        this._entityGrants = [];
+        this._entityCardNotFound = false;
+        this._syncedAccessRequestsForEntityId = '';
+        this._boundAuthChangeForOwnership = this._onAuthChangeForOwnership.bind(this);
+        this._boundCloseHeaderMenu = this._closeHeaderMenuOnOutside.bind(this);
 
         this._unsubscribe = CRMStore.subscribe(state => {
             this._entity = state.entities.currentEntity;
             this._relatedEntities = state.entities.currentEntityRelated || [];
             this._entityTypes = state.entities.entityTypes || [];
-            this._loading = state.entities.entitiesLoading;
+            this._loading = state.entities.cardLoading || false;
+            this._entityCardNotFound = state.entities.entityCardNotFound === true;
+            this._entityGrants = state.grants.currentEntityGrants || [];
+            this._syncOwnershipAndAccessUI();
         });
     }
 
+    connectedCallback() {
+        super.connectedCallback();
+        window.addEventListener(AppEvents.AUTH_CHANGE, this._boundAuthChangeForOwnership);
+        document.addEventListener('pointerdown', this._boundCloseHeaderMenu, true);
+        this._syncOwnershipAndAccessUI();
+    }
+
     disconnectedCallback() {
+        document.removeEventListener('pointerdown', this._boundCloseHeaderMenu, true);
+        window.removeEventListener(AppEvents.AUTH_CHANGE, this._boundAuthChangeForOwnership);
         super.disconnectedCallback();
         this._unsubscribe?.();
     }
 
+    _onAuthChangeForOwnership() {
+        this._syncOwnershipAndAccessUI();
+    }
+
     updated(changedProperties) {
-        if (changedProperties.has('entityId') && this.entityId) {
-            this._loadEntityCard();
+        if (changedProperties.has('entityId')) {
+            this._graphVisible = false;
+            this._headerMenuOpen = false;
+            this._syncedAccessRequestsForEntityId = '';
+            if (this.entityId) {
+                this._loadEntityCard();
+            }
+        }
+    }
+
+    _closeHeaderMenuOnOutside(ev) {
+        if (!this._headerMenuOpen) {
+            return;
+        }
+        const root = this.renderRoot;
+        const trigger = root.querySelector('.header-menu-trigger');
+        const panel = root.querySelector('.header-dropdown');
+        if (!trigger || !panel) {
+            return;
+        }
+        const path = ev.composedPath();
+        for (const n of path) {
+            if (n === trigger || n === panel) {
+                return;
+            }
+            if (n instanceof Node && trigger.contains(n)) {
+                return;
+            }
+            if (n instanceof Node && panel.contains(n)) {
+                return;
+            }
+        }
+        this._headerMenuOpen = false;
+        this.requestUpdate();
+    }
+
+    _toggleHeaderMenu(ev) {
+        ev.preventDefault();
+        ev.stopPropagation();
+        if (this._headerMenuOpen) {
+            this._headerMenuOpen = false;
+            return;
+        }
+        const btn = ev.currentTarget;
+        const r = btn.getBoundingClientRect();
+        this._headerMenuAnchor = {
+            top: Math.round(r.bottom + 6),
+            right: Math.round(document.documentElement.clientWidth - r.right),
+        };
+        this._headerMenuZ = nextModalLayerZIndex();
+        this._headerMenuOpen = true;
+    }
+
+    _hasPublicGrant() {
+        return this._entityGrants.some((g) => g.grant_type === 'public');
+    }
+
+    async _headerMenuMakePublic() {
+        this._headerMenuOpen = false;
+        if (!this.entityId) {
+            return;
+        }
+        const crmApi = this.crmApi;
+        await CRMStore.makeEntityPublic(crmApi, this.entityId);
+        this.success(this.i18n.t('grants.success_entity_public'));
+    }
+
+    _headerMenuShareUser() {
+        this._headerMenuOpen = false;
+        if (!this.entityId) {
+            return;
+        }
+        const modal = document.createElement('share-modal');
+        modal.entityId = this.entityId;
+        modal.shareType = 'user';
+        document.body.appendChild(modal);
+        modal.showModal();
+        modal.addEventListener('close', () => modal.remove());
+        modal.addEventListener('shared', () => {
+            void CRMStore.loadEntityGrants(this.crmApi, this.entityId);
+        });
+    }
+
+    _headerMenuShareCompany() {
+        this._headerMenuOpen = false;
+        if (!this.entityId) {
+            return;
+        }
+        const modal = document.createElement('share-modal');
+        modal.entityId = this.entityId;
+        modal.shareType = 'company';
+        document.body.appendChild(modal);
+        modal.showModal();
+        modal.addEventListener('close', () => modal.remove());
+        modal.addEventListener('shared', () => {
+            void CRMStore.loadEntityGrants(this.crmApi, this.entityId);
+        });
+    }
+
+    _syncOwnershipAndAccessUI() {
+        const authUserId = this._platformAuthUserId(this.auth?.user);
+        const entity = this._entity;
+        const eid = typeof entity?.entity_id === 'string' ? entity.entity_id.trim() : '';
+        const entityOwnerId =
+            typeof entity?.user_id === 'string' && entity.user_id.trim().length > 0
+                ? entity.user_id.trim()
+                : null;
+        const nextOwner = Boolean(authUserId && entityOwnerId && eid && entityOwnerId === authUserId);
+        const prevOwner = this._isOwner;
+        this._isOwner = nextOwner;
+
+        if (!nextOwner) {
+            this._pendingAccessRequests = [];
+            this._syncedAccessRequestsForEntityId = '';
+            if (prevOwner !== nextOwner) {
+                this.requestUpdate();
+            }
+            return;
+        }
+
+        const shouldLoadRequests = eid !== this._syncedAccessRequestsForEntityId || (!prevOwner && nextOwner);
+        if (shouldLoadRequests) {
+            this._syncedAccessRequestsForEntityId = eid;
+            this._loadPendingRequests();
+        } else if (prevOwner !== nextOwner) {
+            this.requestUpdate();
         }
     }
 
     async _loadEntityCard() {
         if (!this.entityId) return;
-        
+
         const crmApi = this.crmApi;
-        const card = await CRMStore.loadEntityCard(crmApi, this.entityId);
-        
-        const currentUser = this.auth?.user;
-        this._isOwner = currentUser && card.entity?.user_id === currentUser.user_id;
-        if (this._isOwner) {
-            await this._loadPendingRequests();
-        } else {
-            this._pendingAccessRequests = [];
+        await CRMStore.loadEntityCard(crmApi, this.entityId);
+        this._syncOwnershipAndAccessUI();
+    }
+
+    _platformAuthUserId(user) {
+        if (!user || typeof user !== 'object') {
+            return null;
         }
+        if (typeof user.user_id === 'string' && user.user_id.trim().length > 0) {
+            return user.user_id.trim();
+        }
+        if (typeof user.id === 'string' && user.id.trim().length > 0) {
+            return user.id.trim();
+        }
+        return null;
     }
 
     _resolveRequestEntityId(request) {
@@ -413,7 +689,7 @@ export class EntityCard extends PlatformElement {
         if (typeof request?.user_id === 'string' && request.user_id.trim().length > 0) {
             return request.user_id;
         }
-        return 'Пользователь';
+        return this.i18n.t('entity_card.requester_fallback');
     }
 
     async _loadPendingRequests() {
@@ -459,28 +735,33 @@ export class EntityCard extends PlatformElement {
         const entityType = this._entityTypes.find(t => t.type_id === typeId);
         if (entityType) {
             return {
-                icon: entityType.icon || 'file',
+                icon: this._resolveIconName(entityType.icon),
                 color: entityType.color || 'var(--text-tertiary)',
                 label: entityType.name || typeId,
             };
         }
-        return { icon: 'file', color: 'var(--text-tertiary)', label: entity?.entity_type || '' };
+        return { icon: 'folder', color: 'var(--text-tertiary)', label: entity?.entity_type || '' };
     }
 
     _hexToRgba(hex, alpha) {
-        if (!hex) return `rgba(148, 163, 184, ${alpha})`;
-        const cleanHex = hex.replace('#', '');
-        const r = parseInt(cleanHex.substring(0, 2), 16);
-        const g = parseInt(cleanHex.substring(2, 4), 16);
-        const b = parseInt(cleanHex.substring(4, 6), 16);
+        if (!hex || hex.startsWith('var(')) {
+            return `rgba(148, 163, 184, ${alpha})`;
+        }
+        const clean = hex.replace('#', '');
+        const r = parseInt(clean.substring(0, 2), 16);
+        const g = parseInt(clean.substring(2, 4), 16);
+        const b = parseInt(clean.substring(4, 6), 16);
         return `rgba(${r}, ${g}, ${b}, ${alpha})`;
     }
 
     _resolveIconName(iconName) {
+        if (iconName === 'file') {
+            return 'folder';
+        }
         if (typeof iconName === 'string' && /^[a-z0-9-]+$/i.test(iconName)) {
             return iconName;
         }
-        return 'file';
+        return 'folder';
     }
 
     _onBack() {
@@ -497,6 +778,38 @@ export class EntityCard extends PlatformElement {
         modal.addEventListener('saved', () => this._loadEntityCard());
     }
 
+    async _onDelete() {
+        this._headerMenuOpen = false;
+        if (!this.entityId || !this._entity || this._deleting) {
+            return;
+        }
+        const displayName =
+            typeof this._entity.name === 'string' && this._entity.name.trim().length > 0
+                ? this._entity.name.trim()
+                : this.entityId;
+        const confirmed = await platformConfirm(
+            this.i18n.t('entities_page.delete_entity_confirm', { name: displayName }),
+            {
+                title: this.i18n.t('entities_page.delete_entity_title'),
+                variant: 'danger',
+                confirmVariant: 'danger',
+                confirmText: this.i18n.t('delete', {}, 'common'),
+                cancelText: this.i18n.t('cancel', {}, 'common'),
+            }
+        );
+        if (!confirmed) {
+            return;
+        }
+        this._deleting = true;
+        try {
+            await CRMStore.deleteEntity(this.crmApi, this.entityId);
+        } catch {
+            this.error(this.i18n.t('entities_page.delete_entity_failed'));
+        } finally {
+            this._deleting = false;
+        }
+    }
+
     _onRequestAccess() {
         const modal = document.createElement('access-request-modal');
         modal.entityId = this.entityId;
@@ -510,6 +823,73 @@ export class EntityCard extends PlatformElement {
         CRMStore.setCurrentEntity(entityId);
     }
 
+    async _onShowGraph() {
+        this._graphVisible = true;
+        await this.updateComplete;
+        await import('./mini-graph-preview.js');
+    }
+
+    _getAttributeFieldType(fieldKey) {
+        const typeId = this._entity?.entity_subtype || this._entity?.entity_type;
+        const entityType = this._entityTypes.find(t => t.type_id === typeId);
+        if (!entityType) return 'string';
+        const spec = entityType.required_fields?.[fieldKey]
+            || entityType.optional_fields?.[fieldKey];
+        return spec?.type || 'string';
+    }
+
+    _getAttributeFieldConfig(fieldKey) {
+        const typeId = this._entity?.entity_subtype || this._entity?.entity_type;
+        const entityType = this._entityTypes.find(t => t.type_id === typeId);
+        if (!entityType) return {};
+        const spec = entityType.required_fields?.[fieldKey]
+            || entityType.optional_fields?.[fieldKey];
+        if (spec?.type === 'enum') {
+            return { values: spec.values || [] };
+        }
+        return {};
+    }
+
+    _getEntityTypeForCurrent() {
+        const typeId = this._entity?.entity_subtype || this._entity?.entity_type;
+        return this._entityTypes.find(t => t.type_id === typeId) || null;
+    }
+
+    _isAttributeRequired(key) {
+        const entityType = this._getEntityTypeForCurrent();
+        return Boolean(entityType?.required_fields?.[key]);
+    }
+
+    _isAttributeOptional(key) {
+        const entityType = this._getEntityTypeForCurrent();
+        return Boolean(entityType?.optional_fields?.[key]);
+    }
+
+    _isAttributePublic(key) {
+        const entityType = this._getEntityTypeForCurrent();
+        return (entityType?.public_fields || []).includes(key);
+    }
+
+    _getAttributeLabel(key) {
+        const entityType = this._getEntityTypeForCurrent();
+        const spec = entityType?.required_fields?.[key]
+            || entityType?.optional_fields?.[key];
+        return spec?.label || key;
+    }
+
+    _renderAttributeBadges(key) {
+        const badges = [];
+        if (this._isAttributeRequired(key)) {
+            badges.push(html`<span class="attr-badge required">${this.i18n.t('entity_card.badge_required')}</span>`);
+        } else if (this._isAttributeOptional(key)) {
+            badges.push(html`<span class="attr-badge optional">${this.i18n.t('entity_card.badge_optional')}</span>`);
+        }
+        if (this._isAttributePublic(key)) {
+            badges.push(html`<span class="attr-badge public">${this.i18n.t('entity_card.badge_public')}</span>`);
+        }
+        return badges;
+    }
+
     _renderAttributes(attributes) {
         if (!attributes || Object.keys(attributes).length === 0) {
             return '';
@@ -517,12 +897,20 @@ export class EntityCard extends PlatformElement {
 
         return html`
             <div class="section">
-                <div class="section-title">Атрибуты</div>
+                <div class="section-title">${this.i18n.t('entities.attributes')}</div>
                 <div class="attributes-grid">
                     ${Object.entries(attributes).map(([key, value]) => html`
                         <div class="attribute-item">
-                            <div class="attribute-label">${key}</div>
-                            <div class="attribute-value">${value}</div>
+                            <div class="attribute-label">
+                                ${this._getAttributeLabel(key)}
+                                ${this._renderAttributeBadges(key)}
+                            </div>
+                            <platform-field
+                                .type=${this._getAttributeFieldType(key)}
+                                .value=${value}
+                                .config=${this._getAttributeFieldConfig(key)}
+                                mode="view"
+                            ></platform-field>
                         </div>
                     `)}
                 </div>
@@ -537,12 +925,12 @@ export class EntityCard extends PlatformElement {
 
         return html`
             <div class="section">
-                <div class="section-title">Связанные сущности</div>
+                <div class="section-title">${this.i18n.t('entity_card.related_entities')}</div>
                 <div class="related-list">
                     ${this._relatedEntities.map(entity => {
                         const typeConfig = this._getEntityTypeConfig(entity);
                         const bgColor = this._hexToRgba(typeConfig.color, 0.15);
-                        
+
                         return html`
                             <button
                                 class="related-item"
@@ -553,7 +941,7 @@ export class EntityCard extends PlatformElement {
                                     class="related-icon"
                                     style="background: ${bgColor}; color: ${typeConfig.color};"
                                 >
-                                    <platform-icon name="${this._resolveIconName(typeConfig.icon)}" size="18"></platform-icon>
+                                    <platform-icon name="${typeConfig.icon}" size="18"></platform-icon>
                                 </div>
                                 <div class="related-name">${entity.name}</div>
                                 <div class="related-type">${typeConfig.label}</div>
@@ -565,20 +953,48 @@ export class EntityCard extends PlatformElement {
         `;
     }
 
+    _renderGraph() {
+        if (!this.entityId) return '';
+
+        if (!this._graphVisible) {
+            return html`
+                <div class="section">
+                    <div class="section-title">${this.i18n.t('entity_card.graph_section')}</div>
+                    <button class="show-graph-btn" type="button" @click=${this._onShowGraph}>
+                        <platform-icon name="link" size="16"></platform-icon>
+                        ${this.i18n.t('entity_card.show_graph')}
+                    </button>
+                </div>
+            `;
+        }
+
+        return html`
+            <div class="section">
+                <div class="section-title">${this.i18n.t('entity_card.graph_section')}</div>
+                <mini-graph-preview
+                    .entityId=${this.entityId}
+                    .maxDepth=${5}
+                    height="200px"
+                    @entity-open=${(e) => this._onRelatedClick(e.detail.entityId)}
+                ></mini-graph-preview>
+            </div>
+        `;
+    }
+
     _renderPendingAccessRequests() {
         if (!this._isOwner) {
             return '';
         }
         return html`
             <div class="section">
-                <div class="section-title">Запросы доступа</div>
+                <div class="section-title">${this.i18n.t('entity_card.access_requests')}</div>
                 ${this._requestsLoading ? html`
                     <div class="request-item">
-                        <div class="request-message">Загрузка запросов...</div>
+                        <div class="request-message">${this.i18n.t('entity_card.requests_loading')}</div>
                     </div>
                 ` : this._pendingAccessRequests.length === 0 ? html`
                     <div class="request-item">
-                        <div class="request-message">Нет ожидающих запросов</div>
+                        <div class="request-message">${this.i18n.t('entity_card.requests_empty')}</div>
                     </div>
                 ` : html`
                     <div class="requests-list">
@@ -586,7 +1002,7 @@ export class EntityCard extends PlatformElement {
                             const requestId = this._resolveRequestId(request);
                             const message = request?.message && typeof request.message === 'string'
                                 ? request.message
-                                : 'Без комментария';
+                                : this.i18n.t('entity_card.no_comment');
                             return html`
                                 <div class="request-item">
                                     <div class="request-title">${this._resolveRequesterLabel(request)}</div>
@@ -598,7 +1014,7 @@ export class EntityCard extends PlatformElement {
                                             ?disabled=${this._processingRequestId === requestId}
                                             @click=${() => this._rejectRequest(request)}
                                         >
-                                            Отклонить
+                                            ${this.i18n.t('entity_card.request_reject')}
                                         </button>
                                         <button
                                             class="request-btn approve"
@@ -606,7 +1022,7 @@ export class EntityCard extends PlatformElement {
                                             ?disabled=${this._processingRequestId === requestId}
                                             @click=${() => this._approveRequest(request)}
                                         >
-                                            Одобрить
+                                            ${this.i18n.t('entity_card.request_approve')}
                                         </button>
                                     </div>
                                 </div>
@@ -622,12 +1038,22 @@ export class EntityCard extends PlatformElement {
         if (!this.entityId) {
             return html`
                 <div class="empty-state">
-                    <div class="empty-icon">
-                        <platform-icon name="book-open" size="56"></platform-icon>
+                    <platform-icon name="book-open" size="56"></platform-icon>
+                    <div>${this.i18n.t('entity_card.empty_pick_title')}</div>
+                    <div style="font-size: var(--text-sm);">
+                        ${this.i18n.t('entity_card.empty_pick_subtitle')}
                     </div>
-                    <div>Выберите сущность</div>
-                    <div style="margin-top: var(--space-2); font-size: var(--text-sm);">
-                        из списка или фильтров
+                </div>
+            `;
+        }
+
+        if (this._entityCardNotFound) {
+            return html`
+                <div class="empty-state">
+                    <platform-icon name="info" size="56"></platform-icon>
+                    <div>${this.i18n.t('entity_card.not_found_title')}</div>
+                    <div style="font-size: var(--text-sm);">
+                        ${this.i18n.t('entity_card.not_found_subtitle')}
                     </div>
                 </div>
             `;
@@ -636,7 +1062,7 @@ export class EntityCard extends PlatformElement {
         if (this._loading || !this._entity) {
             return html`
                 <div class="empty-state">
-                    <div>Загрузка...</div>
+                    <div>${this.i18n.t('loading', {}, 'common')}</div>
                 </div>
             `;
         }
@@ -656,7 +1082,7 @@ export class EntityCard extends PlatformElement {
                     class="header-icon"
                     style="background: ${bgColor}; color: ${typeConfig.color};"
                 >
-                    <platform-icon name="${this._resolveIconName(typeConfig.icon)}" size="22"></platform-icon>
+                    <platform-icon name="${typeConfig.icon}" size="22"></platform-icon>
                 </div>
 
                 <div class="header-content">
@@ -666,14 +1092,77 @@ export class EntityCard extends PlatformElement {
 
                 <div class="header-actions">
                     ${this._isOwner ? html`
-                        <button class="action-btn" @click=${this._onEdit}>
+                        <button class="icon-btn" @click=${this._onEdit} title=${this.i18n.t('edit', {}, 'common')}>
                             <platform-icon name="edit" size="16"></platform-icon>
-                            Редактировать
                         </button>
+                        <div class="header-menu-root">
+                            <button
+                                class="icon-btn header-menu-trigger"
+                                type="button"
+                                title=${this.i18n.t('entity_card.actions_menu_tooltip')}
+                                aria-label=${this.i18n.t('entity_card.actions_menu_tooltip')}
+                                aria-haspopup="menu"
+                                aria-expanded=${this._headerMenuOpen ? 'true' : 'false'}
+                                @click=${this._toggleHeaderMenu}
+                            >
+                                <platform-icon name="more-vertical" size="16"></platform-icon>
+                            </button>
+                            ${this._headerMenuOpen && this._headerMenuAnchor
+                                ? html`
+                                    <div
+                                        class="header-dropdown"
+                                        role="menu"
+                                        style="position: fixed; top: ${this._headerMenuAnchor.top}px; right: ${this._headerMenuAnchor.right}px; z-index: ${this._headerMenuZ}"
+                                        @pointerdown=${(e) => e.stopPropagation()}
+                                    >
+                                        ${!this._hasPublicGrant()
+                                            ? html`
+                                                <button
+                                                    type="button"
+                                                    class="header-dropdown-item"
+                                                    role="menuitem"
+                                                    @click=${this._headerMenuMakePublic}
+                                                >
+                                                    <platform-icon name="globe" size="16"></platform-icon>
+                                                    ${this.i18n.t('grants.make_public_entity')}
+                                                </button>
+                                            `
+                                            : ''}
+                                        <button
+                                            type="button"
+                                            class="header-dropdown-item"
+                                            role="menuitem"
+                                            @click=${this._headerMenuShareUser}
+                                        >
+                                            <platform-icon name="user" size="16"></platform-icon>
+                                            ${this.i18n.t('grants.share_user')}
+                                        </button>
+                                        <button
+                                            type="button"
+                                            class="header-dropdown-item"
+                                            role="menuitem"
+                                            @click=${this._headerMenuShareCompany}
+                                        >
+                                            <platform-icon name="building-one" size="16"></platform-icon>
+                                            ${this.i18n.t('grants.share_company')}
+                                        </button>
+                                        <button
+                                            type="button"
+                                            class="header-dropdown-item danger"
+                                            role="menuitem"
+                                            ?disabled=${this._deleting}
+                                            @click=${this._onDelete}
+                                        >
+                                            <platform-icon name="trash" size="16"></platform-icon>
+                                            ${this.i18n.t('entity_card.delete_entity_tooltip')}
+                                        </button>
+                                    </div>
+                                `
+                                : ''}
+                        </div>
                     ` : html`
-                        <button class="action-btn primary" @click=${this._onRequestAccess}>
-                            <platform-icon name="access-request" size="16"></platform-icon>
-                            Запросить доступ
+                        <button class="icon-btn" @click=${this._onRequestAccess} title=${this.i18n.t('entity_card.request_access_tooltip')}>
+                            <platform-icon name="lock" size="16"></platform-icon>
                         </button>
                     `}
                 </div>
@@ -682,14 +1171,14 @@ export class EntityCard extends PlatformElement {
             <div class="content">
                 ${this._entity.description ? html`
                     <div class="section">
-                        <div class="section-title">Описание</div>
+                        <div class="section-title">${this.i18n.t('tasks.description')}</div>
                         <div class="description">${this._entity.description}</div>
                     </div>
                 ` : ''}
 
                 ${this._entity.tags?.length > 0 ? html`
                     <div class="section">
-                        <div class="section-title">Теги</div>
+                        <div class="section-title">${this.i18n.t('tasks.tags')}</div>
                         <div class="tags-list">
                             ${this._entity.tags.map(tag => html`
                                 <span class="tag">${tag}</span>
@@ -701,6 +1190,9 @@ export class EntityCard extends PlatformElement {
                 ${this._renderAttributes(this._entity.attributes)}
 
                 ${this._renderRelated()}
+
+                ${this._renderGraph()}
+
                 ${this._renderPendingAccessRequests()}
 
                 ${this._isOwner ? html`

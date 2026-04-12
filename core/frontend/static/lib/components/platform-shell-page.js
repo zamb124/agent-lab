@@ -49,8 +49,8 @@ export class PlatformShellPage extends PlatformElement {
                 font-weight: 700;
                 line-height: 1;
                 margin: 0 0 var(--space-4, 16px);
-                color: var(--accent, #10b981);
-                text-shadow: 0 0 40px rgba(16, 185, 129, 0.35);
+                color: var(--accent);
+                text-shadow: 0 0 40px rgba(153, 166, 249, 0.35);
             }
 
             h1 {

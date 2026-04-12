@@ -11,6 +11,7 @@ from a2a.types import Message
 from pydantic import BaseModel
 
 from core.clients.llm.factory import get_llm, MessageInput
+from core.errors import SafeEvalError
 from core.context import get_current_channel
 from core.http import get_httpx_client
 from core.logging import get_logger
@@ -20,15 +21,38 @@ logger = get_logger(__name__)
 T = TypeVar("T", bound=BaseModel)
 
 
+def _normalize_tools_for_llm(tools: Optional[List[Any]]) -> Optional[List[Dict[str, Any]]]:
+    """
+    Приводит элементы tools к OpenAI-словарям для HTTP-тела.
+
+    Принимает либо уже готовые dict, либо экземпляры BaseTool / @tool (to_openai_schema).
+    Сырая функция без обёртки не поддерживается — используйте декоратор tool(...) в namespace.
+    """
+    if not tools:
+        return None
+    out: List[Dict[str, Any]] = []
+    for i, item in enumerate(tools):
+        if isinstance(item, dict):
+            out.append(item)
+            continue
+        to_schema = getattr(item, "to_openai_schema", None)
+        if callable(to_schema):
+            out.append(to_schema())
+            continue
+        raise SafeEvalError(
+            f"tools[{i}]: ожидается dict (OpenAI tool) или объект с to_openai_schema() "
+            f"(класс BaseTool / результат @tool), получено {type(item).__name__}. "
+            f"Объяви функцию через @tool(name=..., description=..., tags=[...]) и передай имя в tools=[...]."
+        )
+    return out
+
+
 class SafeLLMClient:
     """
-    Безопасная обертка над LLM клиентом для использования в inline коде.
-    
-    Единый метод chat() для всех сценариев:
-    - Простой чат: await llm.chat("Привет!")
-    - С параметрами: await llm.chat("...", temperature=0.7, max_tokens=500)
-    - Structured output: await llm.chat("...", response_model=MyModel)
-    - Function calling: await llm.chat(messages, tools=[...])
+    Обертка над LLM для inline-кода: делегирует в core get_llm().chat.
+
+    Семантика и полный набор kwargs совпадают с фабричным клиентом, включая
+    seed, reasoning_effort, extra_body (произвольные поля тела запроса к провайдеру).
     """
 
     def _get_llm(self, model: Optional[str] = None):
@@ -41,7 +65,7 @@ class SafeLLMClient:
         messages: MessageInput,
         *,
         response_model: Type[T],
-        tools: Optional[List[Dict[str, Any]]] = None,
+        tools: Optional[List[Any]] = None,
         model: Optional[str] = None,
         temperature: Optional[float] = None,
         top_p: Optional[float] = None,
@@ -49,6 +73,9 @@ class SafeLLMClient:
         max_tokens: Optional[int] = None,
         frequency_penalty: Optional[float] = None,
         presence_penalty: Optional[float] = None,
+        seed: Optional[int] = None,
+        reasoning_effort: Optional[str] = None,
+        extra_body: Optional[Dict[str, Any]] = None,
     ) -> T: ...
 
     @overload
@@ -57,7 +84,7 @@ class SafeLLMClient:
         messages: MessageInput,
         *,
         response_model: None = None,
-        tools: Optional[List[Dict[str, Any]]] = None,
+        tools: Optional[List[Any]] = None,
         model: Optional[str] = None,
         temperature: Optional[float] = None,
         top_p: Optional[float] = None,
@@ -65,6 +92,9 @@ class SafeLLMClient:
         max_tokens: Optional[int] = None,
         frequency_penalty: Optional[float] = None,
         presence_penalty: Optional[float] = None,
+        seed: Optional[int] = None,
+        reasoning_effort: Optional[str] = None,
+        extra_body: Optional[Dict[str, Any]] = None,
     ) -> Message: ...
 
     async def chat(
@@ -72,7 +102,7 @@ class SafeLLMClient:
         messages: MessageInput,
         *,
         response_model: Optional[Type[T]] = None,
-        tools: Optional[List[Dict[str, Any]]] = None,
+        tools: Optional[List[Any]] = None,
         model: Optional[str] = None,
         temperature: Optional[float] = None,
         top_p: Optional[float] = None,
@@ -80,6 +110,9 @@ class SafeLLMClient:
         max_tokens: Optional[int] = None,
         frequency_penalty: Optional[float] = None,
         presence_penalty: Optional[float] = None,
+        seed: Optional[int] = None,
+        reasoning_effort: Optional[str] = None,
+        extra_body: Optional[Dict[str, Any]] = None,
     ) -> Message | T:
         """
         Единый метод вызова LLM.
@@ -96,7 +129,7 @@ class SafeLLMClient:
                 - Message или List[Message]: A2A сообщения
                 - Dict или List[Dict]: {"role": "user", "content": "..."}
             response_model: Pydantic модель для structured output
-            tools: Список tools для function calling
+            tools: OpenAI dict или экземпляры @tool / BaseTool (см. to_openai_schema); смешивание типов допустимо
             model: Имя модели
             temperature: Температура генерации (0.0-2.0)
             top_p: Top-P семплирование (0.0-1.0)
@@ -104,6 +137,9 @@ class SafeLLMClient:
             max_tokens: Максимальное количество токенов
             frequency_penalty: Штраф за частоту токенов (-2.0-2.0)
             presence_penalty: Штраф за присутствие токенов (-2.0-2.0)
+            seed: Фиксированный seed (детерминизм), если провайдер поддерживает
+            reasoning_effort: Режим reasoning (OpenAI-совместимые API), строка
+            extra_body: Доп. поля тела запроса к провайдеру (dict); мержатся поверх сформированного JSON и перекрывают совпадающие ключи
         
         Returns:
             Message или экземпляр response_model
@@ -124,22 +160,24 @@ class SafeLLMClient:
             user = await llm.chat("Extract: John is 25", response_model=User)
             print(user.name, user.age)
             
-            # Function calling
-            msg = await llm.chat(messages, tools=[...])
-            if msg.metadata and msg.metadata.get("tool_calls"):
-                ...
+            # Function calling: @tool(...) def my_tool(...): ...  ->  tools=[my_tool]
+            msg = await llm.chat("2+2?", tools=[my_tool])
         """
         llm = self._get_llm(model)
+        coerced_tools = _normalize_tools_for_llm(tools)
         return await llm.chat(
             messages,
             response_model=response_model,
-            tools=tools,
+            tools=coerced_tools,
             temperature=temperature,
             top_p=top_p,
             top_k=top_k,
             max_tokens=max_tokens,
             frequency_penalty=frequency_penalty,
             presence_penalty=presence_penalty,
+            seed=seed,
+            reasoning_effort=reasoning_effort,
+            extra_body=extra_body,
         )
 
 

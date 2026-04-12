@@ -42,7 +42,7 @@ export class FlowNodeModal extends BaseNodeModal {
     }
 
     getModalTitle() {
-        return 'Flow Node';
+        return this.i18n.t('node_modal.titles.flow');
     }
 
     showModal(nodeId = '', config = {}) {
@@ -87,7 +87,7 @@ export class FlowNodeModal extends BaseNodeModal {
         const skillId = this.shadowRoot.querySelector('[name="skill_id"]')?.value?.trim() || 'default';
         
         if (!flowId) {
-            throw new Error('Целевой flow обязателен');
+            throw new Error(this.i18n.t('node_modal.flow.err_target_flow'));
         }
         
         const config = {
@@ -114,7 +114,7 @@ export class FlowNodeModal extends BaseNodeModal {
             <div class="form-layout">
                 <div class="form-sidebar">
                     <div class="form-group">
-                        <label class="form-label">Node ID *</label>
+                        <label class="form-label">${this.i18n.t('node_modal.common.node_id_label')}</label>
                         <input 
                             type="text" 
                             name="node_id"
@@ -127,21 +127,21 @@ export class FlowNodeModal extends BaseNodeModal {
                     </div>
                     
                     <div class="form-group">
-                        <label class="form-label">Имя</label>
+                        <label class="form-label">${this.i18n.t('node_modal.common.field_name')}</label>
                         <input 
                             type="text" 
                             name="name"
                             class="form-input"
                             .value=${config.name || ''}
-                            placeholder="Обработчик заказов"
+                            placeholder=${this.i18n.t('node_modal.flow.placeholder_name')}
                         />
                     </div>
                     
                     <div class="flow-section">
-                        <div class="flow-section-title">Вызываемый flow</div>
+                        <div class="flow-section-title">${this.i18n.t('node_modal.flow.section_title')}</div>
                         
                         <div class="form-group">
-                            <label class="form-label">Flow *</label>
+                            <label class="form-label">${this.i18n.t('node_modal.flow.flow_label')}</label>
                             <select 
                                 name="flow_id" 
                                 class="form-select"
@@ -149,7 +149,7 @@ export class FlowNodeModal extends BaseNodeModal {
                                 @change=${this._onCalleeFlowChange}
                                 required
                             >
-                                <option value="">Выберите flow...</option>
+                                <option value="">${this.i18n.t('node_modal.flow.select_flow')}</option>
                                 ${this.availableFlows.map(flowItem => html`
                                     <option 
                                         value=${flowItem.flow_id}
@@ -159,11 +159,11 @@ export class FlowNodeModal extends BaseNodeModal {
                                     </option>
                                 `)}
                             </select>
-                            <span class="form-hint">Вложенный flow для вызова</span>
+                            <span class="form-hint">${this.i18n.t('node_modal.flow.flow_hint')}</span>
                         </div>
                         
                         <div class="form-group">
-                            <label class="form-label">Skill</label>
+                            <label class="form-label">${this.i18n.t('node_modal.flow.skill_label')}</label>
                             <select name="skill_id" class="form-select">
                                 <option value="default" ?selected=${!config.skill_id || config.skill_id === 'default'}>
                                     default
@@ -177,7 +177,7 @@ export class FlowNodeModal extends BaseNodeModal {
                                     </option>
                                 `)}
                             </select>
-                            <span class="form-hint">Skill вложенного flow</span>
+                            <span class="form-hint">${this.i18n.t('node_modal.flow.skill_hint')}</span>
                         </div>
                     </div>
                     
@@ -194,7 +194,6 @@ export class FlowNodeModal extends BaseNodeModal {
                     </div>
                     
                     <test-panel
-                        .flowId=${this.flowId || ''}
                         .inputState=${this._buildDefaultState()}
                         .defaultInputState=${this._buildDefaultState()}
                         @validate=${this._onValidate}

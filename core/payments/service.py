@@ -75,8 +75,8 @@ class PaymentService:
             # Для production используем PRIMARY_DOMAIN для единообразия payment callbacks
             base_url = f"https://{company.subdomain}.{PRIMARY_DOMAIN}"
         
-        success_url = f"{base_url}/frontend/billing?payment=success&transaction_id={transaction_id}"
-        fail_url = f"{base_url}/frontend/billing?payment=fail&transaction_id={transaction_id}"
+        success_url = f"{base_url}/billing?payment=success&transaction_id={transaction_id}"
+        fail_url = f"{base_url}/billing?payment=fail&transaction_id={transaction_id}"
         
         payment_request = PaymentRequest(
             amount=amount,
@@ -216,10 +216,19 @@ class PaymentService:
                 )
                 
                 await self._save_transaction(transaction)
-                
+
+                await self._update_company_balance(
+                    company_id_from_label,
+                    verification_result.amount,
+                )
+
+                notification.processed = True
+                await self._save_notification(notification)
+
                 logger.info(
                     f"✅ Транзакция восстановлена из webhook: {transaction.transaction_id}"
                 )
+                return
             else:
                 logger.error(
                     f"❌ Транзакция {verification_result.transaction_id} не найдена и не может быть восстановлена"

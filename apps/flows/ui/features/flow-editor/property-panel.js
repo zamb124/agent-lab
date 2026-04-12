@@ -58,35 +58,30 @@ export class PropertyPanel extends PlatformElement {
         
         // ВАЖНО: type должен быть всегда
         if (!config.type) {
-            console.error('[PropertyPanel] Нет type в ноде!', this.node);
+            console.error('[PropertyPanel] Node has no type', this.node);
             this.config = null;
             return;
         }
-        
+
         // Если это новая нода (нет code/prompt), добавляем дефолтные значения
         if (!config.code && !config.prompt && !config.name) {
-            const DEFAULT_CODE = `async def run(state):
-    """
-    Обработка state.
-    
-    Args:
-        state: Текущее состояние
-    
-    Returns:
-        Измененный state
-    """
-    return state
-`;
+            const defaultCode = this.i18n.t('node_defaults.python_stub');
             
             const defaults = {
-                'llm_node': { name: 'Новый LLM-узел', prompt: '', code: null },
-                'code': { name: 'Новая функция', code: DEFAULT_CODE },
-                'function': { name: 'Новая функция', code: DEFAULT_CODE },
-                'flow': { name: 'Вложенный flow', flow_id: '' },
-                'external_api': { name: 'Новый API', url: '', method: 'GET' },
-                'remote_flow': { name: 'Новый удалённый flow (A2A)', url: '' },
-                'mcp': { name: 'MCP Tool', server_id: '', tool_name: '' },
-                'channel': { name: 'Send to Channel', channel: 'telegram', action: 'send_message', channel_config: {} },
+                'llm_node': { name: this.i18n.t('node_defaults.name_llm_node'), prompt: '', code: null },
+                'code': { name: this.i18n.t('node_defaults.name_function'), code: defaultCode },
+                'flow': { name: this.i18n.t('node_defaults.name_flow'), flow_id: '' },
+                'external_api': { name: this.i18n.t('node_defaults.name_api'), url: '', method: 'GET' },
+                'remote_flow': { name: this.i18n.t('node_defaults.name_remote_flow'), url: '' },
+                'mcp': { name: this.i18n.t('node_defaults.name_mcp'), server_id: '', tool_name: '' },
+                'channel': { name: this.i18n.t('node_defaults.name_channel'), channel: 'telegram', action: 'send_message', channel_config: {} },
+                'hitl_node': {
+                    name: this.i18n.t('node_defaults.name_hitl_node'),
+                    operator_queue_slug: '',
+                    operator_task_title: '',
+                    operator_user_message: '',
+                    operator_handoff_mode: 'tool_result',
+                },
             };
             
             const typeDefaults = defaults[config.type] || {};
@@ -106,7 +101,8 @@ export class PropertyPanel extends PlatformElement {
             config: e.detail.config
         });
         
-        this.config = e.detail.config;
+        const next = e.detail.config;
+        this.config = next;
         this.emit('node-updated', {
             nodeId: this.node.id || this.node.nodeId,
             nodeConfig: this.config,
@@ -141,7 +137,7 @@ export class PropertyPanel extends PlatformElement {
     _renderDefaultPanel() {
         return html`
             <div style="padding: var(--space-4); text-align: center; color: var(--text-tertiary);">
-                Выберите ноду для редактирования
+                ${this.i18n.t('property_panel.select_node')}
             </div>
         `;
     }
@@ -161,7 +157,8 @@ export class PropertyPanel extends PlatformElement {
         }
 
         const nodeType = this.node.type;
-        
+        const allowNodeIdRenameOnce = this.node.allowNodeIdRenameOnce === true;
+
         switch (nodeType) {
             case 'llm_node':
                 return html`<llm-node-editor
@@ -173,6 +170,7 @@ export class PropertyPanel extends PlatformElement {
                     .previewExecutionState=${this.previewExecutionState}
                     .graphNodes=${this._graphNodesFromFlow()}
                     ?expanded=${this.expanded}
+                    .allowNodeIdRenameOnce=${allowNodeIdRenameOnce}
                     @config-change=${this._onConfigChanged}
                     @node-delete=${this._onNodeDeleted}
                     @node-id-changed=${this._onNodeIdChanged}
@@ -186,36 +184,11 @@ export class PropertyPanel extends PlatformElement {
                     .flowVariables=${this.flowVariables}
                     .previewExecutionState=${this.previewExecutionState}
                     ?expanded=${this.expanded}
+                    .allowNodeIdRenameOnce=${allowNodeIdRenameOnce}
                     @config-change=${this._onConfigChanged}
                     @node-delete=${this._onNodeDeleted}
                     @node-id-changed=${this._onNodeIdChanged}
                 ></code-node-editor>`;
-            case 'function':
-                return html`<function-node-editor
-                    .nodeConfig=${this.config}
-                    .nodeId=${this.node.id || this.node.nodeId}
-                    .flowId=${this.flowId}
-                    .skillId=${this.skillId}
-                    .flowVariables=${this.flowVariables}
-                    .previewExecutionState=${this.previewExecutionState}
-                    ?expanded=${this.expanded}
-                    @config-change=${this._onConfigChanged}
-                    @node-delete=${this._onNodeDeleted}
-                    @node-id-changed=${this._onNodeIdChanged}
-                ></function-node-editor>`;
-            case 'tool':
-                return html`<tool-node-editor
-                    .nodeConfig=${this.config}
-                    .nodeId=${this.node.id || this.node.nodeId}
-                    .flowId=${this.flowId}
-                    .skillId=${this.skillId}
-                    .flowVariables=${this.flowVariables}
-                    .previewExecutionState=${this.previewExecutionState}
-                    ?expanded=${this.expanded}
-                    @config-change=${this._onConfigChanged}
-                    @node-delete=${this._onNodeDeleted}
-                    @node-id-changed=${this._onNodeIdChanged}
-                ></tool-node-editor>`;
             case 'external_api':
                 return html`<external-api-editor
                     .nodeConfig=${this.config}
@@ -225,6 +198,7 @@ export class PropertyPanel extends PlatformElement {
                     .flowVariables=${this.flowVariables}
                     .previewExecutionState=${this.previewExecutionState}
                     ?expanded=${this.expanded}
+                    .allowNodeIdRenameOnce=${allowNodeIdRenameOnce}
                     @config-change=${this._onConfigChanged}
                     @node-delete=${this._onNodeDeleted}
                     @node-id-changed=${this._onNodeIdChanged}
@@ -238,6 +212,7 @@ export class PropertyPanel extends PlatformElement {
                     .flowVariables=${this.flowVariables}
                     .previewExecutionState=${this.previewExecutionState}
                     ?expanded=${this.expanded}
+                    .allowNodeIdRenameOnce=${allowNodeIdRenameOnce}
                     @config-change=${this._onConfigChanged}
                     @node-delete=${this._onNodeDeleted}
                     @node-id-changed=${this._onNodeIdChanged}
@@ -251,6 +226,7 @@ export class PropertyPanel extends PlatformElement {
                     .flowVariables=${this.flowVariables}
                     .previewExecutionState=${this.previewExecutionState}
                     ?expanded=${this.expanded}
+                    .allowNodeIdRenameOnce=${allowNodeIdRenameOnce}
                     @config-change=${this._onConfigChanged}
                     @node-delete=${this._onNodeDeleted}
                     @node-id-changed=${this._onNodeIdChanged}
@@ -264,6 +240,7 @@ export class PropertyPanel extends PlatformElement {
                     .flowVariables=${this.flowVariables}
                     .previewExecutionState=${this.previewExecutionState}
                     ?expanded=${this.expanded}
+                    .allowNodeIdRenameOnce=${allowNodeIdRenameOnce}
                     @config-change=${this._onConfigChanged}
                     @node-delete=${this._onNodeDeleted}
                     @node-id-changed=${this._onNodeIdChanged}
@@ -277,10 +254,25 @@ export class PropertyPanel extends PlatformElement {
                     .flowVariables=${this.flowVariables}
                     .previewExecutionState=${this.previewExecutionState}
                     ?expanded=${this.expanded}
+                    .allowNodeIdRenameOnce=${allowNodeIdRenameOnce}
                     @config-change=${this._onConfigChanged}
                     @node-delete=${this._onNodeDeleted}
                     @node-id-changed=${this._onNodeIdChanged}
                 ></channel-node-editor>`;
+            case 'hitl_node':
+                return html`<hitl-node-editor
+                    .nodeConfig=${this.config}
+                    .nodeId=${this.node.id || this.node.nodeId}
+                    .flowId=${this.flowId}
+                    .skillId=${this.skillId}
+                    .flowVariables=${this.flowVariables}
+                    .previewExecutionState=${this.previewExecutionState}
+                    ?expanded=${this.expanded}
+                    .allowNodeIdRenameOnce=${allowNodeIdRenameOnce}
+                    @config-change=${this._onConfigChanged}
+                    @node-delete=${this._onNodeDeleted}
+                    @node-id-changed=${this._onNodeIdChanged}
+                ></hitl-node-editor>`;
             default:
                 return this._renderDefaultPanel();
         }

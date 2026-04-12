@@ -12,6 +12,8 @@
  * </script>
  */
 
+import '@platform/lib/components/platform-icon.js';
+
 (function() {
     'use strict';
     
@@ -24,27 +26,100 @@
             this.contextId = `ctx_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
             this.messages = [];
             this.isOpen = false;
+            /** @type {Record<string, unknown> | null} */
+            this._flowsStrings = null;
             
             this.init();
         }
         
         async init() {
             try {
+                await this.loadI18n();
                 await this.loadSettings();
                 this.render();
                 this.attachEventListeners();
             } catch (error) {
-                console.error('[HumanitecChat] Ошибка инициализации:', error);
+                console.error('[HumanitecChat] Init error:', error);
             }
+        }
+
+        /**
+         * Тексты виджета из GET /api/i18n/{locale} → namespace flows (см. core/i18n/translations).
+         */
+        async loadI18n() {
+            const raw =
+                navigator.languages && navigator.languages.length > 0
+                    ? navigator.languages[0]
+                    : navigator.language || '';
+            const lang = String(raw).split('-')[0].toLowerCase();
+            const locale = lang === 'ru' ? 'ru' : 'en';
+            const response = await fetch(`${this.baseUrl}/api/i18n/${locale}`);
+            if (!response.ok) {
+                throw new Error(`HumanitecChat: i18n HTTP ${response.status}`);
+            }
+            const data = await response.json();
+            const flows = data.flows;
+            if (!flows || typeof flows.chat_widget !== 'object' || flows.chat_widget === null) {
+                throw new Error('HumanitecChat: flows.chat_widget i18n missing');
+            }
+            const requiredChatWidget = [
+                'err_send',
+                'err_process',
+                'err_load_settings',
+                'placeholder_message',
+                'embed_window_title',
+                'embed_powered_by',
+                'embed_brand_name',
+                'tool_calls_line',
+                'reasoning_prefix',
+            ];
+            for (const k of requiredChatWidget) {
+                if (typeof flows.chat_widget[k] !== 'string') {
+                    throw new Error(`HumanitecChat: flows.chat_widget.${k} must be a string`);
+                }
+            }
+            this._flowsStrings = flows;
+        }
+
+        /**
+         * @param {string} key путь от корня flows.json, например chat_widget.err_send
+         */
+        _flowsT(key) {
+            const parts = key.split('.');
+            let node = this._flowsStrings;
+            for (const p of parts) {
+                if (node === undefined || node === null) {
+                    throw new Error(`HumanitecChat i18n missing: flows.${key}`);
+                }
+                node = node[p];
+            }
+            if (typeof node !== 'string') {
+                throw new Error(`HumanitecChat i18n not a string: flows.${key}`);
+            }
+            return node;
+        }
+
+        /**
+         * @param {string} key путь от корня flows, например chat_widget.err_load_settings
+         * @param {Record<string, string | number>} [params]
+         */
+        _t(key, params = {}) {
+            let s = this._flowsT(key);
+            if (Object.keys(params).length === 0) {
+                return s;
+            }
+            return s.replace(/\{\{(\w+)\}\}/g, (_, paramKey) =>
+                params[paramKey] !== undefined ? String(params[paramKey]) : `{{${paramKey}}}`
+            );
         }
         
         async loadSettings() {
             const response = await fetch(
-                `${this.baseUrl}/agents/api/v1/embed/${this.embedId}/settings`
+                `${this.baseUrl}/flows/api/v1/embed/${this.embedId}/settings`
             );
             
             if (!response.ok) {
-                throw new Error(`Не удалось загрузить настройки: ${response.status}`);
+                throw new Error(this._t('chat_widget.err_load_settings', { status: response.status }));
             }
             
             const data = await response.json();
@@ -86,10 +161,8 @@
                         box-shadow: 0 6px 20px rgba(0, 0, 0, 0.2);
                     }
                     
-                    .hc-toggle-button svg {
-                        width: 28px;
-                        height: 28px;
-                        fill: white;
+                    .hc-toggle-button platform-icon {
+                        color: white;
                     }
                     
                     .hc-chat-window {
@@ -235,10 +308,8 @@
                         cursor: not-allowed;
                     }
                     
-                    .hc-send-btn svg {
-                        width: 20px;
-                        height: 20px;
-                        fill: white;
+                    .hc-send-btn platform-icon {
+                        color: white;
                     }
                     
                     .hc-typing-indicator {
@@ -300,15 +371,12 @@
                 </style>
                 
                 <button class="hc-toggle-button" id="hc-toggle">
-                    <svg viewBox="0 0 24 24">
-                        <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10h10V12c0-5.52-4.48-10-10-10zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8z"/>
-                        <path d="M8.5 11c.83 0 1.5-.67 1.5-1.5S9.33 8 8.5 8 7 8.67 7 9.5 7.67 11 8.5 11zm7 0c.83 0 1.5-.67 1.5-1.5S16.33 8 15.5 8 14 8.67 14 9.5s.67 1.5 1.5 1.5zm-3.5 6.5c2.33 0 4.31-1.46 5.11-3.5H6.89c.8 2.04 2.78 3.5 5.11 3.5z"/>
-                    </svg>
+                    <platform-icon name="chat" size="28"></platform-icon>
                 </button>
                 
                 <div class="hc-chat-window" id="hc-window">
                     <div class="hc-header">
-                        <div class="hc-header-title">AI Assistant</div>
+                        <div class="hc-header-title">${this.escapeHtml(this._t('chat_widget.embed_window_title'))}</div>
                         <button class="hc-close-btn" id="hc-close">&times;</button>
                     </div>
                     
@@ -328,15 +396,14 @@
                             placeholder="${this.escapeHtml(this.settings.placeholder)}"
                         />
                         <button class="hc-send-btn" id="hc-send">
-                            <svg viewBox="0 0 24 24">
-                                <path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/>
-                            </svg>
+                            <platform-icon name="send" size="20"></platform-icon>
                         </button>
                     </div>
                     
                     ${this.settings.branding ? `
                         <div class="hc-branding">
-                            Powered by <a href="https://humanitec.ru" target="_blank">Humanitec</a>
+                            ${this.escapeHtml(this._t('chat_widget.embed_powered_by'))}
+                            <a href="https://humanitec.ru" target="_blank">${this.escapeHtml(this._t('chat_widget.embed_brand_name'))}</a>
                         </div>
                     ` : ''}
                 </div>
@@ -398,9 +465,9 @@
             try {
                 await this.streamResponse(message);
             } catch (error) {
-                console.error('[HumanitecChat] Ошибка отправки:', error);
+                console.error('[HumanitecChat] Send error:', error);
                 this.hideTyping();
-                this.addMessage('Произошла ошибка. Попробуйте снова.', 'assistant');
+                this.addMessage(this._flowsT('chat_widget.err_send'), 'assistant');
             } finally {
                 input.disabled = false;
                 document.getElementById('hc-send').disabled = false;
@@ -409,7 +476,7 @@
         }
         
         async streamResponse(message) {
-            const url = new URL(`${this.baseUrl}/agents/api/v1/embed/${this.embedId}/stream`);
+            const url = new URL(`${this.baseUrl}/flows/api/v1/embed/${this.embedId}/stream`);
             url.searchParams.set('message', message);
             url.searchParams.set('context_id', this.contextId);
             
@@ -427,9 +494,9 @@
                     const data = JSON.parse(event.data);
                     
                     if (data.error) {
-                        console.error('[HumanitecChat] Ошибка от сервера:', data.error);
+                        console.error('[HumanitecChat] Server error:', data.error);
                         this.hideTyping();
-                        this.addMessage('Ошибка обработки сообщения', 'assistant');
+                        this.addMessage(this._flowsT('chat_widget.err_process'), 'assistant');
                         this.eventSource.close();
                         return;
                     }
@@ -471,12 +538,12 @@
                         }
                     }
                 } catch (error) {
-                    console.error('[HumanitecChat] Ошибка парсинга:', error);
+                    console.error('[HumanitecChat] Parse error:', error);
                 }
             };
             
             this.eventSource.onerror = (error) => {
-                console.error('[HumanitecChat] SSE ошибка:', error);
+                console.error('[HumanitecChat] SSE error:', error);
                 this.hideTyping();
                 this.eventSource.close();
             };
@@ -517,7 +584,7 @@
             if (messageEl && !messageEl.querySelector('.hc-message-reasoning')) {
                 const reasoningEl = document.createElement('div');
                 reasoningEl.className = 'hc-message-reasoning';
-                reasoningEl.textContent = `💭 ${reasoning}`;
+                reasoningEl.textContent = this._t('chat_widget.reasoning_prefix') + reasoning;
                 messageEl.appendChild(reasoningEl);
             }
         }
@@ -527,7 +594,9 @@
             if (messageEl && !messageEl.querySelector('.hc-message-tool')) {
                 const toolEl = document.createElement('div');
                 toolEl.className = 'hc-message-tool';
-                toolEl.textContent = `🔧 ${toolCalls.map(t => t.name).join(', ')}`;
+                toolEl.textContent = this._t('chat_widget.tool_calls_line', {
+                    names: toolCalls.map((t) => t.name).join(', '),
+                });
                 messageEl.appendChild(toolEl);
             }
         }
@@ -566,4 +635,5 @@
     
     window.HumanitecChat = HumanitecChat;
 })();
+
 

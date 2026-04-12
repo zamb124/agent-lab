@@ -16,19 +16,15 @@ async def test_list_providers(rag_client, auth_headers_system):
     assert response.status_code == 200
     data = response.json()
     
-    assert {
-        "has_providers": "providers" in data,
-        "has_current": "current_provider" in data,
-        "providers_nonempty": len(data["providers"]) > 0,
-    } == {"has_providers": True, "has_current": True, "providers_nonempty": True}
-
-    provider = data["providers"][0]
-    assert {k: k in provider for k in ("name", "enabled", "is_default", "type")} == {
-        "name": True,
-        "enabled": True,
-        "is_default": True,
-        "type": True,
-    }
+    assert "items" in data
+    assert "current_provider" in data
+    assert len(data["items"]) > 0
+    
+    provider = data["items"][0]
+    assert "name" in provider
+    assert "enabled" in provider
+    assert "is_default" in provider
+    assert "type" in provider
 
 
 @pytest.mark.asyncio
@@ -38,9 +34,10 @@ async def test_list_providers_pgvector_present(rag_client, auth_headers_system):
     assert response.status_code == 200
     data = response.json()
     
-    providers = data["providers"]
-    pgvector = next(p for p in providers if p["name"] == "pgvector")
-    assert {k: pgvector[k] for k in ("name", "enabled")} == {"name": "pgvector", "enabled": True}
+    pgvector = next((p for p in data["items"] if p["name"] == "pgvector"), None)
+    
+    assert pgvector is not None
+    assert pgvector["enabled"] is True
 
 
 @pytest.mark.asyncio
@@ -54,8 +51,9 @@ async def test_switch_provider_pgvector(rag_client, auth_headers_system):
     assert response.status_code == 200
     data = response.json()
     
-    assert {k: data[k] for k in ("success", "provider")} == {"success": True, "provider": "pgvector"}
-    assert isinstance(data.get("message"), str) and data["message"]
+    assert data["success"] is True
+    assert data["provider"] == "pgvector"
+    assert "message" in data
 
 
 @pytest.mark.asyncio

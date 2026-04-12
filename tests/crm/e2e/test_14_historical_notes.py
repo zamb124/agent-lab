@@ -49,7 +49,7 @@ class TestHistoricalNotes:
         list_resp = await crm_client.get(
             f"/crm/api/v1/entities/?entity_type=note&user_id={test_user_id}&sort=note_date&order=asc"
         , headers=auth_headers_system)
-        notes = list_resp.json()
+        notes = list_resp.json()["items"]
         
         assert len(notes) >= 3
         for n in notes:
@@ -72,7 +72,7 @@ class TestHistoricalNotes:
         filter_resp = await crm_client.get(
             f"/crm/api/v1/entities/?entity_type=note&user_id={test_user_id}&note_date_from={start_date}&note_date_to={end_date}"
         , headers=auth_headers_system)
-        filtered = filter_resp.json()
+        filtered = filter_resp.json()["items"]
         assert len(filtered) >= 1
         for n in filtered:
             assert n["user_id"] == test_user_id

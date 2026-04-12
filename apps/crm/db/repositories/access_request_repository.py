@@ -4,7 +4,7 @@
 
 from typing import List, Optional, Type
 
-from sqlalchemy import select
+from sqlalchemy import func, select, update, delete
 
 from apps.crm.db.base import BaseCRMRepository, CRMDatabase
 from apps.crm.db.models import AccessRequest
@@ -26,92 +26,63 @@ class AccessRequestRepository(BaseCRMRepository[AccessRequest]):
     def id_field(self) -> str:
         return "request_id"
     
-    async def get_by_owner(
+    async def remap_entity_resource_id(
         self,
-        owner_id: str,
-        status: Optional[str] = None,
-        limit: int = 100
-    ) -> List[AccessRequest]:
-        """Получает запросы, направленные владельцу ресурсов"""
+        company_id: str,
+        old_entity_id: str,
+        new_entity_id: str,
+    ) -> int:
+        if old_entity_id == new_entity_id:
+            raise ValueError("old_entity_id и new_entity_id должны различаться")
         async with self._db.session() as session:
-            stmt = select(AccessRequest).where(
-                AccessRequest.owner_id == owner_id
+            result = await session.execute(
+                update(AccessRequest)
+                .where(
+                    AccessRequest.company_id == company_id,
+                    AccessRequest.resource_type == "entity",
+                    AccessRequest.resource_id == old_entity_id,
+                )
+                .values(resource_id=new_entity_id)
             )
-            
-            if status:
-                stmt = stmt.where(AccessRequest.status == status)
-            
-            stmt = stmt.order_by(AccessRequest.created_at.desc()).limit(limit)
-            
+            await session.commit()
+            return int(result.rowcount or 0)
+
+    async def deduplicate_pending_entity_requests(
+        self,
+        entity_id: str,
+    ) -> None:
+        """Оставляет один pending-запрос на (requester, entity), остальные удаляет."""
+        pending = await self._fetch_pending_entity_requests(entity_id)
+        seen: set[tuple[str, str]] = set()
+        to_delete: List[str] = []
+        for r in pending:
+            key = (r.requester_id, r.resource_id)
+            if key not in seen:
+                seen.add(key)
+                continue
+            to_delete.append(r.request_id)
+        if not to_delete:
+            return
+        async with self._db.session() as session:
+            for rid in to_delete:
+                await session.execute(
+                    delete(AccessRequest).where(AccessRequest.request_id == rid)
+                )
+            await session.commit()
+
+    async def _fetch_pending_entity_requests(self, entity_id: str) -> List[AccessRequest]:
+        async with self._db.session() as session:
+            stmt = (
+                select(AccessRequest)
+                .where(
+                    AccessRequest.resource_type == "entity",
+                    AccessRequest.resource_id == entity_id,
+                    AccessRequest.status == "pending",
+                )
+                .order_by(AccessRequest.created_at.asc())
+            )
             result = await session.execute(stmt)
             return list(result.scalars().all())
-    
-    async def get_by_requester(
-        self,
-        requester_id: str,
-        status: Optional[str] = None,
-        limit: int = 100
-    ) -> List[AccessRequest]:
-        """Получает запросы, отправленные пользователем"""
-        async with self._db.session() as session:
-            stmt = select(AccessRequest).where(
-                AccessRequest.requester_id == requester_id
-            )
-            
-            if status:
-                stmt = stmt.where(AccessRequest.status == status)
-            
-            stmt = stmt.order_by(AccessRequest.created_at.desc()).limit(limit)
-            
-            result = await session.execute(stmt)
-            return list(result.scalars().all())
-    
-    async def get_by_resource(
-        self,
-        resource_type: str,
-        resource_id: str
-    ) -> List[AccessRequest]:
-        """Получает все запросы на конкретный ресурс"""
-        async with self._db.session() as session:
-            stmt = select(AccessRequest).where(
-                AccessRequest.resource_type == resource_type,
-                AccessRequest.resource_id == resource_id
-            ).order_by(AccessRequest.created_at.desc())
-            
-            result = await session.execute(stmt)
-            return list(result.scalars().all())
-    
-    async def get_pending_count(self, owner_id: str) -> int:
-        """Подсчитывает количество ожидающих запросов для владельца"""
-        async with self._db.session() as session:
-            from sqlalchemy import func
-            
-            stmt = select(func.count(AccessRequest.request_id)).where(
-                AccessRequest.owner_id == owner_id,
-                AccessRequest.status == "pending"
-            )
-            
-            result = await session.execute(stmt)
-            return result.scalar() or 0
-    
-    async def exists(
-        self,
-        requester_id: str,
-        resource_type: str,
-        resource_id: str,
-        status: str = "pending"
-    ) -> bool:
-        """Проверяет существует ли уже запрос"""
-        async with self._db.session() as session:
-            stmt = select(AccessRequest.request_id).where(
-                AccessRequest.requester_id == requester_id,
-                AccessRequest.resource_type == resource_type,
-                AccessRequest.resource_id == resource_id,
-                AccessRequest.status == status
-            ).limit(1)
-            
-            result = await session.execute(stmt)
-            return result.scalar_one_or_none() is not None
     
     async def create(self, request: AccessRequest) -> AccessRequest:
         """Создает запрос на доступ"""
@@ -121,54 +92,45 @@ class AccessRequestRepository(BaseCRMRepository[AccessRequest]):
             await session.refresh(request)
             return request
     
-    async def update_status(
-        self,
-        request_id: str,
-        status: str
-    ) -> Optional[AccessRequest]:
-        """Обновляет статус запроса"""
-        async with self._db.session() as session:
-            stmt = select(AccessRequest).where(
-                AccessRequest.request_id == request_id
-            )
-            result = await session.execute(stmt)
-            request = result.scalar_one_or_none()
-            
-            if not request:
-                return None
-            
-            request.status = status
-            await session.commit()
-            await session.refresh(request)
-            return request
-    
     async def list_by_company(
         self,
         company_id: str,
-        limit: int = 100
+        limit: int = 100,
+        offset: int = 0,
     ) -> List[AccessRequest]:
-        """Получает все запросы для компании"""
         async with self._db.session() as session:
             stmt = select(AccessRequest).where(
                 AccessRequest.company_id == company_id
-            ).order_by(AccessRequest.created_at.desc()).limit(limit)
-            
+            ).order_by(AccessRequest.created_at.desc()).offset(offset).limit(limit)
             result = await session.execute(stmt)
             return list(result.scalars().all())
-    
+
     async def list_by_company_and_status(
         self,
         company_id: str,
         status: str,
-        limit: int = 100
+        limit: int = 100,
+        offset: int = 0,
     ) -> List[AccessRequest]:
-        """Получает запросы для компании с фильтром по статусу"""
         async with self._db.session() as session:
             stmt = select(AccessRequest).where(
                 AccessRequest.company_id == company_id,
                 AccessRequest.status == status
-            ).order_by(AccessRequest.created_at.desc()).limit(limit)
-            
+            ).order_by(AccessRequest.created_at.desc()).offset(offset).limit(limit)
             result = await session.execute(stmt)
             return list(result.scalars().all())
+
+    async def count_by_company(
+        self,
+        company_id: str,
+        status: Optional[str] = None,
+    ) -> int:
+        async with self._db.session() as session:
+            stmt = select(func.count()).select_from(AccessRequest).where(
+                AccessRequest.company_id == company_id
+            )
+            if status is not None:
+                stmt = stmt.where(AccessRequest.status == status)
+            result = await session.execute(stmt)
+            return result.scalar() or 0
 

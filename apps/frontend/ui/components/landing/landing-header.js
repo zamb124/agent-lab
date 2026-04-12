@@ -4,6 +4,7 @@
 import { html, css } from 'lit';
 import { classMap } from 'lit/directives/class-map.js';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
+import { I18nNs } from '@platform/services/i18n/i18n.service.js';
 
 export class LandingHeader extends PlatformElement {
     static styles = [
@@ -22,11 +23,13 @@ export class LandingHeader extends PlatformElement {
             .header-container {
                 max-width: 1440px;
                 margin: 0 auto;
-                padding: 20px;
+                padding: max(20px, var(--platform-safe-top)) max(20px, var(--platform-safe-right))
+                    max(20px, var(--platform-safe-bottom)) max(20px, var(--platform-safe-left));
                 display: flex;
                 align-items: center;
                 justify-content: space-between;
                 gap: 20px;
+                box-sizing: border-box;
             }
             
             .logo {
@@ -35,6 +38,7 @@ export class LandingHeader extends PlatformElement {
                 gap: 10px;
                 text-decoration: none;
                 white-space: nowrap;
+                flex-shrink: 0;
             }
             
             .logo-icon {
@@ -183,6 +187,7 @@ export class LandingHeader extends PlatformElement {
                 display: flex;
                 align-items: center;
                 gap: 16px;
+                flex-shrink: 0;
             }
             
             .lang-switcher {
@@ -287,16 +292,19 @@ export class LandingHeader extends PlatformElement {
             .mobile-menu {
                 display: none;
                 position: fixed;
+                inset: 0;
                 top: 71px;
-                left: 0;
-                right: 0;
-                bottom: 0;
-                background: rgba(15, 15, 15, 0.98);
-                backdrop-filter: blur(20px);
+                box-sizing: border-box;
                 padding: 40px 20px;
                 flex-direction: column;
+                align-items: stretch;
                 gap: 24px;
-                z-index: 99;
+                z-index: 10000;
+                background: #0f0f0f;
+                overflow-y: auto;
+                -webkit-overflow-scrolling: touch;
+                min-height: calc(100vh - 71px);
+                min-height: calc(100dvh - 71px);
             }
             
             .mobile-menu.active {
@@ -331,10 +339,6 @@ export class LandingHeader extends PlatformElement {
                     font-size: 20px;
                 }
                 
-                .nav {
-                    display: flex;
-                }
-                
                 .nav-link {
                     font-size: 18px;
                 }
@@ -350,6 +354,12 @@ export class LandingHeader extends PlatformElement {
                 .login-btn,
                 .dashboard-btn {
                     display: block;
+                }
+            }
+            
+            @media (min-width: 1100px) {
+                .nav {
+                    display: flex;
                 }
                 
                 .burger {
@@ -447,7 +457,6 @@ export class LandingHeader extends PlatformElement {
 
     static properties = {
         mobileMenuOpen: { type: Boolean },
-        currentLang: { type: String },
         isAuthenticated: { type: Boolean },
         user: { type: Object },
         productsDropdownOpen: { type: Boolean }
@@ -456,23 +465,23 @@ export class LandingHeader extends PlatformElement {
     constructor() {
         super();
         this.mobileMenuOpen = false;
-        this.currentLang = 'ru';
         this.isAuthenticated = false;
         this.user = null;
         this.productsDropdownOpen = false;
+        this._i18nUnsub = null;
+    }
+
+    _lt(key) {
+        return this.i18n.t(key, {}, I18nNs.LANDING);
     }
 
     async _checkAuth() {
-        try {
-            const response = await fetch('/frontend/api/auth/me', {
-                credentials: 'include'
-            });
-            if (response.ok) {
-                this.user = await response.json();
-                this.isAuthenticated = true;
-            }
-        } catch (e) {
-            // Пользователь не авторизован
+        const response = await fetch('/frontend/api/auth/me', {
+            credentials: 'include'
+        });
+        if (response.ok) {
+            this.user = await response.json();
+            this.isAuthenticated = true;
         }
     }
 
@@ -484,15 +493,61 @@ export class LandingHeader extends PlatformElement {
         this.mobileMenuOpen = false;
     }
 
-    _setLang(lang) {
-        if (this.currentLang === lang) return;
-        this.currentLang = lang;
-        this.dispatchEvent(new CustomEvent('lang-changed', { 
-            detail: { lang: this.currentLang }
-        }));
+    _onMobileMenuShellClick(e) {
+        if (e.target === e.currentTarget) {
+            this._closeMobileMenu();
+        }
+    }
+
+    _onHeaderBarClick(e) {
+        if (!this.mobileMenuOpen) {
+            return;
+        }
+        const path = e.composedPath();
+        const burger = this.shadowRoot?.querySelector('.burger');
+        if (burger && path.includes(burger)) {
+            return;
+        }
+        this._closeMobileMenu();
+    }
+
+    async _setLang(lang) {
+        if (this.i18n.getCurrentLocale() === lang) {
+            return;
+        }
+        await this.i18n.setLocale(lang);
+    }
+
+    _resolveLandingPage() {
+        const root = this.getRootNode();
+        if (!(root instanceof ShadowRoot)) {
+            return null;
+        }
+        const host = root.host;
+        if (host?.tagName?.toLowerCase() !== 'landing-page') {
+            return null;
+        }
+        return host;
+    }
+
+    _scrollToLandingSection(sectionId) {
+        const page = this._resolveLandingPage();
+        if (!page) {
+            return;
+        }
+        const target = page.shadowRoot?.getElementById(sectionId);
+        if (!target) {
+            return;
+        }
+        target.scrollIntoView({ behavior: 'smooth', block: 'start' });
     }
 
     _handleNavClick(e) {
+        const href = e.currentTarget.getAttribute('href');
+        if (href?.startsWith('#')) {
+            e.preventDefault();
+            this._scrollToLandingSection(href.slice(1));
+        }
         this._closeMobileMenu();
         this._closeProductsDropdown();
     }
@@ -509,14 +564,19 @@ export class LandingHeader extends PlatformElement {
 
     connectedCallback() {
         super.connectedCallback();
-        this._checkAuth();
+        this._i18nUnsub = this.i18n.subscribe(() => this.requestUpdate());
+        void this._checkAuth();
         this._handleOutsideClick = this._handleOutsideClick.bind(this);
         document.addEventListener('click', this._handleOutsideClick);
     }
 
     disconnectedCallback() {
-        super.disconnectedCallback();
+        if (this._i18nUnsub) {
+            this._i18nUnsub();
+            this._i18nUnsub = null;
+        }
         document.removeEventListener('click', this._handleOutsideClick);
+        super.disconnectedCallback();
     }
 
     _handleOutsideClick(e) {
@@ -528,7 +588,6 @@ export class LandingHeader extends PlatformElement {
     }
 
     _handleLoginClick() {
-        console.log('🔵 Login button clicked');
         this.dispatchEvent(new CustomEvent('open-auth-modal', {
             bubbles: true,
             composed: true
@@ -536,9 +595,11 @@ export class LandingHeader extends PlatformElement {
     }
 
     render() {
+        const uiLocale = this.i18n.getCurrentLocale();
+        const h = (sub) => this._lt(`header.${sub}`);
         return html`
-            <header class="header-container">
-                <a href="#" class="logo" @click=${this._closeMobileMenu}>
+            <header class="header-container" @click=${this._onHeaderBarClick}>
+                <a href="/" class="logo" @click=${this._closeMobileMenu}>
                     <div class="logo-icon">
                         <img src="/static/core/assets/service_logos/frontend_logo.svg" alt="Humanitec" />
                     </div>
@@ -546,79 +607,86 @@ export class LandingHeader extends PlatformElement {
                 </a>
                 
                 <nav class="nav">
-                    <a href="#about" class="nav-link">О нас</a>
-                    <a href="#abilities" class="nav-link">Возможности</a>
+                    <a href="#about" class="nav-link" @click=${this._handleNavClick}>${h('about')}</a>
+                    <a href="#abilities" class="nav-link" @click=${this._handleNavClick}>${h('features')}</a>
                     <div class=${classMap({ 'nav-dropdown': true, 'open': this.productsDropdownOpen })}>
                         <button class="nav-dropdown-trigger" @click=${this._toggleProductsDropdown}>
-                            Наши решения
-                            <svg viewBox="0 0 12 12" fill="currentColor">
-                                <path d="M2.5 4.5L6 8L9.5 4.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
-                            </svg>
+                            ${h('solutions')}
+                            <platform-icon name="arrow-down" size="12"></platform-icon>
                         </button>
                         <div class="nav-dropdown-menu">
                             <a href="/products/agents" class="nav-dropdown-item" @click=${this._handleNavClick}>
                                 <div class="nav-dropdown-item-icon">
-                                    <img src="/static/core/assets/service_logos/agents_logo.svg" alt="AI Studio" />
+                                    <img src="/static/core/assets/service_logos/agents_logo.svg" alt=${h('product_agents_title')} />
                                 </div>
                                 <div class="nav-dropdown-item-content">
-                                    <span class="nav-dropdown-item-title">AI Studio</span>
-                                    <span class="nav-dropdown-item-desc">Конструктор AI-агентов</span>
+                                    <span class="nav-dropdown-item-title">${h('product_agents_title')}</span>
+                                    <span class="nav-dropdown-item-desc">${h('product_agents_desc')}</span>
                                 </div>
                             </a>
                             <a href="/products/rag" class="nav-dropdown-item" @click=${this._handleNavClick}>
                                 <div class="nav-dropdown-item-icon">
-                                    <img src="/static/core/assets/service_logos/rag_logo.svg" alt="Knowledge Base" />
+                                    <img src="/static/core/assets/service_logos/rag_logo.svg" alt=${h('product_rag_title')} />
                                 </div>
                                 <div class="nav-dropdown-item-content">
-                                    <span class="nav-dropdown-item-title">Knowledge Base</span>
-                                    <span class="nav-dropdown-item-desc">База знаний с поиском</span>
+                                    <span class="nav-dropdown-item-title">${h('product_rag_title')}</span>
+                                    <span class="nav-dropdown-item-desc">${h('product_rag_desc')}</span>
                                 </div>
                             </a>
                             <a href="/products/crm" class="nav-dropdown-item" @click=${this._handleNavClick}>
                                 <div class="nav-dropdown-item-icon">
-                                    <img src="/static/core/assets/service_logos/crm_logo.svg" alt="NetWorkle" />
+                                    <img src="/static/core/assets/service_logos/crm_logo.svg" alt=${h('product_crm_title')} />
                                 </div>
                                 <div class="nav-dropdown-item-content">
-                                    <span class="nav-dropdown-item-title">NetWorkle</span>
-                                    <span class="nav-dropdown-item-desc">Умная записная книжка</span>
+                                    <span class="nav-dropdown-item-title">${h('product_crm_title')}</span>
+                                    <span class="nav-dropdown-item-desc">${h('product_crm_desc')}</span>
                                 </div>
                             </a>
                             <a href="/products/sync" class="nav-dropdown-item" @click=${this._handleNavClick}>
                                 <div class="nav-dropdown-item-icon">
-                                    <img src="/static/core/assets/service_logos/sync_logo.svg" alt="Sync" />
+                                    <img src="/static/core/assets/service_logos/sync_logo.svg" alt=${h('product_sync_title')} />
                                 </div>
                                 <div class="nav-dropdown-item-content">
-                                    <span class="nav-dropdown-item-title">Sync</span>
-                                    <span class="nav-dropdown-item-desc">Чат и видеозвонки</span>
+                                    <span class="nav-dropdown-item-title">${h('product_sync_title')}</span>
+                                    <span class="nav-dropdown-item-desc">${h('product_sync_desc')}</span>
+                                </div>
+                            </a>
+                            <a href="/products/documents" class="nav-dropdown-item" @click=${this._handleNavClick}>
+                                <div class="nav-dropdown-item-icon">
+                                    <img src="/static/core/assets/service_logos/documents_logo.svg" alt=${h('product_documents_title')} />
+                                </div>
+                                <div class="nav-dropdown-item-content">
+                                    <span class="nav-dropdown-item-title">${h('product_documents_title')}</span>
+                                    <span class="nav-dropdown-item-desc">${h('product_documents_desc')}</span>
                                 </div>
                             </a>
                         </div>
                     </div>
-                    <a href="/documentation" class="nav-link">Документация</a>
+                    <a href="/documentation" class="nav-link">${h('docs')}</a>
                 </nav>
                 
                 <div class="header-actions">
                     <div class="lang-switcher">
                         <span 
-                            class=${classMap({ 'lang-option': true, active: this.currentLang === 'en' })}
-                            @click=${() => this._setLang('en')}
+                            class=${classMap({ 'lang-option': true, active: uiLocale === 'en' })}
+                            @click=${() => void this._setLang('en')}
                         >en</span>
                         <span class="lang-separator">|</span>
                         <span 
-                            class=${classMap({ 'lang-option': true, active: this.currentLang === 'ru' })}
-                            @click=${() => this._setLang('ru')}
+                            class=${classMap({ 'lang-option': true, active: uiLocale === 'ru' })}
+                            @click=${() => void this._setLang('ru')}
                         >ru</span>
                     </div>
                     
                     ${this.isAuthenticated
-                        ? html`<a href="/dashboard" class="dashboard-btn">Dashboard</a>`
-                        : html`<button class="login-btn" @click=${this._handleLoginClick}>Войти</button>`
+                        ? html`<a href="/dashboard" class="dashboard-btn">${h('dashboard')}</a>`
+                        : html`<button class="login-btn" @click=${this._handleLoginClick}>${h('login')}</button>`
                     }
                     
                     <button 
                         class=${classMap({ burger: true, active: this.mobileMenuOpen })}
                         @click=${this._toggleMobileMenu}
-                        aria-label="Меню"
+                        aria-label=${h('mobile_nav_aria')}
                     >
                         <span class="burger-line"></span>
                         <span class="burger-line"></span>
@@ -627,42 +695,51 @@ export class LandingHeader extends PlatformElement {
                 </div>
             </header>
             
-            <div class=${classMap({ 'mobile-menu': true, active: this.mobileMenuOpen })}>
-                <a href="#about" class="nav-link" @click=${this._handleNavClick}>О нас</a>
-                <a href="#abilities" class="nav-link" @click=${this._handleNavClick}>Возможности</a>
+            <div
+                class=${classMap({ 'mobile-menu': true, active: this.mobileMenuOpen })}
+                @click=${this._onMobileMenuShellClick}
+            >
+                <a href="#about" class="nav-link" @click=${this._handleNavClick}>${h('about')}</a>
+                <a href="#abilities" class="nav-link" @click=${this._handleNavClick}>${h('features')}</a>
                 
                 <div class="mobile-products-group">
-                    <span class="mobile-products-title">Наши решения</span>
+                    <span class="mobile-products-title">${h('solutions')}</span>
                     <a href="/products/agents" class="mobile-product-link" @click=${this._handleNavClick}>
                         <div class="mobile-product-icon">
-                            <img src="/static/core/assets/service_logos/agents_logo.svg" alt="AI Studio" />
+                            <img src="/static/core/assets/service_logos/agents_logo.svg" alt=${h('product_agents_title')} />
                         </div>
-                        AI Studio
+                        ${h('product_agents_title')}
                     </a>
                     <a href="/products/rag" class="mobile-product-link" @click=${this._handleNavClick}>
                         <div class="mobile-product-icon">
-                            <img src="/static/core/assets/service_logos/rag_logo.svg" alt="Knowledge Base" />
+                            <img src="/static/core/assets/service_logos/rag_logo.svg" alt=${h('product_rag_title')} />
                         </div>
-                        Knowledge Base
+                        ${h('product_rag_title')}
                     </a>
                     <a href="/products/crm" class="mobile-product-link" @click=${this._handleNavClick}>
                         <div class="mobile-product-icon">
-                            <img src="/static/core/assets/service_logos/crm_logo.svg" alt="NetWorkle" />
+                            <img src="/static/core/assets/service_logos/crm_logo.svg" alt=${h('product_crm_title')} />
                         </div>
-                        NetWorkle
+                        ${h('product_crm_title')}
                     </a>
                     <a href="/products/sync" class="mobile-product-link" @click=${this._handleNavClick}>
                         <div class="mobile-product-icon">
-                            <img src="/static/core/assets/service_logos/sync_logo.svg" alt="Sync" />
+                            <img src="/static/core/assets/service_logos/sync_logo.svg" alt=${h('product_sync_title')} />
                         </div>
-                        Sync
+                        ${h('product_sync_title')}
+                    </a>
+                    <a href="/products/documents" class="mobile-product-link" @click=${this._handleNavClick}>
+                        <div class="mobile-product-icon">
+                            <img src="/static/core/assets/service_logos/documents_logo.svg" alt=${h('product_documents_title')} />
+                        </div>
+                        ${h('product_documents_title')}
                     </a>
                 </div>
                 
-                <a href="/documentation" class="nav-link" @click=${this._handleNavClick}>Документация</a>
+                <a href="/documentation" class="nav-link" @click=${this._handleNavClick}>${h('docs')}</a>
                 ${this.isAuthenticated
-                    ? html`<a href="/dashboard" class="dashboard-btn" @click=${this._closeMobileMenu}>Dashboard</a>`
-                    : html`<button class="login-btn" @click=${() => { this._closeMobileMenu(); this._handleLoginClick(); }}>Войти</button>`
+                    ? html`<a href="/dashboard" class="dashboard-btn" @click=${this._closeMobileMenu}>${h('dashboard')}</a>`
+                    : html`<button class="login-btn" @click=${() => { this._closeMobileMenu(); this._handleLoginClick(); }}>${h('login')}</button>`
                 }
             </div>
         `;

@@ -1,6 +1,6 @@
 /**
  * Platform Icon Component
- * Использует IconService для загрузки иконок
+ * Использует IconService: load() для UI, loadFileIcon() при attribute file-icon
  */
 import { html, css } from 'lit';
 import { unsafeHTML } from 'lit/directives/unsafe-html.js';
@@ -18,25 +18,21 @@ export class PlatformIcon extends PlatformElement {
                 height: var(--icon-size, 20px);
                 color: inherit;
             }
-            
+
             svg {
                 width: 100%;
                 height: 100%;
             }
-            
-            :host(:not([colored])) svg {
-                fill: none;
-                stroke: currentColor;
-                stroke-width: 2;
-                stroke-linecap: round;
-                stroke-linejoin: round;
-            }
-            
-            :host([filled]:not([colored])) svg {
+
+            /* Material Icons — fill-based по умолчанию */
+            :host(:not([colored]):not([file-icon])) svg {
                 fill: currentColor;
-                stroke: none;
             }
-        `
+
+            :host(:not([colored]):not([file-icon])) svg path {
+                fill: currentColor;
+            }
+        `,
     ];
 
     static properties = {
@@ -44,6 +40,8 @@ export class PlatformIcon extends PlatformElement {
         size: { type: Number },
         filled: { type: Boolean, reflect: true },
         colored: { type: Boolean, reflect: true },
+        /** Иконка из core/.../icons/files_icons (цветная, отдельный кеш в IconService) */
+        fileIcon: { type: Boolean, reflect: true, attribute: 'file-icon' },
     };
 
     constructor() {
@@ -52,6 +50,7 @@ export class PlatformIcon extends PlatformElement {
         this.size = 20;
         this.filled = false;
         this.colored = false;
+        this.fileIcon = false;
         this._svg = '';
     }
 
@@ -63,7 +62,10 @@ export class PlatformIcon extends PlatformElement {
     }
 
     updated(changedProperties) {
-        if (changedProperties.has('name') && this.name) {
+        if (
+            (changedProperties.has('name') && this.name) ||
+            changedProperties.has('fileIcon')
+        ) {
             this._loadIcon();
         }
         if (changedProperties.has('size')) {
@@ -72,8 +74,16 @@ export class PlatformIcon extends PlatformElement {
     }
 
     async _loadIcon() {
+        if (!this.name) {
+            this._svg = '';
+            this.requestUpdate();
+            return;
+        }
         try {
-            this._svg = await this.icon.load(this.name);
+            const svg = this.fileIcon
+                ? await this.icon.loadFileIcon(this.name)
+                : await this.icon.load(this.name);
+            this._svg = svg;
             this.requestUpdate();
         } catch (error) {
             console.error(`Failed to load icon "${this.name}":`, error);
@@ -87,4 +97,3 @@ export class PlatformIcon extends PlatformElement {
 }
 
 customElements.define('platform-icon', PlatformIcon);
-

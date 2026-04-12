@@ -2,24 +2,22 @@
 API endpoints для nodes.
 """
 
+import asyncio
 from typing import Any, Dict, List, Optional
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel
 
-from apps.flows.src.container import FlowContainer, get_container
+from core.pagination import OffsetPage
+from apps.flows.src.dependencies import ContainerDep
 from core.logging import get_logger
 from apps.flows.src.models import NodeConfig, ToolReference, NodeLLMOverride
+from apps.flows.src.models.enums import ReactToolRole
 from apps.flows.src.models.tool_reference import CallParameter
 
 logger = get_logger(__name__)
 
 router = APIRouter(tags=["nodes"])
-
-
-async def get_container_dep() -> FlowContainer:
-    """Dependency для получения контейнера"""
-    return get_container()
 
 
 class NodeLLMOverrideRequest(BaseModel):
@@ -34,7 +32,7 @@ class NodeCreateRequest(BaseModel):
     """Запрос на создание ноды"""
 
     node_id: str
-    type: str  # llm_node, function, tool, flow, remote_flow, external_api
+    type: str  # llm_node, code, flow, remote_flow, external_api, mcp, channel
     name: str
     description: Optional[str] = None
     prompt: Optional[str] = None
@@ -72,6 +70,8 @@ def _tool_ref_to_response(tool_ref: ToolReference) -> Any:
                 k: {"type": v.type, "description": v.description}
                 for k, v in tool_ref.args_schema.items()
             }
+        if tool_ref.parameters_schema:
+            result["parameters_schema"] = tool_ref.parameters_schema
         return result
     return tool_ref.tool_id
 
@@ -82,15 +82,25 @@ def _convert_inline_tool(tool_data: Dict[str, Any]) -> ToolReference:
     if "args_schema" in tool_data:
         for k, v in tool_data["args_schema"].items():
             args_schema[k] = CallParameter(
-                type=v.get("type", "string"), 
-                description=v.get("description", "")
+                type=v.get("type", "string"),
+                description=v.get("description", ""),
+                required=v.get("required", True),
             )
     
+    react_role_raw = tool_data.get("react_role")
+    react_role = (
+        ReactToolRole(react_role_raw)
+        if react_role_raw
+        else ReactToolRole.STANDARD
+    )
+
     return ToolReference(
         tool_id=tool_data["tool_id"],
         description=tool_data.get("description"),
         code=tool_data.get("code"),
         args_schema=args_schema,
+        parameters_schema=tool_data.get("parameters_schema"),
+        react_role=react_role,
     )
 
 
@@ -110,18 +120,23 @@ def _node_to_response(node: NodeConfig) -> NodeResponse:
     )
 
 
-@router.get("/", response_model=List[NodeResponse])
+@router.get("/", response_model=OffsetPage[NodeResponse])
 async def list_nodes(
-    container: FlowContainer = Depends(get_container_dep),
-) -> List[NodeResponse]:
-    """Список всех нод"""
-    nodes = await container.node_repository.list_all()
-    return [_node_to_response(n) for n in nodes]
+    container: ContainerDep,
+    limit: int = Query(200, ge=1, le=1000),
+    offset: int = Query(0, ge=0),
+) -> OffsetPage[NodeResponse]:
+    nodes, total = await asyncio.gather(
+        container.node_repository.list(limit=limit, offset=offset),
+        container.node_repository.count_all(),
+    )
+    items = [_node_to_response(n) for n in nodes]
+    return OffsetPage[NodeResponse](items=items, total=total, limit=limit, offset=offset)
 
 
 @router.post("/", response_model=NodeResponse)
 async def create_node(
-    request: NodeCreateRequest, container: FlowContainer = Depends(get_container_dep)
+    request: NodeCreateRequest, container: ContainerDep
 ) -> NodeResponse:
     """Создает новую ноду"""
     tools = []
@@ -160,7 +175,7 @@ async def create_node(
 
 @router.get("/{node_id}", response_model=NodeResponse)
 async def get_node(
-    node_id: str, container: FlowContainer = Depends(get_container_dep)
+    node_id: str, container: ContainerDep
 ) -> NodeResponse:
     """Получает ноду по ID"""
     node = await container.node_repository.get(node_id)
@@ -173,7 +188,7 @@ async def get_node(
 async def update_node(
     node_id: str,
     request: NodeCreateRequest,
-    container: FlowContainer = Depends(get_container_dep),
+    container: ContainerDep,
 ) -> NodeResponse:
     """Обновляет или создаёт ноду (upsert)"""
     existing = await container.node_repository.get(node_id)
@@ -216,7 +231,7 @@ async def update_node(
 
 @router.delete("/{node_id}")
 async def delete_node(
-    node_id: str, container: FlowContainer = Depends(get_container_dep)
+    node_id: str, container: ContainerDep
 ) -> dict:
     """Удаляет ноду"""
     deleted = await container.node_repository.delete(node_id)

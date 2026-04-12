@@ -9,21 +9,41 @@ from apps.crm.db.models import EntityType
 from apps.crm.db.repositories.entity_repository import EntityRepository
 from apps.crm.db.repositories.entity_type_repository import EntityTypeRepository
 from apps.crm.db.repositories.namespace_template_repository import NamespaceTemplateRepository
+from apps.crm.services.company_init_service import CompanyInitService
 from core.db.repositories.namespace_repository import NamespaceRepository
 
 
 class NamespaceTemplateService:
+    _PAGE_LIMIT = 200
+
     def __init__(
         self,
         template_repo: NamespaceTemplateRepository,
         entity_type_repo: EntityTypeRepository,
         namespace_repo: NamespaceRepository,
         entity_repo: EntityRepository,
+        company_init_service: CompanyInitService,
     ) -> None:
         self._template_repo = template_repo
         self._entity_type_repo = entity_type_repo
         self._namespace_repo = namespace_repo
         self._entity_repo = entity_repo
+        self._company_init_service = company_init_service
+
+    async def _load_company_types(self) -> list[EntityType]:
+        items: list[EntityType] = []
+        offset = 0
+        while True:
+            page = await self._entity_type_repo.get_all_for_company(
+                limit=self._PAGE_LIMIT,
+                offset=offset,
+            )
+            if not page:
+                return items
+            items.extend(page)
+            if len(page) < self._PAGE_LIMIT:
+                return items
+            offset += self._PAGE_LIMIT
 
     async def create_namespace_from_template(
         self,
@@ -54,7 +74,7 @@ class NamespaceTemplateService:
         )
         await self._namespace_repo.set(namespace)
 
-        existing_types = await self._entity_type_repo.get_all_for_company()
+        existing_types = await self._load_company_types()
         existing_types_map = {item.type_id: item for item in existing_types}
 
         for item in template_types:
@@ -76,42 +96,75 @@ class NamespaceTemplateService:
                     check_duplicates=item.check_duplicates,
                     weight_coefficient=item.weight_coefficient,
                     namespace_ids=[],
+                    is_context_anchor=item.is_context_anchor,
+                    is_voice_target=item.is_voice_target,
                 )
-                runtime_type = await self._entity_type_repo.create(runtime_type)
+                runtime_type = await self._entity_type_repo.update(runtime_type)
                 existing_types_map[runtime_type.type_id] = runtime_type
+            else:
+                await self._entity_type_repo.update_metadata(
+                    runtime_type.type_id,
+                    company_id=company_id,
+                    parent_type_id=item.parent_type_id,
+                    name=item.name,
+                    description=item.description,
+                    prompt=item.prompt,
+                    required_fields=item.required_fields,
+                    optional_fields=item.optional_fields,
+                    icon=item.icon,
+                    color=item.color,
+                    is_event=item.is_event,
+                    check_duplicates=item.check_duplicates,
+                    weight_coefficient=item.weight_coefficient,
+                    is_context_anchor=item.is_context_anchor,
+                    is_voice_target=item.is_voice_target,
+                )
 
-            current_namespaces = list(runtime_type.namespace_ids or [])
+            current_namespaces = runtime_type.namespace_ids or []
             if namespace_name not in current_namespaces:
-                current_namespaces.append(namespace_name)
-                runtime_type.namespace_ids = current_namespaces
-                await self._entity_type_repo.update(runtime_type)
+                await self._entity_type_repo.add_namespace_ids(
+                    runtime_type.type_id, [namespace_name],
+                )
+
+        await self._company_init_service._ensure_namespace_entity(company_id, namespace_name)
 
         return namespace
 
     async def get_namespace_editability(self, namespace_name: str) -> dict[str, Any]:
-        entity_count = await self._entity_repo.count_by_namespace(namespace_name)
-        used_type_ids = await self._entity_repo.list_used_entity_types_by_namespace(namespace_name)
+        all_types = await self._load_company_types()
 
-        all_types = await self._entity_type_repo.get_all_for_company()
+        cross_namespace_type_ids = {
+            t.type_id for t in all_types if "*" in (t.namespace_ids or [])
+        }
+
+        entity_count = await self._entity_repo.count_by_namespace(
+            namespace_name, exclude_entity_types=cross_namespace_type_ids,
+        )
+        used_type_ids = await self._entity_repo.list_used_entity_types_by_namespace(namespace_name)
+        used_type_ids_set = set(used_type_ids) - cross_namespace_type_ids
+
         current_allowed_type_ids = sorted(
             [item.type_id for item in all_types if namespace_name in (item.namespace_ids or [])]
         )
 
-        has_entities = entity_count > 0
-        lock_reason = (
-            f"Нельзя менять разрешенные типы: в пространстве уже есть сущности ({entity_count})."
-            if has_entities
-            else None
+        locked_type_ids = sorted(used_type_ids_set)
+        removable_type_ids = sorted(
+            tid for tid in current_allowed_type_ids if tid not in used_type_ids_set
         )
+
+        has_entities = entity_count > 0
 
         return {
             "namespace": namespace_name,
             "has_entities": has_entities,
             "entity_count": entity_count,
-            "used_type_ids": used_type_ids,
+            "used_type_ids": sorted(used_type_ids_set),
             "current_allowed_type_ids": current_allowed_type_ids,
             "can_update_allowed_types": not has_entities,
-            "lock_reason": lock_reason,
+            "can_add_types": True,
+            "locked_type_ids": locked_type_ids,
+            "removable_type_ids": removable_type_ids,
+            "lock_reason": None,
         }
 
     async def update_existing_namespace(
@@ -125,28 +178,34 @@ class NamespaceTemplateService:
         if namespace is None:
             raise RuntimeError(f"Namespace {namespace_name} not found")
 
-        editability = await self.get_namespace_editability(namespace_name)
-        current_allowed_type_ids = set(editability["current_allowed_type_ids"])
-        requested_allowed_type_ids = None
         if allowed_type_ids is not None:
-            requested_allowed_type_ids = set(allowed_type_ids)
+            editability = await self.get_namespace_editability(namespace_name)
+            locked_type_ids = set(editability["locked_type_ids"])
+            requested_set = set(allowed_type_ids)
+            missing_locked = locked_type_ids - requested_set
+            if missing_locked:
+                raise ValueError(
+                    f"Нельзя убрать типы с существующими сущностями: {', '.join(sorted(missing_locked))}"
+                )
 
-        if requested_allowed_type_ids is not None and requested_allowed_type_ids != current_allowed_type_ids:
-            all_types = await self._entity_type_repo.get_all_for_company()
-            for item in all_types:
-                namespace_ids = list(item.namespace_ids or [])
-                has_namespace = namespace_name in namespace_ids
-                should_have_namespace = item.type_id in requested_allowed_type_ids
-                if has_namespace == should_have_namespace:
-                    continue
+            current_allowed_type_ids = set(editability["current_allowed_type_ids"])
+            if requested_set != current_allowed_type_ids:
+                all_types = await self._load_company_types()
+                for item in all_types:
+                    current_ns = set(item.namespace_ids or [])
+                    has_namespace = namespace_name in current_ns
+                    should_have_namespace = item.type_id in requested_set
+                    if has_namespace == should_have_namespace:
+                        continue
 
-                if should_have_namespace:
-                    namespace_ids.append(namespace_name)
-                else:
-                    namespace_ids = [value for value in namespace_ids if value != namespace_name]
-
-                item.namespace_ids = namespace_ids
-                await self._entity_type_repo.update(item)
+                    if should_have_namespace:
+                        await self._entity_type_repo.add_namespace_ids(
+                            item.type_id, [namespace_name],
+                        )
+                    else:
+                        await self._entity_type_repo.remove_namespace_ids(
+                            item.type_id, [namespace_name],
+                        )
 
         if description_is_set:
             namespace.description = description

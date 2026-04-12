@@ -72,7 +72,7 @@ pytest tests/frontend/api/ -v -s
 
 ```bash
 # Терминал 1: Запустить worker
-uv run python -m apps.broker.run_worker
+uv run python -m apps.flows_worker.run_worker
 
 # Терминал 2: Запустить тесты
 pytest tests/frontend/api/test_company_creation.py::test_company_creation_with_agents_initialization -v
@@ -190,7 +190,7 @@ KEYS subdomain:*
 ps aux | grep worker
 
 # Запустить вручную
-uv run python -m apps.broker.run_worker
+uv run python -m apps.flows_worker.run_worker
 ```
 
 ### Агенты не загружаются
@@ -224,7 +224,7 @@ pytest tests/frontend/api/ -v -k "auth" --setup-show
 test:
   script:
     - docker-compose -f docker-compose-test.yaml up -d
-    - uv run python -m apps.broker.run_worker &
+    - uv run python -m apps.flows_worker.run_worker &
     - pytest tests/frontend/api/ -v --junitxml=junit.xml
   artifacts:
     reports:

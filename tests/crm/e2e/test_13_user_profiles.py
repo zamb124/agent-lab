@@ -19,6 +19,8 @@ class TestUserProfiles:
         profile = response.json()
         assert "user_id" in profile
         assert "name" in profile
+        assert "first_name" in profile
+        assert "last_name" in profile
         assert "emails" in profile
         assert "phones" in profile
         assert "messengers" in profile
@@ -124,3 +126,31 @@ class TestUserProfiles:
         assert profile["attrs"]["crm"]["position"] == "Manager"
         assert profile["attrs"]["agents"]["favorite_agent_id"] == "agent_123"
         assert profile["attrs"]["rag"]["default_namespace"] == "docs"
+
+    @pytest.mark.asyncio
+    async def test_update_profile_first_last_name_syncs_display_name(
+        self, crm_client, auth_headers_system
+    ):
+        response = await crm_client.put(
+            "/crm/api/auth/me",
+            json={"first_name": "Пётр", "last_name": "Петров"},
+            headers=auth_headers_system,
+        )
+        assert response.status_code == 200
+        get_resp = await crm_client.get("/crm/api/auth/me", headers=auth_headers_system)
+        profile = get_resp.json()
+        assert profile["first_name"] == "Пётр"
+        assert profile["last_name"] == "Петров"
+        assert profile["name"] == "Пётр Петров"
+
+    @pytest.mark.asyncio
+    async def test_bio_max_length_4000(self, crm_client, auth_headers_system):
+        long_bio = "x" * 4000
+        response = await crm_client.put(
+            "/crm/api/auth/me",
+            json={"bio": long_bio},
+            headers=auth_headers_system,
+        )
+        assert response.status_code == 200
+        get_resp = await crm_client.get("/crm/api/auth/me", headers=auth_headers_system)
+        assert len(get_resp.json()["bio"]) == 4000

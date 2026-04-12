@@ -1,7 +1,7 @@
 """
 Alembic env для crm БД.
 
-Управляет таблицами: crm_entities, entity_types, relationship_types,
+Управляет таблицами: crm_entities, crm_tasks, entity_types, relationship_types,
 relationships, company_mapping, access_grants, access_requests.
 """
 
@@ -18,7 +18,7 @@ from alembic import context
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 
 from apps.crm.db.models import (  # noqa: F401
-    Base, CRMEntity, EntityType, RelationshipType,
+    Base, CRMEntity, CRMTask, EntityType, RelationshipType,
     Relationship, CompanyMapping, AccessGrant, AccessRequest,
 )
 
@@ -31,7 +31,7 @@ if config.config_file_name is not None:
 target_metadata = Base.metadata
 
 MANAGED_TABLES = {
-    "crm_entities", "entity_types", "relationship_types",
+    "crm_entities", "crm_tasks", "entity_types", "relationship_types",
     "relationships", "company_mapping", "access_grants", "access_requests",
 }
 

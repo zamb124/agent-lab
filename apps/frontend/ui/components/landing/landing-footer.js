@@ -3,6 +3,7 @@
  */
 import { html, css } from 'lit';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
+import { I18nNs } from '@platform/services/i18n/i18n.service.js';
 
 export class LandingFooter extends PlatformElement {
     static styles = [
@@ -29,6 +30,7 @@ export class LandingFooter extends PlatformElement {
             
             .footer-left {
                 flex: 1;
+                min-width: 0;
             }
             
             .footer-email {
@@ -48,12 +50,14 @@ export class LandingFooter extends PlatformElement {
             
             .footer-logo {
                 font-family: 'Fira Sans Condensed', sans-serif;
-                font-size: 100px;
+                font-size: clamp(2rem, 12vw, 6.25rem);
                 font-weight: 500;
                 line-height: 1;
                 color: var(--landing-primary);
                 margin: 0;
                 text-transform: capitalize;
+                max-width: 100%;
+                overflow-wrap: break-word;
             }
             
             .footer-right {
@@ -179,16 +183,33 @@ export class LandingFooter extends PlatformElement {
         `
     ];
 
+    connectedCallback() {
+        super.connectedCallback();
+        this._i18nUnsub = this.i18n.subscribe(() => this.requestUpdate());
+    }
+
+    disconnectedCallback() {
+        if (this._i18nUnsub) {
+            this._i18nUnsub();
+            this._i18nUnsub = null;
+        }
+        super.disconnectedCallback();
+    }
+
     _legalUrl(pathname) {
-        const params = new URLSearchParams(window.location.search);
-        const lang = params.get('lang');
+        const lang = this.i18n.getCurrentLocale();
         if (lang === 'ru') {
             return `${pathname}?lang=ru`;
+        }
+        if (lang === 'en') {
+            return `${pathname}?lang=en`;
         }
         return pathname;
     }
 
     render() {
+        const t = (key, params) => this.i18n.t(key, params ?? {}, I18nNs.LANDING);
+        const year = new Date().getFullYear();
         return html`
             <footer class="footer-container">
                 <div class="footer-content">
@@ -200,19 +221,19 @@ export class LandingFooter extends PlatformElement {
                     </div>
                     
                     <div class="footer-right">
-                        <a href="#" class="footer-link">Документация</a>
+                        <a href="/documentation" class="footer-link">${t('footer.docs')}</a>
                     </div>
                 </div>
                 
                 <div class="footer-bottom">
-                    <p class="footer-copy">© 2025 Humanitec</p>
+                    <p class="footer-copy">${t('footer.copyright', { year })}</p>
                     
                     <div class="footer-legal">
                         <a href=${this._legalUrl('/policy')} class="footer-legal-link">
-                            Политика конфиденциальности
+                            ${t('footer.privacy')}
                         </a>
                         <a href=${this._legalUrl('/terms')} class="footer-legal-link">
-                            Пользовательское соглашение
+                            ${t('footer.terms')}
                         </a>
                     </div>
                 </div>

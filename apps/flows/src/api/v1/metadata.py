@@ -7,15 +7,18 @@ from typing import Any, Dict, List
 
 from fastapi import APIRouter
 
+from apps.flows.src.dependencies import ContainerDep
+
 router = APIRouter(tags=["metadata"])
 
 
 @router.get("/node-types")
-async def get_node_types() -> List[Dict[str, Any]]:
+async def get_node_types(container: ContainerDep) -> List[Dict[str, Any]]:
     """
     Возвращает список доступных типов нод для визуального редактора.
     Используется в редакторе графа (canvas) для панели типов нод.
     """
+    _ = container
     return [
         {
             "type": "llm_node",

@@ -6,7 +6,7 @@ import pytest
 from apps.flows.src.runtime import Flow
 from apps.flows.src.runtime.nodes import create_node, CodeNode, CodeNode
 from apps.flows.src.models import FlowConfig, Edge, CodeMode, ToolReference
-from apps.flows.src.tools import InlineTool
+from apps.flows.src.tools.base import CodeTool
 from apps.flows.src.eval import SafeEvalError
 from core.state import ExecutionState
 
@@ -20,7 +20,7 @@ class TestCodeNode:
         node_config = {
             "type": "code",
             "code": """
-def run(state):
+async def run(state):
     state['result'] = 'inline_ok'
     return state
 """
@@ -67,7 +67,7 @@ async def run(state):
     async def test_inline_node_with_variables(self):
         """Доступ к variables из inline кода."""
         code = """
-def run(state):
+async def run(state):
     vars = state.get('variables', {})
     state['greeting'] = f"Hello, {vars.get('company', 'World')}!"
     return state
@@ -91,7 +91,7 @@ def run(state):
         code = """
 import os
 
-def run(state):
+async def run(state):
     state['files'] = os.listdir('/')
     return state
 """
@@ -120,7 +120,7 @@ class TestFlowWithInlineCode:
                 "process": {
                     "type": "code",
                     "code": """
-def run(state):
+async def run(state):
     state['processed'] = True
     state['value'] = state.get('input', 0) + 100
     return state
@@ -166,7 +166,7 @@ def run(state):
                 "step1": {
                     "type": "code",
                     "code": """
-def run(state):
+async def run(state):
     state['step1'] = 'done'
     state['counter'] = 1
     return state
@@ -175,7 +175,7 @@ def run(state):
                 "step2": {
                     "type": "code",
                     "code": """
-def run(state):
+async def run(state):
     state['step2'] = 'done'
     state['counter'] = state.get('counter', 0) + 1
     return state
@@ -184,7 +184,7 @@ def run(state):
                 "step3": {
                     "type": "code",
                     "code": """
-def run(state):
+async def run(state):
     state['step3'] = 'done'
     state['counter'] = state.get('counter', 0) + 1
     return state
@@ -235,7 +235,7 @@ def run(state):
                     "code": """
 import json
 
-def run(state):
+async def run(state):
     data = json.loads(state.get('json_input', '{}'))
     state['parsed'] = data
     state['name'] = data.get('name', 'unknown')
@@ -282,7 +282,7 @@ def run(state):
                 "check": {
                     "type": "code",
                     "code": """
-def run(state):
+async def run(state):
     value = state.get('input', 0)
     state['is_positive'] = value > 0
     return state
@@ -291,7 +291,7 @@ def run(state):
                 "positive": {
                     "type": "code",
                     "code": """
-def run(state):
+async def run(state):
     state['result'] = 'positive_path'
     return state
 """
@@ -299,7 +299,7 @@ def run(state):
                 "negative": {
                     "type": "code",
                     "code": """
-def run(state):
+async def run(state):
     state['result'] = 'negative_path'
     return state
 """
@@ -357,7 +357,7 @@ def run(state):
                 "bad": {
                     "type": "code",
                     "code": """
-def run(state):
+async def run(state):
     raise ValueError("Intentional error")
 """
                 }
@@ -402,7 +402,7 @@ class TestMixedNodes:
                 "first": {
                     "type": "code",
                     "code": """
-def run(state):
+async def run(state):
     state['first_done'] = True
     state['counter'] = 1
     return state
@@ -411,7 +411,7 @@ def run(state):
                 "second": {
                     "type": "code",
                     "code": """
-def run(state):
+async def run(state):
     state['second_done'] = True
     state['counter'] = state.get('counter', 0) + 1
     return state
@@ -448,19 +448,19 @@ def run(state):
         assert result.get("counter") == 2
 
 
-class TestInlineTool:
+class TestCodeTool:
     """Тесты для inline tools."""
 
     @pytest.mark.asyncio
     async def test_inline_tool_simple(self):
         """Простой inline tool."""
         code = """
-def execute(args, state):
+async def execute(args, state):
     x = args.get('x', 0)
     y = args.get('y', 0)
     return x + y
 """
-        tool = InlineTool(
+        tool = CodeTool(
             tool_id="add",
             code=code,
             description="Сложение двух чисел"
@@ -483,7 +483,7 @@ async def execute(args, state):
     value = args.get('value', 0)
     return value * 2
 """
-        tool = InlineTool(
+        tool = CodeTool(
             tool_id="double",
             code=code
         )
@@ -501,12 +501,12 @@ async def execute(args, state):
     async def test_inline_tool_with_state(self):
         """Inline tool с доступом к state."""
         code = """
-def execute(args, state):
+async def execute(args, state):
     prefix = state.get('prefix', '')
     name = args.get('name', 'World')
     return f"{prefix}Hello, {name}!"
 """
-        tool = InlineTool(
+        tool = CodeTool(
             tool_id="greet",
             code=code
         )
@@ -527,12 +527,12 @@ def execute(args, state):
         code = """
 import json
 
-def execute(args, state):
+async def execute(args, state):
     data = args.get('data', '{}')
     parsed = json.loads(data)
     return parsed.get('name', 'unknown')
 """
-        tool = InlineTool(
+        tool = CodeTool(
             tool_id="parse_name",
             code=code
         )
@@ -552,10 +552,10 @@ def execute(args, state):
         code = """
 import os
 
-def execute(args, state):
+async def execute(args, state):
     return os.listdir('/')
 """
-        tool = InlineTool(
+        tool = CodeTool(
             tool_id="bad_tool",
             code=code
         )
@@ -579,9 +579,9 @@ def execute(args, state):
             "y": CallParameter(type="number", description="Second number")
         }
         
-        tool = InlineTool(
+        tool = CodeTool(
             tool_id="add",
-            code="def execute(args, state): return args['x'] + args['y']",
+            code="async def execute(args, state): return args['x'] + args['y']",
             description="Add two numbers",
             parameters=params
         )
@@ -599,13 +599,13 @@ class TestToolRegistryInline:
 
     @pytest.mark.asyncio
     async def test_tool_registry_creates_inline_tool(self, app, container):
-        """ToolRegistry создаёт InlineTool."""
+        """ToolRegistry создаёт CodeTool."""
         # Создаём inline tool напрямую через factory с inline конфигом
         tool_config = {
             "tool_id": "test_inline_tool",
             "description": "Test inline tool",
             "code": """
-def execute(args, state):
+async def execute(args, state):
     return args.get('value', 0) * 3
 """
         }
@@ -614,7 +614,7 @@ def execute(args, state):
         tool = await container.tool_registry.create_tool(tool_config)
         
         assert tool is not None
-        assert isinstance(tool, InlineTool)
+        assert isinstance(tool, CodeTool)
         assert tool.name == "test_inline_tool"
         
         # Выполняем

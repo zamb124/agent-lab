@@ -22,6 +22,7 @@ from apps.flows.src.eval import compile_function
 from apps.flows.src.models import NodeConfig, TestCaseConfig
 from apps.flows.src.models.flow_config import CheckConfig, CheckType, InputConfig, InputType, TestTurn
 from apps.flows.src.tasks.llm_tasks import invoke_llm
+from core.context import get_context
 from core.logging import get_logger
 from core.state import ExecutionState
 
@@ -281,13 +282,19 @@ class TestRunner:
         if input_config.type == InputType.TEXT:
             return input_config.value, None
 
-        if input_config.type == InputType.FUNCTION:
+        if input_config.type == InputType.INLINE_CODE:
             fn = compile_function(input_config.value, "generate")
             sig = inspect.signature(fn)
-            if len(sig.parameters) == 0:
-                result = fn()
+            if inspect.iscoroutinefunction(fn):
+                if len(sig.parameters) == 0:
+                    result = await fn()
+                else:
+                    result = await fn(execution_state.model_dump())
             else:
-                result = fn(execution_state.model_dump())
+                if len(sig.parameters) == 0:
+                    result = fn()
+                else:
+                    result = fn(execution_state.model_dump())
             return str(result), None
 
         return input_config.value, None
@@ -306,9 +313,12 @@ class TestRunner:
             result = self._execute_string_checker(check_config.value, state_dict, response)
             return {"result": 10.0 if result else 0.0}
 
-        if check_config.type == CheckType.FUNCTION:
+        if check_config.type == CheckType.INLINE_CODE:
             fn = compile_function(check_config.value, "check")
-            result = fn(state_dict, response)
+            if inspect.iscoroutinefunction(fn):
+                result = await fn(state_dict, response)
+            else:
+                result = fn(state_dict, response)
             return self._normalize_check_result(result)
 
         if check_config.type == CheckType.NODE:
@@ -511,11 +521,20 @@ class TestRunner:
             tools = await container.tool_registry.create_tools(node_config.tools)
             tools_for_llm = [tool.to_llm_format() for tool in tools]
 
+        request_ctx = get_context()
+        if request_ctx is None:
+            raise ValueError(
+                "Для invoke_llm в worker нужен Context запроса (user, active_company). "
+                "Запуск evaluation tester/judge только из обработчика с установленным контекстом."
+            )
+        context_data = request_ctx.to_dict()
+
         task = await invoke_llm.kiq(
             messages=llm_messages,
             tools=tools_for_llm,
             task_id=str(uuid.uuid4()),
             context_id="evaluation",
+            context_data=context_data,
         )
 
         result = await task.wait_result()
@@ -549,11 +568,20 @@ class TestRunner:
 {{"scores": {{"quality": 8}}, "passed": true, "feedback": "..."}}
 """
 
+        request_ctx = get_context()
+        if request_ctx is None:
+            raise ValueError(
+                "Для invoke_llm в worker нужен Context запроса (user, active_company). "
+                "Запуск evaluation tester/judge только из обработчика с установленным контекстом."
+            )
+        context_data = request_ctx.to_dict()
+
         task = await invoke_llm.kiq(
             messages=[{"role": "user", "content": system_message}],
             tools=None,
             task_id=str(uuid.uuid4()),
             context_id="evaluation",
+            context_data=context_data,
         )
 
         result = await task.wait_result()

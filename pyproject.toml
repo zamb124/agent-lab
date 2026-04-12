@@ -5,18 +5,14 @@ description = "Agent Platform - платформа агентских систе
 requires-python = ">=3.13"
 dependencies = [
     "cairosvg>=2.8.2",
+    "google-auth>=2.43.0",
     "greenlet",
     "pywebpush>=2.1.2",
     "reportlab>=4.4.7",
     "svglib>=1.6.0",
+    "xlrd>=2.0.1",
 ]
 [tool.uv]
-# marker-pdf объявляет openai<2; платформа — openai>=2.2.0.
-override-dependencies = [
-    "openai>=2.2.0",
-]
-# marker-pdf (pdftext) требует pypdfium2==4.30; unstructured-inference>=1.6 — pypdfium2>=5.
-# В одном lock резолвер отдаёт приоритет совместимости с marker-pdf (см. комментарий в rag.mdc).
 default-groups = [
     "core",
     "agents",
@@ -35,18 +31,14 @@ build-backend = "hatchling.build"
 [tool.hatch.build.targets.wheel]
 packages = ["apps", "core"]
 
+[tool.hatch.build.targets.wheel.force-include]
+"core/files/writer/fonts/NotoSans-Regular.ttf" = "core/files/writer/fonts/NotoSans-Regular.ttf"
+"core/files/writer/fonts/OFL.txt" = "core/files/writer/fonts/OFL.txt"
+
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 asyncio_default_fixture_loop_scope = "session"
 asyncio_default_test_loop_scope = "session"
-filterwarnings = [
-    "ignore:.*HTTP_413_REQUEST_ENTITY_TOO_LARGE.*:DeprecationWarning",
-    "ignore:.*SwigPy.*has no __module__ attribute:DeprecationWarning",
-    "ignore:.*swigvar.*has no __module__ attribute:DeprecationWarning",
-    "ignore::DeprecationWarning:starlette.templating:",
-    "ignore::DeprecationWarning:httpx._models:",
-    "ignore::DeprecationWarning:httpx._client:",
-]
 markers = [
     "unit: unit tests",
     "integration: integration tests that require external services",
@@ -74,7 +66,7 @@ core = [
     "uvicorn>=0.37.0",
     "asyncpg>=0.30.0",
     "redis>=7.0.0",
-    "httpx>=0.28.0",
+    "httpx[http2]>=0.28.0",
     "httpx-sse>=0.4.0",
     "sqlalchemy[asyncpg]>=2.0.23",
     "alembic>=1.13.0",
@@ -97,6 +89,15 @@ core = [
     "opentelemetry-instrumentation-asyncpg>=0.59b0",
     "gunicorn>=21.2.0",
     "pgvector>=0.3.6",
+    "croniter>=6.2.2",
+    "markdown>=3.10",
+    "python-docx>=1.2.0",
+    "openpyxl>=3.1.5",
+    "pillow>=12.0.0",
+    "docxtpl>=0.20.2",
+    "reportlab>=4.4.7",
+    "unstructured[xlsx]>=0.16.0",
+    "yt-dlp>=2024.0.0",
 ]
 
 agents = [
@@ -118,12 +119,8 @@ worker-base = [
 ]
 
 rag-worker = [
-    "unstructured[pdf]>=0.16.0",
-    "marker-pdf>=1.3.0",
     "tiktoken>=0.9.0",
     "beautifulsoup4>=4.12.0",
-    "chonkie>=1.6.1",
-    "tree-sitter-language-pack>=0.7.0",
 ]
 
 crm = [
@@ -131,8 +128,6 @@ crm = [
 ]
 
 rag = [
-    "chonkie>=1.6.1",
-    "litserve>=0.2.17",
     "tiktoken>=0.9.0",
 ]
 
@@ -142,8 +137,8 @@ sync = [
 ]
 
 dev = [
-    # marker-pdf: Pillow<11; совместная резолюция с rag-worker.
-    "pillow>=10.1.0,<11",
+    "skia-python>=144.0",
+    "pillow>=12.0.0",
     "pytest>=9.0.0",
     "pytest-asyncio>=1.3.0",
     "pytest-cov>=7.0.0",
@@ -151,18 +146,12 @@ dev = [
     "pytest-rerunfailures>=15.0",
     "filelock>=3.0.0",
     "ruff>=0.14.0",
-    "mkdocs>=1.6.0",
-    "mkdocs-material>=9.5.0",
-    "mkdocs-static-i18n>=1.3.0",
-    "pymdown-extensions>=10.16.1",
     "websockets>=14.0",
     "schemathesis>=3.19.0",
     "coverage>=7.4.0",
     "pytest-timeout>=2.4.0",
     "playwright>=1.58.0",
-]
-reranker-model = [
-    "flagembedding>=1.2.0",
+    "xlwt>=1.3.0",
 ]
 
 [tool.coverage.run]

@@ -116,6 +116,23 @@ export class MessageContextMenu extends PlatformElement {
         this.anchorY = 0;
         this.isOwn = false;
         this.selectionMode = false;
+        /** @type {(() => void) | null} */
+        this._i18nUnsub = null;
+    }
+
+    connectedCallback() {
+        super.connectedCallback();
+        this._i18nUnsub = this.i18n.subscribe(() => this.requestUpdate());
+    }
+
+    disconnectedCallback() {
+        super.disconnectedCallback?.();
+        this._i18nUnsub?.();
+        this._i18nUnsub = null;
+    }
+
+    _tp(key, params) {
+        return this.i18n.t(key, params ?? {});
     }
 
     _emit(kind, detail = {}) {
@@ -157,30 +174,30 @@ export class MessageContextMenu extends PlatformElement {
                     `)}
                 </div>
                 <button type="button" class="item" @click=${() => this._emit('reply')}>
-                    <span class="item-label">Ответить</span>
+                    <span class="item-label">${this._tp('context_menu.reply')}</span>
                 </button>
                 <button type="button" class="item" @click=${() => this._emit('copy')}>
-                    <span class="item-label">Копировать текст</span>
+                    <span class="item-label">${this._tp('context_menu.copy_text')}</span>
                 </button>
                 <button type="button" class="item" @click=${() => this._emit('translate')}>
-                    <span class="item-label">Перевести</span>
+                    <span class="item-label">${this._tp('context_menu.translate')}</span>
                 </button>
                 ${this.isOwn ? html`
                     <button type="button" class="item" @click=${() => this._emit('edit')}>
-                        <span class="item-label">Редактировать</span>
+                        <span class="item-label">${this._tp('context_menu.edit')}</span>
                     </button>
                 ` : ''}
                 <button type="button" class="item" @click=${() => this._emit('pin')}>
-                    <span class="item-label">Закрепить</span>
+                    <span class="item-label">${this._tp('context_menu.pin')}</span>
                 </button>
                 <button type="button" class="item" @click=${() => this._emit('forward')}>
-                    <span class="item-label">Переслать</span>
+                    <span class="item-label">${this._tp('context_menu.forward')}</span>
                 </button>
                 <button type="button" class="item" @click=${() => this._emit('select')}>
-                    <span class="item-label">Выбрать</span>
+                    <span class="item-label">${this._tp('context_menu.select')}</span>
                 </button>
                 <button type="button" class="item danger" @click=${() => this._emit('delete')}>
-                    <span class="item-label">Удалить</span>
+                    <span class="item-label">${this._tp('context_menu.delete')}</span>
                 </button>
             </div>
         `;

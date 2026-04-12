@@ -11,6 +11,10 @@ export class CRMAPIService extends BaseService {
     async getEntities(params = {}) {
         return this.get('/entities', params);
     }
+
+    async getEntityTimelineBounds(params = {}) {
+        return this.get('/entities/timeline/bounds', params);
+    }
     
     async getEntity(entityId) {
         if (!entityId) {
@@ -18,12 +22,23 @@ export class CRMAPIService extends BaseService {
         }
         return this.get(`/entities/${entityId}`);
     }
+
+    async getPersonEntitySelf() {
+        return this.get('/entities/person-entity/self');
+    }
     
     async createEntity(data) {
         if (!data) {
             throw new Error('Entity data is required');
         }
         return this.post('/entities', data);
+    }
+
+    async mergeEntities(payload) {
+        if (!payload || typeof payload !== 'object') {
+            throw new Error('Merge payload is required');
+        }
+        return this.post('/entities/merge', payload);
     }
     
     async updateEntity(entityId, data) {
@@ -43,34 +58,66 @@ export class CRMAPIService extends BaseService {
         return this.delete(`/entities/${entityId}`);
     }
     
+    async bulkUpdateEntities(items) {
+        return this.put('/entities/bulk', { items });
+    }
+
+    async bulkDeleteEntities(entityIds) {
+        return this.post('/entities/bulk-delete', { entity_ids: entityIds });
+    }
+
+    async exportEntities(params = {}) {
+        const format = params.format || 'json';
+        const exportParams = Object.fromEntries(
+            Object.entries({ ...params, format }).filter(([, v]) => v != null)
+        );
+        return this.getBlob('/entities/export', exportParams);
+    }
+
+    async getAggregate(params = {}) {
+        return this.get('/entities/aggregate', params);
+    }
+
+    async voiceInput(audioFile, language = null) {
+        const formData = new FormData();
+        formData.append('file', audioFile);
+        if (language) {
+            formData.append('language', language);
+        }
+        return this.post('/entities/voice-input', formData);
+    }
+
     async searchEntities(query, params = {}) {
         if (!query) {
             throw new Error('Search query is required');
         }
         return this.get('/entities/search', { query, ...params });
     }
+
+    async getLaraWorkspaceSummary(namespace) {
+        if (!namespace || typeof namespace !== 'string' || namespace.trim().length === 0) {
+            throw new Error('namespace is required');
+        }
+        return this.get('/workspace/lara-summary', { namespace: namespace.trim() });
+    }
     
-    async findEntitiesByText(text) {
+    async findEntitiesByText(text, namespace = null) {
         if (!text) {
             throw new Error('Text is required');
         }
-        return this.post('/entities/search/mentions', { text });
+        const body = { text };
+        if (namespace) {
+            body.namespace = namespace;
+        }
+        return this.post('/entities/search/mentions', body);
     }
     
-    async analyzeText(text, noteId = null, options = {}) {
-        if (!text) {
-            throw new Error('Text is required');
+    async analyzeNote(noteId, options = {}) {
+        if (!noteId) {
+            throw new Error('Note ID is required');
         }
         if (options !== null && typeof options !== 'object') {
             throw new Error('Analyze options must be object');
-        }
-
-        const query = new URLSearchParams();
-        if (noteId) {
-            query.set('note_id', noteId);
-        }
-        if (typeof options.checkDuplicates === 'boolean') {
-            query.set('check_duplicates', options.checkDuplicates ? 'true' : 'false');
         }
 
         const mentionedEntityIds = Array.isArray(options.mentionedEntityIds)
@@ -83,7 +130,7 @@ export class CRMAPIService extends BaseService {
             ? options.extractRelationshipTypes
             : null;
 
-        const body = { text };
+        const body = {};
         if (mentionedEntityIds && mentionedEntityIds.length > 0) {
             body.mentioned_entity_ids = mentionedEntityIds;
         }
@@ -93,12 +140,32 @@ export class CRMAPIService extends BaseService {
         if (extractRelationshipTypes && extractRelationshipTypes.length > 0) {
             body.extract_relationship_types = extractRelationshipTypes;
         }
-        if (typeof options.namespace === 'string' && options.namespace.trim().length > 0) {
-            body.namespace = options.namespace.trim();
+        if (typeof options.checkDuplicates === 'boolean') {
+            body.check_duplicates = options.checkDuplicates;
         }
 
-        const params = query.size > 0 ? `?${query.toString()}` : '';
-        return this.post(`/entities/analyze${params}`, body);
+        return this.post('/tasks/note-analyze', { note_id: noteId, ...body });
+    }
+
+    async patchNoteAnalysisDraft(noteId, body) {
+        if (!noteId) {
+            throw new Error('Note ID is required');
+        }
+        if (!body || typeof body !== 'object') {
+            throw new Error('Patch body is required');
+        }
+        return this.patch(`/entities/notes/${encodeURIComponent(noteId)}/analysis-draft`, body);
+    }
+
+    async applyNoteAnalysisDraft(noteId) {
+        if (!noteId) {
+            throw new Error('Note ID is required');
+        }
+        const taskResp = await this.post('/tasks/note-analyze', { note_id: noteId, mode: 'apply' });
+        if (!taskResp?.task_id) {
+            throw new Error('Apply task did not return task_id');
+        }
+        return { task_id: taskResp.task_id };
     }
     
     async getEntityTypes() {
@@ -118,6 +185,16 @@ export class CRMAPIService extends BaseService {
         }
         return this.post('/entity-types', data);
     }
+
+    async updateEntityType(typeId, data) {
+        if (!typeId) {
+            throw new Error('Type ID is required');
+        }
+        if (!data) {
+            throw new Error('Entity type update data is required');
+        }
+        return this.put(`/entity-types/${encodeURIComponent(typeId)}`, data);
+    }
     
     async getRelationships(params = {}) {
         return this.get('/relationships', params);
@@ -135,6 +212,13 @@ export class CRMAPIService extends BaseService {
             throw new Error('Relationship ID is required');
         }
         return this.delete(`/relationships/${relationshipId}`);
+    }
+
+    async getRelationship(relationshipId) {
+        if (!relationshipId) {
+            throw new Error('Relationship ID is required');
+        }
+        return this.get(`/relationships/${relationshipId}`);
     }
     
     async getRelationshipTypes() {
@@ -160,12 +244,32 @@ export class CRMAPIService extends BaseService {
         }
         return this.post('/relationships/types/', data);
     }
-    
+
     async getInfluenceGraph(entityId, params = {}) {
         if (!entityId) {
             throw new Error('Entity ID is required');
         }
         return this.get(`/entities/${entityId}/influence-graph`, params);
+    }
+
+    async getOverviewGraph(entityIds, params = {}) {
+        if (!Array.isArray(entityIds) || entityIds.length === 0) {
+            throw new Error('entity_ids array is required');
+        }
+        return this.post('/entities/overview-graph', {
+            entity_ids: entityIds,
+            max_depth: params.max_depth || 3,
+            relationship_types: params.relationship_types || null,
+            created_at_from: params.created_at_from || null,
+            created_at_to: params.created_at_to || null,
+        });
+    }
+
+    async getRelatedEntities(entityId, params = {}) {
+        if (!entityId) {
+            throw new Error('Entity ID is required');
+        }
+        return this.get(`/entities/${entityId}/related`, params);
     }
     
     async getShortestPath(sourceId, targetId, params = {}) {
@@ -227,6 +331,20 @@ export class CRMAPIService extends BaseService {
         return this.get(`/entities/${entityId}/card`);
     }
 
+    async getEntityCardIfPresent(entityId) {
+        if (!entityId) {
+            throw new Error('Entity ID is required');
+        }
+        return this.get(`/entities/${entityId}/card`, {}, { notFoundReturns: null });
+    }
+
+    async getEntityCardsBulk(entityIds) {
+        if (!Array.isArray(entityIds) || entityIds.length === 0) {
+            throw new Error('entityIds must be a non-empty array');
+        }
+        return this.post('/entities/cards/bulk', { entity_ids: entityIds });
+    }
+
     async getDailySummary(date, options = {}) {
         if (!date) {
             throw new Error('Date is required');
@@ -234,6 +352,19 @@ export class CRMAPIService extends BaseService {
         const namespace = options.namespace;
         return this.post('/entities/daily-summary', {
             date,
+            namespace: namespace ?? null,
+            force_rebuild: options.forceRebuild === true,
+        });
+    }
+
+    async getPeriodSummary(dateFrom, dateTo, options = {}) {
+        if (!dateFrom || !dateTo) {
+            throw new Error('dateFrom and dateTo are required');
+        }
+        const namespace = options.namespace;
+        return this.post('/entities/period-summary', {
+            date_from: dateFrom,
+            date_to: dateTo,
             namespace: namespace ?? null,
             force_rebuild: options.forceRebuild === true,
         });
@@ -472,6 +603,103 @@ export class CRMAPIService extends BaseService {
         return this.post(`/namespaces/${namespace}/grants/public`);
     }
 
+    // === KNOWLEDGE IMPORT ===
+
+    async uploadFile(file) {
+        if (!file) {
+            throw new Error('File is required');
+        }
+        const formData = new FormData();
+        formData.append('file', file);
+        return this.post('/files/', formData);
+    }
+
+    // === TASKS (unified: knowledge_import + note_analyze) ===
+
+    async listTasks(namespace, limit = 50, taskType = null, noteId = null) {
+        if (!namespace || typeof namespace !== 'string') {
+            throw new Error('Namespace is required');
+        }
+        const params = { namespace, limit };
+        if (taskType) {
+            params.task_type = taskType;
+        }
+        if (noteId) {
+            params.note_id = noteId;
+        }
+        return this.get('/tasks', params);
+    }
+
+    async getTask(taskId) {
+        if (!taskId) {
+            throw new Error('Task ID is required');
+        }
+        return this.get(`/tasks/${encodeURIComponent(taskId)}`, {});
+    }
+
+    async startKnowledgeImportTask(body) {
+        if (!body || typeof body !== 'object') {
+            throw new Error('Body is required');
+        }
+        return this.post('/tasks/knowledge-import', body);
+    }
+
+    async startNoteAnalyzeTask(noteId, options = {}) {
+        if (!noteId) {
+            throw new Error('Note ID is required');
+        }
+        return this.post('/tasks/note-analyze', { note_id: noteId, ...options });
+    }
+
+    async cancelTask(taskId) {
+        if (!taskId) {
+            throw new Error('Task ID is required');
+        }
+        return this.post(`/tasks/${encodeURIComponent(taskId)}/cancel`, {});
+    }
+
+    async rollbackTask(taskId) {
+        if (!taskId) {
+            throw new Error('Task ID is required');
+        }
+        return this.post(`/tasks/${encodeURIComponent(taskId)}/rollback`, {});
+    }
+
+    async getTaskCreatedEntities(taskId) {
+        if (!taskId) {
+            throw new Error('Task ID is required');
+        }
+        return this.get(`/tasks/${encodeURIComponent(taskId)}/created-entities`, {});
+    }
+
+    async completeTaskReview(taskId) {
+        if (!taskId) {
+            throw new Error('Task ID is required');
+        }
+        return this.post(`/tasks/${encodeURIComponent(taskId)}/review-complete`, {});
+    }
+
+    async retryTask(taskId) {
+        if (!taskId) {
+            throw new Error('Task ID is required');
+        }
+        return this.post(`/tasks/${encodeURIComponent(taskId)}/retry`, {});
+    }
+
+    async startDailySummaryTask(namespace, dateStr) {
+        if (!namespace || !dateStr) {
+            throw new Error('namespace and dateStr are required');
+        }
+        return this.post('/tasks/daily-summary', { namespace, date_str: dateStr });
+    }
+
+    async startPeriodSummaryTask(namespace, dateFrom, dateTo) {
+        if (!namespace || !dateFrom || !dateTo) {
+            throw new Error('namespace, dateFrom and dateTo are required');
+        }
+        return this.post('/tasks/period-summary', { namespace, date_from: dateFrom, date_to: dateTo });
+    }
+
     // === ATTACHMENTS ===
 
     async getEntityAttachments(entityId) {
@@ -490,7 +718,7 @@ export class CRMAPIService extends BaseService {
         }
         const formData = new FormData();
         formData.append('file', file);
-        return this.postFormData(`/entities/${entityId}/attachments`, formData);
+        return this.post(`/entities/${entityId}/attachments`, formData);
     }
 
     async deleteAttachment(entityId, attachmentId) {

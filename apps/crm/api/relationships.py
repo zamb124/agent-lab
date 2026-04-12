@@ -2,20 +2,25 @@
 API для работы со связями (relationships).
 """
 
+import asyncio
 import uuid
 from typing import List, Optional
 from datetime import datetime, timezone
-from fastapi import APIRouter, Depends, HTTPException, Query
 
-from apps.crm.models.api import RelationshipCreate, RelationshipResponse, RelationshipTypeCreate, RelationshipTypeResponse
+from fastapi import APIRouter, HTTPException, Query
+from sqlalchemy.exc import IntegrityError
+
+from core.pagination import CursorPage, OffsetPage
+from apps.crm.models.api import (
+    RelationshipCreate,
+    RelationshipResponse,
+    RelationshipTypeCreate,
+    RelationshipTypeResponse,
+)
 from apps.crm.models.graph import ShortestPathResponse
-from apps.crm.db.repositories.relationship_repository import RelationshipRepository
-from apps.crm.db.repositories.relationship_type_repository import RelationshipTypeRepository
-from apps.crm.services.graph_service import GraphService
-from apps.crm.container import get_crm_container
-from apps.crm.dependencies import get_graph_service
-from apps.crm.db.models import Relationship
-from apps.crm.db.models import RelationshipType
+from apps.crm.services.graph_service import GraphEntityLimitExceededError
+from apps.crm.dependencies import ContainerDep
+from apps.crm.db.models import Relationship, RelationshipType
 from core.context import get_context
 from core.logging import get_logger
 
@@ -24,44 +29,47 @@ logger = get_logger(__name__)
 router = APIRouter(prefix="/relationships", tags=["Relationships"])
 
 
-def get_relationship_repo() -> RelationshipRepository:
-    """Получить репозиторий связей"""
-    container = get_crm_container()
-    return container.relationship_repository
-
-
-def get_relationship_type_repo() -> RelationshipTypeRepository:
-    """Получить репозиторий типов связей"""
-    container = get_crm_container()
-    return container.relationship_type_repository
-
-
-@router.get("", response_model=List[RelationshipResponse])
+@router.get("", response_model=CursorPage[RelationshipResponse])
 async def list_relationships(
-    entity_id: str = None,
+    container: ContainerDep,
+    entity_id: Optional[str] = Query(None, description="Фильтр по entity (source или target)"),
     namespace: Optional[str] = Query(None, description="Фильтр по namespace"),
-    limit: int = Query(1000, ge=1, le=10000, description="Лимит для полного списка связей"),
-    repo: RelationshipRepository = Depends(get_relationship_repo)
+    cursor: Optional[str] = Query(None, description="Cursor для следующей страницы"),
+    limit: int = Query(200, ge=1, le=1000, description="Размер страницы"),
 ):
-    """Получить все связи (опционально для конкретной entity)"""
+    """Связи с cursor-пагинацией. Без entity_id возвращает все связи компании постранично."""
+    repo = container.relationship_repository
+
+    if namespace is not None and namespace.strip() == "":
+        raise HTTPException(status_code=400, detail="namespace must not be empty")
+
     if entity_id:
         relationships = await repo.get_by_entity(entity_id)
-    else:
-        relationships = await repo.get_all_for_graph(limit=limit)
-    if namespace is None:
-        return relationships
-    if namespace.strip() == "":
-        raise HTTPException(status_code=400, detail="namespace must not be empty")
-    return [rel for rel in relationships if rel.namespace == namespace]
+        if namespace is not None:
+            relationships = [r for r in relationships if r.namespace == namespace]
+        return CursorPage[RelationshipResponse](
+            items=relationships,
+            next_cursor=None,
+            has_more=False,
+        )
+
+    batch, next_cursor, has_more = await repo.get_all_for_graph(limit=limit, cursor=cursor)
+    if namespace is not None:
+        batch = [r for r in batch if r.namespace == namespace]
+    return CursorPage[RelationshipResponse](
+        items=batch,
+        next_cursor=next_cursor,
+        has_more=has_more,
+    )
 
 
 @router.get("/{relationship_id}", response_model=RelationshipResponse)
 async def get_relationship(
     relationship_id: str,
-    repo: RelationshipRepository = Depends(get_relationship_repo)
+    container: ContainerDep,
 ):
     """Получить связь по ID"""
-    relationship = await repo.get(relationship_id)
+    relationship = await container.relationship_repository.get(relationship_id)
     if not relationship:
         raise HTTPException(status_code=404, detail="Relationship not found")
     return relationship
@@ -70,12 +78,20 @@ async def get_relationship(
 @router.post("", response_model=RelationshipResponse)
 async def create_relationship(
     data: RelationshipCreate,
-    repo: RelationshipRepository = Depends(get_relationship_repo)
+    container: ContainerDep,
 ):
     """Создать новую связь"""
 
     context = get_context()
     company_id = context.active_company.company_id
+
+    all_types = await container.relationship_type_repository.get_all_for_company(include_system=True)
+    valid_type_ids = {t.type_id for t in all_types}
+    if data.relationship_type not in valid_type_ids:
+        raise HTTPException(
+            status_code=422,
+            detail=f"Unknown relationship_type: {data.relationship_type}",
+        )
 
     relationship = Relationship(
         relationship_id=str(uuid.uuid4()),
@@ -90,37 +106,47 @@ async def create_relationship(
         updated_at=datetime.now(timezone.utc)
     )
     
-    await repo.create(relationship)
+    try:
+        await container.relationship_repository.create(relationship)
+    except IntegrityError as exc:
+        if "uq_relationships_unique_edge" in str(exc):
+            raise HTTPException(status_code=409, detail="Relationship already exists")
+        raise
     return relationship
 
 
 @router.delete("/{relationship_id}")
 async def delete_relationship(
     relationship_id: str,
-    repo: RelationshipRepository = Depends(get_relationship_repo)
+    container: ContainerDep,
 ):
     """Удалить связь"""
-    success = await repo.delete(relationship_id)
+    success = await container.relationship_repository.delete(relationship_id)
     if not success:
         raise HTTPException(status_code=404, detail="Relationship not found")
     return {"status": "deleted"}
 
 
-@router.get("/types/", response_model=List[RelationshipTypeResponse])
+@router.get("/types/", response_model=OffsetPage[RelationshipTypeResponse])
 async def list_relationship_types(
-    repo: RelationshipTypeRepository = Depends(get_relationship_type_repo)
-):
-    """Получить все типы связей для компании"""
-    types = await repo.get_all_for_company(include_system=True)
-    return types
+    container: ContainerDep,
+    limit: int = Query(200, ge=1, le=1000),
+    offset: int = Query(0, ge=0),
+) -> OffsetPage[RelationshipTypeResponse]:
+    repo = container.relationship_type_repository
+    types, total = await asyncio.gather(
+        repo.get_all_for_company(include_system=True, limit=limit, offset=offset),
+        repo.count_all_for_company(include_system=True),
+    )
+    return OffsetPage[RelationshipTypeResponse](items=types, total=total, limit=limit, offset=offset)
 
 
 @router.post("/types/", response_model=RelationshipTypeResponse)
 async def create_relationship_type(
     data: RelationshipTypeCreate,
-    repo: RelationshipTypeRepository = Depends(get_relationship_type_repo)
+    container: ContainerDep,
 ):
-    """Создать новый тип связи"""
+    """Создать кастомный тип связи (скрыт из UI, доступен по API)"""
 
     rel_type = RelationshipType(
         type_id=data.type_id,
@@ -135,16 +161,19 @@ async def create_relationship_type(
         is_system=False,
     )
 
-    await repo.create_custom_type(rel_type)
+    await container.relationship_type_repository.create_custom_type(rel_type)
     return rel_type
 
 
 @router.get("/path/", response_model=ShortestPathResponse)
 async def find_shortest_path(
+    container: ContainerDep,
     from_entity_id: str = Query(..., alias="from", description="ID начальной entity"),
     to_entity_id: str = Query(..., alias="to", description="ID конечной entity"),
     max_depth: int = Query(10, ge=1, le=20, description="Максимальная глубина поиска"),
-    service: GraphService = Depends(get_graph_service)
+    created_at_from: Optional[datetime] = Query(None, description="Фильтр created_at >= value"),
+    created_at_to: Optional[datetime] = Query(None, description="Фильтр created_at <= value"),
+    namespace: Optional[str] = Query(None, description="Namespace для проверки лимита сущностей в БД"),
 ):
     """
     Кратчайший путь между entities с учетом весов.
@@ -152,7 +181,7 @@ async def find_shortest_path(
     Использует:
     - Алгоритм: Bidirectional Weighted Dijkstra
     - Учитывает weight из Relationship
-    - Учитывает направленность (is_directed, inverse_type_id)
+    - Возвращает два расчета: directed и undirected
     
     Args:
         from_entity_id: Начальная entity
@@ -167,12 +196,17 @@ async def find_shortest_path(
         403: Нет доступа к entity
     """
     try:
-        path = await service.find_shortest_path(
+        path = await container.graph_service.find_shortest_path(
             from_entity_id=from_entity_id,
             to_entity_id=to_entity_id,
-            max_depth=max_depth
+            max_depth=max_depth,
+            created_at_from=created_at_from,
+            created_at_to=created_at_to,
+            namespace=namespace,
         )
         return path
+    except GraphEntityLimitExceededError as e:
+        raise HTTPException(status_code=400, detail=e.message)
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
     except PermissionError as e:
@@ -180,4 +214,3 @@ async def find_shortest_path(
     except Exception as e:
         logger.error(f"Error finding shortest path: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"Internal error: {str(e)}")
-

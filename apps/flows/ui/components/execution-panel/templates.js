@@ -4,8 +4,10 @@
  */
 import { html } from 'lit';
 import '@platform/lib/components/platform-switch.js';
+import '@platform/lib/components/platform-icon.js';
 
 export function renderPanel(component) {
+    const t = (key) => component.i18n.t(`execution_panel.${key}`);
     const hasResult = component.result !== null;
     const hasError = component.errorMessage !== null;
     const showMocks = component.showMocks;
@@ -16,17 +18,17 @@ export function renderPanel(component) {
         <div class="execution-panel-container">
             <div class="execution-panel-header">
                 <div class="execution-panel-header-top">
-                    <span class="execution-panel-title">Запуск агента</span>
+                    <span class="execution-panel-title">${t('title')}</span>
                     <div class="execution-panel-actions">
                     <platform-switch
                         size="sm"
                         .checked=${component.persistSessionContext}
-                        aria-label="Один и тот же контекст сессии между запусками"
+                        aria-label=${t('persist_aria')}
                         @change=${(e) => { component.persistSessionContext = Boolean(e.detail.value); }}
                     ></platform-switch>
                     <platform-help-hint
                         .text=${component.persistContextHelpText}
-                        label="Справка: контекст сессии"
+                        label=${t('help_hint_label')}
                     ></platform-help-hint>
                     ${showState ? html`
                         <button 
@@ -34,7 +36,7 @@ export function renderPanel(component) {
                             class="action-btn"
                             ?disabled=${!component.hasExecutionData}
                             @click=${component._handleStateClick}
-                            title="Показать State"
+                            title=${t('state_title')}
                         >
                             State
                         </button>
@@ -45,7 +47,7 @@ export function renderPanel(component) {
                             class="action-btn"
                             ?disabled=${!component.hasExecutionData}
                             @click=${component._handleTracingClick}
-                            title="Трейсинг"
+                            title=${t('tracing_title')}
                         >
                             Tracing
                         </button>
@@ -55,7 +57,7 @@ export function renderPanel(component) {
                             type="button"
                             class="action-btn"
                             @click=${component._toggleMocks}
-                            title="Настроить моки"
+                            title=${t('mocks_title')}
                         >
                             Mocks
                         </button>
@@ -64,7 +66,7 @@ export function renderPanel(component) {
                         type="button"
                         class="close-btn"
                         @click=${component._handleClose}
-                        title="Закрыть панель"
+                        title=${t('close_panel')}
                     >
                         ×
                     </button>
@@ -81,7 +83,7 @@ export function renderPanel(component) {
                 ` : ''}
                 <div class="input-row">
                     <div class="input-tools-column">
-                        <label class="file-attach-btn" title="Прикрепить файлы">
+                        <label class="file-attach-btn" title=${t('attach_files')}>
                             <input 
                                 type="file" 
                                 class="file-input" 
@@ -89,7 +91,7 @@ export function renderPanel(component) {
                                 hidden
                                 @change=${component._handleFileSelect}
                             >
-                            <platform-icon name="file" size="20"></platform-icon>
+                            <platform-icon file-icon name="text" size="20"></platform-icon>
                         </label>
                         ${component.isBreakpoint
                             ? html`
@@ -98,7 +100,7 @@ export function renderPanel(component) {
                                       class="btn-run-icon btn-resume-inline"
                                       @click=${component._handleResume}
                                       ?disabled=${component.inputQuestion && !component.message.trim()}
-                                      title=${component.inputQuestion ? 'Отправить ответ' : 'Продолжить выполнение'}
+                                      title=${component.inputQuestion ? t('send_answer') : t('continue_run')}
                                   >
                                       <svg
                                           class="btn-resume-combo-svg"
@@ -120,25 +122,9 @@ export function renderPanel(component) {
                                         type="button"
                                         class="btn-run-icon btn-stop-icon"
                                         @click=${component._handleStop}
-                                        title="Остановить"
+                                        title=${t('stop')}
                                     >
-                                        <svg
-                                            class="btn-stop-svg"
-                                            xmlns="http://www.w3.org/2000/svg"
-                                            viewBox="0 0 24 24"
-                                            width="20"
-                                            height="20"
-                                            aria-hidden="true"
-                                        >
-                                            <rect
-                                                x="5"
-                                                y="5"
-                                                width="14"
-                                                height="14"
-                                                rx="2"
-                                                fill="currentColor"
-                                            />
-                                        </svg>
+                                        <platform-icon name="stop" size="16"></platform-icon>
                                     </button>
                                 `
                               : html`
@@ -147,7 +133,7 @@ export function renderPanel(component) {
                                         class="btn-run-icon ${hasError ? 'btn-retry-icon' : ''}"
                                         @click=${component._handleRun}
                                         ?disabled=${!component.message.trim()}
-                                        title=${hasError ? 'Запустить заново' : 'Запустить'}
+                                        title=${hasError ? t('run_retry') : t('run_start')}
                                     >
                                         <platform-icon name="play" size="20"></platform-icon>
                                     </button>
@@ -155,7 +141,7 @@ export function renderPanel(component) {
                     </div>
                     <textarea
                         class="input-text"
-                        placeholder=${component.inputQuestion ? 'Введите ваш ответ...' : (component.placeholder || 'Введите сообщение для агента...')}
+                        placeholder=${component.inputQuestion ? t('placeholder_answer') : (component.placeholder || t('placeholder_message'))}
                         rows="3"
                         .value=${component.message}
                         @input=${component._handleMessageInput}
@@ -185,12 +171,12 @@ export function renderPanel(component) {
                 <div class="error-section">
                     <div class="error-header">
                         <platform-icon name="x" size="16" style="color: var(--error, #ef4444);"></platform-icon>
-                        <span>Ошибка</span>
+                        <span>${t('error_heading')}</span>
                         <button 
                             type="button"
                             class="error-clear"
                             @click=${() => { component.errorMessage = null; }}
-                            title="Закрыть"
+                            title=${t('close')}
                         >
                             ×
                         </button>
@@ -202,19 +188,19 @@ export function renderPanel(component) {
                         <button 
                             type="button"
                             class="error-copy-btn"
-                            @click=${() => {
+                            @click=${(e) => {
+                                const btn = e.currentTarget;
+                                const copyLabel = t('copy');
                                 navigator.clipboard.writeText(component.errorMessage).then(() => {
-                                    const btn = event.target;
-                                    const originalText = btn.textContent;
-                                    btn.textContent = 'Скопировано!';
+                                    btn.textContent = t('copied');
                                     setTimeout(() => {
-                                        btn.textContent = originalText;
+                                        btn.textContent = copyLabel;
                                     }, 1500);
                                 });
                             }}
-                            title="Копировать"
+                            title=${t('copy')}
                         >
-                            Копировать
+                            ${t('copy')}
                         </button>
                     </div>
                 </div>
@@ -223,12 +209,12 @@ export function renderPanel(component) {
             ${hasResult ? html`
                 <div class="result-section">
                     <div class="result-header">
-                        <span>Результат</span>
+                        <span>${t('result_heading')}</span>
                         <button 
                             type="button"
                             class="result-clear"
                             @click=${component._clearResult}
-                            title="Очистить"
+                            title=${t('clear')}
                         >
                             ×
                         </button>
@@ -242,7 +228,7 @@ export function renderPanel(component) {
             ${component.showMocksSection && showMocks ? html`
                 <div class="mocks-section">
                     <div class="mocks-header">
-                        <span>Настройка моков</span>
+                        <span>${t('mocks_section_title')}</span>
                         <button 
                             type="button"
                             class="mocks-close"
@@ -263,4 +249,3 @@ export function renderPanel(component) {
         </div>
     `;
 }
-

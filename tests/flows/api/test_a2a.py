@@ -1168,12 +1168,12 @@ class TestA2ASkills:
         assert resp.status_code == 404
 
     @pytest.mark.asyncio
-    async def test_create_skill_valid(self, client, flow_id, unique_id):
+    async def test_create_skill_valid(self, client, mutable_flow_id, unique_id):
         """POST /flows/{id}/skills создаёт новый skill."""
         skill_id = f"test_skill_{unique_id}"
         
         resp = await client.post(
-            f"/flows/api/v1/{flow_id}/skills",
+            f"/flows/api/v1/{mutable_flow_id}/skills",
             json={
                 "skill_id": skill_id,
                 "name": "Test Skill",
@@ -1191,24 +1191,21 @@ class TestA2ASkills:
         assert data["status"] == "success"
         assert data["skill_id"] == skill_id
         
-        # Проверяем что skill создан
-        get_resp = await client.get(f"/flows/api/v1/{flow_id}/skills/{skill_id}")
+        get_resp = await client.get(f"/flows/api/v1/{mutable_flow_id}/skills/{skill_id}")
         assert get_resp.status_code == 200
         skill = get_resp.json()
         assert skill["id"] == skill_id
         assert skill["name"] == "Test Skill"
         
-        # Cleanup
-        await client.delete(f"/flows/api/v1/{flow_id}/skills/{skill_id}")
+        await client.delete(f"/flows/api/v1/{mutable_flow_id}/skills/{skill_id}")
 
     @pytest.mark.asyncio
-    async def test_create_skill_duplicate(self, client, flow_id, unique_id):
+    async def test_create_skill_duplicate(self, client, mutable_flow_id, unique_id):
         """POST /flows/{id}/skills возвращает 409 для существующего skill."""
         skill_id = f"test_skill_dup_{unique_id}"
         
-        # Создаём первый раз
         resp1 = await client.post(
-            f"/flows/api/v1/{flow_id}/skills",
+            f"/flows/api/v1/{mutable_flow_id}/skills",
             json={
                 "skill_id": skill_id,
                 "name": "Test Skill",
@@ -1216,9 +1213,8 @@ class TestA2ASkills:
         )
         assert resp1.status_code == 201
         
-        # Пытаемся создать второй раз
         resp2 = await client.post(
-            f"/flows/api/v1/{flow_id}/skills",
+            f"/flows/api/v1/{mutable_flow_id}/skills",
             json={
                 "skill_id": skill_id,
                 "name": "Test Skill",
@@ -1226,8 +1222,7 @@ class TestA2ASkills:
         )
         assert resp2.status_code == 409
         
-        # Cleanup
-        await client.delete(f"/flows/api/v1/{flow_id}/skills/{skill_id}")
+        await client.delete(f"/flows/api/v1/{mutable_flow_id}/skills/{skill_id}")
 
     @pytest.mark.asyncio
     async def test_create_skill_missing_skill_id(self, client, flow_id):
@@ -1253,13 +1248,12 @@ class TestA2ASkills:
         assert resp.status_code == 404
 
     @pytest.mark.asyncio
-    async def test_update_skill_valid(self, client, flow_id, unique_id):
+    async def test_update_skill_valid(self, client, mutable_flow_id, unique_id):
         """PUT /flows/{id}/skills/{skill_id} обновляет существующий skill."""
         skill_id = f"test_skill_update_{unique_id}"
         
-        # Создаём skill
         create_resp = await client.post(
-            f"/flows/api/v1/{flow_id}/skills",
+            f"/flows/api/v1/{mutable_flow_id}/skills",
             json={
                 "skill_id": skill_id,
                 "name": "Original Name",
@@ -1268,9 +1262,8 @@ class TestA2ASkills:
         )
         assert create_resp.status_code == 201
         
-        # Обновляем skill
         update_resp = await client.put(
-            f"/flows/api/v1/{flow_id}/skills/{skill_id}",
+            f"/flows/api/v1/{mutable_flow_id}/skills/{skill_id}",
             json={
                 "skill_id": skill_id,
                 "name": "Updated Name",
@@ -1286,16 +1279,14 @@ class TestA2ASkills:
         assert data["status"] == "success"
         assert data["skill_id"] == skill_id
         
-        # Проверяем что skill обновлён
-        get_resp = await client.get(f"/flows/api/v1/{flow_id}/skills/{skill_id}")
+        get_resp = await client.get(f"/flows/api/v1/{mutable_flow_id}/skills/{skill_id}")
         assert get_resp.status_code == 200
         skill = get_resp.json()
         assert skill["name"] == "Updated Name"
         assert skill["description"] == "Updated description"
         assert "updated" in skill["tags"]
         
-        # Cleanup
-        await client.delete(f"/flows/api/v1/{flow_id}/skills/{skill_id}")
+        await client.delete(f"/flows/api/v1/{mutable_flow_id}/skills/{skill_id}")
 
     @pytest.mark.asyncio
     async def test_update_skill_404_for_nonexistent_skill(self, client, flow_id, unique_id):
@@ -1322,13 +1313,12 @@ class TestA2ASkills:
         assert resp.status_code == 404
 
     @pytest.mark.asyncio
-    async def test_delete_skill_valid(self, client, flow_id, unique_id):
+    async def test_delete_skill_valid(self, client, mutable_flow_id, unique_id):
         """DELETE /flows/{id}/skills/{skill_id} удаляет skill."""
         skill_id = f"test_skill_delete_{unique_id}"
         
-        # Создаём skill
         create_resp = await client.post(
-            f"/flows/api/v1/{flow_id}/skills",
+            f"/flows/api/v1/{mutable_flow_id}/skills",
             json={
                 "skill_id": skill_id,
                 "name": "To Delete",
@@ -1336,15 +1326,13 @@ class TestA2ASkills:
         )
         assert create_resp.status_code == 201
         
-        # Удаляем skill
-        delete_resp = await client.delete(f"/flows/api/v1/{flow_id}/skills/{skill_id}")
+        delete_resp = await client.delete(f"/flows/api/v1/{mutable_flow_id}/skills/{skill_id}")
         assert delete_resp.status_code == 200
         data = delete_resp.json()
         assert data["status"] == "success"
         assert data["skill_id"] == skill_id
         
-        # Проверяем что skill удалён
-        get_resp = await client.get(f"/flows/api/v1/{flow_id}/skills/{skill_id}")
+        get_resp = await client.get(f"/flows/api/v1/{mutable_flow_id}/skills/{skill_id}")
         assert get_resp.status_code == 404
 
     @pytest.mark.asyncio
@@ -1359,13 +1347,29 @@ class TestA2ASkills:
         resp = await client.delete(f"/flows/api/v1/nonexistent_flow/skills/test_skill_{unique_id}")
         assert resp.status_code == 404
 
+    @pytest.fixture
+    async def mutable_flow_id(self, container, unique_id):
+        """Уникальный flow для тестов, мутирующих skills (изоляция от xdist)."""
+        from apps.flows.src.models import FlowConfig
+        fid = f"skill_test_{unique_id}"
+        fc = FlowConfig(
+            flow_id=fid,
+            name="Skill mutation test",
+            entry="main",
+            nodes={"main": {"type": "llm_node", "prompt": "Test"}},
+            edges=[{"from": "main", "to": None}],
+        )
+        await container.flow_repository.set(fc)
+        yield fid
+        await container.flow_repository.delete(fid)
+
     @pytest.mark.asyncio
-    async def test_create_skill_with_edges(self, client, flow_id, unique_id):
+    async def test_create_skill_with_edges(self, client, mutable_flow_id, unique_id):
         """POST /flows/{id}/skills создаёт skill с edges."""
         skill_id = f"test_skill_edges_{unique_id}"
         
         resp = await client.post(
-            f"/flows/api/v1/{flow_id}/skills",
+            f"/flows/api/v1/{mutable_flow_id}/skills",
             json={
                 "skill_id": skill_id,
                 "name": "Test Skill with Edges",
@@ -1373,7 +1377,7 @@ class TestA2ASkills:
                     "entry": "node1",
                     "nodes": {
                         "node1": {"type": "llm_node", "prompt": "Test prompt"},
-                        "node2": {"type": "code", "code": "def run(state):\n    state['result'] = 'ok'\n    return state"},
+                        "node2": {"type": "code", "code": "async def run(state):\n    state['result'] = 'ok'\n    return state"},
                     },
                     "edges": [
                         {"from": "node1", "to": "node2"},
@@ -1387,12 +1391,10 @@ class TestA2ASkills:
         data = resp.json()
         assert data["status"] == "success"
         
-        # Проверяем что skill создан с edges
-        get_resp = await client.get(f"/flows/api/v1/{flow_id}/skills/{skill_id}")
+        get_resp = await client.get(f"/flows/api/v1/{mutable_flow_id}/skills/{skill_id}")
         assert get_resp.status_code == 200
         
-        # Cleanup
-        await client.delete(f"/flows/api/v1/{flow_id}/skills/{skill_id}")
+        await client.delete(f"/flows/api/v1/{mutable_flow_id}/skills/{skill_id}")
 
 
 class TestA2AConversation:
@@ -1627,12 +1629,22 @@ class TestA2ARealisticStreaming:
 
         events = _parse_sse(resp.text)
         artifact_events = [e for e in events if e.get("result", {}).get("kind") == "artifact-update"]
+        text_stream_events = [
+            e
+            for e in artifact_events
+            if not str((e.get("result", {}).get("artifact") or {}).get("name") or "").startswith(
+                "node_"
+            )
+            and any(
+                p.get("kind") == "text"
+                for p in (e.get("result", {}).get("artifact") or {}).get("parts", [])
+            )
+        ]
 
-        assert len(artifact_events) >= 2, "Should have multiple artifact chunks"
+        assert len(text_stream_events) >= 2, "Should have multiple text artifact chunks"
 
-        # Все artifactId должны быть одинаковыми
         artifact_ids = set()
-        for event in artifact_events:
+        for event in text_stream_events:
             result = event.get("result", {})
             artifact_id = result.get("artifact", {}).get("artifactId")
             if artifact_id:
@@ -1657,18 +1669,22 @@ class TestA2ARealisticStreaming:
 
         events = _parse_sse(resp.text)
         artifact_events = [e for e in events if e.get("result", {}).get("kind") == "artifact-update"]
+        content_artifacts = [
+            e
+            for e in artifact_events
+            if not str((e.get("result", {}).get("artifact") or {}).get("name") or "").startswith(
+                "node_"
+            )
+        ]
 
-        # Должен быть хотя бы один чанк
-        assert len(artifact_events) >= 1
+        assert len(content_artifacts) >= 1, "Должен быть хотя бы один контентный artifact chunk"
 
-        # Последний artifact event должен иметь lastChunk=True
-        last_result = artifact_events[-1].get("result", {})
-        assert last_result.get("lastChunk") is True, "Last artifact chunk should have lastChunk=True"
+        last_result = content_artifacts[-1].get("result", {})
+        assert last_result.get("lastChunk") is True, "Last content artifact chunk should have lastChunk=True"
 
-        # Промежуточные не должны быть last
-        for event in artifact_events[:-1]:
+        for event in content_artifacts[:-1]:
             result = event.get("result", {})
-            assert result.get("lastChunk") is not True, "Intermediate chunks should not have lastChunk=True"
+            assert result.get("lastChunk") is not True, "Intermediate content chunks should not have lastChunk=True"
 
     @pytest.mark.asyncio
     async def test_stream_status_events(self, client, flow_id, mock_llm_with_queue, sync_tools):

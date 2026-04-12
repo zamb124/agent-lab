@@ -4,11 +4,11 @@ Tasks для обслуживания и очистки vector_documents.
 
 from typing import Any, Dict, List
 
+from apps.rag.container import get_rag_container
 from apps.rag_worker.broker import broker
 from core.config import get_settings
 from core.context import Context, clear_context, set_context
 from core.logging import get_logger
-from core.rag.factory import get_default_rag_provider
 from core.rag.upload_profile_binding import UploadProfileBinding
 
 logger = get_logger(__name__)
@@ -27,7 +27,7 @@ async def cleanup_namespace_task(namespace_id: str) -> Dict[str, Any]:
     """
     logger.info(f"RAG Worker: очистка namespace {namespace_id}")
 
-    provider = get_default_rag_provider()
+    provider = get_rag_container().rag_provider
 
     success = await provider.delete_namespace(namespace_id)
 
@@ -52,7 +52,7 @@ async def list_documents_task(namespace_id: str) -> List[Dict[str, Any]]:
     """
     logger.info(f"RAG Worker: получение списка документов в namespace {namespace_id}")
 
-    provider = get_default_rag_provider()
+    provider = get_rag_container().rag_provider
     documents = await provider.list_documents(namespace_id)
 
     return [
@@ -83,7 +83,7 @@ async def reindex_document_task(
         namespace_id: ID namespace
         document_id: ID документа для удаления
         s3_key: Ключ файла в S3
-        document_name: Имя документа
+        document_name: Имя файла
         metadata: Метаданные
 
     Returns:
@@ -103,7 +103,7 @@ async def reindex_document_task(
             company_id,
         )
 
-        provider = get_default_rag_provider()
+        provider = get_rag_container().rag_provider
 
         await provider.delete_document(namespace_id, document_id)
 

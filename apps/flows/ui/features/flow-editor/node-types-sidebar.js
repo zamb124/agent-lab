@@ -15,7 +15,7 @@ const TRIGGER_TYPES = {
 };
 
 const STATUS_COLORS = {
-    active: '#10b981',
+    active: '#99A6F9',
     inactive: '#6b7280',
     error: '#ef4444',
 };
@@ -23,47 +23,43 @@ const STATUS_COLORS = {
 const NODE_CATEGORIES = [
     {
         id: 'core',
-        name: 'Core',
         items: [
-            { type: 'llm_node', name: 'LLM Node', icon: 'llm_node', color: '#f59e0b', description: 'LLM и tools (ReAct)' },
-            { type: 'code', name: 'Code Node', icon: 'code', color: '#8b5cf6', description: 'Python функция' },
+            { type: 'llm_node', paletteKey: 'llm_node', icon: 'llm_node', color: '#f59e0b' },
+            { type: 'code', paletteKey: 'code_node', icon: 'code', color: '#8b5cf6' },
         ]
     },
     {
         id: 'tools',
-        name: 'Tools',
         items: [
-            { type: 'external_api', name: 'External API', icon: 'globe', color: '#06b6d4', description: 'HTTP API вызов' },
-            { type: 'mcp', name: 'MCP Tool', icon: 'plug', color: '#8b5cf6', description: 'MCP сервер tool' },
+            { type: 'external_api', paletteKey: 'external_api', icon: 'globe', color: '#06b6d4' },
+            { type: 'mcp', paletteKey: 'mcp', icon: 'plug', color: '#8b5cf6' },
         ]
     },
     {
         id: 'integrations',
-        name: 'Integrations',
         items: [
-            { type: 'remote_flow', name: 'Remote A2A', icon: 'cloud', color: '#3b82f6', description: 'Внешний endpoint по A2A' },
-            { type: 'flow', name: 'Flow Node', icon: 'workflow', color: '#ec4899', description: 'Вложенный flow (subflow)' },
+            { type: 'remote_flow', paletteKey: 'remote_flow', icon: 'cloud', color: '#3b82f6' },
+            { type: 'flow', paletteKey: 'flow_node', icon: 'workflow', color: '#ec4899' },
         ]
     },
     {
         id: 'channels',
-        name: 'Channels',
         items: [
-            { type: 'channel', name: 'Channel', icon: 'send', color: '#10b981', description: 'Отправка в каналы (Telegram, Email)' },
+            { type: 'channel', paletteKey: 'channel', icon: 'send', color: '#99A6F9' },
+            { type: 'hitl_node', paletteKey: 'hitl_node', icon: 'users', color: '#0ea5e9' },
         ]
     },
     {
         id: 'resources',
-        name: 'Resources',
         items: [
-            { type: 'code', name: 'Code', icon: 'code', color: '#8b5cf6', description: 'Inline Python/JS код', isResource: true },
-            { type: 'rag', name: 'RAG', icon: 'search', color: '#3b82f6', description: 'RAG namespace для поиска', isResource: true },
-            { type: 'files', name: 'Files', icon: 'folder', color: '#f59e0b', description: 'S3/MinIO файловое хранилище', isResource: true },
-            { type: 'prompt', name: 'Prompt', icon: 'chat', color: '#10b981', description: 'Шаблон промпта', isResource: true },
-            { type: 'llm', name: 'LLM', icon: 'bot', color: '#ec4899', description: 'LLM модель', isResource: true },
-            { type: 'secret', name: 'Secret', icon: 'key', color: '#ef4444', description: 'Секрет из переменных', isResource: true },
-            { type: 'http', name: 'HTTP', icon: 'globe', color: '#06b6d4', description: 'HTTP endpoint', isResource: true },
-            { type: 'cache', name: 'Cache', icon: 'database', color: '#14b8a6', description: 'Redis cache namespace', isResource: true },
+            { type: 'code', paletteKey: 'resource_code', icon: 'code', color: '#8b5cf6', isResource: true },
+            { type: 'rag', paletteKey: 'resource_rag', icon: 'search', color: '#3b82f6', isResource: true },
+            { type: 'files', paletteKey: 'resource_files', icon: 'folder', color: '#f59e0b', isResource: true },
+            { type: 'prompt', paletteKey: 'resource_prompt', icon: 'chat', color: '#99A6F9', isResource: true },
+            { type: 'llm', paletteKey: 'resource_llm', icon: 'bot', color: '#ec4899', isResource: true },
+            { type: 'secret', paletteKey: 'resource_secret', icon: 'key', color: '#ef4444', isResource: true },
+            { type: 'http', paletteKey: 'resource_http', icon: 'globe', color: '#06b6d4', isResource: true },
+            { type: 'cache', paletteKey: 'resource_cache', icon: 'database', color: '#14b8a6', isResource: true },
         ]
     },
 ];
@@ -315,18 +311,32 @@ export class NodeTypesSidebar extends PlatformElement {
         this._searchQuery = e.target.value.toLowerCase();
     }
 
+    _paletteName(item) {
+        return this.i18n.t(`node_palette.${item.paletteKey}.name`);
+    }
+
+    _paletteDesc(item) {
+        return this.i18n.t(`node_palette.${item.paletteKey}.description`);
+    }
+
+    _categoryTitle(cat) {
+        return this.i18n.t(`node_palette.category_${cat.id}`);
+    }
+
     _getFilteredCategories() {
-        if (!this._searchQuery) {
+        const q = this._searchQuery.trim().toLowerCase();
+        if (!q) {
             return NODE_CATEGORIES;
         }
-        
-        return NODE_CATEGORIES.map(cat => ({
+
+        return NODE_CATEGORIES.map((cat) => ({
             ...cat,
-            items: cat.items.filter(item => 
-                item.name.toLowerCase().includes(this._searchQuery) ||
-                item.description.toLowerCase().includes(this._searchQuery)
-            )
-        })).filter(cat => cat.items.length > 0);
+            items: cat.items.filter((item) => {
+                const name = this._paletteName(item).toLowerCase();
+                const desc = this._paletteDesc(item).toLowerCase();
+                return name.includes(q) || desc.includes(q);
+            }),
+        })).filter((cat) => cat.items.length > 0);
     }
 
     _onDragStart(e, item) {
@@ -358,7 +368,7 @@ export class NodeTypesSidebar extends PlatformElement {
                 draggable="true"
                 @dragstart=${(e) => this._onDragStart(e, item)}
                 @dragend=${this._onDragEnd}
-                title=${item.description}
+                title=${this._paletteDesc(item)}
             >
                 <div 
                     class="node-icon" 
@@ -367,7 +377,7 @@ export class NodeTypesSidebar extends PlatformElement {
                     <platform-icon name=${item.icon} size="16"></platform-icon>
                 </div>
                 <div class="node-info">
-                    <div class="node-name">${item.name}</div>
+                    <div class="node-name">${this._paletteName(item)}</div>
                 </div>
             </div>
         `;
@@ -377,7 +387,7 @@ export class NodeTypesSidebar extends PlatformElement {
         return html`
             ${showDivider ? html`<div class="category-divider"></div>` : ''}
             <div class="category">
-                <div class="category-header">${category.name}</div>
+                <div class="category-header">${this._categoryTitle(category)}</div>
                 <div class="category-items">
                     ${category.items.map(item => this._renderNodeItem(item))}
                 </div>
@@ -413,13 +423,13 @@ export class NodeTypesSidebar extends PlatformElement {
         return html`
             <div class="triggers-section">
                 <div class="triggers-header">
-                    <span class="triggers-title">Triggers</span>
-                    <button class="add-trigger-btn" @click=${this._onAddTrigger} title="Добавить триггер">
+                    <span class="triggers-title">${this.i18n.t('node_types_sidebar.triggers_title')}</span>
+                    <button class="add-trigger-btn" @click=${this._onAddTrigger} title=${this.i18n.t('node_types_sidebar.add_trigger_title')}>
                         <platform-icon name="plus" size="12"></platform-icon>
                     </button>
                 </div>
                 ${triggerEntries.length === 0 ? html`
-                    <div class="triggers-empty">Нет триггеров</div>
+                    <div class="triggers-empty">${this.i18n.t('node_types_sidebar.empty_triggers')}</div>
                 ` : triggerEntries.map(([triggerId, trigger]) => 
                     this._renderTriggerItem(triggerId, trigger)
                 )}
@@ -439,7 +449,7 @@ export class NodeTypesSidebar extends PlatformElement {
                     <input 
                         type="text" 
                         class="search-input"
-                        placeholder="Search nodes..."
+                        placeholder=${this.i18n.t('node_types_sidebar.search_placeholder')}
                         .value=${this._searchQuery}
                         @input=${this._onSearch}
                     />

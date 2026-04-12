@@ -38,10 +38,6 @@ class EmbedConfigRepository(BaseRepository[EmbedConfig]):
     def _extract_entity_id(self, entity: EmbedConfig) -> str:
         return entity.embed_id
     
-    async def list(self, limit: int = 100) -> list[EmbedConfig]:
-        """Получение списка всех конфигураций для текущей компании"""
-        return await self.list_all(limit=limit)
-    
     async def increment_usage(self, embed_id: str) -> None:
         """Увеличение счетчика использований виджета"""
         config = await self.get(embed_id)

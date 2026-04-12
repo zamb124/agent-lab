@@ -1,7 +1,7 @@
 """
 Точка входа для Sync Worker.
 
-Запуск: taskiq worker apps.sync_worker.worker:broker
+Запуск: taskiq worker apps.sync_worker.worker:worker_app
 """
 
 from core.config import set_settings
@@ -11,9 +11,9 @@ from apps.sync.config import SyncSettings
 
 set_settings(SyncSettings(**load_merged_config(service_name="sync_worker")))
 
-from apps.sync.realtime.broker import broker
+from apps.sync.realtime.broker import broker as worker_app
 
 import apps.sync.realtime.tasks  # noqa: F401
 import apps.sync.realtime.notification_tasks  # noqa: F401
 
-__all__ = ["broker"]
+__all__ = ["worker_app"]

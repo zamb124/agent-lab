@@ -2,18 +2,20 @@
 
 from fastapi import APIRouter, HTTPException
 
-from apps.sync.container import get_sync_container
+from apps.sync.dependencies import ContainerDep
 from apps.sync.models.git import GitResourceRefRead, GitResourceRefCreate
 from apps.sync.realtime.commands import CommandEnvelope
 from apps.sync.realtime.tasks import handle_command
+from core.config import get_settings
 from core.context import get_context
 
 router = APIRouter()
 
 
 @router.post("/resources", status_code=201)
-async def upsert_git_resource(body: GitResourceRefCreate) -> GitResourceRefRead:
+async def upsert_git_resource(container: ContainerDep, body: GitResourceRefCreate) -> GitResourceRefRead:
     """Создание/обновление Git-ресурса через TaskIQ."""
+    _ = container
     context = get_context()
     cmd = CommandEnvelope(
         id=__import__("uuid").uuid4().hex,
@@ -23,16 +25,17 @@ async def upsert_git_resource(body: GitResourceRefCreate) -> GitResourceRefRead:
         payload={"body": body.model_dump()},
     )
     task = await handle_command.kiq(cmd.model_dump())
-    res = await task.wait_result(timeout=300.0)
+    res = await task.wait_result(
+        timeout=get_settings().sync_taskiq_wait_result_timeout_seconds,
+    )
     if res.is_err:
         raise RuntimeError(f"Command failed: {res.error}")
     return GitResourceRefRead.model_validate(res.return_value["result"])
 
 
 @router.get("/resources/{git_ref_id}")
-async def get_git_resource(git_ref_id: str) -> GitResourceRefRead:
+async def get_git_resource(git_ref_id: str, container: ContainerDep) -> GitResourceRefRead:
     """Получение Git-ресурса по ID."""
-    container = get_sync_container()
     ref = await container.git_resource_ref_repository.get(git_ref_id)
     if ref is None:
         raise HTTPException(status_code=404, detail="Git resource not found")

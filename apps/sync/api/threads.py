@@ -1,30 +1,32 @@
 """API роутер для тредов (Threads)."""
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, HTTPException, Query
 
-from apps.sync.container import get_sync_container
-from apps.sync.models.common import PaginationRequest
+from core.pagination import OffsetPage
+from apps.sync.dependencies import ContainerDep
 from apps.sync.models.threads import ThreadRead, ThreadCreate, ThreadRow
 from apps.sync.realtime.commands import CommandEnvelope
 from apps.sync.realtime.tasks import handle_command
+from core.config import get_settings
 from core.context import get_context
 
 router = APIRouter()
 
 
-@router.get("/")
+@router.get("/", response_model=OffsetPage[ThreadRow])
 async def list_threads(
     channel_id: str,
-    pagination: PaginationRequest = Depends(),
-) -> list[ThreadRow]:
+    container: ContainerDep,
+    limit: int = Query(50, ge=1, le=200),
+    offset: int = Query(0, ge=0),
+) -> OffsetPage[ThreadRow]:
     """Список тредов в канале."""
     context = get_context()
-    container = get_sync_container()
     threads = await container.thread_repository.list_by_channel(
-        channel_id, limit=pagination.limit,
+        channel_id, limit=limit,
         company_id=context.active_company.company_id,
     )
-    return [
+    items = [
         ThreadRow(
             id=t.thread_id,
             channel_id=t.channel_id,
@@ -35,11 +37,13 @@ async def list_threads(
         )
         for t in threads
     ]
+    return OffsetPage[ThreadRow](items=items, total=len(items), limit=limit, offset=offset)
 
 
 @router.post("/", status_code=201)
-async def create_thread(channel_id: str, body: ThreadCreate) -> ThreadRead:
+async def create_thread(container: ContainerDep, channel_id: str, body: ThreadCreate) -> ThreadRead:
     """Создание треда через TaskIQ."""
+    _ = container
     context = get_context()
     cmd = CommandEnvelope(
         id=__import__("uuid").uuid4().hex,
@@ -49,19 +53,19 @@ async def create_thread(channel_id: str, body: ThreadCreate) -> ThreadRead:
         payload={"body": body.model_dump()},
     )
     task = await handle_command.kiq(cmd.model_dump())
-    res = await task.wait_result(timeout=300.0)
+    res = await task.wait_result(
+        timeout=get_settings().sync_taskiq_wait_result_timeout_seconds,
+    )
     if res.is_err:
         raise RuntimeError(f"Command failed: {res.error}")
     return ThreadRead.model_validate(res.return_value["result"])
 
 
 @router.get("/{thread_id}")
-async def get_thread(thread_id: str) -> ThreadRow:
+async def get_thread(thread_id: str, container: ContainerDep) -> ThreadRow:
     """Получение треда по ID."""
-    container = get_sync_container()
     thread = await container.thread_repository.get(thread_id)
     if thread is None:
-        from fastapi import HTTPException
         raise HTTPException(status_code=404, detail="Thread not found")
     return ThreadRow(
         id=thread.thread_id,

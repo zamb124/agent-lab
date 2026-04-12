@@ -97,7 +97,7 @@ class TestStateRepositorySearchSessions:
         await repo.set(session1_id, state1)
         await repo.set(session2_id, state2)
 
-        sessions, total = await repo.search_sessions(limit=100)
+        sessions, total = await repo.search_sessions(limit=500)
 
         assert total >= 2
         session_ids = [s.session_id for s in sessions]

@@ -13,6 +13,7 @@ from core.app import create_service_app
 from core.logging import get_logger
 from .config import RAGSettings, get_rag_settings
 from .container import get_rag_container
+from .dependencies import ContainerDep
 from .api import (
     providers_router,
     namespaces_router,
@@ -81,8 +82,9 @@ if core_frontend_path.exists():
 @app.get("/rag/")
 @app.get("/rag/ui")
 @app.get("/rag/ui/{path:path}")
-async def serve_ui(path: str = ""):
+async def serve_ui(container: ContainerDep, path: str = ""):
     """Отдает SPA для RAG UI"""
+    _ = container
     index_path = ui_path / "index.html"
     if index_path.exists():
         return FileResponse(index_path)

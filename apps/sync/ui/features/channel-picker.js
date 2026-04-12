@@ -6,6 +6,8 @@ import { PlatformElement } from '@platform/lib/platform-element/index.js';
 import { glassStyles } from '@platform/lib/styles/shared/glass.styles.js';
 import { buttonStyles } from '@platform/lib/styles/shared/button.styles.js';
 import { SyncStore } from '../store/sync.store.js';
+import '@platform/lib/components/platform-icon.js';
+import './sync-channel-row.js';
 
 export class ChannelPicker extends PlatformElement {
     static styles = [
@@ -16,7 +18,9 @@ export class ChannelPicker extends PlatformElement {
             :host {
                 display: block;
                 padding: var(--space-6);
-                flex: 1;
+                flex: 1 1 0;
+                min-height: 0;
+                overflow-y: auto;
             }
 
             .hint {
@@ -49,12 +53,14 @@ export class ChannelPicker extends PlatformElement {
                 color: white;
             }
 
-            .adhoc-btn svg {
+            .adhoc-btn svg,
+            .adhoc-btn platform-icon {
                 flex-shrink: 0;
                 color: var(--accent);
             }
 
-            .adhoc-btn:hover svg {
+            .adhoc-btn:hover svg,
+            .adhoc-btn:hover platform-icon {
                 color: white;
             }
 
@@ -72,16 +78,16 @@ export class ChannelPicker extends PlatformElement {
             }
 
             .channel-card {
-                padding: var(--space-4);
+                padding: 0;
                 border-radius: var(--radius-xl);
                 border: 1px solid var(--glass-border-subtle);
                 background: var(--glass-solid-subtle);
-                cursor: pointer;
                 text-align: left;
                 transition: all var(--duration-normal);
-                display: flex;
-                flex-direction: column;
-                gap: var(--space-2);
+                display: block;
+                width: 100%;
+                box-sizing: border-box;
+                overflow: hidden;
             }
 
             .channel-card:hover {
@@ -91,18 +97,10 @@ export class ChannelPicker extends PlatformElement {
                 transform: translateY(-2px);
             }
 
-            .channel-name {
-                font-size: var(--text-sm);
-                font-weight: var(--font-semibold);
-                color: var(--text-primary);
-                overflow: hidden;
-                text-overflow: ellipsis;
-                white-space: nowrap;
-            }
-
-            .channel-type {
-                font-size: var(--text-xs);
-                color: var(--text-tertiary);
+            .channel-card sync-channel-row {
+                cursor: pointer;
+                display: block;
+                width: 100%;
             }
 
             .empty {
@@ -124,10 +122,12 @@ export class ChannelPicker extends PlatformElement {
         this._channels = s.channels;
         this._chat = s.chat;
         this._sidebarSpaceFilterIds = s.ui.sidebarSpaceFilterIds ?? [];
+        this._i18nUnsub = null;
     }
 
     connectedCallback() {
         super.connectedCallback();
+        this._i18nUnsub = this.i18n.subscribe(() => this.requestUpdate());
         this._unsubscribe = SyncStore.subscribe(state => {
             this._channels = state.channels;
             this._chat = state.chat;
@@ -137,6 +137,8 @@ export class ChannelPicker extends PlatformElement {
 
     disconnectedCallback() {
         super.disconnectedCallback?.();
+        this._i18nUnsub?.();
+        this._i18nUnsub = null;
         this._unsubscribe?.();
     }
 
@@ -150,42 +152,38 @@ export class ChannelPicker extends PlatformElement {
     }
 
     render() {
+        const ts = (key, params) => this.i18n.t(key, params ?? {});
         const channels = SyncStore.getChannelsForPickerList();
         const loading = this._channels.loading;
         const hasFilter = Array.isArray(this._sidebarSpaceFilterIds) && this._sidebarSpaceFilterIds.length > 0;
 
         return html`
-            <div class="hint">Выбери канал</div>
+            <div class="hint">${ts('chat_view.title_pick_channel')}</div>
             <div class="adhoc-row">
                 <button type="button" class="adhoc-btn" @click=${this._emitAdhocRequest}>
-                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                        <polygon points="23 7 16 12 23 17 23 7"/>
-                        <rect x="1" y="5" width="15" height="14" rx="2" ry="2"/>
-                    </svg>
-                    Создать Sync
+                    <platform-icon name="video-call" size="20" filled aria-hidden="true"></platform-icon>
+                    ${ts('sidebar.create_sync_label')}
                 </button>
                 <div class="adhoc-hint">
-                    Создаётся служебный канал встречи и сразу запускается видеозвонок. Канал скрыт в списках.
+                    ${ts('channel_picker.adhoc_description')}
                 </div>
             </div>
-            ${loading ? html`<div class="hint">Загрузка...</div>` : ''}
+            ${loading ? html`<div class="hint">${ts('sidebar.loading')}</div>` : ''}
             <div class="grid">
                 ${channels.length === 0 && !loading
                     ? html`<div class="empty">${hasFilter
-                        ? 'Нет каналов в выбранных пространствах.'
-                        : 'Каналов пока нет.'}</div>`
+                        ? ts('sidebar.no_channels_filtered')
+                        : ts('sidebar.no_channels_yet')}</div>`
                     : ''}
-                ${channels.map((ch) => {
-                    const title = ch.type === 'direct' && ch.peer?.display_name
-                        ? ch.peer.display_name
-                        : (ch.name ?? ch.id);
-                    return html`
-                        <button class="channel-card" @click=${() => this._pick(ch)}>
-                            <span class="channel-name">${title}</span>
-                            <span class="channel-type">${SyncStore.channelRowMetaLabel(ch)}</span>
-                        </button>
-                    `;
-                })}
+                ${channels.map((ch) => html`
+                    <div class="channel-card">
+                        <sync-channel-row
+                            .channel=${ch}
+                            .active=${false}
+                            @click=${() => void this._pick(ch)}
+                        ></sync-channel-row>
+                    </div>
+                `)}
             </div>
         `;
     }

@@ -318,6 +318,8 @@ export class ToolPickerModal extends PlatformModal {
         loading: { type: Boolean },
         allItems: { type: Array },
         activeTag: { type: String },
+        /** Режим drop graph code-ноды: только tools (без flow), один выбор как радио */
+        codeNodePlacement: { type: Boolean, attribute: 'code-node-placement' },
     };
 
     constructor() {
@@ -327,8 +329,8 @@ export class ToolPickerModal extends PlatformModal {
         this.allItems = [];
         this.activeTag = 'all';
         this.loading = false;
-        this.title = 'Добавить инструменты';
         this.size = 'full';
+        this.codeNodePlacement = false;
     }
 
     renderHeader() {
@@ -337,7 +339,8 @@ export class ToolPickerModal extends PlatformModal {
 
     connectedCallback() {
         super.connectedCallback();
-        
+        this.title = this.i18n.t('tool_picker.title');
+
         if (this.initialSelection && this.initialSelection.length > 0) {
             this.selectedTools = new Set(this.initialSelection);
         }
@@ -349,10 +352,10 @@ export class ToolPickerModal extends PlatformModal {
         this.loading = true;
         
         try {
-            const items = await this.a2a.get('/api/v1/tools/all');
-            this.allItems = items || [];
+            const data = await this.a2a.get('/api/v1/tools/all');
+            this.allItems = data.items ?? [];
         } catch (error) {
-            this.error(`Ошибка загрузки инструментов: ${error.message}`);
+            this.error(this.i18n.t('tool_picker.err_load', { message: error.message }));
             this.allItems = [];
         }
         
@@ -360,8 +363,8 @@ export class ToolPickerModal extends PlatformModal {
     }
 
     _isReasonTool(item) {
-        return item.tool_type === 'reason' || 
-               item.tool_type === 'exit' || 
+        return item.react_role === 'reason' || 
+               item.react_role === 'exit' || 
                item.tool_id === 'reason' || 
                item.tool_id === 'final_answer';
     }
@@ -381,9 +384,16 @@ export class ToolPickerModal extends PlatformModal {
         return null;
     }
 
+    _getBaseItems() {
+        if (this.codeNodePlacement) {
+            return this.allItems.filter((item) => item.item_type !== 'flow');
+        }
+        return this.allItems;
+    }
+
     _getAllTags() {
         const tags = new Set();
-        this.allItems.forEach(item => {
+        this._getBaseItems().forEach(item => {
             if (this._isReasonTool(item)) {
                 return;
             }
@@ -393,16 +403,17 @@ export class ToolPickerModal extends PlatformModal {
     }
 
     _getFilteredItems() {
+        const base = this._getBaseItems();
         if (this.activeTag === 'all') {
-            return this.allItems;
+            return base;
         }
         if (this.activeTag === 'reason') {
-            return this.allItems.filter(item => this._isReasonTool(item));
+            return base.filter(item => this._isReasonTool(item));
         }
         if (this.activeTag === 'mcp') {
-            return this.allItems.filter(item => this._isMCPTool(item));
+            return base.filter(item => this._isMCPTool(item));
         }
-        return this.allItems.filter(item => 
+        return base.filter(item => 
             !this._isReasonTool(item) && (item.tags || ['misc']).includes(this.activeTag)
         );
     }
@@ -413,6 +424,14 @@ export class ToolPickerModal extends PlatformModal {
 
     _onCardClick(item) {
         const toolId = item.tool_id;
+        if (this.codeNodePlacement) {
+            if (this.selectedTools.has(toolId)) {
+                this.selectedTools = new Set();
+            } else {
+                this.selectedTools = new Set([toolId]);
+            }
+            return;
+        }
         if (this.selectedTools.has(toolId)) {
             this.selectedTools.delete(toolId);
         } else {
@@ -426,31 +445,38 @@ export class ToolPickerModal extends PlatformModal {
         this.close();
     }
 
+    _toolPickerTagLabel(tag) {
+        const keyByTag = {
+            misc: 'tag_misc',
+            math: 'tag_math',
+            docs: 'tag_docs',
+            api: 'tag_api',
+            validation: 'tag_validation',
+            flow: 'tag_flow',
+        };
+        const sub = keyByTag[tag];
+        if (sub) {
+            return this.i18n.t(`tool_picker.${sub}`);
+        }
+        return tag;
+    }
+
     _renderTags() {
         const tags = this._getAllTags();
-        const tagLabels = {
-            'all': 'Все',
-            'reason': 'Reason',
-            'misc': 'Общие',
-            'math': 'Математика',
-            'docs': 'Документы',
-            'api': 'API интеграции',
-            'validation': 'Валидация',
-            'flow': 'Flows'
-        };
+        const base = this._getBaseItems();
 
-        const reasonCount = this.allItems.filter(i => this._isReasonTool(i)).length;
-        const mcpCount = this.allItems.filter(i => this._isMCPTool(i)).length;
+        const reasonCount = base.filter(i => this._isReasonTool(i)).length;
+        const mcpCount = base.filter(i => this._isMCPTool(i)).length;
         
         return html`
-            <div class="sidebar-title">Категории</div>
+            <div class="sidebar-title">${this.i18n.t('tool_picker.categories')}</div>
             
             <button 
                 class="tag-btn ${this.activeTag === 'all' ? 'active' : ''}" 
                 @click=${() => this._onTagClick('all')}
             >
-                <span>Все</span>
-                <span class="tag-count">${this.allItems.length}</span>
+                <span>${this.i18n.t('tool_picker.tag_all')}</span>
+                <span class="tag-count">${base.length}</span>
             </button>
             
             ${mcpCount > 0 ? html`
@@ -458,7 +484,7 @@ export class ToolPickerModal extends PlatformModal {
                     class="tag-btn tag-btn-mcp ${this.activeTag === 'mcp' ? 'active' : ''}" 
                     @click=${() => this._onTagClick('mcp')}
                 >
-                    <span>MCP</span>
+                    <span>${this.i18n.t('tool_picker.tag_mcp')}</span>
                     <span class="tag-count">${mcpCount}</span>
                 </button>
             ` : ''}
@@ -468,14 +494,14 @@ export class ToolPickerModal extends PlatformModal {
                     class="tag-btn tag-btn-reason ${this.activeTag === 'reason' ? 'active' : ''}" 
                     @click=${() => this._onTagClick('reason')}
                 >
-                    <span>Reason</span>
+                    <span>${this.i18n.t('tool_picker.tag_reason')}</span>
                     <span class="tag-count">${reasonCount}</span>
                 </button>
             ` : ''}
             
             ${tags.map(tag => {
-                const label = tagLabels[tag] || tag;
-                const count = this.allItems.filter(i => !this._isReasonTool(i) && (i.tags || ['misc']).includes(tag)).length;
+                const label = this._toolPickerTagLabel(tag);
+                const count = base.filter(i => !this._isReasonTool(i) && (i.tags || ['misc']).includes(tag)).length;
                 return html`
                     <button 
                         class="tag-btn ${this.activeTag === tag ? 'active' : ''}" 
@@ -508,7 +534,7 @@ export class ToolPickerModal extends PlatformModal {
                     <span class="card-icon">
                         <platform-icon name="${isFlow ? 'workflow' : (isMCP ? 'plug' : 'tool')}" size="20"></platform-icon>
                     </span>
-                    <span class="card-type-badge">${isFlow ? 'Flow' : 'Tool'}</span>
+                    <span class="card-type-badge">${isFlow ? this.i18n.t('tool_picker.badge_flow') : this.i18n.t('tool_picker.badge_tool')}</span>
                     ${isMCP && mcpServer ? html`
                         <span class="mcp-badge">mcp:${mcpServer}</span>
                     ` : ''}
@@ -536,7 +562,7 @@ export class ToolPickerModal extends PlatformModal {
         const items = this._getFilteredItems();
         
         if (items.length === 0) {
-            return html`<div class="picker-empty">Нет инструментов</div>`;
+            return html`<div class="picker-empty">${this.i18n.t('tool_picker.empty')}</div>`;
         }
         
         return html`
@@ -562,7 +588,7 @@ export class ToolPickerModal extends PlatformModal {
                 </aside>
                 <main class="picker-main">
                     <div class="picker-header">
-                        <span class="selected-counter">Выбрано: ${this.selectedTools.size}</span>
+                        <span class="selected-counter">${this.i18n.t('tool_picker.selected', { count: this.selectedTools.size })}</span>
                     </div>
                     ${this._renderCards()}
                 </main>
@@ -570,13 +596,18 @@ export class ToolPickerModal extends PlatformModal {
         `;
     }
 
+    renderSaveHeaderButton() {
+        return this._renderHeaderSaveIcon({
+            onClick: () => this._onSave(),
+            disabled: false,
+            title: this.i18n.t('tool_picker.add_with_count', { count: this.selectedTools.size }),
+        });
+    }
+
     renderFooter() {
         return html`
             <button type="button" class="btn btn-secondary" @click=${this.close}>
-                Отмена
-            </button>
-            <button type="button" class="btn btn-primary" @click=${this._onSave}>
-                Добавить (${this.selectedTools.size})
+                ${this.i18n.t('editor.cancel')}
             </button>
         `;
     }

@@ -43,7 +43,7 @@ def _build_parser() -> argparse.ArgumentParser:
     u.add_argument(
         "--service",
         choices=_SERVICE_CHOICES,
-        help="Только указанный сервис; без флага — все пять",
+        help="Только указанный сервис; без флага — все из migrations/services.json",
     )
 
     r = sub.add_parser("revision", help="создать ревизию в дереве сервиса")

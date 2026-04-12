@@ -1,6 +1,11 @@
 /**
  * PWA Service - управление Service Worker и Push Notifications
  */
+import { AppEvents } from '../lib/utils/types.js';
+
+const STORAGE_WEB_PUSH_ENDPOINT = 'humanitec_web_push_endpoint';
+const STORAGE_IOS_DEVICE_TOKEN = 'humanitec_ios_device_token_posted';
+const STORAGE_DEPLOYMENT_VERSION = 'humanitec_deployment_version';
 
 export class PWAService {
     constructor(baseUrl = '') {
@@ -9,7 +14,8 @@ export class PWAService {
         this.pushSubscription = null;
         this._deferredPrompt = null;
         this._updateAvailable = false;
-        
+        this._swPushMessageListenerAttached = false;
+
         // Слушаем beforeinstallprompt для A2HS
         window.addEventListener('beforeinstallprompt', (e) => {
             e.preventDefault();
@@ -24,6 +30,63 @@ export class PWAService {
         });
     }
 
+    _healthUrl() {
+        const trimmed = (this.baseUrl || '').trim().replace(/\/$/, '');
+        return trimmed ? `${trimmed}/health` : '/health';
+    }
+
+    /**
+     * Сравнивает `deployment_version` из GET {baseUrl}/health с localStorage; при смене релиза — сброс SW и Cache Storage.
+     * @returns {Promise<boolean>} true, если вызвана перезагрузка страницы
+     */
+    async _syncDeploymentAndMaybeResetClient() {
+        let res;
+        try {
+            res = await fetch(this._healthUrl(), {
+                credentials: 'same-origin',
+                cache: 'no-store',
+            });
+        } catch (e) {
+            console.warn('[PWA] health недоступен, пропуск проверки версии деплоя:', e);
+            return false;
+        }
+        if (!res.ok) {
+            console.warn('[PWA] health вернул', res.status, '— пропуск проверки версии деплоя');
+            return false;
+        }
+        let data;
+        try {
+            data = await res.json();
+        } catch (e) {
+            console.warn('[PWA] Некорректный JSON health, пропуск проверки версии:', e);
+            return false;
+        }
+        const current = data.deployment_version;
+        if (typeof current !== 'string' || current.length === 0) {
+            return false;
+        }
+        const stored = localStorage.getItem(STORAGE_DEPLOYMENT_VERSION);
+        if (stored !== null && stored !== current) {
+            console.log('[PWA] Новый релиз:', current, '(было:', stored, ') — сброс SW и кэшей');
+            await this._unregisterAllServiceWorkersAndClearCaches();
+            localStorage.setItem(STORAGE_DEPLOYMENT_VERSION, current);
+            window.location.reload();
+            return true;
+        }
+        localStorage.setItem(STORAGE_DEPLOYMENT_VERSION, current);
+        return false;
+    }
+
+    async _unregisterAllServiceWorkersAndClearCaches() {
+        const regs = await navigator.serviceWorker.getRegistrations();
+        await Promise.all(regs.map((r) => r.unregister()));
+        if (!('caches' in window)) {
+            return;
+        }
+        const keys = await caches.keys();
+        await Promise.all(keys.map((name) => caches.delete(name)));
+    }
+
     /**
      * Инициализация PWA - регистрация Service Worker
      */
@@ -34,10 +97,18 @@ export class PWAService {
         }
 
         try {
+            const reloadPending = await this._syncDeploymentAndMaybeResetClient();
+            if (reloadPending) {
+                return false;
+            }
+
             this.swRegistration = await navigator.serviceWorker.register('/sw.js', {
-                scope: '/'
+                scope: '/',
+                updateViaCache: 'none',
             });
             console.log('[PWA] Service Worker зарегистрирован');
+
+            void this.swRegistration.update();
 
             // Проверка обновлений
             this.swRegistration.addEventListener('updatefound', () => {
@@ -52,10 +123,28 @@ export class PWAService {
                 }
             });
 
-            // Слушаем сообщения от SW
-            navigator.serviceWorker.addEventListener('message', (event) => {
-                console.log('[PWA] Message from SW:', event.data);
-            });
+            if (!this._swPushMessageListenerAttached) {
+                this._swPushMessageListenerAttached = true;
+                navigator.serviceWorker.addEventListener('message', (event) => {
+                    const d = event.data;
+                    console.log('[PWA] Message from SW:', d);
+                    if (d?.type !== 'humanitec-web-push' || !d.payload) {
+                        return;
+                    }
+                    const p = d.payload;
+                    const title = typeof p.title === 'string' ? p.title.trim() : '';
+                    const body = typeof p.message === 'string' ? p.message.trim() : '';
+                    const message = [title, body].filter(Boolean).join(' — ');
+                    if (!message) {
+                        return;
+                    }
+                    window.dispatchEvent(
+                        new CustomEvent(AppEvents.TOAST_SHOW, {
+                            detail: { type: 'info', message, duration: 5000 },
+                        })
+                    );
+                });
+            }
 
             return true;
         } catch (error) {
@@ -65,7 +154,184 @@ export class PWAService {
     }
 
     /**
-     * Подписка на Push уведомления
+     * Единая регистрация офлайн-push: нативный iOS (APNs токен) или Web Push (VAPID).
+     */
+    async ensurePushRegistration() {
+        if (typeof window === 'undefined') {
+            return null;
+        }
+        if (await this._shouldUseIosNativePush()) {
+            return this._ensureIosNativePushRegistration();
+        }
+        return this._ensureWebPushRegistration();
+    }
+
+    /**
+     * iOS в Capacitor: плагин APNs, не Web Push в WKWebView.
+     * Мост WKWebView может быть доступен до полного заполнения Capacitor.isNativePlatform().
+     */
+    async _shouldUseIosNativePush() {
+        const { isCapacitorNativePlatform, isStandaloneOrNativeAppShell } = await import(
+            '../lib/utils/native-app-shell.js'
+        );
+        if (!this._isIOS()) {
+            return false;
+        }
+        if (isCapacitorNativePlatform() && window.Capacitor?.getPlatform?.() === 'ios') {
+            return true;
+        }
+        if (window.webkit?.messageHandlers?.bridge && isStandaloneOrNativeAppShell()) {
+            return true;
+        }
+        return false;
+    }
+
+    async _ensureWebPushRegistration() {
+        const initialized = await this.init();
+        if (!initialized || !this.swRegistration) {
+            return null;
+        }
+        if (!('PushManager' in window)) {
+            console.warn('[PWA] Push API не поддерживается');
+            return null;
+        }
+        if (this._isIOS() && !this.isInstalled()) {
+            console.warn('[PWA] Push на iOS в Safari требует установки на Home Screen');
+            return null;
+        }
+
+        await this.getExistingPushSubscription();
+        if (this.pushSubscription) {
+            const ep = this.pushSubscription.endpoint;
+            if (sessionStorage.getItem(STORAGE_WEB_PUSH_ENDPOINT) === ep) {
+                return this.pushSubscription;
+            }
+            const permission = Notification.permission;
+            if (permission !== 'granted') {
+                const p = await Notification.requestPermission();
+                if (p !== 'granted') {
+                    console.warn('[PWA] Разрешение на уведомления отклонено');
+                    return null;
+                }
+            }
+            try {
+                await this._postWebVapidSubscription(this.pushSubscription);
+                sessionStorage.setItem(STORAGE_WEB_PUSH_ENDPOINT, ep);
+            } catch (e) {
+                console.error('[PWA] Не удалось синхронизировать существующую push-подписку:', e);
+            }
+            return this.pushSubscription;
+        }
+
+        return this.subscribeToPush();
+    }
+
+    async _postWebVapidSubscription(pushSubscription) {
+        const response = await fetch(`${this.baseUrl}/api/push/subscribe`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            credentials: 'include',
+            body: JSON.stringify({
+                transport: 'web_vapid',
+                endpoint: pushSubscription.endpoint,
+                keys: {
+                    p256dh: this._arrayBufferToBase64(pushSubscription.getKey('p256dh')),
+                    auth: this._arrayBufferToBase64(pushSubscription.getKey('auth')),
+                },
+                platform: this._detectPlatform(),
+            }),
+        });
+        if (!response.ok) {
+            throw new Error(`subscribe failed: ${response.status}`);
+        }
+    }
+
+    async _ensureIosNativePushRegistration() {
+        let PushNotifications;
+        try {
+            ({ PushNotifications } = await import('@capacitor/push-notifications'));
+        } catch (e) {
+            console.warn('[PWA] @capacitor/push-notifications недоступен', e);
+            return null;
+        }
+
+        let perm = await PushNotifications.checkPermissions();
+        if (perm.receive !== 'granted') {
+            perm = await PushNotifications.requestPermissions();
+        }
+        if (perm.receive !== 'granted') {
+            console.warn('[PWA] Нативные push: нет разрешения');
+            return null;
+        }
+
+        return new Promise((resolve) => {
+            let settled = false;
+            const timeout = setTimeout(() => {
+                if (!settled) {
+                    settled = true;
+                    console.warn('[PWA] Таймаут регистрации APNs');
+                    resolve(null);
+                }
+            }, 15000);
+
+            const done = (value) => {
+                if (settled) {
+                    return;
+                }
+                settled = true;
+                clearTimeout(timeout);
+                resolve(value);
+            };
+
+            void PushNotifications.addListener('registration', async (tokenEvent) => {
+                const token = tokenEvent?.value;
+                if (!token) {
+                    done(null);
+                    return;
+                }
+                if (sessionStorage.getItem(STORAGE_IOS_DEVICE_TOKEN) === token) {
+                    done(token);
+                    return;
+                }
+                try {
+                    const r = await fetch(`${this.baseUrl}/api/push/subscribe`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        credentials: 'include',
+                        body: JSON.stringify({
+                            transport: 'ios_apns',
+                            endpoint: '',
+                            keys: { device_token: token },
+                            platform: 'ios_native',
+                        }),
+                    });
+                    if (!r.ok) {
+                        console.error('[PWA] Ошибка сохранения APNs токена:', r.status);
+                        done(null);
+                        return;
+                    }
+                    sessionStorage.setItem(STORAGE_IOS_DEVICE_TOKEN, token);
+                    done(token);
+                } catch (err) {
+                    console.error('[PWA] Сеть при регистрации APNs:', err);
+                    done(null);
+                }
+            });
+
+            void PushNotifications.addListener('registrationError', (err) => {
+                console.error('[PWA] registrationError APNs:', err);
+                done(null);
+            });
+
+            PushNotifications.register().catch((e) => {
+                console.error('[PWA] PushNotifications.register:', e);
+                done(null);
+            });
+        });
+    }
+
+    /**
+     * Подписка на Push уведомления (Web Push / VAPID)
      */
     async subscribeToPush() {
         if (!this.swRegistration) {
@@ -73,19 +339,16 @@ export class PWAService {
             return null;
         }
 
-        // Проверяем поддержку Push API
         if (!('PushManager' in window)) {
             console.warn('[PWA] Push API не поддерживается');
             return null;
         }
 
-        // Проверяем iOS ограничения
         if (this._isIOS() && !this.isInstalled()) {
             console.warn('[PWA] Push на iOS требует установки на Home Screen');
             return null;
         }
 
-        // Запрашиваем разрешение
         const permission = await Notification.requestPermission();
         if (permission !== 'granted') {
             console.warn('[PWA] Разрешение на уведомления отклонено');
@@ -93,37 +356,26 @@ export class PWAService {
         }
 
         try {
-            // Получаем VAPID ключ с сервера
             const response = await fetch(`${this.baseUrl}/api/push/vapid-public-key`);
             if (!response.ok) {
                 throw new Error('Failed to get VAPID key');
             }
-            const { publicKey } = await response.json();
+            const body = await response.json();
+            const publicKey = body?.publicKey;
+            if (typeof publicKey !== 'string' || publicKey.trim() === '') {
+                throw new Error('[PWA] Сервер вернул пустой VAPID publicKey (настройте push.vapid_public_key)');
+            }
 
-            // Подписываемся на push
             this.pushSubscription = await this.swRegistration.pushManager.subscribe({
                 userVisibleOnly: true,
-                applicationServerKey: this._urlBase64ToUint8Array(publicKey)
+                applicationServerKey: this._urlBase64ToUint8Array(publicKey),
             });
 
-            // Отправляем подписку на сервер
-            await fetch(`${this.baseUrl}/api/push/subscribe`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                credentials: 'include',
-                body: JSON.stringify({
-                    endpoint: this.pushSubscription.endpoint,
-                    keys: {
-                        p256dh: this._arrayBufferToBase64(this.pushSubscription.getKey('p256dh')),
-                        auth: this._arrayBufferToBase64(this.pushSubscription.getKey('auth'))
-                    },
-                    platform: this._detectPlatform()
-                })
-            });
+            await this._postWebVapidSubscription(this.pushSubscription);
+            sessionStorage.setItem(STORAGE_WEB_PUSH_ENDPOINT, this.pushSubscription.endpoint);
 
             console.log('[PWA] Push подписка создана');
             return this.pushSubscription;
-
         } catch (error) {
             console.error('[PWA] Ошибка подписки на push:', error);
             return null;
@@ -145,7 +397,8 @@ export class PWAService {
                 method: 'DELETE',
                 credentials: 'include'
             });
-            
+            sessionStorage.removeItem(STORAGE_WEB_PUSH_ENDPOINT);
+
             this.pushSubscription = null;
             console.log('[PWA] Push подписка удалена');
         } catch (error) {
@@ -218,10 +471,19 @@ export class PWAService {
      * Применить обновление (перезагрузка)
      */
     applyUpdate() {
-        if (this.swRegistration?.waiting) {
-            this.swRegistration.waiting.postMessage('skipWaiting');
+        const waiting = this.swRegistration?.waiting;
+        if (!waiting) {
+            window.location.reload();
+            return;
         }
-        window.location.reload();
+        navigator.serviceWorker.addEventListener(
+            'controllerchange',
+            () => {
+                window.location.reload();
+            },
+            { once: true },
+        );
+        waiting.postMessage('skipWaiting');
     }
 
     /**
@@ -259,15 +521,42 @@ export class PWAService {
     }
 
     /**
-     * Конвертация VAPID ключа
+     * Конвертация VAPID ключа (base64url или одна строка из PEM без заголовков).
      */
     _urlBase64ToUint8Array(base64String) {
-        const padding = '='.repeat((4 - base64String.length % 4) % 4);
-        const base64 = (base64String + padding)
-            .replace(/-/g, '+')
-            .replace(/_/g, '/');
-        const rawData = window.atob(base64);
-        return Uint8Array.from([...rawData].map(char => char.charCodeAt(0)));
+        if (typeof base64String !== 'string') {
+            throw new TypeError('[PWA] VAPID publicKey: ожидается строка');
+        }
+        let s = base64String.trim().replace(/^\uFEFF/, '');
+        s = s.replace(/[\u200B-\u200D\uFEFF\u00AD\u2060]/g, '');
+        if (s.includes('-----BEGIN')) {
+            const lines = s.split(/\r?\n/).map((line) => line.trim());
+            s = lines
+                .filter((line) => line.length > 0 && !line.startsWith('-----'))
+                .join('');
+        }
+        s = s.replace(/\s/g, '');
+        if (s.length === 0 || !/^[A-Za-z0-9+/=_-]+$/.test(s)) {
+            const bad = s.match(/[^A-Za-z0-9+/=_-]/u);
+            const hint = bad
+                ? `U+${bad[0].codePointAt(0).toString(16)}`
+                : 'empty';
+            throw new Error(
+                `[PWA] VAPID publicKey: ожидается base64 или base64url (A-Za-z0-9, +, /, -, _, padding =). Проблема: ${hint}. Проверьте push.vapid_public_key.`,
+            );
+        }
+        const padding = '='.repeat((4 - (s.length % 4)) % 4);
+        const base64 = (s + padding).replace(/-/g, '+').replace(/_/g, '/');
+        let rawData;
+        try {
+            rawData = window.atob(base64);
+        } catch (e) {
+            const msg = e instanceof Error ? e.message : String(e);
+            throw new Error(
+                `[PWA] VAPID publicKey: неверный base64 (${msg}). Ожидается одна строка base64url как в выводе web-push / vapidkeys.`,
+            );
+        }
+        return Uint8Array.from([...rawData].map((char) => char.charCodeAt(0)));
     }
 
     /**

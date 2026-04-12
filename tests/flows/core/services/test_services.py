@@ -102,6 +102,39 @@ class TestFlowFactory:
         await container.variable_repository.delete("factory_var")
 
     @pytest.mark.asyncio
+    async def test_flow_factory_unresolved_var_is_none(self, app):
+        """Нет company variable — в runtime variables попадает None, не строка @var:..."""
+        container = get_container()
+        factory = container.flow_factory
+
+        flow_config = FlowConfig(
+            flow_id="test_unresolved_var_flow",
+            name="Test unresolved @var",
+            entry="main",
+            nodes={
+                "main": {
+                    "type": "llm_node",
+                    "prompt": "Test",
+                    "next": None,
+                }
+            },
+            variables={
+                "only_ref": "@var:factory_nonexistent_key_xyz",
+                "composite": "Bearer @var:factory_nonexistent_token_xyz",
+                "literal": "ok",
+            },
+        )
+        await container.flow_repository.set(flow_config)
+
+        flow = await factory.get_flow("test_unresolved_var_flow")
+
+        assert flow.variables["only_ref"] is None
+        assert flow.variables["composite"] is None
+        assert flow.variables["literal"] == "ok"
+
+        await container.flow_repository.delete("test_unresolved_var_flow")
+
+    @pytest.mark.asyncio
     async def test_create_flow_saves_to_db(self, app):
         """FlowFactory.create_flow сохраняет в БД."""
         container = get_container()
@@ -185,6 +218,17 @@ class TestFlowsLoader:
         if "calculator" in loaded:
             tool = await container.tool_repository.get("calculator")
             assert tool is not None
+            assert tool.parameters_schema is not None
+            assert tool.parameters_schema.get("type") == "object"
+            assert "properties" in tool.parameters_schema
+
+        if "crm_search_entities" in loaded:
+            crm_tool = await container.tool_repository.get("crm_search_entities")
+            assert crm_tool is not None
+            assert crm_tool.parameters_schema is not None
+            props = crm_tool.parameters_schema.get("properties") or {}
+            assert "query" in props
+            assert "minimum" in props.get("limit", {})
 
 
 class TestFlowDiscoveryService:
@@ -428,7 +472,9 @@ class TestFlowDiscoveryService:
         assert result is False
 
     @pytest.mark.asyncio
-    async def test_health_check_all(self, discovery_service, mock_a2a_client, app, unique_id):
+    async def test_health_check_all(
+        self, discovery_service, mock_a2a_client, app, unique_id, monkeypatch
+    ):
         """Health check всех агентов."""
         # Используем короткие ID чтобы попасть в limit=100 при сортировке по алфавиту
         ext_id_a = f"a_check_1_{unique_id}"
@@ -449,6 +495,16 @@ class TestFlowDiscoveryService:
         )
         await discovery_service._repository.set(row_a)
         await discovery_service._repository.set(row_b)
+
+        async def _list_only_test_flows(limit: int = 100):
+            _ = limit
+            persisted_a = await discovery_service._repository.get(ext_id_a)
+            persisted_b = await discovery_service._repository.get(ext_id_b)
+            if persisted_a is None or persisted_b is None:
+                raise AssertionError("тестовые external flow не найдены в репозитории")
+            return [persisted_a, persisted_b]
+
+        monkeypatch.setattr(discovery_service._repository, "list", _list_only_test_flows)
 
         results = await discovery_service.health_check_all()
 

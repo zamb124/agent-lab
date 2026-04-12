@@ -171,17 +171,45 @@ def get_files(state: 'ExecutionState | dict') -> List[Dict[str, Any]]:
         return []
 
 
-def read_file(file_path: str, mode: str = "rb") -> bytes:
+def find_file(files: List[Dict[str, Any]], name: Optional[str] = None) -> Optional[Dict[str, Any]]:
     """
-    Безопасно читает файл по пути.
-    
+    Ищет файл в списке state.files по имени.
+
+    Точное совпадение по полю name, затем case-insensitive подстрока.
+    Без name — первый элемент списка.
+
+    Args:
+        files: Список записей файлов (state.files)
+        name: Имя файла для поиска
+
+    Returns:
+        Запись файла или None
+    """
+    if not files:
+        return None
+    if not name:
+        return files[0]
+    for f in files:
+        if f.get("name") == name:
+            return f
+    name_lower = name.lower()
+    for f in files:
+        if name_lower in (f.get("name") or "").lower():
+            return f
+    return None
+
+
+def read_path_bytes(file_path: str, mode: str = "rb") -> bytes:
+    """
+    Читает сырые байты или текст с диска по пути (без семантики документа).
+
     Args:
         file_path: Путь к файлу
         mode: Режим чтения ("rb" для бинарного, "r" для текстового)
-    
+
     Returns:
         Содержимое файла (bytes для "rb", str для "r")
-    
+
     Raises:
         SafeEvalError: Если файл не найден или ошибка чтения
     """
@@ -195,20 +223,20 @@ def read_file(file_path: str, mode: str = "rb") -> bytes:
         return path.read_text(encoding="utf-8")
 
 
-def read_file_base64(file_path: str) -> str:
+def read_path_base64(file_path: str) -> str:
     """
     Читает файл и возвращает base64 строку.
-    
+
     Args:
         file_path: Путь к файлу
-    
+
     Returns:
         Base64 строка
-    
+
     Raises:
         SafeEvalError: Если файл не найден или ошибка чтения
     """
-    data = read_file(file_path, mode="rb")
+    data = read_path_bytes(file_path, mode="rb")
     return base64.b64encode(data).decode("utf-8")
 
 

@@ -23,6 +23,7 @@ class ChannelType(str, Enum):
     DIRECT = "direct"
     GROUP = "group"
     TOPIC = "topic"
+    CALENDAR_MEETING = "calendar_meeting"
 
 
 class ChannelRead(BaseModel):
@@ -79,6 +80,14 @@ class ChannelRead(BaseModel):
         default=False,
         description="Уведомления о новых сообщениях отключены для текущего пользователя в этом канале.",
     )
+    transcribe_voice_messages: bool = Field(
+        default=False,
+        description="Автоматически ставить в очередь STT для входящих голосовых сообщений.",
+    )
+    speech_to_chat_enabled: bool = Field(
+        default=False,
+        description="Речь участников звонка в ленту (серверный LiveKit egress по микрофону).",
+    )
 
 
 class ChannelCreate(BaseModel):
@@ -101,6 +110,14 @@ class ChannelCreate(BaseModel):
         default=None,
         description="Начальный список участников (актуально для direct/group).",
     )
+    transcribe_voice_messages: bool | None = Field(
+        default=None,
+        description="Если задано — перекрывает значение с пространства; иначе при space_id — как у space, без space — false.",
+    )
+    speech_to_chat_enabled: bool | None = Field(
+        default=None,
+        description="Если задано — перекрывает значение с пространства; иначе при space_id — как у space, без space — false.",
+    )
 
 
 class ChannelUpdate(BaseModel):
@@ -114,6 +131,15 @@ class ChannelUpdate(BaseModel):
     @classmethod
     def avatar_url_must_be_relative(cls, v: str | None) -> str | None:
         return _validate_avatar_url(v)
+
+    transcribe_voice_messages: bool | None = Field(
+        default=None,
+        description="Авто-транскрипция голосовых сообщений в канале.",
+    )
+    speech_to_chat_enabled: bool | None = Field(
+        default=None,
+        description="Речь звонка в ленту через LiveKit egress.",
+    )
 
 
 class ChannelMemberRead(BaseModel):

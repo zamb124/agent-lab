@@ -12,9 +12,11 @@ from fastapi.templating import Jinja2Templates
 from starlette.middleware.sessions import SessionMiddleware
 
 from core.app import create_service_app
-from core.tracing.middleware import TracingMiddleware
 from core.context import set_context, clear_context
-from core.identity.system_bootstrap import ensure_system_admin_membership
+from core.identity.system_bootstrap import (
+    SYSTEM_ADMIN_EMAIL,
+    ensure_system_admin_membership,
+)
 from core.models.context_models import Context, Language
 from core.models.identity_models import User, Company
 from core.utils.tokens import get_token_service
@@ -28,9 +30,20 @@ from core.logging import get_logger
 
 logger = get_logger(__name__)
 
+# CORS для A2A/embed с другого порта (CRM :8003 → flows :8001): credentials несовместимы с Allow-Origin: *.
+_FLOWS_DEV_CORS_ORIGIN_REGEX = (
+    r"^https?://(localhost|127\.0\.0\.1)(:\d+)?$"
+    r"|"
+    r"^https?://([a-z0-9-]+\.)*lvh\.me(:\d+)?$"
+)
+
 
 async def _build_scheduler_auth_context(container: object, trace_id: str, session_id: str) -> Context:
     company, user = await ensure_system_admin_membership(container)
+    if user is None:
+        raise ValueError(
+            f"Нет пользователя с email {SYSTEM_ADMIN_EMAIL}: контекст для фоновых задач не собрать"
+        )
     roles = user.companies.get(company.company_id, [])
     auth_token = get_token_service().create_token(
         user_id=user.user_id,
@@ -52,7 +65,13 @@ async def _build_scheduler_auth_context(container: object, trace_id: str, sessio
 
 async def on_startup(app: FastAPI, container, settings: FlowSettings):
     """Логика при старте сервиса flows."""
-    
+    from core.files.writer import FileWriter
+
+    FileWriter.configure_process_upload(
+        file_processor=container.file_processor,
+        download_url_prefix=f"/{settings.server.name}/api/v1/files/download",
+    )
+
     # Подключаемся к Redis с retry
     logger.info("Connecting to Redis...")
     max_startup_retries = 5
@@ -102,6 +121,9 @@ async def on_startup(app: FastAPI, container, settings: FlowSettings):
                 container.tool_repository
             )
             logger.info(f"Загружено flows: {loaded_flow_ids}")
+            from apps.flows.src.services.operator_demo_queue import ensure_example_hitl_queue
+
+            await ensure_example_hitl_queue(container.operator_repository, "system")
         else:
             # Фоновая загрузка bundles в company system через TaskIQ (не блокирует старт)
             from apps.flows.src.tasks.company_init_tasks import init_company_resources
@@ -189,6 +211,11 @@ async def on_shutdown(app: FastAPI, container):
         logger.error(f"Error closing Redis: {e}")
 
 
+_flow_settings = get_settings()
+_cors_regex = _flow_settings.cors_allow_origin_regex
+if _cors_regex is None and _flow_settings.server.debug and os.getenv("TESTING") != "true":
+    _cors_regex = _FLOWS_DEV_CORS_ORIGIN_REGEX
+
 app = create_service_app(
     service_name="flows",
     settings_class=FlowSettings,
@@ -211,31 +238,32 @@ app = create_service_app(
             "same_site": "lax",
             "https_only": False,
         }),
-        (TracingMiddleware, {}),
     ],
-    cors_origins=["*"],
+    cors_origins=list(_flow_settings.cors_allow_origins),
+    cors_allow_origin_regex=_cors_regex,
     api_version="v1",
     title="Humanitec Flows",
     description="Сервис flows: конфигурации, runtime и A2A",
     version="2.0.0",
-    mount_repo_mkdocs=False,
+    mount_repo_documentation=False,
 )
 
-# Документация (статические файлы mkdocs)
+# Документация (локальная статика apps/flows/site)
 docs_path = Path(__file__).parent / "site"
 if docs_path.exists():
     app.mount("/documentation", StaticFiles(directory=docs_path, html=True), name="documentation")
 
-# Статические файлы для чата
-static_path = Path(__file__).parent / "static"
-if static_path.exists():
-    app.mount("/static", StaticFiles(directory=static_path), name="static")
-
-# Core frontend библиотека (общая для всех сервисов)
+# Core frontend — раньше общего /static: иначе Mount("/static") забирает /static/core/... и ищет
+# core/... внутри apps/flows/static (404 на tokens.css, import map и т.д.).
 core_frontend_path = Path(__file__).parent.parent.parent / "core" / "frontend" / "static"
 if core_frontend_path.exists():
     app.mount("/static/core", StaticFiles(directory=core_frontend_path), name="core_frontend")
     logger.info(f"Core frontend библиотека смонтирована: {core_frontend_path}")
+
+# Статические файлы для чата (остальное под /static, кроме уже смонтированного /static/core)
+static_path = Path(__file__).parent / "static"
+if static_path.exists():
+    app.mount("/static", StaticFiles(directory=static_path), name="static")
 
 # UI - статические файлы
 ui_path = Path(__file__).parent / "ui"
@@ -261,6 +289,23 @@ async def old_ui_redirect(flow_id: str = "example_react"):
 async def old_flows_ui_redirect(flow_id: str = "example_react"):
     """Редирект со старых путей /flows/ui на /flows/{flow_id}"""
     return RedirectResponse(url=f"/flows/{flow_id}", status_code=301)
+
+
+@app.get("/flows/operator", response_class=HTMLResponse)
+@app.get("/flows/operator/", response_class=HTMLResponse)
+async def ui_operator_workbench(request: Request):
+    """Рабочее место оператора (очереди и задачи)."""
+    ui_templates = Jinja2Templates(directory=ui_path)
+    base_url = f"{request.base_url.scheme}://{request.base_url.netloc}"
+    return ui_templates.TemplateResponse(
+        request,
+        "index.html",
+        {
+            "flow_id": "operator",
+            "flow_name": "operator",
+            "base_url": base_url,
+        },
+    )
 
 
 @app.get("/flows", response_class=HTMLResponse)

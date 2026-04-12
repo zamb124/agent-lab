@@ -273,7 +273,7 @@ class TestFlowValidationReferences:
                         "tools": [
                             {
                                 "tool_id": "inline_test",
-                                "code": "def execute(args, state): return 'ok'",
+                                "code": "async def execute(args, state): return 'ok'",
                             }
                         ],
                     }
@@ -345,7 +345,7 @@ class TestFlowValidationReferences:
                 "nodes": {
                     "main": {
                         "type": "code",
-                        "code": "def execute(args, state): return 'ok'",
+                        "code": "async def execute(args, state): return 'ok'",
                     }
                 },
                 "edges": [{"from": "main", "to": None}],
@@ -533,7 +533,7 @@ class TestFlowValidationInlineCode:
                 "nodes": {
                     "main": {
                         "type": "code",
-                        "code": "def run(state):\n    content = state.get('content', '')\n    state['result'] = content.upper()\n    return state",
+                        "code": "async def run(state):\n    content = state.get('content', '')\n    state['result'] = content.upper()\n    return state",
                     }
                 },
                 "edges": [{"from": "main", "to": None}],
@@ -557,7 +557,7 @@ class TestFlowValidationInlineCode:
                 "nodes": {
                     "classifier": {
                         "type": "code",
-                        "code": "def run(state):\n    content = state['content'].lower()\n    if 'order' in content:\n        state['route'] = 'order'\n    return state",
+                        "code": "async def run(state):\n    content = state['content'].lower()\n    if 'order' in content:\n        state['route'] = 'order'\n    return state",
                     }
                 },
                 "edges": [{"from": "classifier", "to": None}],
@@ -672,7 +672,7 @@ class TestFlowValidationComplexCases:
                 "nodes": {
                     "router": {
                         "type": "code",
-                        "code": "def run(state):\n    state['route'] = 'a' if state.get('flag') else 'b'\n    return state",
+                        "code": "async def run(state):\n    state['route'] = 'a' if state.get('flag') else 'b'\n    return state",
                     },
                     "handler_a": {"type": "llm_node", "prompt": "Handler A"},
                     "handler_b": {"type": "llm_node", "prompt": "Handler B"},
@@ -704,7 +704,7 @@ class TestFlowValidationComplexCases:
                 "nodes": {
                     "router": {
                         "type": "code",
-                        "code": "def run(state): state['route'] = 'a'; return state",
+                        "code": "async def run(state): state['route'] = 'a'; return state",
                     },
                     "exit_a": {"type": "llm_node", "prompt": "Exit A"},
                     "exit_b": {"type": "llm_node", "prompt": "Exit B"},

@@ -35,8 +35,19 @@ export const sidebarHostStyles = css`
     }
 
     :host([collapsed]) .sidebar-logo {
+        flex-direction: row;
         justify-content: center;
-        padding: var(--space-3);
+        align-items: center;
+        gap: var(--space-2);
+        padding: var(--space-3) var(--space-2);
+    }
+
+    :host([collapsed]) .sidebar-collapse-row {
+        justify-content: center;
+    }
+
+    :host(:not([collapsed])) .sidebar-logo {
+        margin-bottom: var(--space-6);
     }
 
     :host([collapsed]) .sidebar-logo-text,
@@ -115,6 +126,13 @@ export const sidebarHostStyles = css`
         }
 
         :host([collapsed]) .sidebar-logo {
+            flex-direction: row;
+            justify-content: flex-start;
+            align-items: center;
+            gap: var(--space-3);
+        }
+
+        :host([collapsed]) .sidebar-collapse-row {
             justify-content: flex-start;
         }
 
@@ -152,7 +170,7 @@ export const sidebarStyles = css`
         flex-direction: column;
         padding: var(--space-4);
         overflow-y: auto;
-        overflow-x: hidden;
+        overflow-x: clip;
     }
 
     .sidebar-logo {
@@ -160,34 +178,37 @@ export const sidebarStyles = css`
         align-items: center;
         gap: var(--space-3);
         padding: var(--space-4) var(--space-3);
-        margin-bottom: var(--space-6);
+        margin-bottom: var(--space-2);
     }
 
-    .sidebar-logo .collapse-btn {
+    .sidebar-logo > .collapse-btn {
         margin-left: auto;
-        width: 32px;
-        height: 32px;
+        flex-shrink: 0;
+    }
+
+    .sidebar-logo--slot {
+        flex-wrap: wrap;
+    }
+
+    .sidebar-logo--slot slot[name='logo']::slotted(*) {
+        flex: 1 1 auto;
+        min-width: 0;
+    }
+
+    .sidebar-collapse-row {
         display: flex;
         align-items: center;
-        justify-content: center;
-        border-radius: var(--radius-lg);
-        color: var(--text-secondary);
-        background: transparent;
-        border: 1px solid transparent;
-        cursor: pointer;
+        justify-content: flex-end;
         flex-shrink: 0;
-        transition: all var(--duration-normal) var(--easing-default);
-    }
-
-    .sidebar-logo .collapse-btn:hover {
-        background: var(--glass-solid-medium);
-        border-color: var(--glass-border-subtle);
-        color: var(--text-primary);
+        width: 100%;
+        min-width: 0;
+        padding: 0 var(--space-3);
+        margin-bottom: var(--space-3);
+        box-sizing: border-box;
     }
 
     @media (max-width: 767px) {
-        /* Скрыть collapse кнопку на мобильных */
-        .sidebar-logo .collapse-btn {
+        .sidebar-collapse-row {
             display: none;
         }
     }
@@ -236,8 +257,18 @@ export const sidebarStyles = css`
         display: flex;
         align-items: center;
         gap: var(--space-2);
-        padding: 0 var(--space-3);
+        padding: 0;
         margin-bottom: var(--space-4);
+        width: 100%;
+        min-width: 0;
+        box-sizing: border-box;
+    }
+
+    .sidebar-header slot[name="header"]::slotted(*) {
+        flex: 1 1 100%;
+        min-width: 0;
+        max-width: 100%;
+        box-sizing: border-box;
     }
 
     .sidebar-nav {
@@ -248,6 +279,8 @@ export const sidebarStyles = css`
         overflow-y: auto;
         overflow-x: hidden;
         min-height: 0;
+        padding: 0 var(--space-2);
+        margin: 0 calc(-1 * var(--space-2));
     }
 
     .sidebar-section {
@@ -327,6 +360,18 @@ export const sidebarNavItemStyles = css`
         color: var(--accent);
         font-weight: var(--font-semibold);
         box-shadow: var(--accent-glow);
+    }
+
+    /* Ведущая иконка в одной вертикали: фиксированная полоса, SVG центрируем (разный viewBox у иконок). */
+    .nav-item > platform-icon:first-child {
+        flex: 0 0 var(--sidebar-nav-icon-slot, 32px);
+        width: var(--sidebar-nav-icon-slot, 32px);
+        min-width: var(--sidebar-nav-icon-slot, 32px);
+        margin: 0;
+        box-sizing: border-box;
+        display: flex;
+        align-items: center;
+        justify-content: center;
     }
 
     .nav-item-icon {

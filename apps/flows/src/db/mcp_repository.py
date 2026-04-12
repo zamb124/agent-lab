@@ -35,7 +35,7 @@ class MCPServerRepository(BaseRepository[MCPServerConfig]):
     
     async def list_active(self) -> List[MCPServerConfig]:
         """Возвращает только активные серверы."""
-        all_servers = await self.list_all()
+        all_servers = await self.list(limit=1000)
         return [s for s in all_servers if s.is_active]
     
     async def get_by_id(self, server_id: str) -> Optional[MCPServerConfig]:

@@ -1,56 +1,19 @@
 """
 Константы безопасности для выполнения inline кода.
+
+Политика whitelist: см. core.inline_python_eval_policy.
 """
 
-from typing import FrozenSet
+from core.inline_python_eval_policy import (
+    ALLOWED_BUILTINS,
+    ALLOWED_IMPORT_ROOTS,
+    FORBIDDEN_IMPORT_ROOTS,
+    FUTURE_IMPORT_NAMES,
+)
 
-# Запрещённые модули - потенциально опасны для системы
-BLOCKED_MODULES: FrozenSet[str] = frozenset({
-    "os",
-    "sys",
-    "subprocess",
-    "shutil",
-    "socket",
-    "pickle",
-    "marshal",
-    "ctypes",
-    "multiprocessing",
-    "threading",
-    "signal",
-    "resource",
-    "pty",
-    "fcntl",
-    "termios",
-    "syslog",
-    "posix",
-    "nt",
-    "_thread",
-    "builtins",
-    "__builtin__",
-    "importlib",
-    "code",
-    "codeop",
-    "compileall",
-    "py_compile",
-})
-
-# Запрещённые builtins - позволяют обойти ограничения
-BLOCKED_BUILTINS: FrozenSet[str] = frozenset({
-    "eval",
-    "exec",
-    "compile",
-    "open",
-    "__import__",
-    "globals",
-    "locals",
-    "vars",
-    "dir",
-
-    "memoryview",
-    "bytearray",
-    "breakpoint",
-    "input",
-    "help",
-    "exit",
-    "quit",
-})
+__all__ = [
+    "ALLOWED_BUILTINS",
+    "ALLOWED_IMPORT_ROOTS",
+    "FORBIDDEN_IMPORT_ROOTS",
+    "FUTURE_IMPORT_NAMES",
+]

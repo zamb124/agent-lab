@@ -1,12 +1,13 @@
 /**
- * FrontendSidebar - боковая навигационная панель
- * Использует platform-sidebar с collapsed/mobile режимами
+ * FrontendSidebar — навигация консоли; оболочка platform-service-sidebar.
  */
 import { html, css } from 'lit';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
+import { AppEvents } from '@platform/lib/utils/types.js';
 import { sidebarStyles, sidebarNavItemStyles } from '@platform/lib/styles/shared/sidebar.styles.js';
 import { FrontendStore } from '../store/frontend.store.js';
-import '@platform/lib/components/layout/platform-sidebar.js';
+import { readShellSidebarCollapsed } from '@platform/lib/utils/shell-sidebar-preference.js';
+import '@platform/lib/components/layout/platform-service-sidebar.js';
 import '@platform/lib/components/platform-icon.js';
 import '@platform/lib/components/platform-user.js';
 
@@ -52,7 +53,7 @@ export class FrontendSidebar extends PlatformElement {
                 border-color: var(--accent);
                 color: var(--accent);
                 font-weight: var(--font-semibold);
-                box-shadow: 0 4px 16px rgba(16, 185, 129, 0.15);
+                box-shadow: 0 4px 16px rgba(153, 166, 249, 0.15);
             }
 
             .nav-icon {
@@ -74,13 +75,6 @@ export class FrontendSidebar extends PlatformElement {
 
             .nav-icon platform-icon {
                 display: flex;
-            }
-
-            .nav-icon img {
-                width: 20px;
-                height: 20px;
-                display: block;
-                object-fit: contain;
             }
 
             .nav-label {
@@ -129,28 +123,20 @@ export class FrontendSidebar extends PlatformElement {
                 transform: translateX(4px);
             }
 
-            .service-link .external-icon {
-                margin-left: auto;
-                font-size: 12px;
-                opacity: 0.5;
-            }
-
-            /* Collapsed mode */
-            :host([collapsed]) .nav-label,
-            :host([collapsed]) .section-title,
-            :host([collapsed]) .external-icon,
-            :host([collapsed]) .service-link span:not(.nav-icon) {
+            platform-service-sidebar[collapsed] .nav-label,
+            platform-service-sidebar[collapsed] .section-title,
+            platform-service-sidebar[collapsed] .service-link span:not(.nav-icon) {
                 display: none;
             }
 
-            :host([collapsed]) .nav-item,
-            :host([collapsed]) .service-link {
+            platform-service-sidebar[collapsed] .nav-item,
+            platform-service-sidebar[collapsed] .service-link {
                 justify-content: center;
                 padding: var(--space-3);
             }
 
-            :host([collapsed]) .nav-item:hover,
-            :host([collapsed]) .service-link:hover {
+            platform-service-sidebar[collapsed] .nav-item:hover,
+            platform-service-sidebar[collapsed] .service-link:hover {
                 transform: none;
             }
         `
@@ -163,7 +149,7 @@ export class FrontendSidebar extends PlatformElement {
 
     constructor() {
         super();
-        this.collapsed = false;
+        this.collapsed = readShellSidebarCollapsed();
         this.mobileOpen = false;
 
         this.state = this.use((s) => ({
@@ -171,25 +157,31 @@ export class FrontendSidebar extends PlatformElement {
         }));
     }
 
-    toggleCollapse() {
-        this.collapsed = !this.collapsed;
-        this.emit('collapse-change', { collapsed: this.collapsed });
+    connectedCallback() {
+        super.connectedCallback();
+        this._i18nUnsub = this.i18n.subscribe(() => this.requestUpdate());
+        this._onAuthChange = () => this.requestUpdate();
+        window.addEventListener(AppEvents.AUTH_CHANGE, this._onAuthChange);
     }
 
-    toggleMobile() {
-        this.mobileOpen = !this.mobileOpen;
-        this.emit('mobile-change', { open: this.mobileOpen });
+    disconnectedCallback() {
+        if (this._onAuthChange) {
+            window.removeEventListener(AppEvents.AUTH_CHANGE, this._onAuthChange);
+            this._onAuthChange = null;
+        }
+        if (this._i18nUnsub) {
+            this._i18nUnsub();
+            this._i18nUnsub = null;
+        }
+        super.disconnectedCallback();
+    }
+
+    _shell() {
+        return this.renderRoot?.querySelector('platform-service-sidebar');
     }
 
     closeMobile() {
-        if (this.mobileOpen) {
-            this.mobileOpen = false;
-            this.emit('mobile-change', { open: false });
-            // Глобальное событие для platform-sidebar-trigger и platform-island
-            window.dispatchEvent(new CustomEvent('platform-sidebar-mobile-change', {
-                detail: { open: false },
-            }));
-        }
+        this._shell()?.closeMobile();
     }
 
     _navigate(view) {
@@ -197,21 +189,22 @@ export class FrontendSidebar extends PlatformElement {
         this.closeMobile();
     }
 
-    _openExternalService(url) {
-        window.open(url, '_blank');
-    }
-
     render() {
         const { currentView } = this.state.value;
+        const t = (key) => this.i18n.t(key, {});
 
         return html`
-            <platform-sidebar
+            <platform-service-sidebar
                 logo-src="/static/core/assets/service_logos/frontend_logo.svg"
                 logo-text="HUMANITEC"
                 ?collapsed=${this.collapsed}
                 ?mobile-open=${this.mobileOpen}
-                @collapse-change=${(e) => this.collapsed = e.detail.collapsed}
-                @mobile-change=${(e) => this.mobileOpen = e.detail.open}
+                @collapse-change=${(e) => {
+                    this.collapsed = e.detail.collapsed;
+                }}
+                @mobile-change=${(e) => {
+                    this.mobileOpen = e.detail.open;
+                }}
             >
                 <nav>
                     <button
@@ -221,7 +214,7 @@ export class FrontendSidebar extends PlatformElement {
                         <span class="nav-icon">
                             <platform-icon name="chart" size="18"></platform-icon>
                         </span>
-                        <span class="nav-label">Dashboard</span>
+                        <span class="nav-label">${t('console_sidebar.dashboard')}</span>
                     </button>
 
                     <button
@@ -231,7 +224,7 @@ export class FrontendSidebar extends PlatformElement {
                         <span class="nav-icon">
                             <platform-icon name="user" size="18"></platform-icon>
                         </span>
-                        <span class="nav-label">Команда</span>
+                        <span class="nav-label">${t('console_sidebar.team')}</span>
                     </button>
 
                     <button
@@ -241,17 +234,7 @@ export class FrontendSidebar extends PlatformElement {
                         <span class="nav-icon">
                             <platform-icon name="key" size="18"></platform-icon>
                         </span>
-                        <span class="nav-label">API Ключи</span>
-                    </button>
-
-                    <button
-                        class="nav-item ${currentView === 'billing' ? 'active' : ''}"
-                        @click=${() => this._navigate('billing')}
-                    >
-                        <span class="nav-icon">
-                            <platform-icon name="clipboard" size="18"></platform-icon>
-                        </span>
-                        <span class="nav-label">Биллинг</span>
+                        <span class="nav-label">${t('console_sidebar.api_keys')}</span>
                     </button>
 
                     <button
@@ -261,7 +244,17 @@ export class FrontendSidebar extends PlatformElement {
                         <span class="nav-icon">
                             <platform-icon name="chat" size="18"></platform-icon>
                         </span>
-                        <span class="nav-label">Embed Виджеты</span>
+                        <span class="nav-label">${t('console_sidebar.embed')}</span>
+                    </button>
+
+                    <button
+                        class="nav-item ${currentView === 'billing' ? 'active' : ''}"
+                        @click=${() => this._navigate('billing')}
+                    >
+                        <span class="nav-icon">
+                            <platform-icon name="database" size="18"></platform-icon>
+                        </span>
+                        <span class="nav-label">${t('console_sidebar.billing')}</span>
                     </button>
 
                     <button
@@ -271,7 +264,7 @@ export class FrontendSidebar extends PlatformElement {
                         <span class="nav-icon">
                             <platform-icon name="settings" size="18"></platform-icon>
                         </span>
-                        <span class="nav-label">Настройки</span>
+                        <span class="nav-label">${t('console_sidebar.settings')}</span>
                     </button>
 
                     <button
@@ -281,61 +274,57 @@ export class FrontendSidebar extends PlatformElement {
                         <span class="nav-icon">
                             <platform-icon name="clock" size="18"></platform-icon>
                         </span>
-                        <span class="nav-label">Scheduler</span>
+                        <span class="nav-label">${t('console_sidebar.scheduler')}</span>
                     </button>
+
+                    ${this.auth.user?.company_id === 'system'
+                        ? html`
+                              <button
+                                  class="nav-item ${currentView === 'lead-requests' ? 'active' : ''}"
+                                  @click=${() => this._navigate('lead-requests')}
+                              >
+                                  <span class="nav-icon">
+                                      <platform-icon name="access-request" size="18"></platform-icon>
+                                  </span>
+                                  <span class="nav-label">${t('console_sidebar.leads')}</span>
+                              </button>
+                              <button
+                                  class="nav-item ${currentView === 'platform-tracing' ? 'active' : ''}"
+                                  @click=${() => this._navigate('platform-tracing')}
+                              >
+                                  <span class="nav-icon">
+                                      <platform-icon name="workflow" size="18"></platform-icon>
+                                  </span>
+                                  <span class="nav-label">${t('console_sidebar.tracing')}</span>
+                              </button>
+                              <button
+                                  class="nav-item ${currentView === 'platform-billing' ? 'active' : ''}"
+                                  @click=${() => this._navigate('platform-billing')}
+                              >
+                                  <span class="nav-icon">
+                                      <platform-icon name="database" size="18"></platform-icon>
+                                  </span>
+                                  <span class="nav-label">${t('console_sidebar.billing_admin')}</span>
+                              </button>
+                          `
+                        : ''}
                 </nav>
 
                 <div class="services-section" data-hide-collapsed>
-                    <div class="section-title">Документация</div>
+                    <div class="section-title">${t('console_sidebar.docs_section')}</div>
                     <a class="service-link" href="/documentation">
                         <span class="nav-icon">
                             <platform-icon name="book-open" size="18"></platform-icon>
                         </span>
-                        <span>Humanitec Docs</span>
+                        <span>${t('console_sidebar.docs_link')}</span>
                     </a>
-                </div>
-
-                <div class="services-section" data-hide-collapsed>
-                    <div class="section-title">Сервисы</div>
-
-                    <button class="service-link" @click=${() => this._openExternalService('/flows')}>
-                        <span class="nav-icon">
-                            <img src="/static/core/assets/service_logos/agents_logo.svg" alt="" />
-                        </span>
-                        <span>Flows</span>
-                        <span class="external-icon">↗</span>
-                    </button>
-
-                    <button class="service-link" @click=${() => this._openExternalService('/crm')}>
-                        <span class="nav-icon">
-                            <img src="/static/core/assets/service_logos/crm_logo.svg" alt="" />
-                        </span>
-                        <span>NetWorkle</span>
-                        <span class="external-icon">↗</span>
-                    </button>
-
-                    <button class="service-link" @click=${() => this._openExternalService('/rag')}>
-                        <span class="nav-icon">
-                            <img src="/static/core/assets/service_logos/rag_logo.svg" alt="" />
-                        </span>
-                        <span>RAG</span>
-                        <span class="external-icon">↗</span>
-                    </button>
-
-                    <button class="service-link" @click=${() => this._openExternalService('/sync')}>
-                        <span class="nav-icon">
-                            <img src="/static/core/assets/service_logos/sync_logo.svg" alt="" />
-                        </span>
-                        <span>Sync</span>
-                        <span class="external-icon">↗</span>
-                    </button>
                 </div>
 
                 <div slot="footer">
                     <platform-user block></platform-user>
                     <platform-deployment-version base-url="/frontend" footer></platform-deployment-version>
                 </div>
-            </platform-sidebar>
+            </platform-service-sidebar>
         `;
     }
 }

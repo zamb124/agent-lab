@@ -6,6 +6,8 @@ import { PlatformElement } from '@platform/lib/platform-element/index.js';
 import { FrontendStore } from '../../store/frontend.store.js';
 import '../../modals/create-api-key-modal.js';
 import '@platform/lib/components/layout/page-header.js';
+import '@platform/lib/components/platform-icon.js';
+import '@platform/lib/components/glass-spinner.js';
 
 export class ApiKeysPage extends PlatformElement {
     static styles = [
@@ -35,7 +37,7 @@ export class ApiKeysPage extends PlatformElement {
 
             .primary-button:hover {
                 transform: scale(1.05);
-                box-shadow: 0 8px 24px rgba(16, 185, 129, 0.4);
+                box-shadow: 0 8px 24px rgba(153, 166, 249, 0.4);
             }
 
             .keys-grid {
@@ -179,10 +181,12 @@ export class ApiKeysPage extends PlatformElement {
                 color: var(--accent);
             }
 
-            .loading-state {
-                text-align: center;
-                padding: var(--space-12);
-                color: var(--text-secondary);
+            .page-loading {
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                flex: 1;
+                min-height: 200px;
             }
 
             @media (max-width: 768px) {
@@ -216,38 +220,48 @@ export class ApiKeysPage extends PlatformElement {
 
     connectedCallback() {
         super.connectedCallback();
+        this._i18nUnsub = this.i18n.subscribe(() => this.requestUpdate());
         this._loadKeys();
+    }
+
+    disconnectedCallback() {
+        if (this._i18nUnsub) {
+            this._i18nUnsub();
+            this._i18nUnsub = null;
+        }
+        super.disconnectedCallback();
     }
 
     async _loadKeys() {
         const { keys } = this.state.value;
         if (keys.length > 0) return;
-        
+
         FrontendStore.setApiKeysLoading(true);
-        const apiKeys = await this.services.get('apiKeys').list();
-        FrontendStore.setApiKeys(apiKeys);
+        const page = await this.services.get('apiKeys').listKeys();
+        FrontendStore.setApiKeys(page.items);
     }
 
     async _reloadKeys() {
         FrontendStore.setApiKeysLoading(true);
-        const apiKeys = await this.services.get('apiKeys').list();
-        FrontendStore.setApiKeys(apiKeys);
+        const page = await this.services.get('apiKeys').listKeys();
+        FrontendStore.setApiKeys(page.items);
     }
 
     render() {
+        const td = (key, params) => this.i18n.t(key, params ?? {});
         return html`
             <page-header 
-                title="API Ключи" 
-                subtitle="Управление ключами для интеграций с платформой"
+                title=${td('api_keys_page.title')} 
+                subtitle=${td('api_keys_page.subtitle')}
             >
                 <button slot="actions" class="primary-button" @click=${this._onCreateClick}>
-                    + Создать ключ
+                    ${td('api_keys_page.create')}
                 </button>
             </page-header>
 
             <div class="info-box">
-                <strong>Важно:</strong> Секретный ключ показывается только один раз при создании.
-                Сохраните его в безопасном месте. Если ключ утерян, создайте новый.
+                <strong>${td('api_keys_page.info_lead')}</strong>
+                ${td('api_keys_page.info_body')}
             </div>
 
             ${this._renderContent()}
@@ -255,22 +269,23 @@ export class ApiKeysPage extends PlatformElement {
     }
 
     _renderContent() {
+        const td = (key, params) => this.i18n.t(key, params ?? {});
         const { loading, keys } = this.state.value;
         
         if (loading) {
-            return html`<div class="loading-state">Загрузка...</div>`;
+            return html`<div class="page-loading"><glass-spinner size="lg"></glass-spinner></div>`;
         }
 
         if (keys.length === 0) {
             return html`
                 <div class="empty-state">
                     <div class="empty-icon">K</div>
-                    <h2 class="empty-title">Нет API ключей</h2>
+                    <h2 class="empty-title">${td('api_keys_page.empty_title')}</h2>
                     <p class="empty-description">
-                        Создайте первый ключ для интеграции с платформой
+                        ${td('api_keys_page.empty_description')}
                     </p>
                     <button class="primary-button" @click=${this._onCreateClick}>
-                        Создать ключ
+                        ${td('api_keys_page.create_key')}
                     </button>
                 </div>
             `;
@@ -284,31 +299,18 @@ export class ApiKeysPage extends PlatformElement {
     }
 
     _renderKeyCard(key) {
+        const t = (k, p) => this.i18n.t(k, p ?? {});
         return html`
             <div class="key-card">
                 <div class="key-header">
                     <h3 class="key-name">${key.name}</h3>
                     <div class="key-actions">
                         <button 
-                            class="icon-button" 
-                            title="Копировать"
-                            @click=${() => this._onCopyKey(key)}
-                        >
-                            C
-                        </button>
-                        <button 
-                            class="icon-button" 
-                            title="Редактировать"
-                            @click=${() => this._onEditKey(key)}
-                        >
-                            E
-                        </button>
-                        <button 
                             class="icon-button danger" 
-                            title="Отозвать"
+                            title=${t('api_keys_page.revoke_title')}
                             @click=${() => this._onRevokeKey(key)}
                         >
-                            X
+                            <platform-icon name="trash" size="16"></platform-icon>
                         </button>
                     </div>
                 </div>
@@ -323,15 +325,15 @@ export class ApiKeysPage extends PlatformElement {
 
                 <div class="key-meta">
                     <div class="meta-item">
-                        <span>Создан: ${this._formatDate(key.created_at)}</span>
+                        <span>${t('api_keys_page.created')} ${this._formatDate(key.created_at)}</span>
                     </div>
                     ${key.last_used ? html`
                         <div class="meta-item">
-                            <span>Использован: ${this._formatDate(key.last_used)}</span>
+                            <span>${t('api_keys_page.used')} ${this._formatDate(key.last_used)}</span>
                         </div>
                     ` : html`
                         <div class="meta-item">
-                            <span>Никогда не использовался</span>
+                            <span>${t('api_keys_page.never_used')}</span>
                         </div>
                     `}
                 </div>
@@ -341,7 +343,8 @@ export class ApiKeysPage extends PlatformElement {
 
     _formatDate(dateStr) {
         const date = new Date(dateStr);
-        return date.toLocaleDateString('ru-RU', {
+        const loc = this.i18n.getCurrentLocale() === 'en' ? 'en-US' : 'ru-RU';
+        return date.toLocaleDateString(loc, {
             year: 'numeric',
             month: 'short',
             day: 'numeric',
@@ -354,21 +357,14 @@ export class ApiKeysPage extends PlatformElement {
         modal.addEventListener('close', () => modal.remove());
     }
 
-    _onCopyKey(key) {
-        this.info('Полный ключ недоступен. Показан только при создании.');
-    }
-
-    _onEditKey(key) {
-        this.info('Функция в разработке');
-    }
-
     async _onRevokeKey(key) {
-        const confirmed = confirm(`Отозвать ключ "${key.name}"? Это действие нельзя отменить.`);
+        const td = (k, p) => this.i18n.t(k, p ?? {});
+        const confirmed = confirm(td('api_keys_page.confirm_revoke', { name: key.name }));
         if (!confirmed) return;
         
         await this.services.get('apiKeys').revoke(key.key_id);
         await this._reloadKeys();
-        this.success('API ключ отозван');
+        this.success(td('api_keys_page.toast_revoked'));
     }
 }
 

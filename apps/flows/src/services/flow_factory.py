@@ -3,7 +3,6 @@ FlowFactory - создание flow из БД.
 """
 
 import copy
-import re
 from typing import Any, Dict, List, Optional
 
 from apps.flows.src.runtime import Flow
@@ -22,9 +21,6 @@ logger = get_logger(__name__)
 
 
 class FlowFactory:
-    _VAR_REF_PATTERN = re.compile(r"^@var:([a-zA-Z_][a-zA-Z0-9_.]*)$")
-    _VAR_TOKEN_PATTERN = re.compile(r"@var:([a-zA-Z_][a-zA-Z0-9_.]*)")
-
     """Фабрика для создания Flow из БД."""
 
     def __init__(
@@ -157,7 +153,12 @@ class FlowFactory:
         resolved_variables = await self._resolve_variables(effective["variables"])
 
         edges = [
-            {"from": e.from_node, "to": e.to_node, "condition": e.condition}
+            {
+                "from": e.from_node,
+                "to": e.to_node,
+                "condition": e.condition,
+                "contributes_to_join": e.contributes_to_join,
+            }
             for e in effective["edges"]
         ]
 
@@ -271,10 +272,7 @@ class FlowFactory:
         """
         Резолвит @var:key ссылки в переменных и извлекает значения из FlowVariableConfig.
 
-        Для flow-переменных допускается отложенный резолв:
-        - если company variable существует, ссылка резолвится сразу;
-        - если company variable отсутствует, ссылка сохраняется как @var:...
-          и будет разрешена позже через runtime metadata/context.
+        Если company variable не существует — значение становится None.
 
         Args:
             variables: Словарь FlowVariableConfig объектов
@@ -283,12 +281,11 @@ class FlowFactory:
             Словарь с резолвнутыми значениями (только values, без метаданных)
         """
         company_variables = await self.variables_service._get_company_variables_map()
-        resolved = self._resolve_flow_variables_with_deferred_refs(
+        resolved = self._resolve_flow_variables(
             value=variables,
             company_variables=company_variables,
         )
         
-        # Извлекаем только значения из FlowVariableConfig объектов
         result = {}
         for key, value in resolved.items():
             if isinstance(value, dict) and "value" in value:
@@ -298,44 +295,25 @@ class FlowFactory:
         
         return result
 
-    def _resolve_flow_variables_with_deferred_refs(
+    def _resolve_flow_variables(
         self,
         value: Any,
         company_variables: Dict[str, Any],
     ) -> Any:
         if isinstance(value, dict):
             return {
-                key: self._resolve_flow_variables_with_deferred_refs(item, company_variables)
+                key: self._resolve_flow_variables(item, company_variables)
                 for key, item in value.items()
             }
         if isinstance(value, list):
             return [
-                self._resolve_flow_variables_with_deferred_refs(item, company_variables)
+                self._resolve_flow_variables(item, company_variables)
                 for item in value
             ]
         if not isinstance(value, str):
             return value
 
-        full_match = self._VAR_REF_PATTERN.match(value)
-        if full_match is not None:
-            path = full_match.group(1)
-            root_key = path.split(".", 1)[0]
-            if root_key not in company_variables:
-                return value
-            return VarResolver.resolve_ref(value, company_variables)
-
-        if "@var:" not in value:
-            return value
-
-        def replace_var(match: re.Match[str]) -> str:
-            path = match.group(1)
-            root_key = path.split(".", 1)[0]
-            if root_key not in company_variables:
-                return f"@var:{path}"
-            resolved_value = VarResolver.resolve_ref(f"@var:{path}", company_variables)
-            return str(resolved_value)
-
-        return self._VAR_TOKEN_PATTERN.sub(replace_var, value)
+        return VarResolver.resolve_for_flow_variable(value, company_variables)
 
     async def create_flow(self, config: FlowConfig, skill_id: str = "default") -> Flow:
         """

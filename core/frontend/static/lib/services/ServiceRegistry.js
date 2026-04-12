@@ -7,7 +7,10 @@ import { NotifyService } from '../../services/notify.service.js';
 import { IconService } from '../../services/icon.service.js';
 import { CalendarService } from '../../services/calendar.service.js';
 import { FilesService } from '../../services/files.service.js';
+import { FileTypesService } from '../../services/file-types.service.js';
+import { TeamService } from '../../services/team.service.js';
 import { getPWAService } from '../../services/pwa.service.js';
+import { i18n } from '../../services/i18n/i18n.service.js';
 import { AppEvents } from '../utils/types.js';
 import { redirectToLogin } from '../utils/auth-redirect.js';
 
@@ -42,7 +45,10 @@ class ServiceRegistryClass {
         this.register('icon', new IconService('/static/core/assets/icons'));
         this.register('calendarApi', new CalendarService(baseUrl));
         this.register('filesApi', new FilesService(baseUrl));
+        this.register('fileTypes', new FileTypesService(baseUrl));
+        this.register('team', new TeamService(baseUrl));
         this.register('pwa', getPWAService(baseUrl));
+        this.register('i18n', i18n);
 
         if (!this._auth401ListenerRegistered) {
             this._auth401ListenerRegistered = true;
@@ -82,6 +88,7 @@ class ServiceRegistryClass {
     get a2a() { return this.has('a2a') ? this.get('a2a') : null; }
     get companies() { return this.has('companies') ? this.get('companies') : null; }
     get ragApi() { return this.has('ragApi') ? this.get('ragApi') : null; }
+    get officeApi() { return this.has('officeApi') ? this.get('officeApi') : null; }
     get syncApi() { return this.has('syncApi') ? this.get('syncApi') : null; }
     get syncWs() { return this.has('syncWs') ? this.get('syncWs') : null; }
     get crmApi() { return this.has('crmApi') ? this.get('crmApi') : null; }
@@ -91,9 +98,14 @@ class ServiceRegistryClass {
     get settings() { return this.has('settings') ? this.get('settings') : null; }
     get servicesStatus() { return this.has('servicesStatus') ? this.get('servicesStatus') : null; }
     get pwa() { return this.has('pwa') ? this.get('pwa') : null; }
+    get i18n() { return this.get('i18n'); }
     get calendarApi() { return this.has('calendarApi') ? this.get('calendarApi') : null; }
     get filesApi() { return this.has('filesApi') ? this.get('filesApi') : null; }
+    get fileTypes() { return this.get('fileTypes'); }
 }
 
 export const ServiceRegistry = new ServiceRegistryClass();
 export const Services = ServiceRegistry;
+
+// i18n до registerCore: в body стоит app-loader (PlatformElement), он подписывается в connectedCallback.
+ServiceRegistry.register('i18n', i18n);

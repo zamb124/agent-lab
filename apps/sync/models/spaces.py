@@ -27,16 +27,16 @@ class SpaceRead(BaseModel):
         description="URL аватара (изображение).",
     )
     namespace: str | None = Field(default=None, description="Общий namespace для CRM/RAG.")
-    auto_export_transcript_to_crm: bool = Field(
-        default=False,
-        description="Автоэкспорт транскрипта встречи в CRM.",
-    )
-    auto_export_summary_to_crm: bool = Field(
-        default=False,
-        description="Автоэкспорт summary встречи в CRM.",
-    )
     created_at: datetime = Field(description="Время создания пространства.")
     created_by_user_id: str = Field(description="Создатель пространства.")
+    transcribe_voice_messages: bool = Field(
+        default=False,
+        description="Значение по умолчанию для новых каналов: авто-STT голосовых.",
+    )
+    speech_to_chat_enabled: bool = Field(
+        default=False,
+        description="Значение по умолчанию для новых каналов: речь звонка в ленту (LiveKit egress).",
+    )
 
 
 class SpaceCreate(BaseModel):
@@ -47,6 +47,14 @@ class SpaceCreate(BaseModel):
         default=None,
         description="Описание пространства.",
     )
+    transcribe_voice_messages: bool = Field(
+        default=False,
+        description="Дефолт авто-STT для новых каналов в этом пространстве.",
+    )
+    speech_to_chat_enabled: bool = Field(
+        default=False,
+        description="Дефолт «речь в ленту» для новых каналов в этом пространстве.",
+    )
 
 
 class SpaceUpdate(BaseModel):
@@ -56,8 +64,14 @@ class SpaceUpdate(BaseModel):
     description: str | None = Field(default=None, description="Новое описание пространства.")
     avatar_url: str | None = Field(default=None, description="URL аватара или null для сброса.")
     namespace: str | None = Field(default=None, description="Общий namespace CRM/RAG или null для сброса.")
-    auto_export_transcript_to_crm: bool | None = Field(default=None)
-    auto_export_summary_to_crm: bool | None = Field(default=None)
+    transcribe_voice_messages: bool | None = Field(
+        default=None,
+        description="Дефолт для новых каналов в space; существующие каналы не меняются.",
+    )
+    speech_to_chat_enabled: bool | None = Field(
+        default=None,
+        description="Дефолт «речь в ленту» для новых каналов; существующие каналы не меняются.",
+    )
 
     @field_validator("avatar_url")
     @classmethod

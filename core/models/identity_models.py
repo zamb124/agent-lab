@@ -3,8 +3,8 @@
 """
 
 from datetime import datetime, timezone
-from typing import Optional, Dict, Any, List
-from pydantic import BaseModel, ConfigDict, field_validator
+from typing import Optional, Dict, Any, List, Literal
+from pydantic import BaseModel, ConfigDict
 from enum import Enum
 
 from core.fields import Field
@@ -25,6 +25,8 @@ class AuthProvider(str, Enum):
     YANDEX = "yandex"
     GOOGLE = "google"
     GITHUB = "github"
+    APPLE = "apple"
+    DEMO = "demo"
 
 
 class User(BaseModel):
@@ -43,9 +45,22 @@ class User(BaseModel):
         readonly=True,
     )
     name: str = Field(
-        title="Имя", 
-        description="Имя пользователя", 
-        placeholder="Иван Иванов"
+        title="Имя",
+        description="Отображаемое имя; при сохранении ФИО может выставляться из имени и фамилии",
+        placeholder="Иван Иванов",
+        max_length=200,
+    )
+    first_name: Optional[str] = Field(
+        default=None,
+        title="Имя",
+        description="Имя для профиля и сопоставления на графе",
+        max_length=100,
+    )
+    last_name: Optional[str] = Field(
+        default=None,
+        title="Фамилия",
+        description="Фамилия для профиля и сопоставления на графе",
+        max_length=100,
     )
     status: UserStatus = Field(
         default=UserStatus.ACTIVE,
@@ -94,7 +109,8 @@ class User(BaseModel):
     bio: Optional[str] = Field(
         default=None,
         title="О себе",
-        description="Биография пользователя"
+        description="Биография пользователя для ИИ и интерфейса",
+        max_length=4000,
     )
     ui_preferences: Dict[str, Any] = Field(
         default_factory=dict,
@@ -105,6 +121,12 @@ class User(BaseModel):
         default_factory=dict,
         title="Атрибуты",
         description="Дополнительные service-specific данные"
+    )
+    password_hash: Optional[str] = Field(
+        default=None,
+        title="Хеш пароля",
+        description="Bcrypt-хеш; используется только для демо-учётки (auth.demo), не для OAuth",
+        groups={"admin": {"hidden": True}, "user": {"hidden": True}},
     )
     created_at: datetime = Field(
         default_factory=lambda: datetime.now(timezone.utc),
@@ -179,8 +201,7 @@ class Company(BaseModel):
     balance: float = Field(
         default=50.0,
         title="Баланс",
-        description="Баланс компании в RUB (реальные деньги на счету)",
-        ge=0.0,
+        description="Баланс компании в RUB; отрицательное значение — задолженность после списаний",
         groups={"admin": {"readonly": False}, "user": {"readonly": True}},
     )
     monthly_budget: float = Field(
@@ -290,6 +311,24 @@ class AuthRequest(BaseModel):
     code: str = Field(description="Код авторизации от провайдера")
     state: str = Field(description="State для проверки CSRF")
     redirect_uri: Optional[str] = Field(default=None, description="URI для редиректа")
+    oauth_first_login_user_json: Optional[str] = Field(
+        default=None,
+        description="Apple: JSON из query-параметра user при первой авторизации (имя)",
+    )
+
+
+class NamespaceCRMSettings(BaseModel):
+    """Настройки CRM для namespace (заметки: голос, контекст)."""
+
+    show_note_voice_ui: bool = Field(default=True, title="Показывать выбор голоса")
+    default_note_voice: Literal["self", "none", "last"] = Field(
+        default="self",
+        title="Голос по умолчанию для новой заметки",
+    )
+    default_context_entity_id: Optional[str] = Field(
+        default=None,
+        title="Якорь контекста по умолчанию",
+    )
 
 
 class Namespace(BaseModel):
@@ -314,25 +353,15 @@ class Namespace(BaseModel):
         title="Описание",
         description="Описание namespace"
     )
-    provider: str = Field(
-        default="pgvector",
-        title="RAG-провайдер",
-        description="Имя провайдера RAG (pgvector, agentset), в котором создан namespace; по умолчанию pgvector",
-    )
-
-    @field_validator("provider", mode="before")
-    @classmethod
-    def _coerce_provider_default(cls, value: object) -> object:
-        if value is None:
-            return "pgvector"
-        if isinstance(value, str) and value.strip() == "":
-            return "pgvector"
-        return value
-
     is_default: bool = Field(
         default=False,
         title="По умолчанию",
         description="Является ли namespace дефолтным для компании"
+    )
+    crm_settings: Optional[NamespaceCRMSettings] = Field(
+        default=None,
+        title="Настройки CRM",
+        description="Опционально: UI заметок и значения по умолчанию",
     )
     created_at: datetime = Field(
         default_factory=lambda: datetime.now(timezone.utc),

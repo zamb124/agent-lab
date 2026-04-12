@@ -3,6 +3,7 @@
  */
 import { html, css } from 'lit';
 import { PlatformModal } from '@platform/lib/components/glass-modal.js';
+import '@platform/lib/components/platform-icon.js';
 
 export class RawJsonModal extends PlatformModal {
     static styles = [
@@ -49,7 +50,7 @@ export class RawJsonModal extends PlatformModal {
             
             .download-json-btn:hover {
                 background: var(--accent-hover);
-                box-shadow: 0 2px 6px rgba(16, 185, 129, 0.3);
+                box-shadow: 0 2px 6px rgba(153, 166, 249, 0.3);
                 transform: translateY(-1px);
             }
         `
@@ -93,8 +94,8 @@ export class RawJsonModal extends PlatformModal {
 
     renderHeaderActions() {
         return html`
-            <button class="header-btn" @click=${this._downloadJson} title="Скачать JSON">
-                ⬇
+            <button class="header-btn" @click=${this._downloadJson} title=${this.i18n.t('raw_json.download_title')}>
+                <platform-icon name="arrow-down" size="16"></platform-icon>
             </button>
         `;
     }
@@ -145,7 +146,7 @@ export class RawJsonModal extends PlatformModal {
 
     renderBody() {
         if (!this.data) {
-            return html`<p>Нет данных</p>`;
+            return html`<p>${this.i18n.t('raw_json.no_data')}</p>`;
         }
 
         const beautified = this._beautifyData(this.data);

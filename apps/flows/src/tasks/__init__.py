@@ -1,4 +1,4 @@
-from apps.broker.broker import broker
+from apps.flows_worker.broker import broker
 from .eval_task import execute_inline_code, run_inline_code
 from .llm_tasks import invoke_llm
 from .tool_tasks import execute_tool

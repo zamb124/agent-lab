@@ -10,6 +10,7 @@ from core.docs.models import (
     StateField,
     CodeTemplate,
     ModuleMethod,
+    PlatformToolDoc,
 )
 from core.docs.service import DocumentationService
 
@@ -20,5 +21,6 @@ __all__ = [
     "StateField",
     "CodeTemplate",
     "ModuleMethod",
+    "PlatformToolDoc",
     "DocumentationService",
 ]

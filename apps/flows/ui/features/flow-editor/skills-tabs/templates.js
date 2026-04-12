@@ -1,6 +1,7 @@
 import { html } from 'lit';
 
 export function renderSkillsTabsBar(component) {
+    const t = (key) => component.i18n.t(key);
     return html`
         <div class="skills-tabs-bar">
             <div class="skills-tabs">
@@ -8,7 +9,7 @@ export function renderSkillsTabsBar(component) {
                     class="skill-tab ${component.activeSkill === 'base' ? 'active' : ''}"
                     @click=${() => component._switchSkill('base')}
                 >
-                    Base Flow
+                    ${t('skills_tabs.base_flow')}
                 </button>
                 
                 ${component.skills.map(skill => html`
@@ -23,7 +24,7 @@ export function renderSkillsTabsBar(component) {
                         ${skill.name}
                         <button
                             class="skill-close-btn"
-                            title="Удалить скилл"
+                            title=${t('skills_tabs.delete_skill_title')}
                             @click=${(e) => {
                                 e.stopPropagation();
                                 component._deleteSkill(skill.id);
@@ -37,7 +38,7 @@ export function renderSkillsTabsBar(component) {
             
             <button class="add-skill-btn" @click=${component._showNewSkillDialog}>
                 <platform-icon name="plus" size="14"></platform-icon>
-                Skill
+                ${t('skills_tabs.add_skill_button')}
             </button>
         </div>
     `;

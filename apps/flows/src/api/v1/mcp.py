@@ -2,29 +2,26 @@
 API endpoints для MCP серверов.
 """
 
+import asyncio
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel, Field
 
+from core.pagination import OffsetPage
 from apps.flows.src.clients.mcp_client import (
     MCPClientError,
     MCPHttpClient,
     clear_mcp_client_cache,
 )
-from apps.flows.src.container import FlowContainer, get_container
+from apps.flows.src.dependencies import ContainerDep
 from apps.flows.src.models.mcp import MCPServerConfig, MCPToolInfo, MCPTransportType
 from core.logging import get_logger
 
 logger = get_logger(__name__)
 
 router = APIRouter(tags=["mcp"])
-
-
-async def get_container_dep() -> FlowContainer:
-    """Dependency для получения контейнера."""
-    return get_container()
 
 
 class MCPServerCreateRequest(BaseModel):
@@ -113,19 +110,24 @@ def _server_to_response(server: MCPServerConfig) -> MCPServerResponse:
     )
 
 
-@router.get("/servers", response_model=List[MCPServerResponse])
+@router.get("/servers", response_model=OffsetPage[MCPServerResponse])
 async def list_servers(
-    container: FlowContainer = Depends(get_container_dep),
-) -> List[MCPServerResponse]:
-    """Список всех MCP серверов."""
-    servers = await container.mcp_server_repository.list_all()
-    return [_server_to_response(s) for s in servers]
+    container: ContainerDep,
+    limit: int = Query(200, ge=1, le=1000),
+    offset: int = Query(0, ge=0),
+) -> OffsetPage[MCPServerResponse]:
+    servers, total = await asyncio.gather(
+        container.mcp_server_repository.list(limit=limit, offset=offset),
+        container.mcp_server_repository.count_all(),
+    )
+    items = [_server_to_response(s) for s in servers]
+    return OffsetPage[MCPServerResponse](items=items, total=total, limit=limit, offset=offset)
 
 
 @router.post("/servers", response_model=MCPServerResponse)
 async def create_server(
     request: MCPServerCreateRequest,
-    container: FlowContainer = Depends(get_container_dep),
+    container: ContainerDep,
 ) -> MCPServerResponse:
     """Создает MCP сервер."""
     existing = await container.mcp_server_repository.get(request.server_id)
@@ -153,7 +155,7 @@ async def create_server(
 @router.get("/servers/{server_id}", response_model=MCPServerResponse)
 async def get_server(
     server_id: str,
-    container: FlowContainer = Depends(get_container_dep),
+    container: ContainerDep,
 ) -> MCPServerResponse:
     """Получает MCP сервер по ID."""
     server = await container.mcp_server_repository.get(server_id)
@@ -167,7 +169,7 @@ async def get_server(
 async def update_server(
     server_id: str,
     request: MCPServerUpdateRequest,
-    container: FlowContainer = Depends(get_container_dep),
+    container: ContainerDep,
 ) -> MCPServerResponse:
     """Обновляет MCP сервер."""
     server = await container.mcp_server_repository.get(server_id)
@@ -194,7 +196,7 @@ async def update_server(
 @router.delete("/servers/{server_id}")
 async def delete_server(
     server_id: str,
-    container: FlowContainer = Depends(get_container_dep),
+    container: ContainerDep,
 ) -> dict:
     """Удаляет MCP сервер."""
     server = await container.mcp_server_repository.get(server_id)
@@ -215,7 +217,7 @@ async def delete_server(
 @router.post("/servers/{server_id}/sync", response_model=MCPSyncResponse)
 async def sync_server_tools(
     server_id: str,
-    container: FlowContainer = Depends(get_container_dep),
+    container: ContainerDep,
 ) -> MCPSyncResponse:
     """
     Синхронизирует tools с MCP сервера.
@@ -304,7 +306,7 @@ async def sync_server_tools(
 @router.post("/servers/{server_id}/test", response_model=MCPTestResponse)
 async def test_server_connection(
     server_id: str,
-    container: FlowContainer = Depends(get_container_dep),
+    container: ContainerDep,
 ) -> MCPTestResponse:
     """Тестирует подключение к MCP серверу."""
     server = await container.mcp_server_repository.get(server_id)

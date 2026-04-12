@@ -29,7 +29,7 @@ async def test_calendar_event_crud_and_filters(
     end_at = start_at + timedelta(hours=1)
     create_payload = {
         "title": f"Calendar CRUD {unique_id}",
-        "kind": "meeting",
+        "kind": "event",
         "source": "platform",
         "source_id": None,
         "namespace": "tests",
@@ -104,6 +104,45 @@ async def test_calendar_event_crud_and_filters(
     assert after_delete.status_code == 200
     event_ids = {item["event_id"] for item in after_delete.json()["events"]}
     assert event_id not in event_ids
+
+
+@pytest.mark.asyncio
+async def test_calendar_platform_kind_event_has_no_sync_link_metadata(
+    unique_id: str,
+    frontend_client,
+    auth_headers_system,
+) -> None:
+    now = datetime.now(timezone.utc)
+    response = await frontend_client.post(
+        "/frontend/api/calendar/events",
+        json={
+            "title": f"plain event {unique_id}",
+            "kind": "event",
+            "source": "platform",
+            "source_id": None,
+            "namespace": None,
+            "description": None,
+            "location": None,
+            "status": "confirmed",
+            "timezone": "UTC",
+            "all_day": False,
+            "start_at": (now + timedelta(hours=4)).isoformat(),
+            "end_at": (now + timedelta(hours=5)).isoformat(),
+            "attendees": [],
+            "recurrence_rule": None,
+            "recurrence_id": None,
+            "series_id": None,
+            "deep_link": None,
+            "metadata": {},
+        },
+        headers=auth_headers_system,
+    )
+    assert response.status_code == 200
+    body = response.json()
+    meta = body.get("metadata") or {}
+    assert not meta.get("sync_link_token")
+    assert meta.get("sync_meeting") not in ("1", 1)
+    assert body.get("deep_link") in (None, "")
 
 
 @pytest.mark.asyncio
@@ -234,8 +273,9 @@ async def test_auth_google_callback_can_finalize_calendar_integration_state(
     location = response.headers.get("location")
     assert location is not None
     assert location.startswith("/crm/calendar")
-    assert "calendar_provider=google" in location
-    assert "calendar_status=connected" in location
+    assert "integration_provider=google" in location
+    assert "integration_service=calendar" in location
+    assert "integration_status=connected" in location
 
 
 @pytest.mark.asyncio
@@ -338,7 +378,7 @@ async def test_calendar_create_event_sends_invite_notification_by_attendee_id(
     end_at = start_at + timedelta(minutes=30)
     create_payload = {
         "title": f"Invite by attendee_id {unique_id}",
-        "kind": "meeting",
+        "kind": "event",
         "source": "platform",
         "source_id": None,
         "namespace": "tests",
@@ -400,7 +440,7 @@ async def test_calendar_create_event_sends_invite_notification_by_attendee_email
     end_at = start_at + timedelta(minutes=45)
     create_payload = {
         "title": f"Invite by attendee_email {unique_id}",
-        "kind": "meeting",
+        "kind": "event",
         "source": "platform",
         "source_id": None,
         "namespace": "tests",

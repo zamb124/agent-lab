@@ -52,7 +52,7 @@ export class MCPNodeModal extends BaseNodeModal {
     }
 
     getModalTitle() {
-        return 'MCP Tool Node';
+        return this.i18n.t('node_modal.titles.mcp');
     }
 
     showModal(nodeId = '', config = {}) {
@@ -63,14 +63,15 @@ export class MCPNodeModal extends BaseNodeModal {
 
     async _loadMCPServers() {
         try {
-            const servers = await this.a2a.get('/api/v1/mcp/servers');
+            const serversPage = await this.a2a.get('/api/v1/mcp/servers');
+            const servers = serversPage.items;
             this.mcpServers = servers || [];
             
             if (this.selectedServerId) {
                 this._loadServerTools(this.selectedServerId);
             }
         } catch (error) {
-            this.error(`Ошибка загрузки MCP серверов: ${error.message}`);
+            this.error(this.i18n.t('node_modal.mcp.err_load_servers', { message: error.message }));
             this.mcpServers = [];
         }
     }
@@ -101,11 +102,11 @@ export class MCPNodeModal extends BaseNodeModal {
         const toolName = this.shadowRoot.querySelector('[name="tool_name"]')?.value?.trim() || '';
         
         if (!serverId) {
-            throw new Error('MCP сервер обязателен');
+            throw new Error(this.i18n.t('node_modal.mcp.err_server'));
         }
         
         if (!toolName) {
-            throw new Error('Tool обязателен');
+            throw new Error(this.i18n.t('node_modal.mcp.err_tool'));
         }
         
         const config = {
@@ -119,7 +120,7 @@ export class MCPNodeModal extends BaseNodeModal {
         const headersEditor = this.shadowRoot.querySelector('json-field-editor[name="headers"]');
         if (headersEditor?.getValue()?.trim()) {
             if (!headersEditor.isValid()) {
-                throw new Error('Неверный формат Headers JSON');
+                throw new Error(this.i18n.t('node_modal.mcp.err_headers'));
             }
             const headers = headersEditor.getParsedValue();
             if (Object.keys(headers).length > 0) {
@@ -130,7 +131,7 @@ export class MCPNodeModal extends BaseNodeModal {
         const stateMappingEditor = this.shadowRoot.querySelector('json-field-editor[name="state_mapping"]');
         if (stateMappingEditor?.getValue()?.trim()) {
             if (!stateMappingEditor.isValid()) {
-                throw new Error('Неверный формат State Mapping JSON');
+                throw new Error(this.i18n.t('node_modal.mcp.err_state_mapping'));
             }
             const stateMapping = stateMappingEditor.getParsedValue();
             if (Object.keys(stateMapping).length > 0) {
@@ -155,7 +156,7 @@ export class MCPNodeModal extends BaseNodeModal {
             <div class="form-layout">
                 <div class="form-sidebar">
                     <div class="form-group">
-                        <label class="form-label">Node ID *</label>
+                        <label class="form-label">${this.i18n.t('node_modal.common.node_id_label')}</label>
                         <input 
                             type="text" 
                             name="node_id"
@@ -168,21 +169,21 @@ export class MCPNodeModal extends BaseNodeModal {
                     </div>
                     
                     <div class="form-group">
-                        <label class="form-label">Имя</label>
+                        <label class="form-label">${this.i18n.t('node_modal.common.field_name')}</label>
                         <input 
                             type="text" 
                             name="name"
                             class="form-input"
                             .value=${config.name || ''}
-                            placeholder="MCP Tool Call"
+                            placeholder=${this.i18n.t('node_modal.mcp.placeholder_name')}
                         />
                     </div>
                     
                     <div class="mcp-section">
-                        <div class="mcp-section-title">MCP Сервер и Tool</div>
+                        <div class="mcp-section-title">${this.i18n.t('node_modal.mcp.section_title')}</div>
                         
                         <div class="form-group">
-                            <label class="form-label">MCP Сервер *</label>
+                            <label class="form-label">${this.i18n.t('node_modal.mcp.server_label')}</label>
                             <select 
                                 name="server_id" 
                                 class="form-select"
@@ -190,7 +191,7 @@ export class MCPNodeModal extends BaseNodeModal {
                                 @change=${this._onServerChange}
                                 required
                             >
-                                <option value="">Выберите сервер...</option>
+                                <option value="">${this.i18n.t('node_modal.mcp.select_server')}</option>
                                 ${this.mcpServers.map(server => html`
                                     <option 
                                         value=${server.server_id}
@@ -206,7 +207,7 @@ export class MCPNodeModal extends BaseNodeModal {
                         </div>
                         
                         <div class="form-group">
-                            <label class="form-label">Tool *</label>
+                            <label class="form-label">${this.i18n.t('node_modal.mcp.tool_label')}</label>
                             <select 
                                 name="tool_name" 
                                 class="form-select"
@@ -214,7 +215,7 @@ export class MCPNodeModal extends BaseNodeModal {
                                 ?disabled=${!this.selectedServerId}
                                 required
                             >
-                                <option value="">Выберите tool...</option>
+                                <option value="">${this.i18n.t('node_modal.mcp.select_tool')}</option>
                                 ${this.serverTools.map(tool => html`
                                     <option 
                                         value=${tool.name}
@@ -225,19 +226,19 @@ export class MCPNodeModal extends BaseNodeModal {
                                 `)}
                             </select>
                             ${this.serverTools.length === 0 && this.selectedServerId ? html`
-                                <span class="form-hint">Синхронизируйте tools на странице MCP серверов</span>
+                                <span class="form-hint">${this.i18n.t('node_modal.mcp.sync_tools_hint')}</span>
                             ` : ''}
                         </div>
                     </div>
                     
                     <div class="form-group">
-                        <label class="form-label">Headers (JSON)</label>
+                        <label class="form-label">${this.i18n.t('node_modal.mcp.headers_label')}</label>
                         <json-field-editor
                             name="headers"
                             .value=${config.headers ? JSON.stringify(config.headers, null, 2) : '{}'}
                             min-height="80"
                             placeholder='{"X-Custom-Header": "value"}'
-                            hint="Дополнительные headers (переопределяют серверные)"
+                            hint=${this.i18n.t('node_modal.mcp.headers_hint')}
                         ></json-field-editor>
                     </div>
                     
@@ -254,18 +255,17 @@ export class MCPNodeModal extends BaseNodeModal {
                     </div>
                     
                     <div class="form-group">
-                        <label class="form-label">State Mapping (JSON)</label>
+                        <label class="form-label">${this.i18n.t('node_modal.mcp.state_mapping_label')}</label>
                         <json-field-editor
                             name="state_mapping"
                             .value=${config.state_mapping ? JSON.stringify(config.state_mapping, null, 2) : '{}'}
                             min-height="80"
                             placeholder='{"result": "mcp_result"}'
-                            hint="Маппинг результата MCP tool в state"
+                            hint=${this.i18n.t('node_modal.mcp.state_mapping_hint')}
                         ></json-field-editor>
                     </div>
                     
                     <test-panel
-                        .flowId=${this.flowId || ''}
                         .inputState=${this._buildDefaultState()}
                         .defaultInputState=${this._buildDefaultState()}
                         @validate=${this._onValidate}

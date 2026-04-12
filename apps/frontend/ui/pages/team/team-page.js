@@ -4,9 +4,12 @@
 import { html, css } from 'lit';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
 import { copyTextToClipboard } from '@platform/lib/utils/clipboard.js';
+import { isStandaloneOrNativeAppShell } from '@platform/lib/utils/native-app-shell.js';
+import { createAvatarRetry } from '@platform/lib/utils/avatar-retry.js';
 import { FrontendStore } from '../../store/frontend.store.js';
 import '../../modals/edit-team-member-modal.js';
 import '@platform/lib/components/layout/page-header.js';
+import '@platform/lib/components/glass-spinner.js';
 
 export class TeamPage extends PlatformElement {
     static styles = [
@@ -28,12 +31,12 @@ export class TeamPage extends PlatformElement {
                 font-weight: var(--font-medium);
                 cursor: pointer;
                 transition: all var(--duration-fast);
-                box-shadow: 0 4px 12px rgba(16, 185, 129, 0.25);
+                box-shadow: 0 4px 12px rgba(153, 166, 249, 0.25);
             }
 
             .primary-button:hover {
                 transform: scale(1.05);
-                box-shadow: 0 8px 24px rgba(16, 185, 129, 0.4);
+                box-shadow: 0 8px 24px rgba(153, 166, 249, 0.4);
             }
 
             .members-grid {
@@ -181,10 +184,12 @@ export class TeamPage extends PlatformElement {
                 margin: 0 0 var(--space-6) 0;
             }
 
-            .loading-state {
-                text-align: center;
-                padding: var(--space-12);
-                color: var(--text-secondary);
+            .page-loading {
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                flex: 1;
+                min-height: 200px;
             }
 
             @media (max-width: 768px) {
@@ -210,10 +215,26 @@ export class TeamPage extends PlatformElement {
     constructor() {
         super();
         this._canManageTeam = false;
+        this._avatarRetries = new Map();
         this.state = this.use((s) => ({
             members: s.entities.team.members,
             loading: s.entities.team.loading,
         }));
+    }
+
+    disconnectedCallback() {
+        super.disconnectedCallback?.();
+        for (const ctrl of this._avatarRetries.values()) {
+            ctrl.cancel();
+        }
+        this._avatarRetries.clear();
+    }
+
+    _getAvatarRetry(memberId) {
+        if (!this._avatarRetries.has(memberId)) {
+            this._avatarRetries.set(memberId, createAvatarRetry(() => this.requestUpdate()));
+        }
+        return this._avatarRetries.get(memberId);
     }
 
     _computeCanManageTeam() {
@@ -226,10 +247,19 @@ export class TeamPage extends PlatformElement {
 
     async connectedCallback() {
         super.connectedCallback();
+        this._i18nUnsub = this.i18n.subscribe(() => this.requestUpdate());
         await this.services.get('auth').validateToken();
         this._canManageTeam = this._computeCanManageTeam();
         this.requestUpdate();
         await this._loadMembers();
+    }
+
+    disconnectedCallback() {
+        if (this._i18nUnsub) {
+            this._i18nUnsub();
+            this._i18nUnsub = null;
+        }
+        super.disconnectedCallback();
     }
 
     async _loadMembers() {
@@ -239,10 +269,11 @@ export class TeamPage extends PlatformElement {
     }
 
     render() {
+        const td = (key, params) => this.i18n.t(key, params ?? {});
         return html`
-            <page-header title="Команда">
+            <page-header title=${td('team_page.title')}>
                 <button slot="actions" class="primary-button" @click=${this._onCopyInviteLink}>
-                    + Скопировать ссылку-приглашение
+                    ${td('team_page.copy_invite')}
                 </button>
             </page-header>
 
@@ -251,20 +282,21 @@ export class TeamPage extends PlatformElement {
     }
 
     _renderContent() {
+        const td = (key, params) => this.i18n.t(key, params ?? {});
         const { members, loading } = this.state.value;
         
         if (loading) {
-            return html`<div class="loading-state">Загрузка...</div>`;
+            return html`<div class="page-loading"><glass-spinner size="lg"></glass-spinner></div>`;
         }
 
         if (members.length === 0) {
             return html`
                 <div class="empty-state">
                     <div class="empty-icon">T</div>
-                    <h2 class="empty-title">Нет участников</h2>
-                    <p class="empty-description">Скопируйте ссылку-приглашение и отправьте коллеге</p>
+                    <h2 class="empty-title">${td('team_page.empty_title')}</h2>
+                    <p class="empty-description">${td('team_page.empty_description')}</p>
                     <button class="primary-button" @click=${this._onCopyInviteLink}>
-                        Скопировать ссылку-приглашение
+                        ${td('team_page.copy_invite_action')}
                     </button>
                 </div>
             `;
@@ -278,13 +310,20 @@ export class TeamPage extends PlatformElement {
     }
 
     _renderMemberCard(member) {
+        const td = (key, params) => this.i18n.t(key, params ?? {});
+        const roleLabel = (r) => this.i18n.t(`team_roles.${r}`, {});
         const initials = this._getInitials(member.name);
+        const retry = this._getAvatarRetry(member.user_id);
+        const originalUrl = member.avatar_url ?? null;
+        const avatarSrc = retry.currentSrc(originalUrl);
         
         return html`
             <div class="member-card">
                 <div class="member-avatar">
-                    ${member.avatar_url
-                        ? html`<img src=${member.avatar_url} alt="" />`
+                    ${avatarSrc
+                        ? html`<img src=${avatarSrc} alt=""
+                            @load=${() => retry.onLoad()}
+                            @error=${() => retry.onError(originalUrl)} />`
                         : initials}
                 </div>
                 
@@ -295,7 +334,7 @@ export class TeamPage extends PlatformElement {
                     ` : ''}
                     <div class="member-roles">
                         ${member.roles.map((role) => html`
-                            <span class="role-badge ${role}">${role}</span>
+                            <span class="role-badge ${role}">${roleLabel(role)}</span>
                         `)}
                     </div>
                 </div>
@@ -305,7 +344,7 @@ export class TeamPage extends PlatformElement {
                         ? html`
                               <button
                                   class="icon-button"
-                                  title="Изменить роль"
+                                  title=${td('team_page.edit_role')}
                                   @click=${() => this._onEditRole(member)}
                               >
                                   E
@@ -314,7 +353,7 @@ export class TeamPage extends PlatformElement {
                                   ? html`
                                         <button
                                             class="icon-button danger"
-                                            title="Удалить"
+                                            title=${td('team_page.remove')}
                                             @click=${() => this._onRemoveMember(member)}
                                         >
                                             X
@@ -337,21 +376,61 @@ export class TeamPage extends PlatformElement {
         return name[0].toUpperCase();
     }
 
+    async _shareInviteUrl(url) {
+        if (typeof navigator.share !== 'function') {
+            return 'unavailable';
+        }
+        const payloads = [{ url }, { url, text: url }];
+        for (const data of payloads) {
+            if (typeof navigator.canShare === 'function' && !navigator.canShare(data)) {
+                continue;
+            }
+            try {
+                await navigator.share(data);
+                return 'shared';
+            } catch (err) {
+                const name = err && typeof err === 'object' && 'name' in err ? err.name : '';
+                if (name === 'AbortError') {
+                    return 'aborted';
+                }
+            }
+        }
+        return 'failed';
+    }
+
     async _onCopyInviteLink() {
+        const td = (key) => this.i18n.t(key, {});
         let result;
         try {
             result = await this.services.get('team').generateInviteLink('developer');
         } catch {
-            this.error('Не удалось создать ссылку-приглашение');
+            this.error(td('team_page.err_invite'));
             return;
         }
 
+        const url = result.invite_url;
+        const shell = typeof window !== 'undefined' && isStandaloneOrNativeAppShell();
+
         try {
-            await copyTextToClipboard(result.invite_url);
-            this.success('Ссылка-приглашение скопирована в буфер обмена');
+            await copyTextToClipboard(url);
+            this.success(td('team_page.toast_invite_copied'));
+            return;
         } catch {
-            this.error('Ссылка создана, но буфер обмена недоступен. Откройте ответ API и скопируйте invite_url.');
+            if (!shell) {
+                this.error(td('team_page.err_clipboard'));
+                return;
+            }
         }
+
+        const shareOutcome = await this._shareInviteUrl(url);
+        if (shareOutcome === 'shared') {
+            this.success(td('team_page.toast_invite_shared'));
+            return;
+        }
+        if (shareOutcome === 'aborted') {
+            return;
+        }
+        this.error(td('team_page.err_clipboard'));
     }
 
     async _reloadMembers() {
@@ -369,12 +448,13 @@ export class TeamPage extends PlatformElement {
     }
 
     async _onRemoveMember(member) {
-        const confirmed = confirm(`Удалить ${member.name} из команды?`);
+        const td = (key, params) => this.i18n.t(key, params ?? {});
+        const confirmed = confirm(td('team_page.confirm_remove', { name: member.name }));
         if (!confirmed) return;
         
         await this.services.get('team').removeMember(member.user_id);
         await this._reloadMembers();
-        this.success(`${member.name} удален из команды`);
+        this.success(td('team_page.toast_removed', { name: member.name }));
     }
 }
 

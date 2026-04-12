@@ -2,15 +2,10 @@
  * Flows Builder - Entry Point
  */
 
-console.log('Flows Builder загружается...');
-
-// Импортируем главное приложение - оно автоматически инициализирует все сервисы
 import './app/FlowsApp.js';
 
-// Редактор кода (platform chat / flow editor); не только через ленивые импорты нод
 import './components/editors/code-editor.js';
 
-// Импортируем компоненты из core/frontend
 import '@platform/lib/components/glass-modal.js';
 import '@platform/lib/components/glass-form-modal.js';
 import '@platform/lib/components/platform-icon.js';
@@ -42,7 +37,6 @@ import './components/editors/test-panel.js';
 import './components/nodes/index.js';
 
 // Модальные окна (загружаем ДО функциональных компонентов, которые их используют)
-import './modals/platform-modal-host.js';
 import './modals/confirm-modal.js';
 import './modals/sessions-modal.js';
 import './modals/tracing-modal.js';
@@ -52,6 +46,7 @@ import './modals/state-modal.js';
 import './modals/flow-edit-modal.js';
 import './modals/flow-create-modal.js';
 import './modals/edge-condition-modal.js';
+import './modals/incoming-policy-modal.js';
 import './modals/mcp-servers-modal.js';
 import './modals/variables-modal.js';
 
@@ -70,5 +65,3 @@ import './features/flow-editor/flow-canvas/index.js';
 import './features/flow-editor/bottom-toolbar.js';
 import './features/flow-editor/property-panel.js';
 import './features/flow-editor/skills-tabs/index.js';
-
-console.log('Flows Builder инициализирован');

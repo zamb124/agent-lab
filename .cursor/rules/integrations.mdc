@@ -1,5 +1,5 @@
 ---
-description: "Интеграции: A2A, TaskIQ, Redis Pub/Sub, HTTP, внешние flows (A2A)"
+description: "Интеграции: A2A, TaskIQ, Redis Pub/Sub, HTTP, внешние flows (A2A), OAuth для внешних сервисов"
 alwaysApply: false
 ---
 # Интеграции
@@ -13,7 +13,7 @@ alwaysApply: false
 - SessionLockMiddleware (FIFO per session)
 
 ```python
-from core.tasks import broker, scheduler, schedule_source
+from apps.flows_worker.broker import broker
 
 @broker.task(retry_on_error=True, max_retries=3)
 async def my_task(param: str) -> str:
@@ -51,7 +51,7 @@ emitter = Emitter(redis_client, state)
 await emitter.emit_text("Hello")
 await emitter.emit_tool_call("calculator", {"x": 1}, "call_123")
 await emitter.emit_complete("Done")
-await emitter.emit_interrupt("Вопрос?")
+await emitter.emit_interrupt(state.interrupt)
 
 # Подписка (в API)
 subscriber = EventSubscriber(redis_client)
@@ -62,6 +62,8 @@ async for event in subscriber.subscribe(task_id):
 **A2A типы (из a2a-sdk):**
 - `TaskStatusUpdateEvent` - статус задачи (working, input-required, completed, failed)
 - `TaskArtifactUpdateEvent` - текстовые чанки от LLM
+
+**A2A вложения (`FilePart`):** `FileWithBytes` на HTTP API flows не пишется на локальный диск: канал вызывает `FileProcessor.persist_uploaded_file_as_state_files_item` (внутри — `persist_uploaded_file` / S3 + `FileRecord`). Имя без суффикса дополняется расширением по MIME в `process_file_from_bytes`. В `state.files` — `file_id` и same-origin `path` вида `/{server.name}/api/v1/files/download/{file_id}`. `FileWithUri` — без персиста, в `path` остаётся URI. Нужен `active_company` в контексте. При takeover ответ пользователя с файлами: в `dialog_log` уходят только `file_id` из этих записей (чтение локального path с диска не используется).
 
 **Автоматически добавляется:**
 - `task_id`, `context_id`
@@ -83,14 +85,18 @@ response = await client.get("flows", "/flows/api/v1/flows/")
 response = await client.post("crm", "/crm/api/v1/entities/", json=data)
 ```
 
-**Сервисы:** `flows`, `crm`, `frontend`
+**Сервисы:** `flows`, `crm`, `frontend`, `rag`, `sync`, `office`, `scheduler` (и др. по `ServerConfig` / `get_service_url`).
 
-**Браузер и тот же origin (shell на :8002, API flows на :8001):** без ingress в `development` / `test` при локальном Host срабатывает `DevInterServiceProxyMiddleware` в `create_service_app`: путь `/flows/...`, `/crm/...` и т.д. пересылается на `server.*_service_url` (если текущий процесс — не целевой сервис). В upstream уходит **тот же `Host`, что у браузера** (`qqq.lvh.me:8002`), а не `localhost:8001` — иначе `CompanyResolver` не видит субдомен и `/flows` (frontend) уводит на выбор компании; `/sync` часто в `anonymous` и ведёт себя иначе. Локальный Host определяется через `core.utils.domain.is_local`. В production с внешним доменом прокси не включается.
+Вызовы REST **документов** с других сервисов — на BFF: `ServiceClient` → `"office"`, путь `/documents/api/v1/...` (секреты OnlyOffice только в процессе `apps/office`). В проде Document Server — на **субдомене** `onlyoffice.{domain}` (единый Ingress `path: /`), не на основном домене с набором Prefix. См. **`office.mdc`**.
+
+**Браузер и тот же origin (shell на :8002, API flows на :8001):** без ingress в `development` / `test` при локальном Host срабатывает `DevInterServiceProxyMiddleware` в `create_service_app`: путь `/flows/...`, `/crm/...`, `/documents/...` и т.д. пересылается на `server.*_service_url` (если текущий процесс — не целевой сервис). В upstream уходит **тот же `Host`, что у браузера** (`qqq.lvh.me:8002`), а не `localhost:8001` — иначе `CompanyResolver` не видит субдомен и `/flows` (frontend) уводит на выбор компании; `/sync` часто в `anonymous` и ведёт себя иначе. Префиксы OnlyOffice **`/web-apps`**, **`/common`**, **`/cache`**, **`/fonts`**, **`/sdkjs`**, **`/downloadfile`**, пути **`/{semver}-{hex}/web-apps/...`**, **`/{semver}-{hex}/sdkjs/...`**, **`/{semver}-{hex}/fonts/...`**, **`/{semver}-{hex}/doc/...`** (co-editing / Socket.IO) при заданном **`server.document_server_dev_upstream_url`** уходят на Document Server с **`Host`** = **`Host`** запроса браузера (как у прочих прокси в middleware), чтобы подписанные URL DS не указывали на порт контейнера и не ломали CORS. Локальный Host определяется через `core.utils.domain.is_local`. В production с внешним доменом прокси не включается.
 
 **Преимущества:**
 - Автоматическая передача trace_id, авторизации
 - Валидация по OpenAPI
 - Единая конфигурация URL
+
+**Заголовки httpx:** значения должны быть encodable в latin-1. Не класть в заголовки сырой `user_id` с Unicode (например гость `guest:…:Кириллица`). Контекст пользователя для межсервисного вызова — в JWT (`Authorization`); см. `_build_interservice_auth_headers` в `apps/sync/realtime/tasks.py`.
 
 ### Внешние API - get_httpx_client
 
@@ -170,10 +176,54 @@ external_flow = await container.flow_discovery.register_agent(
 - `@var:api.host` → `variables["api"]["host"]`
 - `@var:auth.tokens.access` → `variables["auth"]["tokens"]["access"]`
 
+## Универсальный механизм авторизации интеграций
+
+**Модуль:** `core/integrations/` — единый OAuth2 flow для всех внешних интеграций (Google, Yandex, будущие).
+
+### Компоненты
+
+| Файл | Назначение |
+|------|-----------|
+| `core/integrations/models.py` | `IntegrationProvider`, `IntegrationCredential`, `OAuthProviderConfig` |
+| `core/integrations/repository.py` | `IntegrationCredentialRepository` — CRUD для `integration_credentials` (shared БД) |
+| `core/integrations/oauth_service.py` | `OAuthService` — `build_auth_url`, `complete_oauth`, `refresh_token`, `get_valid_token` |
+| `core/api/integrations.py` | OAuth callback: `GET /{server.name}/api/v1/integrations/oauth/callback` (flows: `/flows/api/v1/...`); дефолтный `redirect_uri` в `OAuthService.build_auth_url` совпадает с этим путём |
+
+### Приоритет credentials в тулах
+
+1. **Company-level** — `state.variables` (SA JSON, static token) — преднастроено админом
+2. **Per-user OAuth** — `integration_credentials` в БД — `company_id` и `user_id` из `get_context()`, НЕ из state
+3. **Нет ничего** — тул бросает `FlowInterrupt(body=OAuthInterrupt(...))`, flow ставится на паузу; после OAuth callback — автоматический resume
+
+### FlowInterrupt для OAuth (auto-resume)
+
+- `OAuthInterrupt` (`core/state/interrupt.py`): `kind=oauth_required`, поля `question`, `auth_url`, `provider`, `service`
+- `build_auth_url(..., flow_context=...)`: в OAuth state (Storage) сохраняется контекст flow (`flow_id`, `session_id`, `task_id`, `context_id`, `skill_id`, `channel`, `context_data`)
+- OAuth callback (`core/api/integrations.py`): после `complete_oauth` — если `flow_context` есть, вызывает `process_flow_task.kiq(is_resume=True, content="oauth_completed:...")`
+- SSE: `emit_interrupt` для `OAUTH_REQUIRED` отправляет `input-required` с **`final=False`** и **`platform_oauth_continue=true`** — SSE остаётся открытым
+- UI: `interruptKind === 'oauth_required'` — кнопка/ссылка авторизации (target=_blank), юзер авторизуется в новой вкладке → flow продолжается автоматически
+
+### Безопасность
+
+`company_id` для чтения/записи credentials — ТОЛЬКО из `get_context().active_company.company_id`. Разработчик flow не может подменить через `input_mapping` или `state.variables`.
+
+### Прозрачность
+
+Вся логика авторизации ЯВНО в коде тула: переменные, OAuth-проверка, создание клиента. Никаких скрытых resolver-ов. Разработчик flow видит каждый шаг и может менять имена переменных, убирать OAuth-ветку, добавлять свою логику.
+
+### CalendarService
+
+Делегирует OAuth в `OAuthService` (через конструктор). Credentials хранятся в `integration_credentials`, calendar-специфичные настройки — в `metadata.calendar_settings` JSONB.
+
+### DI
+
+`BaseContainer` предоставляет `oauth_service` и `integration_credential_repository` для всех сервисов.
+
 ## КРИТИЧНЫЕ ПРАВИЛА
 
-1. **TaskIQ:** Все задачи через `core.tasks.broker`, FIFO per session автоматически
+1. **TaskIQ:** Задачи регистрируются на брокере своего worker-модуля (`apps.flows_worker.broker`, `apps.idle_worker.broker`, `apps.rag_worker.broker`, `apps.sync.realtime.broker`, `apps.crm_worker.broker`); FIFO per session автоматически
 2. **Streaming:** LLM ТОЛЬКО через `.stream()`, события через Redis Pub/Sub
 3. **Данные между сервисами:** репозиторий при доступной БД (`repository_inter_service.mdc`). **HTTP между сервисами:** только `ServiceClient`; внешние API — `get_httpx_client`
 4. **A2A типы:** Используй типы из `a2a-sdk`, НЕ создавай свои
 5. **OAuth:** ВСЕГДА `use_proxy_from_config=False`
+6. **Интеграции:** Авторизация внешних сервисов — через `core/integrations/OAuthService`, не дублировать OAuth-логику в сервисах

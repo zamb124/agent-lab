@@ -1,7 +1,7 @@
 """
 Модели shared-базы данных.
 
-Таблицы platform БД: storage, users, variables, usage, namespaces, spans, push_subscriptions.
+Таблицы platform БД: storage, users, variables, usage, namespaces, push_subscriptions.
 """
 
 from datetime import datetime, timezone
@@ -22,6 +22,7 @@ class Storage(Base):
     - agent:flow_id
     - flow:flow_id
     - session:session_id
+    - company:system:request:{uuid} — заявки с лендинга (frontend), значение JSON
     """
 
     __tablename__ = "storage"
@@ -196,55 +197,6 @@ class Namespaces(Base):
         return f"<Namespaces(key='{self.key}', updated_at='{self.updated_at}')>"
 
 
-class Spans(Base):
-    """
-    Таблица для хранения OpenTelemetry spans.
-
-    Нормализованная структура для быстрого поиска по user_id, flow_id, session.
-    """
-
-    __tablename__ = "spans"
-
-    span_id: Mapped[str] = mapped_column(String, primary_key=True, index=True)
-    trace_id: Mapped[str] = mapped_column(String, nullable=False, index=True)
-    parent_span_id: Mapped[Optional[str]] = mapped_column(String, nullable=True, index=True)
-
-    operation_name: Mapped[str] = mapped_column(String, nullable=False)
-    kind: Mapped[Optional[str]] = mapped_column(String, nullable=True)
-
-    start_time: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, index=True)
-    end_time: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
-    duration_ms: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
-
-    status: Mapped[Optional[str]] = mapped_column(String, nullable=True)
-    status_message: Mapped[Optional[str]] = mapped_column(String, nullable=True)
-
-    user_id: Mapped[Optional[str]] = mapped_column(String, nullable=True, index=True)
-    user_name: Mapped[Optional[str]] = mapped_column(String, nullable=True)
-    user_groups: Mapped[Optional[dict[str, Any]]] = mapped_column(JSONB, nullable=True)
-
-    session_auth: Mapped[Optional[str]] = mapped_column(String, nullable=True, index=True)
-    session_agent: Mapped[Optional[str]] = mapped_column(String, nullable=True, index=True)
-
-    flow_id: Mapped[Optional[str]] = mapped_column(String, nullable=True, index=True)
-    task_id: Mapped[Optional[str]] = mapped_column(String, nullable=True, index=True)
-    context_id: Mapped[Optional[str]] = mapped_column(String, nullable=True, index=True)
-    skill_id: Mapped[Optional[str]] = mapped_column(String, nullable=True)
-    channel: Mapped[Optional[str]] = mapped_column(String, nullable=True)
-
-    node_id: Mapped[Optional[str]] = mapped_column(String, nullable=True)
-    agent_name: Mapped[Optional[str]] = mapped_column(String, nullable=True)
-    is_resume: Mapped[Optional[bool]] = mapped_column(Boolean, nullable=True)
-
-    attributes: Mapped[Optional[dict[str, Any]]] = mapped_column(JSONB, nullable=True)
-    events: Mapped[Optional[dict[str, Any]]] = mapped_column(JSONB, nullable=True)
-
-    __table_args__ = ()
-
-    def __repr__(self) -> str:
-        return f"<Spans(span_id='{self.span_id}', trace_id='{self.trace_id}', operation_name='{self.operation_name}')>"
-
-
 class CalendarEventRecord(Base):
     """Реляционная таблица событий платформенного календаря."""
 
@@ -326,6 +278,42 @@ class CalendarIntegrationRecord(Base):
     )
 
 
+class IntegrationCredentialRecord(Base):
+    """Per-user OAuth токены внешних интеграций (shared БД)."""
+
+    __tablename__ = "integration_credentials"
+
+    credential_id: Mapped[str] = mapped_column(String(255), primary_key=True, index=True)
+    company_id: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
+    user_id: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
+    provider: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    service: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    access_token: Mapped[str] = mapped_column(Text, nullable=False)
+    refresh_token: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    expires_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    scope: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    token_type: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    metadata_json: Mapped[dict[str, Any]] = mapped_column(
+        JSONB, nullable=False, server_default=text("'{}'::jsonb")
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(timezone.utc),
+        onupdate=lambda: datetime.now(timezone.utc),
+        nullable=False,
+    )
+
+    __table_args__ = (
+        UniqueConstraint(
+            "company_id", "user_id", "provider", "service",
+            name="uq_integration_credentials_user_provider_service",
+        ),
+    )
+
+
 class SchedulerTaskRecord(Base):
     """Служебная таблица задач платформенного scheduler (shared БД)."""
 
@@ -392,3 +380,49 @@ class PushSubscription(Base):
 
     def __repr__(self) -> str:
         return f"<PushSubscription(user_id={self.user_id}, platform={self.platform})>"
+
+
+class ApiKeyRecord(Base):
+    """API-ключи компаний (shared БД)."""
+
+    __tablename__ = "api_keys"
+
+    key_id: Mapped[str] = mapped_column(String(255), primary_key=True)
+    company_id: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
+    key_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    key_prefix: Mapped[str] = mapped_column(String(16), nullable=False)
+    scopes: Mapped[list[str]] = mapped_column(JSONB, nullable=False, server_default=text("'[]'::jsonb"))
+    created_by: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
+    revoked: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False
+    )
+    last_used: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+
+    __table_args__ = (
+        Index("ix_api_keys_company_id", "company_id"),
+        Index("ix_api_keys_key_hash", "key_hash", unique=True),
+    )
+
+
+class PlatformShortLink(Base):
+    """Короткий публичный код -> полезная нагрузка (вход по звонку Sync, JWT инвайта)."""
+
+    __tablename__ = "platform_short_links"
+
+    code: Mapped[str] = mapped_column(String(32), primary_key=True)
+    kind: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    payload: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, index=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False
+    )
+
+    __table_args__ = (
+        Index(
+            "ix_platform_short_links_sync_link_token",
+            text("(payload->>'link_token')"),
+            postgresql_where=text("kind = 'sync_call_join'"),
+        ),
+    )

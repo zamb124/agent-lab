@@ -12,32 +12,15 @@ InterruptManager - управление interrupt/resume для вложенны
 Zero-Guess: все методы работают с ExecutionState, не Dict.
 """
 
-import uuid
 from typing import Any, Dict, List, Optional
-
-from a2a.types import Message, Part, Role, TextPart
+from uuid import UUID
 
 from core.logging import get_logger
-from core.state import (
-    ExecutionState,
-    InterruptData,
-    InterruptPathItem,
-)
+from core.state import ExecutionState, InterruptData, InterruptPathItem
+from core.state.interrupt import InterruptBody, InterruptSystemContext
+from apps.flows.src.runtime.a2a_messages import build_user_message
 
 logger = get_logger(__name__)
-
-
-def _new_user_message(
-    content: str, source_node_id: str, task_id: Optional[str] = None
-) -> Message:
-    """Создаёт A2A Message от пользователя с привязкой к ноде (nested resume)."""
-    return Message(
-        messageId=str(uuid.uuid4()),
-        role=Role.user,
-        parts=[Part(root=TextPart(text=content))],
-        taskId=task_id,
-        metadata={"node_id": source_node_id},
-    )
 
 
 class InterruptManager:
@@ -45,7 +28,7 @@ class InterruptManager:
     Управляет interrupt/resume для вложенных вызовов.
 
     Структура ExecutionState:
-    - interrupt: InterruptData с вопросом и контекстом
+    - interrupt: InterruptData (body + system)
     - interrupt_path: List[InterruptPathItem] путь к месту прерывания
     - nested_states: Dict[str, Dict] снимки state вложенных subflow (по nested_id)
     """
@@ -90,10 +73,12 @@ class InterruptManager:
         from apps.flows.src.state.execution_state import NestedStateData
         
         saved = parent_state.nested_states.get(nested_id)
-        
+
         if saved is None:
-            saved = NestedStateData()
-        elif isinstance(saved, dict):
+            raise ValueError(
+                f"load_nested_state: нет снимка nested_states для nested_id={nested_id!r}"
+            )
+        if isinstance(saved, dict):
             saved = NestedStateData.model_validate(saved)
 
         result = ExecutionState(
@@ -157,25 +142,39 @@ class InterruptManager:
         state.interrupt_path = []
 
     @staticmethod
-    def set_interrupt(
+    def apply_interrupt(
         state: ExecutionState,
-        question: str,
+        body: InterruptBody,
         tool_call: Optional[Dict[str, Any]] = None,
+        correlation_id: Optional[UUID] = None,
     ) -> None:
         """
-        Устанавливает interrupt в state.
-
-        Args:
-            state: Текущий ExecutionState
-            question: Вопрос для пользователя
-            tool_call: Информация о tool_call который вызвал interrupt
+        Единая запись interrupt: тело (union) + системный конверт из текущего state.
         """
-        context = {
-            "tool_call": tool_call,
-            "path": [item.model_dump() for item in state.interrupt_path],
-            "task_id": state.task_id,
-        }
-        state.interrupt = InterruptData(question=question, context=context)
+        system = InterruptSystemContext(
+            tool_call=tool_call,
+            path=[item.model_dump(mode="json") for item in state.interrupt_path],
+            task_id=state.task_id,
+        )
+        state.interrupt = InterruptData(
+            body=body, system=system, correlation_id=correlation_id
+        )
+
+    @staticmethod
+    def enrich_system_from_channel(
+        state: ExecutionState,
+        *,
+        context_id: str,
+        task_id: str,
+    ) -> None:
+        """Дополняет system после run (канал передаёт актуальные task_id/context_id)."""
+        if state.interrupt is None:
+            raise ValueError("enrich_system_from_channel: interrupt отсутствует")
+        ir = state.interrupt
+        new_system = ir.system.model_copy(
+            update={"context_id": context_id, "task_id": task_id}
+        )
+        state.interrupt = ir.model_copy(update={"system": new_system})
 
     @staticmethod
     def get_interrupt(state: ExecutionState) -> Optional[InterruptData]:
@@ -221,7 +220,12 @@ class InterruptManager:
         nested_state = InterruptManager.load_nested_state(parent_state, nested_id)
 
         nested_state.messages.append(
-            _new_user_message(user_answer, nested_id, nested_state.task_id)
+            build_user_message(
+                user_answer,
+                nested_id,
+                context_id=nested_state.context_id,
+                task_id=nested_state.task_id,
+            )
         )
 
         if parent_state.interrupt_path:

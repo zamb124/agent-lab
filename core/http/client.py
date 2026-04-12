@@ -14,6 +14,91 @@ from core.logging import get_logger
 
 logger = get_logger(__name__)
 
+_CONNECT_RETRY_EXCEPTIONS = (httpx.ConnectError, httpx.ConnectTimeout)
+
+PUBLIC_OAUTH_DIRECT_ATTEMPTS_BEFORE_PROXY = 3
+PUBLIC_OAUTH_DIRECT_ATTEMPTS_AFTER_PROXY = 2
+
+
+def _platform_proxy_active() -> bool:
+    from core.config import get_settings
+
+    p = get_settings().proxy
+    return bool(p.enabled and p.proxies)
+
+
+async def _request_direct_burst(
+    method: str,
+    url: str,
+    *,
+    timeout: float,
+    attempts: int,
+    **kwargs,
+) -> httpx.Response:
+    m = method.lower()
+    last: BaseException | None = None
+    for attempt in range(attempts):
+        async with get_httpx_client(timeout=timeout, proxy=False) as client:
+            try:
+                return await getattr(client, m)(url, **kwargs)
+            except _CONNECT_RETRY_EXCEPTIONS as e:
+                last = e
+                logger.warning(
+                    "Прямой запрос к %s: %s (попытка %s/%s)",
+                    url,
+                    type(e).__name__,
+                    attempt + 1,
+                    attempts,
+                )
+    if last is None:
+        raise RuntimeError("request_public_oauth: attempts must be >= 1")
+    raise last
+
+
+async def request_public_oauth(
+    method: str,
+    url: str,
+    *,
+    timeout: float = 30.0,
+    direct_attempts_before_proxy: int = PUBLIC_OAUTH_DIRECT_ATTEMPTS_BEFORE_PROXY,
+    direct_attempts_after_proxy: int = PUBLIC_OAUTH_DIRECT_ATTEMPTS_AFTER_PROXY,
+    **kwargs,
+) -> httpx.Response:
+    """
+    Исходящие запросы к публичным OAuth/identity API: несколько попыток без прокси,
+    затем через platform proxy (если proxy.enabled и список proxies непустой),
+    затем снова несколько попыток без прокси.
+    """
+    try:
+        return await _request_direct_burst(
+            method,
+            url,
+            timeout=timeout,
+            attempts=direct_attempts_before_proxy,
+            **kwargs,
+        )
+    except _CONNECT_RETRY_EXCEPTIONS:
+        pass
+
+    if _platform_proxy_active():
+        try:
+            async with get_httpx_client(timeout=timeout, proxy=True) as client:
+                return await getattr(client, method.lower())(url, **kwargs)
+        except _CONNECT_RETRY_EXCEPTIONS as e:
+            logger.warning(
+                "Запрос через прокси к %s не удался (%s), снова прямое подключение",
+                url,
+                type(e).__name__,
+            )
+
+    return await _request_direct_burst(
+        method,
+        url,
+        timeout=timeout,
+        attempts=direct_attempts_after_proxy,
+        **kwargs,
+    )
+
 
 class SmartProxyClient:
     """

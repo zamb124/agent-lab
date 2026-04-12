@@ -31,7 +31,7 @@ export class VariablesPanel extends PlatformElement {
 
     updated(changedProperties) {
         if (changedProperties.has('variables')) {
-            console.log('[VariablesPanel] Переменные обновлены:', {
+            console.log('[VariablesPanel] Variables updated:', {
                 variables: this.variables,
                 variables_json: JSON.stringify(this.variables, null, 2),
                 keys: Object.keys(this.variables || {}),
@@ -60,7 +60,7 @@ export class VariablesPanel extends PlatformElement {
                 const str = JSON.stringify(value);
                 return str.length > 50 ? str.substring(0, 47) + '...' : str;
             } catch (e) {
-                console.error('[VariablesPanel] Ошибка преобразования значения в строку:', e);
+                console.error('[VariablesPanel] Failed to stringify value:', e);
                 throw e;
             }
         }
@@ -109,7 +109,7 @@ export class VariablesPanel extends PlatformElement {
             return;
         }
 
-        const confirmed = confirm(`Удалить переменную "${name}"?`);
+        const confirmed = confirm(this.i18n.t('variables_panel.confirm_delete', { name }));
         if (confirmed) {
             this.emit('variable-deleted', { name });
         }

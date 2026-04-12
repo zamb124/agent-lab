@@ -18,6 +18,7 @@ from apps.flows.src.runtime.nodes import (
     ExternalAPINode,
     MCPNode,
     ChannelNode,
+    HitlNode,
 )
 
 
@@ -99,6 +100,7 @@ def create_default_node_registry() -> NodeRegistry:
     registry.register(NodeType.EXTERNAL_API, ExternalAPINode, {"description": "HTTP API вызов"})
     registry.register(NodeType.MCP, MCPNode, {"description": "MCP tool"})
     registry.register(NodeType.CHANNEL, ChannelNode, {"description": "Отправка в канал (Telegram, Email, Webhook)"})
+    registry.register(NodeType.HITL_NODE, HitlNode, {"description": "Оператор очереди (пауза до специалиста)"})
     
     return registry
 

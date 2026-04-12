@@ -6,6 +6,7 @@
 - Без моков репозиториев, `execute_command`, `dispatch_sync_command`, `handle_command.kiq`, Redis Pub/Sub и WebSocket.
 - TaskIQ: очередь `sync` — для HTTP/WS, где вызывается `handle_command.kiq()`, нужен **реальный** `sync_worker` ([`tests/fixtures/workers.py`](../fixtures/workers.py)).
 - Redis: `DATABASE__REDIS_URL` / `TASKS__BROKER_URL` как в корневом [`tests/conftest.py`](../conftest.py).
+- STT: без патча `STTClientFactory`. В корневом `tests/conftest.py`, [`tests/fixtures/services.py`](../fixtures/services.py) и env процесса **`sync_worker`** заданы `STT__PROVIDER=mock` и `STT__MOCK_TRANSCRIPT_TEXT` (см. [`tests/fixtures/workers.py`](../fixtures/workers.py)). Сценарии с выгрузкой файла в worker используют **`sync_service` (9005)** и `SERVER__SYNC_SERVICE_URL` у воркера, чтобы HTTP-скачивание файла попадало в тот же процесс Sync.
 
 Подробнее: `.cursor/rules/sync.mdc` (раздел «Тестирование»), `.cursor/rules/testing.mdc`.
 
@@ -37,10 +38,15 @@ uv run pytest tests/sync/ -v
 | HTTP (матрица) | `api/test_sync_http_matrix.py` | 401 без Bearer, 403/404 по каналам и тредам, company members, git GET/POST, цепочка сообщений + read |
 | HTTP (вложения) | `api/test_sync_messages_attachments.py` | Загрузка в S3, сообщение с `file/document` / `file/image` + текст, два документа в одном сообщении, лента |
 | WebSocket | `api/test_sync_websocket.py` | Успех через TaskIQ, отказ без cookie (403 handshake), `ok: false` при ошибке задачи, две команды подряд |
+| WebSocket (broadcast) | `api/test_sync_websocket_broadcast.py` | Два пользователя в канале: оба WS получают `message.created` |
+| Голос / флаг канала | `api/test_channel_voice_transcribe_flag.py` | Без `transcribe_voice_messages` — `idle`; с флагом — `processing`→`done` через **`sync_service` + sync_worker** |
+| STT REST + звонок | `api/test_transcribe_video_and_call_http.py` | `transcribe-video` (ffmpeg + worker), `transcribe-call` и агрегат с подписью гостя; join по ссылке дополняется **`add_participant` в БД** (вход по ссылке сам не пишет участников) |
 | Платформенные уведомления | `test_sync_notification_delivery.py` | `deliver_channel_message_notification`: пропуск при Redis presence `/sync/ws` и при mute; payload `sync_new_message`; публикация в Redis `platform:notifications`; цепочка Web Push при настроенном VAPID (как в `tests/core/push/`, `webpush` мокается) |
 | Файлы | `api/test_sync_files_upload.py`, `api/test_sync_files_negative.py` | Загрузка при S3; пустой файл 400; метаданные 404; 503 при `S3__ENABLED=false` через env |
 | Маршруты | `test_route_config.py` | Публичные/защищённые пути AuthMiddleware |
 | Unit | `unit/test_sync_commands_pydantic.py` | Валидация DTO команд |
+
+**Playwright (опционально):** отдельный сценарий «маркер `call/boundary` и кнопки транскрипции в `message-bubble` без микрофона» не добавлен: для стабильного сидирования ленты нужен тот же контракт участников после join, что и в `api/test_transcribe_video_and_call_http.py`. Когда join начнёт писать `sync_call_participants` или появится публичный API — имеет смысл вынести сид в `tests/ui/e2e/sync_e2e_helpers.py` и проверить `.call-boundary` / `.transcribe-btn` в открытом канале.
 
 ## Фикстуры
 

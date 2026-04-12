@@ -4,31 +4,12 @@
 
 from typing import Any, Dict, List
 
-# Доступные модули для импорта
-COMMON_MODULES: List[str] = [
-    "json",
-    "re",
-    "datetime",
-    "math",
-    "typing",
-    "collections",
-    "itertools",
-    "functools",
-    "uuid",
-    "hashlib",
-    "base64",
-    "urllib.parse",
-    "random",
-    "operator",
-    "string",
-    "decimal",
-    "pydantic",
-    "a2a",
-    "a2a.types",
-    "httpx",
-    "copy",
-    "time",
-]
+from core.inline_python_eval_policy import ALLOWED_IMPORT_ROOTS
+
+# Импорты в inline-коде flows: whitelist (см. core.inline_python_eval_policy).
+COMMON_MODULES: List[str] = sorted(
+    m for m in ALLOWED_IMPORT_ROOTS if m != "__future__"
+)
 
 # Методы модулей для autocomplete
 MODULE_METHODS: Dict[str, List[Dict[str, Any]]] = {
@@ -101,16 +82,16 @@ MODULE_METHODS: Dict[str, List[Dict[str, Any]]] = {
         {"name": "lru_cache", "type": "function", "doc": "Кеширование: @lru_cache(maxsize=128)"},
     ],
     "pydantic": [
-        {"name": "BaseModel", "type": "class", "doc": "Базовый класс модели с валидацией: class User(BaseModel): name: str"},
-        {"name": "Field", "type": "function", "doc": "Поле с метаданными: name: str = Field(..., min_length=1)"},
-        {"name": "validator", "type": "decorator", "doc": "Валидатор поля: @validator('email')"},
-        {"name": "root_validator", "type": "decorator", "doc": "Валидатор всей модели: @root_validator"},
+        {"name": "BaseModel", "type": "class", "doc": "Базовый класс модели: class User(BaseModel): name: str"},
+        {"name": "Field", "type": "function", "doc": "Поле: name: str = Field(..., min_length=1)"},
+        {"name": "field_validator", "type": "decorator", "doc": "Валидатор поля (v2): @field_validator('email')"},
+        {"name": "model_validator", "type": "decorator", "doc": "Валидатор модели (v2): @model_validator(mode='after')"},
     ],
     "a2a.types": [
         {"name": "Message", "type": "class", "doc": "A2A сообщение: Message(messageId, role, parts, metadata)"},
         {"name": "Part", "type": "class", "doc": "Часть сообщения: Part(root=TextPart(text='...'))"},
         {"name": "TextPart", "type": "class", "doc": "Текстовая часть: TextPart(text='Привет')"},
-        {"name": "FilePart", "type": "class", "doc": "Файловая часть: FilePart(file=FileWithBytes(...))"},
+        {"name": "FilePart", "type": "class", "doc": "Файл: FilePart(file=FileWithBytes(name, bytes=base64_str, mime_type))"},
         {"name": "DataPart", "type": "class", "doc": "Структурированные данные: DataPart(data={'key': 'value'})"},
         {"name": "Role", "type": "enum", "doc": "Роль сообщения: Role.user или Role.agent"},
         {"name": "Artifact", "type": "class", "doc": "Артефакт задачи: Artifact(artifactId, parts)"},
@@ -119,23 +100,47 @@ MODULE_METHODS: Dict[str, List[Dict[str, Any]]] = {
         {"name": "TaskStatus", "type": "class", "doc": "Статус с состоянием и сообщением"},
     ],
     "httpx": [
-        {"name": "get", "type": "function", "doc": "GET запрос: response = await httpx.get('https://api.example.com/data', params={'id': 1}); data = response.json()"},
-        {"name": "post", "type": "function", "doc": "POST запрос: response = await httpx.post('https://api.example.com/data', json={'name': 'test'})"},
-        {"name": "put", "type": "function", "doc": "PUT запрос: response = await httpx.put('https://api.example.com/data/1', json={'name': 'updated'})"},
-        {"name": "patch", "type": "function", "doc": "PATCH запрос: response = await httpx.patch('https://api.example.com/data/1', json={'name': 'patched'})"},
-        {"name": "delete", "type": "function", "doc": "DELETE запрос: response = await httpx.delete('https://api.example.com/data/1')"},
+        {
+            "name": "get",
+            "type": "function",
+            "doc": (
+                "GET запрос: response = await httpx.get(`https://api.example.com/data`, params={'id': 1}); "
+                "data = response.json()"
+            ),
+        },
+        {
+            "name": "post",
+            "type": "function",
+            "doc": (
+                "POST запрос: response = await httpx.post(`https://api.example.com/data`, json={'name': 'test'})"
+            ),
+        },
+        {
+            "name": "put",
+            "type": "function",
+            "doc": (
+                "PUT запрос: response = await httpx.put(`https://api.example.com/data/1`, json={'name': 'updated'})"
+            ),
+        },
+        {
+            "name": "patch",
+            "type": "function",
+            "doc": (
+                "PATCH запрос: response = await httpx.patch(`https://api.example.com/data/1`, json={'name': 'patched'})"
+            ),
+        },
+        {
+            "name": "delete",
+            "type": "function",
+            "doc": "DELETE запрос: response = await httpx.delete(`https://api.example.com/data/1`)",
+        },
         {"name": "request", "type": "function", "doc": "Универсальный запрос: response = await httpx.request('POST', url, json={...})"},
     ],
     "llm": [
-        {"name": "chat", "type": "function", "doc": """Единый метод вызова LLM. Примеры:
-- Простой: msg = await llm.chat('Привет!')
-- Параметры: msg = await llm.chat('...', temperature=0.7, max_tokens=500, top_p=0.9)
-- Structured: user = await llm.chat('Extract: John 25', response_model=UserModel)
-- Tools: msg = await llm.chat(messages, tools=[...])
-Возвращает Message или экземпляр response_model."""},
+        {"name": "chat", "type": "function", "doc": """await llm.chat(..., tools=[...]). tools: OpenAI dict или объекты @tool / BaseTool (to_openai_schema). Сырую def без @tool не передавать."""},
     ],
     "context": [
-        {"name": "channel", "type": "property", "doc": "Канал коммуникации: 'a2a', 'telegram', 'api'"},
+        {"name": "channel", "type": "property", "doc": "Канал: 'a2a', 'api', 'telegram', 'max', 'voip'"},
         {"name": "user_id", "type": "property", "doc": "ID пользователя"},
         {"name": "session_id", "type": "property", "doc": "ID сессии"},
         {"name": "flow_id", "type": "property", "doc": "ID агента"},
@@ -152,10 +157,7 @@ MODULE_METHODS: Dict[str, List[Dict[str, Any]]] = {
         {"name": "debug", "type": "function", "doc": "Отладка: logger.debug('Debug info')"},
     ],
     "state": [
-        {"name": "get", "type": "function", "doc": "Получить значение: state.get('key', default)"},
-        {"name": "keys", "type": "function", "doc": "Список ключей: state.keys()"},
-        {"name": "values", "type": "function", "doc": "Список значений: state.values()"},
-        {"name": "items", "type": "function", "doc": "Пары ключ-значение: state.items()"},
-        {"name": "update", "type": "function", "doc": "Обновить: state.update({'key': 'value'})"},
+        {"name": "get", "type": "method", "doc": "state.get('key', default) — как у dict"},
+        {"name": "model_dump", "type": "method", "doc": "Сериализация в dict: state.model_dump()"},
     ],
 }

@@ -1,11 +1,11 @@
 # Миграции: единая точка — python -m scripts.db_migrate <команда>
-# Сервисы: shared | flows | crm | sync | rag
+# Сервисы: shared | flows | crm | sync | rag | office
 .PHONY: migrate migrate-new migrate-empty migrate-downgrade migrate-downgrade-to migrate-history migrate-current migrate-heads
 
 migrate:
 	uv run python -m scripts.db_migrate upgrade
 
-# make migrate-new m="описание" s=shared  (или flows, crm, sync, rag)
+# make migrate-new m="описание" s=shared  (или flows, crm, sync, rag, office)
 migrate-new:
 	uv run python -m scripts.db_migrate revision -m "$(m)" --service $(s) --autogenerate
 

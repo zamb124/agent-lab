@@ -163,6 +163,7 @@ var devtoolsImpl = (fn, devtoolsOptions = {}) => (set, get, api) => {
     };
   }
   connection.subscribe((message) => {
+    try {
     var _a;
     if (message == null || message.type == null) {
       return;
@@ -178,6 +179,9 @@ var devtoolsImpl = (fn, devtoolsOptions = {}) => (set, get, api) => {
         return parseJsonThen(
           message.payload,
           (action) => {
+            if (action == null || typeof action !== "object") {
+              return;
+            }
             if (action.type === "__setState") {
               if (store === void 0) {
                 setStateFromDevtools(action.state);
@@ -207,7 +211,7 @@ var devtoolsImpl = (fn, devtoolsOptions = {}) => (set, get, api) => {
           }
         );
       case "DISPATCH":
-        if (message.payload == null) {
+        if (message.payload == null || typeof message.payload !== "object") {
           return;
         }
         switch (message.payload.type) {
@@ -245,7 +249,10 @@ var devtoolsImpl = (fn, devtoolsOptions = {}) => (set, get, api) => {
               }
             });
           case "IMPORT_STATE": {
-            const { nextLiftedState } = message.payload;
+            const nextLiftedState = message.payload.nextLiftedState;
+            if (nextLiftedState == null || !Array.isArray(nextLiftedState.computedStates)) {
+              return;
+            }
             const lastComputedState = (_a = nextLiftedState.computedStates.slice(-1)[0]) == null ? void 0 : _a.state;
             if (!lastComputedState) return;
             if (store === void 0) {
@@ -264,6 +271,9 @@ var devtoolsImpl = (fn, devtoolsOptions = {}) => (set, get, api) => {
             return isRecording = !isRecording;
         }
         return;
+    }
+    } catch (err) {
+      console.error("[zustand devtools middleware] Invalid message from Redux DevTools extension", err);
     }
   });
   return initialState;

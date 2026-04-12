@@ -3,6 +3,15 @@
  */
 import { html, css } from 'lit';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
+import { I18nNs } from '@platform/services/i18n/i18n.service.js';
+import {
+    landFlowsAbilityUrl,
+    landRagAbilityUrl,
+    landNetworkleAbilityUrl,
+    landSyncAbilityUrl,
+    landDocumentsHeroUrl,
+    landDocumentsShot2Url,
+} from '../../utils/land-product-images.js';
 
 export class LandingAbilities extends PlatformElement {
     static styles = [
@@ -41,15 +50,34 @@ export class LandingAbilities extends PlatformElement {
             
             .ability-image {
                 width: 100%;
-                aspect-ratio: 4 / 3;
-                background: radial-gradient(circle at center, rgba(87, 104, 254, 0.2), transparent);
+                aspect-ratio: 16 / 9;
+                background: rgba(20, 22, 34, 0.6);
                 border: 1px solid rgba(255, 255, 255, 0.1);
                 border-radius: 20px;
-                display: flex;
-                align-items: center;
-                justify-content: center;
-                font-size: 64px;
+                overflow: hidden;
                 order: -1;
+                box-shadow: 0 20px 56px rgba(0, 0, 0, 0.35);
+            }
+
+            .ability-image img {
+                width: 100%;
+                height: 100%;
+                object-fit: cover;
+                object-position: top center;
+                display: block;
+            }
+
+            .ability-images-stack {
+                display: flex;
+                flex-direction: column;
+                gap: 20px;
+                width: 100%;
+                order: -1;
+            }
+
+            .ability-images-stack .ability-image {
+                order: 0;
+                width: 100%;
             }
             
             .ability-content {
@@ -120,6 +148,12 @@ export class LandingAbilities extends PlatformElement {
                     width: 45%;
                     order: 0;
                 }
+
+                .ability-images-stack {
+                    width: 45%;
+                    order: 0;
+                    flex-shrink: 0;
+                }
                 
                 .ability-name {
                     font-size: 36px;
@@ -163,75 +197,155 @@ export class LandingAbilities extends PlatformElement {
         `
     ];
 
+    connectedCallback() {
+        super.connectedCallback();
+        this._i18nUnsub = this.i18n.subscribe(() => this.requestUpdate());
+    }
+
+    disconnectedCallback() {
+        if (this._i18nUnsub) {
+            this._i18nUnsub();
+            this._i18nUnsub = null;
+        }
+        super.disconnectedCallback();
+    }
+
     render() {
+        const t = (key) => this.i18n.t(key, {}, I18nNs.LANDING);
+        const locale = this.i18n.getCurrentLocale();
+        const flowsSrc = landFlowsAbilityUrl(locale);
         return html`
             <div class="abilities-container">
-                <h2 class="abilities-title">/ Возможности платформы</h2>
+                <h2 class="abilities-title">${t('features.tag')}</h2>
                 
                 <div class="ability-item">
-                    <div class="ability-image">🚀</div>
+                    <div class="ability-image">
+                        <img
+                            src=${flowsSrc}
+                            alt=${t('features.ability_alt_flows')}
+                            width="1200"
+                            height="675"
+                            loading="lazy"
+                            decoding="async"
+                        />
+                    </div>
                     <div class="ability-content">
-                        <h3 class="ability-name">Запуск за часы, а не месяцы</h3>
+                        <h3 class="ability-name">${t('features.feature1_title')}</h3>
                         <p class="ability-description">
-                            Не тратьте время и деньги на разработку с нуля. Используйте готовые
-                            сервисы: создавайте AI-агентов, общайтесь в Sync, управляйте контактами в NetWorkle,
-                            храните документы в Knowledge Base. Всё уже настроено и работает.
+                            ${t('features.feature1_description')}
                         </p>
                         <ul class="ability-features">
-                            <li>Готовые решения для типовых задач</li>
-                            <li>Запуск первого агента за 1 день</li>
-                            <li>Не нужна команда разработчиков</li>
+                            <li>${t('features.feature1_li1')}</li>
+                            <li>${t('features.feature1_li2')}</li>
+                            <li>${t('features.feature1_li3')}</li>
                         </ul>
                     </div>
                 </div>
                 
                 <div class="ability-item">
-                    <div class="ability-image">💰</div>
+                    <div class="ability-image">
+                        <img
+                            src=${landRagAbilityUrl}
+                            alt=${t('features.ability_alt_kb')}
+                            width="1200"
+                            height="675"
+                            loading="lazy"
+                            decoding="async"
+                        />
+                    </div>
                     <div class="ability-content">
-                        <h3 class="ability-name">Платите только за результат</h3>
+                        <h3 class="ability-name">${t('features.feature2_title')}</h3>
                         <p class="ability-description">
-                            Никаких скрытых платежей и абонентской платы. Начните с 50 рублей, 
-                            платите только за то, что используете. Видите каждую копейку 
-                            в детальной статистике расходов.
+                            ${t('features.feature2_description')}
                         </p>
                         <ul class="ability-features">
-                            <li>Старт от 50₽ без обязательств</li>
-                            <li>Оплата только за использование</li>
-                            <li>Полная прозрачность расходов</li>
+                            <li>${t('features.feature2_li1')}</li>
+                            <li>${t('features.feature2_li2')}</li>
+                            <li>${t('features.feature2_li3')}</li>
                         </ul>
                     </div>
                 </div>
                 
                 <div class="ability-item">
-                    <div class="ability-image">📈</div>
+                    <div class="ability-image">
+                        <img
+                            src=${landNetworkleAbilityUrl}
+                            alt=${t('features.ability_alt_networkle')}
+                            width="1200"
+                            height="675"
+                            loading="lazy"
+                            decoding="async"
+                        />
+                    </div>
                     <div class="ability-content">
-                        <h3 class="ability-name">Масштаб без головной боли</h3>
+                        <h3 class="ability-name">${t('features.feature3_title')}</h3>
                         <p class="ability-description">
-                            Ваши агенты работают 24/7 без выходных, больничных и отпусков. 
-                            Обрабатывают тысячи запросов одновременно. Обновляйте логику работы 
-                            на лету, без остановки сервиса.
+                            ${t('features.feature3_description')}
                         </p>
                         <ul class="ability-features">
-                            <li>Работа 24/7 без перерывов</li>
-                            <li>Обработка тысяч запросов в день</li>
-                            <li>Обновления без простоя</li>
+                            <li>${t('features.feature3_li1')}</li>
+                            <li>${t('features.feature3_li2')}</li>
+                            <li>${t('features.feature3_li3')}</li>
                         </ul>
                     </div>
                 </div>
                 
                 <div class="ability-item">
-                    <div class="ability-image">🔒</div>
+                    <div class="ability-image">
+                        <img
+                            src=${landSyncAbilityUrl}
+                            alt=${t('features.ability_alt_sync')}
+                            width="1200"
+                            height="675"
+                            loading="lazy"
+                            decoding="async"
+                        />
+                    </div>
                     <div class="ability-content">
-                        <h3 class="ability-name">Ваши данные под контролем</h3>
+                        <h3 class="ability-name">${t('features.feature4_title')}</h3>
                         <p class="ability-description">
-                            Все данные хранятся в вашей базе, не передаются третьим лицам. 
-                            Полная изоляция между компаниями. Интегрируйте с любыми 
-                            вашими системами через API.
+                            ${t('features.feature4_description')}
                         </p>
                         <ul class="ability-features">
-                            <li>Данные только в вашей базе</li>
-                            <li>Полная изоляция компаний</li>
-                            <li>Интеграция с любыми системами</li>
+                            <li>${t('features.feature4_li1')}</li>
+                            <li>${t('features.feature4_li2')}</li>
+                            <li>${t('features.feature4_li3')}</li>
+                        </ul>
+                    </div>
+                </div>
+                
+                <div class="ability-item">
+                    <div class="ability-images-stack">
+                        <div class="ability-image">
+                            <img
+                                src=${landDocumentsHeroUrl}
+                                alt=${t('features.ability_alt_documents')}
+                                width="1200"
+                                height="673"
+                                loading="lazy"
+                                decoding="async"
+                            />
+                        </div>
+                        <div class="ability-image">
+                            <img
+                                src=${landDocumentsShot2Url}
+                                alt=${t('features.ability_alt_documents_2')}
+                                width="1200"
+                                height="673"
+                                loading="lazy"
+                                decoding="async"
+                            />
+                        </div>
+                    </div>
+                    <div class="ability-content">
+                        <h3 class="ability-name">${t('features.feature5_title')}</h3>
+                        <p class="ability-description">
+                            ${t('features.feature5_description')}
+                        </p>
+                        <ul class="ability-features">
+                            <li>${t('features.feature5_li1')}</li>
+                            <li>${t('features.feature5_li2')}</li>
+                            <li>${t('features.feature5_li3')}</li>
                         </ul>
                     </div>
                 </div>

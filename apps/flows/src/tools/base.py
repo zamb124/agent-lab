@@ -10,14 +10,16 @@ Permissions:
 
 from __future__ import annotations
 
+import copy
 import hashlib
 import os
 import re
 from abc import ABC, abstractmethod
-from enum import Enum
-from typing import TYPE_CHECKING, Any, Dict, List, Optional, Type, Union
+from typing import TYPE_CHECKING, Any, ClassVar, Dict, List, Optional, Type, Union
 
 from pydantic import BaseModel
+
+from apps.flows.src.models.enums import ReactToolRole
 
 
 def sanitize_tool_name(name: str) -> str:
@@ -38,13 +40,6 @@ def sanitize_tool_name(name: str) -> str:
 if TYPE_CHECKING:
     from core.state import ExecutionState
     from apps.flows.src.runtime.exceptions import FlowInterrupt
-
-
-class ToolType(str, Enum):
-    """Тип tool для llm_node."""
-    TOOL = "tool"
-    REASON = "reason"
-    EXIT = "exit"
 
 from apps.flows.src.clients.external_api_client import ExternalAPIClient
 from apps.flows.config import get_settings
@@ -71,7 +66,7 @@ class BaseTool(ABC):
 
     Определение параметров:
         - args_schema: Pydantic модель для автогенерации схемы (рекомендуется)
-        - parameters: Dict для ручного задания схемы (для inline tools)
+        - parameters: Dict для ручного задания схемы (для тулов из поля code в конфиге)
 
     Mock режим:
         - Определить mock_response для простых случаев
@@ -81,14 +76,20 @@ class BaseTool(ABC):
     Permissions:
         - permission: группы с доступом к tool
         - При отсутствии прав возвращается строка агенту
+
+    listed_in_platform_tool_docs:
+        Участвует ли класс в разделе platform tools у /code/completions и /code/documentation
+        (процессный ToolRegistry после register_builtin_tools).
     """
+
+    listed_in_platform_tool_docs: ClassVar[bool] = True
 
     name: str = "base_tool"
     description: str = "Базовый инструмент"
     args_schema: Optional[Type[BaseModel]] = None
     permission: Permission = None
     tags: List[str] = []  # Группы/категории: misc, math, docs, api, validation
-    tool_type: ToolType = ToolType.TOOL  # reason/exit tools могут быть только по 1
+    react_role: ReactToolRole = ReactToolRole.STANDARD
 
     # Mock ответ для тестов (переопределить в наследниках)
     mock_response: Any = "mock_result"
@@ -251,11 +252,16 @@ class BaseTool(ABC):
         return f"{self.__class__.__name__}(name={self.name})"
 
 
-class InlineTool(BaseTool):
+class CodeTool(BaseTool):
     """
-    Инструмент из inline кода.
-    Использует SafeEval для выполнения.
+    Тул из Python-кода в конфиге (поле code).
+    Выполнение через SafeEval.execute_tool.
+
+    Не кладётся в процессный ToolRegistry.register и не показывается в platform tools документации:
+    экземпляры живут только в списке tools конкретной llm_node (materialize).
     """
+
+    listed_in_platform_tool_docs: ClassVar[bool] = False
 
     def __init__(
         self,
@@ -264,21 +270,34 @@ class InlineTool(BaseTool):
         title: Optional[str] = None,
         description: Optional[str] = None,
         parameters: Optional[Dict[str, Any]] = None,
+        parameters_schema: Optional[Dict[str, Any]] = None,
         permission: Permission = None,
         tags: Optional[List[str]] = None,
-        tool_type: ToolType = ToolType.TOOL,
+        react_role: ReactToolRole = ReactToolRole.STANDARD,
         resources: Optional[Dict[str, Any]] = None,
     ):
         self.name = tool_id
-        self.description = description or f"Inline tool: {tool_id}"
+        self.description = description or f"Code tool: {tool_id}"
         self.permission = permission
         self.tags = tags or ["misc"]
-        self.tool_type = tool_type
+        self.react_role = react_role
         self._code = code
         self._resources_config = resources or {}
 
-        # Параметры из args_schema
-        if parameters:
+        if parameters_schema is not None:
+            if not isinstance(parameters_schema, dict):
+                raise ValueError(f"CodeTool '{tool_id}': parameters_schema must be a dict")
+            if parameters_schema.get("type") != "object":
+                raise ValueError(
+                    f"CodeTool '{tool_id}': parameters_schema must have type: object"
+                )
+            props = parameters_schema.get("properties")
+            if not isinstance(props, dict):
+                raise ValueError(
+                    f"CodeTool '{tool_id}': parameters_schema must contain object properties"
+                )
+            self._parameters = copy.deepcopy(parameters_schema)
+        elif parameters:
             props = {}
             required = []
             for param_name, param_info in parameters.items():
@@ -290,7 +309,13 @@ class InlineTool(BaseTool):
                     if hasattr(param_info, "description")
                     else param_info.get("description", ""),
                 }
-                required.append(param_name)
+                is_req = (
+                    param_info.required
+                    if hasattr(param_info, "required")
+                    else param_info.get("required", True)
+                )
+                if is_req:
+                    required.append(param_name)
             self._parameters = {"type": "object", "properties": props, "required": required}
         else:
             self._parameters = None
@@ -382,14 +407,14 @@ class ExternalAPITool(BaseTool):
         response_mapping: Optional[Dict[str, str]] = None,
         permission: Permission = None,
         tags: Optional[List[str]] = None,
-        tool_type: ToolType = ToolType.TOOL,
+        react_role: ReactToolRole = ReactToolRole.STANDARD,
     ):
         self.api_id = api_id
         self.name = api_id
         self.description = description or f"External API: {api_id}"
         self.permission = permission
         self.tags = tags or ["api"]
-        self.tool_type = tool_type
+        self.react_role = react_role
         self._url = url
         self._method = method
         self._headers = headers or {}
@@ -463,7 +488,15 @@ class ExternalAPITool(BaseTool):
 
         if result.get("status") == "waiting_input" and result.get("interrupt"):
             from apps.flows.src.runtime.exceptions import FlowInterrupt
-            raise FlowInterrupt(question=result["interrupt"].get("question", ""))
+            from core.state import parse_interrupt_body_from_external_dict
+
+            raw = result["interrupt"]
+            if not isinstance(raw, dict):
+                raise ValueError(
+                    f"External API tool: interrupt должен быть dict, получено {type(raw)}"
+                )
+            body = parse_interrupt_body_from_external_dict(raw)
+            raise FlowInterrupt(body=body)
 
         if result.get("status") == "error":
             raise ValueError(f"External API error: {result.get('error')}")

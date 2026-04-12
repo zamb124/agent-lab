@@ -39,6 +39,7 @@ app.mount("/static/core", StaticFiles(directory=core_frontend_path), name="core_
         "lit": "/static/core/assets/js/lit/lit.min.js",
         "lit/decorators.js": "/static/core/assets/js/lit/decorators.min.js",
         "lit/directives/class-map.js": "/static/core/assets/js/lit/directives/class-map.min.js",
+        "lit/directives/guard.js": "/static/core/assets/js/lit/directives/guard.min.js",
         "@platform/lib/": "/static/core/lib/",
         "@platform/services/": "/static/core/services/"
     }

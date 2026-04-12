@@ -98,7 +98,7 @@ async def test_init_company_resources_for_regular_company(
     
     try:
         agent_repo = container.flow_repository
-        agents = await agent_repo.list_all()
+        agents = await agent_repo.list(limit=1000)
         agent_ids = [agent.flow_id for agent in agents]
         
         print(f"📋 Загруженные агенты в {test_company_id}: {agent_ids}")
@@ -163,7 +163,7 @@ async def test_flows_loader_filter_public(container, unique_id: str):
         
         print(f"📊 С фильтром: {stats_filtered}")
         
-        agents_filtered = await container.flow_repository.list_all()
+        agents_filtered = await container.flow_repository.list(limit=1000)
         filtered_count = len(agents_filtered)
         
         # Очищаем для второго теста
@@ -178,7 +178,7 @@ async def test_flows_loader_filter_public(container, unique_id: str):
         
         print(f"📊 Без фильтра: {stats_all}")
         
-        agents_all = await container.flow_repository.list_all()
+        agents_all = await container.flow_repository.list(limit=1000)
         all_count = len(agents_all)
         
         # Без фильтра должно быть больше или равно

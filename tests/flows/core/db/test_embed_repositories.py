@@ -125,7 +125,7 @@ async def test_embed_config_list(storage):
         await repo.set(config)
     
     # Получаем список
-    configs = await repo.list()
+    configs = await repo.list(limit=100)
     
     # В списке должно быть минимум 3 элемента (могут быть и другие из других тестов)
     assert len(configs) >= 3
@@ -209,14 +209,14 @@ async def test_embed_config_is_global_false_isolation(storage, storage_shared):
     
     # Список конфигураций для компании 1
     set_context(context1)
-    list1 = await repo.list()
+    list1 = await repo.list(limit=100)
     embed_ids1 = [c.embed_id for c in list1]
     assert "embed_company1" in embed_ids1
     assert "embed_company2" not in embed_ids1
     
     # Список конфигураций для компании 2
     set_context(context2)
-    list2 = await repo.list()
+    list2 = await repo.list(limit=100)
     embed_ids2 = [c.embed_id for c in list2]
     assert "embed_company2" in embed_ids2
     assert "embed_company1" not in embed_ids2

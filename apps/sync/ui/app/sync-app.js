@@ -8,7 +8,6 @@ import { SyncAPIService } from '../services/sync-api.service.js';
 import { SyncWsService } from '../services/sync-ws.service.js';
 import { SyncStore } from '../store/sync.store.js';
 import { lanePreviewFromMessagePayload } from '../utils/lane-preview.js';
-import { hueFromString } from '../utils/sync-hue.js';
 import { senderUserId } from '../utils/sender.js';
 import '@platform/lib/components/app-loader.js';
 import '@platform/lib/components/layout/platform-island.js';
@@ -21,14 +20,10 @@ export class SyncApp extends PlatformApp {
         _chat: { state: true },
         _ui: { state: true },
         _activeCall: { state: true },
+        _callUiMinimized: { state: true },
         _incomingCall: { state: true },
         _activeCallChannels: { state: true },
         _mobileShell: { state: true },
-        _meetingsChannelFilter: { state: true },
-        _meetingsDateFrom: { state: true },
-        _meetingsDateTo: { state: true },
-        _meetingDetailsById: { state: true },
-        _meetingsDetailsLoadingId: { state: true },
     };
 
     static styles = [
@@ -52,16 +47,15 @@ export class SyncApp extends PlatformApp {
             }
 
             /*
-             * Активный звонок: iOS WebKit иначе может оставить hit-testing на .main (flex на весь экран)
-             * под полноэкранным call-overlay — кнопки оверлея не получают касания.
-             * inert снимает интерактив с подложки; overflow: visible снимает обрезку fixed-детей.
+             * Полноэкранный оверлей звонка: иначе iOS WebKit оставляет hit-testing на .main под overlay.
+             * При свёрнутом звонке атрибут снят — чат и сайдбар снова кликабельны.
              */
-            :host([data-call-active]) {
+            :host([data-call-overlay-expanded]) {
                 overflow: visible;
             }
 
-            :host([data-call-active]) .sidebar,
-            :host([data-call-active]) .main {
+            :host([data-call-overlay-expanded]) .sidebar,
+            :host([data-call-overlay-expanded]) .main {
                 pointer-events: none;
             }
 
@@ -89,254 +83,6 @@ export class SyncApp extends PlatformApp {
                 flex-direction: column;
             }
 
-            .meetings-overlay {
-                position: fixed;
-                inset: 0;
-                z-index: var(--z-modal, 1000);
-                background: rgba(2, 6, 23, 0.52);
-                backdrop-filter: blur(6px);
-                -webkit-backdrop-filter: blur(6px);
-                display: flex;
-                align-items: center;
-                justify-content: center;
-                padding: var(--space-4);
-            }
-
-            .meetings-modal {
-                width: min(1320px, 100%);
-                height: min(88vh, 980px);
-                border-radius: var(--radius-2xl);
-                border: 1px solid var(--glass-border-medium);
-                background: var(--glass-solid-strong);
-                box-shadow: var(--glass-shadow-strong);
-                display: flex;
-                flex-direction: column;
-                min-height: 0;
-                overflow: hidden;
-            }
-
-            .meetings-header {
-                display: flex;
-                justify-content: space-between;
-                align-items: center;
-                gap: var(--space-3);
-                padding: var(--space-3) var(--space-4);
-                border-bottom: 1px solid var(--glass-border-subtle);
-                background: var(--glass-solid-subtle);
-                flex-shrink: 0;
-            }
-
-            .meetings-title {
-                font-size: var(--text-lg);
-                font-weight: var(--font-semibold);
-                color: var(--text-primary);
-            }
-
-            .meetings-controls {
-                display: grid;
-                grid-template-columns: minmax(220px, 320px) minmax(160px, 220px) minmax(160px, 220px) auto;
-                gap: var(--space-2);
-                padding: var(--space-3) var(--space-4);
-                border-bottom: 1px solid var(--glass-border-subtle);
-                flex-shrink: 0;
-            }
-
-            .back-btn {
-                border: 1px solid var(--glass-border-subtle);
-                border-radius: var(--radius-md);
-                background: var(--glass-solid-subtle);
-                color: var(--text-primary);
-                font: inherit;
-                font-size: var(--text-sm);
-                padding: 8px 12px;
-                cursor: pointer;
-                text-decoration: none;
-                transition: background var(--duration-fast), border-color var(--duration-fast);
-                display: inline-flex;
-                align-items: center;
-                justify-content: center;
-            }
-
-            .back-btn:hover {
-                background: var(--glass-solid-medium);
-                border-color: var(--accent);
-            }
-
-            .meetings-select,
-            .meetings-date {
-                width: 100%;
-                min-height: 40px;
-                border-radius: var(--radius-md);
-                border: 1px solid var(--glass-border-subtle);
-                background: var(--glass-solid-subtle);
-                color: var(--text-primary);
-                font: inherit;
-                padding: 0 var(--space-3);
-                outline: none;
-            }
-
-            .meetings-select:focus,
-            .meetings-date:focus {
-                border-color: var(--accent);
-            }
-
-            .meetings-body {
-                display: grid;
-                grid-template-columns: minmax(340px, 460px) minmax(0, 1fr);
-                gap: var(--space-3);
-                padding: var(--space-3) var(--space-4) var(--space-4);
-                min-height: 0;
-                flex: 1;
-            }
-
-            .meetings-list {
-                border: 1px solid var(--glass-border-subtle);
-                border-radius: var(--radius-lg);
-                padding: var(--space-2);
-                overflow: auto;
-                min-height: 0;
-                display: flex;
-                flex-direction: column;
-                gap: var(--space-2);
-            }
-
-            .meeting-card {
-                border: 1px solid var(--glass-border-subtle);
-                border-radius: var(--radius-lg);
-                background: var(--glass-solid-subtle);
-                padding: var(--space-3);
-                cursor: pointer;
-                display: flex;
-                flex-direction: column;
-                gap: var(--space-2);
-                text-align: left;
-                color: var(--text-primary);
-                transition: border-color var(--duration-fast), background var(--duration-fast);
-            }
-
-            .meeting-card:hover {
-                border-color: var(--glass-border-medium);
-                background: var(--glass-solid-medium);
-            }
-
-            .meeting-card.active {
-                border-color: var(--accent);
-                background: var(--accent-subtle);
-            }
-
-            .meeting-card-row {
-                display: flex;
-                align-items: center;
-                justify-content: space-between;
-                gap: var(--space-2);
-            }
-
-            .meeting-channel {
-                display: inline-flex;
-                align-items: center;
-                gap: var(--space-2);
-                min-width: 0;
-            }
-
-            .meeting-channel-badge {
-                width: 24px;
-                height: 24px;
-                border-radius: 50%;
-                color: #fff;
-                font-size: 11px;
-                font-weight: var(--font-semibold);
-                display: inline-flex;
-                align-items: center;
-                justify-content: center;
-                flex-shrink: 0;
-            }
-
-            .meeting-channel-name {
-                font-size: var(--text-sm);
-                font-weight: var(--font-medium);
-                color: var(--text-primary);
-                white-space: nowrap;
-                overflow: hidden;
-                text-overflow: ellipsis;
-            }
-
-            .meeting-meta {
-                font-size: var(--text-xs);
-                color: var(--text-secondary);
-            }
-
-            .meeting-status {
-                display: inline-flex;
-                align-items: center;
-                justify-content: center;
-                min-width: 72px;
-                padding: 2px 10px;
-                border-radius: var(--radius-full);
-                border: 1px solid var(--glass-border-subtle);
-                font-size: 11px;
-                font-weight: var(--font-medium);
-                color: var(--text-secondary);
-            }
-
-            .meeting-status.done {
-                color: rgb(22, 163, 74);
-                border-color: rgba(22, 163, 74, 0.35);
-                background: rgba(22, 163, 74, 0.12);
-            }
-
-            .meeting-status.pending {
-                color: rgb(217, 119, 6);
-                border-color: rgba(217, 119, 6, 0.35);
-                background: rgba(217, 119, 6, 0.12);
-            }
-
-            .meeting-status.failed {
-                color: rgb(220, 38, 38);
-                border-color: rgba(220, 38, 38, 0.35);
-                background: rgba(220, 38, 38, 0.12);
-            }
-
-            .meetings-detail {
-                border: 1px solid var(--glass-border-subtle);
-                border-radius: var(--radius-lg);
-                padding: var(--space-3);
-                overflow: auto;
-                min-height: 0;
-                display: flex;
-                flex-direction: column;
-                gap: var(--space-3);
-            }
-
-            .meetings-empty {
-                font-size: var(--text-sm);
-                color: var(--text-secondary);
-                padding: var(--space-2);
-            }
-
-            .detail-grid {
-                display: grid;
-                grid-template-columns: repeat(2, minmax(0, 1fr));
-                gap: var(--space-2) var(--space-3);
-            }
-
-            .detail-label {
-                font-size: 11px;
-                color: var(--text-tertiary);
-                text-transform: uppercase;
-                letter-spacing: 0.05em;
-            }
-
-            .detail-value {
-                font-size: var(--text-sm);
-                color: var(--text-primary);
-            }
-
-            .detail-actions {
-                display: flex;
-                flex-wrap: wrap;
-                gap: var(--space-2);
-            }
-
             @media (max-width: 767px) {
                 .sidebar {
                     position: absolute;
@@ -351,38 +97,6 @@ export class SyncApp extends PlatformApp {
 
                 platform-island {
                     min-height: 0;
-                }
-
-                .meetings-overlay {
-                    padding: var(--space-1);
-                }
-
-                .meetings-modal {
-                    width: 100%;
-                    height: 100%;
-                    border-radius: var(--radius-lg);
-                }
-
-                .meetings-header {
-                    padding: var(--space-2) var(--space-3);
-                }
-
-                .meetings-title {
-                    font-size: var(--text-base);
-                }
-
-                .meetings-controls {
-                    grid-template-columns: 1fr;
-                    padding: var(--space-2) var(--space-3);
-                }
-
-                .meetings-body {
-                    grid-template-columns: 1fr;
-                    padding: var(--space-2) var(--space-3) var(--space-3);
-                }
-
-                .detail-grid {
-                    grid-template-columns: 1fr;
                 }
             }
         `
@@ -405,18 +119,75 @@ export class SyncApp extends PlatformApp {
         this._typingPruneTimer = null;
         this._wsEverConnected = false;
         this._activeCallChannels = {};
-        this._meetingsChannelFilter = 'all';
-        this._meetingsDateFrom = '';
-        this._meetingsDateTo = '';
-        this._meetingDetailsById = {};
-        this._meetingsDetailsLoadingId = null;
         /** id WS-команд call.hangup — ack тоже содержит CallRead с call_id, без фильтра открыл бы оверлей снова */
         this._callHangupRequestIds = new Set();
+        /** id WS-команд call.recording.start/stop — ack содержит CallRecordingRead с call_id, без фильтра затирает _activeCall */
+        this._callRecordingRequestIds = new Set();
+        this._callUiMinimized = false;
+        this._boundSyncCallOverlayExpand = () => {
+            if (this._activeCall == null) return;
+            this._callUiMinimized = false;
+            this._syncUiActiveCallOverlay();
+            this.requestUpdate();
+        };
+        this._boundSyncCallBannerHangup = () => {
+            const id = this._activeCall?.call_id;
+            if (typeof id !== 'string' || id === '') {
+                return;
+            }
+            this._sendCallHangupWs(id);
+        };
+        this._boundJoinCallFromBoundary = (e) => {
+            const d = e.detail;
+            if (d == null || typeof d !== 'object') return;
+            const channelId = d.channelId;
+            const callId = d.callId;
+            if (typeof channelId !== 'string' || channelId === '') return;
+            if (typeof callId !== 'string' || callId === '') return;
+            void this._joinCallInChannel(channelId, callId);
+        };
         this._mqMobileShell = window.matchMedia('(max-width: 767px)');
         this._mobileShell = this._mqMobileShell.matches;
-        this._boundWindowOpenMeetings = () => {
-            void this._openMeetingsPanel();
-        };
+    }
+
+    _syncUiActiveCallOverlay() {
+        if (this._activeCall == null) {
+            this._callUiMinimized = false;
+            SyncStore.setUiActiveCallOverlay(null);
+            return;
+        }
+        const ch = this._activeCall.channel_id;
+        const channelId = typeof ch === 'string' ? ch : '';
+        SyncStore.setUiActiveCallOverlay({
+            call_id: this._activeCall.call_id,
+            channel_id: channelId,
+            minimized: this._callUiMinimized,
+        });
+    }
+
+    _blurCallOverlayFocus() {
+        const host = this.renderRoot?.querySelector('call-overlay');
+        const sr = host?.shadowRoot;
+        const inner = sr?.activeElement;
+        if (inner && typeof inner.blur === 'function') {
+            inner.blur();
+        }
+        if (host && document.activeElement === host && typeof host.blur === 'function') {
+            host.blur();
+        }
+    }
+
+    _onCallMinimizeRequest() {
+        if (this._activeCall == null) return;
+        this._blurCallOverlayFocus();
+        this._callUiMinimized = true;
+        this._syncUiActiveCallOverlay();
+        this.requestUpdate();
+    }
+
+    _localeTag() {
+        const loc = this.i18n.getCurrentLocale();
+        return loc === 'en' ? 'en-US' : 'ru-RU';
     }
 
     setupStore() {
@@ -429,7 +200,6 @@ export class SyncApp extends PlatformApp {
 
     async initServices() {
         await super.initServices();
-        await this.services.registerCore('/sync');
         this.services.register('syncApi', new SyncAPIService('/sync/api/v1'));
 
         this._unsubscribe = SyncStore.subscribe((state) => {
@@ -450,6 +220,10 @@ export class SyncApp extends PlatformApp {
     async connectedCallback() {
         try {
             await super.connectedCallback();
+            this._i18nUnsub = this.i18n.subscribe(() => this.requestUpdate());
+            window.addEventListener('sync-call-overlay-expand', this._boundSyncCallOverlayExpand);
+            window.addEventListener('sync-call-banner-hangup', this._boundSyncCallBannerHangup);
+            window.addEventListener('join-call-from-boundary', this._boundJoinCallFromBoundary);
 
             if (!this._mobileShellMqBound) {
                 this._mobileShellMqBound = true;
@@ -461,8 +235,6 @@ export class SyncApp extends PlatformApp {
             }
 
             if (!this._isAuthenticated) return;
-
-            window.addEventListener('sync-open-meetings', this._boundWindowOpenMeetings);
 
             const syncApi = this.services.get('syncApi');
 
@@ -487,12 +259,19 @@ export class SyncApp extends PlatformApp {
             }
             this._connectWs();
         } catch (err) {
-            console.error('[SyncApp] Ошибка инициализации:', err);
+            console.error('[SyncApp] initialization failed:', err);
             this.redirectToAuth();
         }
     }
 
     disconnectedCallback() {
+        window.removeEventListener('sync-call-overlay-expand', this._boundSyncCallOverlayExpand);
+        window.removeEventListener('sync-call-banner-hangup', this._boundSyncCallBannerHangup);
+        window.removeEventListener('join-call-from-boundary', this._boundJoinCallFromBoundary);
+        if (this._i18nUnsub) {
+            this._i18nUnsub();
+            this._i18nUnsub = null;
+        }
         super.disconnectedCallback?.();
         if (this._mobileShellMqBound) {
             this._mobileShellMqBound = false;
@@ -502,7 +281,6 @@ export class SyncApp extends PlatformApp {
             clearInterval(this._typingPruneTimer);
             this._typingPruneTimer = null;
         }
-        window.removeEventListener('sync-open-meetings', this._boundWindowOpenMeetings);
         this._unsubscribe?.();
         this._ws?.close();
         this._ws = null;
@@ -530,7 +308,7 @@ export class SyncApp extends PlatformApp {
     _handleWsMessage(data) {
         const msg = JSON.parse(data);
         if (msg === null || typeof msg !== 'object' || Array.isArray(msg)) {
-            throw new Error('[sync-ws] ожидался JSON-объект.');
+            throw new Error(this.i18n.t('sync_app.ws_json_expected'));
         }
         if (typeof msg.type === 'string' && msg.type !== '') {
             this._dispatchRealtimeEvent(msg);
@@ -538,6 +316,22 @@ export class SyncApp extends PlatformApp {
         }
         if (typeof msg.ok === 'boolean' && typeof msg.id === 'string') {
             if (this._callHangupRequestIds.delete(msg.id)) {
+                return;
+            }
+            if (this._callRecordingRequestIds.delete(msg.id)) {
+                if (!msg.ok) {
+                    const overlay = this.renderRoot?.querySelector('call-overlay');
+                    if (overlay) {
+                        const prev = overlay._recordingStatus;
+                        const resetTo = prev === 'starting' ? 'idle'
+                            : prev === 'stopping' ? 'recording'
+                            : prev;
+                        overlay.setRecordingStatus(
+                            resetTo,
+                            msg.error_detail || null,
+                        );
+                    }
+                }
                 return;
             }
             if (msg.ok) {
@@ -555,7 +349,7 @@ export class SyncApp extends PlatformApp {
             }
             return;
         }
-        throw new Error(`[sync-ws] неизвестный кадр WebSocket: ${JSON.stringify(msg)}`);
+        throw new Error(this.i18n.t('sync_app.ws_unknown_frame', { detail: JSON.stringify(msg) }));
     }
 
     _dispatchRealtimeEvent(msg) {
@@ -586,7 +380,7 @@ export class SyncApp extends PlatformApp {
             const auth = this.auth?.user;
             const companyId = auth?.company_id;
             if (typeof companyId !== 'string' || companyId === '') {
-                throw new Error('user.presence: auth.user.company_id обязателен.');
+                throw new Error(this.i18n.t('sync_app.ws_user_presence_company_id'));
             }
             if (p.company_id !== companyId) return;
             SyncStore.applyUserPresence(p);
@@ -595,7 +389,7 @@ export class SyncApp extends PlatformApp {
 
         const p = msg.payload;
         if (!p || typeof p !== 'object') {
-            throw new Error(`${msg.type}: payload обязателен.`);
+            throw new Error(this.i18n.t('sync_app.ws_payload_required', { type: msg.type }));
         }
 
         if (
@@ -640,7 +434,7 @@ export class SyncApp extends PlatformApp {
             const authUser = this.auth?.user;
             const myId = authUser?.id;
             if (typeof myId !== 'string' || myId === '') {
-                throw new Error('channel.read_updated: auth.user.id обязателен.');
+                throw new Error(this.i18n.t('sync_app.ws_channel_read_user_id'));
             }
             if (p.reader_user_id === myId && typeof p.channel_id === 'string') {
                 SyncStore.patchChannelFields(p.channel_id, {
@@ -663,7 +457,7 @@ export class SyncApp extends PlatformApp {
                 const authUser = this.auth?.user;
                 const myId = authUser?.id;
                 if (typeof myId !== 'string' || myId === '') {
-                    throw new Error('message.created: auth.user.id обязателен.');
+                    throw new Error(this.i18n.t('sync_app.ws_message_created_user_id'));
                 }
                 if (senderUserId(p.sender) === myId) {
                     SyncStore.resolveOwnMessageBroadcast(p);
@@ -686,7 +480,7 @@ export class SyncApp extends PlatformApp {
             const authUser = this.auth?.user;
             const myId = authUser?.id;
             if (typeof myId !== 'string' || myId === '') {
-                throw new Error('Нет user id для синхронизации списка каналов.');
+                throw new Error(this.i18n.t('sync_app.ws_no_user_id_channel_list'));
             }
             const preview = lanePreviewFromMessagePayload(p);
             const patch = {
@@ -723,7 +517,7 @@ export class SyncApp extends PlatformApp {
                 && SyncStore.normalizeSyncChannelId(p.channel_id) === selectedNorm
             ) {
                 const mid = p.message_id;
-                if (typeof mid !== 'string') throw new Error('message.reaction_changed: нет message_id.');
+                if (typeof mid !== 'string') throw new Error(this.i18n.t('sync_app.ws_reaction_no_message_id'));
                 SyncStore.mergeMessageFields(mid, { reactions: p.reactions });
             }
             return;
@@ -751,7 +545,7 @@ export class SyncApp extends PlatformApp {
                 && SyncStore.normalizeSyncChannelId(p.channel_id) === selectedNorm
             ) {
                 const mid = p.message_id;
-                if (typeof mid !== 'string') throw new Error('message.status_changed: нет message_id.');
+                if (typeof mid !== 'string') throw new Error(this.i18n.t('sync_app.ws_status_no_message_id'));
                 SyncStore.mergeMessageFields(mid, { status: p.status });
             }
             return;
@@ -798,6 +592,7 @@ export class SyncApp extends PlatformApp {
         if (msg.type === 'call.ended') {
             if (this._activeCall?.call_id === p.call_id) {
                 this._activeCall = null;
+                this._syncUiActiveCallOverlay();
             }
             if (this._incomingCall?.call_id === p.call_id) {
                 this._incomingCall = null;
@@ -848,26 +643,10 @@ export class SyncApp extends PlatformApp {
                     recording_started_by_user_id: '',
                 };
                 const overlay = this.renderRoot?.querySelector('call-overlay');
-                overlay?.setRecordingStatus?.('failed', p.error || 'Ошибка записи');
-            }
-            return;
-        }
-        if (
-            msg.type === 'call.transcript.ready'
-            || msg.type === 'call.summary.ready'
-            || msg.type === 'call.export.crm.done'
-            || msg.type === 'call.export.crm.failed'
-        ) {
-            SyncStore.upsertMeeting(p);
-            return;
-        }
-        if (msg.type === 'call.transcript.failed' || msg.type === 'call.summary.failed') {
-            SyncStore.upsertMeeting(p);
-            const errorText = (typeof p.error === 'string' && p.error !== '') ? p.error : 'Ошибка обработки встречи';
-            console.error(`[sync] ${msg.type}: ${errorText}`, p);
-            if (this._activeCall?.call_id === p.call_id) {
-                const overlay = this.renderRoot?.querySelector('call-overlay');
-                overlay?.setRecordingStatus?.('failed', errorText);
+                overlay?.setRecordingStatus?.(
+                    'failed',
+                    p.error || this.i18n.t('recording_error_default', {}),
+                );
             }
             return;
         }
@@ -889,7 +668,7 @@ export class SyncApp extends PlatformApp {
             return;
         }
 
-        throw new Error(`[sync-ws] неизвестное realtime-событие: ${msg.type}`);
+        throw new Error(this.i18n.t('sync_app.ws_unknown_realtime', { type: msg.type }));
     }
 
     _buildNamesMap() {
@@ -903,25 +682,44 @@ export class SyncApp extends PlatformApp {
         return map;
     }
 
-    async _joinCallInChannel(channelId) {
-        const callInfo = this._activeCallChannels[channelId];
-        if (!callInfo) return;
+    async _joinCallInChannel(channelId, explicitCallId) {
+        const fromMap = this._activeCallChannels[channelId];
+        const callId =
+            typeof explicitCallId === 'string' && explicitCallId !== ''
+                ? explicitCallId
+                : (fromMap && typeof fromMap.call_id === 'string' ? fromMap.call_id : '');
+        if (callId === '') return;
+
+        if (this._activeCall?.call_id === callId && !this._callUiMinimized) {
+            return;
+        }
+        if (this._activeCall?.call_id === callId && this._callUiMinimized) {
+            this._callUiMinimized = false;
+            this._syncUiActiveCallOverlay();
+            this.requestUpdate();
+            return;
+        }
+
         const syncApi = this.services.get('syncApi');
         const [callData, tokenData] = await Promise.all([
-            syncApi.get(`/calls/${callInfo.call_id}`),
-            syncApi.get(`/calls/${callInfo.call_id}/token`),
+            syncApi.get(`/calls/${callId}`),
+            syncApi.get(`/calls/${callId}/token`),
         ]);
         const ws = this.services.get('syncWs');
         if (ws) {
             const id = ([1e7]+-1e3+-4e3+-8e3+-1e11).replace(/[018]/g, c =>
                 (c ^ (Math.random() * 16 >> c / 4)).toString(16));
-            ws.sendJson({ id, type: 'call.accept', payload: { call_id: callInfo.call_id } });
+            ws.sendJson({ id, type: 'call.accept', payload: { call_id: callId } });
         }
+        this._callUiMinimized = false;
         this._activeCall = { ...callData, livekit_token: tokenData.token, livekit_url: tokenData.livekit_url };
+        this._syncUiActiveCallOverlay();
     }
 
     async _openCallOverlay(callData) {
+        this._callUiMinimized = false;
         this._activeCall = callData;
+        this._syncUiActiveCallOverlay();
         this._incomingCall = null;
         const syncApi = this.services.get('syncApi');
         const pending = [syncApi.get(`/calls/${callData.call_id}/recordings`)];
@@ -944,6 +742,7 @@ export class SyncApp extends PlatformApp {
             nextCallData.livekit_url = tokenData.livekit_url;
         }
         this._activeCall = nextCallData;
+        this._syncUiActiveCallOverlay();
         const overlay = this.renderRoot?.querySelector('call-overlay');
         if (overlay && activeRecording) {
             overlay.setRecordingStatus('recording');
@@ -953,19 +752,21 @@ export class SyncApp extends PlatformApp {
     async _acceptCall(callId) {
         this._incomingCall = null;
         const ws = this.services.get('syncWs');
-        if (!ws) throw new Error('syncWs не инициализирован при accept.');
+        if (!ws) throw new Error(this.i18n.t('sync_app.err_sync_ws_not_initialized'));
         const id = ([1e7]+-1e3+-4e3+-8e3+-1e11).replace(/[018]/g, c =>
             (c ^ (Math.random() * 16 >> c / 4)).toString(16));
         ws.sendJson({ id, type: 'call.accept', payload: { call_id: callId } });
 
         const syncApi = this.services.get('syncApi');
         const callData = await syncApi.get(`/calls/${callId}`);
+        this._callUiMinimized = false;
         if (callData.mode === 'sfu') {
             const tokenData = await syncApi.get(`/calls/${callId}/token`);
             this._activeCall = { ...callData, livekit_token: tokenData.token, livekit_url: tokenData.livekit_url };
         } else {
             this._activeCall = callData;
         }
+        this._syncUiActiveCallOverlay();
     }
 
     _declineCall(callId) {
@@ -996,12 +797,13 @@ export class SyncApp extends PlatformApp {
     _sendCallRecordingWs(callId, action) {
         if (typeof callId !== 'string' || callId === '') return;
         if (action !== 'start' && action !== 'stop') {
-            throw new Error('action должен быть start или stop.');
+            throw new Error(this.i18n.t('sync_app.err_recording_action'));
         }
         const ws = this.services.get('syncWs');
         if (!ws) return;
         const id = ([1e7]+-1e3+-4e3+-8e3+-1e11).replace(/[018]/g, c =>
             (c ^ (Math.random() * 16 >> c / 4)).toString(16));
+        this._callRecordingRequestIds.add(id);
         ws.sendJson({
             id,
             type: action === 'start' ? 'call.recording.start' : 'call.recording.stop',
@@ -1061,7 +863,7 @@ export class SyncApp extends PlatformApp {
             try {
                 this._handleWsMessage(data);
             } catch (e) {
-                console.error('[sync-ws] ошибка обработки кадра:', e, { raw: data });
+                console.error('[sync-ws] frame handler error:', e, { raw: data });
             }
         });
 
@@ -1073,209 +875,6 @@ export class SyncApp extends PlatformApp {
         this._typingPruneTimer = setInterval(() => {
             SyncStore.pruneExpiredTypingPeers();
         }, 1200);
-    }
-
-    async _openMeetingsPanel() {
-        SyncStore.openMeetingsPanel();
-        const syncApi = this.services.get('syncApi');
-        await SyncStore.loadMeetings(syncApi, { limit: 200 });
-    }
-
-    _meetingDateMs(meeting) {
-        if (!meeting || typeof meeting !== 'object') {
-            return null;
-        }
-        const iso = typeof meeting.created_at === 'string' && meeting.created_at !== ''
-            ? meeting.created_at
-            : meeting.updated_at;
-        if (typeof iso !== 'string' || iso === '') {
-            return null;
-        }
-        const parsed = Date.parse(iso);
-        if (Number.isNaN(parsed)) {
-            return null;
-        }
-        return parsed;
-    }
-
-    _filteredMeetings() {
-        const meetings = SyncStore.state.meetings.list;
-        const channelFilter = this._meetingsChannelFilter;
-        const fromFilter = this._meetingsDateFrom;
-        const toFilter = this._meetingsDateTo;
-        const fromMs = fromFilter !== '' ? Date.parse(`${fromFilter}T00:00:00`) : null;
-        const toMs = toFilter !== '' ? Date.parse(`${toFilter}T23:59:59.999`) : null;
-        return meetings.filter((meeting) => {
-            if (channelFilter !== 'all' && meeting.channel_id !== channelFilter) {
-                return false;
-            }
-            const meetingDateMs = this._meetingDateMs(meeting);
-            if (fromMs !== null && meetingDateMs !== null && meetingDateMs < fromMs) {
-                return false;
-            }
-            if (toMs !== null && meetingDateMs !== null && meetingDateMs > toMs) {
-                return false;
-            }
-            return true;
-        });
-    }
-
-    _meetingChannelOptions(meetings) {
-        const channelIds = new Set();
-        for (const meeting of meetings) {
-            if (typeof meeting.channel_id === 'string' && meeting.channel_id !== '') {
-                channelIds.add(meeting.channel_id);
-            }
-        }
-        const options = [];
-        for (const channelId of channelIds) {
-            const channel = SyncStore.state.channels.list.find((item) => item.id === channelId);
-            const title = channel ? SyncStore.channelDisplayTitle(channel) : channelId;
-            options.push({ channelId, title });
-        }
-        options.sort((left, right) => left.title.localeCompare(right.title, 'ru'));
-        return options;
-    }
-
-    _formatMeetingDate(isoValue) {
-        if (typeof isoValue !== 'string' || isoValue === '') {
-            return '—';
-        }
-        const date = new Date(isoValue);
-        if (Number.isNaN(date.getTime())) {
-            return '—';
-        }
-        return new Intl.DateTimeFormat('ru-RU', {
-            day: '2-digit',
-            month: '2-digit',
-            year: 'numeric',
-            hour: '2-digit',
-            minute: '2-digit',
-        }).format(date);
-    }
-
-    _channelName(channelId) {
-        if (typeof channelId !== 'string' || channelId === '') {
-            return '—';
-        }
-        const channel = SyncStore.state.channels.list.find((item) => item.id === channelId);
-        if (!channel) {
-            return channelId;
-        }
-        return SyncStore.channelDisplayTitle(channel);
-    }
-
-    _channelInitials(channelId) {
-        const label = this._channelName(channelId).trim();
-        if (label === '') {
-            return '?';
-        }
-        return label.slice(0, 1).toUpperCase();
-    }
-
-    _statusLabel(exportStatus) {
-        if (exportStatus === 'done') return 'готово';
-        if (exportStatus === 'pending') return 'в работе';
-        if (exportStatus === 'failed') return 'ошибка';
-        return '—';
-    }
-
-    _selectedMeeting() {
-        const selected = SyncStore.state.meetings.selected;
-        if (!selected || typeof selected.meeting_id !== 'string' || selected.meeting_id === '') {
-            return null;
-        }
-        const details = this._meetingDetailsById[selected.meeting_id];
-        if (details) {
-            return details;
-        }
-        return selected;
-    }
-
-    _meetingParticipants(meetingDetails) {
-        const segments = Array.isArray(meetingDetails?.segments) ? meetingDetails.segments : [];
-        const participants = new Set();
-        for (const segment of segments) {
-            if (typeof segment.speaker_user_id === 'string' && segment.speaker_user_id !== '') {
-                participants.add(segment.speaker_user_id);
-                continue;
-            }
-            if (typeof segment.speaker_guest_name === 'string' && segment.speaker_guest_name !== '') {
-                participants.add(segment.speaker_guest_name);
-                continue;
-            }
-            if (typeof segment.speaker_identity === 'string' && segment.speaker_identity !== '') {
-                participants.add(segment.speaker_identity);
-            }
-        }
-        return [...participants];
-    }
-
-    _durationText(meetingDetails) {
-        const startedAt = meetingDetails?.recording?.started_at;
-        const endedAt = meetingDetails?.recording?.ended_at;
-        if (typeof startedAt !== 'string' || typeof endedAt !== 'string') {
-            return '—';
-        }
-        const startedMs = Date.parse(startedAt);
-        const endedMs = Date.parse(endedAt);
-        if (Number.isNaN(startedMs) || Number.isNaN(endedMs) || endedMs <= startedMs) {
-            return '—';
-        }
-        const diffSeconds = Math.round((endedMs - startedMs) / 1000);
-        const hours = Math.floor(diffSeconds / 3600);
-        const minutes = Math.floor((diffSeconds % 3600) / 60);
-        const seconds = diffSeconds % 60;
-        if (hours > 0) {
-            return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
-        }
-        return `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
-    }
-
-    async _openMeetingDetails(meetingId) {
-        if (typeof meetingId !== 'string' || meetingId === '') {
-            throw new Error('meetingId обязателен.');
-        }
-        const syncApi = this.services.get('syncApi');
-        this._meetingsDetailsLoadingId = meetingId;
-        const details = await syncApi.getMeeting(meetingId);
-        if (!details || typeof details !== 'object' || !details.meeting) {
-            this._meetingsDetailsLoadingId = null;
-            throw new Error('Некорректный ответ details встречи.');
-        }
-        const selected = {
-            ...details.meeting,
-            recording: details.recording ?? null,
-            segments: Array.isArray(details.segments) ? details.segments : [],
-        };
-        this._meetingDetailsById = {
-            ...this._meetingDetailsById,
-            [meetingId]: selected,
-        };
-        this._meetingsDetailsLoadingId = null;
-        SyncStore.setMeetingSelected(selected);
-    }
-
-    async _exportSelectedMeeting() {
-        const selected = this._selectedMeeting();
-        if (!selected || typeof selected.meeting_id !== 'string' || selected.meeting_id === '') {
-            throw new Error('meeting_id обязателен.');
-        }
-        const syncApi = this.services.get('syncApi');
-        await syncApi.exportMeetingToCrm(selected.meeting_id, null);
-        await SyncStore.loadMeetings(syncApi, { limit: 200 });
-        await this._openMeetingDetails(selected.meeting_id);
-    }
-
-    async _retrySelectedMeeting() {
-        const selected = this._selectedMeeting();
-        if (!selected || typeof selected.meeting_id !== 'string' || selected.meeting_id === '') {
-            throw new Error('meeting_id обязателен.');
-        }
-        const syncApi = this.services.get('syncApi');
-        await syncApi.retryMeetingProcessing(selected.meeting_id);
-        await SyncStore.loadMeetings(syncApi, { limit: 200 });
-        await this._openMeetingDetails(selected.meeting_id);
     }
 
     render() {
@@ -1291,13 +890,7 @@ export class SyncApp extends PlatformApp {
             return html`<app-loader></app-loader>`;
         }
 
-        const callUiLocked = this._activeCall != null;
-        const meetingsOpen = this._ui.meetingsPanelOpen === true;
-        const meetingsState = SyncStore.state.meetings;
-        const filteredMeetings = this._filteredMeetings();
-        const meetingChannelOptions = this._meetingChannelOptions(meetingsState.list);
-        const selectedMeeting = this._selectedMeeting();
-        const selectedParticipants = selectedMeeting ? this._meetingParticipants(selectedMeeting) : [];
+        const callUiLocked = this._activeCall != null && !this._callUiMinimized;
 
         return html`
             <div class="sidebar" ?inert=${callUiLocked}>
@@ -1308,195 +901,12 @@ export class SyncApp extends PlatformApp {
             </div>
 
             <div class="main" ?inert=${callUiLocked}>
-                <platform-island padding="none">
+                <platform-island padding="none" content-no-scroll>
                     <chat-view></chat-view>
                 </platform-island>
             </div>
 
             <space-settings-modal></space-settings-modal>
-
-            ${meetingsOpen ? html`
-                <div
-                    class="meetings-overlay"
-                    @click=${(e) => {
-        if (e.target === e.currentTarget) {
-            SyncStore.closeMeetingsPanel();
-        }
-    }}
-                >
-                    <div class="meetings-modal" @click=${(e) => e.stopPropagation()}>
-                        <div class="meetings-header">
-                            <div class="meetings-title">Встречи компании</div>
-                            <button type="button" class="back-btn" @click=${() => SyncStore.closeMeetingsPanel()}>Закрыть</button>
-                        </div>
-                        <div class="meetings-controls">
-                            <select
-                                class="meetings-select"
-                                .value=${this._meetingsChannelFilter}
-                                @change=${(e) => {
-                                    const nextValue = e.target.value;
-                                    this._meetingsChannelFilter = nextValue;
-                                }}
-                            >
-                                <option value="all">Все каналы</option>
-                                ${meetingChannelOptions.map((item) => html`
-                                    <option value=${item.channelId}>${item.title}</option>
-                                `)}
-                            </select>
-                            <input
-                                class="meetings-date"
-                                type="date"
-                                .value=${this._meetingsDateFrom}
-                                @change=${(e) => {
-                                    this._meetingsDateFrom = e.target.value;
-                                }}
-                            />
-                            <input
-                                class="meetings-date"
-                                type="date"
-                                .value=${this._meetingsDateTo}
-                                @change=${(e) => {
-                                    this._meetingsDateTo = e.target.value;
-                                }}
-                            />
-                            <button
-                                type="button"
-                                class="back-btn"
-                                @click=${() => {
-        this._meetingsChannelFilter = 'all';
-        this._meetingsDateFrom = '';
-        this._meetingsDateTo = '';
-    }}
-                            >
-                                Сбросить фильтры
-                            </button>
-                        </div>
-                        <div class="meetings-body">
-                            <div class="meetings-list">
-                                ${meetingsState.loading ? html`<div class="meetings-empty">Загрузка встреч...</div>` : ''}
-                                ${!meetingsState.loading && filteredMeetings.length === 0
-                                    ? html`<div class="meetings-empty">По фильтрам ничего не найдено.</div>`
-                                    : ''}
-                                ${filteredMeetings.map((meeting) => {
-        const isActive = selectedMeeting?.meeting_id === meeting.meeting_id;
-        const loading = this._meetingsDetailsLoadingId === meeting.meeting_id;
-        const statusClass = `meeting-status ${meeting.export_status}`;
-        const badgeColor = `background:hsl(${hueFromString(meeting.channel_id)} 48% 42%)`;
-        const details = this._meetingDetailsById[meeting.meeting_id];
-        const duration = details ? this._durationText(details) : '—';
-        return html`
-                                        <button
-                                            type="button"
-                                            class="meeting-card ${isActive ? 'active' : ''}"
-                                            @click=${async () => {
-            try {
-                await this._openMeetingDetails(meeting.meeting_id);
-            } catch (err) {
-                const text = err instanceof Error ? err.message : String(err);
-                this.error(text);
-            }
-        }}
-                                        >
-                                            <div class="meeting-card-row">
-                                                <span class="meeting-channel">
-                                                    <span class="meeting-channel-badge" style=${badgeColor}>${this._channelInitials(meeting.channel_id)}</span>
-                                                    <span class="meeting-channel-name">${this._channelName(meeting.channel_id)}</span>
-                                                </span>
-                                                <span class=${statusClass}>${this._statusLabel(meeting.export_status)}</span>
-                                            </div>
-                                            <div class="meeting-meta">Дата: ${this._formatMeetingDate(meeting.created_at)}</div>
-                                            <div class="meeting-meta">Длительность: ${duration}</div>
-                                            <div class="meeting-meta">meeting_id: ${meeting.meeting_id.slice(0, 12)}...</div>
-                                            ${loading ? html`<div class="meeting-meta">Загрузка деталей...</div>` : ''}
-                                        </button>
-                                    `;
-    })}
-                            </div>
-                            <div class="meetings-detail">
-                                ${selectedMeeting ? html`
-                                    <div class="meetings-title">Детали встречи</div>
-                                    <div class="detail-grid">
-                                        <div>
-                                            <div class="detail-label">Канал</div>
-                                            <div class="detail-value">${this._channelName(selectedMeeting.channel_id)}</div>
-                                        </div>
-                                        <div>
-                                            <div class="detail-label">Дата</div>
-                                            <div class="detail-value">${this._formatMeetingDate(selectedMeeting.created_at)}</div>
-                                        </div>
-                                        <div>
-                                            <div class="detail-label">Длительность</div>
-                                            <div class="detail-value">${this._durationText(selectedMeeting)}</div>
-                                        </div>
-                                        <div>
-                                            <div class="detail-label">Статус</div>
-                                            <div class="detail-value">${this._statusLabel(selectedMeeting.export_status)}</div>
-                                        </div>
-                                        <div>
-                                            <div class="detail-label">Участники</div>
-                                            <div class="detail-value">${selectedParticipants.length > 0 ? selectedParticipants.join(', ') : '—'}</div>
-                                        </div>
-                                        <div>
-                                            <div class="detail-label">meeting_id</div>
-                                            <div class="detail-value">${selectedMeeting.meeting_id}</div>
-                                        </div>
-                                    </div>
-                                    <div class="detail-actions">
-                                        ${selectedMeeting.recording?.raw_file_download_url ? html`
-                                            <a
-                                                class="back-btn"
-                                                href=${selectedMeeting.recording.raw_file_download_url}
-                                                download
-                                                target="_blank"
-                                                rel="noopener noreferrer"
-                                            >Скачать запись</a>
-                                        ` : ''}
-                                        ${selectedMeeting.transcript_text_download_url ? html`
-                                            <a
-                                                class="back-btn"
-                                                href=${selectedMeeting.transcript_text_download_url}
-                                                download
-                                                target="_blank"
-                                                rel="noopener noreferrer"
-                                            >Скачать транскрипт</a>
-                                        ` : ''}
-                                        <button
-                                            type="button"
-                                            class="back-btn"
-                                            @click=${async () => {
-            try {
-                await this._exportSelectedMeeting();
-            } catch (err) {
-                const text = err instanceof Error ? err.message : String(err);
-                this.error(text);
-            }
-        }}
-                                        >
-                                            Экспорт в CRM
-                                        </button>
-                                        <button
-                                            type="button"
-                                            class="back-btn"
-                                            @click=${async () => {
-            try {
-                await this._retrySelectedMeeting();
-            } catch (err) {
-                const text = err instanceof Error ? err.message : String(err);
-                this.error(text);
-            }
-        }}
-                                        >
-                                            Повторить обработку
-                                        </button>
-                                    </div>
-                                ` : html`
-                                    <div class="meetings-empty">Выберите карточку встречи в списке слева.</div>
-                                `}
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            ` : ''}
 
             ${this._activeCall ? html`
                 <call-overlay
@@ -1510,7 +920,14 @@ export class SyncApp extends PlatformApp {
                     livekit-url=${this._activeCall.livekit_url || ''}
                     livekit-token=${this._activeCall.livekit_token || ''}
                     .names=${this._buildNamesMap()}
-                    @call-ended=${() => { this._activeCall = null; }}
+                    ?minimized=${this._callUiMinimized}
+                    ?inert=${this._callUiMinimized}
+                    @call-minimize-request=${() => this._onCallMinimizeRequest()}
+                    @call-ended=${() => {
+        this._activeCall = null;
+        this._callUiMinimized = false;
+        this._syncUiActiveCallOverlay();
+    }}
                     @call-hangup-request=${(e) => this._sendCallHangupWs(e.detail?.callId)}
                     @call-recording-start=${(e) => this._sendCallRecordingWs(e.detail?.callId, 'start')}
                     @call-recording-stop=${(e) => this._sendCallRecordingWs(e.detail?.callId, 'stop')}
@@ -1533,9 +950,11 @@ export class SyncApp extends PlatformApp {
 
     updated(changedProps) {
         super.updated(changedProps);
-        if (changedProps.has('_activeCall')) {
-            this.toggleAttribute('data-call-active', this._activeCall != null);
-        }
+        this.toggleAttribute('data-call-active', this._activeCall != null);
+        this.toggleAttribute(
+            'data-call-overlay-expanded',
+            this._activeCall != null && !this._callUiMinimized,
+        );
     }
 }
 

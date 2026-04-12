@@ -3,27 +3,53 @@
 """
 
 from typing import Any, Dict, Optional
+from uuid import UUID
+
+from core.state.interrupt import (
+    InterruptBody,
+    UserMessageInterrupt,
+    interrupt_body_public_question,
+)
 
 
 class FlowInterrupt(Exception):
-    """Исключение для прерывания агента с вопросом пользователю."""
+    """Прерывание выполнения с типизированным телом interrupt (HITL)."""
 
     def __init__(
         self,
-        question: str,
+        question: str | None = None,
+        *,
+        body: InterruptBody | None = None,
         tool_call: dict | None = None,
         flow_id: str = "",
+        correlation_id: UUID | None = None,
     ):
-        self.question = question
+        if body is not None:
+            if question is not None:
+                raise ValueError("FlowInterrupt: нельзя передавать одновременно body и question")
+            self.body: InterruptBody = body
+        elif question is not None:
+            if not isinstance(question, str) or not question.strip():
+                raise ValueError("FlowInterrupt: question должен быть непустой строкой")
+            self.body = UserMessageInterrupt(question=question.strip())
+        else:
+            raise ValueError("FlowInterrupt: укажите question или body")
         self.tool_call = tool_call
         self.flow_id = flow_id
-        super().__init__(question)
+        self.correlation_id = correlation_id
+        super().__init__(interrupt_body_public_question(self.body))
+
+    @property
+    def question(self) -> str:
+        from core.state.interrupt import interrupt_body_public_question
+
+        return interrupt_body_public_question(self.body)
 
 
 class BreakpointInterrupt(Exception):
     """
     Исключение для остановки выполнения агента на breakpoint.
-    
+
     Выбрасывается когда агент достигает ноды с установленным breakpoint.
     Сохраняет snapshot state для отображения в UI.
     """
@@ -58,4 +84,3 @@ class NodeCallLimitError(Exception):
         self.message = message
         self.limit = limit
         super().__init__(message)
-

@@ -36,13 +36,6 @@ _CRM_WORKER_LOCK = "/tmp/platform_test_crm_taskiq_worker.lock"
 _CRM_WORKER_PID = "/tmp/platform_test_crm_taskiq_worker.pid"
 
 
-def _force_restart_sync_worker() -> None:
-    subprocess.run(["pkill", "-f", "apps.sync_worker.worker:broker"], capture_output=True, text=True)
-    Path(_SYNC_WORKER_PID).unlink(missing_ok=True)
-    Path(f"{_SYNC_WORKER_PID}.refs").unlink(missing_ok=True)
-    print("🔄 Принудительный перезапуск sync worker: старые процессы и PID-файлы очищены")
-
-
 def _clear_taskiq_stream(stream_name: str, redis_url: str) -> None:
     parsed = urlparse(redis_url)
     if parsed.hostname is None or parsed.port is None:
@@ -92,7 +85,7 @@ class SessionWorkerManager:
             name="TaskIQ",
             lock_file="/tmp/taskiq.lock",
             pid_file="/tmp/taskiq.pid",
-            command=[sys.executable, "-m", "taskiq", "worker", "app.broker:broker"],
+            command=[sys.executable, "-m", "taskiq", "worker", "apps.flows_worker.worker:worker_app"],
             env={"TESTING": "true"},
             cleanup_patterns=["taskiq.*worker", "multiprocessing.spawn"],
             startup_wait=3
@@ -258,16 +251,18 @@ class SessionWorkerManager:
         """Запускает новый worker процесс."""
         self._cleanup_old_processes()
         
-        # Логи
-        worker_log = open(self.log_file, "w")
-        worker_err = open(self.err_file, "w")
+        # Логи: line-buffered + unbuffered python, иначе stderr/stdout воркера долго не попадают в файлы.
+        worker_log = open(self.log_file, "w", buffering=1, encoding="utf-8", errors="replace")
+        worker_err = open(self.err_file, "w", buffering=1, encoding="utf-8", errors="replace")
         
-        # Запускаем worker
+        worker_env = {**os.environ, **self.env}
+        worker_env.pop("PYTEST_XDIST_WORKER", None)
+        worker_env.pop("PYTEST_XDIST_WORKER_COUNT", None)
         worker_process = subprocess.Popen(
             self.command,
             stdout=worker_log,
             stderr=worker_err,
-            env={**os.environ, **self.env},
+            env=worker_env,
         )
 
         # Как SessionServerManager._start_server: убеждаемся, что процесс не вышел сразу.
@@ -377,7 +372,7 @@ def taskiq_worker():
     """
     Запускает TaskIQ worker для тестов.
     
-    В Docker: использует существующий worker-test контейнер
+    В Docker: использует существующий flows_worker_test контейнер
     Локально: запускает worker как subprocess через SessionWorkerManager
     
     scope="session" - worker запускается один раз на все тесты.
@@ -397,7 +392,7 @@ def taskiq_worker():
         pid_file=_TASKIQ_WORKER_PID,
         # Один процесс: mock LLM в Redis (mock_llm:responses) без атомарного pop — при -w 2
         # параллельные задачи крадут ответы друг у друга и E2E (триггеры, RAG) падают.
-        command=[sys.executable, "-m", "taskiq", "worker", "apps.broker.worker:broker", "-w", "1"],
+        command=[sys.executable, "-m", "taskiq", "worker", "apps.flows_worker.worker:worker_app", "-w", "1"],
         env={
             **TEST_DATABASE_ENV,
             "TESTING": "true",
@@ -410,7 +405,7 @@ def taskiq_worker():
             "CALLS__LIVEKIT_API_SECRET": "secret",
         },
         cleanup_patterns=[
-            "taskiq.*apps.broker.worker:broker",
+            "taskiq.*apps.flows_worker.worker:worker_app",
             "multiprocessing.spawn.*spawn_main",
             "multiprocessing.resource_tracker",
         ],
@@ -446,7 +441,7 @@ def rag_worker():
         name="RAGWorker",
         lock_file=_RAG_WORKER_LOCK,
         pid_file=_RAG_WORKER_PID,
-        command=[sys.executable, "-m", "taskiq", "worker", "apps.rag_worker.worker:broker", "-w", "1"],
+        command=[sys.executable, "-m", "taskiq", "worker", "apps.rag_worker.worker:worker_app", "-w", "1"],
         env={
             **TEST_DATABASE_ENV,
             "TESTING": "true",
@@ -472,16 +467,16 @@ def rag_worker():
 @pytest.fixture(scope="session")
 def sync_worker():
     """
-    TaskIQ worker очереди sync (apps.sync_worker.worker:broker).
+    TaskIQ worker очереди sync (apps.sync_worker.worker:worker_app).
 
     Нужен для REST/WS, где вызывается handle_command.kiq() (создание space/channel и т.д.).
+
+    Логи процесса: stdout /tmp/sync_taskiq_worker_test.log, stderr /tmp/sync_taskiq_worker_test_err.log
+    (line-buffered, PYTHONUNBUFFERED=1 у дочернего процесса).
     """
     if os.environ.get("EXTERNAL_AGENT_TEST_URL"):
         yield None
         return
-
-    _force_restart_sync_worker()
-    _clear_taskiq_stream("sync", "redis://localhost:63792/1")
 
     manager = SessionWorkerManager(
         name="SyncTaskIQ",
@@ -492,13 +487,14 @@ def sync_worker():
             "-m",
             "taskiq",
             "worker",
-            "apps.sync_worker.worker:broker",
+            "apps.sync_worker.worker:worker_app",
             "-w",
             "2",
         ],
         env={
             **TEST_DATABASE_ENV,
             "TESTING": "true",
+            "PYTHONUNBUFFERED": "1",
             "DATABASE__REDIS_URL": "redis://localhost:63792/0",
             "TASKS__BROKER_URL": "redis://localhost:63792/1",
             "AUTH__PERMISSIONS_ENABLED": "false",
@@ -515,10 +511,24 @@ def sync_worker():
             "S3__BUCKETS__TEST-BUCKET__PROVIDER": "minio",
             "STT__PROVIDER": "mock",
             "STT__MOCK_TRANSCRIPT_TEXT": "Тестовая транскрипция sync worker",
+            "CALLS__SPEECH_TO_CHAT__SEGMENT_SECONDS": os.environ.get(
+                "CALLS__SPEECH_TO_CHAT__SEGMENT_SECONDS", "2"
+            ),
+            "CALLS__SPEECH_TO_CHAT__POLL_INITIAL_DELAY_SECONDS": os.environ.get(
+                "CALLS__SPEECH_TO_CHAT__POLL_INITIAL_DELAY_SECONDS", "0.5"
+            ),
+            "CALLS__SPEECH_TO_CHAT__POLL_INTERVAL_SECONDS": os.environ.get(
+                "CALLS__SPEECH_TO_CHAT__POLL_INTERVAL_SECONDS", "1"
+            ),
+            "SERVER__FLOWS_SERVICE_URL": "http://localhost:9001",
+            "SERVER__RAG_SERVICE_URL": "http://localhost:9002",
+            "SERVER__CRM_SERVICE_URL": "http://localhost:9003",
+            "SERVER__FRONTEND_SERVICE_URL": "http://localhost:9004",
+            "SERVER__SYNC_SERVICE_URL": "http://127.0.0.1:9005",
         },
         cleanup_patterns=[
             "apps.sync_worker.worker",
-            "taskiq.*apps.sync_worker.worker:broker",
+            "taskiq.*apps.sync_worker.worker:worker_app",
             "multiprocessing.spawn.*spawn_main",
             "multiprocessing.resource_tracker",
         ],
@@ -533,7 +543,7 @@ def sync_worker():
 @pytest.fixture(scope="session")
 def crm_worker():
     """
-    TaskIQ worker очереди crm (apps.crm_worker.worker:broker).
+    TaskIQ worker очереди crm (apps.crm_worker.worker:worker_app).
     """
     if os.environ.get("EXTERNAL_AGENT_TEST_URL"):
         yield None
@@ -548,7 +558,7 @@ def crm_worker():
             "-m",
             "taskiq",
             "worker",
-            "apps.crm_worker.worker:broker",
+            "apps.crm_worker.worker:worker_app",
             "-w",
             "1",
         ],
@@ -561,7 +571,7 @@ def crm_worker():
         },
         cleanup_patterns=[
             "apps.crm_worker.worker",
-            "taskiq.*apps.crm_worker.worker:broker",
+            "taskiq.*apps.crm_worker.worker:worker_app",
             "multiprocessing.spawn.*spawn_main",
             "multiprocessing.resource_tracker",
         ],
@@ -580,7 +590,7 @@ def taskiq_broker(rag_worker):
     
     Зависит от rag_worker - гарантирует что worker запущен.
     """
-    from apps.broker.broker import broker
+    from apps.flows_worker.broker import broker
     return broker
 
 
@@ -708,18 +718,15 @@ class SessionServerManager:
         self.lock = FileLock(self.lock_file, timeout=60)
     
     def _cleanup_old_processes(self):
-        """Убивает старые процессы сервера перед запуском"""
+        """Убивает старые процессы сервера перед запуском."""
         print(f"🧹 Очистка старых {self.name} server процессов...")
-        
+
         subprocess.run(
             ["pkill", "-9", "-f", f"uvicorn.*{self.app_path}"],
             check=False,
             capture_output=True
         )
-        
-        self.pid_path.unlink(missing_ok=True)
-        self.ref_count_path.unlink(missing_ok=True)
-        
+
         print(f"✅ Старые {self.name} server процессы очищены")
     
     def _increment_ref_count(self) -> int:
@@ -766,10 +773,16 @@ class SessionServerManager:
                 self.ref_count_path.unlink(missing_ok=True)
         return False
     
-    def _wait_for_port(self, timeout: float = 30.0) -> bool:
-        """Ждет пока порт станет доступен"""
+    def _wait_for_port(
+        self,
+        timeout: float = 30.0,
+        process: subprocess.Popen | None = None,
+    ) -> bool:
+        """Ждет пока порт станет доступен. Если process передан — прерывает при crash."""
         start_time = time.time()
         while time.time() - start_time < timeout:
+            if process is not None and process.poll() is not None:
+                return False
             try:
                 with socket.create_connection((self.host, self.port), timeout=1.0):
                     return True
@@ -777,12 +790,58 @@ class SessionServerManager:
                 time.sleep(0.1)
         return False
     
+    def _wait_port_free(self, timeout: float = 5.0) -> bool:
+        """Ждёт пока порт станет свободен для bind."""
+        deadline = time.monotonic() + timeout
+        while time.monotonic() < deadline:
+            sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+            try:
+                sock.bind((self.host, self.port))
+                return True
+            except OSError:
+                time.sleep(0.15)
+            finally:
+                sock.close()
+        return False
+
+    def _kill_port_occupant(self) -> None:
+        """Убивает процесс, занимающий порт, и ждёт пока порт реально освободится."""
+        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        try:
+            sock.bind((self.host, self.port))
+            return
+        except OSError:
+            pass
+        finally:
+            sock.close()
+
+        subprocess.run(
+            f"lsof -ti:{self.port} | xargs kill -9 2>/dev/null",
+            shell=True,
+            capture_output=True,
+            timeout=5,
+        )
+        print(f"🧹 Убит stale процесс на порту {self.port}")
+
+        if not self._wait_port_free(timeout=5.0):
+            subprocess.run(
+                f"lsof -ti:{self.port} | xargs kill -9 2>/dev/null",
+                shell=True,
+                capture_output=True,
+                timeout=5,
+            )
+            if not self._wait_port_free(timeout=3.0):
+                print(f"⚠️  Порт {self.port} не освободился после 8s")
+
     def _start_server(self) -> subprocess.Popen:
         """Запускает новый uvicorn server"""
         self._cleanup_old_processes()
-        
-        server_log = open(self.log_file, "w")
-        server_err = open(self.err_file, "w")
+        self._kill_port_occupant()
+
+        server_log = open(self.log_file, "w", buffering=1, encoding="utf-8", errors="replace")
+        server_err = open(self.err_file, "w", buffering=1, encoding="utf-8", errors="replace")
         
         command = [
             sys.executable, "-m", "uvicorn",
@@ -792,33 +851,44 @@ class SessionServerManager:
             "--log-level", "error"
         ]
         
-        full_env = {**os.environ, **self.env}
-        
+        full_env = {**os.environ, **self.env, "PYTHONUNBUFFERED": "1"}
+
         server_process = subprocess.Popen(
             command,
             stdout=server_log,
             stderr=server_err,
             env=full_env,
         )
-        
-        # Ждем пока порт станет доступен
-        if not self._wait_for_port(timeout=self.startup_wait):
-            server_process.kill()
+
+        if not self._wait_for_port(timeout=self.startup_wait, process=server_process):
+            exit_code = server_process.poll()
+            if exit_code is None:
+                server_process.kill()
+                server_process.wait(timeout=3)
             server_log.close()
             server_err.close()
             with open(self.err_file, "r") as f:
                 err_content = f.read()
-            raise RuntimeError(
-                f"{self.name} server failed to start (port {self.port} not available). Error log:\n{err_content}"
+            with open(self.log_file, "r") as f:
+                log_content = f.read()
+            detail = (
+                f"exit_code={exit_code}, "
+                f"stderr:\n{err_content or '(empty)'}\n"
+                f"stdout:\n{log_content or '(empty)'}"
             )
-        
+            raise RuntimeError(
+                f"{self.name} server failed to start "
+                f"(port {self.port}, timeout {self.startup_wait}s). {detail}"
+            )
+
         if server_process.poll() is not None:
             server_log.close()
             server_err.close()
             with open(self.err_file, "r") as f:
                 err_content = f.read()
             raise RuntimeError(
-                f"{self.name} server failed to start. Error log:\n{err_content}"
+                f"{self.name} server died after port became available. "
+                f"Error log:\n{err_content}"
             )
         
         self.pid_path.write_text(str(server_process.pid))
@@ -827,12 +897,12 @@ class SessionServerManager:
         return server_process
     
     def _stop_server(self, pid: int):
-        """Останавливает server"""
+        """Останавливает server и ждёт пока порт освободится."""
         print(f"🛑 Останавливаем {self.name} server (PID: {pid}, последний ref)...")
-        
+
         try:
             os.kill(pid, signal.SIGTERM)
-            time.sleep(0.2)
+            time.sleep(0.3)
             try:
                 os.kill(pid, 0)
                 os.kill(pid, signal.SIGKILL)
@@ -840,8 +910,9 @@ class SessionServerManager:
                 pass
         except OSError:
             pass
-        
+
         self.pid_path.unlink(missing_ok=True)
+        self._wait_port_free(timeout=3.0)
         print(f"✅ {self.name} server stopped (PID: {pid})")
     
     def start(self):
@@ -878,11 +949,11 @@ class SessionServerManager:
             def __exit__(ctx_self, exc_type, exc_val, exc_tb):
                 with ctx_self.manager.lock:
                     ref_count = ctx_self.manager._decrement_ref_count()
-                    
                     if ref_count == 0:
-                        if ctx_self.manager.pid_path.exists():
-                            pid = int(ctx_self.manager.pid_path.read_text().strip())
-                            ctx_self.manager._stop_server(pid)
+                        print(
+                            f"📉 {ctx_self.manager.name} server: последний ref "
+                            f"освобождён, сервер остаётся жив для других gw-workers"
+                        )
                     else:
                         print(
                             f"✅ {ctx_self.manager.name} server сохранен "

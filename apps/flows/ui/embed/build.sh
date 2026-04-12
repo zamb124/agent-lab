@@ -32,7 +32,8 @@ esbuild "$DEST" \
     --target=es2020 \
     --format=iife \
     --outfile="$DEST_MIN" \
-    --sourcemap
+    --sourcemap \
+    --alias:@platform=./core/frontend/static
 
 if [ $? -eq 0 ]; then
     echo "✅ Build complete!"

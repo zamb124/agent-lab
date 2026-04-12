@@ -105,12 +105,15 @@ export class StateModal extends PlatformModal {
 
     constructor() {
         super();
-        this.title = 'State';
         this.contextId = '';
         this.taskId = '';
         this.flowId = '';
         this.state = null;
         this.loading = false;
+    }
+
+    renderHeader() {
+        return this.i18n.t('state_modal.modal_title');
     }
 
     async showModal() {
@@ -146,7 +149,7 @@ export class StateModal extends PlatformModal {
             return html`
                 <div class="empty-state">
                     <platform-spinner variant="ai" size="48"></platform-spinner>
-                    <p>Загрузка state...</p>
+                    <p>${this.i18n.t('state_modal.loading')}</p>
                 </div>
             `;
         }
@@ -155,8 +158,8 @@ export class StateModal extends PlatformModal {
             return html`
                 <div class="empty-state">
                     <platform-icon name="database" size="48" class="empty-state-icon"></platform-icon>
-                    <p>Нет данных state</p>
-                    <p style="font-size: var(--text-sm);">State появится после выполнения задачи</p>
+                    <p>${this.i18n.t('state_modal.empty_no_data')}</p>
+                    <p style="font-size: var(--text-sm);">${this.i18n.t('state_modal.empty_hint')}</p>
                 </div>
             `;
         }

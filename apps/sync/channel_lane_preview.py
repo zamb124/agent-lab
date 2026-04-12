@@ -44,6 +44,17 @@ def lane_preview_from_content_row(content_type: str, data: dict) -> str:
         return "[Файл]"
     if content_type == MessageContentType.FILE_AUDIO.value:
         return "[Аудио]"
+    if content_type == MessageContentType.FILE_VIDEO.value:
+        return "[Видео]"
+    if content_type == MessageContentType.CALL_TRANSCRIPT.value:
+        return "[Транскрипт звонка]"
+    if content_type == MessageContentType.CALL_BOUNDARY.value:
+        phase = data.get("phase")
+        if phase == "started":
+            return "[Звонок начался]"
+        if phase == "ended":
+            return "[Звонок завершён]"
+        return "[Звонок]"
     if content_type == MessageContentType.GIT_REFERENCE.value:
         return "[Git]"
     if content_type == MessageContentType.CUSTOM_TOOL_RESPONSE.value:

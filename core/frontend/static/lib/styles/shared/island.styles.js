@@ -37,6 +37,8 @@ export const islandStyles = css`
         position: relative;
         width: 100%;
         height: 100%;
+        display: flex;
+        flex-direction: column;
         background: var(--island-bg, var(--glass-solid-medium));
         backdrop-filter: blur(var(--island-blur, var(--glass-blur-strong)));
         -webkit-backdrop-filter: blur(var(--island-blur, var(--glass-blur-strong)));
@@ -70,11 +72,12 @@ export const islandStyles = css`
         position: relative;
         z-index: 1;
         padding: var(--island-padding, var(--space-6));
-        height: 100%;
+        flex: 1;
+        min-height: 0;
         box-sizing: border-box;
         overflow-y: auto;
         overflow-x: hidden;
-        min-height: 0;
+        overscroll-behavior: contain;
     }
 
     :host([padding="none"]) .island-content {
@@ -121,6 +124,7 @@ export const islandStyles = css`
 
         .island-content {
             padding: var(--space-4);
+            padding-bottom: max(var(--space-4), var(--platform-safe-bottom));
             display: flex;
             flex-direction: column;
         }
@@ -129,9 +133,48 @@ export const islandStyles = css`
             padding: 0;
         }
 
+        :host([padding="none"][safe-bottom]) .island-content {
+            padding-bottom: var(--platform-safe-bottom);
+        }
+
         :host([padding="sm"]) .island-content {
             padding: var(--space-2);
+            padding-bottom: max(var(--space-2), var(--platform-safe-bottom));
         }
+
+        :host([padding="lg"]) .island-content {
+            padding: var(--space-8);
+            padding-bottom: max(var(--space-8), var(--platform-safe-bottom));
+        }
+    }
+
+    :host([content-no-scroll]) .island-content {
+        overflow: hidden;
+        overflow-y: hidden;
+    }
+
+    /* ========== LOADING STATE ========== */
+
+    .island-loading-overlay {
+        position: absolute;
+        inset: 0;
+        z-index: 10;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        pointer-events: none;
+        animation: island-loading-in 0.15s ease;
+    }
+
+    .island-content.busy {
+        opacity: 0.5;
+        pointer-events: none;
+        transition: opacity 0.15s ease;
+    }
+
+    @keyframes island-loading-in {
+        from { opacity: 0; }
+        to { opacity: 1; }
     }
 `;
 

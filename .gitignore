@@ -1,4 +1,3 @@
-/conf.json
 /conf.local.json
 artifacts/*
 .env
@@ -15,8 +14,13 @@ sgr-service/config.yaml
 
 /backend/app/custom_flows/fashn_buyer/add_token.py
 
-# MkDocs
+# MkDocs (legacy; см. documentation-dist для Fumadocs)
 site/
+
+documentation-dist/
+apps/documentation/generated/
+
+docs/scenarios/**/index.mdx
 
 /server.log
 
@@ -33,3 +37,20 @@ docs/video/*.mov
 /scripts/logs/agents.log
 /.hypothesis/
 /sync1/
+.DS_Store
+
+# Android TWA Digital Asset Links (копия из assetlinks.json.example, значения под прод)
+core/frontend/pwa/assetlinks.json
+/AuthKey_2A85V3258V.p8
+
+# Сгенерированные скриншоты App Store (исходники в mobile/screens/source/)
+mobile/screens/generated/
+
+# Объединённые JSON переводов (генерируются scripts/build_i18n.py)
+core/i18n/generated/
+
+# FileWriter: выход тестов (перезапись при прогоне)
+tests/core/files/file_writer_output/
+
+# Google Service Account key (integration tests)
+/google_service_account.json

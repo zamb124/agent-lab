@@ -18,11 +18,20 @@ class NamespaceTemplateRepository(BaseCRMRepository[NamespaceTemplate]):
     def id_field(self) -> str:
         return "template_key"
 
-    async def list_for_company(self, company_id: Optional[str] = None) -> list[NamespaceTemplate]:
+    async def list_for_company(
+        self,
+        company_id: Optional[str] = None,
+        *,
+        limit: int = 200,
+        offset: int = 0,
+    ) -> list[NamespaceTemplate]:
         effective_company_id = company_id or self._get_company_id()
         async with self._db.session() as session:
-            stmt = select(NamespaceTemplate).where(
-                NamespaceTemplate.company_id == effective_company_id
+            stmt = (
+                select(NamespaceTemplate)
+                .where(NamespaceTemplate.company_id == effective_company_id)
+                .limit(limit)
+                .offset(offset)
             )
             result = await session.execute(stmt)
             return list(result.scalars().all())
@@ -94,6 +103,8 @@ class NamespaceTemplateRepository(BaseCRMRepository[NamespaceTemplate]):
         check_duplicates: bool,
         weight_coefficient: float,
         namespace_ids: list[str],
+        is_context_anchor: bool = False,
+        is_voice_target: bool = False,
     ) -> NamespaceTemplateType:
         async with self._db.session() as session:
             stmt = select(NamespaceTemplateType).where(
@@ -119,6 +130,8 @@ class NamespaceTemplateRepository(BaseCRMRepository[NamespaceTemplate]):
             existing.check_duplicates = check_duplicates
             existing.weight_coefficient = weight_coefficient
             existing.namespace_ids = namespace_ids
+            existing.is_context_anchor = is_context_anchor
+            existing.is_voice_target = is_voice_target
             session.add(existing)
             await session.commit()
             await session.refresh(existing)

@@ -29,6 +29,9 @@ if TYPE_CHECKING:
     from core.db.base_repository import BaseRepository
 
 
+_UNSET = object()
+
+
 def lazy(func: Callable) -> property:
     """
     Декоратор для ленивой инициализации сервисов с кэшированием.
@@ -47,8 +50,8 @@ def lazy(func: Callable) -> property:
     @property
     @functools.wraps(func)
     def wrapper(self):
-        cached = getattr(self, attr_name, None)
-        if cached is None:
+        cached = getattr(self, attr_name, _UNSET)
+        if cached is _UNSET:
             cached = func(self)
             setattr(self, attr_name, cached)
             logger.debug(f"{func.__name__} инициализирован")
@@ -155,6 +158,18 @@ class BaseContainer:
         from core.db.storage import Storage
         from core.context import get_context
         return Storage(db_url=self.shared_db_url, get_context_func=get_context)
+
+    @lazy
+    def tracing_storage(self):
+        """Storage только для platform_tracing (spans), не shared."""
+        from core.db.storage import Storage
+        from core.context import get_context
+        from core.config import get_settings
+
+        url = get_settings().database.tracing_url
+        if not url:
+            raise ValueError("DATABASE__TRACING_URL не задан в конфигурации")
+        return Storage(db_url=url, get_context_func=get_context)
     
     # === Репозитории (shared БД) ===
     
@@ -199,7 +214,19 @@ class BaseContainer:
         """FileRepository для работы с файлами"""
         from core.files.file_repository import FileRepository
         return FileRepository(storage=self.shared_storage)
-    
+
+    @lazy
+    def file_processor(self):
+        """
+        Один процессор на процесс контейнера: shared FileRepository + S3.
+        Новый экземпляр FileProcessor(...) с тем же репозиторием не менял бы поведение — это та же логика;
+        кеш здесь убирает лишние объекты и явно «один на контейнер». Сервис с другим file_repository
+        (например office) переопределяет file_repository и при необходимости file_processor.
+        """
+        from core.files.processors import FileProcessor
+
+        return FileProcessor(file_repository=self.file_repository)
+
     @lazy
     def namespace_repository(self):
         """NamespaceRepository для работы с namespace"""
@@ -212,10 +239,19 @@ class BaseContainer:
     def billing_service(self):
         """BillingService для биллинга и учета использования"""
         from core.billing import BillingService
+        from core.config import get_settings
+
+        settings = get_settings()
         return BillingService(
             company_repository=self.company_repository,
             user_repository=self.user_repository,
-            usage_repository=self.usage_repository
+            usage_repository=self.usage_repository,
+            resource_base_prices=settings.billing.resource_base_prices,
+            shared_storage=self.shared_storage,
+            balance_enforcement_enabled=settings.billing.balance_enforcement_enabled,
+            balance_enforcement_exempt_company_ids=list(
+                settings.billing.balance_enforcement_exempt_company_ids
+            ),
         )
     
     @lazy
@@ -271,24 +307,57 @@ class BaseContainer:
         return SchedulerClient(service_client=self.service_client)
 
     @lazy
+    def integration_credential_repository(self):
+        """IntegrationCredentialRepository для per-user OAuth токенов"""
+        from core.integrations.repository import IntegrationCredentialRepository
+        return IntegrationCredentialRepository(db_url=self.shared_db_url)
+
+    @lazy
+    def oauth_service(self):
+        """OAuthService — универсальный OAuth2 flow для внешних интеграций"""
+        from core.integrations.oauth_service import OAuthService
+        return OAuthService(
+            repository=self.integration_credential_repository,
+            storage=self.shared_storage,
+        )
+
+    @lazy
+    def calendar_event_repository(self):
+        """Репозиторий событий календаря."""
+        from core.calendar.repositories import CalendarEventSqlRepository
+        return CalendarEventSqlRepository(db_url=self.shared_db_url)
+
+    @lazy
     def calendar_service(self):
         """CalendarService для платформенного календаря"""
-        from core.calendar.repositories import CalendarEventSqlRepository, CalendarIntegrationSqlRepository
         from core.calendar.service import CalendarService
         return CalendarService(
-            event_repository=CalendarEventSqlRepository(db_url=self.shared_db_url),
-            integration_repository=CalendarIntegrationSqlRepository(db_url=self.shared_db_url),
+            event_repository=self.calendar_event_repository,
+            oauth_service=self.oauth_service,
             user_repository=self.user_repository,
             company_repository=self.company_repository,
             service_client=self.service_client,
-            storage=self.shared_storage,
         )
-    
+
+    @lazy
+    def short_link_repository(self):
+        """Репозиторий коротких ссылок."""
+        from core.short_links.repository import ShortLinkRepository
+        if not self.shared_db_url:
+            raise ValueError("shared_db_url не задан для ShortLinkRepository")
+        return ShortLinkRepository(db_url=self.shared_db_url)
+
+    @lazy
+    def short_link_service(self):
+        """Сервис коротких ссылок."""
+        from core.short_links import ShortLinkService
+        return ShortLinkService(repository=self.short_link_repository)
+
     @lazy
     def span_repository(self):
-        """SpanRepository для сохранения трейсов в shared БД"""
+        """SpanRepository для platform_tracing (отдельная БД)."""
         from core.tracing.repository import SpanRepository
-        return SpanRepository(storage=self.shared_storage)
+        return SpanRepository(storage=self.tracing_storage)
     
     @lazy
     def push_subscription_repository(self):

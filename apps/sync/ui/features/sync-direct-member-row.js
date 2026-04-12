@@ -4,6 +4,7 @@
 import { html, css } from 'lit';
 import { classMap } from 'lit/directives/class-map.js';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
+import { createAvatarRetry } from '@platform/lib/utils/avatar-retry.js';
 import { SyncStore } from '../store/sync.store.js';
 import { hueFromString } from '../utils/sync-hue.js';
 
@@ -144,9 +145,15 @@ export class SyncDirectMemberRow extends PlatformElement {
                 width: 9px;
                 height: 9px;
                 border-radius: 50%;
-                background: #22c55e;
+                background: var(--success);
                 border: 2px solid var(--glass-solid-strong);
                 box-sizing: border-box;
+                animation: subtle-pulse 2.5s ease-in-out infinite;
+            }
+
+            @keyframes subtle-pulse {
+                0%, 100% { opacity: 0.75; transform: scale(1); }
+                50% { opacity: 1; transform: scale(1.15); }
             }
 
             .peer-avatar {
@@ -190,16 +197,24 @@ export class SyncDirectMemberRow extends PlatformElement {
 
     constructor() {
         super();
+        /** @type {(() => void) | null} */
+        this._i18nUnsub = null;
         this.member = null;
         this.active = false;
         this.iconOnly = false;
+        this._avatarRetry = createAvatarRetry(() => this.requestUpdate());
         const s = SyncStore.state;
         this._peerPresenceByUserId = s.peerPresenceByUserId ?? {};
         this._typingPeersByChannel = s.typingPeersByChannel ?? {};
     }
 
+    _tp(key, params) {
+        return this.i18n.t(key, params ?? {});
+    }
+
     connectedCallback() {
         super.connectedCallback();
+        this._i18nUnsub = this.i18n.subscribe(() => this.requestUpdate());
         this._unsubscribe = SyncStore.subscribe((state) => {
             this._peerPresenceByUserId = state.peerPresenceByUserId ?? {};
             this._typingPeersByChannel = state.typingPeersByChannel ?? {};
@@ -208,6 +223,9 @@ export class SyncDirectMemberRow extends PlatformElement {
 
     disconnectedCallback() {
         super.disconnectedCallback?.();
+        this._i18nUnsub?.();
+        this._i18nUnsub = null;
+        this._avatarRetry.cancel();
         this._unsubscribe?.();
     }
 
@@ -218,8 +236,12 @@ export class SyncDirectMemberRow extends PlatformElement {
     }
 
     _memberAvatar(member) {
-        if (member.avatar_url) {
-            return html`<img class="peer-avatar" src=${member.avatar_url} alt="" />`;
+        const originalUrl = member.avatar_url ?? null;
+        const src = this._avatarRetry.currentSrc(originalUrl);
+        if (src) {
+            return html`<img class="peer-avatar" src=${src} alt=""
+                @load=${() => this._avatarRetry.onLoad()}
+                @error=${() => this._avatarRetry.onError(originalUrl)} />`;
         }
         const label = typeof member.name === 'string' ? member.name : member.user_id;
         const initial = (label.trim().slice(0, 1) || '?').toUpperCase();
@@ -235,7 +257,7 @@ export class SyncDirectMemberRow extends PlatformElement {
         return html`
             <div class="avatar-wrap">
                 ${inner}
-                ${on ? html`<span class="peer-online-dot" title="Онлайн" aria-hidden="true"></span>` : ''}
+                ${on ? html`<span class="peer-online-dot" title=${this._tp('direct_member.online_title')} aria-hidden="true"></span>` : ''}
             </div>
         `;
     }

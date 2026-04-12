@@ -58,10 +58,12 @@
       "title": "Создать неймспейс",
       "name_label": "Название",
       "name_placeholder": "my-namespace",
-      "description_label": "Описание (опционально)",
-      "description_placeholder": "Опишите ваш неймспейс...",
+      "name_hint": "Уникальное имя для namespace (латиница, цифры, дефисы)",
+      "description_label": "Описание",
+      "description_placeholder": "Опишите назначение namespace...",
       "cancel": "Отмена",
-      "create": "Создать"
+      "create": "Создать",
+      "creating": "Создание..."
     },
     "upload_document": {
       "title": "Загрузить документ",
@@ -93,7 +95,58 @@
     "document_upload_failed": "документ(ов) не удалось загрузить",
     "document_deleted": "Документ удален",
     "enter_namespace_name": "Введите название неймспейса",
-    "select_namespace_first": "Сначала выберите неймспейс"
+    "select_namespace_first": "Сначала выберите неймспейс",
+    "document_uploaded_named": "Документ «{{name}}» успешно загружен",
+    "namespace_created_with_name": "Namespace «{{name}}» создан"
+  },
+  "namespace_detail": {
+    "not_found": "Namespace не найден",
+    "open_menu": "Открыть меню",
+    "documents_count": "{{count}} документов",
+    "upload_document": "Загрузить документ",
+    "loading_documents": "Загрузка документов...",
+    "uploading_short": "Загрузка...",
+    "uploading_document": "Загрузка документа...",
+    "drop_here": "Перетащите файл сюда",
+    "drop_or_choose": "или нажмите для выбора файла",
+    "supported_formats": "Поддерживаемые форматы: PDF, DOCX, DOC, XLSX, PPTX, HTML, TXT, MD, RTF, CSV, изображения",
+    "created_label": "Создан:",
+    "pages_count": "{{count}} страниц",
+    "delete_title": "Удалить"
+  },
+  "namespace_list": {
+    "header_title": "Namespaces",
+    "header_subtitle": "Управление неймспейсами документов",
+    "loading": "Загрузка неймспейсов...",
+    "create_button": "Создать namespace"
+  },
+  "search_view": {
+    "fill_all_fields": "Заполните все поля",
+    "title": "Поиск",
+    "subtitle": "Поиск по документам в namespaces",
+    "label_namespace": "Namespace",
+    "select_namespace": "Выберите namespace",
+    "label_limit": "Результатов",
+    "label_query": "Запрос",
+    "query_placeholder": "Введите поисковый запрос...",
+    "searching": "Поиск...",
+    "find": "Найти",
+    "document_fallback": "Документ",
+    "page_meta": "Стр. {{page}}",
+    "empty_no_results": "Нет результатов",
+    "empty_hint": "Введите запрос для поиска"
+  },
+  "settings_view": {
+    "title": "Настройки",
+    "subtitle": "Конфигурация RAG Service",
+    "current_provider": "Текущий провайдер",
+    "current_provider_desc": "Активный RAG провайдер для хранения документов",
+    "usage": "Использование",
+    "usage_desc": "Текущее использование ресурсов",
+    "pages": "Страницы",
+    "queries": "Запросы",
+    "about_title": "О RAG Service",
+    "about_text": "Retrieval Augmented Generation (RAG) позволяет использовать ваши документы для улучшения ответов AI. Документы разбиваются на части, векторизуются и сохраняются для быстрого семантического поиска."
   }
 }
 

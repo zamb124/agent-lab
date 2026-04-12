@@ -1,10 +1,12 @@
 /**
  * Компонент одного сообщения в чате
  */
-import { html, css } from 'lit';
+import { html, css, nothing } from 'lit';
 import { classMap } from 'lit/directives/class-map.js';
 import { unsafeHTML } from 'lit/directives/unsafe-html.js';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
+import '@platform/lib/components/platform-icon.js';
+import { resolveFileIconKey } from '@platform/services/icon.service.js';
 
 export class ChatMessage extends PlatformElement {
     static styles = [
@@ -40,12 +42,17 @@ export class ChatMessage extends PlatformElement {
                 background: var(--accent-gradient);
                 border: none;
                 color: white;
-                box-shadow: 0 4px 12px rgba(16, 185, 129, 0.25);
+                box-shadow: 0 4px 12px rgba(153, 166, 249, 0.25);
             }
             
             .message.assistant .avatar {
                 background: var(--glass-solid-medium);
                 color: var(--accent);
+            }
+            
+            .message.operator .avatar {
+                background: var(--glass-solid-medium);
+                color: var(--warning, #f59e0b);
             }
             
             .message.system .avatar {
@@ -77,7 +84,7 @@ export class ChatMessage extends PlatformElement {
                 border: none;
                 color: white;
                 border-bottom-right-radius: var(--radius-sm);
-                box-shadow: 0 4px 16px rgba(16, 185, 129, 0.2);
+                box-shadow: 0 4px 16px rgba(153, 166, 249, 0.2);
             }
             
             .message.assistant .content {
@@ -295,11 +302,52 @@ export class ChatMessage extends PlatformElement {
                 border: 1px solid var(--info-border);
                 border-radius: var(--radius-lg);
             }
+
+            .input-required-banner {
+                font-size: var(--text-sm);
+                color: var(--text-secondary);
+                margin-bottom: var(--space-2);
+            }
             
             .input-required-text {
                 font-size: var(--text-base);
                 color: var(--text-primary);
                 margin-bottom: var(--space-3);
+            }
+
+            .oauth-auth-link {
+                display: inline-block;
+                padding: var(--space-2) var(--space-4);
+                background: var(--primary);
+                color: var(--on-primary);
+                border-radius: var(--radius-md);
+                text-decoration: none;
+                font-size: var(--text-sm);
+                font-weight: 500;
+                transition: opacity 0.15s;
+            }
+            .oauth-auth-link:hover {
+                opacity: 0.85;
+            }
+
+            .operator-reply {
+                margin-top: var(--space-4);
+                padding: var(--space-4);
+                background: var(--glass-solid-subtle);
+                border: 1px solid var(--glass-border-subtle);
+                border-radius: var(--radius-lg);
+            }
+
+            .operator-reply-label {
+                font-size: var(--text-xs);
+                font-weight: var(--font-semibold);
+                color: var(--text-tertiary);
+                margin-bottom: var(--space-2);
+            }
+
+            .operator-reply-text {
+                font-size: var(--text-base);
+                color: var(--text-primary);
             }
             
             .breakpoint {
@@ -318,7 +366,12 @@ export class ChatMessage extends PlatformElement {
             }
             
             .breakpoint-icon {
-                font-size: var(--text-lg);
+                display: inline-block;
+                width: 10px;
+                height: 10px;
+                border-radius: 50%;
+                background: var(--warning);
+                flex-shrink: 0;
             }
             
             .breakpoint-title {
@@ -349,11 +402,10 @@ export class ChatMessage extends PlatformElement {
                 display: flex;
                 align-items: center;
                 gap: var(--space-2);
-                padding: var(--space-2) var(--space-3);
-                background: var(--glass-solid-subtle);
-                border: 1px solid var(--border-subtle);
-                border-radius: var(--radius-md);
+                padding: var(--space-1) 0;
                 font-size: var(--text-sm);
+                text-decoration: none;
+                color: inherit;
             }
             
             .file-image {
@@ -384,8 +436,10 @@ export class ChatMessage extends PlatformElement {
         toolCalls: { type: Array },
         toolResults: { type: Array },
         inputRequired: { type: Object },
+        operatorReply: { type: String },
         breakpoint: { type: Object },
         files: { type: Array },
+        fileIds: { type: Array },
         expandedStates: { type: Object },
         taskId: { type: String },
     };
@@ -400,18 +454,25 @@ export class ChatMessage extends PlatformElement {
         this.toolCalls = [];
         this.toolResults = [];
         this.inputRequired = null;
+        this.operatorReply = '';
         this.breakpoint = null;
         this.files = [];
+        this.fileIds = [];
         this.expandedStates = new Map();
         this.expandedStates.set('reasoning', false);
         this.taskId = '';
     }
 
+    _escapeRegex(s) {
+        return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    }
+
     _getRoleName() {
         switch (this.role) {
-            case 'user': return 'Вы';
-            case 'assistant': return 'Ассистент';
-            case 'system': return 'Система';
+            case 'user': return this.i18n.t('chat_message.role_user');
+            case 'assistant': return this.i18n.t('chat_message.role_assistant');
+            case 'operator': return this.i18n.t('chat_message.role_operator');
+            case 'system': return this.i18n.t('chat_message.role_system');
             default: return this.role;
         }
     }
@@ -420,6 +481,7 @@ export class ChatMessage extends PlatformElement {
         switch (this.role) {
             case 'user': return 'user';
             case 'assistant': return 'bot';
+            case 'operator': return 'agent';
             case 'system': return 'info';
             default: return 'chat';
         }
@@ -440,24 +502,25 @@ export class ChatMessage extends PlatformElement {
 
     _parseReasoningStructure(text) {
         if (!text) return '';
-        
-        const sections = [
-            { key: 'Наблюдение', icon: '👁', class: 'observation' },
-            { key: 'Анализ', icon: '🔍', class: 'analysis' },
-            { key: 'План', icon: '📋', class: 'plan' },
-            { key: 'Действие', icon: '⚡', class: 'action' }
+
+        const labelKeys = [
+            'chat_message.reasoning_section_observation',
+            'chat_message.reasoning_section_analysis',
+            'chat_message.reasoning_section_plan',
+            'chat_message.reasoning_section_action',
         ];
-        
+
         let html = text;
-        
-        for (const section of sections) {
-            const regex = new RegExp(`\\*\\*${section.key}:\\*\\*\\s*`, 'g');
-            html = html.replace(regex, 
-                `<div style="font-weight: bold; margin-top: 12px; color: var(--accent);">` +
-                `<span>${section.icon}</span> ${section.key}</div>`
+
+        for (const labelKey of labelKeys) {
+            const label = this.i18n.t(labelKey);
+            const regex = new RegExp(`\\*\\*${this._escapeRegex(label)}:\\*\\*\\s*`, 'g');
+            html = html.replace(
+                regex,
+                `<div style="font-weight: bold; margin-top: 12px; color: var(--accent);">${label}</div>`
             );
         }
-        
+
         if (window.marked) {
             return unsafeHTML(window.marked.parse(html));
         }
@@ -470,7 +533,7 @@ export class ChatMessage extends PlatformElement {
         return html`
             <div class="reasoning-container">
                 <div class="reasoning-header" @click=${this._toggleReasoning}>
-                    <span class="reasoning-title">🧠 Reasoning</span>
+                    <span class="reasoning-title">${this.i18n.t('chat_message.reasoning_title')}</span>
                     <span class="reasoning-toggle">${this.expandedStates.get('reasoning') ? '▼' : '▶'}</span>
                 </div>
                 <div class="reasoning-content ${this.expandedStates.get('reasoning') ? '' : 'collapsed'}">
@@ -489,7 +552,7 @@ export class ChatMessage extends PlatformElement {
             return html`
                 <div class="tool-call">
                     <div class="tool-header" @click=${() => this._toggleToolCall(index)}>
-                        <span class="tool-name">🔧 ${toolCall.name || 'Tool'}</span>
+                        <span class="tool-name">${this.i18n.t('chat_message.tool_call_label', { name: toolCall.name || 'Tool' })}</span>
                         <span class="reasoning-toggle">${isExpanded ? '▼' : '▶'}</span>
                     </div>
                     <div class="tool-content ${isExpanded ? '' : 'collapsed'}">
@@ -516,7 +579,7 @@ export class ChatMessage extends PlatformElement {
             return html`
                 <div class="tool-result">
                     <div class="tool-header" @click=${() => this._toggleToolResult(index)}>
-                        <span class="tool-name">✅ ${result.name || 'Result'}</span>
+                        <span class="tool-name">${this.i18n.t('chat_message.tool_result_label', { name: result.name || 'Result' })}</span>
                         <span class="reasoning-toggle">${isExpanded ? '▼' : '▶'}</span>
                     </div>
                     <div class="tool-content ${isExpanded ? '' : 'collapsed'}">
@@ -536,11 +599,51 @@ export class ChatMessage extends PlatformElement {
 
     _renderInputRequired() {
         if (!this.inputRequired) return '';
-        
+
+        const kind = this.inputRequired.interruptKind;
+
+        if (kind === 'oauth_required' && this.inputRequired.authUrl) {
+            return html`
+                <div class="input-required">
+                    <div class="input-required-banner">${this.i18n.t('chat_message.interrupt_oauth_banner')}</div>
+                    <div class="input-required-text">
+                        ${window.marked ? unsafeHTML(window.marked.parse(this.inputRequired.question)) : this.inputRequired.question}
+                    </div>
+                    <a
+                        class="oauth-auth-link"
+                        href="${this.inputRequired.authUrl}"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                    >${this.i18n.t('chat_message.interrupt_oauth_button')}</a>
+                </div>
+            `;
+        }
+
+        const banner =
+            kind === 'operator_task'
+                ? html`<div class="input-required-banner">${this.i18n.t('chat_message.interrupt_operator_banner')}</div>`
+                : nothing;
+
         return html`
             <div class="input-required">
+                ${banner}
                 <div class="input-required-text">
                     ${window.marked ? unsafeHTML(window.marked.parse(this.inputRequired.question)) : this.inputRequired.question}
+                </div>
+            </div>
+        `;
+    }
+
+    _renderOperatorReply() {
+        const t = (this.operatorReply && String(this.operatorReply).trim()) || '';
+        if (!t) {
+            return '';
+        }
+        return html`
+            <div class="operator-reply">
+                <div class="operator-reply-label">${this.i18n.t('chat_message.operator_reply_heading')}</div>
+                <div class="operator-reply-text">
+                    ${window.marked ? unsafeHTML(window.marked.parse(t)) : t}
                 </div>
             </div>
         `;
@@ -552,15 +655,15 @@ export class ChatMessage extends PlatformElement {
         return html`
             <div class="breakpoint">
                 <div class="breakpoint-header">
-                    <span class="breakpoint-icon">🔴</span>
+                    <span class="breakpoint-icon" aria-hidden="true"></span>
                     <span class="breakpoint-title">Breakpoint: ${this.breakpoint.nodeId}</span>
                 </div>
                 <div class="breakpoint-message">
                     ${window.marked ? unsafeHTML(window.marked.parse(this.breakpoint.message)) : this.breakpoint.message}
                 </div>
                 <div class="breakpoint-actions">
-                    <button class="btn" @click=${this._continueBreakpoint}>Continue</button>
-                    <button class="btn" @click=${this._viewBreakpointState}>View State</button>
+                    <button class="btn" @click=${this._continueBreakpoint}>${this.i18n.t('chat_message.breakpoint_continue')}</button>
+                    <button class="btn" @click=${this._viewBreakpointState}>${this.i18n.t('chat_message.breakpoint_view_state')}</button>
                 </div>
             </div>
         `;
@@ -580,6 +683,30 @@ export class ChatMessage extends PlatformElement {
         }
     }
 
+    _renderOperatorFiles() {
+        if (!this.fileIds || this.fileIds.length === 0) return '';
+        return html`
+            <div class="files-container">
+                ${this.fileIds.map(
+                    (fid) => html`
+                        <a
+                            class="file-item"
+                            href="/flows/api/v1/files/download/${fid}"
+                            target="_blank"
+                            rel="noopener"
+                            style="text-decoration:none;color:inherit;cursor:pointer;"
+                        >
+                            <platform-icon name="file" size="20"></platform-icon>
+                            <div>
+                                <div class="file-name">${this.i18n.t('chat_message.operator_files')}</div>
+                            </div>
+                        </a>
+                    `,
+                )}
+            </div>
+        `;
+    }
+
     _renderFiles() {
         if (!this.files || this.files.length === 0) return '';
         
@@ -592,14 +719,11 @@ export class ChatMessage extends PlatformElement {
 
     _renderFile(file) {
         const isImage = file.type && file.type.startsWith('image/');
-        
+        const iconKey = isImage ? 'image' : resolveFileIconKey(file.name || '', file.type || '');
+
         return html`
             <div class="file-item">
-                ${isImage ? html`
-                    <div>📷</div>
-                ` : html`
-                    <platform-icon name="file" size="20"></platform-icon>
-                `}
+                <platform-icon file-icon name=${iconKey} size="20"></platform-icon>
                 <div>
                     <div class="file-name">${file.name}</div>
                     ${file.size ? html`<div class="file-size">${this._formatFileSize(file.size)}</div>` : ''}
@@ -635,7 +759,7 @@ export class ChatMessage extends PlatformElement {
                             ${this.timestamp ? html`<span class="timestamp">${this.timestamp}</span>` : ''}
                             ${this.role === 'assistant' && this.taskId && !this.streaming ? html`
                                 <div class="header-actions">
-                                    <button class="tracing-btn" @click=${this._showTracing} title="Показать трейсинг">
+                                    <button class="tracing-btn" @click=${this._showTracing} title=${this.i18n.t('chat_message.show_tracing_title')}>
                                         <platform-icon name="terminal" size="14"></platform-icon>
                                     </button>
                                 </div>
@@ -643,6 +767,7 @@ export class ChatMessage extends PlatformElement {
                         </div>
                         
                         ${this._renderFiles()}
+                        ${this._renderOperatorFiles()}
                         ${this._renderReasoning()}
                         ${this._renderToolCalls()}
                         ${this._renderToolResults()}
@@ -650,6 +775,7 @@ export class ChatMessage extends PlatformElement {
                         ${this.content ? html`<div class="text">${this._renderContent()}</div>` : ''}
                         
                         ${this._renderInputRequired()}
+                        ${this._renderOperatorReply()}
                         ${this._renderBreakpoint()}
                     </div>
                 </div>

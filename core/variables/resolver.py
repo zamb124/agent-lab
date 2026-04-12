@@ -130,6 +130,44 @@ class VarResolver:
             raise VariableResolutionError(f"Variable '@var:{path}' not found")
         return value
 
+    @classmethod
+    def resolve_for_flow_variable(
+        cls,
+        value: str,
+        company_variables: Dict[str, Any],
+    ) -> Any:
+        """
+        Резолвит значение поля flow/skill variables (строка из FlowVariableConfig.value).
+
+        Контракт (без «висячих» @var: в state.variables):
+        - строка без ``@var:`` — без изменений;
+        - полная ссылка ``@var:path`` — значение из company_variables или None, если
+          корневого ключа нет или путь/цепочка не резолвится;
+        - смешанная строка (текст + токены) — если корень любого токена отсутствует в
+          company_variables, результат целиком None; иначе подстановка как в resolve_text;
+          при ошибке резолва (нет вложенного пути и т.д.) — None.
+
+        Отличается от resolve_ref/resolve_text: не бросает исключение при отсутствии
+        переменной — возвращает None (опциональные секреты и ссылки в агенте).
+        """
+        if not isinstance(value, str):
+            raise VariableResolutionError(
+                f"resolve_for_flow_variable expects str, got {type(value).__name__}"
+            )
+        if "@var:" not in value:
+            return value
+        for match in cls._VAR_TOKEN_PATTERN.finditer(value):
+            path = match.group(1)
+            root_key = path.split(".", 1)[0]
+            if root_key not in company_variables:
+                return None
+        try:
+            if cls._VAR_REF_PATTERN.match(value):
+                return cls.resolve_ref(value, company_variables)
+            return cls.resolve_text(value, company_variables)
+        except VariableResolutionError:
+            return None
+
 
 class VariableResolver:
     """

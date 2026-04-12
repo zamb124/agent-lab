@@ -92,7 +92,7 @@ export class AuthService extends BaseService {
 
     /**
      * Начать OAuth авторизацию через провайдера
-     * @param {string} provider - yandex, google или github
+     * @param {string} provider - yandex, google, github или apple
      */
     async startOAuth(provider, returnPath = null) {
         let path = `/api/auth/login/${provider}`;
@@ -112,12 +112,30 @@ export class AuthService extends BaseService {
      * Получить список доступных провайдеров OAuth
      */
     async getAvailableProviders() {
-        try {
-            const response = await this.get('/api/auth/providers');
-            return response.providers || ['yandex', 'google', 'github'];
-        } catch (e) {
-            return ['yandex', 'google', 'github'];
+        const response = await this.get('/api/auth/providers');
+        const list = response.providers;
+        if (!Array.isArray(list) || list.length === 0) {
+            throw new Error('Список провайдеров авторизации пуст или невалиден');
         }
+        return list;
+    }
+
+    /**
+     * Публичный статус демо-входа (App Review): { enabled: boolean, email?: string }
+     */
+    async getDemoStatus() {
+        return this.get('/api/auth/demo/status');
+    }
+
+    /**
+     * Демо-вход по email/password; cookies выставляет сервер. Возвращает redirect_url.
+     */
+    async loginDemo(email, password) {
+        const data = await this.post('/api/auth/login/demo', { email, password });
+        if (!data.redirect_url) {
+            throw new Error('Нет redirect_url в ответе сервера');
+        }
+        return data.redirect_url;
     }
 
     /**

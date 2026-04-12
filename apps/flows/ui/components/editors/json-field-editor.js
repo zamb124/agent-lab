@@ -22,8 +22,15 @@ export class JsonFieldEditor extends PlatformElement {
             }
 
             :host([bounded]:not(.fullscreen)) .editor-shell {
-                max-height: min(42vh, 380px);
-                min-height: 0;
+                box-sizing: border-box;
+                height: min(50vh, 440px);
+                max-height: min(50vh, 440px);
+                min-height: min(
+                    var(--editor-min-height, 160px),
+                    min(50vh, 440px)
+                );
+                display: flex;
+                flex-direction: column;
                 overflow: hidden;
             }
 
@@ -44,7 +51,7 @@ export class JsonFieldEditor extends PlatformElement {
 
             :host([bounded]:not(.fullscreen)) #codemirror-container .cm-editor {
                 height: 100% !important;
-                min-height: 0 !important;
+                min-height: var(--editor-min-height, 160px) !important;
                 max-height: 100%;
                 overflow: hidden !important;
                 display: flex !important;
@@ -328,8 +335,17 @@ export class JsonFieldEditor extends PlatformElement {
         };
     }
 
+    _syncHostMinHeightVar() {
+        const h =
+            typeof this.minHeight === 'number' && !Number.isNaN(this.minHeight) && this.minHeight > 0
+                ? this.minHeight
+                : 100;
+        this.style.setProperty('--editor-min-height', `${h}px`);
+    }
+
     async firstUpdated() {
         document.addEventListener('keydown', this._boundKeydown);
+        this._syncHostMinHeightVar();
         await this._initCodeMirror();
     }
 
@@ -388,6 +404,11 @@ export class JsonFieldEditor extends PlatformElement {
                 }
             });
         });
+    }
+
+    /** Родитель скрывал вкладку (display:none) — заново измерить область прокрутки CM. */
+    refreshLayout() {
+        this._scheduleEditorMeasure();
     }
 
     _getFullscreenEmbedRoot() {
@@ -614,7 +635,7 @@ export class JsonFieldEditor extends PlatformElement {
     }
 
     _notifyCopied() {
-        this.success('Скопировано');
+        this.success(this.i18n.t('json_field_editor.copied'));
     }
 
     async _copyValue() {
@@ -635,11 +656,15 @@ export class JsonFieldEditor extends PlatformElement {
             this._notifyCopied();
         } catch (e) {
             console.warn('Copy failed:', e);
-            this.error('Не удалось скопировать');
+            this.error(this.i18n.t('json_field_editor.copy_failed'));
         }
     }
 
     updated(changedProperties) {
+        if (changedProperties.has('minHeight')) {
+            this._syncHostMinHeightVar();
+        }
+
         if (changedProperties.has('value') && this._editorView) {
             const currentValue = this._editorView.state.doc.toString();
             if (this.value !== currentValue) {
@@ -665,7 +690,7 @@ export class JsonFieldEditor extends PlatformElement {
                     type="button"
                     class="editor-btn"
                     @click=${this._copyValue}
-                    title="Копировать"
+                    title=${this.i18n.t('json_field_editor.copy_title')}
                 >
                     <platform-icon name="copy" size="12"></platform-icon>
                 </button>
@@ -673,7 +698,7 @@ export class JsonFieldEditor extends PlatformElement {
                     type="button"
                     class="editor-btn ${this._fullscreen ? 'active' : ''}"
                     @click=${this._toggleFullscreen}
-                    title="${this._fullscreen ? 'Выйти из полноэкранного режима (Esc)' : 'На весь экран'}"
+                    title="${this._fullscreen ? this.i18n.t('json_field_editor.fs_exit') : this.i18n.t('json_field_editor.fs_enter')}"
                 >
                     <platform-icon
                         name="${this._fullscreen ? 'minimize' : 'maximize'}"
@@ -685,7 +710,11 @@ export class JsonFieldEditor extends PlatformElement {
     }
 
     render() {
-        const style = this.minHeight ? `--editor-min-height: ${this.minHeight}px` : '';
+        const minPx =
+            typeof this.minHeight === 'number' && !Number.isNaN(this.minHeight) && this.minHeight > 0
+                ? this.minHeight
+                : 100;
+        const style = `--editor-min-height: ${minPx}px`;
         const showHeaderRow = this.showToolbar || this._fullscreen;
         const showFab = !showHeaderRow;
 
@@ -699,7 +728,7 @@ export class JsonFieldEditor extends PlatformElement {
                     <button
                         type="button"
                         class="json-fs-fab"
-                        title="На весь экран"
+                        title=${this.i18n.t('json_field_editor.fs_enter')}
                         ?hidden=${!showFab}
                         @click=${this._toggleFullscreen}
                     >

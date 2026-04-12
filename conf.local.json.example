@@ -1,6 +1,11 @@
 {
+  "database": {
+    "office_url": "postgresql+asyncpg://platform_user:admin@localhost:54321/platform_office"
+  },
   "server": {
-    "env": "development"
+    "env": "development",
+    "platform_public_base_url": "https://your-public-app-origin.example.com",
+    "document_server_dev_upstream_url": "http://localhost:8088"
   },
   "auth": {
     "jwt_secret_key": "YOUR_JWT_SECRET_KEY_CHANGE_IN_PRODUCTION",
@@ -17,7 +22,21 @@
       "github": {
         "client_id": "YOUR_GITHUB_CLIENT_ID",
         "client_secret": "YOUR_GITHUB_CLIENT_SECRET"
+      },
+      "apple": {
+        "client_id": "app.humanitec.ru",
+        "apple_team_id": "YOUR_APPLE_TEAM_ID",
+        "apple_key_id": "YOUR_APPLE_KEY_ID",
+        "apple_private_key": "-----BEGIN PRIVATE KEY-----\\n...\\n-----END PRIVATE KEY-----"
       }
+    },
+    "demo": {
+      "login_enabled": true,
+      "email": "demo@demo.ru",
+      "password": "Zz123456",
+      "company_id": "demo",
+      "subdomain": "demo",
+      "company_name": "Demo"
     }
   },
   "llm": {
@@ -64,8 +83,7 @@
         "account_number": "YOUR_YOOMONEY_ACCOUNT_NUMBER",
         "notification_secret": "YOUR_YOOMONEY_NOTIFICATION_SECRET",
         "client_id": "YOUR_YOOMONEY_CLIENT_ID",
-        "client_secret": "YOUR_YOOMONEY_CLIENT_SECRET",
-        "access_token": "YOUR_YOOMONEY_ACCESS_TOKEN"
+        "client_secret": "YOUR_YOOMONEY_CLIENT_SECRET"
       }
     }
   },
@@ -82,6 +100,44 @@
     "enabled": true,
     "vapid_public_key": "YOUR_VAPID_PUBLIC_KEY",
     "vapid_private_key": "YOUR_VAPID_PRIVATE_KEY",
-    "vapid_email": "YOUR_EMAIL@example.com"
+    "vapid_email": "YOUR_EMAIL@example.com",
+    "apns_team_id": null,
+    "apns_key_id": null,
+    "apns_private_key": null,
+    "apns_bundle_id": null,
+    "apns_use_sandbox": false
+  },
+  "calendar_sync": {
+    "sync_meeting_reminder_enabled": true,
+    "sync_meeting_reminder_cron": "*/1 * * * *",
+    "sync_meeting_reminder_limit": 500
+  },
+  "selectel": {
+    "ip": "YOUR_SERVER_PUBLIC_IPV4",
+    "login": "root",
+    "ssh_port": "22"
+  },
+  "ingress": {
+    "domain": "your-domain.example.com",
+    "email": "admin@your-domain.example.com",
+    "services": [
+      {"name": "frontend", "port": 8002, "path": "/", "websocket": false},
+      {"name": "agents", "port": 8001, "path": "/flows", "websocket": false},
+      {"name": "crm", "port": 8003, "path": "/crm", "websocket": false},
+      {"name": "rag", "port": 8004, "path": "/rag", "websocket": false},
+      {"name": "sync", "port": 8005, "path": "/sync", "websocket": true},
+      {"name": "office", "port": 8008, "path": "/documents", "websocket": false}
+    ],
+    "onlyoffice_port": 8088
+  },
+  "services": {
+    "office": {
+      "office": {
+        "document_server_public_url": "https://onlyoffice.your-domain.example.com",
+        "jwt_secret": "YOUR_ONLYOFFICE_JWT_SAME_AS_DS",
+        "callback_public_base_url": "http://localhost:8008",
+        "download_token_ttl_seconds": 900
+      }
+    }
   }
 }

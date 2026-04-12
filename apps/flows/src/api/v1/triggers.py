@@ -4,12 +4,13 @@ API endpoints для триггеров агентов.
 CRUD для триггеров + webhook endpoints для приема входящих событий.
 """
 
+import json
 from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, Header, HTTPException, Request
 from pydantic import BaseModel, Field
 
-from apps.flows.src.container import get_container
+from apps.flows.src.dependencies import ContainerDep
 from apps.flows.src.models import TriggerConfig, TriggerStatus, TriggerType
 from apps.flows.src.triggers import TriggerRegistry, TriggerValidationError
 from apps.flows.src.triggers.handlers.telegram import TelegramTriggerHandler
@@ -53,23 +54,17 @@ class TriggerResponse(BaseModel):
     last_error: Optional[str] = None
 
 
-class TriggerListResponse(BaseModel):
-    """Список триггеров."""
-    triggers: List[TriggerResponse]
-
-
 # CRUD endpoints
 
 @router.get("/flows/{flow_id}/triggers")
-async def list_triggers(flow_id: str) -> TriggerListResponse:
+async def list_triggers(flow_id: str, container: ContainerDep) -> list[TriggerResponse]:
     """Получить список триггеров агента."""
-    container = get_container()
     flow_config = await container.flow_repository.get(flow_id)
-    
+
     if not flow_config:
         raise HTTPException(status_code=404, detail=f"Flow not found: {flow_id}")
-    
-    triggers = [
+
+    return [
         TriggerResponse(
             trigger_id=t.trigger_id,
             name=t.name,
@@ -83,14 +78,11 @@ async def list_triggers(flow_id: str) -> TriggerListResponse:
         )
         for t in flow_config.triggers.values()
     ]
-    
-    return TriggerListResponse(triggers=triggers)
 
 
 @router.get("/flows/{flow_id}/triggers/{trigger_id}")
-async def get_trigger(flow_id: str, trigger_id: str) -> TriggerResponse:
+async def get_trigger(flow_id: str, trigger_id: str, container: ContainerDep) -> TriggerResponse:
     """Получить триггер по ID."""
-    container = get_container()
     flow_config = await container.flow_repository.get(flow_id)
     
     if not flow_config:
@@ -115,9 +107,8 @@ async def get_trigger(flow_id: str, trigger_id: str) -> TriggerResponse:
 
 
 @router.post("/flows/{flow_id}/triggers")
-async def create_trigger(flow_id: str, request: TriggerCreateRequest) -> TriggerResponse:
+async def create_trigger(flow_id: str, request: TriggerCreateRequest, container: ContainerDep) -> TriggerResponse:
     """Создать новый триггер."""
-    container = get_container()
     flow_config = await container.flow_repository.get(flow_id)
     
     if not flow_config:
@@ -176,9 +167,9 @@ async def update_trigger(
     flow_id: str,
     trigger_id: str,
     request: TriggerUpdateRequest,
+    container: ContainerDep,
 ) -> TriggerResponse:
     """Обновить триггер."""
-    container = get_container()
     old_config = await container.flow_repository.get(flow_id)
     
     if not old_config:
@@ -233,9 +224,8 @@ async def update_trigger(
 
 
 @router.delete("/flows/{flow_id}/triggers/{trigger_id}")
-async def delete_trigger(flow_id: str, trigger_id: str) -> Dict[str, str]:
+async def delete_trigger(flow_id: str, trigger_id: str, container: ContainerDep) -> Dict[str, str]:
     """Удалить триггер."""
-    container = get_container()
     old_config = await container.flow_repository.get(flow_id)
     
     if not old_config:
@@ -272,6 +262,7 @@ async def telegram_webhook(
     flow_id: str,
     trigger_id: str,
     request: Request,
+    container: ContainerDep,
     x_telegram_bot_api_secret_token: Optional[str] = Header(None),
 ) -> Dict[str, str]:
     """
@@ -279,7 +270,6 @@ async def telegram_webhook(
     
     Telegram посылает Update сюда после setWebhook.
     """
-    container = get_container()
     flow_config = await container.flow_repository.get(flow_id)
     
     if not flow_config:
@@ -332,11 +322,11 @@ async def generic_webhook(
     flow_id: str,
     trigger_id: str,
     request: Request,
+    container: ContainerDep,
 ) -> Dict[str, Any]:
     """
     Generic webhook endpoint для внешних сервисов.
     """
-    container = get_container()
     flow_config = await container.flow_repository.get(flow_id)
     
     if not flow_config:
@@ -353,16 +343,20 @@ async def generic_webhook(
     if not trigger.enabled:
         raise HTTPException(status_code=400, detail="Trigger is disabled")
     
-    # Парсим payload
     try:
         payload = await request.json()
-    except Exception:
-        payload = {}
-    
-    logger.info(f"Webhook received: flow_id={flow_id}, trigger={trigger_id}")
-    
-    # TODO: Implement WebhookTriggerHandler
-    return {"status": "ok", "message": "Webhook received (handler not implemented)"}
+    except json.JSONDecodeError as e:
+        raise HTTPException(status_code=400, detail=f"Invalid JSON body: {e}") from e
+
+    payload_keys = list(payload.keys()) if isinstance(payload, dict) else None
+    logger.info(
+        f"Webhook received: flow_id={flow_id}, trigger={trigger_id}, payload_type={type(payload).__name__}, keys={payload_keys}"
+    )
+
+    raise HTTPException(
+        status_code=501,
+        detail="Webhook trigger execution is not implemented",
+    )
 
 
 # Test endpoint
@@ -372,13 +366,13 @@ async def test_trigger(
     flow_id: str,
     trigger_id: str,
     payload: Dict[str, Any],
+    container: ContainerDep,
 ) -> Dict[str, Any]:
     """
     Тестирует триггер с заданным payload.
     
     Полезно для отладки input_mapping.
     """
-    container = get_container()
     flow_config = await container.flow_repository.get(flow_id)
     
     if not flow_config:

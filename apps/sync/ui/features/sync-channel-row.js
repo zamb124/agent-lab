@@ -4,6 +4,7 @@
 import { html, css } from 'lit';
 import { classMap } from 'lit/directives/class-map.js';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
+import { createAvatarRetry } from '@platform/lib/utils/avatar-retry.js';
 import { SyncStore } from '../store/sync.store.js';
 import { hueFromString } from '../utils/sync-hue.js';
 
@@ -58,7 +59,7 @@ export class SyncChannelRow extends PlatformElement {
                 box-shadow: inset 3px 0 0 rgba(234, 179, 8, 0.85);
             }
 
-            /* Внутри .nav-row-wrap сайдбара фон и рамка только у обёртки, не у кнопки */
+            /* In .nav-row-wrap sidebar, background/border are on the wrapper, not the button */
             :host([in-nav-wrap]) button.nav-item {
                 border: none;
             }
@@ -208,28 +209,28 @@ export class SyncChannelRow extends PlatformElement {
         this.active = false;
         this.iconOnly = false;
         this.inNavRowWrap = false;
+        this._avatarRetry = createAvatarRetry(() => this.requestUpdate());
+    }
+
+    disconnectedCallback() {
+        super.disconnectedCallback?.();
+        this._avatarRetry.cancel();
     }
 
     _channelAvatar(ch) {
-        if (ch.type === 'direct' && ch.peer) {
-            const p = ch.peer;
-            if (typeof p.avatar_url === 'string' && p.avatar_url !== '') {
-                return html`<img class="entity-avatar" src=${p.avatar_url} alt="" />`;
-            }
-            const title = SyncStore.channelDisplayTitle(ch);
-            const initial = (title.trim().slice(0, 1) || '?').toUpperCase();
-            const hue = hueFromString(p.user_id);
-            return html`
-                <span class="entity-avatar-initials" style=${`background:hsl(${hue} 48% 42%)`}>${initial}</span>
-            `;
-        }
-        const url = ch.avatar_url;
-        if (typeof url === 'string' && url !== '') {
-            return html`<img class="entity-avatar" src=${url} alt="" />`;
+        const originalUrl = ch.type === 'direct' && ch.peer
+            ? (typeof ch.peer.avatar_url === 'string' && ch.peer.avatar_url !== '' ? ch.peer.avatar_url : null)
+            : (typeof ch.avatar_url === 'string' && ch.avatar_url !== '' ? ch.avatar_url : null);
+        const src = this._avatarRetry.currentSrc(originalUrl);
+        if (src) {
+            return html`<img class="entity-avatar" src=${src} alt=""
+                @load=${() => this._avatarRetry.onLoad()}
+                @error=${() => this._avatarRetry.onError(originalUrl)} />`;
         }
         const label = SyncStore.channelDisplayTitle(ch);
         const initial = (label.trim().slice(0, 1) || '?').toUpperCase();
-        const hue = hueFromString(ch.id);
+        const seed = ch.type === 'direct' && ch.peer ? ch.peer.user_id : ch.id;
+        const hue = hueFromString(seed);
         return html`
             <span class="entity-avatar-initials" style=${`background:hsl(${hue} 48% 42%)`}>${initial}</span>
         `;

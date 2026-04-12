@@ -3,8 +3,10 @@
  * Следует паттерну RagStore / BaseStore.
  */
 import { BaseStore } from '@platform/lib/store/BaseStore.js';
+import { i18n, t } from '@platform/services/i18n/i18n.service.js';
 
 import { formatPeerPresenceLine } from '../utils/presence-format.js';
+
 
 let _flashMessageTimer = null;
 
@@ -19,19 +21,29 @@ function _clearAllMessageDeleteTimers() {
 }
 
 const MESSAGE_DELETE_ANIM_MS = 580;
+const MESSAGES_PAGE_SIZE = 20;
+
+function _emptyPaginationState() {
+    return {
+        olderCursor: null,
+        hasMoreOlder: false,
+        loadingOlder: false,
+    };
+}
 
 function _emptyOverlayChannelState() {
     return {
         list: [],
         pending: {},
         loading: false,
+        pagination: _emptyPaginationState(),
     };
 }
 
 /** UUID канала в событиях и в UI должны совпадать; сравнение без учёта регистра. */
 function normalizeSyncChannelId(channelId) {
     if (typeof channelId !== 'string' || channelId === '') {
-        throw new Error('normalizeSyncChannelId: channelId обязателен.');
+        throw new Error(t('channel_settings.err_channel_id', {}));
     }
     return channelId.trim().toLowerCase();
 }
@@ -39,6 +51,17 @@ function normalizeSyncChannelId(channelId) {
 /** Каналы встреч: имя с префикса `_` не показываем в сайдбаре и в выборе канала. */
 function isHiddenSyncChannelName(name) {
     return typeof name === 'string' && name.startsWith('_');
+}
+
+/** Свежие каналы наверху: по last_message_at desc, без сообщений — по created_at desc. */
+function _sortChannelsByRecent(channels) {
+    return [...channels].sort((a, b) => {
+        const ta = a.last_message_at || a.created_at || '';
+        const tb = b.last_message_at || b.created_at || '';
+        if (tb > ta) return 1;
+        if (tb < ta) return -1;
+        return 0;
+    });
 }
 
 const baseStore = new BaseStore('sync', {
@@ -62,17 +85,9 @@ const baseStore = new BaseStore('sync', {
         pending: {},
         loading: false,
     },
+    messagePaginationByChannel: {},
     callOverlayChat: {
         channels: {},
-    },
-    meetings: {
-        list: [],
-        selected: null,
-        loading: false,
-        filters: {
-            channel_id: null,
-            space_id: null,
-        },
     },
     chat: {
         selectedSpaceId: null,
@@ -106,9 +121,14 @@ const baseStore = new BaseStore('sync', {
         /** space_id при открытии модалки создания канала (зафиксирован при open). */
         channelSettingsCreateSpaceId: null,
         spaceSettingsSpaceId: null,
-        meetingsPanelOpen: false,
         /** Пустой массив = показать все topic-каналы; иначе только каналы выбранных пространств (ИЛИ). */
         sidebarSpaceFilterIds: [],
+        /**
+         * Активный звонок в основном приложении: полоса в шапке канала при свёрнутом оверлее.
+         * Не персистится (partialize).
+         * @type {null | { call_id: string, channel_id: string, minimized: boolean }}
+         */
+        activeCallOverlay: null,
     },
 }, {
     persist: true,
@@ -136,7 +156,7 @@ export const SyncStore = {
      */
     channelDisplayTitle(channel) {
         if (!channel || typeof channel !== 'object') {
-            throw new Error('channelDisplayTitle: channel обязателен.');
+            throw new Error(t('sync_store.err_channel_display_title', {}));
         }
         if (channel.type === 'direct' && channel.peer) {
             const p = channel.peer;
@@ -153,7 +173,7 @@ export const SyncStore = {
         if (typeof channel.id === 'string' && channel.id !== '') {
             return channel.id;
         }
-        throw new Error('channelDisplayTitle: нет данных для отображения.');
+        throw new Error(t('sync_store.err_channel_display_empty', {}));
     },
 
     /**
@@ -163,7 +183,7 @@ export const SyncStore = {
      */
     getForwardDestinationChannels(excludeChannelId) {
         if (typeof excludeChannelId !== 'string' || excludeChannelId === '') {
-            throw new Error('getForwardDestinationChannels: excludeChannelId обязателен.');
+            throw new Error(t('sync_store.err_exclude_channel_id', {}));
         }
         const all = baseStore.state.channels.list;
         return all.filter((c) => {
@@ -229,9 +249,120 @@ export const SyncStore = {
         }));
     },
 
+    _getMessagePaginationState(source, channelId) {
+        if (typeof channelId !== 'string' || channelId === '') {
+            throw new Error(t('channel_settings.err_channel_id', {}));
+        }
+        const norm = normalizeSyncChannelId(channelId);
+        return source.messagePaginationByChannel[norm] ?? _emptyPaginationState();
+    },
+
+    _setMessagePaginationState(channelId, pagination) {
+        if (typeof channelId !== 'string' || channelId === '') {
+            throw new Error(t('channel_settings.err_channel_id', {}));
+        }
+        if (!pagination || typeof pagination !== 'object') {
+            throw new Error(t('sync_store.err_pagination_required', {}));
+        }
+        const norm = normalizeSyncChannelId(channelId);
+        baseStore.setState((s) => ({
+            messagePaginationByChannel: {
+                ...s.messagePaginationByChannel,
+                [norm]: {
+                    ...this._getMessagePaginationState(s, channelId),
+                    ...pagination,
+                },
+            },
+        }));
+    },
+
+    _applyMessagePage(channelId, payload) {
+        if (typeof channelId !== 'string' || channelId === '') {
+            throw new Error(t('channel_settings.err_channel_id', {}));
+        }
+        if (!payload || typeof payload !== 'object') {
+            throw new Error(t('sync_store.err_payload_required', {}));
+        }
+        if (!Array.isArray(payload.items)) {
+            throw new Error(t('sync_store.err_payload_items_array', {}));
+        }
+        baseStore.setState((s) => ({
+            messages: { ...s.messages, list: payload.items, loading: false, pending: {} },
+            messagePaginationByChannel: {
+                ...s.messagePaginationByChannel,
+                [normalizeSyncChannelId(channelId)]: {
+                    olderCursor: payload.next_cursor ?? null,
+                    hasMoreOlder: typeof payload.next_cursor === 'string' && payload.next_cursor !== '',
+                    loadingOlder: false,
+                },
+            },
+            ui: { ...s.ui, deletingMessageIds: [] },
+        }));
+    },
+
+    canLoadOlderMessages(channelId) {
+        const p = this._getMessagePaginationState(baseStore.state, channelId);
+        return p.hasMoreOlder && !p.loadingOlder;
+    },
+
+    getMessageHistoryState(channelId) {
+        const p = this._getMessagePaginationState(baseStore.state, channelId);
+        return {
+            olderCursor: p.olderCursor,
+            hasMoreOlder: p.hasMoreOlder,
+            loadingOlder: p.loadingOlder,
+        };
+    },
+
+    async loadOlderMessages(syncApi, channelId) {
+        if (typeof channelId !== 'string' || channelId === '') {
+            throw new Error(t('channel_settings.err_channel_id', {}));
+        }
+        const current = this._getMessagePaginationState(baseStore.state, channelId);
+        if (!current.hasMoreOlder) {
+            return [];
+        }
+        if (current.loadingOlder) {
+            return [];
+        }
+        if (typeof current.olderCursor !== 'string' || current.olderCursor === '') {
+            throw new Error(t('sync_store.err_older_cursor_older_messages', {}));
+        }
+        this._setMessagePaginationState(channelId, { loadingOlder: true });
+        try {
+            const payload = await syncApi.getMessages(channelId, {
+                limit: MESSAGES_PAGE_SIZE,
+                before: current.olderCursor,
+            });
+            baseStore.setState((s) => {
+                const ids = new Set(s.messages.list.map((m) => m.id));
+                const older = payload.items.filter((m) => !ids.has(m.id));
+                return {
+                    messages: {
+                        ...s.messages,
+                        list: [...older, ...s.messages.list],
+                    },
+                    messagePaginationByChannel: {
+                        ...s.messagePaginationByChannel,
+                        [normalizeSyncChannelId(channelId)]: {
+                            ...this._getMessagePaginationState(s, channelId),
+                            olderCursor: payload.next_cursor ?? null,
+                            hasMoreOlder: typeof payload.next_cursor === 'string' && payload.next_cursor !== '',
+                            loadingOlder: false,
+                        },
+                    },
+                };
+            });
+            return payload.items;
+        } catch (e) {
+            this._setMessagePaginationState(channelId, { loadingOlder: false });
+            throw e;
+        }
+    },
+
     _getOverlayChannelState(source, channelId) {
         if (typeof channelId !== 'string' || channelId === '') {
-            throw new Error('channelId обязателен.');
+            throw new Error(t('channel_settings.err_channel_id', {}));
         }
         const norm = normalizeSyncChannelId(channelId);
         const current = source.callOverlayChat.channels[norm];
@@ -240,10 +371,10 @@ export const SyncStore = {
 
     setCallOverlayMessages(channelId, list) {
         if (typeof channelId !== 'string' || channelId === '') {
-            throw new Error('channelId обязателен.');
+            throw new Error(t('channel_settings.err_channel_id', {}));
         }
         if (!Array.isArray(list)) {
-            throw new Error('list должен быть массивом.');
+            throw new Error(t('sync_store.err_list_array', {}));
         }
         const norm = normalizeSyncChannelId(channelId);
         baseStore.setState((s) => {
@@ -261,7 +392,7 @@ export const SyncStore = {
 
     setCallOverlayLoading(channelId, loading) {
         if (typeof channelId !== 'string' || channelId === '') {
-            throw new Error('channelId обязателен.');
+            throw new Error(t('channel_settings.err_channel_id', {}));
         }
         const norm = normalizeSyncChannelId(channelId);
         baseStore.setState((s) => {
@@ -277,13 +408,13 @@ export const SyncStore = {
 
     upsertCallOverlayMessage(channelId, message) {
         if (typeof channelId !== 'string' || channelId === '') {
-            throw new Error('channelId обязателен.');
+            throw new Error(t('channel_settings.err_channel_id', {}));
         }
         if (!message || typeof message !== 'object') {
-            throw new Error('message обязателен.');
+            throw new Error(t('sync_store.err_message_required', {}));
         }
         if (typeof message.id !== 'string' || message.id === '') {
-            throw new Error('message.id обязателен.');
+            throw new Error(t('sync_store.err_message_dot_id', {}));
         }
         const norm = normalizeSyncChannelId(channelId);
         baseStore.setState((s) => {
@@ -300,13 +431,13 @@ export const SyncStore = {
 
     addCallOverlayPending(channelId, commandId, message) {
         if (typeof channelId !== 'string' || channelId === '') {
-            throw new Error('channelId обязателен.');
+            throw new Error(t('channel_settings.err_channel_id', {}));
         }
         if (typeof commandId !== 'string' || commandId === '') {
-            throw new Error('commandId обязателен.');
+            throw new Error(t('sync_api.err_command_id', {}));
         }
         if (!message || typeof message !== 'object') {
-            throw new Error('message обязателен.');
+            throw new Error(t('sync_store.err_message_required', {}));
         }
         const norm = normalizeSyncChannelId(channelId);
         baseStore.setState((s) => {
@@ -322,13 +453,13 @@ export const SyncStore = {
 
     resolveCallOverlayPending(channelId, commandId, confirmedMessage) {
         if (typeof channelId !== 'string' || channelId === '') {
-            throw new Error('channelId обязателен.');
+            throw new Error(t('channel_settings.err_channel_id', {}));
         }
         if (typeof commandId !== 'string' || commandId === '') {
-            throw new Error('commandId обязателен.');
+            throw new Error(t('sync_api.err_command_id', {}));
         }
         if (!confirmedMessage || typeof confirmedMessage !== 'object') {
-            throw new Error('confirmedMessage обязателен.');
+            throw new Error(t('sync_store.err_confirmed_message_required', {}));
         }
         const norm = normalizeSyncChannelId(channelId);
         baseStore.setState((s) => {
@@ -347,10 +478,10 @@ export const SyncStore = {
 
     failCallOverlayPending(channelId, commandId) {
         if (typeof channelId !== 'string' || channelId === '') {
-            throw new Error('channelId обязателен.');
+            throw new Error(t('channel_settings.err_channel_id', {}));
         }
         if (typeof commandId !== 'string' || commandId === '') {
-            throw new Error('commandId обязателен.');
+            throw new Error(t('sync_api.err_command_id', {}));
         }
         const norm = normalizeSyncChannelId(channelId);
         baseStore.setState((s) => {
@@ -390,73 +521,102 @@ export const SyncStore = {
         return current.loading;
     },
 
-    async loadCallOverlayMessages(syncApi, channelId) {
+    getCallOverlayHistoryState(channelId) {
         if (typeof channelId !== 'string' || channelId === '') {
-            throw new Error('channelId обязателен.');
+            return _emptyPaginationState();
         }
-        this.setCallOverlayLoading(channelId, true);
+        const current = this._getOverlayChannelState(baseStore.state, channelId);
+        return {
+            olderCursor: current.pagination?.olderCursor ?? null,
+            hasMoreOlder: !!current.pagination?.hasMoreOlder,
+            loadingOlder: !!current.pagination?.loadingOlder,
+        };
+    },
+
+    async loadOlderCallOverlayMessages(syncApi, channelId) {
+        if (typeof channelId !== 'string' || channelId === '') {
+            throw new Error(t('channel_settings.err_channel_id', {}));
+        }
+        const history = this.getCallOverlayHistoryState(channelId);
+        if (!history.hasMoreOlder || history.loadingOlder) {
+            return [];
+        }
+        if (typeof history.olderCursor !== 'string' || history.olderCursor === '') {
+            throw new Error(t('sync_store.err_older_cursor_overlay', {}));
+        }
+        const norm = normalizeSyncChannelId(channelId);
+        baseStore.setState((s) => {
+            const channels = { ...s.callOverlayChat.channels };
+            const current = this._getOverlayChannelState(s, channelId);
+            channels[norm] = {
+                ...current,
+                pagination: { ...current.pagination, loadingOlder: true },
+            };
+            return { callOverlayChat: { ...s.callOverlayChat, channels } };
+        });
         try {
-            const items = await syncApi.getMessages(channelId);
-            this.setCallOverlayMessages(channelId, items);
-            return items;
+            const payload = await syncApi.getMessages(channelId, {
+                limit: MESSAGES_PAGE_SIZE,
+                before: history.olderCursor,
+            });
+            baseStore.setState((s) => {
+                const channels = { ...s.callOverlayChat.channels };
+                const current = this._getOverlayChannelState(s, channelId);
+                const ids = new Set(current.list.map((m) => m.id));
+                const older = payload.items.filter((m) => !ids.has(m.id));
+                channels[norm] = {
+                    ...current,
+                    list: [...older, ...current.list],
+                    pagination: {
+                        olderCursor: payload.next_cursor ?? null,
+                        hasMoreOlder: typeof payload.next_cursor === 'string' && payload.next_cursor !== '',
+                        loadingOlder: false,
+                    },
+                };
+                return { callOverlayChat: { ...s.callOverlayChat, channels } };
+            });
+            return payload.items;
         } catch (e) {
-            this.setCallOverlayLoading(channelId, false);
+            baseStore.setState((s) => {
+                const channels = { ...s.callOverlayChat.channels };
+                const current = this._getOverlayChannelState(s, channelId);
+                channels[norm] = {
+                    ...current,
+                    pagination: { ...current.pagination, loadingOlder: false },
+                };
+                return { callOverlayChat: { ...s.callOverlayChat, channels } };
+            });
             throw e;
         }
     },
 
-    setMeetings(list) {
-        baseStore.setState((s) => ({
-            meetings: { ...s.meetings, list, loading: false },
-        }));
-    },
-
-    setMeetingsLoading(loading) {
-        baseStore.setState((s) => ({
-            meetings: { ...s.meetings, loading },
-        }));
-    },
-
-    setMeetingSelected(meeting) {
-        baseStore.setState((s) => ({
-            meetings: { ...s.meetings, selected: meeting },
-        }));
-    },
-
-    upsertMeeting(meeting) {
-        if (!meeting || typeof meeting !== 'object') {
-            throw new Error('upsertMeeting: meeting обязателен.');
+    async loadCallOverlayMessages(syncApi, channelId) {
+        if (typeof channelId !== 'string' || channelId === '') {
+            throw new Error(t('channel_settings.err_channel_id', {}));
         }
-        if (typeof meeting.meeting_id !== 'string' || meeting.meeting_id === '') {
-            throw new Error('upsertMeeting: meeting.meeting_id обязателен.');
+        this.setCallOverlayLoading(channelId, true);
+        try {
+            const payload = await syncApi.getMessages(channelId, { limit: MESSAGES_PAGE_SIZE });
+            this.setCallOverlayMessages(channelId, payload.items);
+            const norm = normalizeSyncChannelId(channelId);
+            baseStore.setState((s) => {
+                const channels = { ...s.callOverlayChat.channels };
+                const current = channels[norm] ?? _emptyOverlayChannelState();
+                channels[norm] = {
+                    ...current,
+                    pagination: {
+                        olderCursor: payload.next_cursor ?? null,
+                        hasMoreOlder: typeof payload.next_cursor === 'string' && payload.next_cursor !== '',
+                        loadingOlder: false,
+                    },
+                };
+                return { callOverlayChat: { ...s.callOverlayChat, channels } };
+            });
+            return payload.items;
+        } catch (e) {
+            this.setCallOverlayLoading(channelId, false);
+            throw e;
         }
-        baseStore.setState((s) => {
-            const list = s.meetings.list;
-            const idx = list.findIndex((m) => m.meeting_id === meeting.meeting_id);
-            const nextList = idx === -1
-                ? [meeting, ...list]
-                : list.map((m, i) => (i === idx ? meeting : m));
-            const selected = s.meetings.selected;
-            const nextSelected = selected && selected.meeting_id === meeting.meeting_id
-                ? meeting
-                : selected;
-            return {
-                meetings: {
-                    ...s.meetings,
-                    list: nextList,
-                    selected: nextSelected,
-                },
-            };
-        });
-    },
-
-    setMeetingsFilters(filters) {
-        if (!filters || typeof filters !== 'object') {
-            throw new Error('filters обязателен.');
-        }
-        baseStore.setState((s) => ({
-            meetings: { ...s.meetings, filters: { ...s.meetings.filters, ...filters } },
-        }));
     },
 
     upsertMessage(message) {
@@ -497,10 +657,10 @@ export const SyncStore = {
 
     mergeMessageFields(messageId, fields) {
         if (typeof messageId !== 'string' || messageId === '') {
-            throw new Error('messageId обязателен.');
+            throw new Error(t('sync_api.err_message_id', {}));
         }
         if (!fields || typeof fields !== 'object') {
-            throw new Error('fields обязателен.');
+            throw new Error(t('sync_store.err_fields_required', {}));
         }
         baseStore.setState(s => ({
             messages: {
@@ -512,7 +672,7 @@ export const SyncStore = {
 
     removeMessage(messageId) {
         if (typeof messageId !== 'string' || messageId === '') {
-            throw new Error('messageId обязателен.');
+            throw new Error(t('sync_api.err_message_id', {}));
         }
         const pending = _messageDeleteTimers.get(messageId);
         if (pending !== undefined) {
@@ -537,7 +697,7 @@ export const SyncStore = {
      */
     scheduleMessageRemovalAfterDeleteAnimation(messageId) {
         if (typeof messageId !== 'string' || messageId === '') {
-            throw new Error('messageId обязателен.');
+            throw new Error(t('sync_api.err_message_id', {}));
         }
         if (_messageDeleteTimers.has(messageId)) {
             return;
@@ -579,10 +739,10 @@ export const SyncStore = {
      */
     patchChannelFields(channelId, fields) {
         if (typeof channelId !== 'string' || channelId === '') {
-            throw new Error('channelId обязателен.');
+            throw new Error(t('channel_settings.err_channel_id', {}));
         }
         if (!fields || typeof fields !== 'object') {
-            throw new Error('fields обязателен.');
+            throw new Error(t('sync_store.err_fields_required', {}));
         }
         const norm = normalizeSyncChannelId(channelId);
         baseStore.setState(s => ({
@@ -601,10 +761,10 @@ export const SyncStore = {
      */
     patchSpaceFields(spaceId, fields) {
         if (typeof spaceId !== 'string' || spaceId === '') {
-            throw new Error('spaceId обязателен.');
+            throw new Error(t('channel_settings.err_space_id', {}));
         }
         if (!fields || typeof fields !== 'object') {
-            throw new Error('fields обязателен.');
+            throw new Error(t('sync_store.err_fields_required', {}));
         }
         baseStore.setState(s => ({
             spaces: {
@@ -616,7 +776,7 @@ export const SyncStore = {
 
     openChannelSettings(channelId) {
         if (typeof channelId !== 'string' || channelId === '') {
-            throw new Error('channelId обязателен.');
+            throw new Error(t('channel_settings.err_channel_id', {}));
         }
         baseStore.setState(s => ({
             ui: {
@@ -644,9 +804,7 @@ export const SyncStore = {
             return filters[0];
         }
         if (filters.length > 1) {
-            throw new Error(
-                'Чтобы создать канал, оставь в фильтре одно пространство или сбрось фильтр (покажи все каналы).',
-            );
+            throw new Error(t('sync_store.err_channel_filter_multi', {}));
         }
         const sel = s.chat.selectedSpaceId;
         if (typeof sel === 'string' && sel !== '' && valid.has(sel)) {
@@ -656,7 +814,7 @@ export const SyncStore = {
         if (first && typeof first.id === 'string' && first.id !== '') {
             return first.id;
         }
-        throw new Error('Сначала создай пространство.');
+        throw new Error(t('sync_store.err_create_space_first', {}));
     },
 
     openChannelSettingsCreate() {
@@ -677,7 +835,7 @@ export const SyncStore = {
      */
     toggleSidebarSpaceFilter(spaceId) {
         if (typeof spaceId !== 'string' || spaceId === '') {
-            throw new Error('toggleSidebarSpaceFilter: spaceId обязателен.');
+            throw new Error(t('sync_store.err_toggle_sidebar_space_id', {}));
         }
         baseStore.setState(s => {
             const prev = [...(s.ui.sidebarSpaceFilterIds ?? [])];
@@ -698,27 +856,34 @@ export const SyncStore = {
      */
     channelRowMetaLabel(channel) {
         if (!channel || typeof channel !== 'object') {
-            throw new Error('channelRowMetaLabel: channel обязателен.');
+            throw new Error(t('sync_store.err_channel_row_channel', {}));
         }
         if (channel.type === 'direct') {
-            return 'Личный';
+            return t('sync_store.channel_meta_direct', {});
         }
         const sid = channel.space_id;
         if (typeof sid !== 'string' || sid === '') {
-            throw new Error('channelRowMetaLabel: у канала нет space_id.');
+            if (channel.type === 'calendar_meeting') {
+                return t('sync_store.channel_meta_calendar_meeting', {});
+            }
+            if (channel.type === 'group') {
+                return t('sync_store.channel_meta_group', {});
+            }
+            throw new Error(t('sync_store.err_channel_row_no_space_id', {}));
         }
         const sp = baseStore.state.spaces.list.find(x => x.id === sid);
         if (!sp) {
-            return 'Пространство недоступно';
+            return t('sync_store.channel_meta_space_unavailable', {});
         }
         if (typeof sp.name === 'string' && sp.name !== '') {
             return sp.name;
         }
-        return 'Без названия';
+        return t('sync_store.channel_meta_unnamed', {});
     },
 
     /**
      * Topic-каналы для сайдбара: по умолчанию все; при непустом sidebarSpaceFilterIds — только выбранные пространства (ИЛИ).
+     * Сортировка: свежие (по last_message_at) наверху, без сообщений — по created_at.
      * @returns {object[]}
      */
     getChannelsForSidebarList() {
@@ -728,11 +893,27 @@ export const SyncStore = {
             c => c.type !== 'direct' && c.space_id && visible(c),
         );
         const filters = baseStore.state.ui.sidebarSpaceFilterIds ?? [];
+        let filtered;
         if (!Array.isArray(filters) || filters.length === 0) {
-            return topicInSpaces;
+            filtered = topicInSpaces;
+        } else {
+            const set = new Set(filters);
+            filtered = topicInSpaces.filter(c => c.space_id && set.has(c.space_id));
         }
-        const set = new Set(filters);
-        return topicInSpaces.filter(c => c.space_id && set.has(c.space_id));
+        return _sortChannelsByRecent(filtered);
+    },
+
+    /**
+     * Объединённый список для сайдбара: direct-каналы (всегда) + topic-каналы с фильтром по пространствам.
+     * Сортировка по свежести общая — все вместе.
+     * @returns {object[]}
+     */
+    getUnifiedSidebarChannelList() {
+        const all = baseStore.state.channels.list;
+        const visible = (c) => !isHiddenSyncChannelName(c.name);
+        const direct = all.filter(c => c.type === 'direct' && visible(c));
+        const topic = this.getChannelsForSidebarList();
+        return _sortChannelsByRecent([...direct, ...topic]);
     },
 
     /**
@@ -742,7 +923,7 @@ export const SyncStore = {
     getChannelsForPickerList() {
         const all = baseStore.state.channels.list;
         const visible = (c) => !isHiddenSyncChannelName(c.name);
-        const direct = all.filter(c => c.type === 'direct' && visible(c));
+        const direct = _sortChannelsByRecent(all.filter(c => c.type === 'direct' && visible(c)));
         const topic = this.getChannelsForSidebarList();
         return [...direct, ...topic];
     },
@@ -760,7 +941,7 @@ export const SyncStore = {
 
     openSpaceSettings(spaceId) {
         if (typeof spaceId !== 'string' || spaceId === '') {
-            throw new Error('spaceId обязателен.');
+            throw new Error(t('channel_settings.err_space_id', {}));
         }
         baseStore.setState(s => ({
             ui: { ...s.ui, spaceSettingsSpaceId: spaceId, spaceSettingsCreate: false },
@@ -776,18 +957,6 @@ export const SyncStore = {
     closeSpaceSettings() {
         baseStore.setState(s => ({
             ui: { ...s.ui, spaceSettingsSpaceId: null, spaceSettingsCreate: false },
-        }));
-    },
-
-    openMeetingsPanel() {
-        baseStore.setState((s) => ({
-            ui: { ...s.ui, meetingsPanelOpen: true },
-        }));
-    },
-
-    closeMeetingsPanel() {
-        baseStore.setState((s) => ({
-            ui: { ...s.ui, meetingsPanelOpen: false },
         }));
     },
 
@@ -864,7 +1033,7 @@ export const SyncStore = {
      */
     flashMessageHighlight(messageId) {
         if (typeof messageId !== 'string' || messageId === '') {
-            throw new Error('messageId обязателен.');
+            throw new Error(t('sync_api.err_message_id', {}));
         }
         if (_flashMessageTimer !== null) {
             clearTimeout(_flashMessageTimer);
@@ -935,10 +1104,10 @@ export const SyncStore = {
 
     setPeerReadAt(channelId, isoStr) {
         if (typeof channelId !== 'string' || channelId === '') {
-            throw new Error('channelId обязателен.');
+            throw new Error(t('channel_settings.err_channel_id', {}));
         }
         if (typeof isoStr !== 'string' || isoStr === '') {
-            throw new Error('isoStr обязателен.');
+            throw new Error(t('sync_store.err_iso_str_required', {}));
         }
         baseStore.setState(s => ({
             peerReadAtByChannel: { ...s.peerReadAtByChannel, [channelId]: isoStr },
@@ -987,11 +1156,11 @@ export const SyncStore = {
     applyChannelTyping(payload) {
         const channelId = payload.channel_id;
         if (typeof channelId !== 'string' || channelId === '') {
-            throw new Error('channel.typing: channel_id обязателен.');
+            throw new Error(t('sync_store.err_typing_channel_id', {}));
         }
         const u = payload.user;
         if (!u || typeof u.user_id !== 'string' || u.user_id === '') {
-            throw new Error('channel.typing: user.user_id обязателен.');
+            throw new Error(t('sync_store.err_typing_user_user_id', {}));
         }
         const uid = u.user_id;
         const name = typeof u.display_name === 'string' && u.display_name.trim() !== ''
@@ -1073,11 +1242,23 @@ export const SyncStore = {
             return row.user_id !== myUserId;
         });
         if (others.length === 0) return '';
-        others.sort((a, b) => a.display_name.localeCompare(b.display_name, 'ru'));
-        if (others.length === 1) return `${others[0].display_name} печатает…`;
-        if (others.length === 2) return `${others[0].display_name}, ${others[1].display_name} печатают…`;
+        const sortLoc = i18n.getCurrentLocale() === 'ru' ? 'ru' : 'en';
+        others.sort((a, b) => a.display_name.localeCompare(b.display_name, sortLoc));
+        if (others.length === 1) {
+            return t('sync_store.typing_one', { name: others[0].display_name });
+        }
+        if (others.length === 2) {
+            return t('sync_store.typing_two', {
+                name1: others[0].display_name,
+                name2: others[1].display_name,
+            });
+        }
         const rest = others.length - 2;
-        return `${others[0].display_name}, ${others[1].display_name} и ещё ${rest}…`;
+        return t('sync_store.typing_many', {
+            name1: others[0].display_name,
+            name2: others[1].display_name,
+            n: rest,
+        });
     },
 
     /**
@@ -1086,7 +1267,7 @@ export const SyncStore = {
     applyUserPresence(payload) {
         const uid = payload.user_id;
         if (typeof uid !== 'string' || uid === '') {
-            throw new Error('user.presence: user_id обязателен.');
+            throw new Error(t('sync_store.err_presence_user_id', {}));
         }
         const online = !!payload.online;
         const rawLast = payload.last_seen_at;
@@ -1110,7 +1291,7 @@ export const SyncStore = {
      */
     getPeerPresenceSubtitle(userId) {
         if (typeof userId !== 'string' || userId === '') {
-            throw new Error('getPeerPresenceSubtitle: userId обязателен.');
+            throw new Error(t('sync_store.err_peer_subtitle_user_id', {}));
         }
         const row = (baseStore.state.peerPresenceByUserId ?? {})[userId];
         if (!row) {
@@ -1138,13 +1319,45 @@ export const SyncStore = {
     },
 
     /**
+     * Состояние оверлея звонка для шапки чата (свёрнут / полный экран).
+     * @param {null | { call_id: string, channel_id: string, minimized: boolean }} overlay
+     */
+    setUiActiveCallOverlay(overlay) {
+        if (overlay === null) {
+            baseStore.setState(s => ({ ui: { ...s.ui, activeCallOverlay: null } }));
+            return;
+        }
+        if (typeof overlay !== 'object') {
+            throw new Error(t('sync_store.err_active_call_overlay_payload', {}));
+        }
+        const callId = overlay.call_id;
+        const channelId = overlay.channel_id;
+        const minimized = overlay.minimized;
+        if (typeof callId !== 'string' || callId === '') {
+            throw new Error(t('sync_store.err_active_call_overlay_call_id', {}));
+        }
+        if (typeof channelId !== 'string') {
+            throw new Error(t('sync_store.err_active_call_overlay_channel_id', {}));
+        }
+        if (typeof minimized !== 'boolean') {
+            throw new Error(t('sync_store.err_active_call_overlay_minimized', {}));
+        }
+        baseStore.setState(s => ({
+            ui: {
+                ...s.ui,
+                activeCallOverlay: { call_id: callId, channel_id: channelId, minimized },
+            },
+        }));
+    },
+
+    /**
      * @param {'direct'|'spaces'|'channels'} key
      * @param {boolean} open
      */
     setSidebarSectionOpen(key, open) {
         const allowed = ['direct', 'spaces', 'channels'];
         if (!allowed.includes(key)) {
-            throw new Error(`Неизвестная секция сайдбара: ${key}`);
+            throw new Error(t('sync_store.err_unknown_sidebar_section', { key }));
         }
         baseStore.setState(s => ({
             ui: {
@@ -1213,7 +1426,8 @@ export const SyncStore = {
     async loadSpaces(syncApi) {
         baseStore.setState(s => ({ spaces: { ...s.spaces, loading: true } }));
         try {
-            const items = await syncApi.getSpaces();
+            const page = await syncApi.getSpaces();
+            const items = page?.items ?? page;
             this.setSpaces(items);
             const validSpaceIds = new Set(items.map(x => x.id));
             baseStore.setState(s => {
@@ -1239,7 +1453,8 @@ export const SyncStore = {
     async loadChannels(syncApi) {
         baseStore.setState(s => ({ channels: { ...s.channels, loading: true } }));
         try {
-            const items = await syncApi.getChannels();
+            const page = await syncApi.getChannels();
+            const items = page?.items ?? page;
             this.setChannels(items);
             return items;
         } catch (e) {
@@ -1251,12 +1466,13 @@ export const SyncStore = {
     async loadCompanyMembers(syncApi) {
         baseStore.setState(s => ({ companyMembers: { ...s.companyMembers, loading: true } }));
         try {
-            const items = await syncApi.getCompanyMembers();
+            const page = await syncApi.getCompanyMembers();
+            const items = page.items ?? [];
             baseStore.setState(s => {
                 const nextPresence = { ...s.peerPresenceByUserId };
                 for (const m of items) {
                     if (typeof m.user_id !== 'string' || m.user_id === '') {
-                        throw new Error('company/members: у элемента нет user_id.');
+                        throw new Error(t('sync_store.err_company_member_user_id', {}));
                     }
                     const ls = m.last_seen_at;
                     nextPresence[m.user_id] = {
@@ -1345,7 +1561,7 @@ export const SyncStore = {
      */
     findDirectChannelForPeer(peerUserId) {
         if (typeof peerUserId !== 'string' || peerUserId === '') {
-            throw new Error('peerUserId обязателен.');
+            throw new Error(t('sync_api.err_peer_user_id', {}));
         }
         const want = String(peerUserId);
         return (
@@ -1355,11 +1571,11 @@ export const SyncStore = {
 
     async loadMessages(syncApi, channelId) {
         baseStore.setState(s => ({ messages: { ...s.messages, loading: true } }));
-        const items = await syncApi.getMessages(channelId);
-        this.setMessages(items);
+        const payload = await syncApi.getMessages(channelId, { limit: MESSAGES_PAGE_SIZE });
+        this._applyMessagePage(channelId, payload);
         await syncApi.markChannelRead(channelId);
         this.patchChannelFields(channelId, { unread_count: 0, mention_unread_count: 0 });
-        return items;
+        return payload.items;
     },
 
     async selectChannelAndLoadMessages(syncApi, spaceId, channelId) {
@@ -1368,16 +1584,4 @@ export const SyncStore = {
         await this.loadMessages(syncApi, channelId);
     },
 
-    async loadMeetings(syncApi, filters = null) {
-        this.setMeetingsLoading(true);
-        try {
-            const params = filters ?? baseStore.state.meetings.filters;
-            const rows = await syncApi.getMeetings(params);
-            this.setMeetings(rows);
-            return rows;
-        } catch (e) {
-            this.setMeetingsLoading(false);
-            throw e;
-        }
-    },
 };

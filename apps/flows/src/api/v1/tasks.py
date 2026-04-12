@@ -18,7 +18,7 @@ from a2a.utils.message import new_agent_text_message
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
-from apps.flows.src.container import get_container
+from apps.flows.src.dependencies import ContainerDep
 from apps.flows.src.runtime.message_metadata import MESSAGE_SOURCE_TASK
 from core.logging import get_logger
 from apps.flows.src.tasks.flow_tasks import process_flow_task
@@ -40,7 +40,7 @@ class TaskSubmitRequest(BaseModel):
 
 
 @router.post("/submit")
-async def submit_task(request: TaskSubmitRequest) -> Dict[str, Any]:
+async def submit_task(request: TaskSubmitRequest, container: ContainerDep) -> Dict[str, Any]:
     """Отправляет задачу на выполнение. Возвращает A2A Task."""
     task_id = str(uuid.uuid4())
     user_id = request.user_id or task_id
@@ -60,8 +60,6 @@ async def submit_task(request: TaskSubmitRequest) -> Dict[str, Any]:
         # Создаем новый context_id и формируем session_id
         context_id = str(uuid.uuid4())
         session_id = f"{request.flow_id}:{context_id}"
-
-    container = get_container()
     logger.info(f"API database_url: {container.db_url}")
 
     state = await container.state_manager.get_state(session_id)
@@ -118,10 +116,10 @@ async def submit_task(request: TaskSubmitRequest) -> Dict[str, Any]:
         response_text = f"Breakpoint at node '{breakpoint_hit}'"
         task_state = TaskState.input_required
     elif interrupt_data:
-        if isinstance(interrupt_data, dict):
-            response_text = interrupt_data.get("question", "")
-        else:
-            response_text = str(interrupt_data)
+        from core.state import InterruptData
+
+        ir = InterruptData.model_validate(interrupt_data)
+        response_text = ir.question
         task_state = TaskState.input_required
     else:
         response_text = task_result.get("response", "")
@@ -161,6 +159,7 @@ class StateUpdateRequest(BaseModel):
 
 @router.get("/state")
 async def get_state(
+    container: ContainerDep,
     session_id: Optional[str] = None,
     context_id: Optional[str] = None,
     flow_id: Optional[str] = None,
@@ -176,7 +175,6 @@ async def get_state(
     Returns:
         State как словарь со всеми полями (включая системные)
     """
-    container = get_container()
     
     if session_id:
         state = await container.state_manager.get_state(session_id)
@@ -198,6 +196,7 @@ async def get_state(
 @router.put("/state")
 async def update_state(
     request: StateUpdateRequest,
+    container: ContainerDep,
     session_id: Optional[str] = None,
     context_id: Optional[str] = None,
     flow_id: Optional[str] = None,
@@ -214,7 +213,6 @@ async def update_state(
     Returns:
         Обновленный state
     """
-    container = get_container()
     
     if session_id:
         pass

@@ -6,13 +6,56 @@ alwaysApply: false
 
 ## Основной принцип
 
-Tools = inline конфиги внутри ноды / FlowConfig. Декоратор @tool устарел!
+Tools = inline конфиги внутри ноды / FlowConfig. Встроенные tools также оформляются через декоратор `@tool` в `apps/flows/tools/`.
+
+**Безопасность и sandbox:** полные правила исполнения тулов, whitelist namespace, паттерны создания — **`eval.mdc`**.
+
+## ЗАПРЕТ: get_container() в тулах
+
+**ЗАПРЕЩЕНО** использовать `get_container()` в коде тулов (`apps/flows/tools/`). Тулы выполняются в eval-песочнице с ограниченным namespace (`PythonNamespaceBuilder`). Доступ к сервисам платформы — только через узкие фасады из `platform_services.py`:
+- `get_oauth_service()` — OAuth (get_valid_token, build_auth_url, refresh_token)
+- `get_file_bytes(file_id)` — скачать файл из хранилища по ID
+- `get_schedule_service()` — планировщик
+- `get_operator_handoff_service()` — операторские очереди
+
+Новый сервис нужен в туле — сначала добавь фасад в `apps/flows/src/eval/platform_services.py` + регистрация в `namespace.py`. `get_container` в теле тула = дыра в безопасности (доступ ко всем репозиториям и данным всех компаний). Детали → **`eval.mdc`**.
+
+**Документация для редактора кода (flows API):** **`GET /api/v1/code/completions`** — JSON (модули, globals, builtins, `module_methods`, `state_fields`, шаблоны, **`platform_tools`**: тулы из **`tool_repository`** текущей компании + недостающие из процессного **`ToolRegistry`**) для autocomplete. **`GET /api/v1/code/documentation`** — тот же состав плюс раздел platform tools в Markdown (параметры `language`, `perspective`); сборка тулов — **`apps/flows/src/services/platform_tool_docs.py`**, MD — **`core/docs/markdown_builder.py`**, UI — **`code-docs-modal`**.
+
+Встроенные тулы жизненного цикла ответа агента (**`reason`**, **`ask_user`**, **`hitl_operator_task`**, **`self_check`**, **`final_answer`**, **`finish`**) собраны в **`apps/flows/tools/agent_session_tools.py`**. **`hitl_operator_task`** перед interrupt вызывает **`OperatorHandoffService.register_handoff`** (резолв очереди по slug в пределах компании, запись **`operator_tasks`**, снимок контекста); при отсутствии очереди — **`ValueError`**.
+
+Встроенный **`calculator`** (tool_id без изменений) живёт в **`apps/flows/tools/math_tools.py`** (не `math.py`, чтобы не путать со stdlib **`math`** при импортах).
+
+Файлы: **`read_file`** и **`create_file`** в **`apps/flows/tools/files.py`**. Подробное описание **`create_file`** для LLM — **`_CREATE_FILE_TOOL_DESCRIPTION`**. При старте flows / flows_worker: **`FileWriter.configure_process_upload(file_processor=..., download_url_prefix=...)`**; внутри tool и в типичном inline — **`await writer.write(...)`** (или **`create_file(..., options=WriteOptions(...))`** только если нужен нестандартный **`WriteOptions`**). Inline: **`writer = FileWriter()`** в namespace (см. **`globals.py`**). PDF из markdown: ReportLab + встроенный **Noto Sans Regular** (**`core/files/writer/fonts/`**, OFL), иначе кириллица даёт «квадратики» (стандартные Helvetica в ReportLab без кириллицы).
+
+**RAG (платформа):** **`rag_create_namespace`**, **`rag_add_text`**, **`rag_search`** в **`apps/flows/tools/rag.py`** — длинные **`description`**, аргументы только через Pydantic **`args_schema`** с описаниями полей (`extra="forbid"`), ответ **`success`** / **`error`**. Исполнение только через **`RagClient`** → HTTP к сервису **`rag`** (не импортировать **`PgVectorProvider`** из тулов). Регистрация: **`apps/flows/tools/__all__`**, **`ToolRegistry.register_builtin_tools`**. Детали API — **`rag.mdc`** (`ingest-text`, проверка namespace).
+
+**DOCX-шаблоны (Jinja2 / docxtpl):** **`DocxTemplater`** в **`core/files/docx_template/`** — **`FileRef`**. **`await fill(file_ref, context, *, strict=False, date_iso=True)`** → bytes; **`await fill_and_create(...)`** → **`FileMetadata`**. Образец шаблона с конструкциями в тексте: статика flows **`/static/examples/docx_templater_reference.docx`** (файл **`apps/flows/static/examples/docx_templater_reference.docx`**). Tool **`fill_docx_template`**: аргумент **`strict`**; описание tool — ссылка на тот же URL.
+
+**Google Docs (Google API):** 7 тулов в **`apps/flows/tools/google_docs.py`** — **`gdocs_create_document`**, **`gdocs_read_document`**, **`gdocs_append_text`**, **`gdocs_insert_text`**, **`gdocs_find_replace`**, **`gdocs_delete_range`**, **`gdocs_share_document`**. Клиент: **`GoogleDocsClient`** в **`core/clients/google_docs_client.py`** (async httpx + google-auth, Google Docs API v1 + Drive API v3), зарегистрирован в eval-namespace. Per-user OAuth — фасад **`get_google_oauth_token(state, service)`** из **`platform_services.py`** (ищет токен в БД, при отсутствии бросает `FlowInterrupt(OAuthInterrupt)`). **НЕ** `get_container()`:
+
+1. **Company-level** из `state.variables`: **`google_service_account`** (JSON SA), **`google_impersonate_email`** (delegation), **`google_access_token`** (Bearer-токен)
+2. **Per-user OAuth** — `get_oauth_service().get_valid_token(company_id, user_id, "google", "docs")`, где `company_id`/`user_id` из `get_context()` (не из state)
+3. **Нет credentials** — `FlowInterrupt(body=OAuthInterrupt(auth_url=..., ...))` → flow на паузе, SSE `input-required` (`final=false`, `platform_oauth_continue`) → UI показывает ссылку → OAuth callback auto-resume
+
+**`gdocs_create_document`** с параметром **`file_id`**: скачивает DOCX через фасад **`get_file_bytes(file_id)`** и загружает в Google Drive с конвертацией в Google Docs (multipart upload, `mimeType: application/vnd.google-apps.document`); без **`file_id`** — пустой документ. Цепочка с шаблонизатором: **`fill_docx_template`** → `file_id` → **`gdocs_create_document(title, file_id)`** → Google Doc. **`gdocs_share_document`**: доступ по email или anyone with link. Tags: **`google_docs`**, **`documents`**. Интеграционные тесты: **`tests/flows/core/tools/test_google_docs_integration.py`** — каждый тул через LlmNode + MockLLM + реальный Google API; требуют `google_service_account.json` в корне проекта + env `GOOGLE_IMPERSONATE_EMAIL`.
+
+Единая материализация runnable tool: **`ToolRegistry.materialize`** (алиас `create_tool` для dict/`ToolReference`).
+
+Исполнение: **`materialize`** сначала проверяет builtin **`FunctionTool`** (если в конфиге нет inline **`code`**) и при совпадении возвращает его напрямую. Если конфиг содержит поле **`code`** (FlowsLoader инлайнит код из **`tool_repository`**), создаётся **`CodeTool`** — sandbox exec через **`PythonNamespaceBuilder`**. Код тула ДОЛЖЕН быть самодостаточен в рамках namespace (хелперы — inline или через namespace; подробности → **`eval.mdc`**). **`CodeTool`** не экспортируется из **`apps.flows.src.tools`**, не вызывается **`ToolRegistry.register`** для него, в **`collect_platform_tool_docs`** процессные тулы с **`listed_in_platform_tool_docs=False`** (у **`CodeTool`**) не попадают в **`platform_tools`** completions/documentation.
+
+**`PythonNamespaceBuilder`** (полный whitelist → **`eval.mdc`**): **`reader`**, **`writer`** (экземпляры **`FileReader()`** / **`FileWriter()`**, при старте **`FileWriter.configure_process_upload`**), плюс классы **`FileReader`**, **`FileReadError`**, **`FileWriter`**, **`FileWriteError`**, **`FileResponse`**; утилиты работы с файлами: **`get_files`**, **`find_file`** (поиск записи в `state.files` по имени — точное совпадение, затем case-insensitive подстрока; определена в **`state_utils.py`**); для **`lara_crm`** (импорты **`core.*`** вырезаются): **`ServiceClient`**, **`ServiceClientError`**, **`get_context`**, **`quote`**, **`_require_context_namespace`**, **`_compact_entity_hit`**; **`Literal`** из **`typing`** для сигнатур. Далее: **`datetime`**, **`ContentType`**, **`_extract_ids_from_state`**, узкие фасады **`get_operator_handoff_service`**, **`get_schedule_service`**, **`get_oauth_service`**, **`get_file_bytes`**, **`get_google_oauth_token`** (**`apps/flows/src/eval/platform_services.py`**), клиенты **`GoogleDocsClient`** (**`core/clients/google_docs_client.py`**) — без **`get_container`** в namespace (контейнер целиком внешнему inline-коду не отдаётся). Все публичные объекты из **`apps.flows.tools.__all__`** попадают в namespace по имени (динамически); новый встроенный tool — в **`__all__`**. **`ask_user`** в inline-коде — синхронный interrupt из **`state_utils`**; экземпляр **`@tool`** для **`llm.chat(..., tools=[...])`** — **`ask_user_tool`**. В eval **нет** **`get_settings`**, **`Path`**, **`read_path_*`**. Импорты и builtins — **whitelist** (**`core/inline_python_eval_policy.py`**). Чтение: **`await reader.read(source, ...)`** — плоские именованные параметры (**`include_asset_bytes`**, **`vision_prompt`**, **`source_file_id`**, …), **`source`** может быть запись **`state.files`**, **`FileRecord`**, путь или bytes. Загрузка: **`await writer.write(...)`** (или **`create_file`** с кастомным **`WriteOptions`**).
+
+**`strip_forbidden_platform_import_lines`** (**`apps/flows/src/eval/inline_tool_sanitize.py`**): при **`load_tools_to_db`**, при создании **`CodeTool`** из конфига и в **`PythonCodeRunner.execute` / `execute_tool`** удаляются строки импорта **`apps.*`** / **`core.*`**. Строгая проверка «запрещён импорт платформы» при **`compile_function`** / **`PythonCompiler.validate`** без этого шага сохраняется.
+
+**`load_tools_to_db`** (**`flows_loader.py`**): у **`FunctionTool`** / класса **`BaseTool`** с Pydantic **`args_schema`** в **`tool_repository`** пишется **`parameters_schema`** — полная JSON Schema объекта аргументов (**`pydantic_model_to_parameters_schema`**, см. **`apps/flows/src/tools/json_schema_parameters.py`**: **`default`**, **`minimum`**, **`minLength`**, **`items`** и т.д.). Параллельно в **`args_schema`** остаётся плоский **`CallParameter`** для API/редактора. У **`CodeTool`** схема для LLM — либо готовый **`parameters_schema`** из конфига, либо сборка из **`args_schema`** через **`resolve_tool_parameters_schema`**. Старые записи в БД без **`parameters_schema`** по-прежнему работают за счёт резолва из **`args_schema`**. После изменения модели тула — перезагрузка тулов в БД (старт flows / **`load_tools_to_db`**).
 
 ## Структура tool
 
     {
         "tool_id": "calculator",
         "type": "code",
+        "react_role": "standard",
         "description": "Вычисляет выражение",
         "args_schema": {
             "expression": {"type": "string", "description": "Выражение"}
@@ -22,9 +65,23 @@ Tools = inline конфиги внутри ноды / FlowConfig. Декорат
         "code": "def execute(args, state):\n    return {'result': eval(args['expression'])}"
     }
 
+## ToolReference.name
+
+В **`ToolReference`** поле **`name`** — подпись для UI (редактор, **inline-tool-modal**). Если в JSON не задано, при **`model_validate`** оно выставляется из **`title`** (непустой), иначе из **`tool_id`**. В БД у тула из `@tool` historically задаётся **`title`**, а не **`name`**, поэтому без этого шага в конфиге не было **`name`**.
+
+## UI: inline-tool-modal
+
+Редактирование инструмента с полем **`code`**: в **`inline-tool-modal`** ветка **`type: code`** и **`code-node-editor`**. Легаси типов ноды **`tool`** / **`function`** на графе нет.
+
+Режим **«на весь экран»** у GlassModal (`_isFullscreen`) пробрасывается в редакторы как **`expanded`**, чтобы раскладка совпадала с развёрнутой **property-panel** (sidebar + основная колонка). Для **`llm-node-editor`** подставляется **`graphNodes`** из **`FlowsStore.state.editor.flowConfig.nodes`** (как в панели).
+
+### Редактор `parameters_schema` в flows UI
+
+У **code-тула** (инлайн в LLM через **`code-node-editor`**, нода **Code** через **`code-node-modal`**, легаси **`tool-editor-modal`**) в зоне кода переключатель **Код / Схема**: на **«Схема»** редактируется JSON Schema для LLM (**`type: object`**, **`properties`**, опционально **`required`** и ограничения полей) — поле **`parameters_schema`**. Отдельного блока **Parameters (args_schema)** в UI нет. **`tool-editor-modal`**: при сохранении **`parameters_schema`** обязателен и валидируется; в конфиг пишется **`args_schema: {}`** для совместимости с **`ToolReference`**. **`POST /api/v1/tools/draft-parameters-schema`** остаётся на API (скрипты, миграции); из flows UI не вызывается.
+
 ## args_schema
 
-JSON Schema для LLM - какие параметры tool принимает:
+В конфиге и **`ToolReference`** поле **`args_schema`** — legacy-плоский вид (**`CallParameter`** по полям). Для LLM приоритет у **`parameters_schema`**; если в UI задана только **`parameters_schema`**, **`args_schema`** в сохранённом конфиге может быть пустым объектом. Пример старого inline-конфига (оба поля или только плоский **`args_schema`** в древних данных):
 
     "args_schema": {
         "name": {"type": "string", "description": "Имя пользователя"},
@@ -33,6 +90,8 @@ JSON Schema для LLM - какие параметры tool принимает:
     }
 
 Типы: string, integer, number, boolean, array, object
+
+**Встроенные тулы в Python** (`apps/flows/tools/`, декоратор **`@tool`**): каждый встроенный тул **обязан** задавать Pydantic **`args_schema`** — **`BaseModel`** с **`Field(description=...)`** по полям (плюс при необходимости валидаторы, **`Literal`**, **`extra="forbid"`**). Для LLM **`parameters`** берутся из **`model_json_schema()`**; перед вызовом — **`model_validate`**. Исключение только для временного черновика; в **`__all__`** попадают только тулы со схемой. Раньше без схемы типы выводились из сигнатуры — это не использовать для новых и не оставлять при правках существующих.
 
 ## input_mapping
 
@@ -144,12 +203,31 @@ JSON Schema для LLM - какие параметры tool принимает:
 
 ## ToolRegistry
 
-Создаёт tools из конфига:
+Создаёт tools из конфига (внутри сервиса flows / API, не из eval):
 
-    container = get_container()
     tool = await container.tool_registry.create_tool(tool_config)
+
+`create_tool({"tool_id": "…"})` без `code`/`prompt`: сначала **`registry.get(tool_id)`** (встроенные), иначе **`tool_repository.get`** и мерж в полный конфиг — так же работает `CodeNode` с полем `tool_id` (тест-панель Execute).
 
 ## Параллельное выполнение
 
 Когда LLM возвращает несколько tool_calls - все выполняются параллельно.
 Результаты мержатся в tool_results и messages.
+
+## Inline Python: `llm.chat` и function calling из кода
+
+- В namespace есть **`tool`** (`apps/flows/src/tools/decorator.py`) и **`BaseTool`**: функцию оборачивают **`@tool(name=..., description=..., tags=[...])`**, после чего имя функции — экземпляр с **`to_openai_schema()`**; для нормальной JSON Schema параметров у класса-наследника **`BaseTool`** задай **`args_schema: Type[BaseModel]`** с **`Field(description=...)`** (см. **`CrmSearchEntitiesTool`** в **`lara_crm.py`**).
+- **`SafeLLMClient.chat`** (`apps/flows/src/eval/wrappers.py`) нормализует **`tools`**: OpenAI-**`dict`** или объекты с **`to_openai_schema`**; сырая **`def`** без обёртки — **`SafeEvalError`** с пояснением.
+- Выполнение tool по **`tool_calls`** из ответа LLM в одном вызове `llm.chat` автоматически не делается: агент сам исполняет цикл или вызывает **`tool_instance.run(args, state)`** в коде ноды.
+
+## FileReader и read_file
+
+- Единый разбор файлов в **`core/files/reader`**: **`FileReader.read`** → **`FileReadResult`** (страницы, текст, `checksum` вложений в каноне с `FileRecord`).
+- Для **изображений** аргумент **`vision_prompt`** у **`reader.read`** и tool **`read_file`**: инструкция vision-модели; пустая строка — **`ValueError`**, **`None`** — встроенный промпт извлечения текста.
+- Системный tool **`read_file`** (`apps/flows/tools/files.py`) вызывает `FileReader` для пути из **`state.files`**; в том же модуле планируются прочие file-тулы.
+- В **eval**: только **`await reader.read(source=..., file_name=...)`** и **`get_files(state)`**; путь — строка из записи вложения, не произвольный **`Path`** с диска.
+- Подсказки редактора: **`core/docs/data/python/globals.py`** (**`reader`**, **`writer`**); шаблоны — **`core/docs/data/python/templates.py`**.
+
+## ОБЯЗАТЕЛЬНО: документация внешнего разработчика
+
+При добавлении/изменении тула или namespace — **сразу** актуализировать `core/docs/data/python/` (`globals.py`, `templates.py`, `modules.py`). Подробности → **`eval.mdc`** (раздел «актуализация документации»). Без обновления документации изменение **не считается завершённым**.

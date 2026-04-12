@@ -14,13 +14,14 @@ URL PostgreSQL для pytest и дочерних процессов (uvicorn, Ta
 _POSTGRES_TEST = "postgresql+asyncpg://platform_user:admin@localhost:54322"
 
 TEST_DATABASE_ENV: dict[str, str] = {
-    # Не RAG__*: см. PgVectorProvider — иначе pydantic кладёт значение в rag.embedding.*
-    "PGVECTOR_TEST_MOCK_EMBEDDINGS": "true",
+    "SERVER__PLATFORM_PUBLIC_BASE_URL": "http://testserver",
     "DATABASE__SHARED_URL": f"{_POSTGRES_TEST}/platform_shared",
     "DATABASE__FLOWS_URL": f"{_POSTGRES_TEST}/platform_agents",
     "DATABASE__CRM_URL": f"{_POSTGRES_TEST}/platform_crm",
     "DATABASE__SYNC_URL": f"{_POSTGRES_TEST}/platform_sync",
     "DATABASE__RAG_URL": f"{_POSTGRES_TEST}/platform_rag",
+    "DATABASE__OFFICE_URL": f"{_POSTGRES_TEST}/platform_office",
+    "DATABASE__TRACING_URL": f"{_POSTGRES_TEST}/platform_tracing",
     "DATABASE__REDIS_URL": "redis://localhost:63792/0",
     "TASKS__BROKER_URL": "redis://localhost:63792/1",
     "CALLS__LIVEKIT_URL": "ws://localhost:7890",

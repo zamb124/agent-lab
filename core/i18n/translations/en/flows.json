@@ -1,0 +1,1262 @@
+{
+  "title": "Agent Builder",
+  "toolbar": {
+    "back_to_dashboard": "Back to Dashboard",
+    "zoom_in": "Zoom In",
+    "zoom_out": "Zoom Out",
+    "zoom_reset": "Reset zoom",
+    "fit_to_screen": "Fit to Screen",
+    "select_or_create_flow": "Select or Create Flow",
+    "save": "Save",
+    "run": "Run",
+    "clear_canvas": "Clear Canvas"
+  },
+  "sidebar": {
+    "collapse": "Collapse Panel",
+    "flows_tab": "Flows",
+    "agents_tab": "Agents",
+    "tools_tab": "Tools",
+    "search_placeholder": "Search...",
+    "create_new_element": "Create New Element"
+  },
+  "context_menu": {
+    "edit": "Edit",
+    "duplicate": "Duplicate",
+    "delete": "Delete"
+  },
+  "chat_widget": {
+    "err_send": "Something went wrong. Please try again.",
+    "err_process": "Could not process the message",
+    "err_load_settings": "Failed to load settings: {{status}}",
+    "placeholder_message": "Type a message...",
+    "embed_window_title": "AI Assistant",
+    "embed_powered_by": "Powered by",
+    "embed_brand_name": "Humanitec",
+    "tool_calls_line": "Tools: {{names}}",
+    "reasoning_prefix": "Reasoning: "
+  },
+  "platform_chat": {
+    "title_menu": "Open menu",
+    "title_sessions": "Sessions",
+    "title_edit_agent": "Edit agent",
+    "title_clear_chat": "Clear chat",
+    "title_actions": "Actions",
+    "title_session_state": "Session state",
+    "menu_sessions": "Sessions",
+    "menu_edit": "Edit",
+    "menu_clear_chat": "Clear chat",
+    "session_label": "Session:",
+    "session_none": "no context",
+    "err_with_message": "Error: {{message}}",
+    "stream_fallback_content": "An error occurred while processing your request.",
+    "err_short": "Error",
+    "err_occurred": "An error occurred",
+    "info_chat_cleared": "Chat cleared",
+    "warn_no_session": "No active session",
+    "warn_no_task_tracing": "No task ID for tracing"
+  },
+  "chat_messages": {
+    "empty_title": "Start a conversation",
+    "empty_text": "Send a message to chat with the agent"
+  },
+  "chat_input": {
+    "title_attach": "Attach file",
+    "title_remove_file": "Remove file",
+    "err_file_too_large": "File \"{{name}}\" is too large. Maximum {{max}}.",
+    "err_file_type": "File type not supported: {{name}}"
+  },
+  "bottom_toolbar": {
+    "title_select": "Select (V)",
+    "title_add_node": "Add node (A)",
+    "title_undo": "Undo (Cmd+Z)",
+    "title_redo": "Redo (Cmd+Shift+Z)",
+    "title_variables": "Variables"
+  },
+  "canvas_runner": {
+    "sse_connection_error": "Connection error"
+  },
+  "tool_picker": {
+    "title": "Add tools",
+    "err_load": "Failed to load tools: {{message}}",
+    "categories": "Categories",
+    "tag_all": "All",
+    "tag_reason": "Reason",
+    "tag_mcp": "MCP",
+    "tag_misc": "General",
+    "tag_math": "Math",
+    "tag_docs": "Documents",
+    "tag_api": "API integrations",
+    "tag_validation": "Validation",
+    "tag_flow": "Flows",
+    "tag_google_docs": "Google Docs",
+    "empty": "No tools",
+    "selected": "Selected: {{count}}",
+    "add_with_count": "Add ({{count}})",
+    "badge_flow": "Flow",
+    "badge_tool": "Tool"
+  },
+  "edge_condition_modal": {
+    "title": "Edge condition",
+    "heading": "Edge condition",
+    "mode_simple": "Simple mode",
+    "mode_python": "Python code",
+    "preview_label": "Result:",
+    "skip_no_condition": "Skip (no condition)",
+    "label_variable": "Variable",
+    "select_placeholder": "-- select --",
+    "label_value": "Value",
+    "variables_available": "Available variables:",
+    "python_hint_1": "The function check(state) must return True or False.",
+    "python_hint_2": "state is a dict with all variables of the current state.",
+    "err_variable": "Select a variable",
+    "err_value": "Enter a value",
+    "err_code": "Code must define check(state)",
+    "apply": "Apply",
+    "preview_python": "Python: check(state) -> bool"
+  },
+  "span_details": {
+    "section_llm": "LLM request / response",
+    "tab_prompt": "Prompt",
+    "tab_messages": "Messages ({{count}})",
+    "tab_tools": "Tools ({{count}})",
+    "structured_output": "Structured output",
+    "tab_response": "Response",
+    "empty_messages": "No messages",
+    "empty_span": "No span data",
+    "raw_json_title": "Raw JSON: {{name}}",
+    "raw_json_button_title": "Show raw JSON",
+    "role_system_prompt": "system prompt",
+    "role_assistant": "assistant",
+    "no_response_data": "No response data",
+    "modal_title": "Span details",
+    "section_main": "Overview",
+    "section_attributes": "Attributes",
+    "label_operation": "Operation:",
+    "label_kind": "Kind:",
+    "label_status": "Status:",
+    "label_duration": "Duration:",
+    "label_start_time": "Start time:",
+    "label_end_time": "End time:"
+  },
+  "code_docs": {
+    "header": "Documentation — {{language}}",
+    "loading": "Loading...",
+    "load_failed": "Could not load documentation",
+    "search_placeholder": "Search sections…",
+    "nav_aria": "Documentation sections",
+    "nav_globals": "Globals",
+    "nav_modules": "Modules",
+    "nav_state": "State",
+    "nav_builtins": "Builtins",
+    "nav_platform_tools": "Tools",
+    "nav_templates": "Templates"
+  },
+  "flow_skills": {
+    "err_exists": "Skill \"{{id}}\" already exists",
+    "created": "Skill \"{{name}}\" created",
+    "confirm_delete": "Delete skill \"{{name}}\"?",
+    "deleted": "Skill deleted"
+  },
+  "skills_tabs": {
+    "base_flow": "Base Flow",
+    "add_skill_button": "Skill",
+    "delete_skill_title": "Remove skill"
+  },
+  "variables_panel": {
+    "title": "Variables",
+    "add_title": "Add variable",
+    "empty": "No variables",
+    "dropdown_header": "Agent variables",
+    "confirm_delete": "Delete variable \"{{name}}\"?",
+    "delete_row_title": "Remove"
+  },
+  "flow_card": {
+    "skills_title": "Skills",
+    "add_skill_title": "Add skill",
+    "no_skills": "No skills",
+    "delete_title": "Delete",
+    "open_chat_title": "Open chat",
+    "edit_title": "Edit"
+  },
+  "chat_message": {
+    "breakpoint_continue": "Continue",
+    "breakpoint_view_state": "View state",
+    "role_user": "You",
+    "role_assistant": "Assistant",
+    "role_operator": "Operator",
+    "role_system": "System",
+    "operator_files": "Attached files",
+    "reasoning_title": "Reasoning",
+    "reasoning_section_observation": "Observation",
+    "reasoning_section_analysis": "Analysis",
+    "reasoning_section_plan": "Plan",
+    "reasoning_section_action": "Action",
+    "tool_call_label": "Tool: {{name}}",
+    "tool_result_label": "Result: {{name}}",
+    "show_tracing_title": "Open tracing",
+    "interrupt_operator_banner": "Waiting for an operator. The chat is on hold.",
+    "interrupt_oauth_banner": "External service authorization required",
+    "interrupt_oauth_button": "Authorize",
+    "integration_badge_title": "Connected: {{provider}} / {{service}}",
+    "integration_disconnect": "Disconnect",
+    "operator_reply_heading": "Operator"
+  },
+  "raw_json": {
+    "no_data": "No data",
+    "download_title": "Download JSON"
+  },
+  "tool_create": {
+    "title": "Add tool",
+    "option_new_title": "New tool",
+    "option_new_desc": "Create an inline tool with code",
+    "option_existing_title": "Existing",
+    "option_existing_desc": "Pick from the library"
+  },
+  "resource_editor": {
+    "rag": {
+      "label_namespace": "Namespace",
+      "placeholder_namespace": "company:docs",
+      "hint_namespace": "Namespace ID or scope for RAG",
+      "label_provider": "Provider",
+      "label_default_top_k": "Default Top K",
+      "hint_default_top_k": "Default number of results to return"
+    },
+    "llm": {
+      "label_provider": "Provider",
+      "label_model": "Model",
+      "placeholder_model": "openai/gpt-4o",
+      "hint_model": "Full model name",
+      "label_temperature": "Temperature",
+      "label_max_tokens": "Max tokens",
+      "placeholder_max_tokens": "Model default",
+      "label_api_key": "API key",
+      "placeholder_api_key": "@var:OPENROUTER_KEY",
+      "hint_api_key": "Direct key or @var:SECRET_NAME",
+      "label_base_url": "Base URL",
+      "placeholder_base_url": "https://openrouter.ai/api/v1",
+      "hint_base_url": "Provider base URL (optional)"
+    },
+    "prompt": {
+      "label_template": "Template",
+      "placeholder_template": "You are {{ role }}. Your task: {{ task }}",
+      "hint_template": "Jinja2 prompt template",
+      "label_variables": "Default variables (JSON)",
+      "hint_variables": "Default variable values"
+    },
+    "files": {
+      "label_bucket": "Bucket",
+      "hint_bucket": "S3 bucket name",
+      "label_prefix": "Prefix",
+      "hint_prefix": "Path prefix (optional)",
+      "label_endpoint": "Endpoint URL",
+      "hint_endpoint": "S3 endpoint URL (for MinIO)",
+      "label_region": "Region"
+    },
+    "cache": {
+      "label_namespace": "Namespace",
+      "hint_namespace": "Cache namespace prefix",
+      "label_ttl": "TTL (seconds)",
+      "hint_ttl": "Entry time-to-live in seconds"
+    },
+    "http": {
+      "label_base_url": "Base URL",
+      "placeholder_base_url": "https://api.example.com",
+      "label_headers": "Headers (JSON)",
+      "label_timeout": "Timeout (sec)",
+      "label_auth_type": "Auth type",
+      "auth_none": "None",
+      "auth_bearer": "Bearer token",
+      "auth_basic": "Basic auth",
+      "auth_api_key": "API key",
+      "label_auth_value": "Auth value",
+      "placeholder_auth_value": "@var:API_KEY",
+      "hint_auth_value": "Token or @var:SECRET_NAME"
+    },
+    "secret": {
+      "label_key": "Secret key",
+      "placeholder_key": "@var:SECRET_NAME",
+      "hint_key": "Reference in the form @var:SECRET_NAME"
+    },
+    "code": {
+      "hint_inline": "Inline code with functions and classes"
+    }
+  },
+  "flow_canvas": {
+    "fanin_input_hint": "Double-click: ANY or ALL. Drag connections to the port as usual.",
+    "context_menu_fan_in_policy": "Fan-in policy (ANY / ALL)",
+    "context_menu_fan_in_policy_disabled_hint": "Requires at least two incoming edges to this node.",
+    "incoming_policy_modal": {
+      "title": "Incoming edges",
+      "option_any_title": "ANY",
+      "option_any_desc": "Run the node when any incoming edge completes.",
+      "option_all_title": "ALL",
+      "option_all_desc": "Wait for all incoming edges (AND-join)."
+    },
+    "inherited_badge_title": "Inherited from base",
+    "tool_chip_readonly_title": "Tool reference only; editing is not available from the canvas",
+    "channel_badge": {
+      "telegram": "Telegram",
+      "email": "Email",
+      "whatsapp": "WhatsApp",
+      "sms": "SMS",
+      "webhook": "Webhook"
+    }
+  },
+  "skill_create": {
+    "title": "Create skill",
+    "err_id_required": "Enter skill ID",
+    "label_id": "Skill ID",
+    "label_name": "Name",
+    "label_init": "Initialization",
+    "copy_base": "Copy base flow",
+    "copy_named": "Copy \"{{id}}\"",
+    "empty_title": "Empty skill",
+    "empty_desc": "Create a skill from scratch, inheriting only the base flow",
+    "copy_desc": "Copy nodes and edges from the current skill",
+    "create": "Create"
+  },
+  "flows_app": {
+    "loading": "Loading Agent Builder...",
+    "redirect_auth": "Redirecting to authentication...",
+    "operator_denied_title": "Access denied",
+    "operator_denied_body": "The operator workbench and queue management are available to company administrators only.",
+    "operator_denied_back": "Open example_react"
+  },
+  "state_modal": {
+    "modal_title": "State",
+    "loading": "Loading state...",
+    "empty_no_data": "No state data",
+    "empty_hint": "State appears after the task has run"
+  },
+  "property_panel": {
+    "select_node": "Select a node to edit",
+    "select_resource": "Select a resource to edit"
+  },
+  "state_mapping_editor": {
+    "empty": "No mappings",
+    "hint_input": "state/var/const → parameter",
+    "hint_output": "result → state",
+    "add_mapping": "+ Add"
+  },
+  "editor": {
+    "load_agent_error": "Failed to load agent: {{message}}",
+    "skill_switched_base": "Switched to base flow",
+    "skill_switched_named": "Switched to skill: {{id}}",
+    "node_error": "Error in node \"{{nodeId}}\"",
+    "breakpoint_hit": "Breakpoint hit on node \"{{nodeId}}\". Click \"Continue\" to resume.",
+    "execution_done_fallback": "Execution finished",
+    "execution_finished_toast": "Execution finished",
+    "execution_error": "Execution error",
+    "variable_deleted": "Variable \"{{name}}\" removed",
+    "variable_saved": "Variable \"{{name}}\" saved",
+    "reinit_success": "Agent reinitialized from repository",
+    "reinit_confirm_message": "The agent will be reinitialized from the bundle in the repository. Unsaved editor changes will be lost.",
+    "reinit_confirm_title": "Reinitialize from repository",
+    "reinit_confirm_ok": "Reinitialize",
+    "cancel": "Cancel",
+    "save_reloading": "Flow saved, reloading...",
+    "save_updated": "Flow updated successfully",
+    "save_error": "Save error: {{message}}",
+    "unsaved_title": "Unsaved changes",
+    "unsaved_subtitle": "You have unsaved changes",
+    "unsaved_message": "Save changes before leaving the editor?",
+    "unsaved_confirm": "Save and exit",
+    "unsaved_cancel": "Cancel",
+    "unsaved_discard": "Exit without saving",
+    "panel_collapse": "Collapse",
+    "panel_expand": "Expand",
+    "panel_close": "Close",
+    "node_id_renamed": "Node ID: {{oldId}} → {{newId}}",
+    "trigger_enabled": "Trigger enabled",
+    "trigger_disabled": "Trigger disabled",
+    "trigger_deleted": "Trigger \"{{id}}\" deleted",
+    "trigger_saved": "Trigger \"{{id}}\" saved",
+    "state_viewer_opening": "Opening state viewer for context: {{contextId}}, task: {{taskId}}"
+  },
+  "llm_node": {
+    "schema_result_description": "Execution result",
+    "loading": "Loading...",
+    "field_name": "Name",
+    "placeholder_agent_name": "Agent name",
+    "field_description": "Description",
+    "placeholder_description": "What this agent does",
+    "field_tags": "Tags",
+    "prompt_label": "Prompt",
+    "prompt_placeholder": "You are a helpful assistant...",
+    "prompt_file_drop_hint": "Drag a file chip from «Attached files» here to insert a [FILE]…[/FILE] signature.",
+    "section_messages_history": "LLM message history scope",
+    "messages_history_hint": "The full dialog stays in state; only the selected slice is sent to the model (history is not deleted).",
+    "messages_filter_label": "Context for model requests",
+    "messages_filter_all": "Entire flow (all)",
+    "messages_filter_own": "This node only (own)",
+    "messages_filter_custom": "Selected nodes",
+    "messages_filter_no_nodes": "No nodes in the flow config.",
+    "section_output_mode": "Output mode",
+    "reload_from_bundle_title": "Reinitialize agent from repository (bundle)",
+    "output_mode_hint": "Tools Mode: the agent uses tools. Structured Output: JSON Schema for the answer.",
+    "structured_schema_hint": "JSON Schema for structured output",
+    "loop_mode_auto": "Auto — text ends the agent",
+    "loop_mode_explicit": "Explicit — only via exit tool",
+    "loop_mode_hint": "Auto: a text reply finishes the run. Explicit: only via the finish tool.",
+    "exit_tool_hint": "Which tool ends the agent loop",
+    "strict_mode_label": "Strict mode",
+    "strict_mode_hint": "When enabled, text without the exit tool triggers a reminder.",
+    "reminder_placeholder": "You did not call the tool to finish...",
+    "reminder_hint": "Custom reminder (optional)",
+    "max_iterations_hint": "Max iterations before forced exit",
+    "max_iterations_label": "Max iterations",
+    "loop_mode_label": "Loop mode",
+    "tools_mode_label": "Tools mode",
+    "tool_chip_remove_aria": "Remove tool {{id}} from list",
+    "section_tools": "Tools",
+    "inline_menu": "Inline ▼",
+    "add_tool": "+ Add",
+    "empty_tools": "No tools",
+    "field_name_required": "Name *",
+    "node_id_label": "Node ID *",
+    "output_mode_tools": "Tools",
+    "output_mode_structured": "Structured Output",
+    "output_schema_label": "Output Schema (JSON Schema)",
+    "output_schema_body_hint": "JSON Schema defines the agent response shape. The LLM returns data strictly matching this schema.",
+    "output_mapping_label": "Output Mapping (optional)",
+    "output_mapping_body_hint": "Maps fields from the JSON response to state fields. If empty, fields are written to state with the same names.",
+    "section_llm": "LLM",
+    "section_react_loop": "ReAct loop mode",
+    "exit_tool_label": "Exit Tool",
+    "reminder_text_label": "Reminder text",
+    "prompt_tool_id": "Enter tool ID:",
+    "prompt_label_required": "Prompt *",
+    "inline_add_tool": "Tool",
+    "inline_add_react_flow": "React flow",
+    "inline_add_function": "Function",
+    "inline_add_external_api": "External API",
+    "inline_add_remote_flow": "Remote flow"
+  },
+  "mcp_servers": {
+    "modal_title": "MCP servers",
+    "err_load": "Load error: {{message}}",
+    "err_url_required": "Enter a URL",
+    "err_headers_json": "Invalid Headers JSON",
+    "test_ok_tools": "Connected. Found {{count}} tools",
+    "test_fail_connection": "Connection error: {{message}}",
+    "err_with_message": "Error: {{message}}",
+    "err_required_fields": "Fill in required fields",
+    "server_updated": "Server \"{{name}}\" updated",
+    "server_added": "Server \"{{name}}\" added",
+    "synced_tools": "Synced {{count}} tools",
+    "err_sync": "Sync error: {{message}}",
+    "test_ok_short": "Connected. {{count}} tools",
+    "err_test_connection": "Connection error: {{message}}",
+    "delete_confirm_title": "Delete MCP server?",
+    "delete_confirm_message": "Delete server \"{{name}}\"? All related tools will be removed.",
+    "delete_confirm_ok": "Delete",
+    "server_deleted": "Server removed",
+    "loading": "Loading...",
+    "empty_title": "No MCP servers",
+    "empty_hint": "Add an MCP server to use external tools in agents",
+    "form_title_new": "New MCP server",
+    "form_title_edit": "Edit MCP server",
+    "field_server_id": "Server ID *",
+    "hint_server_id": "Latin letters, digits, _ and -",
+    "field_name": "Name *",
+    "field_url": "URL *",
+    "hint_mcp_endpoint": "MCP JSON-RPC endpoint",
+    "field_transport": "Transport",
+    "hint_transport": "Most servers use HTTP",
+    "field_description": "Description",
+    "placeholder_server_description": "Server description",
+    "field_headers_json": "Headers (JSON)",
+    "presets_label": "Presets:",
+    "hint_agent_variables": "In Headers (JSON), use @var:variable_name for secrets from agent variables.",
+    "test_checking": "Checking...",
+    "test_connection": "Test connection",
+    "cancel": "Cancel",
+    "save": "Save",
+    "add": "Add",
+    "title_test": "Test connection",
+    "title_sync": "Sync tools",
+    "title_edit": "Edit",
+    "title_delete": "Delete",
+    "last_sync": "Last sync:",
+    "tools_count": "{{count}} tools",
+    "headers_label": "Headers:"
+  },
+  "variables_modal": {
+    "modal_title": "Variables",
+    "err_load": "Load error: {{message}}",
+    "err_key_value": "Enter key and value",
+    "var_created": "Variable \"{{key}}\" created",
+    "delete_title": "Delete variable?",
+    "delete_message": "Delete variable \"{{key}}\"?",
+    "var_deleted": "Variable removed",
+    "loading": "Loading...",
+    "info_block": "Variables are available as @var:name in agent and MCP server configs. Secret values are hidden in the UI but available at runtime.",
+    "empty_user": "No user variables",
+    "system_vars_label": "System variables (read-only):",
+    "form_new": "New variable",
+    "field_key": "Key *",
+    "hint_key": "Latin letters and _",
+    "field_value": "Value *",
+    "secret_label": "Secret value (hide in UI)",
+    "add": "Add",
+    "add_tooltip": "Add variable",
+    "title_delete": "Delete"
+  },
+  "flows_sidebar": {
+    "section_all_flows": "All flows",
+    "create_flow_tooltip": "Create flow",
+    "back_to_flows": "Back to flows",
+    "footer_operator_tasks": "Support tasks",
+    "footer_sessions": "Sessions",
+    "footer_mcp": "MCP",
+    "footer_vars": "Variables",
+    "err_modal_not_loaded": "Modal is not loaded",
+    "flow_created": "Flow \"{{name}}\" created",
+    "err_create": "Create error: {{message}}",
+    "delete_flow_title": "Delete flow?",
+    "delete_flow_message": "Delete flow \"{{id}}\"? This cannot be undone.",
+    "delete_skill_title": "Delete skill?",
+    "delete_skill_message": "Delete skill \"{{id}}\"?",
+    "flow_deleted": "Flow deleted",
+    "skill_deleted": "Skill deleted",
+    "err_delete": "Delete error: {{message}}"
+  },
+  "sessions_modal": {
+    "modal_title": "Sessions",
+    "delete_confirm": "Delete this session?",
+    "delete_title": "Delete session",
+    "session_deleted": "Session deleted",
+    "filter_flow": "Flow:",
+    "all_flows": "All flows",
+    "empty": "No saved sessions",
+    "no_messages": "No messages",
+    "messages_count": "{{count}} messages",
+    "total_sessions": "Total sessions: {{count}}",
+    "continue_title": "Continue chat",
+    "delete_btn": "Delete"
+  },
+  "editor_header": {
+    "back": "Back",
+    "stop": "Stop",
+    "run": "Run",
+    "placeholder_flow_name": "Flow name",
+    "title_visual_mode": "Visual editor",
+    "title_code": "View code",
+    "btn_code": "Code",
+    "btn_publish": "Publish",
+    "status_draft": "Draft"
+  },
+  "node_types_sidebar": {
+    "triggers_title": "Triggers",
+    "search_placeholder": "Search nodes...",
+    "empty_triggers": "No triggers",
+    "add_trigger_title": "Add trigger"
+  },
+  "node_palette": {
+    "category_core": "Core",
+    "category_tools": "Tools",
+    "category_integrations": "Integrations",
+    "category_channels": "Channels",
+    "category_resources": "Resources",
+    "llm_node": {
+      "name": "LLM Node",
+      "description": "LLM with tools (ReAct)"
+    },
+    "code_node": {
+      "name": "Code Node",
+      "description": "Python function"
+    },
+    "external_api": {
+      "name": "External API",
+      "description": "HTTP API call"
+    },
+    "mcp": {
+      "name": "MCP Tool",
+      "description": "MCP server tool"
+    },
+    "remote_flow": {
+      "name": "Remote A2A",
+      "description": "External A2A endpoint"
+    },
+    "flow_node": {
+      "name": "Flow Node",
+      "description": "Nested flow (subflow)"
+    },
+    "channel": {
+      "name": "Channel",
+      "description": "Send to channels (Telegram, Email)"
+    },
+    "hitl_node": {
+      "name": "Operator queue",
+      "description": "Pause until a queue specialist"
+    },
+    "resource_code": {
+      "name": "Code",
+      "description": "Inline Python/JS code"
+    },
+    "resource_rag": {
+      "name": "RAG",
+      "description": "RAG namespace for search"
+    },
+    "resource_files": {
+      "name": "Files",
+      "description": "S3/MinIO file storage"
+    },
+    "resource_prompt": {
+      "name": "Prompt",
+      "description": "Prompt template"
+    },
+    "resource_llm": {
+      "name": "LLM",
+      "description": "LLM model"
+    },
+    "resource_secret": {
+      "name": "Secret",
+      "description": "Secret from variables"
+    },
+    "resource_http": {
+      "name": "HTTP",
+      "description": "HTTP endpoint"
+    },
+    "resource_cache": {
+      "name": "Cache",
+      "description": "Redis cache namespace"
+    }
+  },
+  "llm_config_editor": {
+    "label_model": "Model",
+    "loading": "Loading...",
+    "label_temperature": "Temperature",
+    "label_max_tokens": "Max tokens (optional)",
+    "placeholder_auto": "Auto",
+    "label_provider": "Provider",
+    "option_system_default": "System default",
+    "hint_provider": "Choose a provider or use the system default",
+    "credentials_for": "Credentials for {{provider}}",
+    "label_api_key": "API key",
+    "placeholder_api_key": "sk-... or @var:my_api_key",
+    "hint_api_key": "Direct value or @var:variable_name",
+    "label_base_url": "Base URL (optional)",
+    "placeholder_base_url": "https://api.openai.com/v1",
+    "advanced_toggle": "Advanced",
+    "advanced_hint": "OpenAI-compatible API fields; your provider may ignore some. Full control: JSON block below.",
+    "placeholder_top_p_default": "1",
+    "placeholder_top_k_example": "40",
+    "placeholder_penalty_default": "0",
+    "placeholder_seed_example": "42",
+    "label_freq_penalty": "frequency_penalty",
+    "label_pres_penalty": "presence_penalty",
+    "label_seed": "seed",
+    "label_reasoning": "reasoning_effort",
+    "reasoning_unset": "Unset",
+    "label_extra_json": "Extra parameters (JSON)",
+    "hint_extra_json": "Object merged into the request body last; overrides values from the fields above.",
+    "err_extra_json": "Invalid JSON in extra parameters",
+    "err_extra_not_object": "Extra parameters must be a JSON object {}, not an array"
+  },
+  "test_panel": {
+    "running": "Running...",
+    "hint_execute": "Click Execute to run",
+    "err_run": "Execution error",
+    "label_response": "Response:",
+    "state_unchanged": "State unchanged",
+    "config_valid": "Configuration is valid",
+    "success": "Completed successfully",
+    "input_state_title": "Input State (JSON)",
+    "reset": "Reset",
+    "title": "Test",
+    "validate": "Validate",
+    "execute": "Execute",
+    "result_title": "Result",
+    "view_diff": "Diff",
+    "view_full": "Full"
+  },
+  "node_defaults": {
+    "name_llm_node": "New LLM node",
+    "name_function": "New function",
+    "name_flow": "Nested flow",
+    "name_api": "New API",
+    "name_remote_flow": "New remote flow (A2A)",
+    "name_mcp": "MCP Tool",
+    "name_channel": "Send to Channel",
+    "name_hitl_node": "Operator queue node",
+    "python_stub": "async def run(state):\n    \"\"\"Process state.\"\"\"\n    return state\n"
+  },
+  "operator": {
+    "page_title": "Support tasks",
+    "dialog_section": "Session messages",
+    "task_payload_label": "Task payload",
+    "pick_task": "Select a task in the board",
+    "detail_loading": "Loading…",
+    "detail_unavailable": "Could not load this task",
+    "btn_close_panel": "Close",
+    "theme_to_light": "Light theme",
+    "theme_to_dark": "Dark theme",
+    "btn_claim": "Claim",
+    "btn_send_user": "Message to user",
+    "btn_complete": "Complete and resume agent",
+    "placeholder_message": "Text for the user chat stream",
+    "placeholder_resolution": "Outcome for resume (tool result)",
+    "msg_claimed": "Task claimed",
+    "msg_sent": "Message sent to stream",
+    "msg_completed": "Handoff completed, resume started",
+    "queues_title": "Operator queues",
+    "queues_empty": "No queues yet. Create one: slug must match assignee_queue in hitl_operator_task and hitl_node.",
+    "queue_name_placeholder": "Name (e.g. Support line)",
+    "queue_slug_placeholder": "Slug (e.g. support)",
+    "queue_create": "Create queue",
+    "msg_queue_created": "Queue created; you were added as an operator",
+    "err_queue_name_required": "Enter a queue name",
+    "err_queue_slug_required": "Enter a queue slug (same as in the agent tool)",
+    "btn_join_queue": "Join as operator",
+    "btn_leave_queue": "Leave queue",
+    "msg_joined_queue": "You were added to the queue; tasks and live updates apply to this queue",
+    "msg_left_queue": "You left the queue",
+    "err_join_queue_auth": "Sign in to join a queue",
+    "err_leave_queue_auth": "Sign in to leave a queue",
+    "card_no_title": "No title",
+    "btn_single_reply": "Reply",
+    "btn_return_to_agent": "Return to agent",
+    "placeholder_single_reply": "Your reply (becomes tool result for agent)",
+    "takeover_no_messages": "No messages yet",
+    "section_chat_history": "Chat history",
+    "section_operator_dialog": "Operator dialog",
+    "role_operator": "Operator",
+    "role_user": "User",
+    "role_agent": "Agent",
+    "tooltip_show_task_data": "Show task data",
+    "tooltip_hide_task_data": "Hide task data",
+    "tooltip_reply": "Send",
+    "tooltip_reply_and_close": "Reply and return to agent",
+    "tooltip_attach_file": "Attach file",
+    "placeholder_composer": "Type a message...",
+    "file_upload_failed": "File upload failed",
+    "file_too_large": "File too large (max 25 MB)",
+    "files_attached": "Files attached",
+    "download_file": "Download"
+  },
+  "hitl_node_editor": {
+    "queue_picker_title": "Operator queue",
+    "queue_picker_search_placeholder": "Search by name or slug…",
+    "queue_picker_loading": "Loading queues…",
+    "queue_picker_empty": "No queues yet. Create one on Support tasks (/flows/operator).",
+    "queue_picker_no_match": "No matches",
+    "queue_picker_refresh": "Refresh list",
+    "queue_picker_forbidden": "Only company admins can load the queue list. Enter the slug manually below.",
+    "queue_picker_load_failed": "Failed to load queues: {message}",
+    "queue_slug_label": "Queue slug",
+    "queue_slug_hint": "Same slug as in the queue list on Support tasks (/flows/operator); create the queue there first.",
+    "queue_slug_manual_hint": "Type a slug manually or pick a row in the list above.",
+    "queue_slug_mapping_hint": "You can set the queue dynamically: in the Input tab, parameter assignee_queue (@state: / @var: / constant) overrides the slug saved in config.",
+    "handoff_block_title": "Operator handoff",
+    "handoff_input_mapping_hint": "In the Input tab, map assignee_queue, task_title, user_facing_message, or question from state/variables; resolved values override the fields below at runtime.",
+    "task_title_label": "Task title (fallback)",
+    "task_title_mapping_hint": "If input_mapping provides task_title, it wins.",
+    "user_message_label": "User-facing text (fallback)",
+    "user_message_mapping_hint": "If input_mapping provides user_facing_message or question, one of those wins.",
+    "handoff_mode_label": "Mode",
+    "handoff_mode_single_reply": "Single reply",
+    "handoff_mode_takeover": "Dialog takeover"
+  },
+  "execution_panel": {
+    "title": "Run agent",
+    "persist_aria": "Same session context across runs",
+    "help_hint_label": "Help: session context",
+    "state_title": "Show State",
+    "tracing_title": "Tracing",
+    "mocks_title": "Configure mocks",
+    "close_panel": "Close panel",
+    "attach_files": "Attach files",
+    "send_answer": "Send answer",
+    "continue_run": "Continue execution",
+    "stop": "Stop",
+    "run_retry": "Run again",
+    "run_start": "Run",
+    "placeholder_answer": "Enter your answer...",
+    "placeholder_message": "Message for the agent...",
+    "error_heading": "Error",
+    "close": "Close",
+    "copy": "Copy",
+    "copied": "Copied!",
+    "result_heading": "Result",
+    "clear": "Clear",
+    "mocks_section_title": "Mock configuration",
+    "persist_context_help": "On: each run uses the same contextId — one session state continues. Off: each run starts a new context.",
+    "label_input": "Input",
+    "label_output": "Output",
+    "waiting_for_response": "Waiting for response...",
+    "sidebar_run_title": "Run"
+  },
+  "llm_mocks_editor": {
+    "empty_state": "No mock responses. Add some to test without real node calls.",
+    "add_mock": "+ Add mock response",
+    "hint": "Pick a node on the graph. For an agent (llm_node) you can mock the LLM reply or select a tool and inject its result.",
+    "answer_n": "Response {{n}}",
+    "no_nodes": "No nodes on the graph",
+    "select_node": "Node…",
+    "llm_only_queue": "LLM only (response queue)",
+    "type_text": "Text",
+    "type_tool_call": "Tool call",
+    "type_json": "JSON",
+    "remove_row": "Remove",
+    "text_reply_label": "Text reply",
+    "placeholder_text": "Text from the node or tool...",
+    "tool_name_label": "Tool name",
+    "args_json_label": "Arguments (JSON)",
+    "json_reply_label": "Node JSON response",
+    "add_another": "+ Add another",
+    "placeholder_tool_id": "calculator"
+  },
+  "flow_variable_editor": {
+    "title_new": "New variable",
+    "title_edit": "Edit: {{name}}",
+    "inherited_badge": "from base",
+    "field_variable_name": "Variable name",
+    "placeholder_variable_key": "my_variable",
+    "field_value": "Value",
+    "mode_text": "Text",
+    "mode_json": "JSON",
+    "placeholder_value_plain": "Variable value",
+    "hint_value_json": "JSON for complex structures",
+    "hint_value_text": "Plain text value",
+    "field_title": "Title",
+    "field_description": "Description",
+    "field_order": "Order",
+    "placeholder_title": "Display title",
+    "placeholder_description": "Shown in agent context",
+    "placeholder_order": "0",
+    "hint_order": "Display order (optional)",
+    "field_public": "Public (visible on flow card)",
+    "btn_cancel": "Cancel",
+    "btn_save": "Save",
+    "btn_create": "Create",
+    "err_name_required": "Variable name is required",
+    "err_json_invalid": "Invalid JSON format",
+    "err_to_json": "Could not convert to JSON"
+  },
+  "code_editor": {
+    "copied": "Code copied",
+    "copy_failed": "Could not copy",
+    "no_templates": "No templates",
+    "title_code": "Code",
+    "templates": "Templates",
+    "docs": "Docs",
+    "more_actions": "More actions",
+    "back": "Back",
+    "language": "Language",
+    "fullscreen_min": "Minimize",
+    "fullscreen_max": "Fullscreen",
+    "node_file_drop_hint": "Drag a file chip from «Attached files» into the editor to insert get_files + reader.read (same as the read_file tool).",
+    "node_file_drop_python_only": "Dropping an attached file into code is supported only for Python."
+  },
+  "code_node_editor": {
+    "editor_section_title": "Editor",
+    "pane_code": "Code",
+    "pane_schema": "Schema",
+    "parameters_schema_hint": "JSON Schema for the tool argument object for the LLM (type: object, properties, required, field constraints). Single source for the tool parameter schema."
+  },
+  "code_modal": {
+    "title": "Agent code",
+    "copy_ok": "Code copied to clipboard",
+    "copy_fail": "Could not copy code",
+    "copy_title": "Copy"
+  },
+  "base_node_editor": {
+    "err_no_type": "Node type is missing",
+    "validation_ok": "Validation succeeded",
+    "validation_failed": "Validation failed",
+    "validation_error": "Validation error: {{message}}",
+    "execute_ok": "Execution succeeded",
+    "execute_failed": "Execution failed",
+    "execute_error": "Execution error: {{message}}",
+    "node_id_empty": "Node ID cannot be empty",
+    "node_id_format": "Node ID must start with a letter and contain only letters, digits and _",
+    "node_id_hint": "Unique node id (latin letters, digits, _)",
+    "node_id_locked_hint": "The ID cannot be changed after the node is created. A node created with «Duplicate» from the card menu can be renamed once.",
+    "node_id_rename_once_hint": "Set a unique ID once; after you save it, it cannot be changed again.",
+    "section_main": "General",
+    "placeholder_node_name": "Node name",
+    "placeholder_node_description": "What this node does",
+    "placeholder_node_id": "my_node_id",
+    "field_resources": "Resources",
+    "input_state_section_title": "Input State (JSON)",
+    "remove_resource": "Remove resource",
+    "reset_input_state": "Reset",
+    "resources_drop_hint": "Drop resources onto this node or add global resources on the canvas",
+    "override_render_fields": "Override renderFields() in the subclass",
+    "attached_files_label": "Attached files",
+    "attached_files_hint": "Files are merged into state.files when a new flow session starts (like message attachments).",
+    "node_id_help_aria": "Help for Node ID field",
+    "attached_files_help_aria": "Help for attached files",
+    "attach_file": "Attach file",
+    "file_chip_drag_hint": "Drag into the LLM prompt or into Python code (code node)",
+    "remove_attached_file": "Remove file",
+    "files_api_missing": "File upload service is not available",
+    "attached_files_upload_ok": "Files attached",
+    "attached_files_upload_err": "Upload failed: {{message}}"
+  },
+  "json_field_editor": {
+    "copied": "Copied",
+    "copy_failed": "Could not copy",
+    "copy_title": "Copy",
+    "fs_exit": "Exit fullscreen (Esc)",
+    "fs_enter": "Fullscreen"
+  },
+  "edge_labels": {
+    "condition_title": "Condition: {{condition}}"
+  },
+  "execution_runner": {
+    "err_flow_id": "flow-id is not set",
+    "files_attached": "\n\nAttached files: {{files}}",
+    "err_unknown": "Unknown error",
+    "err_node": "Node execution error",
+    "err_failed": "Execution failed with an error"
+  },
+  "tracing_modal": {
+    "title": "Tracing",
+    "empty_hint": "Traces will appear after tasks run",
+    "loading": "Loading traces...",
+    "no_data": "No trace data"
+  },
+  "node_modal": {
+    "titles": {
+      "llm_node": "LLM Node",
+      "remote_flow": "Remote A2A flow",
+      "external_api": "External API Node",
+      "mcp": "MCP Tool Node",
+      "flow": "Flow Node",
+      "code": "Code Node",
+      "channel": "Channel Node"
+    },
+    "common": {
+      "title_edit_default": "Edit node",
+      "override_subclass": "Override renderMainContent() in the subclass",
+      "node_id_label": "Node ID *",
+      "field_name": "Name",
+      "sidebar_node_id": "Node ID",
+      "state_section_title": "State and messages",
+      "output_key_label": "Output Key",
+      "output_key_hint": "State field for the result (defaults to node_id)",
+      "save_to_messages_label": "Save to messages",
+      "message_field_label": "Message Field",
+      "message_field_placeholder": "Default: state diff",
+      "message_field_hint": "Field written to messages (empty = state diff)"
+    },
+    "remote_flow": {
+      "placeholder_name": "Remote agent",
+      "connection_title": "Connection",
+      "url_label": "URL *",
+      "skill_id_label": "Skill ID",
+      "auth_headers_label": "Auth Headers (JSON)",
+      "url_hint": "Supports @var:path (e.g. @var:config.agent_url)",
+      "auth_headers_hint": "Supports @var:path for variables",
+      "input_mapping_hint": "Which state fields to pass to the remote agent",
+      "err_url": "URL is required",
+      "err_auth_headers": "Invalid Auth Headers JSON"
+    },
+    "external_api": {
+      "placeholder_name": "API request",
+      "url_label": "URL *",
+      "auth_headers_label": "Auth Headers (JSON)",
+      "parameters_label": "Parameters (JSON)",
+      "state_mapping_label": "State Mapping (JSON)",
+      "var_path_hint": "Supports @var:path for variables",
+      "method_label": "Method",
+      "parameters_hint": "source: @state:path or @var:name. location: query, path, body, header",
+      "state_mapping_hint": "Map API response fields into state",
+      "err_url": "URL is required",
+      "err_auth_headers": "Invalid Auth Headers JSON",
+      "err_parameters": "Invalid Parameters JSON",
+      "err_state_mapping": "Invalid State Mapping JSON"
+    },
+    "mcp": {
+      "placeholder_name": "MCP tool call",
+      "section_title": "MCP server and tool",
+      "headers_label": "Headers (JSON)",
+      "state_mapping_label": "State Mapping (JSON)",
+      "server_label": "MCP server *",
+      "tool_label": "Tool *",
+      "select_server": "Select server...",
+      "select_tool": "Select tool...",
+      "sync_tools_hint": "Sync tools on the MCP servers page",
+      "tool_params_label": "Tool parameters",
+      "headers_hint": "Extra headers (override server defaults)",
+      "state_mapping_hint": "Map MCP tool result into state",
+      "err_load_servers": "Failed to load MCP servers: {{message}}",
+      "err_server": "MCP server is required",
+      "err_tool": "Tool is required",
+      "err_headers": "Invalid Headers JSON",
+      "err_state_mapping": "Invalid State Mapping JSON"
+    },
+    "flow": {
+      "placeholder_name": "Order handler",
+      "section_title": "Callee flow",
+      "flow_label": "Flow *",
+      "flow_hint": "Nested flow to invoke",
+      "skill_label": "Skill",
+      "skill_hint": "Skill of the nested flow",
+      "select_flow": "Select flow...",
+      "err_target_flow": "Target flow is required",
+      "editor_flow_id": "Flow ID"
+    },
+    "code": {
+      "placeholder_name": "Classifier",
+      "field_language": "Language",
+      "field_mode": "Mode",
+      "mode_inline": "Inline",
+      "mode_path": "Path",
+      "mode_tool": "Tool",
+      "tool_id_label": "Tool ID *",
+      "tool_id_hint": "Load tool from registry",
+      "function_path_label": "Function Path *",
+      "help_title": "Help",
+      "help_after_execute": "— function with parameters (args, state)",
+      "help_after_run": "— simple function (state only)",
+      "help_after_args": "— parameters from input_mapping",
+      "help_after_state": "— response",
+      "code_label_unused": "Code (unused)",
+      "code_label": "Code",
+      "err_tool_id": "Enter Tool ID",
+      "err_function_path": "Enter function path",
+      "err_code": "Enter code",
+      "err_parameters_schema_invalid": "Invalid parameters_schema: type must be object with a properties object"
+    },
+    "channel": {
+      "err_node_id": "Node ID is required",
+      "err_channel": "Select a channel",
+      "err_headers": "Invalid Headers JSON",
+      "field_channel": "Channel",
+      "field_action": "Action",
+      "var_hint": "Use @var:name to reference a variable",
+      "actions": {
+        "send_message": "Send message",
+        "send_photo": "Send photo",
+        "send_document": "Send document",
+        "send_email": "Send email",
+        "send_sms": "Send SMS",
+        "post": "POST request"
+      },
+      "field_parse_mode": "Parse mode",
+      "field_smtp_host": "SMTP host",
+      "field_from_email": "From email",
+      "field_url": "URL",
+      "field_headers_json": "Headers (JSON)",
+      "placeholder_node_id": "send_telegram"
+    }
+  },
+  "flow_create": {
+    "title": "Create flow",
+    "subtitle": "Choose a template",
+    "intro": "Pick the agent type that fits your task",
+    "cancel": "Cancel",
+    "err": "Error: {{message}}",
+    "templates": {
+      "react": {
+        "name": "React flow",
+        "description": "ReAct loop: reasoning and action. Best for complex tasks with tools."
+      },
+      "graph": {
+        "name": "Graph flow",
+        "description": "Graph-shaped execution. Good for sequential steps and conditional edges."
+      },
+      "multi_agent": {
+        "name": "Multi-flow",
+        "description": "Nested flows and llm_nodes for multi-step scenarios."
+      },
+      "code": {
+        "name": "Code flow",
+        "description": "Single code node (Python): transforms, computations, or a narrow tool callable from other flows."
+      },
+      "external": {
+        "name": "External flow",
+        "description": "External (A2A) flow via HTTP to an existing API or service."
+      }
+    },
+    "gen": {
+      "react": {
+        "flow_name": "New React flow",
+        "description": "Agent description",
+        "tags": "new,react",
+        "prompt": "You are a helpful assistant ready to help the user."
+      },
+      "graph": {
+        "flow_name": "New Graph flow",
+        "description": "Agent description",
+        "tags": "new,graph"
+      },
+      "multi_agent": {
+        "flow_name": "New Multi-flow",
+        "description": "Nested flows",
+        "tags": "new,multi-flow",
+        "prompt": "You are a supervisor coordinating nested flows and tools. Delegate to the right nodes."
+      },
+      "code": {
+        "flow_name": "New Code flow",
+        "description": "Code-node flow",
+        "tags": "new,code"
+      },
+      "external": {
+        "flow_name": "New External flow",
+        "description": "External flow (A2A)",
+        "tags": "new,external"
+      }
+    }
+  },
+  "tool_editor_modal": {
+    "title_create": "Create Inline Tool",
+    "title_edit": "Edit Tool",
+    "err_editors": "Editors are not initialized",
+    "code_valid": "Code is valid",
+    "validation_error": "Validation error: {{message}}",
+    "execute_ok": "Executed successfully",
+    "execute_error": "Execution error: {{message}}",
+    "err_name": "Name is required",
+    "err_code": "Code is required",
+    "field_name": "Name",
+    "placeholder_name": "Tool name",
+    "field_description": "Description",
+    "placeholder_description": "What does this tool do?",
+    "field_react_role": "ReAct role",
+    "option_standard": "Standard tool",
+    "option_reason": "Reason — reasoning step",
+    "option_exit": "Exit — completion",
+    "react_role_hint": "Reason and Exit change behavior in the ReAct loop",
+    "code_label": "Code",
+    "error_unknown": "Unknown error",
+    "err_parameters_schema": "Invalid JSON in parameters_schema",
+    "err_parameters_schema_invalid": "parameters_schema must be an object with type: object and properties"
+  },
+  "inline_tool_modal": {
+    "title_create": "Create {{label}}",
+    "title_edit": "Edit {{label}}",
+    "types": {
+      "code": "Code",
+      "llm_node": "LLM Node",
+      "flow": "Flow",
+      "external_api": "External API",
+      "remote_flow": "Remote A2A flow",
+      "mcp": "MCP Tool"
+    },
+    "type_fallback": "Tool",
+    "err_editor_missing": "Editor not found",
+    "err_code_tool": "Tool code is required",
+    "err_prompt_llm": "Prompt is required for llm_node",
+    "err_name_required": "Name is required",
+    "err_unknown_type": "Unknown tool type: {{type}}",
+    "err_parameters_schema_invalid": "Invalid parameters_schema for the LLM (type: object and properties required)",
+    "create": "Create",
+    "save": "Save"
+  },
+  "trigger_editor": {
+    "title_create": "Create trigger",
+    "title_edit": "Edit trigger",
+    "tabs_config": "Configuration",
+    "tabs_mapping": "Input Mapping",
+    "tabs_output": "Output Actions",
+    "field_trigger_id": "Trigger ID",
+    "field_name": "Name",
+    "field_trigger_type": "Trigger type",
+    "mapping_output_title": "Output Mapping",
+    "mapping_hint": "Map trigger payload into agent state. Left: state path, right: payload path.",
+    "mapping_examples_title": "Example paths for {{type}}",
+    "mapping_select_type": "Select a trigger type",
+    "output_title": "Output Actions",
+    "output_hint": "Actions after the agent finishes. Usually sending the reply to a channel.",
+    "add_action": "Add action",
+    "err_trigger_id": "Trigger ID is required",
+    "err_type": "Select a trigger type",
+    "telegram": {
+      "section": "Telegram Bot",
+      "bot_token": "Bot Token",
+      "bot_token_hint": "Bot token. Type @ to pick a variable",
+      "allowed_users": "Allowed user IDs",
+      "allowed_users_hint": "Comma-separated. Empty = all users"
+    },
+    "cron": {
+      "section": "Cron Schedule",
+      "cron": "Cron expression",
+      "cron_hint": "Format: minute hour day-of-month month day-of-week",
+      "timezone": "Timezone",
+      "initial_content": "Initial content"
+    },
+    "webhook": {
+      "section": "Webhook",
+      "secret": "Secret Token",
+      "secret_hint": "For request verification (X-Secret-Token header)",
+      "allowed_ips": "Allowed IPs",
+      "allowed_ips_hint": "Comma-separated. Empty = all IPs"
+    },
+    "email": {
+      "section": "Email",
+      "provider": "Provider",
+      "imap_host": "IMAP Host",
+      "imap_user": "IMAP User",
+      "imap_password": "IMAP Password"
+    },
+    "redis": {
+      "section": "Redis Pub/Sub",
+      "channel": "Channel",
+      "pattern_subscribe": "Pattern subscribe",
+      "pattern_hint": "Use pattern matching for the channel"
+    },
+    "output_action": {
+      "mapping_json": "Mapping (JSON)",
+      "condition": "Condition",
+      "remove_title": "Remove"
+    },
+    "types": {
+      "telegram": {
+        "name": "Telegram Bot",
+        "description": "Runs on Telegram bot messages"
+      },
+      "cron": {
+        "name": "Cron Schedule",
+        "description": "Runs on a schedule"
+      },
+      "webhook": {
+        "name": "HTTP Webhook",
+        "description": "Runs on HTTP POST"
+      },
+      "email": {
+        "name": "Email",
+        "description": "Runs when email arrives"
+      },
+      "redis": {
+        "name": "Redis Pub/Sub",
+        "description": "Runs on Redis events"
+      }
+    },
+    "channels": {
+      "telegram": "Telegram",
+      "email": "Email",
+      "whatsapp": "WhatsApp",
+      "sms": "SMS",
+      "webhook": "Webhook"
+    },
+    "ex": {
+      "telegram": {
+        "message_text": "Message text",
+        "message_chat_id": "Chat ID",
+        "message_from_id": "Sender ID",
+        "message_from_username": "Sender username"
+      },
+      "webhook": {
+        "body_data": "Body data",
+        "headers_x_custom": "Header",
+        "query_param": "Query parameter"
+      },
+      "cron": {
+        "scheduled_time": "Scheduled time"
+      },
+      "email": {
+        "from": "Sender email",
+        "subject": "Subject",
+        "body": "Body"
+      },
+      "redis": {
+        "channel": "Redis channel",
+        "data": "Message data"
+      }
+    }
+  }
+}

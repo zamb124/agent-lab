@@ -32,6 +32,41 @@ if TYPE_CHECKING:
 logger = get_logger(__name__)
 
 
+def _infer_node_type_for_tool(node: "BaseNode") -> str:
+    """Тип ноды для NodeConfig: из config или по классу (Zero-Guess)."""
+    raw = node.config.get("type") if node.config else None
+    if raw:
+        return raw if isinstance(raw, str) else str(raw)
+    from apps.flows.src.runtime.nodes import (
+        ChannelNode,
+        CodeNode,
+        ExternalAPINode,
+        FlowNode,
+        LlmNode,
+        MCPNode,
+        RemoteFlowNode,
+    )
+
+    if isinstance(node, LlmNode):
+        return NodeType.LLM_NODE.value
+    if isinstance(node, CodeNode):
+        return NodeType.CODE.value
+    if isinstance(node, FlowNode):
+        return NodeType.FLOW.value
+    if isinstance(node, RemoteFlowNode):
+        return NodeType.REMOTE_FLOW.value
+    if isinstance(node, ExternalAPINode):
+        return NodeType.EXTERNAL_API.value
+    if isinstance(node, MCPNode):
+        return NodeType.MCP.value
+    if isinstance(node, ChannelNode):
+        return NodeType.CHANNEL.value
+    raise ValueError(
+        f"Не удалось определить type ноды для as_tool: {type(node).__name__}, "
+        "задайте 'type' в config"
+    )
+
+
 def _build_pydantic_schema(args_schema_dict: Optional[Dict[str, Any]]) -> type:
     """Строит Pydantic модель из args_schema для OpenAI tools."""
     if not args_schema_dict:
@@ -87,7 +122,14 @@ class NodeAsToolWrapper(BaseTool):
                 raise ValueError(f"Node config requires 'tool_id' or 'node_id' field: {node_config}")
             
             self._args_schema_dict = node_config.get("args_schema")
-            
+            if self._args_schema_dict is None and str(node_type) == NodeType.LLM_NODE.value:
+                self._args_schema_dict = {
+                    "request": {
+                        "type": "string",
+                        "description": "Запрос к субагенту",
+                    },
+                }
+
             self.node_config = NodeConfig(
                 node_id=node_id,
                 name=node_config.get("name", node_id),
@@ -107,11 +149,49 @@ class NodeAsToolWrapper(BaseTool):
         self.description = self.node_config.description or f"Вызов ноды {self.node_config.name}"
         self.tags = self.node_config.tags or [self.node_config.type]
         self._node: Optional["BaseNode"] = None
-        
+        self._bound_node: Optional["BaseNode"] = None
+
         self.args_schema = _build_pydantic_schema(self._args_schema_dict)
+
+    @classmethod
+    def from_base_node(
+        cls,
+        node: "BaseNode",
+        tool_name: Optional[str] = None,
+        tool_description: Optional[str] = None,
+    ) -> "NodeAsToolWrapper":
+        """
+        Один канон с реестром: та же обёртка, что и для inline-нод, с привязкой к уже созданному экземпляру.
+        """
+        cfg = dict(node.config) if node.config else {}
+        node_type = _infer_node_type_for_tool(node)
+        merged = {
+            **cfg,
+            "type": node_type,
+            "tool_id": node.node_id,
+            "node_id": node.node_id,
+            "name": tool_name or cfg.get("name") or node.node_id,
+            "description": tool_description
+            or cfg.get("description")
+            or getattr(node, "description", None)
+            or f"Вызов ноды {node.node_id}",
+        }
+        if not merged.get("args_schema"):
+            merged["args_schema"] = {
+                "request": {
+                    "type": "string",
+                    "description": "Запрос к ноде",
+                }
+            }
+        wrapper = cls(merged)
+        wrapper._bound_node = node
+        wrapper.name = sanitize_tool_name(merged["name"])
+        return wrapper
 
     async def _get_node(self) -> "BaseNode":
         """Lazy создание ноды."""
+        if self._bound_node is not None:
+            return self._bound_node
         if self._node is None:
             if self._raw_config:
                 node_dict = dict(self._raw_config)
@@ -231,13 +311,24 @@ class NodeAsToolWrapper(BaseTool):
         self, parent_state: ExecutionState, args: Dict[str, Any]
     ) -> ExecutionState:
         """Создает изолированный state для субагента."""
+        text = args.get("query")
+        if text is None:
+            text = args.get("content")
+        if text is None:
+            text = args.get("request")
+        if text is None or (isinstance(text, str) and not text.strip()):
+            raise ValueError(
+                "Аргументы вызова llm_node как tool должны содержать непустой "
+                "'query', 'content' или 'request'"
+            )
+
         nested_state = ExecutionState(
             task_id=parent_state.task_id,
             context_id=parent_state.context_id,
             session_id=parent_state.session_id,
             user_id=parent_state.user_id,
             variables=parent_state.variables.copy(),
-            content=args.get("query", args.get("content", "")),
+            content=text if isinstance(text, str) else str(text),
             messages=[],
             skill_id=parent_state.skill_id,
             flow_config_version=parent_state.flow_config_version,
@@ -267,10 +358,25 @@ class NodeAsToolWrapper(BaseTool):
     def _extract_response(self, result: Any) -> Any:
         """Извлекает response из результата."""
         if isinstance(result, ExecutionState):
-            return result.response or str(result.model_dump(exclude_none=False))
+            if result.response is not None and str(result.response).strip() != "":
+                return result.response
+            if result.result is not None:
+                return result.result
+            raise ValueError(
+                "Нода завершилась без непустого state.response и без state.result "
+                "после вызова как tool"
+            )
         if isinstance(result, dict):
-            return result.get("response", result.get("result", str(result)))
-        return str(result)
+            if "response" in result and result["response"] is not None:
+                return result["response"]
+            if "result" in result:
+                return result["result"]
+            raise ValueError(
+                f"Результат ноды-dict без полей 'response' или 'result': keys={list(result.keys())}"
+            )
+        if result is None:
+            raise ValueError("Результат вызова ноды как tool — None")
+        return result
 
     def __repr__(self) -> str:
         return f"NodeAsToolWrapper({self.node_config.node_id})"

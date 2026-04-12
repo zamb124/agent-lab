@@ -164,6 +164,52 @@ class TestAskUserTool:
 
         assert exc_info.value.question == "Как вас зовут?"
 
+    @pytest.mark.asyncio
+    async def test_registry_builtin_precedence_over_repository_template(self, app):
+        """Для tool_id с процессным builtin materialize возвращает FunctionTool, не CodeTool из БД."""
+        from apps.flows.src.container import get_container
+        from apps.flows.src.tools.decorator import FunctionTool
+
+        container = get_container()
+        tool = await container.tool_registry.create_tool({"tool_id": "ask_user"})
+        assert isinstance(tool, FunctionTool)
+        assert tool.name == "ask_user"
+
+    @pytest.mark.asyncio
+    async def test_registry_create_tool_from_repository_without_builtin(self, app, unique_id):
+        """Если tool_id не зарегистрирован как builtin, подтягивается шаблон из tool_repository → CodeTool."""
+        from apps.flows.src.container import get_container
+        from apps.flows.src.models import ToolReference
+        from apps.flows.src.tools.base import CodeTool
+
+        container = get_container()
+        tid = f"repo_only_{unique_id}"
+        await container.tool_repository.set(
+            ToolReference(
+                tool_id=tid,
+                code="async def execute(args, state):\n    return 'from_repo'",
+            )
+        )
+        tool = await container.tool_registry.create_tool({"tool_id": tid})
+        assert isinstance(tool, CodeTool)
+        assert tool.name == tid
+
+
+class TestToolRegistryPolicy:
+    """Инварианты процессного ToolRegistry."""
+
+    def test_register_rejects_code_tool(self):
+        from apps.flows.src.tools.base import CodeTool
+        from apps.flows.src.tools.registry import ToolRegistry
+
+        reg = ToolRegistry()
+        ct = CodeTool(
+            tool_id="ephemeral",
+            code="async def execute(args, state):\n    return {}",
+        )
+        with pytest.raises(ValueError, match="CodeTool"):
+            reg.register(ct)
+
 
 class TestFinishTool:
     """Тесты finish tool."""

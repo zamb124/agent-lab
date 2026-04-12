@@ -9,7 +9,7 @@
  */
 import { create, devtools, persist } from '../../assets/js/zustand-bundle.js';
 
-function deepMerge(target, source) {
+export function deepMerge(target, source) {
     if (!source || typeof source !== 'object') return target;
     if (!target || typeof target !== 'object') return target;
     
@@ -45,7 +45,7 @@ export class BaseStore {
     /**
      * @param {string} name - Имя store (для devtools и persist)
      * @param {Object} initialState - Начальное состояние
-     * @param {Object} options - { persist, devtools, partialize }
+     * @param {Object} options - { persist, devtools, partialize, persistMerge }
      */
     constructor(name, initialState, options = {}) {
         this.name = name;
@@ -54,6 +54,7 @@ export class BaseStore {
             persist: false,
             devtools: true,
             partialize: null,
+            persistMerge: null,
             ...options
         };
         
@@ -64,11 +65,13 @@ export class BaseStore {
         });
 
         if (this._options.persist) {
+            const defaultMerge = (persistedState, currentState) => deepMerge(currentState, persistedState);
+            const mergeFn = typeof this._options.persistMerge === 'function'
+                ? this._options.persistMerge
+                : defaultMerge;
             const persistConfig = {
                 name: `${name}-store`,
-                merge: (persistedState, currentState) => {
-                    return deepMerge(currentState, persistedState);
-                },
+                merge: mergeFn,
             };
             if (this._options.partialize) {
                 persistConfig.partialize = this._options.partialize;
@@ -77,7 +80,16 @@ export class BaseStore {
         }
 
         if (this._options.devtools) {
-            storeCreator = devtools(storeCreator, { name });
+            const enableDevtools =
+                typeof window !== 'undefined'
+                && typeof window.location !== 'undefined'
+                && !!window.__REDUX_DEVTOOLS_EXTENSION__
+                && (
+                    window.location.hostname === 'localhost'
+                    || window.location.hostname === '127.0.0.1'
+                    || window.location.hostname.endsWith('.lvh.me')
+                );
+            storeCreator = devtools(storeCreator, { name, enabled: enableDevtools });
         }
 
         this._store = create(storeCreator);

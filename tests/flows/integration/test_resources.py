@@ -68,7 +68,7 @@ def validate_email(email):
             node_id="phone_formatter",
             config={
                 "code": """
-def execute(args, state):
+async def execute(args, state):
     formatted = helpers.format_phone(state.phone)
     is_valid = helpers.validate_email(state.email)
     state.formatted_phone = formatted
@@ -118,7 +118,7 @@ class StringHelper:
             node_id="calculator",
             config={
                 "code": """
-def execute(args, state):
+async def execute(args, state):
     result = utils.Calculator.add(10, 5)
     product = utils.Calculator.multiply(result, 2)
     reversed_name = utils.StringHelper.reverse(state.name)
@@ -177,7 +177,7 @@ def to_percent(n):
             node_id="multi_resource",
             config={
                 "code": """
-def execute(args, state):
+async def execute(args, state):
     num = state.number
     is_pos = validators.is_positive(num)
     is_even = validators.is_even(num)
@@ -229,7 +229,7 @@ class TestPromptResourceWithCodeNode:
             node_id="greeting",
             config={
                 "code": """
-def execute(args, state):
+async def execute(args, state):
     greeting = email_template.render(name=state.user_name, count=state.message_count)
     state.greeting = greeting
     return {'greeting': greeting}
@@ -271,7 +271,7 @@ Final: ${{ total * (1 - discount/100) }}
             node_id="order_summary",
             config={
                 "code": """
-def execute(args, state):
+async def execute(args, state):
     items = [
         {'name': 'Widget', 'price': 10},
         {'name': 'Gadget', 'price': 25},
@@ -416,7 +416,7 @@ def format_price(price):
                 "discount": {"type": "number"}
             },
             "code": """
-def execute(args, state):
+async def execute(args, state):
     discounted = pricing.calculate_discount(args['price'], args['discount'])
     formatted = pricing.format_price(discounted)
     state.final_price = formatted
@@ -597,7 +597,7 @@ def double(n):
             node_id="inheritor",
             config={
                 "code": """
-def execute(args, state):
+async def execute(args, state):
     result = math_utils.double(state.value)
     state.doubled = result
     return {'result': result}
@@ -645,7 +645,7 @@ def process(x):
             node_id="override_test",
             config={
                 "code": """
-def execute(args, state):
+async def execute(args, state):
     result = helper.process(state.input)
     state.output = result
     return {'result': result}
@@ -694,7 +694,7 @@ class TestPromptResourceWithLlmNode:
                 "status": {"type": "string"}
             },
             "code": """
-def execute(args, state):
+async def execute(args, state):
     email = email_tmpl.render(
         name=args['name'],
         order_id=args['order_id'],
@@ -1552,7 +1552,7 @@ class TestSECRETResource:
             node_id="secret_test",
             config={
                 "code": """
-def execute(args, state):
+async def execute(args, state):
     state.api_key = api_key
     state.key_length = len(api_key)
     return {'has_key': len(api_key) > 0}
@@ -1585,7 +1585,7 @@ def execute(args, state):
             node_id="secret_error",
             config={
                 "code": """
-def execute(args, state):
+async def execute(args, state):
     state.secret = secret_val
     return {}
 """,
@@ -1614,7 +1614,7 @@ class TestResourceHierarchy:
     def _stub_entry_node() -> dict:
         return {
             "type": "code",
-            "code": "def execute(args, state):\n    return {}\n",
+            "code": "async def execute(args, state):\n    return {}\n",
         }
 
     @pytest.mark.asyncio
@@ -1639,7 +1639,7 @@ def double(x):
             "description": "Doubles a number",
             "args_schema": {"n": {"type": "number"}},
             "code": """
-def execute(args, state):
+async def execute(args, state):
     result = math.double(args['n'])
     state.result = result
     return {'result': result}
@@ -1667,7 +1667,7 @@ def execute(args, state):
         tool_with_arith = {
             **tool,
             "code": """
-def execute(args, state):
+async def execute(args, state):
     result = arith.double(args['n'])
     state.result = result
     return {'result': result}
@@ -1729,7 +1729,7 @@ def triple(x):
             node_id="triple_node",
             config={
                 "code": """
-def execute(args, state):
+async def execute(args, state):
     result = math.triple(state.input)
     state.output = result
     return {'result': result}
@@ -1797,7 +1797,7 @@ def compute(x):
             node_id="compute_node",
             config={
                 "code": """
-def execute(args, state):
+async def execute(args, state):
     result = helper.compute(state.input)
     state.output = result
     return {'result': result}
@@ -1847,7 +1847,7 @@ def transform(x):
             node_id="transform_node",
             config={
                 "code": """
-def execute(args, state):
+async def execute(args, state):
     result = utils.transform(state.input)
     state.output = result
     return {'result': result}
@@ -1909,7 +1909,7 @@ def from_node():
             node_id="hierarchy_test",
             config={
                 "code": """
-def execute(args, state):
+async def execute(args, state):
     # Node resource всегда доступен
     node_val = node_utils.from_node()
     state.node_val = node_val
@@ -1969,7 +1969,7 @@ def shared_hello():
             node_id="use_shared",
             config={
                 "code": """
-def execute(args, state):
+async def execute(args, state):
     greeting = shared.shared_hello()
     state.greeting = greeting
     return {'greeting': greeting}

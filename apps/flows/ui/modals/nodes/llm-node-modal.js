@@ -4,6 +4,7 @@
 import { html, css } from 'lit';
 import { BaseNodeModal } from './base-node-modal.js';
 import '@platform/lib/components/prompt-editor.js';
+import '@platform/lib/components/platform-switch.js';
 
 export class LlmNodeModal extends BaseNodeModal {
     static styles = [
@@ -90,22 +91,44 @@ export class LlmNodeModal extends BaseNodeModal {
             }
             
             .loop-options {
+                margin-top: var(--space-3);
+            }
+
+            .loop-explicit-row {
+                display: grid;
+                grid-template-columns: 1fr;
+                gap: var(--space-3);
+                align-items: start;
+            }
+
+            .loop-explicit-row.has-reminder {
+                grid-template-columns: 1fr 1fr;
+            }
+
+            @media (max-width: 520px) {
+                .loop-explicit-row.has-reminder {
+                    grid-template-columns: 1fr;
+                }
+            }
+
+            .loop-explicit-left {
                 display: flex;
                 flex-direction: column;
                 gap: var(--space-3);
-                margin-top: var(--space-3);
+                min-width: 0;
             }
-            
-            .checkbox-row {
+
+            .loop-explicit-strict-block {
                 display: flex;
-                align-items: center;
-                gap: var(--space-2);
+                flex-direction: column;
+                gap: var(--space-1);
             }
-            
-            .checkbox-row input[type="checkbox"] {
-                width: 16px;
-                height: 16px;
-                cursor: pointer;
+
+            .loop-explicit-reminder {
+                display: flex;
+                flex-direction: column;
+                gap: var(--space-1);
+                min-width: 0;
             }
             
             .prompt-section {
@@ -204,7 +227,7 @@ export class LlmNodeModal extends BaseNodeModal {
         return {
             type: "object",
             properties: {
-                result: { type: "string", description: "Результат работы агента" }
+                result: { type: "string", description: "Execution result" }
             },
             required: ["result"],
             additionalProperties: false
@@ -216,7 +239,7 @@ export class LlmNodeModal extends BaseNodeModal {
     }
 
     getModalTitle() {
-        return 'LlmNode';
+        return this.i18n.t('node_modal.titles.llm_node');
     }
 
     showModal(nodeId = '', config = {}) {
@@ -232,6 +255,13 @@ export class LlmNodeModal extends BaseNodeModal {
         this.structuredOutput = config.structured_output || false;
         this.outputSchema = config.output_schema || this._getDefaultSchema();
         this.outputMapping = config.output_mapping || {};
+
+        queueMicrotask(() => {
+            const editor = this.shadowRoot?.querySelector('llm-config-editor');
+            if (editor) {
+                editor.setValue(config.llm && typeof config.llm === 'object' ? config.llm : {});
+            }
+        });
     }
 
     _parseTools(tools) {
@@ -244,7 +274,7 @@ export class LlmNodeModal extends BaseNodeModal {
     }
 
     _addTool() {
-        const toolId = prompt('Введите ID инструмента:');
+        const toolId = prompt(this.i18n.t('llm_node.prompt_tool_id'));
         if (toolId && !this.selectedTools.find(t => t.tool_id === toolId)) {
             this.selectedTools = [...this.selectedTools, { tool_id: toolId, name: toolId }];
         }
@@ -262,8 +292,8 @@ export class LlmNodeModal extends BaseNodeModal {
         this.exitTool = e.target.value;
     }
 
-    _onStrictModeChange(e) {
-        this.strictMode = e.target.checked;
+    _onStrictModeSwitchChange(e) {
+        this.strictMode = e.detail.value;
     }
     
     _onModeChange(mode) {
@@ -361,7 +391,7 @@ export class LlmNodeModal extends BaseNodeModal {
             <div class="form-layout">
                 <div class="form-sidebar">
                     <div class="form-group">
-                        <label class="form-label">Node ID *</label>
+                        <label class="form-label">${this.i18n.t('llm_node.node_id_label')}</label>
                         <input 
                             type="text" 
                             name="node_id"
@@ -374,35 +404,35 @@ export class LlmNodeModal extends BaseNodeModal {
                     </div>
                     
                     <div class="form-group">
-                        <label class="form-label">Название *</label>
+                        <label class="form-label">${this.i18n.t('llm_node.field_name_required')}</label>
                         <input 
                             type="text" 
                             name="name"
                             class="form-input"
                             .value=${config.name || ''}
-                            placeholder="Название агента"
+                            placeholder=${this.i18n.t('llm_node.placeholder_agent_name')}
                             required
                         />
                     </div>
                     
                     <div class="form-group">
-                        <label class="form-label">Описание</label>
+                        <label class="form-label">${this.i18n.t('llm_node.field_description')}</label>
                         <textarea 
                             name="description"
                             class="form-textarea"
                             rows="2"
                             .value=${config.description || ''}
-                            placeholder="Описание назначения агента"
+                            placeholder=${this.i18n.t('llm_node.placeholder_description')}
                         ></textarea>
                     </div>
                     
                     <div class="form-group">
-                        <label class="form-label">Теги</label>
+                        <label class="form-label">${this.i18n.t('llm_node.field_tags')}</label>
                         <tag-input .tags=${config.tags || []}></tag-input>
                     </div>
                     
                     <div class="mode-toggle-section">
-                        <label class="form-label">Режим вывода</label>
+                        <label class="form-label">${this.i18n.t('llm_node.section_output_mode')}</label>
                         <div class="mode-toggle-row">
                             <label class="mode-option ${!this.structuredOutput ? 'active' : ''}">
                                 <input 
@@ -411,7 +441,7 @@ export class LlmNodeModal extends BaseNodeModal {
                                     .checked=${!this.structuredOutput}
                                     @change=${() => this._onModeChange('tools')}
                                 />
-                                Tools
+                                ${this.i18n.t('llm_node.output_mode_tools')}
                             </label>
                             <label class="mode-option ${this.structuredOutput ? 'active' : ''}">
                                 <input 
@@ -420,19 +450,19 @@ export class LlmNodeModal extends BaseNodeModal {
                                     .checked=${this.structuredOutput}
                                     @change=${() => this._onModeChange('structured')}
                                 />
-                                Structured Output
+                                ${this.i18n.t('llm_node.output_mode_structured')}
                             </label>
                         </div>
-                        <span class="form-hint">Tools: агент вызывает инструменты. Structured Output: агент возвращает JSON по схеме.</span>
+                        <span class="form-hint">${this.i18n.t('llm_node.output_mode_hint')}</span>
                     </div>
                     
                     ${!this.structuredOutput ? html`
                         <div class="form-group tools-section">
                             <div class="tools-header">
-                                <label class="form-label">Инструменты</label>
+                                <label class="form-label">${this.i18n.t('llm_node.section_tools')}</label>
                                 <div class="tools-actions">
                                     <button type="button" class="tool-add-btn" @click=${this._addTool}>
-                                        + Добавить
+                                        ${this.i18n.t('llm_node.add_tool')}
                                     </button>
                                 </div>
                             </div>
@@ -449,13 +479,13 @@ export class LlmNodeModal extends BaseNodeModal {
                                             >×</button>
                                         </span>
                                     `)
-                                    : html`<span class="tools-empty">Нет инструментов</span>`
+                                    : html`<span class="tools-empty">${this.i18n.t('llm_node.empty_tools')}</span>`
                                 }
                             </div>
                         </div>
                     ` : html`
                         <div class="form-group output-schema-section">
-                            <label class="form-label">Output Schema (JSON Schema)</label>
+                            <label class="form-label">${this.i18n.t('llm_node.output_schema_label')}</label>
                             <textarea
                                 class="schema-editor"
                                 .value=${JSON.stringify(this.outputSchema, null, 2)}
@@ -464,13 +494,12 @@ export class LlmNodeModal extends BaseNodeModal {
                                 rows="10"
                             ></textarea>
                             <div class="schema-hint">
-                                JSON Schema определяет структуру ответа агента. 
-                                LLM будет возвращать данные строго по этой схеме.
+                                ${this.i18n.t('llm_node.output_schema_body_hint')}
                             </div>
                         </div>
                         
                         <div class="form-group output-schema-section">
-                            <label class="form-label">Output Mapping (опционально)</label>
+                            <label class="form-label">${this.i18n.t('llm_node.output_mapping_label')}</label>
                             <textarea
                                 class="schema-editor"
                                 .value=${JSON.stringify(this.outputMapping, null, 2)}
@@ -480,14 +509,13 @@ export class LlmNodeModal extends BaseNodeModal {
                                 placeholder='{"result_field": "state_field"}'
                             ></textarea>
                             <div class="schema-hint">
-                                Маппинг полей из JSON ответа в поля state. 
-                                Если пусто - поля записываются напрямую в state с теми же именами.
+                                ${this.i18n.t('llm_node.output_mapping_body_hint')}
                             </div>
                         </div>
                     `}
                     
                     <div class="form-group">
-                        <label class="form-label">LLM</label>
+                        <label class="form-label">${this.i18n.t('llm_node.section_llm')}</label>
                         <llm-config-editor
                             model=${config.llm ? (config.llm.model || 'gpt-4o') : 'gpt-4o'}
                             temperature=${config.llm && config.llm.temperature !== undefined ? config.llm.temperature : 0.2}
@@ -500,55 +528,58 @@ export class LlmNodeModal extends BaseNodeModal {
                     
                     ${!this.structuredOutput ? html`
                         <div class="react-loop-section">
-                            <label class="form-label">Режим ReAct Loop</label>
+                            <label class="form-label">${this.i18n.t('llm_node.section_react_loop')}</label>
                             <select 
                                 class="form-select"
                                 .value=${this.loopMode}
                                 @change=${this._onLoopModeChange}
                             >
-                                <option value="auto">Auto - текст завершает агента</option>
-                                <option value="explicit">Explicit - только через exit tool</option>
+                                <option value="auto">${this.i18n.t('llm_node.loop_mode_auto')}</option>
+                                <option value="explicit">${this.i18n.t('llm_node.loop_mode_explicit')}</option>
                             </select>
-                            <span class="form-hint">Auto: текстовый ответ = завершение. Explicit: только через finish tool.</span>
+                            <span class="form-hint">${this.i18n.t('llm_node.loop_mode_hint')}</span>
                             
                             ${this.loopMode === 'explicit' ? html`
                                 <div class="loop-options">
-                                    <div class="form-group">
-                                        <label class="form-label">Exit Tool</label>
-                                        <select 
-                                            class="form-select"
-                                            .value=${this.exitTool}
-                                            @change=${this._onExitToolChange}
-                                        >
-                                            ${this.selectedTools.map(t => html`
-                                                <option value=${t.tool_id}>${t.name}</option>
-                                            `)}
-                                        </select>
-                                    </div>
-                                    
-                                    <div class="checkbox-row">
-                                        <input 
-                                            type="checkbox" 
-                                            id="strict-mode"
-                                            .checked=${this.strictMode}
-                                            @change=${this._onStrictModeChange}
-                                        />
-                                        <label for="strict-mode">Строгий режим</label>
-                                    </div>
-                                    <span class="form-hint">Если включен - текст без exit tool вызывает reminder.</span>
-                                    
-                                    ${this.strictMode ? html`
-                                        <div class="form-group">
-                                            <label class="form-label">Текст reminder</label>
-                                            <textarea 
-                                                name="reminder_message"
-                                                class="form-textarea"
-                                                rows="2"
-                                                .value=${react.reminder_message || ''}
-                                                placeholder="Ты не вызвал tool X для завершения..."
-                                            ></textarea>
+                                    <div class="loop-explicit-row ${this.strictMode ? 'has-reminder' : ''}">
+                                        <div class="loop-explicit-left">
+                                            <div class="loop-explicit-strict-block">
+                                                <platform-switch
+                                                    ?checked=${this.strictMode}
+                                                    size="sm"
+                                                    .label=${this.i18n.t('llm_node.strict_mode_label')}
+                                                    @change=${this._onStrictModeSwitchChange}
+                                                ></platform-switch>
+                                                <span class="form-hint">${this.i18n.t('llm_node.strict_mode_hint')}</span>
+                                            </div>
+                                            <div class="form-group" style="margin: 0;">
+                                                <label class="form-label">${this.i18n.t('llm_node.exit_tool_label')}</label>
+                                                <select
+                                                    class="form-select"
+                                                    .value=${this.exitTool}
+                                                    @change=${this._onExitToolChange}
+                                                >
+                                                    ${this.selectedTools.map(t => html`
+                                                        <option value=${t.tool_id}>${t.name}</option>
+                                                    `)}
+                                                </select>
+                                                <span class="form-hint">${this.i18n.t('llm_node.exit_tool_hint')}</span>
+                                            </div>
                                         </div>
-                                    ` : ''}
+                                        ${this.strictMode ? html`
+                                            <div class="loop-explicit-reminder">
+                                                <label class="form-label">${this.i18n.t('llm_node.reminder_text_label')}</label>
+                                                <textarea
+                                                    name="reminder_message"
+                                                    class="form-textarea"
+                                                    rows="3"
+                                                    .value=${react.reminder_message || ''}
+                                                    placeholder=${this.i18n.t('llm_node.reminder_placeholder')}
+                                                ></textarea>
+                                                <span class="form-hint">${this.i18n.t('llm_node.reminder_hint')}</span>
+                                            </div>
+                                        ` : ''}
+                                    </div>
                                 </div>
                             ` : ''}
                         </div>
@@ -564,8 +595,8 @@ export class LlmNodeModal extends BaseNodeModal {
                                 name="prompt"
                                 .value=${config.prompt || ''}
                                 .variables=${this.flowVariables || {}}
-                                label="Промпт *"
-                                placeholder="Ты - полезный ассистент. Твоя задача..."
+                                label=${this.i18n.t('llm_node.prompt_label_required')}
+                                placeholder=${this.i18n.t('llm_node.prompt_placeholder')}
                                 min-height="200"
                                 show-ai-button="false"
                             ></prompt-editor>
@@ -581,7 +612,6 @@ export class LlmNodeModal extends BaseNodeModal {
                     </div>
                     
                     <test-panel
-                        .flowId=${this.flowId || ''}
                         .inputState=${this._buildDefaultState()}
                         .defaultInputState=${this._buildDefaultState()}
                         @validate=${this._onValidate}

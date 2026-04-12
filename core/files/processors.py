@@ -3,22 +3,25 @@
 Сохраняют файлы в S3 и создают записи в БД через FileRepository.
 """
 
-import re
-import logging
 import hashlib
+import logging
 import mimetypes
+import re
 import uuid
-from typing import Optional, Dict, Any, List, TYPE_CHECKING
 from pathlib import Path
+from typing import TYPE_CHECKING, Any, Dict, List, Optional
 
-from core.files.s3_client import S3ClientFactory, S3Client
+from core.files.audio_transcode import (
+    resolve_ios_transcode_source,
+    transcode_audio_bytes_to_m4a_aac,
+)
 from core.files.models import (
     AudioMetadata,
     AudioTranscriptionStatus,
     FileMetadata,
     FileStatus,
 )
-from core.clients.stt_client import BaseSTTClient, STTClientFactory
+from core.files.s3_client import S3Client, S3ClientFactory
 
 if TYPE_CHECKING:
     from core.files.file_repository import FileRepository
@@ -58,6 +61,18 @@ class FileProcessor:
             await self._s3_client.close()
             self._s3_client = None
 
+    @staticmethod
+    def _original_name_with_extension_from_content_type(
+        original_name: str, content_type: str
+    ) -> str:
+        """Если в имени нет суффикса, добавляет его по MIME (S3-ключ и метаданные согласованы)."""
+        if Path(original_name).suffix:
+            return original_name
+        ext = mimetypes.guess_extension(content_type.strip(), strict=False)
+        if ext and not original_name.endswith(ext):
+            return f"{original_name}{ext}"
+        return original_name
+
     async def process_file_from_bytes(
         self,
         data: bytes,
@@ -90,6 +105,23 @@ class FileProcessor:
             if not content_type:
                 content_type = "application/octet-stream"
 
+        original_name = FileProcessor._original_name_with_extension_from_content_type(
+            original_name, content_type
+        )
+
+        needs_ios, src_suffix = resolve_ios_transcode_source(
+            content_type,
+            original_name,
+            data,
+        )
+        if needs_ios:
+            data = await transcode_audio_bytes_to_m4a_aac(data, src_suffix)
+            content_type = "audio/mp4"
+            stem = Path(original_name).stem
+            if stem == "" or stem == ".":
+                stem = "voice"
+            original_name = f"{stem}.m4a"
+
         file_hash = hashlib.sha256(data).hexdigest()[:16]
         extension = Path(original_name).suffix or ".bin"
         s3_key = f"files/{file_id}_{file_hash}{extension}"
@@ -110,7 +142,7 @@ class FileProcessor:
             original_name=original_name,
             content_type=content_type,
             file_size=len(data),
-            s3_bucket=s3_client.bucket_name,
+            s3_bucket=s3_client.require_bucket_config_key(),
             s3_key=s3_key,
             s3_endpoint=s3_client.endpoint_url,
             uploaded_by=uploaded_by,
@@ -124,6 +156,84 @@ class FileProcessor:
 
         logger.info(f"Файл обработан: {file_id} ({original_name}, {len(data)} байт)")
         return file_record
+
+    async def persist_uploaded_file(
+        self,
+        *,
+        data: bytes,
+        original_name: str,
+        content_type: str,
+        uploaded_by: Optional[str],
+        company_id: str,
+        public: bool,
+        download_url_prefix: str,
+        content_sha256_hex: Optional[str] = None,
+        metadata: Optional[Dict[str, Any]] = None,
+        tags: Optional[List[str]] = None,
+    ) -> FileMetadata:
+        """
+        Один путь для «байты с клиента или воркера → S3 + FileRecord»: process_file_from_bytes,
+        затем company_id, same-origin download_url и при необходимости checksum (как POST .../files/).
+        """
+        file_record = await self.process_file_from_bytes(
+            data=data,
+            original_name=original_name,
+            content_type=content_type,
+            uploaded_by=uploaded_by,
+            metadata=metadata,
+            tags=tags,
+            public=public,
+        )
+        prefix = download_url_prefix.rstrip("/")
+        updates: Dict[str, Any] = {
+            "company_id": company_id,
+            "download_url": f"{prefix}/{file_record.file_id}",
+        }
+        if content_sha256_hex is not None:
+            updates["checksum"] = content_sha256_hex
+        file_record = file_record.model_copy(update=updates)
+        await self.file_repository.set(file_record)
+        return file_record
+
+    async def persist_uploaded_file_as_state_files_item(
+        self,
+        *,
+        data: bytes,
+        original_name: str,
+        content_type: Optional[str],
+        uploaded_by: Optional[str],
+        company_id: str,
+        public: bool,
+        download_url_prefix: str,
+        content_sha256_hex: Optional[str] = None,
+        metadata: Optional[Dict[str, Any]] = None,
+        tags: Optional[List[str]] = None,
+    ) -> Dict[str, Any]:
+        """
+        Байты с клиента → S3 + FileRecord + download_url; один элемент формата state.files.
+        """
+        effective_type = content_type if content_type else "application/octet-stream"
+        record = await self.persist_uploaded_file(
+            data=data,
+            original_name=original_name,
+            content_type=effective_type,
+            uploaded_by=uploaded_by,
+            company_id=company_id,
+            public=public,
+            download_url_prefix=download_url_prefix,
+            content_sha256_hex=content_sha256_hex,
+            metadata=metadata,
+            tags=tags,
+        )
+        prefix = download_url_prefix.rstrip("/")
+        path = record.download_url if record.download_url else f"{prefix}/{record.file_id}"
+        return {
+            "name": record.original_name,
+            "path": path,
+            "mime_type": record.content_type,
+            "size": record.file_size,
+            "file_id": record.file_id,
+        }
 
     async def get_file_record(self, file_id: str) -> Optional[FileMetadata]:
         """
@@ -203,12 +313,12 @@ class FileProcessor:
             Список словарей с информацией о файлах (ключи: name, file_id, url, content_type, size)
         """
         file_info_list = []
-        
+
         # Формат: [FILE] Файл: name (ID: id, URL: url, тип: type, размер: size) [/FILE]
         # Может быть с переносами строк и эмодзи внутри
         pattern = r'\[FILE\][\s\n]*📎?\s*Файл:\s*([^\(]+)\s*\(ID:\s*([^,]+),\s*URL:\s*([^,]+),\s*тип:\s*([^,]+),\s*размер:\s*([^)]+)\)[\s\n]*\[/FILE\]'
         matches = re.findall(pattern, message_content, re.MULTILINE)
-        
+
         for filename, file_id, url, content_type, size in matches:
             file_info_list.append({
                 "name": filename.strip(),
@@ -217,7 +327,7 @@ class FileProcessor:
                 "content_type": content_type.strip(),
                 "size": size.strip(),
             })
-        
+
         # Также поддерживаем формат без [FILE]...[/FILE] для обратной совместимости
         if not file_info_list:
             old_pattern = r'📎\s*Файл:\s*([^\(]+)\s*\(ID:\s*(file_[a-f0-9]{12})'
@@ -242,48 +352,19 @@ class AudioProcessor:
         file_repository: "FileRepository",
         bucket_name: Optional[str] = None,
     ):
-        """
-        Args:
-            file_repository: FileRepository для работы с записями о файлах
-            bucket_name: Имя S3 бакета
-        """
         self.file_repository = file_repository
         self.bucket_name = bucket_name
         self._s3_client: Optional[S3Client] = None
-        self._stt_client: Optional[BaseSTTClient] = None
 
     async def _get_s3_client(self) -> S3Client:
-        """Получает S3 клиент"""
         if self._s3_client is None:
             if self.bucket_name:
                 self._s3_client = S3ClientFactory.create_client_for_bucket(self.bucket_name)
             else:
                 self._s3_client = S3ClientFactory.create_default_client()
-
         return self._s3_client
 
-    async def _get_stt_client(self) -> BaseSTTClient:
-        """Получает STT клиент."""
-        if self._stt_client is None:
-            self._stt_client = STTClientFactory.create_client()
-        return self._stt_client
-
-    @staticmethod
-    def extract_audio_info_from_message(message: str) -> List[Dict[str, Any]]:
-        """
-        Legacy AUDIO-теги удалены из платформы.
-
-        Args:
-            message: Текст сообщения
-
-        Returns:
-            Всегда пустой список, т.к. [AUDIO] формат больше не поддерживается.
-        """
-        _ = message
-        return []
-
     async def close(self):
-        """Закрывает клиенты"""
         if self._s3_client:
             await self._s3_client.close()
             self._s3_client = None
@@ -295,27 +376,13 @@ class AudioProcessor:
         content_type: str = "audio/wave",
         uploaded_by: Optional[str] = None,
         auto_recognize: bool = True,
+        language: Optional[str] = None,
         metadata: Optional[Dict[str, Any]] = None,
         tags: Optional[List[str]] = None,
         public: bool = True,
     ) -> AudioMetadata:
-        """
-        Обрабатывает аудиофайл из данных в памяти.
-
-        Args:
-            data: Данные аудиофайла
-            original_name: Оригинальное имя файла
-            content_type: MIME тип аудио
-            uploaded_by: ID пользователя
-            auto_recognize: Автоматически распознавать речь
-            metadata: Дополнительные метаданные
-            tags: Теги аудиофайла
-            public: Сделать файл публичным
-
-        Returns:
-            Метаданные аудиофайла
-        """
-        logger.info(f"Начинаем обработку аудио: {original_name}, размер={len(data)} байт")
+        """Загружает аудио в S3 и при auto_recognize транскрибирует через MediaTranscriber."""
+        logger.info("Обработка аудио: %s, размер=%s байт", original_name, len(data))
 
         file_id = f"file_{uuid.uuid4().hex[:12]}"
         file_hash = hashlib.sha256(data).hexdigest()[:16]
@@ -333,21 +400,23 @@ class AudioProcessor:
         )
 
         transcription_text = None
-        stt_result = None
         transcription_status = AudioTranscriptionStatus.IDLE
+        transcription_error: Optional[str] = None
+        transcription_provider: Optional[str] = None
 
         if auto_recognize:
-            logger.info("Запускаем распознавание речи...")
-            stt_client = await self._get_stt_client()
-            stt_result = await stt_client.transcribe_audio(
+            from core.files.media.transcriber import MediaTranscriber
+
+            transcriber = MediaTranscriber()
+            transcription_result = await transcriber.transcribe_audio(
                 audio_bytes=data,
                 file_name=original_name,
                 mime_type=content_type,
-                language="ru",
+                language=language,
             )
-            transcription_text = stt_result.text
-            transcription_status = stt_result.status
-            logger.info(f"Распознан текст: {transcription_text[:100]}...")
+            transcription_text = transcription_result.text
+            transcription_status = AudioTranscriptionStatus.DONE
+            transcription_provider = transcription_result.provider
 
         audio_record = AudioMetadata(
             file_id=file_id,
@@ -355,7 +424,7 @@ class AudioProcessor:
             original_name=original_name,
             content_type=content_type,
             file_size=len(data),
-            s3_bucket=s3_client.bucket_name,
+            s3_bucket=s3_client.require_bucket_config_key(),
             s3_key=s3_key,
             s3_endpoint=s3_client.endpoint_url,
             uploaded_by=uploaded_by,
@@ -364,25 +433,15 @@ class AudioProcessor:
             tags=tags or [],
             transcription_status=transcription_status,
             transcription_text=transcription_text,
-            transcription_error=stt_result.error if stt_result is not None else None,
-            transcription_provider=stt_result.provider if stt_result is not None else None,
+            transcription_error=transcription_error,
+            transcription_provider=transcription_provider,
         )
 
         await self.file_repository.set(audio_record)
-
-        logger.info(f"Аудио обработано: {file_id}")
+        logger.info("Аудио обработано: %s", file_id)
         return audio_record
 
     async def get_audio_record(self, audio_id: str) -> Optional[AudioMetadata]:
-        """
-        Получает запись об аудиофайле.
-
-        Args:
-            audio_id: ID аудиофайла
-
-        Returns:
-            Запись об аудиофайле или None
-        """
         return await self.file_repository.get(audio_id)
 
 
@@ -409,7 +468,7 @@ async def get_default_file_processor() -> FileProcessor:
     Требует предварительного вызова initialize_default_processors().
     """
     global _default_file_processor
-    
+
     if _default_file_processor is None:
         if _default_file_repository is None:
             raise RuntimeError(
@@ -417,7 +476,7 @@ async def get_default_file_processor() -> FileProcessor:
                 "Вызовите initialize_default_processors(file_repository) при старте приложения."
             )
         _default_file_processor = FileProcessor(file_repository=_default_file_repository)
-    
+
     return _default_file_processor
 
 
@@ -427,7 +486,7 @@ async def get_default_audio_processor() -> AudioProcessor:
     Требует предварительного вызова initialize_default_processors().
     """
     global _default_audio_processor
-    
+
     if _default_audio_processor is None:
         if _default_file_repository is None:
             raise RuntimeError(
@@ -437,7 +496,7 @@ async def get_default_audio_processor() -> AudioProcessor:
         _default_audio_processor = AudioProcessor(
             file_repository=_default_file_repository,
         )
-    
+
     return _default_audio_processor
 
 

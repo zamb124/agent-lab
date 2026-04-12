@@ -9,28 +9,11 @@ from abc import ABC, abstractmethod
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-from core.rag.models import RAGDocument, RAGSearchResult, RAGNamespace
 from core.files.s3_client import S3ClientFactory
+from core.files.types import ext_to_mime
+from core.rag.models import RAGDocument, RAGSearchResult, RAGNamespace
 
 logger = logging.getLogger(__name__)
-
-
-# Общие content types для всех провайдеров
-CONTENT_TYPES = {
-    ".pdf": "application/pdf",
-    ".txt": "text/plain",
-    ".docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-    ".html": "text/html",
-    ".md": "text/markdown",
-    ".csv": "text/csv",
-    ".xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-    ".pptx": "application/vnd.openxmlformats-officedocument.presentationml.presentation",
-    ".json": "application/json",
-    ".xml": "application/xml",
-    ".rtf": "application/rtf",
-    ".odt": "application/vnd.oasis.opendocument.text",
-    ".epub": "application/epub+zip",
-}
 
 
 class BaseRAGProvider(ABC):
@@ -43,9 +26,9 @@ class BaseRAGProvider(ABC):
         self.config = config
     
     def _get_content_type(self, file_path: str) -> str:
-        """Определяет content type по расширению файла"""
+        """Определяет content type по расширению файла."""
         suffix = Path(file_path).suffix.lower()
-        return CONTENT_TYPES.get(suffix, "application/octet-stream")
+        return ext_to_mime(suffix)
     
     async def _upload_file_to_s3(
         self,

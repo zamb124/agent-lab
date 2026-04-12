@@ -22,7 +22,7 @@ alwaysApply: false
 
 ## Маршрутизация (Ingress)
 
-Один ingress `humanitec-ingress` с path-based роутингом — работает одинаково для корневого домена и поддоменов компаний. Отдельный `livekit-ingress` для WebRTC:
+Один ingress `humanitec-ingress` с path-based роутингом — работает одинаково для корневого домена и поддоменов компаний. Список сервисов и путей задаётся в **`conf.local.json`** → **`ingress.services`**, применяется скриптом **`deploy/ingress.sh`** (создаёт Service/Endpoints на IP хоста и Ingress; префиксы OnlyOffice — см. **`office.mdc`**). Аннотация **`nginx.ingress.kubernetes.io/proxy-body-size: "100m"`** на `humanitec-ingress` (см. `deploy/ingress.sh`) — без неё nginx ingress отдаёт **413** на большие POST (например `/documents`). Отдельный `livekit-ingress` для WebRTC:
 
 ```
 humanitec.ru/           → frontend-svc  :8002
@@ -30,6 +30,11 @@ humanitec.ru/flows      → flows (apps.flows) :8001
 humanitec.ru/crm        → crm-svc       :8003
 humanitec.ru/rag        → rag-svc       :8004
 humanitec.ru/sync       → sync-svc      :8005 (WebSocket)
+humanitec.ru/web-apps   → onlyoffice-svc :8088  (Document Server на хосте)
+humanitec.ru/common     → onlyoffice-svc :8088
+humanitec.ru/cache      → onlyoffice-svc :8088
+humanitec.ru/fonts      → onlyoffice-svc :8088
+humanitec.ru/sdkjs      → onlyoffice-svc :8088
 
 *.humanitec.ru/*        → те же правила (поддомен = slug компании)
 
@@ -43,6 +48,8 @@ LiveKit требует отдельный поддомен с собственн
 
 Запросы **`/manifest.json`**, **`/sw.js`**, **`/offline.html`** на общем хосте обычно попадают на сервис с префиксом **`/`** (frontend). Локально при прямом доступе к порту любого сервиса те же пути отдаёт этот инстанс через **`create_service_app`** (см. `core/frontend/pwa/`, `frontend.mdc`).
 
+**`/.well-known/apple-app-site-association`** и **`/.well-known/assetlinks.json`**: отдавать как **JSON** с корректным `Content-Type`, **без** SPA-fallback и без редиректа на другой хост. В приложении — через **`register_platform_pwa_routes`** при наличии файлов в **`core/frontend/pwa/`**. Если перед фронтом стоит отдельный nginx: отдельные **`location =`** для этих путей до общего **`try_files`** к **`index.html`**.
+
 ## Сервисы на хосте
 
 Все сервисы слушают на `0.0.0.0` (нужно для доступа из K8s Endpoints):
@@ -52,6 +59,8 @@ LiveKit требует отдельный поддомен с собственн
 | flows | 8001 | `python -m apps.flows.main` |
 | frontend | 8002 | `python -m apps.frontend.main` |
 | crm | 8003 | `python -m apps.crm.main` |
+
+**CRM vendor (three.js, 3d-force-graph):** HTML тянет `/crm/ui/vendor/...`; FastAPI монтирует файлы из `node_modules` относительно корня репозитория (`apps/crm/main.py`). В Docker-образах **`crm`** и **`full`** стадия **`js-vendor`** (`npm ci`) копирует `node_modules/three/build` и `node_modules/3d-force-graph/dist` в `/app/node_modules/...`, иначе запросы к vendor попадали бы в SPA и отдавали `index.html` вместо JS.
 | rag | 8004 | `python -m apps.rag.main` |
 | sync | 8005 | `python -m apps.sync.main` |
 
@@ -65,18 +74,28 @@ LiveKit требует отдельный поддомен с собственн
 
 ## Деплой
 
+Локально: снимок нагрузки на сервере — переменные **`AGENT_LAB_SSH_USER`**, **`AGENT_LAB_SSH_HOST`**, **`AGENT_LAB_REMOTE_DIR`** в `Makefile` (дефолт под этот сервер). Имена с префиксом `AGENT_LAB_`, чтобы глобальный `export SSH_HOST=...` в шелле не перебивал дефолт Make.
+
+```bash
+make stats
+# другой хост/пользователь/каталог:
+# make stats AGENT_LAB_SSH_HOST=1.2.3.4 AGENT_LAB_SSH_USER=deploy AGENT_LAB_REMOTE_DIR=/opt/agent-lab
+```
+
 Триггер: `workflow_dispatch` → `.github/workflows/deploy.yml`:
 1. Сборка образа (target `full`) → push в GHCR (`IMAGE` + тег из metadata-action)
 2. SCP на `/opt/agent-lab/`: `docker-compose-prod.yaml`, `conf.json`, **`migrations/postgres/init.sql`** (нужен bind-mount у сервиса `postgres`)
 3. SSH: `docker compose pull` → `postgres`+`redis` → одноразовый контейнер **`migrations`** (`python -m scripts.db_migrate upgrade`) → остальные сервисы
 
-`x-common-env` в `docker-compose-prod.yaml` задаёт `DATABASE__SHARED_URL`, `DATABASE__FLOWS_URL`, … на хост `postgres` и отдельные имена БД — они **перекрывают** URL из `conf.json` внутри контейнеров. Репозиторный `conf.json` с `localhost` на сервере не мешает, пока заданы переменные окружения compose.
+`x-common-env` в `docker-compose-prod.yaml` задаёт `DATABASE__SHARED_URL`, `DATABASE__FLOWS_URL`, …, **`DATABASE__TRACING_URL`** (`…/platform_tracing`) на хост `postgres` — они **перекрывают** URL из `conf.json` внутри контейнеров. Репозиторный `conf.json` с `localhost` на сервере не мешает, пока заданы переменные окружения compose. БД `platform_tracing` создаётся из смонтированного **`migrations/postgres/init.sql`** при первом старте тома; на живом кластере без этой БД — **`bootstrap_idempotent.sql`** (см. **`migrations.mdc`**, **`tracing.mdc`**).
 
 **Версия деплоя и кэш UI:** при деплое через GitHub Actions в SSH-сессию передаётся `DEPLOYMENT_VERSION=${{ github.sha }}` → в compose `SERVER__DEPLOYMENT_VERSION` → заголовок `X-Deployment-Version` на ответах HTTP-сервисов (`DeploymentHeadersMiddleware` в `create_service_app`). Локально без переменной можно задать `SERVER__DEPLOYMENT_VERSION` в `.env` или опустить. Ingress в `deploy/ingress.sh` для `humanitec-ingress` сбрасывает `Cache-Control` с бэкенда и выставляет `no-cache, must-revalidate` для клиента — после переконфигурации ingress перезапустить `bash deploy/ingress.sh`.
 
 Секреты — в GitHub Secrets (environment `production`).
 
 **Web Push (VAPID):** GitHub Secrets с теми же именами, что и env: `PUSH__ENABLED`, `PUSH__VAPID_PUBLIC_KEY`, `PUSH__VAPID_PRIVATE_KEY`, `PUSH__VAPID_EMAIL` (последний опционально — в workflow fallback `ops@humanitec.ru`). Workflow передаёт их в SSH-сессию, `docker-compose-prod.yaml` прокидывает в `x-common-env` и перекрывает `conf.json`. После добавления секретов — redeploy.
+
+**APNs (нативный iOS):** `team_id`, `key_id`, `bundle_id`, `use_sandbox` — в **`conf.json`** на сервере (`push.*` и/или `auth.providers.apple` для team/key при переиспользовании ключа Sign in with Apple). В compose опционально **`PUSH__APNS_PRIVATE_KEY`**, если нужен отдельный `.p8` только для push; иначе достаточно **`AUTH_APPLE_PRIVATE_KEY`** (тот же PEM, если у ключа в кабинете Apple включены и Sign in with Apple, и APNs). Секрет `PUSH__APNS_PRIVATE_KEY` в GitHub — только при отдельном ключе для пушей.
 
 **Существующий volume Postgres** со старой схемой (одна БД вместо `platform_*`) требует ручной миграции данных или нового volume — не автоматизировано в workflow.
 
@@ -93,7 +112,7 @@ Healthcheck в `docker-compose-prod.yaml` использует `pg_isready` с `
 bash deploy/ingress.sh
 ```
 
-Читает `conf.local.json` → `ingress.services` и `selectel.ip/login`.
+Читает `conf.local.json` → `ingress.services` и `selectel.ip/login`. Для **`/documents`** — элемент **`office`** (см. `deploy/ingress.sh`). **Wildcard:** скрипт не затирает **`ClusterIssuer letsencrypt`**, если он уже есть; в **`humanitec-ingress`** добавляется **`tls`** для **`*.домен`**, если найден секрет (паттерны `*-wildcard-tls` или **`ingress.wildcard_tls_secret`**). Иначе повторный `apply` оставлял только apex TLS и ломал HTTPS на поддоменах.
 
 Прямые команды на сервере:
 ```bash

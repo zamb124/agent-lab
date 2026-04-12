@@ -60,7 +60,7 @@ class TestTaskIQToolExecution:
             "title": "TaskIQ Test Calculator",
             "description": "Calculator for TaskIQ tests",
             "code": """
-def execute(args, state):
+async def execute(args, state):
     a = args.get('a', 0)
     b = args.get('b', 0)
     op = args.get('op', 'add')
@@ -73,7 +73,9 @@ def execute(args, state):
         }
 
     @pytest.mark.asyncio
-    async def test_tool_executes_via_taskiq_kiq(self, app, container, calculator_tool_config):
+    async def test_tool_executes_via_taskiq_kiq(
+        self, app, container, calculator_tool_config, mock_context
+    ):
         """Tool выполняется через TaskIQ .kiq() + wait_result()."""
         import pytest
         import asyncio
@@ -93,6 +95,7 @@ def execute(args, state):
             calculator_tool_config,
             {"a": 10, "b": 5, "op": "add"},
             state_dict,
+            context_data=mock_context.to_dict(),
         )
 
         try:
@@ -106,7 +109,7 @@ def execute(args, state):
 
     @pytest.mark.asyncio
     async def test_multiple_tools_execute_parallel_via_taskiq(
-        self, app, container, calculator_tool_config
+        self, app, container, calculator_tool_config, mock_context
     ):
         """Несколько tools кикаются параллельно и ждём все результаты."""
         # Создаем валидный state
@@ -123,6 +126,7 @@ def execute(args, state):
                 calculator_tool_config,
                 {"a": i, "b": i * 2, "op": "mul"},
                 state_dict,
+                context_data=mock_context.to_dict(),
             )
             tasks.append((i, task))
 
@@ -137,14 +141,14 @@ def execute(args, state):
         assert results == expected
 
     @pytest.mark.asyncio
-    async def test_tool_receives_state(self, app, container):
+    async def test_tool_receives_state(self, app, container, mock_context):
         """Tool получает state и может его использовать."""
         tool_config = {
             "tool_id": "taskiq_state_tool",
             "title": "State Tool",
             "description": "Tool that uses state",
             "code": """
-def execute(args, state):
+async def execute(args, state):
     prefix = state.get('prefix', '')
     value = args.get('value', '')
     return f"{prefix}:{value}"
@@ -164,6 +168,7 @@ def execute(args, state):
             tool_config,
             {"value": "test"},
             state_dict,
+            context_data=mock_context.to_dict(),
         )
 
         result = await task.wait_result()
@@ -185,7 +190,7 @@ def execute(args, state):
             "title": "Multiplier",
             "description": "Multiplies",
             "code": """
-def execute(args, state):
+async def execute(args, state):
     return args.get('x', 0) * 2
 """,
         }
@@ -249,11 +254,11 @@ class TestTaskIQFlowExecution:
             nodes={
                 "init": {
                     "type": "code",
-                    "code": "def run(state):\n    state['step'] = 'init'\n    return state",
+                    "code": "async def run(state):\n    state['step'] = 'init'\n    return state",
                 },
                 "process": {
                     "type": "code",
-                    "code": "def run(state):\n    state['step'] = 'process'\n    state['response'] = 'Done'\n    return state",
+                    "code": "async def run(state):\n    state['step'] = 'process'\n    state['response'] = 'Done'\n    return state",
                 },
             },
             edges=[
@@ -307,7 +312,7 @@ class TestTaskIQInterruptResume:
                 "ask": {
                     "type": "code",
                     "code": """
-def run(state):
+async def run(state):
     if 'name' in state:
         return state
     if state.get('asked_name'):
@@ -321,7 +326,7 @@ def run(state):
                 "greet": {
                     "type": "code",
                     "code": """
-def run(state):
+async def run(state):
     name = state.get('name', 'Unknown')
     state['response'] = f'Hello, {name}!'
     return state
@@ -420,7 +425,7 @@ class TestTaskIQInlineCode:
     async def test_inline_code_via_taskiq_kiq(self, app):
         """Inline код выполняется через TaskIQ .kiq() + wait_result()."""
         code = """
-def run(state):
+async def run(state):
     state['computed'] = state.get('x', 0) ** 2
     return state
 """
@@ -457,7 +462,7 @@ class TestTaskIQAPIIntegration:
             nodes={
                 "main": {
                     "type": "code",
-                    "code": "def run(state):\n    state['response'] = f\"Got: {state.get('content', '')}\"\n    return state",
+                    "code": "async def run(state):\n    state['response'] = f\"Got: {state.get('content', '')}\"\n    return state",
                 },
             },
             edges=[{"from": "main", "to": None}],

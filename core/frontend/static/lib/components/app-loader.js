@@ -3,6 +3,7 @@
  * Универсальный loader с AI-мозгом для полноэкранной и inline загрузки
  */
 import '../utils/viewport-app-vh.js';
+import '../utils/platform-deeplink-init.js';
 import { html, css, svg } from 'lit';
 import { PlatformElement } from '../platform-element/index.js';
 
@@ -39,7 +40,7 @@ export class AppLoader extends PlatformElement {
             :host([fullscreen])::before {
                 width: 600px;
                 height: 600px;
-                background: #10b981;
+                background: #99A6F9;
                 top: -200px;
                 right: -200px;
             }
@@ -98,7 +99,7 @@ export class AppLoader extends PlatformElement {
             }
             
             .ai-node {
-                fill: #10b981;
+                fill: #99A6F9;
                 animation: pulse-node 2s ease-in-out infinite;
             }
             
@@ -108,7 +109,7 @@ export class AppLoader extends PlatformElement {
             .ai-node:nth-child(5) { animation-delay: 0.8s; }
             
             .ai-connection {
-                stroke: #06b6d4;
+                stroke: #FF885C;
                 stroke-width: 1.5;
                 opacity: 0.4;
                 animation: flow 2s ease-in-out infinite;
@@ -188,12 +189,12 @@ export class AppLoader extends PlatformElement {
                 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120">
                     <defs>
                         <linearGradient id="brain-gradient" x1="0%" y1="0%" x2="100%" y2="100%">
-                            <stop offset="0%" style="stop-color:#10b981;stop-opacity:1" />
-                            <stop offset="100%" style="stop-color:#06b6d4;stop-opacity:1" />
+                            <stop offset="0%" style="stop-color:#99A6F9;stop-opacity:1" />
+                            <stop offset="100%" style="stop-color:#FF885C;stop-opacity:1" />
                         </linearGradient>
                         <radialGradient id="glow-gradient" cx="50%" cy="50%" r="50%">
-                            <stop offset="0%" style="stop-color:#10b981;stop-opacity:0.6" />
-                            <stop offset="100%" style="stop-color:#06b6d4;stop-opacity:0" />
+                            <stop offset="0%" style="stop-color:#99A6F9;stop-opacity:0.6" />
+                            <stop offset="100%" style="stop-color:#FF885C;stop-opacity:0" />
                         </radialGradient>
                     </defs>
                     
@@ -226,13 +227,13 @@ export class AppLoader extends PlatformElement {
                     </g>
                     
                     <!-- Центральный узел -->
-                    <circle cx="60" cy="60" r="12" fill="#10b981" opacity="0.9">
+                    <circle cx="60" cy="60" r="12" fill="#99A6F9" opacity="0.9">
                         <animate attributeName="r" values="12;14;12" dur="2s" repeatCount="indefinite"/>
                         <animate attributeName="opacity" values="0.9;1;0.9" dur="2s" repeatCount="indefinite"/>
                     </circle>
                     
                     <!-- Искры AI -->
-                    <circle cx="60" cy="60" r="8" fill="none" stroke="#06b6d4" stroke-width="1.5" opacity="0.6">
+                    <circle cx="60" cy="60" r="8" fill="none" stroke="#FF885C" stroke-width="1.5" opacity="0.6">
                         <animate attributeName="r" values="8;20;8" dur="3s" repeatCount="indefinite"/>
                         <animate attributeName="opacity" values="0.6;0;0.6" dur="3s" repeatCount="indefinite"/>
                     </circle>

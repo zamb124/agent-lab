@@ -88,14 +88,14 @@ class TestRelationships:
         rel1_resp = await crm_client.post("/crm/api/v1/relationships/", json={
             "source_entity_id": manager_id,
             "target_entity_id": employee_id,
-            "relationship_type": "manages"
+            "relationship_type": "parent_of"
         }, headers=auth_headers_system)
         assert rel1_resp.status_code == 200
         
         rel2_resp = await crm_client.post("/crm/api/v1/relationships/", json={
             "source_entity_id": employee_id,
             "target_entity_id": manager_id,
-            "relationship_type": "reports_to"
+            "relationship_type": "child_of"
         }, headers=auth_headers_system)
         assert rel2_resp.status_code == 200
     
@@ -143,7 +143,7 @@ class TestRelationships:
         rel_resp = await crm_client.post("/crm/api/v1/relationships/", json={
             "source_entity_id": entity1_id,
             "target_entity_id": entity2_id,
-            "relationship_type": "works_on",
+            "relationship_type": "assigned_to",
             "weight": 0.8,
             "attributes": {"role": "developer", "since": "2024-01-01"}
         }, headers=auth_headers_system)

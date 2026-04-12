@@ -349,7 +349,7 @@ export class SkillsTabsBar extends PlatformElement {
             const { skillId, name, initType, copyFromSkillId } = e.detail;
             
             if (this._skillsData.has(skillId)) {
-                this.notify.error(`Skill "${skillId}" уже существует`);
+                this.notify.error(this.i18n.t('flow_skills.err_exists', { id: skillId }));
                 return;
             }
 
@@ -390,16 +390,16 @@ export class SkillsTabsBar extends PlatformElement {
 
         this._skillsData.set(skillId, newSkill);
         this.skills = Array.from(this._skillsData.values());
-        this.notify.success(`Skill "${name}" создан`);
+        this.notify.success(this.i18n.t('flow_skills.created', { name }));
         this._switchSkill(skillId);
     }
 
     _deleteSkill(skillId) {
-        if (!confirm(`Удалить skill "${this._skillsData.get(skillId)?.name}"?`)) return;
+        if (!confirm(this.i18n.t('flow_skills.confirm_delete', { name: this._skillsData.get(skillId)?.name ?? skillId }))) return;
 
         this._skillsData.delete(skillId);
         this.skills = Array.from(this._skillsData.values());
-        this.notify.success('Skill удален');
+        this.notify.success(this.i18n.t('flow_skills.deleted'));
 
         if (this.activeSkill === skillId) {
             this._switchSkill('base');

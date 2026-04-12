@@ -27,30 +27,36 @@ from pathlib import Path
 from typing import Type, Callable, List, Optional, Any, Tuple
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, APIRouter
+from fastapi import FastAPI, APIRouter, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from uvicorn.middleware.proxy_headers import ProxyHeadersMiddleware
 from pydantic_settings import BaseSettings as PydanticBaseSettings
 
 
-from core.config.loader import load_merged_config
+from core.config.loader import get_project_root, load_merged_config
 from core.config import set_settings
+from core.app.health_payload import build_health_payload
 from core.logging import setup_logging
 from core.middleware.auth import AuthMiddleware
 from core.middleware.deployment_headers import DeploymentHeadersMiddleware
 from core.middleware.dev_inter_service_proxy import DevInterServiceProxyMiddleware
 from core.tracing import setup_tracing
-from core.tracing.tracer import set_span_repository
+from core.tracing.tracer import set_span_repository, set_tracing_service_name
 from core.websocket.manager import notification_manager
 from core.websocket.router import router as ws_router
 from core.api.auth import router as core_auth_router
 from core.api.calendar import router as core_calendar_router
 from core.api.companies import router as core_companies_router
+from core.api.integrations import router as core_integrations_router
+from core.api.team import router as core_team_router
 from core.push.router import router as push_router
+from core.push.apns_credentials import resolve_apns_credentials
+from core.push.apns_service import init_apns_push_service
 from core.push.service import init_web_push_service
 from core.app.pwa_routes import register_platform_pwa_routes
+from core.app.i18n_routes import register_platform_i18n_routes
 
 logger = logging.getLogger(__name__)
 
@@ -65,7 +71,7 @@ def load_service_settings(
     Returns:
         (settings, project_root)
     """
-    project_root = Path(__file__).parent.parent.parent
+    project_root = get_project_root()
 
     merged_config = load_merged_config(service_name=service_name)
     
@@ -85,6 +91,7 @@ def create_service_app(
     on_startup: Optional[Callable] = None,
     on_shutdown: Optional[Callable] = None,
     cors_origins: List[str] = None,
+    cors_allow_origin_regex: Optional[str] = None,
     extra_middlewares: List[Tuple[type, dict]] = None,
     static_mounts: List[Tuple[str, str, str]] = None,
     extra_state: dict = None,
@@ -97,8 +104,8 @@ def create_service_app(
     openapi_url: str = "/openapi.json",
     include_auth_middleware: bool = True,
     include_crud_routers: bool = True,
-    mount_repo_mkdocs: bool = True,
-    mkdocs_gateway_prefix: Optional[str] = None,
+    mount_repo_documentation: bool = True,
+    documentation_gateway_prefix: Optional[str] = None,
     include_platform_pwa: Optional[bool] = None,
 ) -> FastAPI:
     """
@@ -113,15 +120,16 @@ def create_service_app(
         repository_names: Имена репозиториев для CRUD роутеров
         on_startup: Функция вызываемая при старте (async)
         on_shutdown: Функция вызываемая при остановке (async)
-        cors_origins: Разрешенные origins для CORS
+        cors_origins: Разрешенные origins для CORS (конкретные URL; с credentials нельзя звёздочку как единственный origin)
+        cors_allow_origin_regex: Regex для Origin (Starlette CORSMiddleware), суммируется с allow_origins
         extra_middlewares: Дополнительные middleware [(MiddlewareClass, {kwargs}), ...]
         static_mounts: Статические директории [(path, directory, name), ...]
         api_version: Версия API ("v1" для flows и др., None для frontend)
         docs_url, redoc_url, openapi_url: Пути для документации
         include_auth_middleware: Включать ли AuthMiddleware
         include_crud_routers: Включать ли автоматические CRUD роутеры
-        mount_repo_mkdocs: Смонтировать MkDocs из корня репозитория ``site/`` на ``/documentation/`` (False для flows со своим ``apps/flows/site``).
-        mkdocs_gateway_prefix: Если задан (например ``frontend``), дублировать документацию на ``/{prefix}/documentation/`` за ingress.
+        mount_repo_documentation: Смонтировать Fumadocs из корня репозитория ``documentation-dist/`` на ``/documentation/`` (False для flows со своим ``apps/flows/site``).
+        documentation_gateway_prefix: Если задан (например ``frontend``), дублировать документацию на ``/{prefix}/documentation/`` за ingress.
         include_platform_pwa: Маршруты ``/manifest.json``, ``/sw.js``, ``/offline.html``. None: выключено при ``TESTING=true``, иначе включено.
         
     Returns:
@@ -146,6 +154,11 @@ def create_service_app(
         if settings.tracing.enabled:
             setup_tracing(settings.tracing)
             if settings.tracing.postgres_enabled:
+                if not settings.database.tracing_url:
+                    raise ValueError(
+                        "tracing.postgres_enabled требует database.tracing_url (DATABASE__TRACING_URL)"
+                    )
+                set_tracing_service_name(settings.server.name)
                 set_span_repository(container.span_repository)
             logger.info("Трейсинг инициализирован")
         
@@ -157,15 +170,32 @@ def create_service_app(
         from core.billing import set_billing_service
         set_billing_service(container.billing_service)
         logger.info("BillingService инициализирован")
+
+        from core.files.processors import initialize_default_processors
+
+        if hasattr(container, "file_repository"):
+            initialize_default_processors(container.file_repository)
+            logger.info("initialize_default_processors: FileReader может грузить файлы по file_id / S3")
         
         # Инициализация WebPushService
         if settings.push.enabled:
             init_web_push_service(
                 vapid_private_key=settings.push.vapid_private_key,
                 vapid_public_key=settings.push.vapid_public_key,
-                vapid_email=settings.push.vapid_email
+                vapid_email=settings.push.vapid_email,
             )
             logger.info("WebPushService инициализирован")
+
+        apns = resolve_apns_credentials(settings)
+        if apns:
+            init_apns_push_service(
+                team_id=apns.team_id,
+                key_id=apns.key_id,
+                private_key_pem=apns.private_key_pem,
+                bundle_id=apns.bundle_id,
+                use_sandbox=apns.use_sandbox,
+            )
+            logger.info("ApnsPushService инициализирован")
         
         # Кастомный startup
         if on_startup:
@@ -181,8 +211,10 @@ def create_service_app(
         if on_shutdown:
             await on_shutdown(app, container)
         
-        # Остановка notification manager
-        await notification_manager.stop_redis_listener()
+        # В одном процессе pytest поднимается несколько приложений (flows, office, rag, sync);
+        # stop_redis_listener обнуляет глобальный клиент и ломает notify_user в чужих тестах.
+        if os.environ.get("TESTING") != "true":
+            await notification_manager.stop_redis_listener()
     
     # Создание приложения
     app = FastAPI(
@@ -198,21 +230,34 @@ def create_service_app(
     
     app.state.container = container
     app.state.settings = settings
+
+    from core.billing.exceptions import BillingBalanceBlockedError
+
+    @app.exception_handler(BillingBalanceBlockedError)
+    async def _billing_balance_blocked_handler(
+        _request: Request, exc: BillingBalanceBlockedError
+    ) -> JSONResponse:
+        return JSONResponse(
+            status_code=403,
+            content={"detail": str(exc), "code": "billing_balance_blocked"},
+        )
     
     # Дополнительные атрибуты state
     if extra_state:
         for key, value in extra_state.items():
             setattr(app.state, key, value)
     
-    # CORS
-    app.add_middleware(
-        CORSMiddleware,
-        allow_origins=cors_origins or [],
-        allow_credentials=True,
-        allow_methods=["*"],
-        allow_headers=["*"],
-    )
-    
+    # CORS собираем здесь, подключаем в конце create_service_app (внешний слой стека).
+    # Иначе preflight OPTIONS обрабатывает AuthMiddleware раньше и отдаёт 404 без ACAO.
+    _cors_kw: dict[str, Any] = {
+        "allow_origins": list(cors_origins) if cors_origins else [],
+        "allow_credentials": True,
+        "allow_methods": ["*"],
+        "allow_headers": ["*"],
+    }
+    if cors_allow_origin_regex and str(cors_allow_origin_regex).strip():
+        _cors_kw["allow_origin_regex"] = str(cors_allow_origin_regex).strip()
+
     # Proxy headers
     app.add_middleware(
         ProxyHeadersMiddleware,
@@ -231,7 +276,7 @@ def create_service_app(
     app.add_middleware(DeploymentHeadersMiddleware)
 
     # Локальный dev/test: браузер на :8002 с путём /flows/... без ingress — пересылаем на flows_service_url
-    app.add_middleware(DevInterServiceProxyMiddleware, service_name=service_name)
+    app.add_middleware(DevInterServiceProxyMiddleware, service_name=settings.server.name)
 
     # API prefix
     # api_version="v1" → /flows/api/v1 (REST API)
@@ -271,42 +316,51 @@ def create_service_app(
     app.include_router(_file_router, prefix=f"{files_api_prefix}/files")
     logger.info(f"Файловый роутер подключён: {files_api_prefix}/files")
 
+    public_segment = settings.server.name
+
     # Core auth роутер (автоматически для всех сервисов)
-    auth_prefix = f"/{service_name}/api/auth"
+    auth_prefix = f"/{public_segment}/api/auth"
     logger.info(f"Подключение core auth роутера ({auth_prefix}/*)")
     app.include_router(core_auth_router, prefix=auth_prefix, tags=["auth"])
     if service_name == "frontend":
         logger.info("Подключение core auth роутера (/auth/*) для единого OAuth callback")
         app.include_router(core_auth_router, prefix="/auth", tags=["auth"])
 
-    calendar_prefix = f"/{service_name}/api/calendar"
+    calendar_prefix = f"/{public_segment}/api/calendar"
     logger.info(f"Подключение core calendar роутера ({calendar_prefix}/*)")
     app.include_router(core_calendar_router, prefix=calendar_prefix, tags=["calendar"])
 
+    integrations_prefix = f"/{public_segment}"
+    logger.info("Подключение core integrations роутера (/api/v1/integrations/*)")
+    app.include_router(core_integrations_router, prefix=integrations_prefix, tags=["integrations"])
+
+    team_prefix = f"/{public_segment}/api/team"
+    logger.info(f"Подключение core team роутера ({team_prefix}/*)")
+    app.include_router(core_team_router, prefix=team_prefix, tags=["team"])
+
     if service_name != "frontend":
-        companies_prefix = f"/{service_name}/api/companies"
+        companies_prefix = f"/{public_segment}/api/companies"
         logger.info(f"Подключение core companies роутера ({companies_prefix}/*)")
         app.include_router(core_companies_router, prefix=companies_prefix, tags=["companies"])
     
     # Push notifications роутер (автоматически для всех сервисов)
-    push_prefix = f"/{service_name}"
+    push_prefix = f"/{public_segment}"
     logger.info(f"Подключение push роутера ({push_prefix}/api/push/*)")
     app.include_router(push_router, prefix=push_prefix, tags=["push"])
     
     # WebSocket роутер для уведомлений (автоматически для всех сервисов)
     # Монтируем с префиксом сервиса для правильного роутинга через nginx
-    ws_path = f"/{service_name}/ws/notifications" if service_name != "core" else "/ws/notifications"
+    ws_path = f"/{public_segment}/ws/notifications" if service_name != "core" else "/ws/notifications"
     logger.info(f"Подключение WebSocket роутера для уведомлений ({ws_path})")
-    app.include_router(ws_router, prefix=f"/{service_name}" if service_name != "core" else "", tags=["websocket"])
+    app.include_router(ws_router, prefix=f"/{public_segment}" if service_name != "core" else "", tags=["websocket"])
     
     # Pages роутеры (добавляем префикс сервиса к их собственному префиксу)
     if pages_routers:
         for router in pages_routers:
             tags = router.tags or [f"{service_name}-pages"]
-            # Добавляем только префикс сервиса, FastAPI сам добавит его к prefix роутера
+            # Добавляем только префикс публичного пути (server.name), FastAPI сам добавит его к prefix роутера
             if hasattr(router, 'prefix') and router.prefix:
-                # Если у роутера есть prefix, добавляем только service_name
-                app.include_router(router, prefix=f"/{service_name}", tags=tags)
+                app.include_router(router, prefix=f"/{public_segment}", tags=tags)
             else:
                 # Роутер без префикса подключается как есть
                 app.include_router(router, tags=tags)
@@ -317,13 +371,13 @@ def create_service_app(
             if Path(directory).exists():
                 app.mount(mount_path, StaticFiles(directory=directory), name=name)
 
-    if mount_repo_mkdocs:
-        from core.frontend.mkdocs_mount import mount_mkdocs_documentation
+    if mount_repo_documentation:
+        from core.frontend.documentation_mount import mount_documentation_static
 
-        mount_mkdocs_documentation(
+        mount_documentation_static(
             app,
             project_root,
-            gateway_prefix=mkdocs_gateway_prefix,
+            gateway_prefix=documentation_gateway_prefix,
         )
 
     if include_platform_pwa is None:
@@ -333,18 +387,19 @@ def create_service_app(
         register_platform_pwa_routes(app, project_root)
         logger.info("PWA: /manifest.json, /sw.js, /offline.html")
 
+    register_platform_i18n_routes(app, project_root)
+    logger.info("I18n: GET /api/i18n/{locale}")
+
+    from core.app.file_types_route import register_platform_file_types_route
+
+    register_platform_file_types_route(app)
+    logger.info("FileTypes: GET /api/platform/file-types")
+
     # Health endpoints
     @app.get("/health")
     @app.get(f"/{service_name}/health")
     async def health():
-        payload: dict[str, str] = {
-            "status": "healthy",
-            "service": settings.server.name,
-        }
-        dep = settings.server.deployment_version
-        if dep:
-            payload["deployment_version"] = dep
-        return payload
+        return build_health_payload(settings)
     
     @app.get("/")
     async def root():
@@ -388,6 +443,7 @@ def create_service_app(
             "lit/directives/repeat.js": "/static/core/assets/js/lit/directives/repeat.min.js",
             "lit/directives/unsafe-html.js": "/static/core/assets/js/lit/directives/unsafe-html.min.js",
             "lit/directives/when.js": "/static/core/assets/js/lit/directives/when.min.js",
+            "lit/directives/guard.js": "/static/core/assets/js/lit/directives/guard.min.js",
             "@platform/lib/": "/static/core/lib/",
             "@platform/services/": "/static/core/services/"
         }
@@ -409,7 +465,9 @@ def create_service_app(
 </html>"""
         
         logger.info(f"✅ Test endpoint enabled: /{service_name}/test (TESTING mode)")
-    
+
+    app.add_middleware(CORSMiddleware, **_cors_kw)
+
     logger.info(f"{service_name} Service создан")
-    
+
     return app

@@ -15,6 +15,14 @@ import { EdgeLabelsManager } from '../edge-labels.js';
 import { renderCanvas } from './templates.js';
 import { setupEvents, setupDragDrop, setupContextMenu, setupNodeClickHandling } from './events.js';
 import { injectDrawflowStyles } from './drawflow-injector.js';
+import { buildLlmToolChipsHtml, isLlmToolChipEditable } from '../../../utils/llm-tool-chips.js';
+import { openInlineToolModal } from '../../../utils/open-inline-tool-modal.js';
+
+const FANIN_SVG_ANY =
+    '<svg class="node-fanin-svg" width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><path d="m4 13h16a1 1 0 0 0 0-2h-16a1 1 0 0 0 0 2z" fill="currentColor"/><path d="m20 5h-16a1 1 0 0 0 0 2h16a1 1 0 0 0 0-2z" fill="currentColor"/><path d="m4 19h16a1 1 0 0 0 0-2h-16a1 1 0 0 0 0 2z" fill="currentColor"/></svg>';
+
+const FANIN_SVG_ALL =
+    '<svg class="node-fanin-svg" width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><path d="m20 14.3c1.2 0 2.3-1 2.3-2.3s-1-2.3-2.3-2.3-2.3 1-2.3 2.3 1.1 2.3 2.3 2.3z" fill="currentColor"/><path d="m20 6.3c1.2 0 2.3-1 2.3-2.3s-1-2.3-2.3-2.3-2.3 1-2.3 2.3 1.1 2.3 2.3 2.3z" fill="currentColor"/><path d="m20 22.3c1.2 0 2.3-1 2.3-2.3s-1-2.3-2.3-2.3-2.3 1-2.3 2.3 1.1 2.3 2.3 2.3z" fill="currentColor"/><path d="m4 14.3c1.2 0 2.3-1 2.3-2.3s-1.1-2.2-2.3-2.2-2.3 1-2.3 2.3 1.1 2.2 2.3 2.2z" fill="currentColor"/><path d="m19 12.8c.4 0 .8-.3.8-.8s-.3-.8-.8-.8h-7.3v-4.2c0-1.6.7-2.3 2.3-2.3h5c.4 0 .8-.3.8-.8s-.4-.6-.8-.6h-5c-2.4 0-3.8 1.3-3.8 3.8v4.3h-5.2c-.4 0-.8.3-.8.8s.3.8.8.8h5.3v4c0 2.4 1.3 3.8 3.8 3.8h5c.4 0 .8-.3.8-.8s-.3-.8-.8-.8h-5c-1.6 0-2.3-.7-2.3-2.3v-4.3h7.2z" fill="currentColor"/></svg>';
 
 const NODE_TYPE_ICON_NAMES = {
     'llm_node': 'llm_node',
@@ -24,6 +32,7 @@ const NODE_TYPE_ICON_NAMES = {
     'flow': 'workflow',
     'mcp': 'mcp',
     'channel': 'send',
+    'hitl_node': 'users',
 };
 
 const RESOURCE_TYPE_ICON_NAMES = {
@@ -41,7 +50,7 @@ const RESOURCE_TYPE_COLORS = {
     'code': '#8b5cf6',
     'rag': '#3b82f6',
     'files': '#f59e0b',
-    'prompt': '#10b981',
+    'prompt': '#99A6F9',
     'llm': '#ec4899',
     'secret': '#ef4444',
     'http': '#06b6d4',
@@ -57,15 +66,13 @@ const CHANNEL_NODE_BADGE_ICONS = {
     webhook: 'globe',
 };
 
-const CHANNEL_NODE_BADGE_TITLES = {
-    telegram: 'Telegram',
-    email: 'Email',
-    whatsapp: 'WhatsApp',
-    sms: 'SMS',
-    webhook: 'Webhook',
-};
-
 export class FlowCanvas extends PlatformElement {
+    _channelBadgeTitle(channelId) {
+        const key = `flow_canvas.channel_badge.${channelId}`;
+        const label = this.i18n.t(key);
+        return label === key ? channelId : label;
+    }
+
     createRenderRoot() {
         return this;
     }
@@ -108,7 +115,11 @@ export class FlowCanvas extends PlatformElement {
         this._duplicateNode = this._duplicateNode.bind(this);
         this._toggleBreakpoint = this._toggleBreakpoint.bind(this);
         this._deleteResource = this._deleteResource.bind(this);
-        
+        this._onFanInPortDblClick = this._onFanInPortDblClick.bind(this);
+        this._openFanInPolicyFromContextMenu = this._openFanInPolicyFromContextMenu.bind(this);
+        this._onFanInPolicyContextMenuItemClick = this._onFanInPolicyContextMenuItemClick.bind(this);
+        this._onLlmToolChipClick = this._onLlmToolChipClick.bind(this);
+
         this.breakpointManager = null;
         
         this.state = this.use(s => ({
@@ -181,13 +192,20 @@ export class FlowCanvas extends PlatformElement {
         this._edgeLabelsManager = new EdgeLabelsManager(
             container,
             this._editor,
-            (fromId, toId, currentCondition) => this._showEdgeConditionModal(fromId, toId, currentCondition)
+            (fromId, toId, currentCondition) => this._showEdgeConditionModal(fromId, toId, currentCondition),
+            this
         );
 
         setupEvents(this);
         setupDragDrop(this);
         setupContextMenu(this);
         setupNodeClickHandling(this);
+        this._setupLlmToolChipHandling();
+
+        const area = this.querySelector('#drawflow-area');
+        if (area) {
+            area.addEventListener('dblclick', this._onFanInPortDblClick);
+        }
     }
 
     _handleNodeClick(e) {
@@ -233,7 +251,8 @@ export class FlowCanvas extends PlatformElement {
         
         this._renderAllNodes();
         this._edgeLabelsManager?.updateAll();
-        
+        this._refreshFanInTriggers();
+
         this._isImporting = false;
     }
     
@@ -269,7 +288,7 @@ export class FlowCanvas extends PlatformElement {
         }
     }
 
-    _duplicateNode() {
+    async _duplicateNode() {
         if (this.contextMenu) {
             const config = this.nodeConfigs.get(this.contextMenu.drawflowId);
             if (config) {
@@ -284,10 +303,33 @@ export class FlowCanvas extends PlatformElement {
                 }
                 const posX = nodeData.pos_x + 50;
                 const posY = nodeData.pos_y + 50;
-                this._addNode(nodeType, posX, posY);
+                await this._addNode(nodeType, posX, posY);
             }
             this.contextMenu = null;
         }
+    }
+
+    getAllowNodeIdRenameOnce(nodeId) {
+        for (const nodeConfig of this.nodeConfigs.values()) {
+            if (nodeConfig.nodeId === nodeId) {
+                return nodeConfig.allowNodeIdRenameOnce === true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * Разрешает однократное редактирование node_id в property panel (как после дублирования).
+     * @param {string} nodeId
+     */
+    setAllowNodeIdRenameOnce(nodeId) {
+        for (const nodeConfig of this.nodeConfigs.values()) {
+            if (nodeConfig.nodeId === nodeId) {
+                nodeConfig.allowNodeIdRenameOnce = true;
+                return;
+            }
+        }
+        throw new Error(`[FlowCanvas] setAllowNodeIdRenameOnce: node not found: ${nodeId}`);
     }
 
     _toggleBreakpoint() {
@@ -771,34 +813,42 @@ export class FlowCanvas extends PlatformElement {
     }
 
     async _addNode(nodeType, posX, posY) {
-        const nodeId = `${nodeType.type}_${this.nodeIdCounter++}`;
+        const canvasType = nodeType.type;
+        const paletteNodeType = nodeType;
+        const nodeId = `${canvasType}_${this.nodeIdCounter++}`;
         const isEntry = this.nodeConfigs.size === 0;
         
-        const nodeHtml = await this._createNodeHtml(nodeId, nodeType, isEntry);
+        const nodeHtml = await this._createNodeHtml(nodeId, paletteNodeType, isEntry);
         
         const drawflowId = this._editor.addNode(
             nodeId,
             1, 1,
             posX, posY,
-            nodeType.type,
-            { nodeId, type: nodeType.type },
+            canvasType,
+            { nodeId, type: canvasType },
             nodeHtml
         );
 
         this.nodeConfigs.set(drawflowId.toString(), {
             nodeId,
-            type: nodeType.type,
+            type: canvasType,
             config: {},
             color: nodeType.color,
             name: nodeType.name,
+            allowNodeIdRenameOnce: true,
         });
 
         if (isEntry) {
             this._setEntryNode(drawflowId);
         }
 
-        this.emit('node-added', { nodeId, nodeType, drawflowId });
+        if (canvasType === 'llm_node') {
+            this._refreshLlmToolChips(drawflowId);
+        }
+
+        this.emit('node-added', { nodeId, nodeType: paletteNodeType, drawflowId });
         this._updateVirtualNodes();
+        this._refreshFanInTriggers();
         this._saveSnapshot();
         
         return drawflowId;
@@ -812,16 +862,25 @@ export class FlowCanvas extends PlatformElement {
         return this._createNodeHtmlSync(nodeId, nodeType, isEntry, isInherited);
     }
 
-    _createNodeHtmlSync(nodeId, nodeType, isEntry = false, isInherited = false, language = null, channelId = null) {
+    _createNodeHtmlSync(
+        nodeId,
+        nodeType,
+        isEntry = false,
+        isInherited = false,
+        language = null,
+        channelId = null,
+        llmTools = null,
+        chipDrawflowId = '0',
+    ) {
         const bgColor = nodeType.color + '20';
-        const entryBadge = isEntry 
-            ? '<div class="agent-node-entry-badge">▶</div>' 
+        const entryBadge = isEntry
+            ? '<div class="agent-node-entry-badge">▶</div>'
             : '';
+        const inheritedTitle = this.i18n.t('flow_canvas.inherited_badge_title');
         const inheritedBadge = isInherited
-            ? '<div class="agent-node-inherited-badge" title="Inherited from base"><svg width="12" height="12" viewBox="0 0 16 16" fill="none"><path d="M8 3v10M8 3l-3 3M8 3l3 3" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></div>'
+            ? `<div class="agent-node-inherited-badge" title="${inheritedTitle.replace(/"/g, '&quot;')}"><svg width="12" height="12" viewBox="0 0 16 16" fill="none"><path d="M8 3v10M8 3l-3 3M8 3l3 3" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></div>`
             : '';
-        
-        // Бейдж языка для code нод - используем SVG иконки
+
         let languageBadge = '';
         if (nodeType.type === 'code' && language) {
             const langIcon = language === 'javascript' ? 'javascript' : 'python';
@@ -831,33 +890,205 @@ export class FlowCanvas extends PlatformElement {
         let channelBadge = '';
         if (nodeType.type === 'channel' && channelId) {
             const chIcon = CHANNEL_NODE_BADGE_ICONS[channelId] || 'send';
-            const chTitle = CHANNEL_NODE_BADGE_TITLES[channelId] || channelId;
+            const chTitle = this._channelBadgeTitle(channelId);
             channelBadge = `<div class="agent-node-lang-badge agent-node-channel-badge" data-channel="${channelId}" title="${chTitle}"><platform-icon name="${chIcon}" size="14"></platform-icon></div>`;
         }
-        
+
         const iconName = NODE_TYPE_ICON_NAMES[nodeType.type];
         let iconSvg = this.icon.getFromCache(iconName);
-        
+
         iconSvg = iconSvg
             .replace(/<svg/, '<svg width="16" height="16"')
             .replace(/\s+width="[^"]*"/g, ' width="16"')
             .replace(/\s+height="[^"]*"/g, ' height="16"');
-        
+
+        const toolsList = nodeType.type === 'llm_node' && Array.isArray(llmTools) ? llmTools : [];
+        const hasTools = toolsList.length > 0;
+        const toolsStrip = hasTools
+            ? buildLlmToolChipsHtml(String(chipDrawflowId), toolsList, (key) => this.i18n.t(key))
+            : '';
+
         return `
             ${inheritedBadge}
-            <div class="agent-node">
-                ${entryBadge}
-                <div class="agent-node-icon" style="background: ${bgColor}; color: ${nodeType.color};">
-                    ${iconSvg}
+            <div class="agent-node${hasTools ? ' agent-node--has-tools' : ''}">
+                <div class="agent-node-main">
+                    <div class="node-fanin-trigger" hidden aria-hidden="true">
+                        <span class="node-fanin-icon"></span>
+                    </div>
+                    ${entryBadge}
+                    <div class="agent-node-icon" style="background: ${bgColor}; color: ${nodeType.color};">
+                        ${iconSvg}
+                    </div>
+                    <div class="agent-node-info">
+                        <div class="agent-node-name">${nodeId}</div>
+                        <div class="agent-node-type">${nodeType.name || nodeType.type}</div>
+                    </div>
+                    ${languageBadge}
+                    ${channelBadge}
                 </div>
-                <div class="agent-node-info">
-                    <div class="agent-node-name">${nodeId}</div>
-                    <div class="agent-node-type">${nodeType.name || nodeType.type}</div>
-                </div>
-                ${languageBadge}
-                ${channelBadge}
+                ${toolsStrip}
             </div>
         `;
+    }
+
+    _refreshLlmToolChips(drawflowId) {
+        const nodeEl = this.querySelector(`#node-${drawflowId}`);
+        const entry = this.nodeConfigs.get(String(drawflowId));
+        if (!nodeEl || !entry || entry.type !== 'llm_node') {
+            return;
+        }
+        const agentRoot = nodeEl.querySelector('.agent-node');
+        if (!agentRoot) {
+            return;
+        }
+        const tools = entry.config?.tools || [];
+        const hasTools = tools.length > 0;
+        agentRoot.classList.toggle('agent-node--has-tools', hasTools);
+        const existing = agentRoot.querySelector('.agent-node-tools');
+        if (!hasTools) {
+            if (existing) {
+                existing.remove();
+            }
+            return;
+        }
+        const html = buildLlmToolChipsHtml(String(drawflowId), tools, (key) => this.i18n.t(key));
+        if (existing) {
+            existing.outerHTML = html;
+        } else {
+            agentRoot.insertAdjacentHTML('beforeend', html);
+        }
+    }
+
+    _setupLlmToolChipHandling() {
+        const container = this.querySelector('#drawflow-area');
+        if (!container) {
+            return;
+        }
+        container.addEventListener('click', (e) => {
+            const chip = e.target.closest('.agent-node-tool-chip--editable');
+            if (!chip) {
+                return;
+            }
+            e.stopPropagation();
+            e.preventDefault();
+            this._onLlmToolChipClick(chip);
+        });
+    }
+
+    _onLlmToolChipClick(chip) {
+        const drawflowId = chip.dataset.drawflowId;
+        const toolIndexRaw = chip.dataset.toolIndex;
+        if (drawflowId === undefined || toolIndexRaw === undefined) {
+            throw new Error('[FlowCanvas] Chip missing data-drawflow-id or data-tool-index');
+        }
+        const toolIndex = parseInt(toolIndexRaw, 10);
+        if (Number.isNaN(toolIndex)) {
+            throw new Error('[FlowCanvas] Invalid data-tool-index on tool chip');
+        }
+        const entry = this.nodeConfigs.get(String(drawflowId));
+        if (!entry || entry.type !== 'llm_node') {
+            return;
+        }
+        const tools = entry.config?.tools || [];
+        const tool = tools[toolIndex];
+        if (tool === undefined || !isLlmToolChipEditable(tool)) {
+            return;
+        }
+
+        const editorState = FlowsStore.state.editor;
+        const flowVariables =
+            editorState.flowConfig && typeof editorState.flowConfig.variables === 'object'
+                ? editorState.flowConfig.variables
+                : {};
+        const flowId = editorState.flowId ?? '';
+        const skillId = editorState.currentSkillId ?? 'base';
+        const previewExecutionState = editorState.previewExecutionState ?? null;
+
+        const tid = typeof tool === 'string' ? tool : tool.tool_id;
+        let toolType;
+        let toolConfig;
+        if (typeof tid === 'string' && tid.startsWith('mcp:')) {
+            const parts = tid.split(':');
+            toolType = 'mcp';
+            toolConfig = {
+                tool_id: tid,
+                type: 'mcp',
+                server_id: parts[1] || '',
+                tool_name: parts[2] || '',
+            };
+        } else if (typeof tool === 'object' && tool !== null) {
+            toolType = tool.type || 'code';
+            toolConfig = tool;
+        } else {
+            return;
+        }
+
+        openInlineToolModal({
+            mode: 'edit',
+            toolType,
+            toolConfig,
+            flowVariables,
+            flowId,
+            skillId,
+            previewExecutionState,
+            onToolSaved: (detail) => {
+                const savedConfig = detail.config;
+                const nextTools = tools.map((t, i) => (i === toolIndex ? savedConfig : t));
+                const mergedConfig = { ...entry.config, tools: nextTools };
+                entry.config = mergedConfig;
+                this._refreshLlmToolChips(drawflowId);
+                this.emit('node-updated', {
+                    nodeId: entry.nodeId,
+                    nodeConfig: { type: entry.type, ...mergedConfig },
+                });
+                this._saveSnapshot();
+            },
+        });
+    }
+
+    _rebuildDrawflowNodeContent(drawflowId) {
+        const nodeEl = this.querySelector(`#node-${drawflowId}`);
+        const entry = this.nodeConfigs.get(String(drawflowId));
+        if (!nodeEl || !entry) {
+            return;
+        }
+        const wrap = nodeEl.querySelector('.drawflow_content_node');
+        if (!wrap) {
+            return;
+        }
+        const isEntry = this.entryNodeId === String(drawflowId);
+        const isInherited = !!entry.isInherited;
+        const nodeType = {
+            type: entry.type,
+            name: entry.name || entry.type,
+            color: entry.color,
+        };
+        const cfg = entry.config || {};
+        const language = entry.type === 'code' ? (cfg.language || 'python') : null;
+        const channelId =
+            entry.type === 'channel' ? (cfg.channel || 'telegram') : null;
+        const llmTools = entry.type === 'llm_node' ? (cfg.tools || []) : null;
+        wrap.innerHTML = this._createNodeHtmlSync(
+            entry.nodeId,
+            nodeType,
+            isEntry,
+            isInherited,
+            language,
+            channelId,
+            llmTools,
+            String(drawflowId),
+        );
+    }
+
+    _renderAllNodes() {
+        if (!this._editor) {
+            return;
+        }
+        for (const drawflowId of this.nodeConfigs.keys()) {
+            this._rebuildDrawflowNodeContent(drawflowId);
+        }
+        this._updateVirtualNodes();
+        this._refreshFanInTriggers();
     }
 
     async _preloadIcons(nodes) {
@@ -887,12 +1118,14 @@ export class FlowCanvas extends PlatformElement {
         const newNodeEl = this.querySelector(`#node-${drawflowId}`);
         if (newNodeEl) {
             newNodeEl.classList.add('is-entry-node');
-            const agentNode = newNodeEl.querySelector('.agent-node');
-            if (agentNode && !agentNode.querySelector('.agent-node-entry-badge')) {
+            const main =
+                newNodeEl.querySelector('.agent-node-main') ||
+                newNodeEl.querySelector('.agent-node');
+            if (main && !main.querySelector('.agent-node-entry-badge')) {
                 const badge = document.createElement('div');
                 badge.className = 'agent-node-entry-badge';
                 badge.textContent = '▶';
-                agentNode.appendChild(badge);
+                main.appendChild(badge);
             }
         }
         
@@ -977,7 +1210,8 @@ export class FlowCanvas extends PlatformElement {
             'remote_flow': '#3b82f6',
             'flow': '#ec4899',
             'mcp': '#14b8a6',
-            'channel': '#10b981',
+            'channel': '#99A6F9',
+            'hitl_node': '#0ea5e9',
         };
         
         const color = colors[type];
@@ -1044,8 +1278,12 @@ export class FlowCanvas extends PlatformElement {
                     continue;
                 }
 
-                const connections = outputData.connections;
-                for (const conn of connections) {
+                const rawConns = outputData.connections;
+                const connList = Array.isArray(rawConns) ? rawConns : Object.values(rawConns);
+                for (const conn of connList) {
+                    if (!conn || conn.node == null) {
+                        continue;
+                    }
                     const targetDrawflowId = conn.node;
                     const targetConfig = this.nodeConfigs.get(String(targetDrawflowId));
                     if (!targetConfig) {
@@ -1098,9 +1336,184 @@ export class FlowCanvas extends PlatformElement {
                 if (nodeConfig.type === 'channel' && config.channel !== oldChannel) {
                     this._updateChannelBadge(drawflowId, config.channel);
                 }
+                if (nodeConfig.type === 'llm_node') {
+                    this._refreshLlmToolChips(drawflowId);
+                }
+                this._refreshFanInTriggers();
                 break;
             }
         }
+    }
+
+    /**
+     * Число входящих связей по drawflow id целевой ноды (каждая линия в графе = 1).
+     * Fan-in (ANY/ALL) в UI показываем только при count >= 2.
+     */
+    _collectIncomingEdgeCounts() {
+        const counts = new Map();
+        const exported = this._editor?.export();
+        const homeData = exported?.drawflow?.Home?.data;
+        if (!homeData) {
+            return counts;
+        }
+        for (const nodeData of Object.values(homeData)) {
+            if (!nodeData.outputs) {
+                continue;
+            }
+            for (const outputData of Object.values(nodeData.outputs)) {
+                if (!outputData.connections) {
+                    continue;
+                }
+                const raw = outputData.connections;
+                const connList = Array.isArray(raw) ? raw : Object.values(raw);
+                for (const conn of connList) {
+                    if (!conn || conn.node == null) {
+                        continue;
+                    }
+                    const targetId = String(conn.node);
+                    counts.set(targetId, (counts.get(targetId) || 0) + 1);
+                }
+            }
+        }
+        return counts;
+    }
+
+    /**
+     * Оверлей внутри .inputs поверх .input — совпадает с портом при любой вёрстке карточки.
+     */
+    _ensureFanInTriggerInInputsPort(nodeEl) {
+        const inputs = nodeEl.querySelector('.inputs');
+        const trigger = nodeEl.querySelector('.node-fanin-trigger');
+        if (!inputs || !trigger || trigger.parentElement === inputs) {
+            return;
+        }
+        inputs.appendChild(trigger);
+    }
+
+    _refreshFanInTriggers() {
+        if (!this._editor) {
+            return;
+        }
+        const incomingCounts = this._collectIncomingEdgeCounts();
+        const portHint = this.i18n.t('flow_canvas.fanin_input_hint');
+        for (const drawflowId of this.nodeConfigs.keys()) {
+            const nodeEl = this.querySelector(`#node-${drawflowId}`);
+            if (!nodeEl) {
+                continue;
+            }
+            this._ensureFanInTriggerInInputsPort(nodeEl);
+            const inputEl = nodeEl.querySelector('.inputs .input');
+            const trigger = nodeEl.querySelector('.node-fanin-trigger');
+            if (!trigger) {
+                continue;
+            }
+            const iconWrap = trigger.querySelector('.node-fanin-icon');
+            const inDegree = incomingCounts.get(drawflowId) || 0;
+            if (inDegree >= 2) {
+                const cfg = this.nodeConfigs.get(drawflowId);
+                const policy = cfg?.config?.incoming_policy === 'all' ? 'all' : 'any';
+                nodeEl.classList.add('fan-in-active');
+                nodeEl.classList.toggle('fan-in-policy-all', policy === 'all');
+                nodeEl.classList.toggle('fan-in-policy-any', policy !== 'all');
+                trigger.hidden = false;
+                trigger.setAttribute('aria-hidden', 'false');
+                trigger.classList.toggle('node-fanin-policy-all', policy === 'all');
+                trigger.classList.toggle('node-fanin-policy-any', policy !== 'all');
+                if (iconWrap) {
+                    iconWrap.innerHTML = policy === 'all' ? FANIN_SVG_ALL : FANIN_SVG_ANY;
+                }
+                if (inputEl) {
+                    inputEl.title = portHint;
+                }
+            } else {
+                nodeEl.classList.remove(
+                    'fan-in-active',
+                    'fan-in-policy-all',
+                    'fan-in-policy-any',
+                );
+                trigger.hidden = true;
+                trigger.setAttribute('aria-hidden', 'true');
+                trigger.classList.remove('node-fanin-policy-all', 'node-fanin-policy-any');
+                if (iconWrap) {
+                    iconWrap.innerHTML = '';
+                }
+                if (inputEl) {
+                    inputEl.removeAttribute('title');
+                }
+            }
+        }
+    }
+
+    _onFanInPortDblClick(e) {
+        const input = e.target.closest('.drawflow-node.fan-in-active .input');
+        if (!input) {
+            return;
+        }
+        e.preventDefault();
+        e.stopPropagation();
+        const nodeEl = input.closest('.drawflow-node');
+        if (!nodeEl) {
+            return;
+        }
+        const drawflowId = nodeEl.id.replace('node-', '');
+        this._showIncomingPolicyModal(drawflowId);
+    }
+
+    _openFanInPolicyFromContextMenu() {
+        if (!this.contextMenu) {
+            return;
+        }
+        const drawflowId = this.contextMenu.drawflowId;
+        const counts = this._collectIncomingEdgeCounts();
+        if ((counts.get(drawflowId) || 0) < 2) {
+            return;
+        }
+        this.contextMenu = null;
+        this.requestUpdate();
+        this._showIncomingPolicyModal(drawflowId);
+    }
+
+    _onFanInPolicyContextMenuItemClick(enabled) {
+        if (!enabled) {
+            return;
+        }
+        this._openFanInPolicyFromContextMenu();
+    }
+
+    _showIncomingPolicyModal(drawflowId) {
+        const cfg = this.nodeConfigs.get(drawflowId);
+        if (!cfg) {
+            return;
+        }
+        let modal = document.querySelector('incoming-policy-modal');
+        if (!modal) {
+            modal = document.createElement('incoming-policy-modal');
+            document.body.appendChild(modal);
+        }
+        const policy = cfg.config?.incoming_policy === 'all' ? 'all' : 'any';
+        const onSaved = (ev) => {
+            const { nodeId, incoming_policy } = ev.detail;
+            if (nodeId !== cfg.nodeId) {
+                return;
+            }
+            const entry = this.nodeConfigs.get(drawflowId);
+            if (entry) {
+                entry.config = { ...entry.config, incoming_policy };
+            }
+            this._refreshFanInTriggers();
+            this.emit('incoming-policy-changed', {
+                nodeId: cfg.nodeId,
+                drawflowId,
+                incoming_policy,
+            });
+            this._saveSnapshot();
+        };
+        modal.addEventListener('incoming-policy-saved', onSaved, { once: true });
+        modal.openFor({
+            nodeId: cfg.nodeId,
+            drawflowId,
+            policy,
+        });
     }
     
     _updateLanguageBadge(drawflowId, language) {
@@ -1108,7 +1521,8 @@ export class FlowCanvas extends PlatformElement {
         if (!nodeEl) return;
         
         let badge = nodeEl.querySelector('.agent-node-lang-badge');
-        const agentNode = nodeEl.querySelector('.agent-node');
+        const agentNode =
+            nodeEl.querySelector('.agent-node-main') || nodeEl.querySelector('.agent-node');
         
         if (!language) {
             if (badge) badge.remove();
@@ -1136,7 +1550,8 @@ export class FlowCanvas extends PlatformElement {
         if (!nodeEl) return;
 
         let badge = nodeEl.querySelector('.agent-node-channel-badge');
-        const agentNode = nodeEl.querySelector('.agent-node');
+        const agentNode =
+            nodeEl.querySelector('.agent-node-main') || nodeEl.querySelector('.agent-node');
 
         if (!channelId) {
             if (badge) badge.remove();
@@ -1144,12 +1559,12 @@ export class FlowCanvas extends PlatformElement {
         }
 
         const iconName = CHANNEL_NODE_BADGE_ICONS[channelId] || 'send';
-        const title = CHANNEL_NODE_BADGE_TITLES[channelId] || channelId;
+        const title = this._channelBadgeTitle(channelId);
 
         void this.icon.load(iconName).then(() => {
             const el = this.querySelector(`#node-${drawflowId}`);
             if (!el) return;
-            const ag = el.querySelector('.agent-node');
+            const ag = el.querySelector('.agent-node-main') || el.querySelector('.agent-node');
             if (!ag) return;
 
             let b = el.querySelector('.agent-node-channel-badge');
@@ -1182,7 +1597,8 @@ export class FlowCanvas extends PlatformElement {
             if (nodeConfig.nodeId === oldId) {
                 // Обновляем nodeId в конфиге
                 nodeConfig.nodeId = newId;
-                
+                delete nodeConfig.allowNodeIdRenameOnce;
+
                 // Обновляем отображение имени в DOM
                 const nodeEl = this.querySelector(`#node-${drawflowId}`);
                 if (nodeEl) {
@@ -1208,6 +1624,7 @@ export class FlowCanvas extends PlatformElement {
                 this._editor.removeNodeId(`node-${drawflowId}`);
                 this.nodeConfigs.delete(drawflowId);
                 this._updateVirtualNodes();
+                this._refreshFanInTriggers();
                 break;
             }
         }
@@ -1325,13 +1742,13 @@ export class FlowCanvas extends PlatformElement {
                         <div class="node-error-content">
                             <div class="node-error-message">${this._escapeHtml(errorMessage)}</div>
                             <div class="node-error-actions">
-                                <button class="node-error-copy" title="Копировать">
+                                <button class="node-error-copy" title="${this.i18n.t('execution_panel.copy')}">
                                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                                         <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
                                         <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
                                     </svg>
                                 </button>
-                                <button class="node-error-close" title="Закрыть">×</button>
+                                <button class="node-error-close" title="${this.i18n.t('editor.panel_close')}">×</button>
                             </div>
                         </div>
                     `;
@@ -1355,7 +1772,7 @@ export class FlowCanvas extends PlatformElement {
                                     `;
                                 }, 1500);
                             }).catch(err => {
-                                console.error('[FlowCanvas] Ошибка копирования:', err);
+                                console.error('[FlowCanvas] Copy error:', err);
                                 this._fallbackCopyTextToClipboard(errorMessage, copyBtn);
                             });
                         } else {
@@ -1459,10 +1876,10 @@ export class FlowCanvas extends PlatformElement {
                     `;
                 }, 1500);
             } else {
-                console.error('[FlowCanvas] Fallback: не удалось скопировать');
+                console.error('[FlowCanvas] Fallback: copy failed');
             }
         } catch (err) {
-            console.error('[FlowCanvas] Fallback: ошибка копирования', err);
+            console.error('[FlowCanvas] Fallback: copy error', err);
         }
         
         document.body.removeChild(textArea);
@@ -1532,28 +1949,33 @@ export class FlowCanvas extends PlatformElement {
 
         let index = 0;
         for (const [nodeId, nodeConfig] of Object.entries(nodes)) {
+            const canvasNodeType = nodeConfig.type;
             const isEntry = nodeId === entry;
             const isInherited = inheritedNodeIds.has(nodeId);
-            const color = this._getNodeColor(nodeConfig.type);
+            const color = this._getNodeColor(canvasNodeType);
             const nodeType = {
-                type: nodeConfig.type,
-                name: nodeConfig.type,
+                type: canvasNodeType,
+                name: canvasNodeType,
                 color,
             };
             
             const posX = nodeConfig.position ? nodeConfig.position.x : 250 + (index % 2) * 280;
             const posY = nodeConfig.position ? nodeConfig.position.y : 80 + Math.floor(index / 2) * 120;
             
-            const language = nodeConfig.type === 'code' ? (nodeConfig.language || 'python') : null;
+            const language = canvasNodeType === 'code' ? (nodeConfig.language || 'python') : null;
             const channelId =
-                nodeConfig.type === 'channel' ? (nodeConfig.channel || 'telegram') : null;
+                canvasNodeType === 'channel' ? (nodeConfig.channel || 'telegram') : null;
+            const llmTools =
+                canvasNodeType === 'llm_node' ? (nodeConfig.tools || []) : null;
             const nodeHtml = this._createNodeHtmlSync(
                 nodeId,
                 nodeType,
                 isEntry,
                 isInherited,
                 language,
-                channelId
+                channelId,
+                llmTools,
+                '0',
             );
             
             console.log('[FlowCanvas] Adding node:', {
@@ -1567,8 +1989,8 @@ export class FlowCanvas extends PlatformElement {
                 nodeId,
                 1, 1,
                 posX, posY,
-                nodeConfig.type,
-                { nodeId, type: nodeConfig.type, config: nodeConfig },
+                canvasNodeType,
+                { nodeId, type: canvasNodeType, config: { ...nodeConfig, type: canvasNodeType } },
                 nodeHtml
             );
 
@@ -1576,14 +1998,18 @@ export class FlowCanvas extends PlatformElement {
 
             this.nodeConfigs.set(drawflowId.toString(), {
                 nodeId,
-                type: nodeConfig.type,
+                type: canvasNodeType,
                 config: configFields,
                 color,
                 isInherited,
             });
 
             nodePositions.set(nodeId, drawflowId);
-            
+
+            if (canvasNodeType === 'llm_node') {
+                this._refreshLlmToolChips(drawflowId);
+            }
+
             if (isEntry) {
                 this._setEntryNode(drawflowId);
             }
@@ -1668,6 +2094,7 @@ export class FlowCanvas extends PlatformElement {
         }
         
         this._updateVirtualNodes();
+        this._refreshFanInTriggers();
     }
 
     _zoomIn() {

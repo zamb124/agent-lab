@@ -58,7 +58,7 @@ class TestMockLLMStreaming:
 
     @pytest.mark.asyncio
     async def test_stream_yields_final_status_event(self):
-        """stream yield'ит финальный TaskStatusUpdateEvent."""
+        """stream yield'ит завершающий TaskStatusUpdateEvent (completed; final=False как в LLMClient)."""
         mock = MockLLM()
         mock.configure(default_response="Test response")
 
@@ -67,9 +67,9 @@ class TestMockLLMStreaming:
             events.append(event)
 
         status_events = [e for e in events if isinstance(e, TaskStatusUpdateEvent)]
-        final_events = [e for e in status_events if e.final]
-        assert len(final_events) == 1
-        assert final_events[0].status.state.value == "completed"
+        completed = [e for e in status_events if e.status.state.value == "completed"]
+        assert len(completed) == 1
+        assert completed[0].final is False
 
     @pytest.mark.asyncio
     async def test_stream_with_response_queue(self):
@@ -116,6 +116,37 @@ class TestMockLLMStreaming:
             if e.status.message and e.status.message.metadata and "tool_calls" in e.status.message.metadata
         ]
         assert len(tool_call_events) == 1
+
+    @pytest.mark.asyncio
+    async def test_stream_tool_call_emits_second_status_without_tool_calls(self):
+        """Как LLMClient.stream: после статуса с tool_calls идёт второй статус (часто только usage)."""
+        mock = MockLLM()
+        mock.configure(
+            response_queue=[{"type": "tool_call", "tool": "calculator", "args": {"x": 1}}]
+        )
+
+        events = []
+        async for event in mock.stream([_msg("calc")]):
+            events.append(event)
+
+        status_events = [e for e in events if isinstance(e, TaskStatusUpdateEvent)]
+        assert len(status_events) >= 2
+        assert status_events[0].status.message
+        assert status_events[0].status.message.metadata
+        assert status_events[0].status.message.metadata.get("tool_calls")
+
+        second = status_events[1]
+        if second.status.message and second.status.message.metadata:
+            tc = second.status.message.metadata.get("tool_calls")
+            assert tc is None or tc == []
+
+        merged: list = []
+        for e in status_events:
+            if e.status.message and e.status.message.metadata:
+                t = e.status.message.metadata.get("tool_calls")
+                if t:
+                    merged = t
+        assert merged
 
     @pytest.mark.asyncio
     async def test_stream_includes_task_id_context_id(self):

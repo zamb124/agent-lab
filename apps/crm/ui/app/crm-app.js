@@ -1,27 +1,35 @@
 /**
- * CRM App - Главное приложение CRM ("Умная Записная Книжка")
- * Адаптивный layout: Desktop (split view) -> Mobile (fullscreen)
- * 3-колоночный layout при наличии AI suggestions
+ * CRM App - Главное приложение CRM
+ * Desktop: sidebar + main content
+ * Mobile: slide-out sidebar + compact header (menu + title + action) + content
  */
 import { html, css } from 'lit';
 import { PlatformApp, renderPlatformAppShell } from '@platform/lib/base/PlatformApp.js';
 import { CRMAPIService } from '../services/crm-api.service.js';
 import { CRMStore } from '../store/crm.store.js';
-import '../components/notes-list.js';
-import '../components/note-editor.js';
-import '../components/ai-suggestions-panel.js';
 import '../pages/daily-notes-page.js';
 import '../pages/entities-page.js';
 import '../pages/graph-page.js';
 import '../pages/tasks-page.js';
-import '../pages/calendar-page.js';
-import '../pages/settings-page.js';
+import '../pages/settings-hub-page.js';
+import '../pages/templates-page.js';
+import '../pages/spaces-page.js';
+import '../pages/namespace-tasks-page.js';
+import '../pages/relationship-types-page.js';
 import '../modals/entity-modal.js';
+import '../modals/note-view-modal.js';
 import '../modals/ai-analysis-modal.js';
 import '../modals/share-modal.js';
 import '../modals/access-request-modal.js';
 import '../modals/namespace-modal.js';
 import '../components/crm-sidebar.js';
+import '../components/crm-mobile-app-header.js';
+import '@platform/lib/embed-chat/platform-embed-chat-drawer.js';
+import {
+    flowsEmbedShouldSendCredentials,
+    resolveCrmLaraFlowsBaseUrl,
+    resolveFlowsEmbedAuthHeaders,
+} from '../utils/crm-lara-flows-base.js';
 import '@platform/lib/components/platform-icon.js';
 import '@platform/lib/components/layout/platform-island.js';
 
@@ -29,12 +37,11 @@ export class CRMApp extends PlatformApp {
     static properties = {
         ...PlatformApp.properties,
         _isMobile: { state: true },
-        _currentNoteId: { state: true },
-        _hasSuggestions: { state: true },
         _currentView: { state: true },
         _showNamespaceModal: { state: true },
         _showAiModal: { state: true },
-        _activeMobilePanel: { state: true },
+        _mobileSearchOpen: { state: true },
+        _mobileSearchInputValue: { state: true },
     };
 
     static styles = [
@@ -47,189 +54,35 @@ export class CRMApp extends PlatformApp {
                 height: var(--app-vh, 100vh);
                 overflow: hidden;
                 background: var(--bg-gradient);
-                --btn-primary-bg: var(--crm-button-primary-bg);
-                --btn-primary-hover-bg: var(--crm-button-primary-hover);
-                --btn-primary-text: var(--crm-button-primary-text);
-                --btn-primary-shadow: 0 4px 12px rgba(153, 166, 249, 0.35);
-                --btn-primary-hover-shadow: 0 6px 20px rgba(153, 166, 249, 0.45);
-                --btn-secondary-bg: var(--crm-button-secondary-bg);
-                --btn-secondary-border: var(--crm-button-secondary-bg);
-                --btn-secondary-text: var(--crm-button-secondary-text);
-                --btn-secondary-hover-bg: var(--crm-button-secondary-hover);
-                --btn-secondary-hover-border: var(--crm-button-secondary-hover);
-                --btn-secondary-hover-text: var(--crm-button-secondary-text);
             }
-            
+
             .sidebar {
                 height: var(--app-vh, 100vh);
                 flex-shrink: 0;
                 overflow: visible;
                 background: transparent;
             }
-            
+
             .main {
                 flex: 1;
+                min-width: 0;
                 height: var(--app-vh, 100vh);
                 display: flex;
+                flex-direction: column;
                 padding: var(--space-4);
-                gap: var(--space-4);
                 overflow: hidden;
-            }
-            
-            notes-list {
-                width: 320px;
-                height: 100%;
-                flex-shrink: 0;
-            }
-            
-            notes-list[collapsed] {
-                width: 48px;
-                flex: 0 0 48px;
-            }
-            
-            note-editor {
-                flex: 1;
-                height: 100%;
-                min-width: 0;
-            }
-            
-            .fullscreen {
-                width: 100%;
-                height: 100%;
-            }
-            
-            ai-suggestions-panel {
-                width: 380px;
-                height: 100%;
-                flex-shrink: 0;
-                overflow-y: auto;
-            }
-            
-            ai-suggestions-panel.hidden {
-                display: none;
             }
 
             platform-island {
                 flex: 1;
-                min-height: calc(var(--app-vh, 100vh) - 2rem);
+                min-height: 0;
+                min-width: 0;
             }
-            
-            @media (min-width: 768px) and (max-width: 1023px) {
-                notes-list {
-                    width: 240px;
-                }
-                notes-list[collapsed] {
-                    width: 48px;
-                }
-            }
-            
-            @media (min-width: 1024px) and (max-width: 1279px) {
-                .main.has-suggestions notes-list {
-                    width: 260px;
-                }
-                .main.has-suggestions notes-list[collapsed] {
-                    width: 48px;
-                }
-            }
-            
-            @media (max-width: 767px) {
-                .main {
-                    padding: 0;
-                    flex-direction: column;
-                }
-                
-                .sidebar {
-                    position: absolute;
-                    width: 0;
-                    height: 0;
-                    overflow: visible;
-                }
-                
-                .mobile-panels-container {
-                    display: flex;
-                    flex-direction: column;
-                    width: 100%;
-                    height: 100%;
-                    overflow: hidden;
-                }
-                
-                .mobile-tabs {
-                    display: flex;
-                    padding: max(var(--space-2), env(safe-area-inset-top, 0px)) var(--space-2) var(--space-2);
-                    gap: var(--space-2);
-                    background: var(--crm-surface-muted);
-                    border-bottom: 1px solid var(--crm-stroke);
-                    flex-shrink: 0;
-                    overflow-x: auto;
-                }
-                
-                .menu-btn {
-                    width: 32px;
-                    height: 32px;
-                    display: flex;
-                    align-items: center;
-                    justify-content: center;
-                    border-radius: var(--radius-md);
-                    background: var(--crm-surface-muted);
-                    border: 1px solid var(--crm-stroke);
-                    color: var(--text-primary);
-                    cursor: pointer;
-                    flex-shrink: 0;
-                }
-                
-                .menu-btn:hover {
-                    background: var(--crm-surface);
-                }
-                
-                .mobile-tab {
-                    display: flex;
-                    align-items: center;
-                    gap: var(--space-2);
-                    padding: var(--space-2) var(--space-3);
-                    border-radius: var(--radius-md);
-                    background: transparent;
-                    border: 1px solid transparent;
-                    color: var(--text-secondary);
-                    font-size: var(--text-sm);
-                    font-weight: 500;
-                    cursor: pointer;
-                    white-space: nowrap;
-                    transition: all var(--duration-fast);
-                }
-                
-                .mobile-tab:hover {
-                    background: var(--crm-surface);
-                    color: var(--text-primary);
-                }
-                
-                .mobile-tab.active {
-                    background: var(--crm-selected-bg);
-                    border-color: var(--crm-selected-stroke);
-                    color: var(--text-primary);
-                }
-                
-                .mobile-panel {
-                    flex: 1;
-                    min-height: 0;
-                    overflow: hidden;
-                }
-                
-                .mobile-panel > * {
-                    width: 100%;
-                    height: 100%;
-                }
 
-                platform-island {
-                    min-height: 100%;
-                }
+            .mobile-shell-header-wrap {
+                display: none;
             }
-            
-            @media (min-width: 768px) {
-                .fullscreen {
-                    display: none;
-                }
-            }
-            
+
             .placeholder-view {
                 display: flex;
                 flex-direction: column;
@@ -240,7 +93,7 @@ export class CRMApp extends PlatformApp {
                 text-align: center;
                 color: var(--text-secondary);
             }
-            
+
             .placeholder-view .placeholder-icon {
                 width: 80px;
                 height: 80px;
@@ -253,18 +106,40 @@ export class CRMApp extends PlatformApp {
                 margin-bottom: var(--space-4);
                 color: var(--text-tertiary);
             }
-            
+
             .placeholder-view h2 {
                 margin: 0 0 var(--space-2) 0;
                 font-size: var(--text-xl);
                 font-weight: 600;
                 color: var(--text-primary);
             }
-            
+
             .placeholder-view p {
                 margin: 0;
                 font-size: var(--text-base);
                 color: var(--text-tertiary);
+            }
+
+            @media (max-width: 767px) {
+                .main {
+                    padding: 0;
+                }
+
+                .sidebar {
+                    position: absolute;
+                    width: 0;
+                    height: 0;
+                    overflow: visible;
+                }
+
+                .mobile-shell-header-wrap {
+                    display: block;
+                    flex-shrink: 0;
+                }
+
+                platform-island {
+                    min-height: 0;
+                }
             }
         `
     ];
@@ -272,14 +147,64 @@ export class CRMApp extends PlatformApp {
     constructor() {
         super();
         this._isMobile = false;
-        this._currentNoteId = null;
-        this._hasSuggestions = false;
         this._currentView = 'notes';
         this._showNamespaceModal = false;
         this._showAiModal = false;
-        this._activeMobilePanel = 'notes';
+        this._mobileSearchOpen = false;
+        this._mobileSearchInputValue = '';
         this._resizeObserver = null;
+        this._searchDebounce = null;
+        /** @type {{ key: string, at: number, data: object } | null} */
+        this._laraSummaryCache = null;
     }
+
+    _laraEmbedGetAuthToken = async () => {
+        const headers = await resolveFlowsEmbedAuthHeaders();
+        const ns = CRMStore._getCurrentNamespaceName();
+        if (ns && ns !== 'default') {
+            headers['X-Platform-Namespace'] = ns;
+        }
+        return headers;
+    };
+
+    _laraSummaryFlattenForVariables(data) {
+        if (!data || typeof data !== 'object') {
+            return {};
+        }
+        const json = JSON.stringify(data);
+        return {
+            crm_lara_summary: data,
+            crm_lara_summary_json: json,
+            crm_knowledge_imports_awaiting_review: data.knowledge_imports_awaiting_review,
+            crm_knowledge_imports_in_progress: data.knowledge_imports_in_progress,
+            crm_notes_analysis_draft_not_applied: data.notes_with_analysis_draft_not_applied,
+        };
+    }
+
+    _laraEmbedExtraMetadataVariables = async () => {
+        const crmApi = this.services?.get('crmApi');
+        if (!crmApi || typeof crmApi.getLaraWorkspaceSummary !== 'function') {
+            return {};
+        }
+        const ns = CRMStore._getCurrentNamespaceName();
+        const now = Date.now();
+        const ttlMs = 45000;
+        if (
+            this._laraSummaryCache &&
+            this._laraSummaryCache.key === ns &&
+            now - this._laraSummaryCache.at < ttlMs
+        ) {
+            return this._laraSummaryFlattenForVariables(this._laraSummaryCache.data);
+        }
+        try {
+            const data = await crmApi.getLaraWorkspaceSummary(ns);
+            this._laraSummaryCache = { key: ns, at: now, data };
+            return this._laraSummaryFlattenForVariables(data);
+        } catch (err) {
+            console.warn('getLaraWorkspaceSummary failed', err);
+            return {};
+        }
+    };
 
     setupStore() {
         return CRMStore;
@@ -291,57 +216,56 @@ export class CRMApp extends PlatformApp {
 
     async initServices() {
         await super.initServices();
-        
-        await this.services.registerCore('/crm');
         this.services.register('crmApi', new CRMAPIService('/crm/api/v1'));
-        
+
         CRMStore.initFromUrl();
         CRMStore.setupPopstateListener();
-        
+
         this._unsubscribe = CRMStore.subscribe((state) => {
-            this._currentNoteId = state.entities.currentNoteId;
             this._isMobile = state.ui.isMobile;
-            this._hasSuggestions = (state.ai.suggestions || []).length > 0;
+            if (this._currentView !== state.ui.currentView) {
+                this._mobileSearchOpen = false;
+            }
             this._currentView = state.ui.currentView;
         });
-        
+
         this._checkMobile();
         this._setupResizeObserver();
     }
-    
+
     async firstUpdated() {
         await super.firstUpdated();
-        
+
         const crmApi = this.services.get('crmApi');
         await CRMStore.loadNamespaces(crmApi);
         const currentNamespace = CRMStore.state.namespaces.current;
         const namespaceName = typeof currentNamespace === 'string'
             ? currentNamespace
             : (currentNamespace && typeof currentNamespace.name === 'string' ? currentNamespace.name : null);
-        const selectedDate = CRMStore.getDailyNotesDate();
+        const { from, to } = CRMStore.getDailyNotesRange();
         await Promise.all([
             CRMStore.loadNotes(crmApi, {
-                dateFrom: selectedDate,
-                dateTo: selectedDate,
+                dateFrom: from,
+                dateTo: to,
                 limit: 300,
             }),
             CRMStore.loadEntityTypes(crmApi, namespaceName),
             CRMStore.loadRelationshipTypes(crmApi),
         ]);
     }
-    
+
     _checkMobile() {
         const isMobile = window.innerWidth < 768;
         CRMStore.setMobile(isMobile);
     }
-    
+
     _setupResizeObserver() {
         this._resizeObserver = new ResizeObserver(() => {
             this._checkMobile();
         });
         this._resizeObserver.observe(document.body);
     }
-    
+
     disconnectedCallback() {
         super.disconnectedCallback?.();
         this._unsubscribe?.();
@@ -349,22 +273,147 @@ export class CRMApp extends PlatformApp {
     }
 
     async checkAuth() {
-        return true;
+        const ok = await this.auth.validateToken();
+        return !!ok;
+    }
+
+    _openSidebar() {
+        window.dispatchEvent(new CustomEvent('platform-sidebar-open', {
+            bubbles: true,
+            composed: true,
+        }));
+    }
+
+    _hydrateMobileSearchInputFromView() {
+        if (this._currentView === 'entities') {
+            this._mobileSearchInputValue = CRMStore.state.entities.filters.search || '';
+            return;
+        }
+        if (this._currentView === 'notes') {
+            this._mobileSearchInputValue = CRMStore.state.ui.notesPageSearchQuery || '';
+            return;
+        }
+        if (this._currentView === 'tasks') {
+            this._mobileSearchInputValue = CRMStore.state.ui.tasksListSearchQuery || '';
+        }
+    }
+
+    _toggleMobileSearch() {
+        if (this._mobileSearchOpen) {
+            this._closeMobileSearch();
+            return;
+        }
+        this._hydrateMobileSearchInputFromView();
+        this._mobileSearchOpen = true;
+    }
+
+    _closeMobileSearch() {
+        if (!this._mobileSearchOpen) {
+            return;
+        }
+        this._mobileSearchOpen = false;
+        this._dispatchSearchQuery('');
+        this._mobileSearchInputValue = '';
+    }
+
+    _onHeaderSearchInput(event) {
+        const raw = event.detail?.value;
+        const query = typeof raw === 'string' ? raw : '';
+        this._mobileSearchInputValue = query;
+        if (this._searchDebounce) {
+            clearTimeout(this._searchDebounce);
+        }
+        this._searchDebounce = setTimeout(() => {
+            this._searchDebounce = null;
+            this._dispatchSearchQuery(query);
+        }, 300);
+    }
+
+    _dispatchSearchQuery(query) {
+        if (this._currentView === 'entities') {
+            CRMStore.setEntityFilters({ search: query });
+            const crmApi = this.services.get('crmApi');
+            CRMStore.loadEntities(crmApi);
+        }
+        if (this._currentView === 'notes') {
+            CRMStore.setNotesPageSearchQuery(query);
+            window.dispatchEvent(new CustomEvent('crm-mobile-search', {
+                detail: { query },
+                bubbles: true,
+                composed: true,
+            }));
+        }
+        if (this._currentView === 'tasks') {
+            CRMStore.setTasksListSearchQuery(query);
+            window.dispatchEvent(new CustomEvent('crm-mobile-search', {
+                detail: { query },
+                bubbles: true,
+                composed: true,
+            }));
+        }
+    }
+
+    _onMobileAction() {
+        if (this._currentView === 'notes') {
+            this._createNote();
+        } else if (this._currentView === 'entities') {
+            this._createEntity();
+        } else if (this._currentView === 'tasks') {
+            this._dispatchPageEvent('tasks-create');
+        }
+    }
+
+    _onMobileExtra() {
+        if (this._currentView === 'entities') {
+            this._dispatchPageEvent('entities-toggle-filters');
+        } else if (this._currentView === 'tasks') {
+            this._dispatchPageEvent('tasks-refresh');
+        }
+    }
+
+    _onMobileAssistant() {
+        window.dispatchEvent(new CustomEvent('humanitec-embed-chat-toggle', { bubbles: true }));
+    }
+
+    _dispatchPageEvent(eventName) {
+        const island = this.renderRoot?.querySelector('platform-island');
+        if (island) {
+            island.dispatchEvent(new CustomEvent(eventName, { bubbles: true, composed: true }));
+        }
+    }
+
+    _createNote() {
+        const focusDate = CRMStore.getDailyNotesFocusDate();
+        const draftNote = {
+            entity_id: `draft-${Date.now()}`,
+            entity_type: 'note',
+            entity_subtype: null,
+            name: '',
+            description: '',
+            note_date: focusDate,
+            attributes: {},
+        };
+        const modal = document.createElement('note-view-modal');
+        modal.note = draftNote;
+        modal.startInEditMode = true;
+        modal.draftMode = true;
+        document.body.appendChild(modal);
+        modal.showModal();
+        modal.addEventListener('close', () => modal.remove());
+    }
+
+    _createEntity() {
+        const modal = document.createElement('entity-modal');
+        document.body.appendChild(modal);
+        modal.showModal();
+        modal.addEventListener('close', () => modal.remove());
     }
 
     _renderContent() {
-        const isMobile = this._isMobile;
-        
         if (this._currentView === 'notes') {
-            if (isMobile) {
-                return this._renderMobileNotesView();
-            }
-            
-            return html`
-                <daily-notes-page @analysis-ready=${this._openAiModal}></daily-notes-page>
-            `;
+            return html`<daily-notes-page @analysis-ready=${this._openAiModal}></daily-notes-page>`;
         }
-        
+
         if (this._currentView === 'entities') {
             return html`<entities-page></entities-page>`;
         }
@@ -377,104 +426,83 @@ export class CRMApp extends PlatformApp {
             return html`<tasks-page></tasks-page>`;
         }
 
-        if (this._currentView === 'calendar') {
-            return html`<calendar-page></calendar-page>`;
+        if (this._currentView === 'settings') {
+            return html`<settings-hub-page></settings-hub-page>`;
         }
 
-        if (this._currentView === 'settings') {
-            return html`<settings-page></settings-page>`;
+        if (this._currentView === 'templates') {
+            return html`<templates-page></templates-page>`;
         }
-        
+
+        if (this._currentView === 'spaces') {
+            return html`<spaces-page></spaces-page>`;
+        }
+
+        if (this._currentView === 'namespace_imports') {
+            return html`<namespace-tasks-page></namespace-tasks-page>`;
+        }
+
+        if (this._currentView === 'relationship_types') {
+            return html`<relationship-types-page></relationship-types-page>`;
+        }
+
         return this._renderPlaceholder(this._currentView);
     }
 
-    _renderMobileNotesView() {
-        const panels = [
-            { id: 'notes', label: 'Заметки', icon: 'file' },
-            { id: 'editor', label: 'Редактор', icon: 'edit' },
-            { id: 'ai', label: this._hasSuggestions ? 'AI' : 'AI (0)', icon: 'ai' },
-        ];
-        
-        return html`
-            <div class="mobile-panels-container">
-                <div class="mobile-tabs">
-                    <button class="menu-btn" @click=${this._openSidebar} title="Открыть меню">
-                        <platform-icon name="menu" size="18"></platform-icon>
-                    </button>
-                    ${panels.map(panel => html`
-                        <button 
-                            class="mobile-tab ${this._activeMobilePanel === panel.id ? 'active' : ''}"
-                            @click=${() => this._setMobilePanel(panel.id)}
-                        >
-                            <platform-icon name="${panel.icon}" size="16"></platform-icon>
-                            ${panel.label}
-                        </button>
-                    `)}
-                </div>
-                <div class="mobile-panel">
-                    ${this._renderMobilePanel()}
-                </div>
-            </div>
-        `;
-    }
-
-    _renderMobilePanel() {
-        switch (this._activeMobilePanel) {
-            case 'notes':
-                return html`<notes-list @note-selected=${this._onNoteSelected}></notes-list>`;
-            case 'editor':
-                return html`<note-editor @analysis-ready=${this._openAiModal}></note-editor>`;
-            case 'ai':
-                return html`<ai-suggestions-panel></ai-suggestions-panel>`;
-            default:
-                return html`<notes-list @note-selected=${this._onNoteSelected}></notes-list>`;
-        }
-    }
-
-    _onNoteSelected() {
-        this._activeMobilePanel = 'editor';
-    }
-
-    _setMobilePanel(panelId) {
-        this._activeMobilePanel = panelId;
-    }
-
-    _openSidebar() {
-        window.dispatchEvent(new CustomEvent('platform-sidebar-open', {
-            bubbles: true,
-            composed: true,
-        }));
-    }
-    
-    _renderPlaceholder(view) {
-        const viewNames = {
-            graph: 'Граф связей',
-            tasks: 'Задачи',
-            calendar: 'Календарь',
-            settings: 'Настройки',
+    _getViewConfig() {
+        const v = (id) => this.i18n.t(`app_shell.views.${id}`);
+        return {
+            notes: {
+                title: v('notes.title'),
+                actionIcon: 'plus',
+                actionTitle: v('notes.action_title'),
+                searchable: true,
+            },
+            entities: {
+                title: v('entities.title'),
+                actionIcon: 'plus',
+                actionTitle: v('entities.action_title'),
+                extraIcon: 'adjustment',
+                extraTitle: v('entities.extra_title'),
+                searchable: true,
+            },
+            graph: { title: v('graph.title'), actionIcon: null },
+            tasks: {
+                title: v('tasks.title'),
+                actionIcon: 'plus',
+                actionTitle: v('tasks.action_title'),
+                extraIcon: 'refresh',
+                extraTitle: v('tasks.extra_title'),
+                searchable: true,
+            },
+            calendar: { title: v('calendar.title'), actionIcon: null },
+            settings: { title: v('settings.title'), actionIcon: null },
+            templates: { title: v('templates.title'), actionIcon: null },
+            spaces: { title: v('spaces.title'), actionIcon: null },
+            namespace_imports: { title: v('namespace_imports.title'), actionIcon: null },
         };
-        
-        const viewName = viewNames[view] || view;
-        
-        return html`
-            <div class="placeholder-view">
-                <div class="placeholder-icon">
-                    <platform-icon name="${this._getViewIcon(view)}" size="48"></platform-icon>
-                </div>
-                <h2>${viewName}</h2>
-                <p>Раздел в разработке</p>
-            </div>
-        `;
     }
-    
-    _getViewIcon(view) {
+
+    _renderPlaceholder(view) {
+        const cfg = this._getViewConfig()[view];
+        const viewName = cfg?.title || view;
         const icons = {
             graph: 'network',
             tasks: 'checklist',
-            calendar: 'calendar',
-            settings: 'settings',
+            templates: 'settings',
+            spaces: 'folder',
+            namespace_imports: 'database',
         };
-        return icons[view] || 'folder';
+
+        return html`
+            <div class="placeholder-view">
+                <div class="placeholder-icon">
+                    <platform-icon name="${icons[view] || 'folder'}" size="48"></platform-icon>
+                </div>
+                <h2>${viewName}</h2>
+                <p>${this.i18n.t('app_shell.under_development')}</p>
+            </div>
+        `;
     }
 
     _openNamespaceModal() {
@@ -491,25 +519,26 @@ export class CRMApp extends PlatformApp {
 
     _closeAiModal() {
         this._showAiModal = false;
+        CRMStore.clearKnowledgeImportReview();
     }
-    
+
     async _onNamespaceChanged() {
         const crmApi = this.services.get('crmApi');
         const currentNamespace = CRMStore.state.namespaces.current;
         const namespaceName = typeof currentNamespace === 'string'
             ? currentNamespace
             : (currentNamespace && typeof currentNamespace.name === 'string' ? currentNamespace.name : null);
-        const selectedDate = CRMStore.getDailyNotesDate();
+        const { from, to } = CRMStore.getDailyNotesRange();
         await CRMStore.loadEntityTypes(crmApi, namespaceName);
         await CRMStore.loadEntities(crmApi);
         await CRMStore.loadNotes(crmApi, {
-            dateFrom: selectedDate,
-            dateTo: selectedDate,
+            dateFrom: from,
+            dateTo: to,
             limit: 300,
         });
     }
 
-    async _onNamespaceSaved(e) {
+    async _onNamespaceSaved() {
         this._showNamespaceModal = false;
         const crmApi = this.services.get('crmApi');
         await CRMStore.loadNamespaces(crmApi);
@@ -517,12 +546,12 @@ export class CRMApp extends PlatformApp {
         const namespaceName = typeof currentNamespace === 'string'
             ? currentNamespace
             : (currentNamespace && typeof currentNamespace.name === 'string' ? currentNamespace.name : null);
-        const selectedDate = CRMStore.getDailyNotesDate();
+        const { from, to } = CRMStore.getDailyNotesRange();
         await CRMStore.loadEntityTypes(crmApi, namespaceName);
         await CRMStore.loadEntities(crmApi);
         await CRMStore.loadNotes(crmApi, {
-            dateFrom: selectedDate,
-            dateTo: selectedDate,
+            dateFrom: from,
+            dateTo: to,
             limit: 300,
         });
     }
@@ -537,7 +566,11 @@ export class CRMApp extends PlatformApp {
             return html`<app-loader></app-loader>`;
         }
 
-        const mainClass = this._hasSuggestions ? 'main has-suggestions' : 'main';
+        if (!this.services.isInitialized || !this.services.has('i18n')) {
+            return html`<app-loader></app-loader>`;
+        }
+
+        const viewCfg = this._getViewConfig()[this._currentView] || { title: this._currentView, actionIcon: null };
 
         return html`
             <div class="sidebar">
@@ -546,12 +579,35 @@ export class CRMApp extends PlatformApp {
                     @namespace-changed=${this._onNamespaceChanged}
                 ></crm-sidebar>
             </div>
-            <div class="${mainClass}">
-                <platform-island padding=${this._isMobile ? 'none' : 'md'}>
+            <div class="main">
+                ${this._isMobile ? html`
+                    <div class="mobile-shell-header-wrap">
+                        <crm-mobile-app-header
+                            .headerTitle=${viewCfg.title}
+                            ?searchable=${!!viewCfg.searchable}
+                            ?searchOpen=${this._mobileSearchOpen}
+                            .searchValue=${this._mobileSearchInputValue}
+                            assistant-icon="ai"
+                            .assistantTitle=${this.i18n.t('app_shell.embed_chat_toggle')}
+                            .extraIcon=${viewCfg.extraIcon || ''}
+                            .extraTitle=${viewCfg.extraTitle || ''}
+                            .actionIcon=${viewCfg.actionIcon || ''}
+                            .actionTitle=${viewCfg.actionTitle || ''}
+                            @header-menu=${this._openSidebar}
+                            @header-toggle-search=${this._toggleMobileSearch}
+                            @header-search-input=${this._onHeaderSearchInput}
+                            @header-search-close=${this._closeMobileSearch}
+                            @header-assistant=${this._onMobileAssistant}
+                            @header-extra=${this._onMobileExtra}
+                            @header-action=${this._onMobileAction}
+                        ></crm-mobile-app-header>
+                    </div>
+                ` : ''}
+                <platform-island padding=${this._isMobile ? 'none' : 'md'} ?safe-bottom=${this._isMobile}>
                     ${this._renderContent()}
                 </platform-island>
             </div>
-            
+
             ${this._showNamespaceModal ? html`
                 <namespace-modal
                     .open=${true}
@@ -567,6 +623,19 @@ export class CRMApp extends PlatformApp {
                     @saved=${this._closeAiModal}
                 ></ai-analysis-modal>
             ` : ''}
+
+            <platform-embed-chat-drawer
+                theme="auto"
+                .assistantTitle=${this.i18n.t('app_shell.embed_assistant_name')}
+                .flowsBaseUrl=${resolveCrmLaraFlowsBaseUrl()}
+                flow-id="lara"
+                skill-id="crm"
+                toggle-event-name="humanitec-embed-chat-toggle"
+                ?use-credentials=${flowsEmbedShouldSendCredentials(resolveCrmLaraFlowsBaseUrl())}
+                .getAuthToken=${this._laraEmbedGetAuthToken}
+                .getExtraMetadataVariables=${this._laraEmbedExtraMetadataVariables}
+                .locale=${this.services.get('i18n').getCurrentLocale()}
+            ></platform-embed-chat-drawer>
         `;
     }
 }

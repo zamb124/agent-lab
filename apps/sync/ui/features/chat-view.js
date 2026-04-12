@@ -7,6 +7,7 @@ import { PlatformElement } from '@platform/lib/platform-element/index.js';
 import { glassStyles } from '@platform/lib/styles/shared/glass.styles.js';
 import { buttonStyles } from '@platform/lib/styles/shared/button.styles.js';
 import { AppEvents } from '@platform/lib/utils/types.js';
+import { createAvatarRetry } from '@platform/lib/utils/avatar-retry.js';
 import { SyncStore } from '../store/sync.store.js';
 import { hueFromString } from '../utils/sync-hue.js';
 import { mentionDisplayLabel } from '../utils/sync-mention-text.js';
@@ -37,7 +38,7 @@ export class ChatView extends PlatformElement {
                 box-sizing: border-box;
             }
 
-            @media (max-width: 767px) {
+            @media (max-width: 76px) {
                 :host {
                     padding-left: 0;
                     padding-right: 0;
@@ -52,19 +53,29 @@ export class ChatView extends PlatformElement {
                 align-items: stretch;
                 gap: 0;
                 padding: var(--space-2) var(--space-4);
-                border-bottom: 1px solid var(--glass-border-subtle);
+                border-bottom: 1px solid var(--glass-border-medium);
                 background: var(--glass-solid-subtle);
-                backdrop-filter: blur(var(--glass-blur-medium));
+                backdrop-filter: blur(var(--sync-header-blur));
+                -webkit-backdrop-filter: blur(var(--sync-header-blur));
+                box-shadow: var(--glass-shadow-subtle);
                 flex-shrink: 0;
             }
 
             .header-body {
                 display: flex;
                 align-items: center;
-                justify-content: space-between;
+                justify-content: flex-start;
                 gap: var(--space-3);
                 min-width: 0;
                 width: 100%;
+            }
+
+            .header-main-tray {
+                flex: 1 1 0;
+                min-width: 0;
+                display: flex;
+                align-items: center;
+                gap: var(--space-2);
             }
 
             .mobile-menu-btn {
@@ -144,10 +155,210 @@ export class ChatView extends PlatformElement {
             }
 
             .header-channel-wrap {
-                flex: 1 1 auto;
+                flex: 1 1 0;
                 min-width: 0;
                 display: flex;
                 align-items: center;
+            }
+
+            .header-call-banner--integrated {
+                flex: 1 1 0;
+                min-width: 0;
+                box-sizing: border-box;
+                display: flex;
+                flex-direction: row;
+                align-items: center;
+                gap: var(--space-2);
+                padding: 8px 10px 8px 12px;
+                border-radius: var(--radius-lg);
+                border: 1px solid rgba(255, 255, 255, 0.22);
+                background: var(--accent-gradient);
+                box-shadow:
+                    0 4px 18px rgba(153, 166, 249, 0.32),
+                    inset 0 1px 0 rgba(255, 255, 255, 0.2);
+                color: rgba(255, 255, 255, 0.98);
+            }
+
+            :host-context([data-theme="light"]) .header-call-banner--integrated {
+                border-color: rgba(255, 255, 255, 0.35);
+                box-shadow:
+                    0 4px 16px rgba(153, 166, 249, 0.22),
+                    inset 0 1px 0 rgba(255, 255, 255, 0.35);
+            }
+
+            @media (min-width: 768px) {
+                .header-call-banner--integrated {
+                    border-radius: var(--radius-lg);
+                }
+            }
+
+            @media (max-width: 767px) {
+                .header-call-banner--integrated {
+                    border-radius: var(--radius-lg) 0 0 var(--radius-lg);
+                    padding-right: max(10px, env(safe-area-inset-right, 0px));
+                }
+            }
+
+            .header-call-banner-hit {
+                flex: 1 1 0;
+                min-width: 0;
+                display: flex;
+                flex-direction: row;
+                align-items: center;
+                gap: 12px;
+                padding: 0;
+                margin: 0;
+                border: none;
+                background: transparent;
+                color: inherit;
+                font: inherit;
+                text-align: left;
+                cursor: pointer;
+                -webkit-tap-highlight-color: transparent;
+                position: relative;
+                z-index: 0;
+            }
+
+            .header-call-banner-hit:hover {
+                filter: brightness(1.06);
+            }
+
+            .header-call-banner-hit:focus-visible {
+                outline: 2px solid rgba(255, 255, 255, 0.85);
+                outline-offset: 2px;
+                border-radius: var(--radius-md);
+            }
+
+            .header-call-banner-toolbar {
+                display: flex;
+                flex-shrink: 0;
+                align-items: center;
+                gap: 6px;
+                position: relative;
+                z-index: 2;
+            }
+
+            .header-call-banner-ws.ws-badge.open {
+                background: #4ade80;
+                box-shadow: 0 0 6px rgba(74, 222, 128, 0.6);
+            }
+
+            .header-call-banner-ws.ws-badge.connecting {
+                background: #fbbf24;
+                box-shadow: 0 0 6px rgba(251, 191, 36, 0.6);
+            }
+
+            .header-call-banner-ws.ws-badge.closed {
+                background: #f87171;
+                box-shadow: 0 0 6px rgba(248, 113, 113, 0.6);
+            }
+
+            .header-call-banner-icon-btn {
+                display: inline-flex;
+                width: 38px;
+                height: 38px;
+                align-items: center;
+                justify-content: center;
+                border-radius: var(--radius-md);
+                border: 1px solid rgba(255, 255, 255, 0.35);
+                background: rgba(255, 255, 255, 0.12);
+                color: #fff;
+                cursor: pointer;
+                padding: 0;
+                box-sizing: border-box;
+                transition: background var(--duration-fast), border-color var(--duration-fast);
+            }
+
+            .header-call-banner-icon-btn:hover {
+                background: rgba(255, 255, 255, 0.2);
+                border-color: rgba(255, 255, 255, 0.5);
+            }
+
+            .header-call-banner-icon-btn:focus-visible {
+                outline: 2px solid #fff;
+                outline-offset: 2px;
+            }
+
+            .header-call-banner-pulse {
+                width: 10px;
+                height: 10px;
+                border-radius: 50%;
+                flex-shrink: 0;
+                background: #fff;
+                animation: header-call-banner-pulse 1.5s ease-in-out infinite;
+            }
+
+            @keyframes header-call-banner-pulse {
+                0%, 100% {
+                    opacity: 1;
+                    transform: scale(1);
+                    box-shadow: 0 0 0 0 rgba(255, 255, 255, 0.4);
+                }
+                50% {
+                    opacity: 0.88;
+                    transform: scale(0.9);
+                    box-shadow: 0 0 0 6px rgba(255, 255, 255, 0);
+                }
+            }
+
+            .header-call-banner-text {
+                flex: 1 1 auto;
+                min-width: 0;
+                display: flex;
+                flex-direction: column;
+                gap: 2px;
+            }
+
+            .header-call-banner-title {
+                font-size: var(--text-sm);
+                font-weight: var(--font-semibold);
+                letter-spacing: 0.01em;
+            }
+
+            .header-call-banner-sub {
+                font-size: var(--text-xs);
+                opacity: 0.92;
+            }
+
+            .header-call-banner-hangup {
+                flex-shrink: 0;
+                width: 40px;
+                height: 40px;
+                border-radius: var(--radius-full);
+                border: none;
+                display: inline-flex;
+                align-items: center;
+                justify-content: center;
+                cursor: pointer;
+                background: rgba(220, 38, 38, 0.92);
+                color: #fff;
+                box-shadow: 0 2px 10px rgba(220, 38, 38, 0.35);
+                transition: transform var(--duration-fast) var(--easing-default), background var(--duration-fast) var(--easing-default);
+                position: relative;
+                z-index: 3;
+            }
+
+            .header-call-banner-hangup:hover {
+                background: rgba(185, 28, 28, 0.98);
+                transform: scale(1.04);
+            }
+
+            .header-call-banner-hangup:focus-visible {
+                outline: 2px solid #fff;
+                outline-offset: 2px;
+            }
+
+            .header-body--call-banner {
+                align-items: stretch;
+            }
+
+            @media (max-width: 767px) {
+                .chat-header.chat-header--call-banner {
+                    padding-top: max(var(--space-1), env(safe-area-inset-top, 0px));
+                    padding-bottom: var(--space-1);
+                    padding-left: var(--space-2);
+                    padding-right: 0;
+                }
             }
 
             .header-leading {
@@ -269,10 +480,27 @@ export class ChatView extends PlatformElement {
                 font-size: var(--text-xs);
                 color: var(--text-tertiary);
                 margin-top: 2px;
+                display: flex;
+                align-items: center;
+                gap: var(--space-1);
             }
 
             .header-subtitle.is-typing {
                 color: var(--accent);
+            }
+
+            .header-online-dot {
+                width: 7px;
+                height: 7px;
+                border-radius: 50%;
+                background: var(--success);
+                flex-shrink: 0;
+                animation: header-online-pulse 2.5s ease-in-out infinite;
+            }
+
+            @keyframes header-online-pulse {
+                0%, 100% { opacity: 0.75; transform: scale(1); }
+                50% { opacity: 1; transform: scale(1.3); }
             }
 
             .header-actions {
@@ -414,28 +642,35 @@ export class ChatView extends PlatformElement {
             }
 
             .ws-badge {
-                font-size: 10px;
-                padding: 2px 8px;
+                width: 8px;
+                height: 8px;
                 border-radius: var(--radius-full);
-                border: 1px solid;
+                border: none;
+                font-size: 0;
+                line-height: 0;
+                overflow: hidden;
+                flex-shrink: 0;
             }
 
             .ws-badge.open {
-                background: rgba(16, 185, 129, 0.1);
-                border-color: rgba(16, 185, 129, 0.4);
-                color: rgb(16, 185, 129);
+                background: var(--success);
+                box-shadow: 0 0 6px rgba(34, 197, 94, 0.5);
             }
 
             .ws-badge.connecting {
-                background: rgba(245, 158, 11, 0.1);
-                border-color: rgba(245, 158, 11, 0.4);
-                color: rgb(245, 158, 11);
+                background: rgb(245, 158, 11);
+                box-shadow: 0 0 6px rgba(245, 158, 11, 0.5);
+                animation: ws-pulse 1.2s ease-in-out infinite;
             }
 
             .ws-badge.closed {
-                background: rgba(239, 68, 68, 0.1);
-                border-color: rgba(239, 68, 68, 0.4);
-                color: rgb(239, 68, 68);
+                background: rgb(239, 68, 68);
+                box-shadow: 0 0 6px rgba(239, 68, 68, 0.5);
+            }
+
+            @keyframes ws-pulse {
+                0%, 100% { opacity: 1; }
+                50% { opacity: 0.4; }
             }
 
             .pin-strip {
@@ -535,6 +770,7 @@ export class ChatView extends PlatformElement {
 
     constructor() {
         super();
+        this._headerAvatarRetry = createAvatarRetry(() => this.requestUpdate());
         const s = SyncStore.state;
         this._chat = s.chat;
         this._channels = s.channels;
@@ -556,10 +792,12 @@ export class ChatView extends PlatformElement {
         this._boundDocPointerHeaderMore = this._onDocPointerDownHeaderMore.bind(this);
         this._boundWindowResize = () => this._checkMobileViewport();
         this._boundWindowAdhoc = () => void this._startAdHocCall();
+        this._i18nUnsub = null;
     }
 
     connectedCallback() {
         super.connectedCallback();
+        this._i18nUnsub = this.i18n.subscribe(() => this.requestUpdate());
         document.addEventListener('pointerdown', this._boundDocPointerHeaderMore, true);
         window.addEventListener('resize', this._boundWindowResize);
         this._checkMobileViewport();
@@ -583,6 +821,9 @@ export class ChatView extends PlatformElement {
 
     disconnectedCallback() {
         super.disconnectedCallback?.();
+        this._i18nUnsub?.();
+        this._i18nUnsub = null;
+        this._headerAvatarRetry.cancel();
         document.removeEventListener('pointerdown', this._boundDocPointerHeaderMore, true);
         window.removeEventListener('resize', this._boundWindowResize);
         window.removeEventListener(AppEvents.AUTH_CHANGE, this._boundAuthChange);
@@ -659,17 +900,24 @@ export class ChatView extends PlatformElement {
 
     _getTitle() {
         const { focusedThreadId, selectedChannelId } = this._chat;
-        if (focusedThreadId) return 'Тред';
-        if (!selectedChannelId) return 'Выбери канал';
+        if (focusedThreadId) return this.i18n.t('chat_view.title_thread', {});
+        if (!selectedChannelId) return this.i18n.t('chat_view.title_pick_channel', {});
         const ch = this._selectedChannel();
         if (!ch) return selectedChannelId;
         if (SyncStore.isHiddenSyncChannelName(ch.name)) {
-            return 'Встреча';
+            return this.i18n.t('chat_view.title_meeting', {});
         }
         if (ch.type === 'direct' && ch.peer && typeof ch.peer.display_name === 'string') {
             return ch.peer.display_name;
         }
         return ch.name ?? selectedChannelId;
+    }
+
+    _isPeerOnline() {
+        const ch = this._selectedChannel();
+        if (!ch || ch.type !== 'direct' || !ch.peer?.user_id) return false;
+        const row = (this._peerPresenceByUserId ?? {})[ch.peer.user_id];
+        return !!(row && row.online);
     }
 
     _getSubtitle() {
@@ -679,7 +927,9 @@ export class ChatView extends PlatformElement {
         const chLabel = ch.type === 'direct' && ch.peer?.display_name
             ? ch.peer.display_name
             : (ch.name ?? ch.id);
-        if (focusedThreadId) return `Канал: ${chLabel} • thread_id: ${focusedThreadId}`;
+        if (focusedThreadId) {
+            return this.i18n.t('chat_view.thread_subtitle', { channel: chLabel, thread_id: focusedThreadId });
+        }
         if (ch.type === 'direct' && ch.peer && typeof ch.peer.user_id === 'string' && ch.peer.user_id !== '') {
             return SyncStore.getPeerPresenceSubtitle(ch.peer.user_id);
         }
@@ -690,16 +940,24 @@ export class ChatView extends PlatformElement {
      * Слева в шапке: как в sync-channel-row — только аватар канала (или peer в DM), иначе инициалы.
      */
     _headerLeadingGraphic(channel) {
+        const ts = (key, params) => this.i18n.t(key, params ?? {});
         if (!channel) {
             return html``;
         }
+        const originalUrl = channel.type === 'direct' && channel.peer
+            ? (typeof channel.peer.avatar_url === 'string' && channel.peer.avatar_url !== '' ? channel.peer.avatar_url : null)
+            : (typeof channel.avatar_url === 'string' && channel.avatar_url !== '' ? channel.avatar_url : null);
+        const src = this._headerAvatarRetry.currentSrc(originalUrl);
+
         if (channel.type === 'direct' && channel.peer) {
             const p = channel.peer;
             const label = SyncStore.channelDisplayTitle(channel);
             const initial = (label.trim().slice(0, 1) || '?').toUpperCase();
             const hue = hueFromString(p.user_id);
-            const inner = typeof p.avatar_url === 'string' && p.avatar_url !== ''
-                ? html`<img class="header-entity-img" src=${p.avatar_url} alt="" />`
+            const inner = src
+                ? html`<img class="header-entity-img" src=${src} alt=""
+                    @load=${() => this._headerAvatarRetry.onLoad()}
+                    @error=${() => this._headerAvatarRetry.onError(originalUrl)} />`
                 : html`
                     <span class="header-entity-initials" style=${`background:hsl(${hue} 48% 42%)`}>${initial}</span>
                 `;
@@ -707,8 +965,8 @@ export class ChatView extends PlatformElement {
                 <button
                     type="button"
                     class="header-peer-hit"
-                    title="Профиль"
-                    aria-label="Открыть профиль собеседника"
+                    title=${ts('chat_view.peer_profile_title')}
+                    aria-label=${ts('chat_view.peer_profile_aria')}
                     @click=${(e) => {
                         e.stopPropagation();
                         this._openHeaderPeerProfile(p);
@@ -718,11 +976,10 @@ export class ChatView extends PlatformElement {
                 </button>
             `;
         }
-        const chUrl = typeof channel.avatar_url === 'string' && channel.avatar_url !== ''
-            ? channel.avatar_url
-            : null;
-        if (chUrl) {
-            return html`<img class="header-entity-img" src=${chUrl} alt="" />`;
+        if (src) {
+            return html`<img class="header-entity-img" src=${src} alt=""
+                @load=${() => this._headerAvatarRetry.onLoad()}
+                @error=${() => this._headerAvatarRetry.onError(originalUrl)} />`;
         }
         const title = SyncStore.channelDisplayTitle(channel);
         const initial = (title.trim().slice(0, 1) || '?').toUpperCase();
@@ -734,7 +991,7 @@ export class ChatView extends PlatformElement {
 
     _openHeaderPeerProfile(peer) {
         if (!peer || typeof peer.user_id !== 'string' || peer.user_id === '') {
-            throw new Error('peer.user_id обязателен для профиля в шапке.');
+            throw new Error(this.i18n.t('chat_view.err_peer_user_id', {}));
         }
         const members = SyncStore.state.companyMembers?.list ?? [];
         const cm = members.find(m => m.user_id === peer.user_id);
@@ -768,12 +1025,12 @@ export class ChatView extends PlatformElement {
         const i = this._chat.pinnedNavigateIndex % ids.length;
         const targetId = ids[i];
         SyncStore.setPinnedNavigateIndex((i + 1) % ids.length);
-        this.updateComplete.then(() => {
+        this.updateComplete.then(async () => {
             const ml = this._messageListEl();
             if (!ml) {
-                throw new Error('message-list не найден.');
+                throw new Error(this.i18n.t('chat_view.err_message_list', {}));
             }
-            ml.scrollToMessageId(targetId);
+            await ml.scrollToMessageId(targetId);
             SyncStore.flashMessageHighlight(targetId);
         }).catch((err) => {
             const text = err instanceof Error ? err.message : String(err);
@@ -784,7 +1041,7 @@ export class ChatView extends PlatformElement {
     async _deleteSelected() {
         const syncApi = this.services.get('syncApi');
         const channelId = this._chat.selectedChannelId;
-        if (!channelId) throw new Error('Канал не выбран.');
+        if (!channelId) throw new Error(this.i18n.t('chat_view.err_channel_not_selected', {}));
         const ids = this._ui.selectedMessageIds;
         for (const mid of ids) {
             await syncApi.deleteMessage(channelId, mid);
@@ -797,7 +1054,7 @@ export class ChatView extends PlatformElement {
     async _forwardSelectedToChannel(toChannelId) {
         const syncApi = this.services.get('syncApi');
         const fromId = this._chat.selectedChannelId;
-        if (!fromId) throw new Error('Канал не выбран.');
+        if (!fromId) throw new Error(this.i18n.t('chat_view.err_channel_not_selected', {}));
         const ids = this._ui.selectedMessageIds;
         for (const mid of ids) {
             await syncApi.forwardMessage(fromId, mid, toChannelId, null);
@@ -820,17 +1077,26 @@ export class ChatView extends PlatformElement {
         const syncApi = this.services.get('syncApi');
         const fwd = this._ui.forwardMessage;
         const fromId = this._chat.selectedChannelId;
-        if (!fwd?.id || !fromId) throw new Error('Нет сообщения для пересылки.');
+        if (!fwd?.id || !fromId) throw new Error(this.i18n.t('chat_view.err_no_forward_message', {}));
         await syncApi.forwardMessage(fromId, fwd.id, toChannelId, null);
         SyncStore.setForwardModal(false, null);
         await SyncStore.loadMessages(syncApi, fromId);
     }
 
     _newMeetChannelName() {
-        const raw = typeof crypto.randomUUID === 'function'
-            ? crypto.randomUUID().replace(/-/g, '')
-            : `${Date.now().toString(16)}${Math.random().toString(16).slice(2)}`;
-        return `meet_${raw.slice(0, 20)}`;
+        const locale = this.i18n.getCurrentLocale();
+        const intlLocale = locale === 'ru' ? 'ru-RU' : 'en-US';
+        const now = new Date();
+        const dateStr = new Intl.DateTimeFormat(intlLocale, {
+            year: 'numeric',
+            month: 'short',
+            day: 'numeric',
+        }).format(now);
+        const timeStr = new Intl.DateTimeFormat(intlLocale, {
+            hour: 'numeric',
+            minute: '2-digit',
+        }).format(now);
+        return this.i18n.t('chat_view.adhoc_meet_channel_name', { date: dateStr, time: timeStr });
     }
 
     _startCallWithChannel(channelId) {
@@ -861,7 +1127,7 @@ export class ChatView extends PlatformElement {
         if (typeof spaceId !== 'string' || spaceId === '') {
             const first = this._spaces.list[0];
             if (!first?.id) {
-                this.error('Создайте пространство в сайдбаре, чтобы начать встречу.');
+                this.error(this.i18n.t('chat_view.create_space_for_meeting', {}));
                 return;
             }
             spaceId = first.id;
@@ -879,7 +1145,50 @@ export class ChatView extends PlatformElement {
         }
     }
 
+    _callBannerActive() {
+        const o = this._ui.activeCallOverlay;
+        if (!o || o.minimized !== true) {
+            return false;
+        }
+        if (typeof o.channel_id !== 'string' || o.channel_id === '') {
+            return false;
+        }
+        const sel = this._chat.selectedChannelId;
+        if (typeof sel !== 'string' || sel === '') {
+            return false;
+        }
+        return SyncStore.normalizeSyncChannelId(sel) === SyncStore.normalizeSyncChannelId(o.channel_id);
+    }
+
+    _expandCallFromBanner(e) {
+        if (e.target.closest('.header-call-banner-toolbar')) {
+            return;
+        }
+        window.dispatchEvent(new CustomEvent('sync-call-overlay-expand', { bubbles: true }));
+    }
+
+    _hangupCallFromBanner(e) {
+        e.stopPropagation();
+        const o = this._ui.activeCallOverlay;
+        if (typeof o?.call_id !== 'string' || o.call_id === '') {
+            throw new Error(this.i18n.t('chat_view.err_call_banner_call_id', {}));
+        }
+        window.dispatchEvent(new CustomEvent('sync-call-banner-hangup', {
+            bubbles: true,
+            detail: { call_id: o.call_id },
+        }));
+    }
+
+    _onCallBannerKeydown(e) {
+        if (e.key !== 'Enter' && e.key !== ' ') {
+            return;
+        }
+        e.preventDefault();
+        this._expandCallFromBanner(e);
+    }
+
     render() {
+        const ts = (key, params) => this.i18n.t(key, params ?? {});
         const { selectedChannelId, focusedThreadId } = this._chat;
         const selectedChannel = this._selectedChannel();
         const pins = selectedChannel?.pinned_message_ids;
@@ -922,6 +1231,9 @@ export class ChatView extends PlatformElement {
         const subtitleFallback = this._getSubtitle();
         const headerSubtitleText = typingLine || subtitleFallback;
         const showHeaderSubtitle = typeof headerSubtitleText === 'string' && headerSubtitleText !== '';
+        const peerOnline = !typingLine && this._isPeerOnline();
+
+        const callBanner = this._callBannerActive();
 
         const headerLead = selectedChannel
             ? html`<div class="header-leading">${this._headerLeadingGraphic(selectedChannel)}</div>`
@@ -932,14 +1244,17 @@ export class ChatView extends PlatformElement {
                     <button
                         type="button"
                         class="header-channel-hit"
-                        title="Настройки канала"
+                        title=${ts('chat_view.channel_settings_title')}
                         @click=${this._openChannelSettings}
                     >
                         ${headerLead}
                         <div class="header-channel-text">
                             <div class="header-title">${this._getTitle()}</div>
                             ${showHeaderSubtitle ? html`
-                                <div class="header-subtitle ${typingLine ? 'is-typing' : ''}">${headerSubtitleText}</div>
+                                <div class="header-subtitle ${typingLine ? 'is-typing' : ''}">
+                                    ${peerOnline ? html`<span class="header-online-dot" aria-hidden="true"></span>` : ''}
+                                    <span>${headerSubtitleText}</span>
+                                </div>
                             ` : ''}
                         </div>
                         <platform-icon class="header-settings-ic" name="settings" size="20"></platform-icon>
@@ -950,51 +1265,161 @@ export class ChatView extends PlatformElement {
                         <div class="header-channel-text">
                             <div class="header-title">${this._getTitle()}</div>
                             ${showHeaderSubtitle ? html`
-                                <div class="header-subtitle ${typingLine ? 'is-typing' : ''}">${headerSubtitleText}</div>
+                                <div class="header-subtitle ${typingLine ? 'is-typing' : ''}">
+                                    ${peerOnline ? html`<span class="header-online-dot" aria-hidden="true"></span>` : ''}
+                                    <span>${headerSubtitleText}</span>
+                                </div>
                             ` : ''}
                         </div>
                     </div>
                 `;
 
-        return html`
-            <div class=${classMap({ 'chat-header': true, 'chat-header--compact': this._isMobile })}>
-                <div class="header-body">
+        const mobileMenuBtn = html`
                     <button
                         type="button"
                         class=${classMap({ 'mobile-menu-btn': true, hidden: !showMobileMenuBtn })}
-                        title="Открыть меню"
-                        aria-label="Открыть меню"
+                        title=${ts('chat_view.open_menu_title')}
+                        aria-label=${ts('chat_view.open_menu_aria')}
                         @click=${this._openMobileSidebar}
                     >
                         <platform-icon name="hamburger" size="20"></platform-icon>
                     </button>
-                    <div class="header-channel-wrap">
-                        ${channelBlock}
+                `;
+
+        const callBannerBody = html`
+                    ${mobileMenuBtn}
+                    <div class="header-call-banner--integrated">
+                        <button
+                            type="button"
+                            class="header-call-banner-hit"
+                            title=${ts('chat_view.call_banner_subtitle')}
+                            @click=${this._expandCallFromBanner}
+                            @keydown=${this._onCallBannerKeydown}
+                        >
+                            <span class="header-call-banner-pulse" aria-hidden="true"></span>
+                            <div class="header-call-banner-text">
+                                <div class="header-call-banner-title">${ts('chat_view.call_banner_title')}</div>
+                                <div class="header-call-banner-sub">${ts('chat_view.call_banner_subtitle')}</div>
+                            </div>
+                        </button>
+                        <div class="header-call-banner-toolbar">
+                            <span class="ws-badge ${this._wsState} header-call-banner-ws">${this._wsState}</span>
+                            ${focusedThreadId ? html`
+                                <button
+                                    type="button"
+                                    class="header-call-banner-icon-btn"
+                                    title=${ts('chat_view.back')}
+                                    aria-label=${ts('chat_view.back')}
+                                    @click=${() => SyncStore.setFocusedThread(null)}
+                                >
+                                    <platform-icon name="chevron-left" size="18"></platform-icon>
+                                </button>
+                            ` : html`
+                                <button
+                                    type="button"
+                                    class="header-call-banner-icon-btn"
+                                    title=${ts('chat_view.threads_title')}
+                                    aria-label=${ts('chat_view.threads_title')}
+                                    ?disabled=${!selectedChannelId}
+                                    @click=${() => SyncStore.setThreadDrawerOpen(true)}
+                                >
+                                    <platform-icon name="list" size="18"></platform-icon>
+                                </button>
+                            `}
+                            ${this._isMobile ? html`
+                                <div class="header-more-wrap">
+                                    <button
+                                        type="button"
+                                        class="header-call-banner-icon-btn header-more-trigger"
+                                        title=${ts('chat_view.more_title')}
+                                        aria-label=${ts('chat_view.more_aria')}
+                                        aria-expanded=${this._headerMoreOpen ? 'true' : 'false'}
+                                        aria-haspopup="true"
+                                        @click=${this._toggleHeaderMoreMenu}
+                                    >
+                                        <platform-icon name="more-vert" size="18" filled aria-hidden="true"></platform-icon>
+                                    </button>
+                                    ${this._headerMoreOpen ? html`
+                                        <div class="header-more-menu" @pointerdown=${(e) => e.stopPropagation()}>
+                                            ${focusedThreadId ? html`
+                                                <button
+                                                    type="button"
+                                                    class="header-more-item"
+                                                    @click=${() => {
+        this._closeHeaderMoreMenu();
+        SyncStore.setFocusedThread(null);
+    }}
+                                                >
+                                                    <platform-icon name="chevron-left" size="16"></platform-icon>
+                                                    <span>${ts('chat_view.back')}</span>
+                                                </button>
+                                            ` : html`
+                                                <button
+                                                    type="button"
+                                                    class="header-more-item"
+                                                    ?disabled=${!selectedChannelId}
+                                                    @click=${() => {
+        this._closeHeaderMoreMenu();
+        SyncStore.setThreadDrawerOpen(true);
+    }}
+                                                >
+                                                    <platform-icon name="list" size="16"></platform-icon>
+                                                    <span>${ts('chat_view.threads')}</span>
+                                                </button>
+                                            `}
+                                        </div>
+                                    ` : ''}
+                                </div>
+                            ` : ''}
+                            <button
+                                type="button"
+                                class="header-call-banner-hangup"
+                                title=${ts('call_overlay.hangup_title')}
+                                aria-label=${ts('chat_view.call_banner_hangup_aria')}
+                                @click=${this._hangupCallFromBanner}
+                            >
+                                <platform-icon name="phone-ended" size="20" filled aria-hidden="true"></platform-icon>
+                            </button>
+                        </div>
                     </div>
-                    <div class="header-actions">
+                `;
+
+        return html`
+            <div class=${classMap({
+        'chat-header': true,
+        'chat-header--compact': this._isMobile,
+        'chat-header--call-banner': callBanner,
+    })}>
+                <div class=${classMap({
+        'header-body': true,
+        'header-body--call-banner': callBanner,
+    })}>
+                    ${callBanner ? callBannerBody : html`
+                    ${mobileMenuBtn}
+                    <div class="header-main-tray">
+                        <div class="header-channel-wrap">
+                            ${channelBlock}
+                        </div>
+                        <div class="header-actions">
                         ${this._isMobile ? html`
                             <div class="header-more-wrap">
                                 <button
                                     type="button"
                                     class="icon-btn header-more-trigger"
-                                    title="Ещё"
-                                    aria-label="Дополнительные действия"
+                                    title=${ts('chat_view.more_title')}
+                                    aria-label=${ts('chat_view.more_aria')}
                                     aria-expanded=${this._headerMoreOpen ? 'true' : 'false'}
                                     aria-haspopup="true"
                                     @click=${this._toggleHeaderMoreMenu}
                                 >
-                                    <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-                                        <circle cx="5" cy="12" r="2"/>
-                                        <circle cx="12" cy="12" r="2"/>
-                                        <circle cx="19" cy="12" r="2"/>
-                                    </svg>
+                                    <platform-icon name="more-vert" size="18" filled aria-hidden="true"></platform-icon>
                                 </button>
                                 ${this._headerMoreOpen ? html`
                                     <div class="header-more-menu" @pointerdown=${(e) => e.stopPropagation()}>
                                         <div class="header-more-menu-status">
                                             <span class="ws-badge ${this._wsState}">${this._wsState}</span>
                                         </div>
-                                        ${selectedChannelId ? html`
+                                        ${selectedChannelId && !callBanner ? html`
                                             <button
                                                 type="button"
                                                 class="header-more-item"
@@ -1003,11 +1428,8 @@ export class ChatView extends PlatformElement {
         this._startCall();
     }}
                                             >
-                                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                                                    <polygon points="23 7 16 12 23 17 23 7"/>
-                                                    <rect x="1" y="5" width="15" height="14" rx="2" ry="2"/>
-                                                </svg>
-                                                <span>Звонок</span>
+                                                <platform-icon name="video-call" size="16" filled aria-hidden="true"></platform-icon>
+                                                <span>${ts('chat_view.call')}</span>
                                             </button>
                                         ` : ''}
                                         ${focusedThreadId ? html`
@@ -1020,7 +1442,7 @@ export class ChatView extends PlatformElement {
     }}
                                             >
                                                 <platform-icon name="chevron-left" size="16"></platform-icon>
-                                                <span>Назад</span>
+                                                <span>${ts('chat_view.back')}</span>
                                             </button>
                                         ` : html`
                                             <button
@@ -1033,7 +1455,7 @@ export class ChatView extends PlatformElement {
     }}
                                             >
                                                 <platform-icon name="list" size="16"></platform-icon>
-                                                <span>Треды</span>
+                                                <span>${ts('chat_view.threads')}</span>
                                             </button>
                                         `}
                                     </div>
@@ -1042,25 +1464,22 @@ export class ChatView extends PlatformElement {
                         ` : html`
                             <span class="ws-badge ${this._wsState}">${this._wsState}</span>
 
-                            ${selectedChannelId ? html`
-                            <button type="button" class="icon-btn" title="Звонок в этом канале" aria-label="Звонок в этом канале" @click=${this._startCall}>
-                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                                    <polygon points="23 7 16 12 23 17 23 7"/>
-                                    <rect x="1" y="5" width="15" height="14" rx="2" ry="2"/>
-                                </svg>
+                            ${selectedChannelId && !callBanner ? html`
+                            <button type="button" class="icon-btn" title=${ts('chat_view.call_in_channel_title')} aria-label=${ts('chat_view.call_in_channel_aria')} @click=${this._startCall}>
+                                <platform-icon name="video-call" size="16" filled aria-hidden="true"></platform-icon>
                             </button>
                         ` : ''}
 
                             ${focusedThreadId ? html`
                             <button type="button" class="back-btn" @click=${() => SyncStore.setFocusedThread(null)}>
                                 <platform-icon name="chevron-left" size="14"></platform-icon>
-                                Назад
+                                ${ts('chat_view.back')}
                             </button>
                         ` : html`
                             <button
                                 type="button"
                                 class="icon-btn"
-                                title="Треды"
+                                title=${ts('chat_view.threads_title')}
                                 ?disabled=${!selectedChannelId}
                                 @click=${() => SyncStore.setThreadDrawerOpen(true)}
                             >
@@ -1068,7 +1487,9 @@ export class ChatView extends PlatformElement {
                             </button>
                         `}
                         `}
+                        </div>
                     </div>
+                    `}
                 </div>
             </div>
 
@@ -1077,30 +1498,30 @@ export class ChatView extends PlatformElement {
                     <channel-picker @sync-request-adhoc-call=${() => void this._startAdHocCall()}></channel-picker>
                 ` : html`
                     ${pinCount > 0 && !focusedThreadId ? html`
-                        <div class="pin-strip" @click=${this._onPinStripClick} title="Перейти к закреплённому">
+                        <div class="pin-strip" @click=${this._onPinStripClick} title=${ts('chat_view.pin_strip_title')}>
                             <platform-icon name="target" size="14"></platform-icon>
-                            <span>Закреплённые сообщения (${pinCount}) — нажмите для перехода по кругу</span>
+                            <span>${ts('chat_view.pinned_messages', { count: pinCount })}</span>
                         </div>
                     ` : ''}
                     ${selMode ? html`
                         <div class="selection-bar">
-                            <span>Выбрано: ${selIds.length}</span>
+                            <span>${ts('chat_view.selected_count', { count: selIds.length })}</span>
                             <div class="selection-actions">
                                 <button type="button" class="back-btn" @click=${() => {
         SyncStore.setSelectionMode(false);
-    }}>Отмена</button>
+    }}>${ts('chat_view.cancel')}</button>
                                 <button
                                     type="button"
                                     class="back-btn"
                                     ?disabled=${selIds.length === 0}
                                     @click=${() => SyncStore.setForwardModal(true, null)}
-                                >Переслать</button>
+                                >${ts('chat_view.forward')}</button>
                                 <button
                                     type="button"
                                     class="back-btn"
                                     ?disabled=${selIds.length === 0}
                                     @click=${this._deleteSelected}
-                                >Удалить</button>
+                                >${ts('chat_view.delete')}</button>
                             </div>
                         </div>
                     ` : ''}
@@ -1115,8 +1536,8 @@ export class ChatView extends PlatformElement {
         if (e.target === e.currentTarget) SyncStore.setForwardModal(false, null);
     }}>
                     <div class="modal-box" @click=${(e) => e.stopPropagation()}>
-                        <div class="modal-title">Куда переслать</div>
-                        ${forwardDestinations.length === 0 ? html`<p class="header-subtitle">Нет других каналов.</p>` : ''}
+                        <div class="modal-title">${ts('chat_view.forward_modal_title')}</div>
+                        ${forwardDestinations.length === 0 ? html`<p class="header-subtitle">${ts('chat_view.no_other_channels')}</p>` : ''}
                         <div class="forward-channel-list">
                             ${forwardDestinations.map(c => html`
                             <sync-channel-row
@@ -1134,7 +1555,7 @@ export class ChatView extends PlatformElement {
                             ></sync-channel-row>
                         `)}
                         </div>
-                        <button type="button" class="back-btn" style="margin-top:var(--space-3)" @click=${() => SyncStore.setForwardModal(false, null)}>Закрыть</button>
+                        <button type="button" class="back-btn" style="margin-top:var(--space-3)" @click=${() => SyncStore.setForwardModal(false, null)}>${ts('close')}</button>
                     </div>
                 </div>
             ` : ''}

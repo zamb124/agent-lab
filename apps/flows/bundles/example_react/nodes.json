@@ -8,17 +8,17 @@
     "tools": [
       "calculator",
       "ask_user",
-      "vision_analyze",
+      "read_file",
       "example_subflow",
       {
         "tool_id": "format_greeting",
-        "type": "function",
+        "type": "code",
         "description": "Форматирует приветствие с именем пользователя",
         "args_schema": {
           "name": {"type": "string", "description": "Имя пользователя"},
           "style": {"type": "string", "description": "Стиль приветствия: formal или casual"}
         },
-        "code": "def execute(args, state):\n    name = args.get('name', 'Гость')\n    style = args.get('style', 'casual')\n    if style == 'formal':\n        return f'Уважаемый {name}, добро пожаловать!'\n    return f'Привет, {name}!'"
+        "code": "async def execute(args, state):\n    name = args.get('name', 'Гость')\n    style = args.get('style', 'casual')\n    if style == 'formal':\n        return f'Уважаемый {name}, добро пожаловать!'\n    return f'Привет, {name}!'"
       }
     ],
     "llm": {"model": "grok-code-fast-1", "temperature": 0.3}
@@ -80,5 +80,34 @@
     "prompt_file": "prompts/evaluation_judge.md",
     "tools": [],
     "llm": {"model": "grok-code-fast-1", "temperature": 0.1}
+  },
+  {
+    "id": "example_hitl_tool_agent",
+    "type": "llm_node",
+    "name": "HITL: тул hitl_operator_task",
+    "description": "ReAct-агент с эскалацией в очередь операторов через hitl_operator_task (демо-очередь example_hitl).",
+    "prompt_file": "prompts/hitl_tool.md",
+    "tools": ["calculator", "ask_user", "hitl_operator_task"],
+    "llm": {"model": "gpt-4o", "temperature": 0.2}
+  },
+  {
+    "id": "example_gdocs_agent",
+    "type": "llm_node",
+    "name": "Google Docs ассистент",
+    "description": "ReAct-агент с тулами Google Docs: создание, чтение, редактирование, шаринг документов. Авторизация через переменные google_service_account / google_access_token или per-user OAuth.",
+    "prompt_file": "prompts/google_docs.md",
+    "tools": [
+      "ask_user",
+      "create_file",
+      "fill_docx_template",
+      "gdocs_create_document",
+      "gdocs_read_document",
+      "gdocs_append_text",
+      "gdocs_insert_text",
+      "gdocs_find_replace",
+      "gdocs_delete_range",
+      "gdocs_share_document"
+    ],
+    "llm": {"model": "gpt-4o", "temperature": 0.2}
   }
 ]

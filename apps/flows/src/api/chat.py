@@ -11,7 +11,8 @@ from fastapi.responses import HTMLResponse
 from jinja2 import Environment, FileSystemLoader, select_autoescape
 
 from apps.flows.src.channels.a2a import A2AChannel
-from apps.flows.src.container import get_container
+from apps.flows.src.container import FlowContainer
+from apps.flows.src.dependencies import ContainerDep
 from core.context import get_context
 from core.frontend.viewport import PLATFORM_MOBILE_VIEWPORT_CONTENT
 from core.logging import get_logger
@@ -22,9 +23,8 @@ logger = get_logger(__name__)
 router = APIRouter(tags=["chat"])
 
 
-async def _get_flow_config(flow_id: str) -> Optional[FlowConfig]:
+async def _get_flow_config(flow_id: str, container: FlowContainer) -> Optional[FlowConfig]:
     """Получает конфигурацию агента из репозитория."""
-    container = get_container()
     return await container.flow_repository.get(flow_id)
 
 
@@ -59,14 +59,14 @@ def _get_base_url(request: Request) -> str:
 
 
 @router.get("/{flow_id}/chat")
-async def get_chat_interface(flow_id: str, request: Request) -> HTMLResponse:
+async def get_chat_interface(flow_id: str, request: Request, container: ContainerDep) -> HTMLResponse:
     """
     Возвращает HTML интерфейс чата для указанного агента.
     
     Проверяет существование агента и возвращает шаблон с настройками авторизации.
     Загружает список skills для выбора в интерфейсе.
     """
-    config = await _get_flow_config(flow_id)
+    config = await _get_flow_config(flow_id, container)
     if not config:
         raise HTTPException(status_code=404, detail=f"Flow '{flow_id}' not found")
     

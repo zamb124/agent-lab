@@ -152,10 +152,14 @@ async def test_ai_analysis(crm_client, mock_llm_redis, unique_id):
         })
     }])
     
-    # Вызываем API
-    response = await crm_client.post("/entities/analyze", json={
-        "text": "Текст для анализа"
-    })
+    # Создаём заметку и вызываем analyze
+    note_resp = await crm_client.post("/crm/api/v1/entities/", json={
+        "entity_type": "note",
+        "name": "Заметка",
+        "description": "Текст для анализа",
+    }, headers=auth_headers_system)
+    note_id = note_resp.json()["entity_id"]
+    response = await crm_client.post(f"/crm/api/v1/entities/notes/{note_id}/analyze", json={})
 ```
 
 Метка `@pytest.mark.real_taskiq` указывает, что тест использует реальный TaskIQ worker.

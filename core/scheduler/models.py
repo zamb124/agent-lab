@@ -150,6 +150,24 @@ class PlatformScheduledTask(FlexibleBaseModel):
         return datetime.now(timezone.utc) + timedelta(seconds=self.interval_seconds)
 
 
+class PlatformRedisScheduleSnapshot(FlexibleBaseModel):
+    """Снимок расписания из Redis schedule source."""
+
+    schedule_task_id: str
+    company_id: str
+    schedule_id: Optional[str] = None
+    exists_in_redis: bool
+    status: ScheduledTaskStatus
+    task_name: str
+    cron: Optional[str] = None
+    interval_seconds: Optional[int] = None
+    run_at: Optional[datetime] = None
+    taskiq_task_id: Optional[str] = None
+    kwargs: Dict[str, Any] = Field(default_factory=dict)
+    labels: Dict[str, Any] = Field(default_factory=dict)
+    missing_reason: Optional[str] = None
+
+
 __all__ = [
     "ScheduleType",
     "ContentType",
@@ -160,5 +178,6 @@ __all__ = [
     "PlatformScheduleUpdateStatusRequest",
     "PlatformScheduleFilter",
     "PlatformScheduledTask",
+    "PlatformRedisScheduleSnapshot",
 ]
 

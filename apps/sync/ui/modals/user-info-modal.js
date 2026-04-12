@@ -4,6 +4,7 @@
 import { html, css } from 'lit';
 import { PlatformModal } from '@platform/lib/components/glass-modal.js';
 import { buttonStyles } from '@platform/lib/styles/shared/button.styles.js';
+import { createAvatarRetry } from '@platform/lib/utils/avatar-retry.js';
 import { SyncStore } from '../store/sync.store.js';
 import { hueFromString } from '../utils/sync-hue.js';
 import '../features/sync-channel-row.js';
@@ -141,13 +142,23 @@ export class UserInfoModal extends PlatformModal {
 
     constructor() {
         super();
-        this.title = 'Профиль';
+        this.title = '';
         this.size = 'xl';
         this.profileUser = null;
         this.sender = null;
+        this._avatarRetry = createAvatarRetry(() => this.requestUpdate());
         this._sharedChannels = [];
         this._channelsLoading = false;
         this._channelsError = null;
+    }
+
+    disconnectedCallback() {
+        super.disconnectedCallback?.();
+        this._avatarRetry.cancel();
+    }
+
+    _tp(key, params) {
+        return this.i18n.t(key, params ?? {});
     }
 
     _effectiveUser() {
@@ -157,7 +168,7 @@ export class UserInfoModal extends PlatformModal {
     _userId() {
         const u = this._effectiveUser();
         if (!u || typeof u.user_id !== 'string' || u.user_id === '') {
-            throw new Error('Нет user_id для профиля.');
+            throw new Error(this._tp('user_info_modal.err_no_user_id'));
         }
         return u.user_id;
     }
@@ -194,15 +205,15 @@ export class UserInfoModal extends PlatformModal {
     async _loadSharedChannels() {
         const syncApi = this.services.get('syncApi');
         if (!syncApi) {
-            throw new Error('syncApi не зарегистрирован.');
+            throw new Error(this._tp('composer.err_sync_api'));
         }
         this._channelsLoading = true;
         this._channelsError = null;
         this._sharedChannels = [];
         try {
             const uid = this._userId();
-            const list = await syncApi.getSharedChannelsWithMember(uid);
-            this._sharedChannels = Array.isArray(list) ? list : [];
+            const page = await syncApi.getSharedChannelsWithMember(uid);
+            this._sharedChannels = page?.items ?? [];
         } catch (e) {
             const msg = e instanceof Error ? e.message : String(e);
             this._channelsError = msg;
@@ -214,11 +225,11 @@ export class UserInfoModal extends PlatformModal {
 
     async _selectChannel(channel) {
         if (!channel?.id) {
-            throw new Error('Некорректный канал.');
+            throw new Error(this._tp('user_info_modal.err_invalid_channel'));
         }
         const syncApi = this.services.get('syncApi');
         if (!syncApi) {
-            throw new Error('syncApi не зарегистрирован.');
+            throw new Error(this._tp('composer.err_sync_api'));
         }
         await SyncStore.selectChannelAndLoadMessages(syncApi, channel.space_id ?? null, channel.id);
         this.close();
@@ -230,7 +241,7 @@ export class UserInfoModal extends PlatformModal {
     }
 
     renderHeader() {
-        return 'Профиль';
+        return this._tp('bubble.profile_title');
     }
 
     renderBody() {
@@ -239,7 +250,8 @@ export class UserInfoModal extends PlatformModal {
             return html``;
         }
         const name = this._displayName();
-        const avatarUrl = typeof u.avatar_url === 'string' && u.avatar_url !== '' ? u.avatar_url : null;
+        const originalAvatarUrl = typeof u.avatar_url === 'string' && u.avatar_url !== '' ? u.avatar_url : null;
+        const avatarSrc = this._avatarRetry.currentSrc(originalAvatarUrl);
         const initials = name.trim().slice(0, 2).toUpperCase() || '?';
         const hue = hueFromString(this._userId());
         const roles = this._rolesFromStore();
@@ -248,8 +260,10 @@ export class UserInfoModal extends PlatformModal {
         return html`
             <div class="body-wrap">
                 <div class="profile-head">
-                    ${avatarUrl
-                        ? html`<img class="profile-avatar" src=${avatarUrl} alt="" />`
+                    ${avatarSrc
+                        ? html`<img class="profile-avatar" src=${avatarSrc} alt=""
+                              @load=${() => this._avatarRetry.onLoad()}
+                              @error=${() => this._avatarRetry.onError(originalAvatarUrl)} />`
                         : html`<span
                               class="profile-avatar-initials"
                               style=${`background:hsl(${hue} 48% 42%)`}
@@ -258,7 +272,7 @@ export class UserInfoModal extends PlatformModal {
                 </div>
                 ${roles.length > 0
                     ? html`
-                        <div class="section-title">Роли</div>
+                        <div class="section-title">${this._tp('user_info_modal.roles_section')}</div>
                         <div class="roles-row">
                             ${roles.map(
                                 r => html`<span class="role-chip">${r}</span>`
@@ -266,13 +280,13 @@ export class UserInfoModal extends PlatformModal {
                         </div>
                     `
                     : ''}
-                <div class="section-title">Каналы вместе</div>
+                <div class="section-title">${this._tp('user_info_modal.shared_channels_section')}</div>
                 ${this._channelsLoading
-                    ? html`<div class="channels-empty">Загрузка…</div>`
+                    ? html`<div class="channels-empty">${this._tp('user_info_modal.loading')}</div>`
                     : this._channelsError
                       ? html`<div class="channels-error">${this._channelsError}</div>`
                       : this._sharedChannels.length === 0
-                        ? html`<div class="channels-empty">Нет общих каналов.</div>`
+                        ? html`<div class="channels-empty">${this._tp('user_info_modal.no_shared_channels')}</div>`
                         : html`
                             <div class="channels-grid">
                                 ${this._sharedChannels.map(ch => html`

@@ -46,7 +46,7 @@ export class StateMappingEditor extends PlatformElement {
                 color: var(--text-secondary);
             }
             
-            /* Табы для режима both */
+            /* Tabs for "both" mode */
             .tabs-container {
                 display: flex;
                 align-items: center;
@@ -300,17 +300,14 @@ export class StateMappingEditor extends PlatformElement {
     }
 
     get _emptyText() {
-        if (this._currentMode === 'input') {
-            return 'Нет маппингов';
-        }
-        return 'Нет маппингов';
+        return this.i18n.t('state_mapping_editor.empty');
     }
 
     get _hintText() {
         if (this._currentMode === 'input') {
-            return 'state/var/const → параметр';
+            return this.i18n.t('state_mapping_editor.hint_input');
         }
-        return 'результат → state';
+        return this.i18n.t('state_mapping_editor.hint_output');
     }
 
     get _typeOptions() {
@@ -678,7 +675,7 @@ export class StateMappingEditor extends PlatformElement {
                         ${this._renderTabs()}
                         ${!this.readonly ? html`
                             <button type="button" class="add-btn" @click=${this._addMapping}>
-                                + Добавить
+                                ${this.i18n.t('state_mapping_editor.add_mapping')}
                             </button>
                         ` : ''}
                     </div>
@@ -693,7 +690,7 @@ export class StateMappingEditor extends PlatformElement {
                     <span class="mapping-title">${this._title}</span>
                     ${!this.readonly ? html`
                         <button type="button" class="add-btn" @click=${this._addMapping}>
-                            + Добавить
+                            ${this.i18n.t('state_mapping_editor.add_mapping')}
                         </button>
                     ` : ''}
                 </div>

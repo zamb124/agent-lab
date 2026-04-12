@@ -54,10 +54,10 @@ export class BreakpointManager extends PlatformElement {
     setBreakpoint(nodeId, enabled) {
         if (enabled) {
             this._breakpoints.set(nodeId, true);
-            console.log(`[BreakpointManager] Breakpoint установлен на ноде "${nodeId}"`);
+            console.log(`[BreakpointManager] Breakpoint set on node "${nodeId}"`);
         } else {
             this._breakpoints.delete(nodeId);
-            console.log(`[BreakpointManager] Breakpoint снят с ноды "${nodeId}"`);
+            console.log(`[BreakpointManager] Breakpoint cleared on node "${nodeId}"`);
         }
         
         this.emit('breakpoint-toggled', { nodeId, enabled });
@@ -73,7 +73,7 @@ export class BreakpointManager extends PlatformElement {
     clearAll() {
         this._breakpoints.clear();
         this.clearActiveBreakpoint();
-        console.log('[BreakpointManager] Все breakpoints очищены');
+        console.log('[BreakpointManager] All breakpoints cleared');
     }
 
     /**

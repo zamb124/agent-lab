@@ -58,10 +58,12 @@
       "title": "Create Namespace",
       "name_label": "Name",
       "name_placeholder": "my-namespace",
-      "description_label": "Description (optional)",
-      "description_placeholder": "Describe your namespace...",
+      "name_hint": "Unique namespace name (letters, digits, hyphens)",
+      "description_label": "Description",
+      "description_placeholder": "Describe what this namespace is for...",
       "cancel": "Cancel",
-      "create": "Create"
+      "create": "Create",
+      "creating": "Creating..."
     },
     "upload_document": {
       "title": "Upload Document",
@@ -93,7 +95,58 @@
     "document_upload_failed": "document(s) failed to upload",
     "document_deleted": "Document deleted",
     "enter_namespace_name": "Please enter a namespace name",
-    "select_namespace_first": "Please select a namespace first"
+    "select_namespace_first": "Please select a namespace first",
+    "document_uploaded_named": "Document \"{{name}}\" uploaded successfully",
+    "namespace_created_with_name": "Namespace \"{{name}}\" created"
+  },
+  "namespace_detail": {
+    "not_found": "Namespace not found",
+    "open_menu": "Open menu",
+    "documents_count": "{{count}} documents",
+    "upload_document": "Upload document",
+    "loading_documents": "Loading documents...",
+    "uploading_short": "Loading...",
+    "uploading_document": "Uploading document...",
+    "drop_here": "Drop a file here",
+    "drop_or_choose": "or click to choose a file",
+    "supported_formats": "Supported formats: PDF, DOCX, DOC, XLSX, PPTX, HTML, TXT, MD, RTF, CSV, images",
+    "created_label": "Created:",
+    "pages_count": "{{count}} pages",
+    "delete_title": "Delete"
+  },
+  "namespace_list": {
+    "header_title": "Namespaces",
+    "header_subtitle": "Manage your document namespaces",
+    "loading": "Loading namespaces...",
+    "create_button": "Create namespace"
+  },
+  "search_view": {
+    "fill_all_fields": "Fill in all fields",
+    "title": "Search",
+    "subtitle": "Search across documents in namespaces",
+    "label_namespace": "Namespace",
+    "select_namespace": "Select a namespace",
+    "label_limit": "Results",
+    "label_query": "Query",
+    "query_placeholder": "Enter a search query...",
+    "searching": "Searching...",
+    "find": "Search",
+    "document_fallback": "Document",
+    "page_meta": "Page {{page}}",
+    "empty_no_results": "No results",
+    "empty_hint": "Enter a query to search"
+  },
+  "settings_view": {
+    "title": "Settings",
+    "subtitle": "RAG Service configuration",
+    "current_provider": "Current provider",
+    "current_provider_desc": "Active RAG provider for document storage",
+    "usage": "Usage",
+    "usage_desc": "Current resource usage",
+    "pages": "Pages",
+    "queries": "Queries",
+    "about_title": "About RAG Service",
+    "about_text": "Retrieval Augmented Generation (RAG) lets you use your documents to improve AI answers. Documents are split, vectorized, and stored for fast semantic search."
   }
 }
 

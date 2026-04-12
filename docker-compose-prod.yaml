@@ -12,6 +12,8 @@ x-common-env: &common-env
   DATABASE__CRM_URL: postgresql+asyncpg://platform_user:${POSTGRES_PASSWORD:-change-me-in-production}@postgres:5432/platform_crm
   DATABASE__SYNC_URL: postgresql+asyncpg://platform_user:${POSTGRES_PASSWORD:-change-me-in-production}@postgres:5432/platform_sync
   DATABASE__RAG_URL: postgresql+asyncpg://platform_user:${POSTGRES_PASSWORD:-change-me-in-production}@postgres:5432/platform_rag
+  DATABASE__OFFICE_URL: postgresql+asyncpg://platform_user:${POSTGRES_PASSWORD:-change-me-in-production}@postgres:5432/platform_office
+  DATABASE__TRACING_URL: postgresql+asyncpg://platform_user:${POSTGRES_PASSWORD:-change-me-in-production}@postgres:5432/platform_tracing
   DATABASE__REDIS_URL: redis://redis:6379/0
   DATABASE__AUTO_MIGRATE: "false"
   TASKS__BROKER_URL: redis://redis:6379/1
@@ -22,6 +24,7 @@ x-common-env: &common-env
   SERVER__CRM_SERVICE_URL: http://crm:8003
   SERVER__RAG_SERVICE_URL: http://rag:8004
   SERVER__SYNC_SERVICE_URL: http://sync:8005
+  SERVER__OFFICE_SERVICE_URL: http://office:8008
   SERVER__SCHEDULER_SERVICE_URL: http://scheduler-api:8006
   AUTH__JWT_SECRET: ${AUTH__JWT_SECRET:-change-me-in-production}
   AUTH__PROVIDERS__YANDEX__CLIENT_ID: ${AUTH_YANDEX_CLIENT_ID}
@@ -30,6 +33,10 @@ x-common-env: &common-env
   AUTH__PROVIDERS__GOOGLE__CLIENT_SECRET: ${AUTH_GOOGLE_CLIENT_SECRET}
   AUTH__PROVIDERS__GITHUB__CLIENT_ID: ${AUTH_GITHUB_CLIENT_ID}
   AUTH__PROVIDERS__GITHUB__CLIENT_SECRET: ${AUTH_GITHUB_CLIENT_SECRET}
+  # Sign in with Apple: client_id / team_id / key_id — в conf.json на сервере; секрет — только ключ .p8
+  AUTH__PROVIDERS__APPLE__APPLE_PRIVATE_KEY: ${AUTH_APPLE_PRIVATE_KEY:-}
+  # Демо-вход: auth.demo.login_enabled в conf.json; пароль только из секрета деплоя (не коммитить).
+  AUTH__DEMO__PASSWORD: ${AUTH_DEMO_PASSWORD:-}
   # Ключи должны совпадать с s3.default_bucket и s3.buckets в conf.json (см. shvedzilla).
   S3__DEFAULT_BUCKET: shvedzilla
   S3__BUCKETS__SHVEDZILLA__ACCESS_KEY_ID: ${SELECTEL_ACCESS_KEY}
@@ -39,6 +46,8 @@ x-common-env: &common-env
   PUSH__VAPID_PUBLIC_KEY: ${PUSH__VAPID_PUBLIC_KEY:-}
   PUSH__VAPID_PRIVATE_KEY: ${PUSH__VAPID_PRIVATE_KEY:-}
   PUSH__VAPID_EMAIL: ${PUSH__VAPID_EMAIL:-ops@humanitec.ru}
+  # APNs: опционально отдельный .p8 (если не тот же, что AUTH__PROVIDERS__APPLE__APPLE_PRIVATE_KEY). team_id / key_id / bundle_id — в conf.json (push или auth.providers.apple).
+  PUSH__APNS_PRIVATE_KEY: ${PUSH__APNS_PRIVATE_KEY:-}
   # WebRTC звонки: livekit доступен внутри Docker по имени сервиса.
   # CALLS__LIVEKIT_PUBLIC_URL — публичный wss:// URL для браузеров (через nginx/ingress).
   # CALLS__TURN_HOST использует SERVER_HOST (тот же IP что и для SSH деплоя).
@@ -52,6 +61,19 @@ x-common-env: &common-env
   LLM__BOTHUB__API_KEY: ${LLM_BOTHUB_API_KEY:-}
   LLM__OPENROUTER__API_KEY: ${LLM_OPENROUTER_API_KEY:-}
   STT__CLOUD_RU__API_KEY: ${STT__CLOUD_RU__API_KEY:-${STT_CLOUD_RU_API_KEY:-}}
+  # RAG pgvector (CRM, flows, сервис rag): OpenRouter embeddings. По умолчанию тот же ключ, что и LLM; иначе RAG_EMBEDDING_API_KEY в SSH/env деплоя.
+  RAG__PROVIDERS__PGVECTOR__EMBEDDING_API_KEY: ${RAG_EMBEDDING_API_KEY:-${LLM_OPENROUTER_API_KEY:-}}
+  # OnlyOffice + публичный origin платформы (браузер и исходящие запросы DS). Переопределение: .env на сервере.
+  SERVER__PLATFORM_PUBLIC_BASE_URL: ${SERVER__PLATFORM_PUBLIC_BASE_URL:-https://humanitec.ru}
+  OFFICE__DOCUMENT_SERVER_PUBLIC_URL: ${OFFICE_DOCUMENT_SERVER_PUBLIC_URL:-https://onlyoffice.humanitec.ru}
+  OFFICE__JWT_SECRET: ${ONLYOFFICE_JWT_SECRET:-change-me-in-production}
+  OFFICE__CALLBACK_PUBLIC_BASE_URL: ${OFFICE_CALLBACK_PUBLIC_BASE_URL:-https://humanitec.ru}
+  # YooMoney: секреты платежного провайдера
+  PAYMENT_PROVIDERS__PROVIDERS__YOOMONEY_MAIN__ACCOUNT_NUMBER: ${YOOMONEY_ACCOUNT_NUMBER:-}
+  PAYMENT_PROVIDERS__PROVIDERS__YOOMONEY_MAIN__NOTIFICATION_SECRET: ${YOOMONEY_NOTIFICATION_SECRET:-}
+  PAYMENT_PROVIDERS__PROVIDERS__YOOMONEY_MAIN__CLIENT_ID: ${YOOMONEY_CLIENT_ID:-}
+  PAYMENT_PROVIDERS__PROVIDERS__YOOMONEY_MAIN__CLIENT_SECRET: ${YOOMONEY_CLIENT_SECRET:-}
+  PAYMENT_PROVIDERS__PROVIDERS__YOOMONEY_MAIN__ACCESS_TOKEN: ${YOOMONEY_ACCESS_TOKEN:-}
 
 x-healthcheck: &healthcheck
   interval: 30s
@@ -149,10 +171,17 @@ services:
     depends_on:
       migrations:
         condition: service_completed_successfully
+      postgres:
+        condition: service_healthy
       redis:
         condition: service_healthy
+      scheduler-api:
+        condition: service_healthy
     healthcheck:
-      <<: *healthcheck
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 180s
       test: ["CMD", "curl", "-f", "http://localhost:8001/health"]
     restart: unless-stopped
     networks:
@@ -285,15 +314,59 @@ services:
     networks:
       - agentlab-net
 
+  onlyoffice-documentserver:
+    image: onlyoffice/documentserver:latest
+    container_name: agentlab_onlyoffice
+    ports:
+      - "8088:80"
+    environment:
+      JWT_ENABLED: "true"
+      JWT_SECRET: ${ONLYOFFICE_JWT_SECRET:-change-me-in-production}
+    volumes:
+      - ./deploy/onlyoffice/themes/theme-humanitec-light.json:/var/www/onlyoffice/documentserver/web-apps/apps/common/main/resources/themes/theme-humanitec-light.json:ro
+    depends_on:
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - agentlab-net
+
+  office:
+    <<: *app
+    container_name: agentlab_office
+    command: ["python", "-m", "apps.office.main"]
+    ports:
+      - "8008:8008"
+    volumes:
+      - ./conf.json:/app/conf.json:ro
+      - office_logs:/app/logs
+    environment:
+      <<: *common-env
+      SERVER__HOST: 0.0.0.0
+      SERVER__PORT: "8008"
+    depends_on:
+      migrations:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+      onlyoffice-documentserver:
+        condition: service_started
+    healthcheck:
+      <<: *healthcheck
+      test: ["CMD", "curl", "-f", "http://localhost:8008/health"]
+    restart: unless-stopped
+    networks:
+      - agentlab-net
+
   # ============================================
   # Workers
   # ============================================
-  worker:
+  flows_worker:
     <<: *app
-    command: ["taskiq", "worker", "apps.broker.worker:broker", "--workers", "4"]
+    command: ["taskiq", "worker", "apps.flows_worker.worker:worker_app", "--workers", "4"]
     volumes:
       - ./conf.json:/app/conf.json:ro
-      - worker_logs:/app/logs
+      - flows_worker_logs:/app/logs
     environment:
       <<: *common-env
     depends_on:
@@ -324,10 +397,10 @@ services:
     networks:
       - agentlab-net
 
-  rag-worker:
+  rag_worker:
     <<: *app
     container_name: agentlab_rag_worker
-    command: ["taskiq", "worker", "apps.rag_worker.worker:broker", "--workers", "2"]
+    command: ["taskiq", "worker", "apps.rag_worker.worker:worker_app", "--workers", "2"]
     volumes:
       - ./conf.json:/app/conf.json:ro
       - rag_worker_logs:/app/logs
@@ -342,13 +415,49 @@ services:
     networks:
       - agentlab-net
 
-  sync-worker:
+  sync_worker:
     <<: *app
     container_name: agentlab_sync_worker
-    command: ["taskiq", "worker", "apps.sync_worker.worker:broker", "--workers", "2"]
+    command: ["taskiq", "worker", "apps.sync_worker.worker:worker_app", "--workers", "2"]
     volumes:
       - ./conf.json:/app/conf.json:ro
       - sync_worker_logs:/app/logs
+    environment:
+      <<: *common-env
+    depends_on:
+      migrations:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - agentlab-net
+
+  crm_worker:
+    <<: *app
+    container_name: agentlab_crm_worker
+    command: ["taskiq", "worker", "apps.crm_worker.worker:worker_app", "--workers", "2"]
+    volumes:
+      - ./conf.json:/app/conf.json:ro
+      - crm_worker_logs:/app/logs
+    environment:
+      <<: *common-env
+    depends_on:
+      migrations:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - agentlab-net
+
+  idle_worker:
+    <<: *app
+    container_name: agentlab_idle_worker
+    command: ["taskiq", "worker", "apps.idle_worker.worker:worker_app", "--workers", "2"]
+    volumes:
+      - ./conf.json:/app/conf.json:ro
+      - idle_worker_logs:/app/logs
     environment:
       <<: *common-env
     depends_on:
@@ -432,10 +541,13 @@ volumes:
   crm_logs:
   rag_logs:
   sync_logs:
+  office_logs:
   scheduler_api_logs:
-  worker_logs:
+  flows_worker_logs:
   rag_worker_logs:
   sync_worker_logs:
+  crm_worker_logs:
+  idle_worker_logs:
 
 networks:
   agentlab-net:

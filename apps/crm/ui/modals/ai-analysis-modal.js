@@ -1,6 +1,7 @@
 import { html, css } from 'lit';
 import { PlatformModal } from '@platform/lib/components/glass-modal.js';
-import { CRMStore } from '../store/crm.store.js';
+import { buttonStyles } from '@platform/lib/styles/shared/button.styles.js';
+import { CRMStore, isRelationshipSuggestion } from '../store/crm.store.js';
 import '@platform/lib/components/platform-icon.js';
 import './entity-modal.js';
 
@@ -21,20 +22,45 @@ export class AIAnalysisModal extends PlatformModal {
         _loadingMessageIndex: { state: true },
         _expandedSuggestions: { state: true },
         _attributeDrafts: { state: true },
+        _importReviewActive: { state: true },
     };
 
     static styles = [
         PlatformModal.styles,
+        buttonStyles,
         css`
             :host {
                 --modal-max-width: 1120px;
+                --ai-analysis-save-bg: #7c3aed;
+                --ai-analysis-save-hover: #6d28d9;
+                --ai-analysis-save-shadow: 0 2px 14px rgba(124, 58, 237, 0.55);
+                --ai-analysis-save-shadow-hover: 0 4px 20px rgba(124, 58, 237, 0.65);
+            }
+
+            .header-btn.header-save-btn--primary {
+                background: var(--ai-analysis-save-bg);
+                color: #ffffff;
+                box-shadow: var(--ai-analysis-save-shadow);
+            }
+
+            .header-btn.header-save-btn--primary:hover:not(:disabled) {
+                background: var(--ai-analysis-save-hover);
+                color: #ffffff;
+                box-shadow: var(--ai-analysis-save-shadow-hover);
+            }
+
+            .header-btn.header-save-btn--primary:disabled {
+                box-shadow: none;
             }
 
             .root {
                 display: grid;
-                grid-template-columns: 1fr 1fr;
+                grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
                 gap: var(--space-3);
                 min-height: 520px;
+                width: 100%;
+                min-width: 0;
+                box-sizing: border-box;
             }
 
             .loading-shell {
@@ -95,6 +121,7 @@ export class AIAnalysisModal extends PlatformModal {
                 flex-direction: column;
                 gap: var(--space-3);
                 min-height: 0;
+                min-width: 0;
             }
 
             .block {
@@ -102,11 +129,89 @@ export class AIAnalysisModal extends PlatformModal {
                 border-radius: var(--radius-xl);
                 background: var(--crm-surface-muted);
                 padding: var(--space-3);
+                min-width: 0;
+                max-width: 100%;
+                box-sizing: border-box;
             }
 
             .ai-summary {
                 background: var(--crm-selected-bg);
                 border-color: var(--crm-selected-stroke);
+            }
+
+            .missing-entities-banner {
+                display: flex;
+                align-items: flex-start;
+                gap: var(--space-2);
+                padding: var(--space-3);
+                border-radius: var(--radius-xl);
+                border: 1px solid rgba(251, 191, 36, 0.45);
+                background: rgba(120, 53, 15, 0.18);
+                font-size: var(--text-sm);
+                color: #fde68a;
+                line-height: 1.5;
+                min-width: 0;
+            }
+
+            :host-context([data-theme='light']) .missing-entities-banner {
+                background: rgba(254, 243, 199, 0.9);
+                border-color: rgba(217, 119, 6, 0.45);
+                color: #92400e;
+            }
+
+            .missing-entities-banner platform-icon {
+                flex-shrink: 0;
+                margin-top: 1px;
+                color: #fbbf24;
+            }
+
+            :host-context([data-theme='light']) .missing-entities-banner platform-icon {
+                color: #d97706;
+            }
+
+            .missing-entities-text { min-width: 0; }
+
+            .missing-entities-title {
+                font-weight: 600;
+                margin-bottom: 2px;
+            }
+
+            .missing-entities-ids {
+                margin-top: var(--space-1);
+                font-size: var(--text-xs);
+                opacity: 0.8;
+                font-family: ui-monospace, monospace;
+                word-break: break-all;
+            }
+
+            .import-tasks-hint {
+                margin: 0 0 var(--space-2) 0;
+                font-size: var(--text-xs);
+                color: var(--text-tertiary);
+                line-height: 1.5;
+            }
+
+            .import-entities-summary {
+                display: flex;
+                align-items: center;
+                gap: var(--space-2);
+                padding: var(--space-2) var(--space-3);
+                border-radius: var(--radius-lg);
+                border: 1px solid var(--crm-stroke);
+                background: var(--crm-surface-muted);
+                font-size: var(--text-xs);
+                color: var(--text-secondary);
+                margin-bottom: var(--space-1);
+            }
+
+            .import-entities-summary platform-icon {
+                flex-shrink: 0;
+                color: var(--text-tertiary);
+            }
+
+            .import-entities-summary-count {
+                font-weight: 600;
+                color: var(--text-primary);
             }
 
             .block-title {
@@ -139,11 +244,21 @@ export class AIAnalysisModal extends PlatformModal {
                 -webkit-text-fill-color: transparent;
             }
 
+            .analysis-header-sub {
+                font-size: var(--text-lg);
+                font-weight: 600;
+                color: var(--text-secondary);
+                -webkit-text-fill-color: var(--text-secondary);
+                background: none;
+            }
+
             .summary-text {
                 margin: 0;
                 color: var(--text-primary);
                 line-height: 1.45;
                 font-size: var(--text-base);
+                overflow-wrap: anywhere;
+                word-break: break-word;
             }
 
             .chips {
@@ -238,6 +353,7 @@ export class AIAnalysisModal extends PlatformModal {
                 flex-direction: column;
                 gap: var(--space-3);
                 overflow: auto;
+                min-width: 0;
             }
 
             .connection-card {
@@ -247,6 +363,9 @@ export class AIAnalysisModal extends PlatformModal {
                 align-items: flex-start;
                 gap: var(--space-2);
                 border: none;
+                min-width: 0;
+                max-width: 100%;
+                box-sizing: border-box;
             }
 
             .connection-card.blue {
@@ -296,7 +415,7 @@ export class AIAnalysisModal extends PlatformModal {
             .score-track {
                 height: 16px;
                 border-radius: var(--radius-full);
-                background: rgba(34, 34, 34, 0.08);
+                background: var(--glass-tint-strong);
                 margin-top: var(--space-2);
                 position: relative;
                 overflow: hidden;
@@ -365,18 +484,24 @@ export class AIAnalysisModal extends PlatformModal {
             .existing-hint {
                 margin-top: 4px;
                 font-size: var(--text-xs);
-                color: rgba(34, 34, 34, 0.6);
+                color: var(--text-secondary);
             }
 
             .existing-link {
                 border: none;
                 background: transparent;
-                color: #5f6fda;
-                font-size: var(--text-xs);
-                line-height: 16px;
+                color: var(--crm-selected-text);
+                font-size: var(--text-sm);
+                font-weight: var(--font-bold);
+                line-height: 1.25;
                 padding: 0;
                 cursor: pointer;
-                text-decoration: underline;
+                text-decoration: none;
+                font-family: inherit;
+            }
+
+            .existing-link:hover {
+                color: var(--platform-btn-primary-hover);
             }
 
             .remove-connection {
@@ -393,21 +518,25 @@ export class AIAnalysisModal extends PlatformModal {
 
             .connection-header {
                 display: flex;
-                align-items: center;
+                align-items: flex-start;
                 justify-content: space-between;
                 gap: var(--space-2);
+                min-width: 0;
+                flex-wrap: wrap;
             }
 
             .connection-meta {
                 display: flex;
                 align-items: center;
                 gap: var(--space-2);
+                flex-shrink: 0;
+                margin-left: auto;
             }
 
             .relationship-type {
                 font-size: var(--text-xs);
                 line-height: 16px;
-                color: rgba(34, 34, 34, 0.5);
+                color: var(--text-tertiary);
                 margin-top: 4px;
             }
 
@@ -428,15 +557,15 @@ export class AIAnalysisModal extends PlatformModal {
             }
 
             .relationship-arrow {
-                color: rgba(34, 34, 34, 0.4);
+                color: var(--text-tertiary);
                 display: inline-flex;
                 align-items: center;
             }
 
             .relationship-object-link {
                 border: none;
-                background: rgba(153, 166, 249, 0.2);
-                color: #5f6fda;
+                background: var(--crm-selected-bg);
+                color: var(--crm-selected-text);
                 border-radius: 12px;
                 padding: 2px 10px;
                 font-size: var(--text-xs);
@@ -450,8 +579,8 @@ export class AIAnalysisModal extends PlatformModal {
 
             .relationship-object-link:disabled {
                 cursor: not-allowed;
-                color: rgba(34, 34, 34, 0.35);
-                background: rgba(34, 34, 34, 0.08);
+                color: var(--text-disabled);
+                background: var(--glass-tint-medium);
             }
 
             .attr-toggle {
@@ -466,7 +595,7 @@ export class AIAnalysisModal extends PlatformModal {
 
             .attrs-panel {
                 margin-top: var(--space-2);
-                border-top: 1px solid rgba(34, 34, 34, 0.08);
+                border-top: 1px solid var(--crm-stroke);
                 padding-top: var(--space-2);
                 display: flex;
                 flex-direction: column;
@@ -481,11 +610,11 @@ export class AIAnalysisModal extends PlatformModal {
             }
 
             .attr-input {
-                border: 1px solid rgba(34, 34, 34, 0.1);
+                border: 1px solid var(--crm-stroke);
                 border-radius: 10px;
                 height: 30px;
                 padding: 0 10px;
-                background: rgba(255, 255, 255, 0.75);
+                background: var(--crm-surface-elevated);
                 color: var(--text-primary);
                 font-size: var(--text-xs);
                 min-width: 0;
@@ -501,7 +630,8 @@ export class AIAnalysisModal extends PlatformModal {
                 height: 24px;
                 border: none;
                 border-radius: 12px;
-                background: rgba(34, 34, 34, 0.08);
+                background: var(--glass-tint-medium);
+                color: var(--text-secondary);
                 cursor: pointer;
                 display: inline-flex;
                 align-items: center;
@@ -533,52 +663,41 @@ export class AIAnalysisModal extends PlatformModal {
                 width: 100%;
             }
 
-            .btn {
-                border: none;
-                border-radius: var(--radius-full);
-                min-height: 40px;
-                padding: 0 var(--space-4);
-                font-size: var(--text-base);
-                cursor: pointer;
-            }
-
-            .btn-secondary {
-                background: var(--crm-button-secondary-bg);
-                color: var(--crm-button-secondary-text);
-            }
-
-            .btn-secondary:hover:not(:disabled) {
-                background: var(--crm-button-secondary-hover);
-            }
-
-            .btn-primary {
-                background: var(--crm-button-primary-bg);
-                color: var(--crm-button-primary-text);
-            }
-
-            .btn-primary:hover:not(:disabled) {
-                background: var(--crm-button-primary-hover);
-            }
-
-            .btn-primary:disabled {
-                opacity: 0.6;
-                cursor: not-allowed;
-            }
-
             .btn-disabled {
-                background: rgba(34, 34, 34, 0.05);
-                color: rgba(34, 34, 34, 0.2);
+                background: var(--glass-tint-subtle);
+                color: var(--text-disabled);
             }
 
             @media (max-width: 1024px) {
                 .root {
-                    grid-template-columns: 1fr;
+                    grid-template-columns: minmax(0, 1fr);
                 }
                 .connections-title {
                     font-size: 30px;
                 }
                 .block-title {
                     font-size: var(--text-xl);
+                }
+            }
+
+            @media (max-width: 480px) {
+                .connection-avatar {
+                    width: 48px;
+                    height: 48px;
+                }
+
+                .attr-row,
+                .attr-add-row {
+                    grid-template-columns: 1fr;
+                }
+
+                .task-row {
+                    grid-template-columns: auto minmax(0, 1fr) auto;
+                }
+
+                .task-row span {
+                    min-width: 0;
+                    overflow-wrap: anywhere;
                 }
             }
         `,
@@ -601,9 +720,11 @@ export class AIAnalysisModal extends PlatformModal {
         this._loadingMessageIndex = 0;
         this._expandedSuggestions = [];
         this._attributeDrafts = {};
+        this._importReviewActive = false;
         this._loadingIntervalId = null;
         this._loadingStartedAt = 0;
         this._unsubscribe = null;
+        this.headerSavePrimary = true;
     }
 
     connectedCallback() {
@@ -633,7 +754,9 @@ export class AIAnalysisModal extends PlatformModal {
         this._currentNoteId = state.entities.currentNoteId;
         this._entityTypes = Array.isArray(state.entities.entityTypes) ? state.entities.entityTypes : [];
         this._relationshipTypes = Array.isArray(state.entities.relationshipTypes) ? state.entities.relationshipTypes : [];
-        this._analyzing = state.ai.analyzing === true;
+        this._importReviewActive = Boolean(state.ai.importReview);
+        const aid = state.ai.analyzingNoteId;
+        this._analyzing = typeof aid === 'string' && aid.trim().length > 0;
         const taskSuggestions = this._getTaskSuggestions();
         const currentDoneMap = new Map(this._taskStates.map((task) => [task.id, task.done]));
         this._taskStates = taskSuggestions.map((task) => ({
@@ -683,11 +806,11 @@ export class AIAnalysisModal extends PlatformModal {
 
     _getLoadingMessage() {
         const messages = [
-            'Проверяю текст...',
-            'Выделяю сущности...',
-            'Строю связи...',
-            'Формирую задачи...',
-            'Готовлю итоговый анализ...',
+            this.i18n.t('ai_analysis_modal.loading_1'),
+            this.i18n.t('ai_analysis_modal.loading_2'),
+            this.i18n.t('ai_analysis_modal.loading_3'),
+            this.i18n.t('ai_analysis_modal.loading_4'),
+            this.i18n.t('ai_analysis_modal.loading_5'),
         ];
         if (this._loadingProgress >= 99) {
             return messages[messages.length - 1];
@@ -716,7 +839,7 @@ export class AIAnalysisModal extends PlatformModal {
         if (typeof task.name === 'string' && task.name.length > 0) {
             return task.name;
         }
-        return 'Задача';
+        return this.i18n.t('ai_analysis_modal.task_fallback');
     }
 
     _getTaskDoneState(currentDoneMap, task) {
@@ -726,6 +849,10 @@ export class AIAnalysisModal extends PlatformModal {
     }
 
     _getCurrentNote() {
+        const ir = CRMStore.state.ai.importReview;
+        if (ir && ir.anchorNote && typeof ir.anchorNote === 'object') {
+            return ir.anchorNote;
+        }
         const note = this._notes.find((entry) => entry.entity_id === this._currentNoteId);
         return note === undefined ? null : note;
     }
@@ -735,7 +862,15 @@ export class AIAnalysisModal extends PlatformModal {
     }
 
     _getConnectionSuggestions() {
-        return this._suggestions.filter((item) => item.entity_type !== 'task');
+        return this._suggestions.filter((item) => {
+            if (isRelationshipSuggestion(item)) {
+                return true;
+            }
+            if (!item.entity_type) {
+                return false;
+            }
+            return item.entity_type !== 'task';
+        });
     }
 
     _onToggleTask(taskId) {
@@ -765,8 +900,13 @@ export class AIAnalysisModal extends PlatformModal {
         this._taskDraft = '';
     }
 
-    _onRemoveConnection(index) {
-        CRMStore.removeSuggestion(index);
+    async _onRemoveConnection(index) {
+        if (this._importReviewActive) {
+            this.error(this.i18n.t('ai_analysis_modal.remove_disabled_import'));
+            return;
+        }
+        const crmApi = this.services.get('crmApi');
+        await CRMStore.removeSuggestionWithServerDraftSync(crmApi, index);
     }
 
     _getSuggestionUiKey(item, index) {
@@ -932,7 +1072,7 @@ export class AIAnalysisModal extends PlatformModal {
                 return draft.note.description.trim();
             }
         }
-        return 'AI-summary пока не сформирована.';
+        return this.i18n.t('ai_analysis_modal.summary_empty');
     }
 
     _getScoreValue(item) {
@@ -962,13 +1102,13 @@ export class AIAnalysisModal extends PlatformModal {
             : null;
         if (isExisting) {
             return {
-                label: 'Existing',
+                label: this.i18n.t('ai_analysis_modal.dedup_existing'),
                 className: 'existing',
                 confidence,
             };
         }
         return {
-            label: 'New',
+            label: this.i18n.t('ai_analysis_modal.dedup_new'),
             className: '',
             confidence: null,
         };
@@ -990,9 +1130,12 @@ export class AIAnalysisModal extends PlatformModal {
 
     _resolveIconName(rawIconName) {
         if (typeof rawIconName !== 'string' || rawIconName.trim().length === 0) {
-            return 'file';
+            return 'folder';
         }
         const iconName = rawIconName.trim();
+        if (iconName === 'file') {
+            return 'folder';
+        }
         if (/^[a-z0-9-]+$/i.test(iconName)) {
             return iconName;
         }
@@ -1002,7 +1145,7 @@ export class AIAnalysisModal extends PlatformModal {
             '🏢': 'database',
         };
         const aliasName = emojiIconAliases[iconName];
-        return typeof aliasName === 'string' ? aliasName : 'file';
+        return typeof aliasName === 'string' ? aliasName : 'folder';
     }
 
     _getEntityTypeIcon(typeId) {
@@ -1029,7 +1172,7 @@ export class AIAnalysisModal extends PlatformModal {
 
     _getRelationshipTypeLabel(typeId) {
         if (typeof typeId !== 'string' || typeId.trim().length === 0) {
-            return 'Связь';
+            return this.i18n.t('ai_analysis_modal.relationship_fallback');
         }
         const typeConfig = this._relationshipTypes.find((item) => item?.type_id === typeId);
         if (typeConfig && typeof typeConfig.name === 'string' && typeConfig.name.trim().length > 0) {
@@ -1040,14 +1183,14 @@ export class AIAnalysisModal extends PlatformModal {
 
     _humanizeRelationshipTypeId(typeId) {
         const typeAliases = {
-            attended: 'Участие во встрече',
-            works_at: 'Работает в',
-            involved_organization: 'Вовлеченная организация',
-            documents: 'Связь с документом',
-            mentions: 'Упоминание',
+            attended: 'ai_analysis_modal.rel_type_attended',
+            works_at: 'ai_analysis_modal.rel_type_works_at',
+            involved_organization: 'ai_analysis_modal.rel_type_involved_organization',
+            documents: 'ai_analysis_modal.rel_type_documents',
+            mentions: 'ai_analysis_modal.rel_type_mentions',
         };
         if (Object.prototype.hasOwnProperty.call(typeAliases, typeId)) {
-            return typeAliases[typeId];
+            return this.i18n.t(typeAliases[typeId]);
         }
         const normalized = typeId
             .split('_')
@@ -1055,51 +1198,74 @@ export class AIAnalysisModal extends PlatformModal {
             .filter((part) => part.length > 0)
             .join(' ');
         if (normalized.length === 0) {
-            return 'Связь';
+            return this.i18n.t('ai_analysis_modal.relationship_fallback');
         }
         return normalized.charAt(0).toUpperCase() + normalized.slice(1);
     }
 
-    _getRelationshipDisplay(item) {
-        const sourceId = typeof item.source_entity_id === 'string' ? item.source_entity_id : '';
-        const targetId = typeof item.target_entity_id === 'string' ? item.target_entity_id : '';
-        const sourceName = typeof item.source_name === 'string' && item.source_name.trim().length > 0
-            ? item.source_name
-            : (sourceId || 'Источник');
-        const targetName = typeof item.target_name === 'string' && item.target_name.trim().length > 0
-            ? item.target_name
-            : (targetId || 'Объект');
+    _draftEndpointLabel(draftEntityId) {
+        if (typeof draftEntityId !== 'string' || draftEntityId.trim().length === 0) {
+            throw new Error('draft_entity_id is required for relationship endpoint');
+        }
+        const ctx = CRMStore.state.ai.analyzeContextNote;
+        if (ctx?.draft_entity_id === draftEntityId) {
+            if (typeof ctx.name === 'string' && ctx.name.trim().length > 0) {
+                return ctx.name.trim();
+            }
+            return this.i18n.t('note_content.note_title_fallback');
+        }
+        const row = this._suggestions.find((s) => s?.draft_entity_id === draftEntityId && s.entity_type);
+        if (!row || typeof row.name !== 'string' || row.name.trim().length === 0) {
+            throw new Error(`No label for draft_entity_id=${draftEntityId}`);
+        }
+        return row.name.trim();
+    }
 
+    _draftEndpointRealEntityId(draftEntityId) {
+        if (typeof draftEntityId !== 'string' || draftEntityId.trim().length === 0) {
+            return '';
+        }
+        if (draftEntityId.startsWith('ki:')) {
+            return draftEntityId.slice(3).trim();
+        }
         const noteId = typeof this._currentNoteId === 'string' ? this._currentNoteId : '';
-        if (noteId.length > 0 && sourceId === noteId && targetId.length > 0) {
-            return {
-                sourceLabel: sourceName,
-                targetLabel: targetName,
-                objectId: targetId,
-                objectLabel: targetName,
-            };
+        const ctx = CRMStore.state.ai.analyzeContextNote;
+        if (ctx?.draft_entity_id === draftEntityId && noteId.length > 0) {
+            return noteId;
         }
-        if (noteId.length > 0 && targetId === noteId && sourceId.length > 0) {
-            return {
-                sourceLabel: sourceName,
-                targetLabel: targetName,
-                objectId: sourceId,
-                objectLabel: sourceName,
-            };
+        const row = this._suggestions.find((s) => s?.draft_entity_id === draftEntityId && s.entity_type);
+        if (row?.dedup_action === 'merge' && typeof row.dedup_existing_id === 'string' && row.dedup_existing_id.trim().length > 0) {
+            return row.dedup_existing_id.trim();
         }
-        if (targetId.length > 0) {
-            return {
-                sourceLabel: sourceName,
-                targetLabel: targetName,
-                objectId: targetId,
-                objectLabel: targetName,
-            };
+        const resolved = CRMStore.state.ai.resolvedDraftEntityIds;
+        if (resolved && typeof resolved[draftEntityId] === 'string' && resolved[draftEntityId].trim().length > 0) {
+            return resolved[draftEntityId].trim();
+        }
+        return '';
+    }
+
+    _getRelationshipDisplay(item) {
+        if (!isRelationshipSuggestion(item)) {
+            throw new Error('Expected draft relationship (draft_relationship_id)');
+        }
+        const sourceLabel = this._draftEndpointLabel(item.source_draft_entity_id);
+        const targetLabel = this._draftEndpointLabel(item.target_draft_entity_id);
+        const targetReal = this._draftEndpointRealEntityId(item.target_draft_entity_id);
+        const sourceReal = this._draftEndpointRealEntityId(item.source_draft_entity_id);
+        let objectId = '';
+        let objectLabel = targetLabel;
+        if (targetReal.length > 0) {
+            objectId = targetReal;
+            objectLabel = targetLabel;
+        } else if (sourceReal.length > 0) {
+            objectId = sourceReal;
+            objectLabel = sourceLabel;
         }
         return {
-            sourceLabel: sourceName,
-            targetLabel: targetName,
-            objectId: sourceId.length > 0 ? sourceId : '',
-            objectLabel: sourceId.length > 0 ? sourceName : targetName,
+            sourceLabel,
+            targetLabel,
+            objectId,
+            objectLabel,
         };
     }
 
@@ -1143,10 +1309,14 @@ export class AIAnalysisModal extends PlatformModal {
     }
 
     renderHeader() {
+        const ir = CRMStore.state.ai.importReview;
         return html`
             <span class="analysis-header-title">
                 <platform-icon name="ai" size="32" colored></platform-icon>
-                AI-анализ
+                ${this.i18n.t('ai_analysis_modal.header_title')}
+                ${ir
+                    ? html`<span class="analysis-header-sub"> · ${this.i18n.t('ai_analysis_modal.import_review_header_suffix')}</span>`
+                    : ''}
             </span>
         `;
     }
@@ -1178,7 +1348,7 @@ export class AIAnalysisModal extends PlatformModal {
                     <article class="block ai-summary">
                         <h3 class="block-title gradient-title">
                             <platform-icon name="ai" size="15" colored></platform-icon>
-                            AI-summary
+                            ${this.i18n.t('ai_analysis_modal.block_summary_title')}
                         </h3>
                         <p class="summary-text">${noteText}</p>
                         <div class="chips">
@@ -1192,34 +1362,77 @@ export class AIAnalysisModal extends PlatformModal {
                     </article>
 
                     <article class="block tasks-wrap">
-                        <h3 class="block-title">Предложенные задачи</h3>
+                        <h3 class="block-title">
+                            ${this._importReviewActive
+                                ? this.i18n.t('ai_analysis_modal.import_review_tasks_title')
+                                : this.i18n.t('ai_analysis_modal.suggested_tasks_title')}
+                        </h3>
+                        ${this._importReviewActive && this._taskStates.length > 0 ? html`
+                            <p class="import-tasks-hint">${this.i18n.t('ai_analysis_modal.import_review_tasks_hint')}</p>
+                        ` : ''}
                         <div class="tasks-list">
                             ${this._taskStates.map((task) => html`
                                 <label class="task-row ${task.done ? 'done' : ''}">
-                                    <input type="checkbox" .checked=${task.done} @change=${() => this._onToggleTask(task.id)} />
+                                    ${this._importReviewActive
+                                        ? html`<platform-icon name="checklist" size="14" style="flex-shrink:0;color:var(--text-tertiary)"></platform-icon>`
+                                        : html`<input type="checkbox" .checked=${task.done} @change=${() => this._onToggleTask(task.id)} />`}
                                     <span>${task.name}</span>
-                                    <button class="task-remove" type="button" @click=${() => this._onRemoveTask(task.id)}>
-                                        <platform-icon name="close" size="12"></platform-icon>
-                                    </button>
+                                    ${this._importReviewActive
+                                        ? ''
+                                        : html`<button class="task-remove" type="button" @click=${() => this._onRemoveTask(task.id)}>
+                                            <platform-icon name="close" size="12"></platform-icon>
+                                        </button>`}
                                 </label>
                             `)}
                         </div>
-                        <label class="task-input-wrap">
-                            <platform-icon name="ai" size="12" colored></platform-icon>
-                            <input
-                                class="task-input"
-                                type="text"
-                                placeholder="Введите задачу + Enter"
-                                .value=${this._taskDraft}
-                                @input=${this._onTaskDraftInput}
-                                @keydown=${this._onTaskDraftKeydown}
-                            />
-                        </label>
+                        ${!this._importReviewActive ? html`
+                            <label class="task-input-wrap">
+                                <platform-icon name="ai" size="12" colored></platform-icon>
+                                <input
+                                    class="task-input"
+                                    type="text"
+                                    placeholder=${this.i18n.t('ai_analysis_modal.task_input_placeholder')}
+                                    .value=${this._taskDraft}
+                                    @input=${this._onTaskDraftInput}
+                                    @keydown=${this._onTaskDraftKeydown}
+                                />
+                            </label>
+                        ` : ''}
                     </article>
                 </section>
 
                 <section class="column">
-                    
+                    ${this._importReviewActive && this._suggestions.length > 0 ? html`
+                        <div class="import-entities-summary">
+                            <platform-icon name="layers" size="14"></platform-icon>
+                            <span>
+                                ${this.i18n.t('ai_analysis_modal.import_review_total', {
+                                    total: String(this._suggestions.length),
+                                    tasks: String(this._taskStates.length),
+                                    entities: String(connections.length),
+                                })}
+                            </span>
+                        </div>
+                    ` : ''}
+                    ${(() => {
+                        const ir = CRMStore.state.ai.importReview;
+                        const missing = ir && Array.isArray(ir.missingEntityIds) ? ir.missingEntityIds : [];
+                        if (missing.length === 0) {
+                            return '';
+                        }
+                        return html`
+                            <div class="missing-entities-banner" role="alert">
+                                <platform-icon name="alert-triangle" size="16"></platform-icon>
+                                <div class="missing-entities-text">
+                                    <div class="missing-entities-title">
+                                        ${this.i18n.t('ai_analysis_modal.missing_entities_title', { count: String(missing.length) })}
+                                    </div>
+                                    <div>${this.i18n.t('ai_analysis_modal.missing_entities_body')}</div>
+                                    <div class="missing-entities-ids">${missing.join(', ')}</div>
+                                </div>
+                            </div>
+                        `;
+                    })()}
                     <div class="connections-list">
                         ${connections.map((item, index) => {
                             const suggestionIndex = this._suggestions.indexOf(item);
@@ -1233,8 +1446,7 @@ export class AIAnalysisModal extends PlatformModal {
                             const expanded = this._isSuggestionExpanded(uiKey);
                             const draft = this._attributeDrafts[suggestionIndex] || { key: '', value: '' };
                             const subtitle = item.description || this._getConnectionSubtitle(item);
-                            const isRelationship = typeof item.relationship_type === 'string'
-                                && item.relationship_type.trim().length > 0;
+                            const isRelationship = isRelationshipSuggestion(item);
                             const dedupBadge = this._getDedupBadge(item);
                             const existingEntityRef = this._getExistingEntityRef(item);
                             const relationshipTypeLabel = isRelationship
@@ -1251,7 +1463,7 @@ export class AIAnalysisModal extends PlatformModal {
                                             <div style="min-width:0;flex:1;">
                                                 ${isRelationship ? html`
                                                     <div class="connection-name">${relationshipTypeLabel}</div>
-                                                    <div class="relationship-type">Связь: ${relationshipDisplay.sourceLabel} -> ${relationshipDisplay.targetLabel}</div>
+                                                    <div class="relationship-type">${this.i18n.t('ai_analysis_modal.relationship_line', { source: relationshipDisplay.sourceLabel, target: relationshipDisplay.targetLabel })}</div>
                                                     <div class="relationship-line">
                                                         <span class="relationship-entity">${relationshipDisplay.sourceLabel}</span>
                                                         <span class="relationship-arrow">
@@ -1262,7 +1474,7 @@ export class AIAnalysisModal extends PlatformModal {
                                                             type="button"
                                                             ?disabled=${relationshipDisplay.objectId.length === 0}
                                                             @click=${() => this._openEntityModalById(relationshipDisplay.objectId)}
-                                                            title="Открыть сущность"
+                                                            title=${this.i18n.t('ai_analysis_modal.open_entity_title')}
                                                         >
                                                             ${relationshipDisplay.objectLabel}
                                                         </button>
@@ -1287,14 +1499,26 @@ export class AIAnalysisModal extends PlatformModal {
                                                     ${dedupBadge.label}
                                                     ${dedupBadge.confidence !== null ? ` ${dedupBadge.confidence}%` : ''}
                                                 </span>
-                                                <button class="remove-connection" type="button" @click=${() => this._onRemoveConnection(suggestionIndex)}>
-                                                    <platform-icon name="close" size="14"></platform-icon>
-                                                </button>
+                                                ${this._importReviewActive
+                                                    ? null
+                                                    : html`
+                                                          <button
+                                                              class="remove-connection"
+                                                              type="button"
+                                                              @click=${() => {
+                                                                  this._onRemoveConnection(suggestionIndex).catch((err) => {
+                                                                      this.error(err?.message || String(err));
+                                                                  });
+                                                              }}
+                                                          >
+                                                              <platform-icon name="close" size="14"></platform-icon>
+                                                          </button>
+                                                      `}
                                             </div>
                                         </div>
                                         ${dedupBadge.className === 'existing' ? html`
                                             <div class="existing-hint">
-                                                Будет обновлено:
+                                                ${this.i18n.t('ai_entity_card.will_update_prefix')}
                                                 ${existingEntityRef.existingId.length > 0 ? html`
                                                     <button
                                                         class="existing-link"
@@ -1304,16 +1528,16 @@ export class AIAnalysisModal extends PlatformModal {
                                                         ${existingEntityRef.existingName || existingEntityRef.existingId}
                                                     </button>
                                                 ` : html`
-                                                    ${existingEntityRef.existingName || 'Существующая сущность'}
+                                                    ${existingEntityRef.existingName || this.i18n.t('ai_analysis_modal.existing_entity_fallback')}
                                                 `}
                                             </div>
                                         ` : ''}
                                         <div class="score-track">
                                             <div class="score-fill ${theme}" style=${`width:${score}%;`}></div>
-                                            <div class="score-label">Score - ${score}%</div>
+                                            <div class="score-label">${this.i18n.t('ai_analysis_modal.score_label', { value: String(score) })}</div>
                                         </div>
                                         <button class="attr-toggle" type="button" @click=${() => this._toggleSuggestionExpanded(uiKey)}>
-                                            ${expanded ? 'Скрыть атрибуты' : 'Показать атрибуты'}
+                                            ${expanded ? this.i18n.t('ai_analysis_modal.toggle_attrs_hide') : this.i18n.t('ai_analysis_modal.toggle_attrs_show')}
                                         </button>
                                         ${expanded ? html`
                                             <div class="attrs-panel">
@@ -1337,18 +1561,18 @@ export class AIAnalysisModal extends PlatformModal {
                                                 <div class="attr-add-row">
                                                     <input
                                                         class="attr-input"
-                                                        placeholder="Ключ"
+                                                        placeholder=${this.i18n.t('ai_entity_card.attr_key_placeholder')}
                                                         .value=${draft.key}
                                                         @input=${(event) => this._onAttributeDraftInput(suggestionIndex, 'key', event)}
                                                     />
                                                     <input
                                                         class="attr-input"
-                                                        placeholder="Значение"
+                                                        placeholder=${this.i18n.t('ai_entity_card.attr_value_placeholder')}
                                                         .value=${draft.value}
                                                         @input=${(event) => this._onAttributeDraftInput(suggestionIndex, 'value', event)}
                                                     />
                                                     <button class="attr-add-btn" type="button" @click=${() => this._onAddAttribute(suggestionIndex)}>
-                                                        Добавить
+                                                        ${this.i18n.t('ai_analysis_modal.add_attribute_row')}
                                                     </button>
                                                 </div>
                                             </div>
@@ -1367,11 +1591,23 @@ export class AIAnalysisModal extends PlatformModal {
         this._saving = true;
         try {
             const crmApi = this.services.get('crmApi');
-            await CRMStore.confirmAllSuggestions(crmApi);
+            if (CRMStore.state.ai.importReview) {
+                await CRMStore.persistKnowledgeImportReview(crmApi);
+            } else {
+                const taskId = await CRMStore.confirmAllSuggestions(crmApi);
+                // Уведомляем родителя о запущенной задаче до закрытия модалки
+                this.dispatchEvent(new CustomEvent('apply-task-started', {
+                    detail: { taskId },
+                    bubbles: true,
+                    composed: true,
+                }));
+            }
             this.dispatchEvent(new CustomEvent('saved'));
             this.close();
         } catch (error) {
-            const message = error instanceof Error ? error.message : 'Ошибка сохранения AI-анализа';
+            const message = error instanceof Error
+                ? error.message
+                : this.i18n.t('ai_analysis_modal.err_save');
             this.error(message);
             throw error;
         } finally {
@@ -1386,7 +1622,7 @@ export class AIAnalysisModal extends PlatformModal {
         if (typeof item.entity_type === 'string' && item.entity_type.length > 0) {
             return item.entity_type;
         }
-        return 'Связь';
+        return this.i18n.t('ai_analysis_modal.relationship_fallback');
     }
 
     _getConnectionSubtitle(item) {
@@ -1396,23 +1632,24 @@ export class AIAnalysisModal extends PlatformModal {
         if (typeof item.entity_type === 'string' && item.entity_type.length > 0) {
             return item.entity_type;
         }
-        return 'Объект';
+        return this.i18n.t('ai_analysis_modal.object_fallback');
+    }
+
+    renderSaveHeaderButton() {
+        const title = this._saving
+            ? this.i18n.t('entity_modal.saving')
+            : (CRMStore.state.ai.importReview
+                ? this.i18n.t('knowledge_import.detail_approve')
+                : this.i18n.t('save', {}, 'common'));
+        return this._renderHeaderSaveIcon({
+            onClick: () => this._onSave(),
+            disabled: this._saving || this._analyzing || this.loading,
+            title,
+        });
     }
 
     renderFooter() {
-        return html`
-            <div class="footer-actions">
-                <button class="btn btn-secondary" type="button" @click=${() => this.close()}>К заметке</button>
-                <button
-                    class="btn ${this._analyzing || this.loading ? 'btn-disabled' : 'btn-primary'}"
-                    type="button"
-                    ?disabled=${this._saving || this._analyzing || this.loading}
-                    @click=${this._onSave}
-                >
-                    ${this._saving ? 'Сохранение...' : 'Сохранить'}
-                </button>
-            </div>
-        `;
+        return html``;
     }
 }
 

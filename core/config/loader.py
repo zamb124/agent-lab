@@ -13,6 +13,37 @@ from typing import Any, Dict, Union
 
 logger = logging.getLogger(__name__)
 
+_PROJECT_ROOT_ENV = "AGENT_LAB_PROJECT_ROOT"
+
+
+def get_project_root() -> Path:
+    """
+    Корень монорепозитория (pyproject.toml, core/, apps/).
+
+    Не использовать Path(__file__).parent... от factory: при установке в .venv путь ведёт в
+    site-packages, а documentation-dist и conf.json лежат в корне репозитория.
+    """
+    env = os.environ.get(_PROJECT_ROOT_ENV)
+    if env:
+        p = Path(env).expanduser().resolve()
+        if not p.is_dir():
+            raise ValueError(f"{_PROJECT_ROOT_ENV} не каталог: {p}")
+        return p
+
+    start = Path(__file__).resolve()
+    for d in start.parents:
+        if (
+            (d / "pyproject.toml").is_file()
+            and (d / "core").is_dir()
+            and (d / "apps").is_dir()
+        ):
+            return d
+
+    raise RuntimeError(
+        f"Корень репозитория agent-lab не найден (ожидаются pyproject.toml, core/, apps/ вверх по пути от {start}). "
+        f"Задайте {_PROJECT_ROOT_ENV} или запускайте из дерева исходников (uv sync из корня репозитория)."
+    )
+
 
 def load_json_config(config_path: Union[str, Path]) -> Dict[str, Any]:
     config_path = Path(config_path)
@@ -44,9 +75,7 @@ def merge_configs(
 
 
 def get_config_paths() -> list[Path]:
-    current_dir = Path(__file__).parent
-    core_dir = current_dir.parent
-    project_root = core_dir.parent
+    project_root = get_project_root()
 
     config_paths = [
         project_root / "conf.json",

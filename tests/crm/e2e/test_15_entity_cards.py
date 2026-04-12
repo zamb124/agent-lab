@@ -35,13 +35,13 @@ class TestEntityCards:
         await crm_client.post("/crm/api/v1/relationships/", json={
             "source_entity_id": main_entity_id,
             "target_entity_id": related1_id,
-            "relationship_type": "works_on"
+            "relationship_type": "assigned_to"
         }, headers=auth_headers_system)
         
         await crm_client.post("/crm/api/v1/relationships/", json={
             "source_entity_id": main_entity_id,
             "target_entity_id": related2_id,
-            "relationship_type": "works_for"
+            "relationship_type": "belongs_to"
         }, headers=auth_headers_system)
         
         card_resp = await crm_client.get(f"/crm/api/v1/entities/{main_entity_id}/card", headers=auth_headers_system)
@@ -85,13 +85,13 @@ class TestEntityCards:
             await crm_client.post("/crm/api/v1/relationships/", json={
                 "source_entity_id": person_id,
                 "target_entity_id": company_id,
-                "relationship_type": "works_for"
+                "relationship_type": "belongs_to"
             }, headers=auth_headers_system)
         
         await crm_client.post("/crm/api/v1/relationships/", json={
             "source_entity_id": company_id,
             "target_entity_id": project_id,
-            "relationship_type": "owns"
+            "relationship_type": "parent_of"
         }, headers=auth_headers_system)
         
         card_resp = await crm_client.get(f"/crm/api/v1/entities/{company_id}/card", headers=auth_headers_system)
@@ -123,7 +123,7 @@ class TestEntityCards:
             await crm_client.post("/crm/api/v1/relationships/", json={
                 "source_entity_id": member_id,
                 "target_entity_id": project_id,
-                "relationship_type": "works_on"
+                "relationship_type": "assigned_to"
             }, headers=auth_headers_system)
         
         card_resp = await crm_client.get(f"/crm/api/v1/entities/{project_id}/card", headers=auth_headers_system)

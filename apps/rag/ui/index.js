@@ -2,7 +2,6 @@
  * RAG Service UI - Entry Point
  */
 
-// Импорт core компонентов
 import '@platform/lib/components/platform-icon.js';
 import '@platform/lib/components/glass-button.js';
 

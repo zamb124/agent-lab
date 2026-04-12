@@ -108,12 +108,7 @@ class ResourceLoader:
             ResourceNotFoundError: Если tool не найден
         """
         id_str = extract_id(tool_id)
-        
-        # Сначала пробуем зарегистрированные tools
-        if self.tool_registry.has(id_str):
-            return self.tool_registry.get(id_str)
-        
-        # Затем из БД
+
         config = await self.tool_repository.get(id_str)
         if not config:
             raise ResourceNotFoundError(

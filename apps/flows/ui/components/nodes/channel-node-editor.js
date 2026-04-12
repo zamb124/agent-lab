@@ -8,31 +8,19 @@ import '../editors/json-field-editor.js';
 import '../editors/variable-input.js';
 
 const CHANNEL_TYPES = [
-    { id: 'telegram', name: 'Telegram', icon: 'send', color: '#0088cc' },
-    { id: 'email', name: 'Email', icon: 'mail', color: '#ea4335' },
-    { id: 'whatsapp', name: 'WhatsApp', icon: 'message-circle', color: '#25d366' },
-    { id: 'sms', name: 'SMS', icon: 'phone', color: '#6b7280' },
-    { id: 'webhook', name: 'Webhook', icon: 'globe', color: '#8b5cf6' },
+    { id: 'telegram', icon: 'send', color: '#0088cc' },
+    { id: 'email', icon: 'mail', color: '#ea4335' },
+    { id: 'whatsapp', icon: 'message-circle', color: '#25d366' },
+    { id: 'sms', icon: 'phone', color: '#6b7280' },
+    { id: 'webhook', icon: 'globe', color: '#8b5cf6' },
 ];
 
-const CHANNEL_ACTIONS = {
-    telegram: [
-        { id: 'send_message', name: 'Отправить сообщение' },
-        { id: 'send_photo', name: 'Отправить фото' },
-        { id: 'send_document', name: 'Отправить документ' },
-    ],
-    email: [
-        { id: 'send_email', name: 'Отправить email' },
-    ],
-    whatsapp: [
-        { id: 'send_message', name: 'Отправить сообщение' },
-    ],
-    sms: [
-        { id: 'send_sms', name: 'Отправить SMS' },
-    ],
-    webhook: [
-        { id: 'post', name: 'POST запрос' },
-    ],
+const CHANNEL_ACTION_IDS = {
+    telegram: ['send_message', 'send_photo', 'send_document'],
+    email: ['send_email'],
+    whatsapp: ['send_message'],
+    sms: ['send_sms'],
+    webhook: ['post'],
 };
 
 export class ChannelNodeEditor extends BaseNodeEditor {
@@ -124,11 +112,19 @@ export class ChannelNodeEditor extends BaseNodeEditor {
         }
     }
 
+    _channelActions(channelId) {
+        const ids = CHANNEL_ACTION_IDS[channelId] || [];
+        return ids.map((id) => ({
+            id,
+            name: this.i18n.t(`node_modal.channel.actions.${id}`),
+        }));
+    }
+
     _onChannelSelect(channelId) {
         this.selectedChannel = channelId;
         this._onInputChange('channel', channelId);
-        
-        const actions = CHANNEL_ACTIONS[channelId] || [];
+
+        const actions = this._channelActions(channelId);
         if (actions.length > 0) {
             this._onInputChange('action', actions[0].id);
         }
@@ -146,10 +142,10 @@ export class ChannelNodeEditor extends BaseNodeEditor {
         if (channel === 'telegram') {
             return html`
                 <div class="config-section">
-                    <div class="config-section-title">Telegram</div>
+                    <div class="config-section-title">${this.i18n.t('trigger.channels.telegram')}</div>
                     <div class="form-group">
                         <div class="form-label">
-                            <span class="form-label-text">Bot Token</span>
+                            <span class="form-label-text">${this.i18n.t('trigger_editor.telegram.bot_token')}</span>
                         </div>
                         <variable-input
                             .value=${config.channel_config?.bot_token || ''}
@@ -157,11 +153,11 @@ export class ChannelNodeEditor extends BaseNodeEditor {
                             placeholder="@var:telegram_bot_token"
                             @change=${(e) => this._updateChannelConfig('bot_token', e.detail.value)}
                         ></variable-input>
-                        <span class="form-hint">Используйте @var:имя для ссылки на переменную</span>
+                        <span class="form-hint">${this.i18n.t('node_modal.channel.var_hint')}</span>
                     </div>
                     <div class="form-group">
                         <div class="form-label">
-                            <span class="form-label-text">Parse Mode</span>
+                            <span class="form-label-text">${this.i18n.t('node_modal.channel.field_parse_mode')}</span>
                         </div>
                         <select 
                             class="form-input form-select"
@@ -183,7 +179,7 @@ export class ChannelNodeEditor extends BaseNodeEditor {
                     <div class="config-section-title">Email</div>
                     <div class="form-group">
                         <div class="form-label">
-                            <span class="form-label-text">SMTP Host</span>
+                            <span class="form-label-text">${this.i18n.t('node_modal.channel.field_smtp_host')}</span>
                         </div>
                         <input 
                             type="text" 
@@ -195,7 +191,7 @@ export class ChannelNodeEditor extends BaseNodeEditor {
                     </div>
                     <div class="form-group">
                         <div class="form-label">
-                            <span class="form-label-text">From Email</span>
+                            <span class="form-label-text">${this.i18n.t('node_modal.channel.field_from_email')}</span>
                         </div>
                         <input 
                             type="text" 
@@ -212,10 +208,10 @@ export class ChannelNodeEditor extends BaseNodeEditor {
         if (channel === 'webhook') {
             return html`
                 <div class="config-section">
-                    <div class="config-section-title">Webhook</div>
+                    <div class="config-section-title">${this.i18n.t('trigger.channels.webhook')}</div>
                     <div class="form-group">
                         <div class="form-label">
-                            <span class="form-label-text">URL</span>
+                            <span class="form-label-text">${this.i18n.t('node_modal.channel.field_url')}</span>
                         </div>
                         <input 
                             type="text" 
@@ -227,7 +223,7 @@ export class ChannelNodeEditor extends BaseNodeEditor {
                     </div>
                     <div class="form-group">
                         <div class="form-label">
-                            <span class="form-label-text">Headers (JSON)</span>
+                            <span class="form-label-text">${this.i18n.t('node_modal.channel.field_headers_json')}</span>
                         </div>
                         <json-field-editor
                             .value=${config.channel_config?.headers ? JSON.stringify(config.channel_config.headers, null, 2) : '{}'}
@@ -249,7 +245,7 @@ export class ChannelNodeEditor extends BaseNodeEditor {
     renderFields() {
         const config = this.nodeConfig;
         const showCommonFields = !this.expanded;
-        const actions = CHANNEL_ACTIONS[this.selectedChannel] || [];
+        const actions = this._channelActions(this.selectedChannel);
         
         return html`
             ${showCommonFields ? html`
@@ -257,21 +253,21 @@ export class ChannelNodeEditor extends BaseNodeEditor {
                 
                 <div class="form-group">
                     <div class="form-label">
-                        <span class="form-label-text">Имя</span>
+                        <span class="form-label-text">${this.i18n.t('node_modal.common.field_name')}</span>
                     </div>
                     <input 
                         type="text" 
                         class="form-input"
                         .value=${config.name || ''}
                         @change=${(e) => this._onInputChange('name', e.target.value)}
-                        placeholder="Send to Telegram"
+                        placeholder=${this.i18n.t('node_defaults.name_channel')}
                     />
                 </div>
             ` : ''}
             
             <div class="form-group">
                 <div class="form-label">
-                    <span class="form-label-text">Канал</span>
+                    <span class="form-label-text">${this.i18n.t('node_modal.channel.field_channel')}</span>
                 </div>
                 <div class="channel-selector">
                     ${CHANNEL_TYPES.map(ch => html`
@@ -282,7 +278,7 @@ export class ChannelNodeEditor extends BaseNodeEditor {
                             <div class="channel-icon" style="background: ${ch.color}20; color: ${ch.color};">
                                 <platform-icon name="${ch.icon}" size="20"></platform-icon>
                             </div>
-                            <span class="channel-label">${ch.name}</span>
+                            <span class="channel-label">${this.i18n.t(`trigger.channels.${ch.id}`)}</span>
                         </div>
                     `)}
                 </div>
@@ -291,7 +287,7 @@ export class ChannelNodeEditor extends BaseNodeEditor {
             ${this.selectedChannel && actions.length > 0 ? html`
                 <div class="form-group">
                     <div class="form-label">
-                        <span class="form-label-text">Действие</span>
+                        <span class="form-label-text">${this.i18n.t('node_modal.channel.field_action')}</span>
                     </div>
                     <select 
                         class="form-input form-select"

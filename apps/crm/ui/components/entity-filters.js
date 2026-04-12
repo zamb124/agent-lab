@@ -1,6 +1,5 @@
 /**
- * Entity Filters - Панель фильтрации сущностей
- * Наследует CRMPanel для поддержки сворачивания
+ * Панель фильтров списка сущностей (CRMPanel).
  */
 import { html, css } from 'lit';
 import { formStyles } from '@platform/lib/styles/shared/form.styles.js';
@@ -17,6 +16,8 @@ export class EntityFilters extends CRMPanel {
         _entityTypes: { state: true },
         _selectedType: { state: true },
         _currentNamespace: { state: true },
+        _aggregate: { state: true },
+        _tagInput: { state: true },
     };
 
     static styles = [
@@ -60,6 +61,32 @@ export class EntityFilters extends CRMPanel {
                 background: var(--crm-surface);
             }
 
+            .search-mode-toggle {
+                display: flex;
+                gap: 2px;
+                margin-top: var(--space-2);
+                background: var(--crm-surface-muted);
+                border-radius: var(--radius-md);
+                padding: 2px;
+            }
+            .search-mode-btn {
+                flex: 1;
+                padding: 4px 8px;
+                border: none;
+                background: transparent;
+                color: var(--text-tertiary);
+                font-size: 11px;
+                border-radius: var(--radius-sm);
+                cursor: pointer;
+                transition: all 0.15s;
+                text-transform: capitalize;
+            }
+            .search-mode-btn.active {
+                background: var(--crm-surface);
+                color: var(--text-primary);
+                box-shadow: 0 1px 3px rgba(0,0,0,0.12);
+            }
+
             .type-chips {
                 display: flex;
                 flex-wrap: wrap;
@@ -95,6 +122,22 @@ export class EntityFilters extends CRMPanel {
                 font-size: var(--text-base);
             }
 
+            .type-chip .chip-count {
+                font-size: 10px;
+                color: var(--text-tertiary);
+                font-weight: 600;
+                min-width: 16px;
+                text-align: center;
+                padding: 0 4px;
+                background: var(--crm-surface);
+                border-radius: var(--radius-full);
+            }
+
+            .type-chip.active .chip-count {
+                background: var(--crm-selected-stroke);
+                color: var(--crm-selected-text);
+            }
+
             .date-row {
                 display: flex;
                 gap: var(--space-2);
@@ -122,6 +165,59 @@ export class EntityFilters extends CRMPanel {
                 background: var(--crm-surface-muted);
                 color: var(--text-primary);
             }
+
+            .tag-chips {
+                display: flex;
+                flex-wrap: wrap;
+                gap: var(--space-1);
+                margin-top: var(--space-2);
+            }
+
+            .tag-chip {
+                display: inline-flex;
+                align-items: center;
+                gap: 4px;
+                padding: 3px 8px;
+                background: var(--crm-selected-bg);
+                border: 1px solid var(--crm-selected-stroke);
+                border-radius: var(--radius-full);
+                color: var(--crm-selected-text);
+                font-size: 12px;
+            }
+
+            .tag-chip-remove {
+                display: inline-flex;
+                align-items: center;
+                justify-content: center;
+                width: 14px;
+                height: 14px;
+                border: none;
+                background: transparent;
+                color: inherit;
+                cursor: pointer;
+                padding: 0;
+                font-size: 14px;
+                line-height: 1;
+                opacity: 0.7;
+            }
+            .tag-chip-remove:hover { opacity: 1; }
+
+            .tag-input-row {
+                display: flex;
+                gap: var(--space-2);
+            }
+            .tag-input-row .filter-input { flex: 1; }
+            .tag-add-btn {
+                padding: 0 var(--space-3);
+                border: 1px solid var(--crm-stroke);
+                border-radius: var(--radius-lg);
+                background: var(--crm-surface);
+                color: var(--text-primary);
+                font-size: var(--text-sm);
+                cursor: pointer;
+                white-space: nowrap;
+            }
+            .tag-add-btn:hover { background: var(--crm-surface-elevated); }
 
             .namespace-indicator {
                 display: flex;
@@ -160,7 +256,7 @@ export class EntityFilters extends CRMPanel {
     constructor() {
         super();
         this.panelId = 'entity-filters';
-        this.panelTitle = 'Фильтры';
+        this.panelTitle = '';
         this.panelIcon = 'adjustment';
         
         this._filters = {
@@ -174,6 +270,8 @@ export class EntityFilters extends CRMPanel {
         this._entityTypes = [];
         this._selectedType = null;
         this._currentNamespace = null;
+        this._aggregate = null;
+        this._tagInput = '';
         this._applyFiltersTimer = null;
 
         this._filtersUnsubscribe = CRMStore.subscribe(state => {
@@ -181,7 +279,19 @@ export class EntityFilters extends CRMPanel {
             this._entityTypes = state.entities.entityTypes || [];
             this._selectedType = state.entities.filters.entity_type;
             this._currentNamespace = state.namespaces.current;
+            this._aggregate = state.entities.aggregate || null;
         });
+    }
+
+    connectedCallback() {
+        super.connectedCallback();
+        this.panelTitle = this.i18n.t('entity_filters.panel_title');
+        this._loadAggregate();
+    }
+
+    async _loadAggregate() {
+        const crmApi = this.services.get('crmApi');
+        await CRMStore.loadAggregate(crmApi);
     }
 
     disconnectedCallback() {
@@ -195,6 +305,11 @@ export class EntityFilters extends CRMPanel {
 
     _onSearchInput(e) {
         CRMStore.setEntityFilters({ search: e.target.value });
+        this._applyFiltersDebounced();
+    }
+
+    _onSearchModeChange(mode) {
+        CRMStore.setSearchMode(mode);
         this._applyFiltersDebounced();
     }
 
@@ -225,14 +340,45 @@ export class EntityFilters extends CRMPanel {
         this._applyFilters();
     }
 
+    _onTagInputChange(e) {
+        this._tagInput = e.target.value;
+    }
+
+    _onTagInputKeydown(e) {
+        if (e.key === 'Enter') {
+            e.preventDefault();
+            this._addTag();
+        }
+    }
+
+    _addTag() {
+        const tag = this._tagInput.trim();
+        if (!tag) return;
+        const current = this._filters.tags || [];
+        if (current.includes(tag)) return;
+        CRMStore.setEntityFilters({ tags: [...current, tag] });
+        this._tagInput = '';
+        this._applyFilters();
+    }
+
+    _removeTag(tag) {
+        const current = this._filters.tags || [];
+        CRMStore.setEntityFilters({ tags: current.filter(t => t !== tag) });
+        this._applyFilters();
+    }
+
     _onClearFilters() {
         CRMStore.clearEntityFilters();
+        this._tagInput = '';
         this._applyFilters();
     }
 
     async _applyFilters() {
         const crmApi = this.services.get('crmApi');
-        await CRMStore.loadEntities(crmApi);
+        await Promise.all([
+            CRMStore.loadEntities(crmApi),
+            CRMStore.loadAggregate(crmApi),
+        ]);
     }
 
     _applyFiltersDebounced() {
@@ -267,10 +413,13 @@ export class EntityFilters extends CRMPanel {
     }
 
     _resolveIconName(iconName) {
+        if (iconName === 'file') {
+            return 'folder';
+        }
         if (typeof iconName === 'string' && /^[a-z0-9-]+$/i.test(iconName)) {
             return iconName;
         }
-        return 'file';
+        return 'folder';
     }
 
     renderContent() {
@@ -287,43 +436,56 @@ export class EntityFilters extends CRMPanel {
                             <platform-icon name="folder" size="16"></platform-icon>
                         </span>
                         <div class="namespace-indicator-content">
-                            <div class="namespace-indicator-label">Пространство</div>
+                            <div class="namespace-indicator-label">${this.i18n.t('entity_filters.namespace_label')}</div>
                                 <div class="namespace-indicator-value">${this._getCurrentNamespaceName()}</div>
                         </div>
                     </div>
                 ` : ''}
 
                 <div class="filter-group">
-                    <label class="filter-label">Поиск</label>
+                    <label class="filter-label">${this.i18n.t('entity_filters.search_label')}</label>
                     <input
                         type="text"
                         class="filter-input"
-                        placeholder="Имя, описание..."
+                        placeholder=${this.i18n.t('entity_filters.search_placeholder')}
                         .value=${this._filters.search || ''}
                         @input=${this._onSearchInput}
                     />
+                    <div class="search-mode-toggle">
+                        ${['text', 'semantic', 'hybrid'].map(mode => html`
+                            <button
+                                type="button"
+                                class="search-mode-btn ${(this._filters.search_mode || 'hybrid') === mode ? 'active' : ''}"
+                                @click=${() => this._onSearchModeChange(mode)}
+                            >${this.i18n.t(`entities.search_modes.${mode}`)}</button>
+                        `)}
+                    </div>
                 </div>
 
                 <div class="filter-group">
-                    <label class="filter-label">Тип</label>
+                    <label class="filter-label">${this.i18n.t('entity_filters.type_label')}</label>
                     <div class="type-chips">
-                        ${baseTypes.map(type => html`
-                            <button
-                                class="type-chip ${this._selectedType === type.type_id ? 'active' : ''}"
-                                @click=${() => this._onTypeSelect(type.type_id)}
-                            >
-                                <span class="chip-icon">
-                                    <platform-icon name="${this._resolveIconName(type.icon)}" size="15"></platform-icon>
-                                </span>
-                                <span>${type.name}</span>
-                            </button>
-                        `)}
+                        ${baseTypes.map(type => {
+                            const count = this._aggregate?.by_type?.[type.type_id];
+                            return html`
+                                <button
+                                    class="type-chip ${this._selectedType === type.type_id ? 'active' : ''}"
+                                    @click=${() => this._onTypeSelect(type.type_id)}
+                                >
+                                    <span class="chip-icon">
+                                        <platform-icon name="${this._resolveIconName(type.icon)}" size="15"></platform-icon>
+                                    </span>
+                                    <span>${type.name}</span>
+                                    ${count != null ? html`<span class="chip-count">${count}</span>` : ''}
+                                </button>
+                            `;
+                        })}
                     </div>
                 </div>
 
                 ${subtypes.length > 0 ? html`
                     <div class="filter-group">
-                        <label class="filter-label">Подтип</label>
+                        <label class="filter-label">${this.i18n.t('entity_filters.subtype_label')}</label>
                         <div class="type-chips">
                             ${subtypes.map(type => html`
                                 <button
@@ -341,7 +503,32 @@ export class EntityFilters extends CRMPanel {
                 ` : ''}
 
                 <div class="filter-group">
-                    <label class="filter-label">Дата</label>
+                    <label class="filter-label">${this.i18n.t('entity_filters.tags_label')}</label>
+                    <div class="tag-input-row">
+                        <input
+                            type="text"
+                            class="filter-input"
+                            placeholder=${this.i18n.t('entity_filters.tags_placeholder')}
+                            .value=${this._tagInput}
+                            @input=${this._onTagInputChange}
+                            @keydown=${this._onTagInputKeydown}
+                        />
+                        <button type="button" class="tag-add-btn" @click=${this._addTag}>+</button>
+                    </div>
+                    ${(this._filters.tags || []).length > 0 ? html`
+                        <div class="tag-chips">
+                            ${this._filters.tags.map(tag => html`
+                                <span class="tag-chip">
+                                    ${tag}
+                                    <button type="button" class="tag-chip-remove" @click=${() => this._removeTag(tag)}>&times;</button>
+                                </span>
+                            `)}
+                        </div>
+                    ` : ''}
+                </div>
+
+                <div class="filter-group">
+                    <label class="filter-label">${this.i18n.t('entity_filters.date_label')}</label>
                     <div class="date-row">
                         <platform-date-picker
                             class="filter-input"
@@ -358,7 +545,7 @@ export class EntityFilters extends CRMPanel {
                 </div>
 
                 <button class="clear-btn" @click=${this._onClearFilters}>
-                    Сбросить фильтры
+                    ${this.i18n.t('entity_filters.reset')}
                 </button>
             </div>
         `;

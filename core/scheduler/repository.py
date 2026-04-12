@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from typing import Optional
 
-from sqlalchemy import select, update
+from sqlalchemy import func, select, update
 from sqlalchemy.dialects.postgresql import insert
 
 from core.db.database import get_session_factory
@@ -128,19 +128,34 @@ class SchedulerTaskRepository:
             records = list(result.scalars().all())
             return [_to_model(item) for item in records]
 
+    async def count(self, company_id: str, filters: PlatformScheduleFilter) -> int:
+        session_factory = await get_session_factory(self._db_url)
+        stmt = select(func.count()).select_from(SchedulerTaskRecord).where(SchedulerTaskRecord.company_id == company_id)
+        if filters.status is not None:
+            status_value = filters.status.value if hasattr(filters.status, "value") else str(filters.status)
+            stmt = stmt.where(SchedulerTaskRecord.status == status_value)
+        if filters.target_service:
+            stmt = stmt.where(SchedulerTaskRecord.target_service == filters.target_service)
+        if filters.task_name:
+            stmt = stmt.where(SchedulerTaskRecord.task_name == filters.task_name)
+        async with session_factory() as session:
+            result = await session.execute(stmt)
+            return result.scalar() or 0
+
     async def update_status(
         self,
         company_id: str,
         schedule_task_id: str,
-        status: ScheduledTaskStatus,
+        status: ScheduledTaskStatus | str,
         *,
         schedule_id: Optional[str] = None,
         last_run_at: Optional[datetime] = None,
         next_run_at: Optional[datetime] = None,
         error_message: Optional[str] = None,
     ) -> bool:
+        status_value = status.value if hasattr(status, "value") else str(status)
         values: dict[str, object] = {
-            "status": status.value,
+            "status": status_value,
             "updated_at": datetime.now(timezone.utc),
         }
         if schedule_id is not None:

@@ -4,7 +4,6 @@
  */
 import { html, css } from 'lit';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
-import { buttonStyles } from '@platform/lib/styles/shared/button.styles.js';
 import { CRMStore } from '../store/crm.store.js';
 import '@platform/lib/components/platform-icon.js';
 
@@ -17,7 +16,6 @@ export class GrantsPanel extends PlatformElement {
 
     static styles = [
         PlatformElement.styles,
-        buttonStyles,
         css`
             :host {
                 display: block;
@@ -117,41 +115,6 @@ export class GrantsPanel extends PlatformElement {
                 color: var(--error);
             }
 
-            .action-buttons {
-                display: flex;
-                flex-wrap: wrap;
-                gap: var(--space-2);
-                margin-top: var(--space-3);
-            }
-
-            .action-btn {
-                display: inline-flex;
-                align-items: center;
-                gap: var(--space-2);
-                padding: var(--space-2) var(--space-3);
-                background: var(--glass-solid-subtle);
-                border: 1px solid var(--glass-border-subtle);
-                border-radius: var(--radius-lg);
-                color: var(--text-secondary);
-                font-size: var(--text-sm);
-                cursor: pointer;
-                transition: all 0.2s;
-            }
-
-            .action-btn:hover {
-                background: var(--glass-solid-medium);
-                color: var(--text-primary);
-            }
-
-            .action-btn.public {
-                border-color: rgba(255, 149, 0, 0.3);
-            }
-
-            .action-btn.public:hover {
-                background: rgba(255, 149, 0, 0.1);
-                color: #ff9500;
-            }
-
             .empty-grants {
                 padding: var(--space-4);
                 text-align: center;
@@ -192,38 +155,12 @@ export class GrantsPanel extends PlatformElement {
         await CRMStore.loadEntityGrants(crmApi, this.entityId);
     }
 
-    async _onMakePublic() {
-        const crmApi = this.services.get('crmApi');
-        await CRMStore.makeEntityPublic(crmApi, this.entityId);
-        this.success('Сущность стала публичной');
-    }
-
-    _onShareToUser() {
-        const modal = document.createElement('share-modal');
-        modal.entityId = this.entityId;
-        modal.shareType = 'user';
-        document.body.appendChild(modal);
-        modal.showModal();
-        modal.addEventListener('close', () => modal.remove());
-        modal.addEventListener('shared', () => this._loadGrants());
-    }
-
-    _onShareToCompany() {
-        const modal = document.createElement('share-modal');
-        modal.entityId = this.entityId;
-        modal.shareType = 'company';
-        document.body.appendChild(modal);
-        modal.showModal();
-        modal.addEventListener('close', () => modal.remove());
-        modal.addEventListener('shared', () => this._loadGrants());
-    }
-
     async _onRevokeGrant(grantId) {
-        if (!confirm('Отозвать доступ?')) return;
+        if (!confirm(this.i18n.t('grants.confirm_revoke'))) return;
         
         const crmApi = this.services.get('crmApi');
         await CRMStore.revokeGrant(crmApi, grantId);
-        this.success('Доступ отозван');
+        this.success(this.i18n.t('grants.success_revoked'));
     }
 
     _getGrantTypeIcon(grantType) {
@@ -241,32 +178,37 @@ export class GrantsPanel extends PlatformElement {
 
     _getGrantTarget(grant) {
         if (grant.grant_type === 'public') {
-            return 'Публичный доступ';
+            return this.i18n.t('grants.target_public');
         }
         if (grant.grant_type === 'user') {
-            return grant.target_user_id || 'Пользователь';
+            return grant.target_user_id || this.i18n.t('grants.target_user_fallback');
         }
         if (grant.grant_type === 'company') {
-            return grant.target_company_id || 'Компания';
+            return grant.target_company_id || this.i18n.t('grants.target_company_fallback');
         }
-        return 'Неизвестно';
+        return this.i18n.t('grants.unknown');
     }
 
     _getRoleLabel(role) {
         switch (role) {
             case 'viewer':
-                return 'Просмотр';
+                return this.i18n.t('grants.role_viewer');
             case 'editor':
-                return 'Редактирование';
+                return this.i18n.t('grants.role_editor');
             case 'admin':
-                return 'Администратор';
+                return this.i18n.t('grants.role_admin');
             default:
                 return role;
         }
     }
 
-    _hasPublicGrant() {
-        return this._grants.some(g => g.grant_type === 'public');
+    _formatGrantExpiry(iso) {
+        const loc = this.i18n.getCurrentLocale() === 'ru' ? 'ru-RU' : 'en-US';
+        return new Date(iso).toLocaleDateString(loc, {
+            day: 'numeric',
+            month: 'short',
+            year: 'numeric',
+        });
     }
 
     render() {
@@ -276,13 +218,13 @@ export class GrantsPanel extends PlatformElement {
 
         return html`
             <div class="section">
-                <div class="section-title">Управление доступом</div>
+                <div class="section-title">${this.i18n.t('grants.section_title')}</div>
 
                 ${this._loading ? html`
-                    <div class="empty-grants">Загрузка...</div>
+                    <div class="empty-grants">${this.i18n.t('grants.loading')}</div>
                 ` : this._grants.length === 0 ? html`
                     <div class="empty-grants">
-                        Нет настроенных доступов. Только вы можете видеть эту сущность.
+                        ${this.i18n.t('grants.empty_entity')}
                     </div>
                 ` : html`
                     <div class="grants-list">
@@ -297,8 +239,10 @@ export class GrantsPanel extends PlatformElement {
                                     </div>
                                     <div class="grant-meta">
                                         ${grant.expires_at
-                                            ? `Истекает: ${new Date(grant.expires_at).toLocaleDateString('ru-RU')}`
-                                            : 'Бессрочно'
+                                            ? this.i18n.t('grants.expires', {
+                                                  date: this._formatGrantExpiry(grant.expires_at),
+                                              })
+                                            : this.i18n.t('grants.perpetual')
                                         }
                                     </div>
                                 </div>
@@ -309,29 +253,12 @@ export class GrantsPanel extends PlatformElement {
                                     class="revoke-btn"
                                     @click=${() => this._onRevokeGrant(grant.grant_id)}
                                 >
-                                    Отозвать
+                                    ${this.i18n.t('grants.revoke')}
                                 </button>
                             </div>
                         `)}
                     </div>
                 `}
-
-                <div class="action-buttons">
-                    ${!this._hasPublicGrant() ? html`
-                        <button class="action-btn public" @click=${this._onMakePublic}>
-                            <platform-icon name="globe" size="14"></platform-icon>
-                            Сделать публичной
-                        </button>
-                    ` : ''}
-                    <button class="action-btn" @click=${this._onShareToUser}>
-                        <platform-icon name="user" size="14"></platform-icon>
-                        Поделиться с пользователем
-                    </button>
-                    <button class="action-btn" @click=${this._onShareToCompany}>
-                        <platform-icon name="building-one" size="14"></platform-icon>
-                        Поделиться с компанией
-                    </button>
-                </div>
             </div>
         `;
     }

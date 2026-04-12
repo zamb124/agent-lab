@@ -1,13 +1,44 @@
 /**
  * Кнопка «?» со всплывающей подсказкой (hover / focus).
- * Текст подсказки — свойство text (обязательно при использовании).
- * Стратегии позиционирования:
- * - fixed (по умолчанию): тултип поверх модалок и скролл-контейнеров;
- * - local: тултип жестко привязан к кнопке внутри текущего блока.
+ * Пузырёк рендерится в document.body (position: fixed + z-index из nextModalLayerZIndex),
+ * чтобы не оказываться под сайдбаром и прочими слоями shell.
+ * Свойство strategy сохранено для совместимости; local/fixed больше не меняют поведение.
  */
 import { html, css } from 'lit';
 import { PlatformElement } from '../platform-element/index.js';
 import { nextModalLayerZIndex } from '../utils/modal-z-stack.js';
+
+const PORTAL_STYLE_ID = 'platform-help-hint-portal-styles';
+
+function ensurePortalBubbleStyles() {
+    if (typeof document === 'undefined' || document.getElementById(PORTAL_STYLE_ID)) {
+        return;
+    }
+    const style = document.createElement('style');
+    style.id = PORTAL_STYLE_ID;
+    style.textContent = `
+        .platform-help-hint-portal-bubble {
+            position: fixed;
+            transform: translate(-50%, calc(-100% - 8px));
+            min-width: 200px;
+            max-width: min(280px, 70vw);
+            padding: 10px 12px;
+            font-size: 12px;
+            font-weight: 400;
+            line-height: 1.45;
+            text-align: left;
+            white-space: normal;
+            color: var(--text-primary, rgba(255, 255, 255, 0.95));
+            background: var(--glass-solid-strong, rgba(40, 40, 64, 0.98));
+            border: 1px solid var(--border-default, rgba(255, 255, 255, 0.12));
+            border-radius: var(--radius-md, 10px);
+            box-shadow: var(--glass-shadow-strong, 0 8px 28px rgba(0, 0, 0, 0.35));
+            pointer-events: auto;
+            box-sizing: border-box;
+        }
+    `;
+    document.head.appendChild(style);
+}
 
 export class PlatformHelpHint extends PlatformElement {
     static styles = [
@@ -52,47 +83,6 @@ export class PlatformHelpHint extends PlatformElement {
                 background: rgba(255, 255, 255, 0.1);
                 border-color: var(--border-default, rgba(255, 255, 255, 0.14));
             }
-
-            .hint-bubble {
-                min-width: 200px;
-                max-width: min(280px, 70vw);
-                padding: 10px 12px;
-                font-size: 12px;
-                font-weight: 400;
-                line-height: 1.45;
-                color: var(--text-primary, rgba(255, 255, 255, 0.95));
-                text-align: left;
-                white-space: normal;
-                background: var(--glass-solid-strong, rgba(40, 40, 64, 0.98));
-                border: 1px solid var(--border-default, rgba(255, 255, 255, 0.12));
-                border-radius: var(--radius-md, 10px);
-                box-shadow: var(--glass-shadow-strong, 0 8px 28px rgba(0, 0, 0, 0.35));
-                opacity: 0;
-                visibility: hidden;
-                pointer-events: none;
-                transition:
-                    opacity var(--duration-fast, 0.2s) ease,
-                    visibility var(--duration-fast, 0.2s) ease;
-            }
-
-            .hint-bubble.fixed {
-                position: fixed;
-                transform: translate(-50%, -100%);
-            }
-
-            .hint-bubble.local {
-                position: absolute;
-                left: 50%;
-                bottom: calc(100% + 8px);
-                transform: translateX(-50%);
-                z-index: var(--z-popover, 1200);
-            }
-
-            .hint-bubble.is-open {
-                opacity: 1;
-                visibility: visible;
-                pointer-events: auto;
-            }
         `,
     ];
 
@@ -101,44 +91,45 @@ export class PlatformHelpHint extends PlatformElement {
         label: { type: String },
         strategy: { type: String },
         _open: { state: true },
-        _bubbleLeft: { state: true },
-        _bubbleTop: { state: true },
-        _bubbleZ: { state: true },
     };
 
     constructor() {
         super();
         this.text = '';
         this.label = 'Справка';
-        this.strategy = 'fixed';
+        this.strategy = 'portal';
         this._open = false;
-        this._bubbleLeft = 0;
-        this._bubbleTop = 0;
-        this._bubbleZ = 0;
         this._bubbleId = `platform-help-hint-${Math.random().toString(36).slice(2, 10)}`;
         this._closeTimer = null;
+        this._portalBubble = null;
+        this._bubbleZ = 0;
         this._onGlobalScroll = this._onGlobalScroll.bind(this);
         this._onGlobalKeydown = this._onGlobalKeydown.bind(this);
+        this._onPortalBubbleEnter = () => this._cancelClose();
+        this._onPortalBubbleLeave = () => this._scheduleClose();
     }
 
     disconnectedCallback() {
         this._clearCloseTimer();
         this._detachGlobalListeners();
+        this._teardownPortal();
         super.disconnectedCallback();
     }
 
     updated(changed) {
         super.updated(changed);
-        if (changed.has('_open') || changed.has('strategy')) {
+        if (changed.has('_open')) {
             if (this._open) {
-                if (!this._isLocalStrategy()) {
-                    window.addEventListener('scroll', this._onGlobalScroll, true);
-                    window.addEventListener('resize', this._onGlobalScroll, true);
-                }
+                queueMicrotask(() => this._mountPortal());
+                window.addEventListener('scroll', this._onGlobalScroll, true);
+                window.addEventListener('resize', this._onGlobalScroll, true);
                 window.addEventListener('keydown', this._onGlobalKeydown, true);
             } else {
+                this._teardownPortal();
                 this._detachGlobalListeners();
             }
+        } else if (this._open && changed.has('text') && this._portalBubble) {
+            this._portalBubble.textContent = this.text;
         }
     }
 
@@ -149,10 +140,10 @@ export class PlatformHelpHint extends PlatformElement {
     }
 
     _onGlobalScroll() {
-        if (!this._open || this._isLocalStrategy()) {
+        if (!this._open) {
             return;
         }
-        this._syncBubblePosition(false);
+        this._syncPortalPosition();
     }
 
     _onGlobalKeydown(e) {
@@ -185,11 +176,8 @@ export class PlatformHelpHint extends PlatformElement {
         this._open = false;
     }
 
-    /**
-     * @param {boolean} allocateZ — взять новый слой из стека (первое открытие)
-     */
-    _syncBubblePosition(allocateZ) {
-        if (this._isLocalStrategy()) {
+    _syncPortalPosition() {
+        if (!this._portalBubble) {
             return;
         }
         const btn = this.renderRoot?.querySelector('.hint-btn');
@@ -197,23 +185,49 @@ export class PlatformHelpHint extends PlatformElement {
             return;
         }
         const r = btn.getBoundingClientRect();
-        if (allocateZ || !this._bubbleZ) {
-            this._bubbleZ = nextModalLayerZIndex();
+        this._portalBubble.style.left = `${r.left + r.width / 2}px`;
+        this._portalBubble.style.top = `${r.top}px`;
+    }
+
+    _mountPortal() {
+        if (!this._open) {
+            return;
         }
-        this._bubbleLeft = r.left + r.width / 2;
-        this._bubbleTop = r.top - 8;
+        this._teardownPortal();
+        const btn = this.renderRoot?.querySelector('.hint-btn');
+        if (!btn) {
+            return;
+        }
+        ensurePortalBubbleStyles();
+        this._bubbleZ = nextModalLayerZIndex();
+        const bubble = document.createElement('div');
+        bubble.id = this._bubbleId;
+        bubble.className = 'platform-help-hint-portal-bubble';
+        bubble.setAttribute('role', 'tooltip');
+        bubble.textContent = this.text;
+        bubble.style.zIndex = String(this._bubbleZ);
+        bubble.addEventListener('mouseenter', this._onPortalBubbleEnter);
+        bubble.addEventListener('mouseleave', this._onPortalBubbleLeave);
+        document.body.appendChild(bubble);
+        this._portalBubble = bubble;
+        this._syncPortalPosition();
+        requestAnimationFrame(() => {
+            requestAnimationFrame(() => this._syncPortalPosition());
+        });
+    }
+
+    _teardownPortal() {
+        if (this._portalBubble) {
+            this._portalBubble.removeEventListener('mouseenter', this._onPortalBubbleEnter);
+            this._portalBubble.removeEventListener('mouseleave', this._onPortalBubbleLeave);
+            this._portalBubble.remove();
+            this._portalBubble = null;
+        }
     }
 
     _openBubble() {
         this._cancelClose();
-        if (!this._isLocalStrategy()) {
-            this._syncBubblePosition(true);
-        }
         this._open = true;
-    }
-
-    _isLocalStrategy() {
-        return this.strategy === 'local';
     }
 
     _onBtnEnter() {
@@ -225,14 +239,6 @@ export class PlatformHelpHint extends PlatformElement {
         this._scheduleClose();
     }
 
-    _onBubbleEnter() {
-        this._cancelClose();
-    }
-
-    _onBubbleLeave() {
-        this._scheduleClose();
-    }
-
     _onBtnFocusIn() {
         this._cancelClose();
         this._openBubble();
@@ -240,18 +246,13 @@ export class PlatformHelpHint extends PlatformElement {
 
     _onBtnFocusOut(e) {
         const related = e.relatedTarget;
-        if (related && this.renderRoot?.contains(related)) {
+        if (related && this._portalBubble?.contains(related)) {
             return;
         }
         this._closeNow();
     }
 
     render() {
-        const bubbleStyleAttr = this._open && !this._isLocalStrategy()
-            ? `left:${this._bubbleLeft}px;top:${this._bubbleTop}px;z-index:${this._bubbleZ}`
-            : '';
-        const bubbleStrategyClass = this._isLocalStrategy() ? 'local' : 'fixed';
-
         return html`
             <span class="hint-root">
                 <button
@@ -259,7 +260,7 @@ export class PlatformHelpHint extends PlatformElement {
                     class="hint-btn"
                     aria-label=${this.label}
                     aria-expanded=${this._open ? 'true' : 'false'}
-                    aria-describedby=${this._bubbleId}
+                    aria-describedby=${this._open ? this._bubbleId : ''}
                     @mouseenter=${this._onBtnEnter}
                     @mouseleave=${this._onBtnLeave}
                     @focusin=${this._onBtnFocusIn}
@@ -267,16 +268,6 @@ export class PlatformHelpHint extends PlatformElement {
                 >
                     ?
                 </button>
-                <div
-                    id=${this._bubbleId}
-                    class="hint-bubble ${bubbleStrategyClass} ${this._open ? 'is-open' : ''}"
-                    style=${bubbleStyleAttr}
-                    role="tooltip"
-                    @mouseenter=${this._onBubbleEnter}
-                    @mouseleave=${this._onBubbleLeave}
-                >
-                    ${this.text}
-                </div>
             </span>
         `;
     }

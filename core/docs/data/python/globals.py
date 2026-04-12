@@ -9,18 +9,14 @@ GLOBALS: List[Dict[str, Any]] = [
     # State - главная сущность
     {
         "name": "state",
-        "type": "Dict[str, Any]",
+        "type": "ExecutionState",
         "doc": (
-            "Главный объект данных (передаётся в run(state)):\n"
-            "- state['content'] - текст последнего сообщения пользователя\n"
-            "- state['response'] - ответ для пользователя (установите)\n"
-            "- state['messages'] - история сообщений List[Message]\n"
-            "- state['files'] - файлы [{name, path, mime_type}]\n"
-            "- state['user_id'] - ID пользователя\n"
-            "- state['user_groups'] - группы пользователя\n"
-            "- state['variables'] - переменные агента\n"
-            "- state['current_nodes'] - текущие ноды\n"
-            "- state['custom_key'] - любые ваши данные"
+            "Состояние выполнения `run(state)`; доступ как к dict: `state['content']`, `state.get('key')`.\n\n"
+            "- **`task_id`**, **`context_id`**, **`user_id`**, **`session_id`** — обязательные системные поля\n"
+            "- **`content`** — вход пользователя; **`response`** — ответ агента; **`result`** — результат ноды/tool\n"
+            "- **`messages`** — `List[Message]`; **`files`** — список вложений `{name, path, mime_type, ...}`\n"
+            "- **`user_groups`**, **`variables`**, **`current_nodes`** — группы, переменные flow, активные ноды\n"
+            "- дополнительные поля через присваивание; сериализация: `state.model_dump()`"
         ),
         "perspectives": ["editor", "flow", "tool", "node"],
         "tags": ["core", "data"],
@@ -30,13 +26,32 @@ GLOBALS: List[Dict[str, Any]] = [
         "name": "llm",
         "type": "SafeLLMClient",
         "doc": (
-            "LLM клиент для вызова моделей. Использование:\n"
-            "- await llm.chat_simple('Привет!') -> str\n"
-            "- await llm.chat(messages) -> Message\n"
-            "- await llm.chat_with_tools(messages, tools) -> Message"
+            "await llm.chat(messages, *ключевые_аргументы). Первый аргумент messages:\n"
+            "str | list[str] | Message | list[Message] | dict | list[dict] (роли/контент нормализуются рантаймом).\n"
+            "Возврат: Message (текст, tool_calls в metadata) или экземпляр response_model при structured output.\n"
+            "Ключевые параметры (все опциональны, кроме смысла вызова):\n"
+            "- model — имя модели; response_model — Pydantic-модель для JSON по схеме\n"
+            "- tools — список: готовые OpenAI dict ИЛИ результат @tool(...) (имя функции после декоратора — экземпляр tool с to_openai_schema); сырую функцию без @tool передавать нельзя\n"
+            "- temperature, top_p, top_k, max_tokens, frequency_penalty, presence_penalty — семплинг и лимиты\n"
+            "- seed — детерминизм (если провайдер поддерживает); reasoning_effort — строка для reasoning API\n"
+            "- extra_body — dict: произвольные поля тела HTTP-запроса к провайдеру; мержатся последними и перекрывают совпадения\n"
+            "Текст ответа удобно брать: from a2a.utils.message import get_message_text\nget_message_text(msg)"
         ),
         "perspectives": ["editor", "flow", "tool", "node"],
         "tags": ["llm", "ai"],
+    },
+    {
+        "name": "tool",
+        "type": "decorator",
+        "doc": (
+            "Декоратор для функции, которую нужно отдать в llm.chat(..., tools=[...]).\n"
+            "@tool(name='add', description='Складывает a и b', tags=['math'])\n"
+            "def add(a: int, b: int): return a + b\n"
+            "После этого add — экземпляр BaseTool; схема аргументов из аннотаций (state в сигнатуре не попадает в JSON schema).\n"
+            "Вызов: await llm.chat('сколько 3+4?', tools=[add]). Ответ может содержать tool_calls в metadata; исполнить логику тула вручную (например await add.run(args, state)) или свой ReAct-цикл — платформа внутри одного llm.chat цикл не крутит."
+        ),
+        "perspectives": ["editor", "flow", "tool", "node"],
+        "tags": ["llm", "tools"],
     },
     # Контекст и канал
     {
@@ -44,7 +59,7 @@ GLOBALS: List[Dict[str, Any]] = [
         "type": "SafeContext",
         "doc": (
             "Контекст выполнения (только чтение):\n"
-            "- context.channel - канал (a2a, telegram, api)\n"
+            "- context.channel - канал (a2a, api, telegram, max, voip; без контекста — 'unknown')\n"
             "- context.user_id - ID пользователя\n"
             "- context.session_id - ID сессии\n"
             "- context.flow_id - ID агента\n"
@@ -112,7 +127,7 @@ GLOBALS: List[Dict[str, Any]] = [
     {
         "name": "set_nested",
         "type": "function",
-        "doc": "Установить вложенное значение по пути:\nstate = set_nested(state, 'user.name', 'Иван')",
+        "doc": "Записать значение по пути (мутирует state, тот же объект возвращается):\nset_nested(state, 'user.name', 'Иван')",
         "perspectives": ["editor", "flow", "node"],
         "tags": ["state", "utility"],
     },
@@ -125,9 +140,65 @@ GLOBALS: List[Dict[str, Any]] = [
         "tags": ["files", "utility"],
     },
     {
+        "name": "find_file",
+        "type": "function",
+        "doc": (
+            "Найти файл по имени в списке state.files:\n"
+            "finfo = find_file(get_files(state), 'report.docx')\n\n"
+            "Без имени — первый файл из списка:\n"
+            "finfo = find_file(get_files(state))\n\n"
+            "Поиск: точное совпадение по полю name, затем case-insensitive подстрока.\n"
+            "Возвращает dict записи файла или None."
+        ),
+        "perspectives": ["editor", "flow", "tool", "node"],
+        "tags": ["files", "utility"],
+    },
+    {
+        "name": "reader",
+        "type": "FileReader",
+        "doc": (
+            "Метод read(source, *, file_name=None, include_asset_bytes=False, source_file_id=None, source_checksum=None, "
+            "vision_model=..., vision_prompt=None) — все именованные аргументы необязательны, кроме смысла source.\n\n"
+            "source — одно из:\n"
+            "• запись вложения: dict из get_files(state) / state.files, или FileRecord / FileResponse (path и/или file_id / url);\n"
+            "• строка пути к файлу на диске, pathlib.Path, или bytes уже загруженного файла.\n\n"
+            "Удобнее всего передать целиком объект вложения:\n"
+            "f = get_files(state)[0]\n"
+            "res = await reader.read(f)\n\n"
+            "Для source=bytes обязателен file_name с расширением (.pdf, .docx, .png …).\n"
+            "Для source=str(path) без записи вложения лучше явно file_name=..., чтобы тип совпал с файлом.\n\n"
+            "Именованные параметры: include_asset_bytes (PDF, тяжёлый ответ), source_file_id и source_checksum, "
+            "vision_prompt / vision_model для картинок (пустую строку в vision_prompt нельзя).\n\n"
+            "Результат FileReadResult: pages, page_count, detected_kind, mime_type, warnings, source_checksum, source_file_id.\n"
+            "Тип по имени/заголовку: reader.recognize_file_type(file_name='x.png', head=raw[:8192]).\n"
+            "Без кода: tool read_file."
+        ),
+        "perspectives": ["editor", "flow", "tool", "node"],
+        "tags": ["files", "reader"],
+    },
+    {
+        "name": "writer",
+        "type": "FileWriter",
+        "doc": (
+            "writer = FileWriter() в namespace процесса flows: на старте FileWriter.configure_process_upload — дальше "
+            "await writer.write(...) в хранилище. build_bytes — только сборка в память.\n\n"
+            "await writer.write(content=..., original_name=..., content_mode='auto', public=True, "
+            "text_encoding='utf-8', max_image_bytes=..., http_timeout_seconds=..., pdf_max_image_width_pt=..., "
+            "docx_image_width_inches=...) -> FileMetadata.\n"
+            "create_file(...) с явным WriteOptions оставлен для редких случаев в коде вне eval.\n\n"
+            "build_bytes(content, original_name, content_mode='auto', options=None) -> FileWriteResult (data, mime_type, ...).\n\n"
+            "content: str или bytes. content_mode: auto | markdown | base64 | raw.\n\n"
+            "Пример: meta = await writer.write(content='# Отчёт\\n|A|B|\\n|-|-|\\n|1|2|', original_name='t.xlsx', "
+            "content_mode='markdown')\n\n"
+            "Tool create_file — тот же сценарий без кода."
+        ),
+        "perspectives": ["editor", "flow", "tool", "node"],
+        "tags": ["files", "writer"],
+    },
+    {
         "name": "get_user",
         "type": "function",
-        "doc": "Получить информацию о пользователе:\nuser = get_user(state)\n# -> {id, email, grps}",
+        "doc": "Сводка из state:\nuser = get_user(state)\n# -> {id, groups} (groups из user_groups)",
         "perspectives": ["editor", "flow", "tool", "node"],
         "tags": ["user", "utility"],
     },
@@ -163,15 +234,302 @@ GLOBALS: List[Dict[str, Any]] = [
     {
         "name": "ask_user",
         "type": "function",
-        "doc": "Запросить информацию у пользователя:\nask_user('Как вас зовут?')\n# Прерывает выполнение и ждёт ответа",
+        "doc": (
+            "Синхронный запрос пользователю (interrupt):\nask_user('Как вас зовут?')\n"
+            "Для await llm.chat(..., tools=[...]) передай в списке tools имя ask_user_tool."
+        ),
         "perspectives": ["editor", "flow", "tool", "node"],
         "tags": ["interrupt", "interaction"],
+    },
+    {
+        "name": "ask_user_tool",
+        "type": "tool",
+        "doc": (
+            "Готовый tool для LLM: await llm.chat('...', tools=[ask_user_tool]). "
+            "Прямой вопрос пользователю из тела кода ноды — вызов ask_user(...)."
+        ),
+        "perspectives": ["editor", "flow", "tool", "node"],
+        "tags": ["interrupt", "llm", "tools"],
+    },
+    {
+        "name": "Встроенные tools",
+        "type": "convention",
+        "doc": (
+            "В окружении кода ноды по имени доступны встроенные tools платформы: calculator, read_file, create_file, "
+            "reason, final_answer, finish, self_check, задачи планировщика (schedule_*), … "
+            "Новый системный tool подключается разработчиками платформы в реестр пакета tools."
+        ),
+        "perspectives": ["editor", "flow", "tool", "node"],
+        "tags": ["tools", "platform"],
+    },
+    # Interrupt-типы
+    {
+        "name": "FlowInterrupt",
+        "type": "exception",
+        "doc": (
+            "Прерывание выполнения flow:\n"
+            "raise FlowInterrupt(question='Как вас зовут?')\n\n"
+            "Для operator handoff:\n"
+            "raise FlowInterrupt(body=OperatorTaskInterrupt(question=..., task_title=..., assignee_queue=..., handoff_mode=HandoffMode.single_reply))\n\n"
+            "После ответа пользователя / оператора flow продолжается с того же места."
+        ),
+        "perspectives": ["editor", "flow", "tool", "node"],
+        "tags": ["interrupt", "exception"],
+    },
+    {
+        "name": "HandoffMode",
+        "type": "enum",
+        "doc": (
+            "Режим передачи оператору:\n"
+            "- HandoffMode.single_reply — один ответ оператора\n"
+            "- HandoffMode.takeover — полный перехват диалога оператором"
+        ),
+        "perspectives": ["editor", "flow", "tool", "node"],
+        "tags": ["interrupt", "operator"],
+    },
+    {
+        "name": "InterruptKind",
+        "type": "enum",
+        "doc": (
+            "Вид прерывания:\n"
+            "- InterruptKind.user_input — запрос ввода от пользователя\n"
+            "- InterruptKind.operator_task — передача оператору\n"
+            "- InterruptKind.oauth_required — ожидание OAuth-авторизации"
+        ),
+        "perspectives": ["editor", "flow", "tool", "node"],
+        "tags": ["interrupt", "types"],
+    },
+    {
+        "name": "UserMessageInterrupt",
+        "type": "class",
+        "doc": (
+            "Тело interrupt для запроса у пользователя:\n"
+            "raise FlowInterrupt(body=UserMessageInterrupt(question='Ваш email?'))"
+        ),
+        "perspectives": ["editor", "flow", "tool", "node"],
+        "tags": ["interrupt", "types"],
+    },
+    {
+        "name": "OperatorTaskInterrupt",
+        "type": "class",
+        "doc": (
+            "Тело interrupt для передачи оператору:\n"
+            "raise FlowInterrupt(body=OperatorTaskInterrupt(\n"
+            "    question='Клиент запрашивает возврат',\n"
+            "    task_title='Возврат заказа #123',\n"
+            "    assignee_queue='support',\n"
+            "    handoff_mode=HandoffMode.takeover,\n"
+            "))"
+        ),
+        "perspectives": ["editor", "flow", "tool", "node"],
+        "tags": ["interrupt", "operator"],
+    },
+    # Интеграции
+    {
+        "name": "ServiceClient",
+        "type": "class",
+        "doc": (
+            "HTTP-клиент для вызовов между сервисами платформы:\n"
+            "client = ServiceClient()\n"
+            "data = await client.get('crm', '/crm/api/v1/entities/search', params={'query': 'test'})\n"
+            "result = await client.post('rag', '/rag/api/v1/search', json={'query': 'text'})\n\n"
+            "Методы: get, post, put, patch, delete. Первый аргумент — имя сервиса (crm, rag, flows, sync, frontend)."
+        ),
+        "perspectives": ["editor", "flow", "tool", "node"],
+        "tags": ["http", "api", "platform"],
+    },
+    {
+        "name": "ServiceClientError",
+        "type": "exception",
+        "doc": (
+            "Ошибка вызова сервиса через ServiceClient:\n"
+            "try:\n"
+            "    data = await client.get('crm', '/crm/api/v1/entities/123')\n"
+            "except ServiceClientError as e:\n"
+            "    logger.error(f'Ошибка CRM: {e}')"
+        ),
+        "perspectives": ["editor", "flow", "tool", "node"],
+        "tags": ["http", "api", "platform"],
+    },
+    {
+        "name": "get_context",
+        "type": "function",
+        "doc": (
+            "Контекст выполнения (company_id, user_id, namespace):\n"
+            "ctx = get_context()\n"
+            "company_id = ctx.active_company.company_id\n"
+            "user_id = ctx.user.user_id\n"
+            "namespace = ctx.active_namespace"
+        ),
+        "perspectives": ["editor", "flow", "tool", "node"],
+        "tags": ["context", "platform"],
+    },
+    {
+        "name": "GoogleDocsClient",
+        "type": "class",
+        "doc": (
+            "Клиент Google Docs API:\n"
+            "client = GoogleDocsClient(credentials_json=..., access_token=..., subject=...)\n"
+            "doc = await client.create_document('Title')\n"
+            "text = await client.read_as_text(document_id)\n"
+            "await client.append_text(document_id, 'text')\n"
+            "await client.share_document(document_id, email, role='writer')\n\n"
+            "Авторизация: SA JSON из variables, или access_token, или per-user OAuth через get_google_oauth_token."
+        ),
+        "perspectives": ["editor", "flow", "tool", "node"],
+        "tags": ["google", "docs", "api"],
+    },
+    {
+        "name": "datetime",
+        "type": "class",
+        "doc": (
+            "Класс datetime.datetime (не модуль целиком):\n"
+            "now = datetime.now()\n"
+            "dt = datetime.fromisoformat('2025-01-15T10:00:00')\n"
+            "ts = datetime(2025, 6, 1, 12, 0)\n\n"
+            "Для timedelta, date и т.д. используйте import datetime."
+        ),
+        "perspectives": ["editor", "flow", "tool", "node"],
+        "tags": ["datetime", "utility"],
+    },
+    # Фасады платформы
+    {
+        "name": "get_file_bytes",
+        "type": "function",
+        "doc": (
+            "Скачать файл из хранилища по ID:\n"
+            "raw = await get_file_bytes(file_id)\n"
+            "# raw: bytes содержимого файла"
+        ),
+        "perspectives": ["editor", "flow", "tool", "node"],
+        "tags": ["files", "platform"],
+    },
+    {
+        "name": "get_google_oauth_token",
+        "type": "function",
+        "doc": (
+            "Получить OAuth-токен Google для текущего пользователя:\n"
+            "token = await get_google_oauth_token(state, service='docs')\n\n"
+            "Если токена нет — бросает FlowInterrupt с OAuthInterrupt (flow встаёт на паузу, UI показывает кнопку авторизации)."
+        ),
+        "perspectives": ["editor", "flow", "tool", "node"],
+        "tags": ["google", "oauth", "platform"],
+    },
+    {
+        "name": "get_schedule_service",
+        "type": "function",
+        "doc": (
+            "Фасад планировщика задач:\n"
+            "svc = get_schedule_service()\n"
+            "task = await svc.schedule_cron_task(flow_id=..., session_id=..., ...)\n"
+            "tasks = await svc.list_tasks(session_id=...)\n"
+            "await svc.cancel_task(task_id)"
+        ),
+        "perspectives": ["editor", "flow", "tool", "node"],
+        "tags": ["scheduling", "platform"],
+    },
+    {
+        "name": "get_oauth_service",
+        "type": "function",
+        "doc": (
+            "Фасад OAuth-сервиса:\n"
+            "svc = get_oauth_service()\n"
+            "token = await svc.get_valid_token(company_id, user_id, 'google', 'docs')"
+        ),
+        "perspectives": ["editor", "flow", "tool", "node"],
+        "tags": ["oauth", "platform"],
+    },
+    {
+        "name": "get_operator_handoff_service",
+        "type": "function",
+        "doc": (
+            "Фасад операторских очередей:\n"
+            "svc = get_operator_handoff_service()\n"
+            "cid, task_id = await svc.register_handoff(state, question=..., task_title=..., assignee_queue_slug=..., handoff_mode=HandoffMode.single_reply)"
+        ),
+        "perspectives": ["editor", "flow", "tool", "node"],
+        "tags": ["operator", "hitl", "platform"],
+    },
+    {
+        "name": "BaseTool",
+        "type": "class",
+        "doc": (
+            "Базовый класс для создания tool-классов (альтернатива @tool):\n"
+            "class MyTool(BaseTool):\n"
+            "    name = 'my_tool'\n"
+            "    description = 'Описание'\n"
+            "    args_schema = MyArgs  # Pydantic BaseModel\n\n"
+            "    async def _run_impl(self, args, state):\n"
+            "        return {'result': args['input']}\n\n"
+            "Экземпляр передаётся в llm.chat(..., tools=[MyTool()])."
+        ),
+        "perspectives": ["editor", "flow", "tool", "node"],
+        "tags": ["tools", "llm"],
+    },
+    {
+        "name": "quote",
+        "type": "function",
+        "doc": "URL-кодирование строки (urllib.parse.quote):\npath = f'/api/v1/items/{quote(item_id, safe=\"\")}'",
+        "perspectives": ["editor", "flow", "tool", "node"],
+        "tags": ["url", "utility"],
+    },
+    {
+        "name": "ContentType",
+        "type": "enum",
+        "doc": "Тип содержимого для планировщика:\nContentType('message') или ContentType('tool_call')",
+        "perspectives": ["editor", "flow", "tool", "node"],
+        "tags": ["scheduling", "utility"],
+    },
+    # Файлы - классы
+    {
+        "name": "FileResponse",
+        "type": "class",
+        "doc": (
+            "Модель ответа о файле:\n"
+            "response = FileResponse.from_record(record)\n"
+            "data = response.model_dump(mode='json')\n"
+            "# -> {file_id, url, original_name, content_type, file_size, checksum, is_public}"
+        ),
+        "perspectives": ["editor", "flow", "tool", "node"],
+        "tags": ["files", "models"],
+    },
+    {
+        "name": "DocxTemplater",
+        "type": "class",
+        "doc": (
+            "Заполнение DOCX по Jinja2 (docxtpl):\n"
+            "record = await DocxTemplater().fill_and_create(\n"
+            "    file_ref=finfo,  # dict из state.files\n"
+            "    context={'name': 'Иван'},\n"
+            "    output_original_name='out.docx',\n"
+            "    strict=False,\n"
+            ")\n"
+            "Без кода: tool fill_docx_template."
+        ),
+        "perspectives": ["editor", "flow", "tool", "node"],
+        "tags": ["files", "docx"],
+    },
+    {
+        "name": "DocxTemplateError",
+        "type": "exception",
+        "doc": (
+            "Ошибка шаблона DOCX (и подклассы DocxTemplateInvalidError, DocxTemplateSyntaxError и т.д.).\n"
+            "У экземпляра: message, code, payload.\n"
+            "В inline-коде нельзя писать .__name__ / .__class__ (валидатор eval); имя типа: "
+            "getattr(type(exc), \"__name__\", \"\"). Или вызывайте fill_docx_template."
+        ),
+        "perspectives": ["editor", "flow", "tool", "node"],
+        "tags": ["files", "docx", "exception"],
     },
     # JSON
     {
         "name": "extract_json",
         "type": "function",
-        "doc": "Извлечь JSON из текста (поддерживает ```json``` блоки):\ndata = extract_json(llm_response)\n# -> dict/list или None",
+        "doc": (
+            "Извлечь JSON из текста, в том числе из fenced-блоков с меткой `json` в Markdown.\n\n"
+            "`data = extract_json(llm_response)`\n\n"
+            "Возвращает `dict` / `list` или `None`."
+        ),
         "perspectives": ["editor", "flow", "tool", "node"],
         "tags": ["json", "utility"],
     },
@@ -200,7 +558,11 @@ GLOBALS: List[Dict[str, Any]] = [
     {
         "name": "FilePart",
         "type": "class",
-        "doc": "Файловая часть сообщения:\nFilePart(file=FileWithBytes(name='doc.pdf', bytes=data))",
+        "doc": (
+            "Файловая часть:\n"
+            "FilePart(file=FileWithBytes(name='doc.pdf', bytes=base64_str, mime_type='application/pdf'))\n"
+            "Поле bytes — base64-строка, не сырые bytes."
+        ),
         "perspectives": ["editor", "flow", "tool", "node"],
         "tags": ["a2a", "types", "files"],
     },

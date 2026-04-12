@@ -1,11 +1,12 @@
 """API роутер для каналов (Channels)."""
 
+import asyncio
 import uuid
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, HTTPException, Query
 
 from apps.sync.channel_read_helpers import channel_read_from_entity
-from apps.sync.container import get_sync_container
+from apps.sync.dependencies import ContainerDep
 from apps.sync.models.channels import (
     ChannelCreate,
     ChannelMemberAdd,
@@ -14,31 +15,34 @@ from apps.sync.models.channels import (
     ChannelRead,
     ChannelUpdate,
 )
-from apps.sync.models.common import PaginationRequest
 from apps.sync.realtime.command_dispatch import dispatch_sync_command
 from apps.sync.realtime.commands import CommandEnvelope
 from apps.sync.realtime.events import event_channel_member_added
 from apps.sync.realtime.publish_events import publish_realtime_events
 from apps.sync.realtime.tasks import handle_command
+from core.config import get_settings
+from core.pagination import OffsetPage
 from core.context import get_context
 
 router = APIRouter()
 
 
-@router.get("/")
+@router.get("/", response_model=OffsetPage[ChannelRead])
 async def list_channels(
+    container: ContainerDep,
     space_id: str | None = None,
-    pagination: PaginationRequest = Depends(),
-) -> list[ChannelRead]:
+    limit: int = Query(50, ge=1, le=200),
+    offset: int = Query(0, ge=0),
+) -> OffsetPage[ChannelRead]:
     """Список каналов текущего пользователя (членство). Опционально фильтр по space_id."""
     context = get_context()
-    container = get_sync_container()
     company_id = context.active_company.company_id
     viewer_id = context.user.user_id
     channels = await container.channel_repository.list_for_user(
         viewer_id,
         space_id=space_id,
-        limit=pagination.limit,
+        limit=limit,
+        offset=offset,
         company_id=company_id,
     )
     channel_ids = [c.channel_id for c in channels]
@@ -60,12 +64,13 @@ async def list_channels(
                 lane_summary=summ,
             )
         )
-    return out
+    return OffsetPage[ChannelRead](items=out, total=len(out), limit=limit, offset=offset)
 
 
 @router.patch("/{channel_id}")
-async def update_channel(channel_id: str, body: ChannelUpdate) -> ChannelRead:
+async def update_channel(container: ContainerDep, channel_id: str, body: ChannelUpdate) -> ChannelRead:
     """Обновление канала (команда в процессе API)."""
+    _ = container
     context = get_context()
     cmd = CommandEnvelope(
         id=uuid.uuid4().hex,
@@ -84,12 +89,12 @@ async def update_channel(channel_id: str, body: ChannelUpdate) -> ChannelRead:
 async def patch_channel_notification_settings(
     channel_id: str,
     body: ChannelNotificationSettingsUpdate,
+    container: ContainerDep,
 ) -> ChannelRead:
     """Мьют платформенных уведомлений о сообщениях для текущего пользователя в канале."""
     context = get_context()
     company_id = context.active_company.company_id
     viewer_id = context.user.user_id
-    container = get_sync_container()
     ch = await container.channel_repository.get(channel_id)
     if ch is None or ch.company_id != company_id:
         raise HTTPException(status_code=404, detail="Канал не найден.")
@@ -117,8 +122,9 @@ async def patch_channel_notification_settings(
 
 
 @router.post("/{channel_id}/read", status_code=204)
-async def mark_channel_read(channel_id: str) -> None:
+async def mark_channel_read(container: ContainerDep, channel_id: str) -> None:
     """Отмечает основную ленту канала прочитанной для текущего пользователя."""
+    _ = container
     context = get_context()
     cmd = CommandEnvelope(
         id=uuid.uuid4().hex,
@@ -133,8 +139,9 @@ async def mark_channel_read(channel_id: str) -> None:
 
 
 @router.post("/", status_code=201)
-async def create_channel(body: ChannelCreate) -> ChannelRead:
+async def create_channel(container: ContainerDep, body: ChannelCreate) -> ChannelRead:
     """Создание канала через TaskIQ."""
+    _ = container
     context = get_context()
     cmd = CommandEnvelope(
         id=__import__("uuid").uuid4().hex,
@@ -144,19 +151,20 @@ async def create_channel(body: ChannelCreate) -> ChannelRead:
         payload={"body": body.model_dump()},
     )
     task = await handle_command.kiq(cmd.model_dump())
-    res = await task.wait_result(timeout=300.0)
+    res = await task.wait_result(
+        timeout=get_settings().sync_taskiq_wait_result_timeout_seconds,
+    )
     if res.is_err:
         raise RuntimeError(f"Command failed: {res.error}")
     return ChannelRead.model_validate(res.return_value["result"])
 
 
 @router.get("/{channel_id}/members", response_model=list[ChannelMemberRead])
-async def list_channel_members(channel_id: str) -> list[ChannelMemberRead]:
+async def list_channel_members(channel_id: str, container: ContainerDep) -> list[ChannelMemberRead]:
     """Участники канала (только для состоящих в канале)."""
     context = get_context()
     company_id = context.active_company.company_id
     viewer_id = context.user.user_id
-    container = get_sync_container()
     ch = await container.channel_repository.get(channel_id)
     if ch is None or ch.company_id != company_id:
         raise HTTPException(status_code=404, detail="Канал не найден.")
@@ -167,12 +175,11 @@ async def list_channel_members(channel_id: str) -> list[ChannelMemberRead]:
 
 
 @router.post("/{channel_id}/members", status_code=201)
-async def add_member(channel_id: str, body: ChannelMemberAdd) -> ChannelMemberRead:
+async def add_member(channel_id: str, body: ChannelMemberAdd, container: ContainerDep) -> ChannelMemberRead:
     """Добавление участника в канал (только участники канала)."""
     context = get_context()
     company_id = context.active_company.company_id
     viewer_id = context.user.user_id
-    container = get_sync_container()
     ch = await container.channel_repository.get(channel_id)
     if ch is None or ch.company_id != company_id:
         raise HTTPException(status_code=404, detail="Канал не найден.")
@@ -182,5 +189,18 @@ async def add_member(channel_id: str, body: ChannelMemberAdd) -> ChannelMemberRe
         channel_id, body.user_id, body.role,
         company_id=company_id,
     )
-    await publish_realtime_events([event_channel_member_added(channel_id, body.user_id)])
+    member_recipients = await container.channel_repository.list_member_user_ids(
+        channel_id,
+        company_id=company_id,
+    )
+    await publish_realtime_events(
+        [
+            event_channel_member_added(
+                channel_id,
+                body.user_id,
+                company_id=company_id,
+                recipient_user_ids=member_recipients,
+            ),
+        ],
+    )
     return ChannelMemberRead(user_id=body.user_id, role=body.role)

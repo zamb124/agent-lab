@@ -48,12 +48,6 @@ class TeamMemberInfo(BaseModel):
     avatar_url: Optional[str] = Field(default=None, description="URL аватара")
 
 
-class TeamInvite(BaseModel):
-    """Приглашение участника"""
-    email: str = Field(description="Email пользователя")
-    role: str = Field(description="Роль (owner, admin, developer, viewer)")
-
-
 class TeamMemberUpdate(BaseModel):
     """Обновление участника"""
     roles: List[str] = Field(description="Новые роли")
@@ -91,13 +85,83 @@ class BillingUsage(BaseModel):
     by_user: Dict[str, Dict[str, Any]]
 
 
-class TopUpRequest(BaseModel):
-    """Запрос на пополнение баланса"""
-    amount: float = Field(ge=100, le=1000000, description="Сумма пополнения (100-1000000 RUB)")
-    payment_method: str = Field(default="card", description="Способ оплаты")
-
-
 class ChangePlanRequest(BaseModel):
     """Запрос на смену тарифа"""
     plan: str = Field(description="Новый тарифный план")
+
+
+class PlatformTracingFacetItem(BaseModel):
+    """Одна подсказка с id для фильтра и человекочитаемой подписью."""
+
+    value: str
+    label: str
+
+
+class PlatformTracingFacetsResponse(BaseModel):
+    """Подсказки для автокомплита (distinct значения)."""
+
+    items: List[str]
+
+
+class PlatformTracingFacetItemsResponse(BaseModel):
+    """Подсказки company/user: value = id, label = имя + короткий id."""
+
+    items: List[PlatformTracingFacetItem]
+
+
+
+
+class PlatformBillingPricesResponse(BaseModel):
+    """Эффективный прайс (конфиг + override) и сырой override из shared storage."""
+
+    effective: Dict[str, Dict[str, float]]
+    storage_override: Optional[Dict[str, Dict[str, float]]] = None
+
+
+class PlatformBillingUsageReportResponse(BaseModel):
+    """Строки usage из shared БД для админки."""
+
+    items: List[Dict[str, Any]]
+
+
+class PlatformBillingSettlementRulesResponse(BaseModel):
+    """Документ правил span settlement (JSON)."""
+
+    document: Dict[str, Any]
+
+
+class PlatformBillingCompanyPricesResponse(BaseModel):
+    """Эффективный прайс для компании (global merge + override компании)."""
+
+    company_id: str
+    effective: Dict[str, Dict[str, float]]
+    storage_override: Optional[Dict[str, Dict[str, float]]] = None
+
+
+class PlatformBillingCompanyResolveResponse(BaseModel):
+    """Разрешение ввода (company_id или subdomain/slug) в company_id для админки биллинга."""
+
+    company_id: str
+    name: str
+    subdomain: Optional[str] = None
+
+
+class PlatformBillingCompanyOverviewItem(BaseModel):
+    """Строка сводки по компании для таблицы админки биллинга."""
+
+    company_id: str
+    name: str
+    subdomain: Optional[str] = None
+    status: str
+    tariff_plan: str
+    balance: float
+    monthly_budget: float
+    current_month_spent: float
+
+
+class PlatformBillingCompaniesOverviewResponse(BaseModel):
+    """Страница списка компаний с полями биллинга."""
+
+    items: List[PlatformBillingCompanyOverviewItem]
+    has_more: bool
 

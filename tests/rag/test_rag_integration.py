@@ -72,11 +72,9 @@ async def test_full_rag_workflow(rag_client, unique_namespace_name, auth_headers
         headers=auth_headers_system
     )
     assert list_response.status_code == 200
-    documents = list_response.json()["documents"]
-    assert {
-        "nonempty": len(documents) > 0,
-        "has_uploaded_id": any(d["document_id"] == document_id for d in documents),
-    } == {"nonempty": True, "has_uploaded_id": True}
+    documents = list_response.json()["items"]
+    assert len(documents) > 0
+    assert any(d["document_id"] == document_id for d in documents)
     
     # 4. Поиск
     search_response = await rag_client.post(
@@ -87,10 +85,8 @@ async def test_full_rag_workflow(rag_client, unique_namespace_name, auth_headers
     assert search_response.status_code == 200
     results = search_response.json()["results"]
     
-    assert {
-        "results_nonempty": len(results) > 0,
-        "first_hit_mentions_fastapi": "FastAPI" in results[0]["content"],
-    } == {"results_nonempty": True, "first_hit_mentions_fastapi": True}
+    assert len(results) > 0
+    assert "FastAPI" in results[0]["content"]
     
     # 5. Удалить namespace (каскадно удалит все документы)
     delete_ns_response = await rag_client.delete(
@@ -111,8 +107,8 @@ async def test_provider_switch_persistence(rag_client, rag_provider_pgvector, au
     response = await rag_client.get("/rag/api/v1/providers", headers=auth_headers_system)
     assert response.status_code == 200
     
-    providers = response.json()["providers"]
-    assert {"pgvector_listed": any(p["name"] == "pgvector" for p in providers)} == {"pgvector_listed": True}
+    providers = response.json()["items"]
+    assert any(p["name"] == "pgvector" for p in providers)
     
     # Переключаемся на pgvector
     switch_response = await rag_client.post(
@@ -121,7 +117,7 @@ async def test_provider_switch_persistence(rag_client, rag_provider_pgvector, au
         headers=auth_headers_system
     )
     assert switch_response.status_code == 200
-    assert {"provider": switch_response.json()["provider"]} == {"provider": "pgvector"}
+    assert switch_response.json()["provider"] == "pgvector"
 
 
 @pytest.mark.asyncio
@@ -162,14 +158,14 @@ async def test_multiple_namespaces_isolation(rag_client, unique_id, auth_headers
         f"/rag/api/v1/namespaces/{ns1_id}/documents",
         headers=auth_headers_system
     )
+    assert len(list1_response.json()["items"]) > 0
+    
+    # Проверяем что документа нет в ns2
     list2_response = await rag_client.get(
         f"/rag/api/v1/namespaces/{ns2_id}/documents",
         headers=auth_headers_system
     )
-    assert {
-        "ns1_nonempty": len(list1_response.json()["documents"]) > 0,
-        "ns2_empty": len(list2_response.json()["documents"]) == 0,
-    } == {"ns1_nonempty": True, "ns2_empty": True}
+    assert len(list2_response.json()["items"]) == 0
 
 
 @pytest.mark.asyncio
@@ -268,14 +264,12 @@ async def test_concurrent_operations(rag_client, unique_id, auth_headers_system)
     names = [f"test_concurrent_{unique_id}_{i}" for i in range(3)]
     results = await asyncio.gather(*[create_namespace(name) for name in names])
     
-    assert {"len": len(results), "all_have_name": all("name" in r for r in results)} == {
-        "len": 3,
-        "all_have_name": True,
-    }
+    assert len(results) == 3
+    assert all("name" in r for r in results)
     
     # Проверяем что все namespace созданы
     list_response = await rag_client.get("/rag/api/v1/namespaces", headers=auth_headers_system)
-    namespaces = list_response.json()["namespaces"]
+    namespaces = list_response.json()["items"]
     
     for name in names:
         assert any(ns["name"] == name for ns in namespaces)

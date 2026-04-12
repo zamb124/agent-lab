@@ -204,7 +204,7 @@ class TestFlowVariables:
         # Получаем список
         response = await client.get("/flows/api/v1/flows/")
         assert response.status_code == 200
-        agents = response.json()
+        agents = response.json()["items"]
         
         # Находим наш агент
         test_agent = next((a for a in agents if a["flow_id"] == flow_id), None)

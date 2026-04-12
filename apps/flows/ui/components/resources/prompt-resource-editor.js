@@ -21,7 +21,7 @@ export class PromptResourceEditor extends BaseResourceEditor {
     }
 
     getColor() {
-        return '#10b981';
+        return '#99A6F9';
     }
 
     getTypeName() {
@@ -35,18 +35,18 @@ export class PromptResourceEditor extends BaseResourceEditor {
 
         return html`
             <div class="form-group">
-                <label class="form-label">Template</label>
+                <label class="form-label">${this.i18n.t('resource_editor.prompt.label_template')}</label>
                 <textarea 
                     class="form-input template-textarea"
                     .value=${template}
                     @input=${(e) => this._onInputChange('template', e.target.value)}
-                    placeholder="Ты {{ role }}. Твоя задача: {{ task }}"
+                    placeholder=${this.i18n.t('resource_editor.prompt.placeholder_template')}
                 ></textarea>
-                <span class="form-hint">Jinja2 шаблон промпта</span>
+                <span class="form-hint">${this.i18n.t('resource_editor.prompt.hint_template')}</span>
             </div>
             
             <div class="form-group">
-                <label class="form-label">Default Variables (JSON)</label>
+                <label class="form-label">${this.i18n.t('resource_editor.prompt.label_variables')}</label>
                 <textarea 
                     class="form-input"
                     .value=${variablesJson}
@@ -54,7 +54,7 @@ export class PromptResourceEditor extends BaseResourceEditor {
                     placeholder='{"role": "assistant"}'
                     rows="4"
                 ></textarea>
-                <span class="form-hint">Значения переменных по умолчанию</span>
+                <span class="form-hint">${this.i18n.t('resource_editor.prompt.hint_variables')}</span>
             </div>
         `;
     }

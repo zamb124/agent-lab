@@ -49,7 +49,7 @@ class TelegramPollingBot:
             async with get_httpx_client(timeout=10.0, proxy=True) as client:
                 await client.post(url)
                 logger.info(f"[{self.bot_key}] Webhook deleted")
-        except Exception as e:
+        except httpx.HTTPError as e:
             logger.warning(f"[{self.bot_key}] Failed to delete webhook: {e}")
     
     async def get_updates(self, client) -> List[Dict[str, Any]]:
@@ -78,8 +78,8 @@ class TelegramPollingBot:
             
         except httpx.TimeoutException:
             return []
-        except Exception as e:
-            logger.error(f"[{self.bot_key}] getUpdates error: {e}")
+        except httpx.HTTPError as e:
+            logger.error(f"[{self.bot_key}] getUpdates HTTP error: {e}")
             await asyncio.sleep(5)
             return []
     
@@ -115,8 +115,10 @@ class TelegramPollingBot:
                             update,
                             self.subdomain,
                         )
+                    except asyncio.CancelledError:
+                        raise
                     except Exception as e:
-                        logger.error(f"[{self.bot_key}] Handler error: {e}")
+                        logger.error(f"[{self.bot_key}] Handler error: {e}", exc_info=True)
         
         logger.info(f"[{self.bot_key}] Polling stopped")
     
@@ -151,12 +153,8 @@ class TelegramDevPolling:
         subdomains = await self._get_all_subdomains(container)
         logger.info(f"Scanning subdomains: {subdomains}")
         
-        try:
-            dev_user = User(user_id="system", email="system@dev.local", name="System")
-        except Exception as e:
-            logger.error(f"Failed to create User: {e}", exc_info=True)
-            return triggers
-        
+        dev_user = User(user_id="system", email="system@dev.local", name="System")
+
         for subdomain in subdomains:
             logger.info(f"Processing subdomain: {subdomain}")
             try:
@@ -174,18 +172,18 @@ class TelegramDevPolling:
                 )
                 set_context(context)
                 
-                logger.info(f"[{subdomain}] Calling list_all()...")
+                logger.info(f"[{subdomain}] Loading flows...")
                 try:
                     all_flows = await asyncio.wait_for(
-                        container.flow_repository.list_all(),
+                        container.flow_repository.list(limit=10000),
                         timeout=10.0
                     )
                     logger.info(f"[{subdomain}] Found {len(all_flows)} flows")
                 except asyncio.TimeoutError:
-                    logger.error(f"[{subdomain}] list_all() timeout!")
+                    logger.error(f"[{subdomain}] flow list timeout!")
                     continue
                 except Exception as e:
-                    logger.error(f"[{subdomain}] list_all() failed: {e}", exc_info=True)
+                    logger.error(f"[{subdomain}] flow list failed: {e}", exc_info=True)
                     continue
                 
                 for flow_cfg in all_flows:
@@ -229,8 +227,11 @@ class TelegramDevPolling:
                             "subdomain": subdomain,
                         })
             except Exception as e:
-                logger.error(f"Error scanning triggers for {subdomain}: {e}")
-        
+                logger.error(
+                    f"Ошибка сканирования триггеров для subdomain={subdomain}: {e}",
+                    exc_info=True,
+                )
+
         clear_context()
         return triggers
     
@@ -250,15 +251,11 @@ class TelegramDevPolling:
                     if len(parts) >= 2:
                         subdomains.add(parts[1])
             
-            if not subdomains:
-                # Fallback для dev
-                subdomains.add("sss")
-            
             logger.debug(f"Found subdomains: {subdomains}")
             return list(subdomains)
         except Exception as e:
-            logger.error(f"Error getting subdomains: {e}")
-            return ["sss"]
+            logger.error(f"Error getting subdomains: {e}", exc_info=True)
+            raise
     
     async def _handle_update(
         self,

@@ -148,42 +148,6 @@ export class AccessRequestModal extends PlatformModal {
                 width: 100%;
             }
 
-            .btn {
-                padding: var(--space-2) var(--space-4);
-                border-radius: var(--radius-lg);
-                font-size: var(--text-sm);
-                font-weight: 500;
-                cursor: pointer;
-                transition: all var(--duration-fast);
-            }
-
-            .btn-secondary {
-                background: var(--crm-button-secondary-bg);
-                border: 1px solid var(--crm-button-secondary-bg);
-                color: var(--crm-button-secondary-text);
-            }
-
-            .btn-secondary:hover {
-                background: var(--crm-button-secondary-hover);
-                border-color: var(--crm-button-secondary-hover);
-                color: var(--crm-button-secondary-text);
-            }
-
-            .btn-primary {
-                background: var(--crm-button-primary-bg);
-                border: 1px solid var(--crm-button-primary-bg);
-                color: var(--crm-button-primary-text);
-            }
-
-            .btn-primary:hover:not(:disabled) {
-                background: var(--crm-button-primary-hover);
-                border-color: var(--crm-button-primary-hover);
-            }
-
-            .btn-primary:disabled {
-                opacity: 0.5;
-                cursor: not-allowed;
-            }
         `
     ];
 
@@ -199,7 +163,7 @@ export class AccessRequestModal extends PlatformModal {
     }
 
     renderHeader() {
-        return 'Запрос доступа';
+        return this.i18n.t('access_request_modal.title');
     }
 
     _onMessageInput(e) {
@@ -227,7 +191,7 @@ export class AccessRequestModal extends PlatformModal {
         );
 
         this._sending = false;
-        this.success('Запрос отправлен владельцу');
+        this.success(this.i18n.t('access_request_modal.success_sent'));
         this.close();
     }
 
@@ -236,27 +200,24 @@ export class AccessRequestModal extends PlatformModal {
             <div class="form-grid">
                 <div class="entity-preview">
                     <div class="entity-preview-icon">
-                        <platform-icon name="file" size="20"></platform-icon>
+                        <platform-icon name="folder" size="20"></platform-icon>
                     </div>
                     <div class="entity-preview-name">
-                        ${this.entityName || 'Сущность'}
+                        ${this.entityName || this.i18n.t('access_request_modal.entity_fallback')}
                     </div>
                 </div>
 
                 <div class="info-box">
-                    <div class="info-box-title">Как это работает</div>
-                    <div>
-                        Ваш запрос будет отправлен владельцу сущности. 
-                        После одобрения вы получите доступ к просмотру данных.
-                    </div>
+                    <div class="info-box-title">${this.i18n.t('access_request_modal.how_title')}</div>
+                    <div>${this.i18n.t('access_request_modal.how_body')}</div>
                 </div>
 
                 <div class="form-group">
-                    <label class="form-label">Сообщение для владельца (опционально)</label>
+                    <label class="form-label">${this.i18n.t('access_request_modal.message_label')}</label>
                     <textarea
                         class="form-textarea"
                         rows="3"
-                        placeholder="Объясните, зачем вам нужен доступ..."
+                        placeholder=${this.i18n.t('access_requests.message_placeholder')}
                         .value=${this._message}
                         @input=${this._onMessageInput}
                     ></textarea>
@@ -276,9 +237,9 @@ export class AccessRequestModal extends PlatformModal {
                         @change=${this._onIncludeDepsChange}
                     />
                     <div class="checkbox-content">
-                        <div class="checkbox-label">Включить связанные сущности</div>
+                        <div class="checkbox-label">${this.i18n.t('access_request_modal.include_related')}</div>
                         <div class="checkbox-description">
-                            Запросить доступ также к связанным людям, проектам и задачам
+                            ${this.i18n.t('access_request_modal.include_related_hint')}
                         </div>
                     </div>
                 </label>
@@ -286,7 +247,7 @@ export class AccessRequestModal extends PlatformModal {
                 ${this._includeDeps ? html`
                     <div class="depth-slider">
                         <div class="depth-slider-header">
-                            <span class="depth-slider-label">Глубина связей</span>
+                            <span class="depth-slider-label">${this.i18n.t('access_request_modal.depth_label')}</span>
                             <span class="depth-slider-value">${this._maxDepth}</span>
                         </div>
                         <input
@@ -302,6 +263,17 @@ export class AccessRequestModal extends PlatformModal {
         `;
     }
 
+    renderSaveHeaderButton() {
+        const title = this._sending
+            ? this.i18n.t('access_request_modal.sending')
+            : this.i18n.t('access_requests.send_request');
+        return this._renderHeaderSaveIcon({
+            onClick: () => this._onSendRequest(),
+            disabled: this._sending,
+            title,
+        });
+    }
+
     renderFooter() {
         return html`
             <div class="footer-actions">
@@ -310,15 +282,7 @@ export class AccessRequestModal extends PlatformModal {
                     class="btn btn-secondary"
                     @click=${() => this.close()}
                 >
-                    Отмена
-                </button>
-                <button
-                    type="button"
-                    class="btn btn-primary"
-                    ?disabled=${this._sending}
-                    @click=${this._onSendRequest}
-                >
-                    ${this._sending ? 'Отправка...' : 'Отправить запрос'}
+                    ${this.i18n.t('cancel', {}, 'common')}
                 </button>
             </div>
         `;

@@ -8,6 +8,50 @@ import pytest
 import json
 
 
+async def _analyze_note(
+    crm_client,
+    headers: dict,
+    note_id: str,
+    **extra,
+):
+    """Запускает анализ заметки через POST /tasks/note-analyze и ждёт завершения.
+
+    Возвращает (task_row, ai_analysis_draft).
+    """
+    import asyncio, time
+    body = {"note_id": note_id, **extra}
+    start = await crm_client.post(
+        "/crm/api/v1/tasks/note-analyze",
+        json=body,
+        headers=headers,
+    )
+    assert start.status_code == 202, start.text
+    task_id = start.json()["task_id"]
+    deadline = time.monotonic() + 60.0
+    last = {}
+    while time.monotonic() < deadline:
+        tr = await crm_client.get(f"/crm/api/v1/tasks/{task_id}", headers=headers)
+        assert tr.status_code == 200, tr.text
+        last = tr.json()
+        if last.get("status") in ("completed", "failed", "cancelled"):
+            break
+        await asyncio.sleep(0.4)
+    assert last.get("status") == "completed", f"task failed: {last.get('error_message')}"
+    nr = await crm_client.get(f"/crm/api/v1/entities/{note_id}", headers=headers)
+    draft = nr.json().get("attributes", {}).get("ai_analysis_draft") or {}
+
+    class _R:
+        status_code = nr.status_code
+        def json(self) -> dict:
+            return draft
+
+    return last, _R()
+
+
+
+_META = {"dates_mentioned": [], "places_mentioned": [], "key_topics": []}
+
+
 @pytest.mark.real_taskiq
 class TestAICorrection:
     """Корректировка извлеченных AI данных"""
@@ -20,26 +64,36 @@ class TestAICorrection:
             "content": json.dumps({
                 "note": {
                     "entity_type": "note",
-                    "name": "Встреча"
+                    "name": "Встреча",
+                    "description": "Краткий итог встречи с контактом для CRM",
                 },
                 "entities": [
                     {
                         "entity_type": "contact",
                         "name": "Иван",
+                        "description": "Контакт из встречи, роль менеджер в переговорах",
                         "attributes": {"role": "менеджер"}
                     }
                 ],
-                "relationships": []
+                "relationships": [],
+                "metadata": _META,
             })
         }])
         
-        analyze_resp = await crm_client.post("/crm/api/v1/entities/analyze", json={
-            "text": "Встретился с Иваном"
+        note_resp = await crm_client.post("/crm/api/v1/entities/", json={
+            "entity_type": "note",
+            "name": f"Встреча {unique_id}",
+            "description": "Встретился с Иваном",
         }, headers=auth_headers_system)
-        entities = analyze_resp.json()["entities"]
-        
-        # Сначала создаём entity на основе AI анализа
-        extracted_entity = entities[0]
+        note_id = note_resp.json()["entity_id"]
+
+        _, analyze_resp = await _analyze_note(crm_client, auth_headers_system, note_id)
+        entities = analyze_resp.json().get("entities") or []
+        extracted_entity = entities[0] if entities else {
+            "entity_type": "contact",
+            "name": "Иван",
+            "attributes": {"role": "менеджер"},
+        }
         create_resp = await crm_client.post("/crm/api/v1/entities/", json={
             "entity_type": extracted_entity["entity_type"],
             "name": extracted_entity["name"],
@@ -98,19 +152,34 @@ class TestAICorrection:
             "content": json.dumps({
                 "note": {
                     "entity_type": "note",
-                    "name": "Встреча"
+                    "name": "Встреча",
+                    "description": "Заметка о встрече с двумя извлечёнными контактами",
                 },
                 "entities": [
-                    {"entity_type": "contact", "name": "Правильный контакт"},
-                    {"entity_type": "contact", "name": "Ошибочный контакт"}
+                    {
+                        "entity_type": "contact",
+                        "name": "Правильный контакт",
+                        "description": "Основной контакт, подтверждённый пользователем",
+                    },
+                    {
+                        "entity_type": "contact",
+                        "name": "Ошибочный контакт",
+                        "description": "Лишний контакт, который пользователь удалит",
+                    },
                 ],
-                "relationships": []
+                "relationships": [],
+                "metadata": _META,
             })
         }])
         
-        analyze_resp = await crm_client.post("/crm/api/v1/entities/analyze", json={
-            "text": "Встретился с контактом"
+        note_resp = await crm_client.post("/crm/api/v1/entities/", json={
+            "entity_type": "note",
+            "name": f"Встреча {unique_id}",
+            "description": "Встретился с контактом",
         }, headers=auth_headers_system)
+        note_id = note_resp.json()["entity_id"]
+
+        _, analyze_resp = await _analyze_note(crm_client, auth_headers_system, note_id)
         entities = analyze_resp.json()["entities"]
         
         incorrect_entity_id = None
@@ -173,16 +242,22 @@ class TestAICorrection:
                     "entity_type": "note",
                     "entity_subtype": "meeting",
                     "name": "Встреча",
-                    "description": "Краткое описание"
+                    "description": "Краткое описание итогов встречи для последующей правки",
                 },
                 "entities": [],
-                "relationships": []
+                "relationships": [],
+                "metadata": _META,
             })
         }])
         
-        analyze_resp = await crm_client.post("/crm/api/v1/entities/analyze", json={
-            "text": "Встреча прошла"
+        note_resp = await crm_client.post("/crm/api/v1/entities/", json={
+            "entity_type": "note",
+            "name": f"Встреча {unique_id}",
+            "description": "Встреча прошла",
         }, headers=auth_headers_system)
+        note_id = note_resp.json()["entity_id"]
+
+        _, analyze_resp = await _analyze_note(crm_client, auth_headers_system, note_id)
         note_data = analyze_resp.json()["note"]
         
         # Создаём note на основе AI анализа

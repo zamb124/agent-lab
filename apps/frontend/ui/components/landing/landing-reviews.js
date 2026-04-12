@@ -4,6 +4,7 @@
 import { html, css } from 'lit';
 import { classMap } from 'lit/directives/class-map.js';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
+import { I18nNs } from '@platform/services/i18n/i18n.service.js';
 
 export class LandingReviews extends PlatformElement {
     static styles = [
@@ -184,44 +185,52 @@ export class LandingReviews extends PlatformElement {
     ];
 
     static properties = {
-        currentReview: { type: Number },
-        reviews: { type: Array }
+        currentReview: { type: Number }
     };
 
     constructor() {
         super();
         this.currentReview = 0;
-        this.reviews = [
-            {
-                name: 'Алексей Иванов',
-                position: 'CEO, TechStart',
-                avatar: 'АИ',
-                text: 'Humanitec помог нам автоматизировать обработку заявок от клиентов. Теперь наша команда может сосредоточиться на развитии продукта, а рутинные задачи выполняют AI-агенты. Окупилось за первый месяц!'
-            },
-            {
-                name: 'Мария Петрова',
-                position: 'Founder, E-commerce Store',
-                avatar: 'МП',
-                text: 'Внедрили AI-агента для работы с заказами и обращениями в мессенджерах. Качество обслуживания выросло, а время ответа сократилось с часов до минут. Клиенты довольны, продажи растут!'
-            },
-            {
-                name: 'Дмитрий Соколов',
-                position: 'CTO, FinTech Company',
-                avatar: 'ДС',
-                text: 'Сложные бизнес-процессы, которые раньше требовали команду разработчиков, теперь работают на базе Humanitec. Платформа гибкая, надежная, с отличной поддержкой. Рекомендую!'
-            }
-        ];
         this._intervalId = null;
     }
 
     connectedCallback() {
         super.connectedCallback();
+        this._i18nUnsub = this.i18n.subscribe(() => this.requestUpdate());
         this._startAutoplay();
     }
 
     disconnectedCallback() {
-        super.disconnectedCallback();
         this._stopAutoplay();
+        if (this._i18nUnsub) {
+            this._i18nUnsub();
+            this._i18nUnsub = null;
+        }
+        super.disconnectedCallback();
+    }
+
+    _getReviews() {
+        const t = (key) => this.i18n.t(key, {}, I18nNs.LANDING);
+        return [
+            {
+                name: t('testimonials.slide1_name'),
+                position: t('testimonials.slide1_role'),
+                avatar: t('testimonials.slide1_avatar'),
+                text: t('testimonials.slide1_text')
+            },
+            {
+                name: t('testimonials.slide2_name'),
+                position: t('testimonials.slide2_role'),
+                avatar: t('testimonials.slide2_avatar'),
+                text: t('testimonials.slide2_text')
+            },
+            {
+                name: t('testimonials.slide3_name'),
+                position: t('testimonials.slide3_role'),
+                avatar: t('testimonials.slide3_avatar'),
+                text: t('testimonials.slide3_text')
+            }
+        ];
     }
 
     _startAutoplay() {
@@ -238,7 +247,8 @@ export class LandingReviews extends PlatformElement {
     }
 
     _nextReview() {
-        this.currentReview = (this.currentReview + 1) % this.reviews.length;
+        const reviews = this._getReviews();
+        this.currentReview = (this.currentReview + 1) % reviews.length;
     }
 
     _selectReview(index) {
@@ -248,12 +258,13 @@ export class LandingReviews extends PlatformElement {
     }
 
     render() {
-        const review = this.reviews[this.currentReview];
+        const reviews = this._getReviews();
+        const review = reviews[this.currentReview];
 
         return html`
             <div class="reviews-container">
                 <h2 class="reviews-title">
-                    / Нам доверяют предприниматели и малый бизнес
+                    ${this.i18n.t('testimonials.tag', {}, I18nNs.LANDING)}
                 </h2>
                 
                 <div class="review-card">
@@ -268,7 +279,7 @@ export class LandingReviews extends PlatformElement {
                 </div>
                 
                 <div class="review-dots">
-                    ${this.reviews.map((_, index) => html`
+                    ${reviews.map((_, index) => html`
                         <div 
                             class=${classMap({ dot: true, active: index === this.currentReview })}
                             @click=${() => this._selectReview(index)}

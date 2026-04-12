@@ -109,9 +109,9 @@ export class CodeModal extends PlatformModal {
             copied = this._copyWithExecCommand(text);
         }
         if (copied) {
-            this.success('Код скопирован в буфер обмена');
+            this.success(this.i18n.t('code_modal.copy_ok'));
         } else {
-            this.error('Не удалось скопировать код');
+            this.error(this.i18n.t('code_modal.copy_fail'));
         }
     }
 
@@ -139,14 +139,14 @@ export class CodeModal extends PlatformModal {
         return html`
             <span class="code-modal-title-row">
                 <platform-icon name="code" size="20"></platform-icon>
-                <span class="code-modal-title-text">Код агента</span>
+                <span class="code-modal-title-text">${this.i18n.t('code_modal.title')}</span>
             </span>
         `;
     }
 
     renderHeaderActions() {
         return html`
-            <button type="button" class="header-btn" title="Копировать" @click=${this._onCopy}>
+            <button type="button" class="header-btn" title=${this.i18n.t('code_modal.copy_title')} @click=${this._onCopy}>
                 <platform-icon name="copy" size="16"></platform-icon>
             </button>
         `;

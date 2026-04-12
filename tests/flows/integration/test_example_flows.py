@@ -289,7 +289,7 @@ class TestExampleGraphAgent:
         classifier = flow_config.nodes["classifier"]
         assert classifier["type"] == "code"
         assert "code" in classifier
-        assert "def run(state):" in classifier["code"]
+        assert "async def run(state):" in classifier["code"]
 
     @pytest.mark.asyncio
     async def test_formatter_has_inlined_code(self, flow_config):
@@ -326,7 +326,7 @@ class TestExampleGraphAgent:
     async def test_flow_has_conditional_edges(self, flow_config):
         """Agent имеет условные переходы."""
         edges_from_classifier = [e for e in flow_config.edges if e.from_node == "classifier"]
-        assert len(edges_from_classifier) == 6
+        assert len(edges_from_classifier) == 8
         
         conditions = [e.condition for e in edges_from_classifier]
         assert "route == 'order'" in conditions
@@ -334,12 +334,13 @@ class TestExampleGraphAgent:
         assert "route == 'general'" in conditions
         assert "route == 'cat'" in conditions
         assert "route == 'greeting'" in conditions
+        assert "route == 'operator'" in conditions
+        assert "route == 'takeover'" in conditions
         
         # Проверяем что есть два edge с условием route == 'general'
         general_edges = [e for e in edges_from_classifier if e.condition == "route == 'general'"]
         assert len(general_edges) == 2
         
-        # Проверяем что один ведет в general_processor, другой в prepare_user_data
         to_nodes = [e.to_node for e in general_edges]
         assert "general_processor" in to_nodes
         assert "prepare_user_data" in to_nodes
@@ -367,21 +368,23 @@ class TestExampleGraphAgent:
 
     @pytest.mark.asyncio
     async def test_skill_fast_track_replaces_edges(self, flow_config, container):
-        """Skill 'fast_track' заменяет edges, пропуская formatter."""
+        """Skill 'fast_track' заменяет edges: LLM-процессоры → null, hitl-ноды → formatter."""
         skill = flow_config.skills["fast_track"]
         assert skill.name == "Быстрая обработка"
         assert skill.edges_mode == "replace"
 
         effective = container.flow_factory._apply_skill(flow_config, "fast_track")
-        # Проверяем что formatter пропущен
-        edges_to_formatter = [e for e in effective["edges"] if e.to_node == "formatter"]
-        assert len(edges_to_formatter) == 0
 
-        # Все процессоры ведут в null
+        # LLM-процессоры ведут в null (пропуск formatter)
         for processor in ["order_processor", "complaint_processor", "general_processor"]:
             processor_edges = [e for e in effective["edges"] if e.from_node == processor]
             if processor_edges:
                 assert processor_edges[0].to_node is None
+
+        # hitl-ноды сохраняют путь через formatter
+        edges_to_formatter = [e for e in effective["edges"] if e.to_node == "formatter"]
+        hitl_sources = {e.from_node for e in edges_to_formatter}
+        assert hitl_sources == {"hitl_queue_demo", "hitl_takeover_demo"}
 
     @pytest.mark.asyncio
     async def test_skill_orders_only_merges_nodes(self, flow_config, container):

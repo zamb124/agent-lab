@@ -4,6 +4,7 @@ A2A Client - HTTP клиент для взаимодействия с внешн
 Автоматически добавляет заголовки из контекста (Authorization, X-Company-Id и т.д.)
 """
 
+import json
 import uuid
 from typing import Any, Dict, Optional
 
@@ -132,12 +133,16 @@ class A2AClient:
                 headers["X-User-Id"] = context.user.user_id
             if context.trace_id and "X-Trace-Id" not in headers:
                 headers["X-Trace-Id"] = context.trace_id
+            if context.language and "Accept-Language" not in headers:
+                headers["Accept-Language"] = context.language.value
         
         logger.debug(f"A2A send_task to {url}: {content[:100]}...")
 
         try:
+            body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
+            headers = {**headers, "Content-Type": "application/json"}
             async with get_httpx_client(timeout=self.timeout, follow_redirects=True) as client:
-                response = await client.post(url, json=payload, headers=headers)
+                response = await client.post(url, content=body, headers=headers)
 
                 if response.status_code != 200:
                     raise A2AClientError(
@@ -154,7 +159,8 @@ class A2AClient:
                 # Нормализуем ответ - парсим artifacts в response
                 return self._parse_a2a_response(result)
         except httpx.HTTPError as e:
-            raise A2AClientError(f"HTTP error sending task to {url}: {e}")
+            error_str = str(e) or type(e).__name__
+            raise A2AClientError(f"HTTP error sending task to {url}: {error_str}")
         except ValueError as e:
             raise A2AClientError(f"Invalid JSON response from {url}: {e}")
 
@@ -174,7 +180,11 @@ class A2AClient:
         # Получаем статус
         status_obj = task_result.get("status", {})
         status = status_obj.get("state", "completed") if isinstance(status_obj, dict) else "completed"
-        
+
+        if status == "failed":
+            error_msg = status_obj.get("message") if isinstance(status_obj, dict) else None
+            raise A2AClientError(f"A2A task failed: {error_msg or 'unknown error'}")
+
         # Извлекаем текст из artifacts
         response_text = ""
         artifacts = task_result.get("artifacts", [])

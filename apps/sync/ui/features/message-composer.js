@@ -11,6 +11,8 @@ import { SyncStore } from '../store/sync.store.js';
 import { senderUserId } from '../utils/sender.js';
 import { SYNC_MESSAGE_TEXT_MAX_CHARS } from '../constants/sync-limits.js';
 import { extractMentionedUserIdsFromPlainText } from '../utils/sync-mention-text.js';
+import { getUserMediaCompat, hasGetUserMediaApi, pickVoiceMimeType } from '@platform/lib/utils/voice-recording.js';
+import '@platform/lib/components/platform-icon.js';
 
 const EMOJIS = ['😀', '😅', '😉', '😍', '🤝', '🔥', '✅', '💡', '🧠', '🚀', '📌', '🧩', '⚠️', '❌', '👍', '👀'];
 
@@ -23,17 +25,6 @@ function extractPlainTextFromMsg(msg) {
         }
     }
     return parts.join('\n').trim();
-}
-
-function toShortUsernameForReply(displayName) {
-    const raw = (displayName || '').trim();
-    if (raw === '') return 'Пользователь';
-    const parts = raw.split(/\s+/).filter(p => p.trim() !== '');
-    const nonEmail = parts.filter(p => !p.includes('@'));
-    if (nonEmail.length > 0) return nonEmail.join(' ');
-    const first = parts[0] ?? raw;
-    if (first.includes('@')) return first.split('@')[0] || first;
-    return raw;
 }
 
 function randomUuidV4() {
@@ -49,7 +40,7 @@ function randomUuidV4() {
         const hex = Array.from(buf, (byte) => byte.toString(16).padStart(2, '0')).join('');
         return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
     }
-    throw new Error('Web Crypto API недоступен: нельзя сгенерировать идентификатор команды.');
+    throw new Error('Web Crypto API is not available.');
 }
 
 export class MessageComposer extends PlatformElement {
@@ -83,11 +74,16 @@ export class MessageComposer extends PlatformElement {
             .composer {
                 border-top: 1px solid var(--glass-border-subtle);
                 padding: var(--space-3);
+                background: var(--sync-composer-bg);
             }
 
             @media (max-width: 767px) {
                 .composer {
                     padding: var(--space-2) var(--space-2) max(var(--space-2), env(safe-area-inset-bottom, 0px));
+                }
+
+                :host-context(html[data-keyboard-visual="1"]) .composer {
+                    padding: var(--space-2);
                 }
             }
 
@@ -111,6 +107,10 @@ export class MessageComposer extends PlatformElement {
                 justify-content: center;
                 transition: all var(--duration-fast);
                 flex-shrink: 0;
+                user-select: none;
+                -webkit-user-select: none;
+                -webkit-touch-callout: none;
+                touch-action: manipulation;
             }
 
             .icon-btn:hover {
@@ -140,7 +140,7 @@ export class MessageComposer extends PlatformElement {
                 max-height: 200px;
                 resize: none;
                 padding: var(--space-3);
-                border-radius: var(--radius-lg);
+                border-radius: var(--radius-xl);
                 border: 1px solid var(--glass-border-subtle);
                 background: var(--glass-solid-subtle);
                 color: var(--text-primary);
@@ -148,11 +148,18 @@ export class MessageComposer extends PlatformElement {
                 font-family: inherit;
                 outline: none;
                 overflow-wrap: anywhere;
-                transition: border-color var(--duration-fast);
+                overflow-y: auto;
+                scrollbar-width: none;
+                transition: border-color var(--duration-normal), box-shadow var(--duration-normal);
+            }
+
+            .textarea::-webkit-scrollbar {
+                display: none;
             }
 
             .textarea:focus {
                 border-color: var(--accent);
+                box-shadow: var(--focus-ring);
             }
 
             .attach-popup {
@@ -280,9 +287,9 @@ export class MessageComposer extends PlatformElement {
 
             .draft-bar.reply-draft--parent-own {
                 align-items: flex-start;
-                border-left: 4px solid rgb(5, 150, 105);
-                background: rgba(16, 185, 129, 0.26);
-                border-color: rgba(16, 185, 129, 0.35);
+                border-left: 4px solid rgb(153, 166, 249);
+                background: rgba(153, 166, 249, 0.26);
+                border-color: rgba(153, 166, 249, 0.35);
             }
 
             .draft-bar.reply-draft--parent-other {
@@ -542,10 +549,27 @@ export class MessageComposer extends PlatformElement {
         this._sendHoldPointerId = null;
         this._sendHoldTriggered = false;
         this._boundWindowResize = () => this._updateMobileFlag();
+        this._i18nUnsub = null;
+    }
+
+    _ts(key, params) {
+        return this.i18n.t(key, params ?? {});
+    }
+
+    _shortUsernameForReply(displayName) {
+        const raw = (displayName || '').trim();
+        if (raw === '') return this._ts('composer.default_user_short');
+        const parts = raw.split(/\s+/).filter(p => p.trim() !== '');
+        const nonEmail = parts.filter(p => !p.includes('@'));
+        if (nonEmail.length > 0) return nonEmail.join(' ');
+        const first = parts[0] ?? raw;
+        if (first.includes('@')) return first.split('@')[0] || first;
+        return raw;
     }
 
     connectedCallback() {
         super.connectedCallback();
+        this._i18nUnsub = this.i18n.subscribe(() => this.requestUpdate());
         window.addEventListener('resize', this._boundWindowResize);
         this._updateMobileFlag();
         this._unsubscribe = SyncStore.subscribe(state => {
@@ -567,6 +591,8 @@ export class MessageComposer extends PlatformElement {
 
     disconnectedCallback() {
         super.disconnectedCallback?.();
+        this._i18nUnsub?.();
+        this._i18nUnsub = null;
         window.removeEventListener('resize', this._boundWindowResize);
         clearTimeout(this._typingDebounceTimer);
         this._typingDebounceTimer = null;
@@ -605,7 +631,7 @@ export class MessageComposer extends PlatformElement {
     _focusTextarea() {
         const ta = this.shadowRoot?.querySelector('textarea.textarea');
         if (!ta) return;
-        ta.focus();
+        ta.focus({ preventScroll: true });
         const len = ta.value.length;
         try {
             ta.setSelectionRange(len, len);
@@ -627,12 +653,12 @@ export class MessageComposer extends PlatformElement {
         if (!this.channelId) return;
         if (this._membersChannelId === this.channelId && Array.isArray(this._channelMembers)) return;
         const syncApi = this.services.get('syncApi');
-        if (!syncApi) throw new Error('syncApi не зарегистрирован.');
+        if (!syncApi) throw new Error(this._ts('composer.err_sync_api'));
         this._mentionLoading = true;
         this.requestUpdate();
         const list = await syncApi.getChannelMembers(this.channelId);
         if (!Array.isArray(list)) {
-            throw new Error('getChannelMembers: ожидается массив.');
+            throw new Error(this._ts('composer.err_members_not_array'));
         }
         this._channelMembers = list;
         this._membersChannelId = this.channelId;
@@ -685,7 +711,7 @@ export class MessageComposer extends PlatformElement {
 
     _pickMention(userId) {
         if (typeof userId !== 'string' || userId === '') {
-            throw new Error('pickMention: userId обязателен.');
+            throw new Error(this._ts('composer.err_pick_mention_user'));
         }
         const text = this._text;
         const anchor = this._mentionAnchor;
@@ -699,7 +725,7 @@ export class MessageComposer extends PlatformElement {
                 new CustomEvent(AppEvents.TOAST_SHOW, {
                     detail: {
                         type: 'warning',
-                        message: `Не больше ${SYNC_MESSAGE_TEXT_MAX_CHARS} символов в сообщении (как в Telegram).`,
+                        message: this._ts('composer.max_chars_like_telegram', { max: SYNC_MESSAGE_TEXT_MAX_CHARS }),
                         duration: 4000,
                     },
                 })
@@ -717,7 +743,7 @@ export class MessageComposer extends PlatformElement {
         queueMicrotask(() => {
             const ta = this.shadowRoot?.querySelector('textarea.textarea');
             if (!ta) return;
-            ta.focus();
+            ta.focus({ preventScroll: true });
             try {
                 ta.setSelectionRange(pos, pos);
             } catch {
@@ -738,7 +764,7 @@ export class MessageComposer extends PlatformElement {
                 new CustomEvent(AppEvents.TOAST_SHOW, {
                     detail: {
                         type: 'warning',
-                        message: `Не больше ${SYNC_MESSAGE_TEXT_MAX_CHARS} символов в сообщении (как в Telegram).`,
+                        message: this._ts('composer.max_chars_like_telegram', { max: SYNC_MESSAGE_TEXT_MAX_CHARS }),
                         duration: 4000,
                     },
                 })
@@ -814,6 +840,26 @@ export class MessageComposer extends PlatformElement {
         this._flushTypingNotTyping();
     }
 
+    /** Сброс внешнего скролла документа сразу при тапе в поле (iOS иначе даёт скачок и «плавное» догоняние). */
+    _onTextareaFocus() {
+        if (typeof window === 'undefined' || window.innerWidth > 767) {
+            return;
+        }
+        const pin = () => {
+            if (window.scrollY === 0 && window.scrollX === 0) {
+                return;
+            }
+            try {
+                window.scrollTo({ left: 0, top: 0, behavior: 'instant' });
+            } catch {
+                window.scrollTo(0, 0);
+            }
+        };
+        pin();
+        requestAnimationFrame(pin);
+    }
+
+
     async _sendText() {
         const text = this._text.trim();
         const hasPending = this._pendingAttachments.length > 0;
@@ -828,7 +874,7 @@ export class MessageComposer extends PlatformElement {
                 new CustomEvent(AppEvents.TOAST_SHOW, {
                     detail: {
                         type: 'error',
-                        message: `Сообщение не длиннее ${SYNC_MESSAGE_TEXT_MAX_CHARS} символов.`,
+                        message: this._ts('composer.max_chars_plain', { max: SYNC_MESSAGE_TEXT_MAX_CHARS }),
                         duration: 5000,
                     },
                 })
@@ -853,16 +899,16 @@ export class MessageComposer extends PlatformElement {
         }
 
         const ws = this.services.get('syncWs');
-        if (!ws) throw new Error('WebSocket не подключен.');
+        if (!ws) throw new Error(this._ts('composer.err_ws'));
 
         const commandId = randomUuidV4();
         const auth = this.auth;
         const userId = auth?.user?.id;
-        if (!userId) throw new Error('Не удалось определить user_id.');
+        if (!userId) throw new Error(this._ts('composer.err_user_id'));
         const displayName =
             typeof auth?.user?.name === 'string' && auth.user.name.trim() !== ''
                 ? auth.user.name.trim()
-                : 'Вы';
+                : this._ts('composer.you');
 
         const parentId = this._replyToMessage?.id ?? null;
         const fromUuid = extractMentionedUserIdsFromPlainText(text);
@@ -905,7 +951,7 @@ export class MessageComposer extends PlatformElement {
     }
 
     async _sendWithAttachments(text) {
-        if (!this.channelId) throw new Error('Выбери канал.');
+        if (!this.channelId) throw new Error(this._ts('composer.channel_required'));
         this._uploading = true;
 
         const syncApi = this.services.get('syncApi');
@@ -916,7 +962,7 @@ export class MessageComposer extends PlatformElement {
         snapshot.forEach(a => { if (a.localUrl) URL.revokeObjectURL(a.localUrl); });
 
         const fileBlocks = uploads.map((res, idx) => {
-            if (!res?.file_id) throw new Error(`Некорректный ответ загрузки файла #${idx + 1}.`);
+            if (!res?.file_id) throw new Error(this._ts('composer.pick_file_bad', { n: idx + 1 }));
             return {
                 type: snapshot[idx].contentType,
                 data: {
@@ -962,11 +1008,17 @@ export class MessageComposer extends PlatformElement {
         e.target.value = '';
         this._attachMenuOpen = false;
 
-        const staged = files.map(file => ({
-            file,
-            contentType,
-            localUrl: file.type.startsWith('image/') ? URL.createObjectURL(file) : null,
-        }));
+        const staged = files.map(file => {
+            let resolvedType = contentType;
+            if (contentType === 'file/image' && file.type.startsWith('video/')) {
+                resolvedType = 'file/video';
+            }
+            return {
+                file,
+                contentType: resolvedType,
+                localUrl: file.type.startsWith('image/') ? URL.createObjectURL(file) : null,
+            };
+        });
         this._pendingAttachments = [...this._pendingAttachments, ...staged];
     }
 
@@ -978,14 +1030,14 @@ export class MessageComposer extends PlatformElement {
     }
 
     _insertEmoji(em) {
-        if (!em.trim()) throw new Error('emoji обязателен.');
+        if (!em.trim()) throw new Error(this._ts('composer.err_emoji'));
         let next = this._text + em;
         if (next.length > SYNC_MESSAGE_TEXT_MAX_CHARS) {
             window.dispatchEvent(
                 new CustomEvent(AppEvents.TOAST_SHOW, {
                     detail: {
                         type: 'warning',
-                        message: `Не больше ${SYNC_MESSAGE_TEXT_MAX_CHARS} символов в сообщении (как в Telegram).`,
+                        message: this._ts('composer.max_chars_like_telegram', { max: SYNC_MESSAGE_TEXT_MAX_CHARS }),
                         duration: 4000,
                     },
                 })
@@ -1037,7 +1089,7 @@ export class MessageComposer extends PlatformElement {
         const m = this._replyToMessage;
         if (!m) return '';
         const t = extractPlainTextFromMsg(m).slice(0, 160);
-        return t || 'Сообщение';
+        return t || this._ts('composer.default_preview');
     }
 
     _replyQuotedParentIsOwn() {
@@ -1049,11 +1101,13 @@ export class MessageComposer extends PlatformElement {
 
     _replyAuthorLabel() {
         const m = this._replyToMessage;
-        return toShortUsernameForReply(m?.sender?.display_name ?? '');
+        return this._shortUsernameForReply(m?.sender?.display_name ?? '');
     }
 
     _renderAttachmentsStrip() {
         if (this._pendingAttachments.length === 0) return '';
+        const rm = this._ts('composer.remove_attachment');
+        const up = this._ts('composer.uploading');
         return html`
             <div class="attachments-strip">
                 ${this._pendingAttachments.map((a, idx) => html`
@@ -1062,17 +1116,18 @@ export class MessageComposer extends PlatformElement {
                             <img class="attachment-thumb" src=${a.localUrl} alt=${a.file.name}>
                         ` : html`
                             <div class="attachment-thumb-doc">
-                                <svg width="22" height="22" viewBox="0 0 24 24" fill="none">
-                                    <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8l-6-6z" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
-                                    <path d="M14 2v6h6" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
-                                </svg>
+                                <platform-icon
+                                    file-icon
+                                    name=${this.icon.resolveFileIconKey(a.file.name, a.file.type || '')}
+                                    size="22"
+                                ></platform-icon>
                                 <span class="attachment-thumb-doc-name">${a.file.name}</span>
                             </div>
                         `}
-                        <button class="attachment-remove" title="Удалить" @click=${() => this._removeAttachment(idx)}>×</button>
+                        <button class="attachment-remove" title=${rm} @click=${() => this._removeAttachment(idx)}>×</button>
                     </div>
                 `)}
-                ${this._uploading ? html`<span class="uploading-hint">Отправка...</span>` : ''}
+                ${this._uploading ? html`<span class="uploading-hint">${up}</span>` : ''}
             </div>
         `;
     }
@@ -1117,18 +1172,7 @@ export class MessageComposer extends PlatformElement {
     }
 
     _pickMediaRecorderMimeType() {
-        const variants = [
-            'audio/webm;codecs=opus',
-            'audio/webm',
-            'audio/ogg;codecs=opus',
-            'audio/mp4',
-        ];
-        for (const variant of variants) {
-            if (MediaRecorder.isTypeSupported(variant)) {
-                return variant;
-            }
-        }
-        return '';
+        return pickVoiceMimeType();
     }
 
     _formatRecordingSeconds() {
@@ -1141,7 +1185,7 @@ export class MessageComposer extends PlatformElement {
     _showRecordingError(message) {
         const text = typeof message === 'string' && message.trim() !== ''
             ? message
-            : 'Не удалось запустить запись аудио.';
+            : this._ts('composer.audio_start_failed');
         window.dispatchEvent(
             new CustomEvent(AppEvents.TOAST_SHOW, {
                 detail: {
@@ -1169,30 +1213,30 @@ export class MessageComposer extends PlatformElement {
         }
         const hostname = window.location.hostname.toLowerCase();
         const isLocalLvhMe = hostname === 'lvh.me' || hostname.endsWith('.lvh.me');
-        const canUseGetUserMedia = Boolean(
-            navigator.mediaDevices && typeof navigator.mediaDevices.getUserMedia === 'function'
-        );
         if (!window.isSecureContext && !isLocalLvhMe) {
-            throw new Error('Запись доступна только в HTTPS или localhost.');
+            throw new Error(this._ts('composer.audio_https_only'));
         }
-        if (!canUseGetUserMedia) {
+        if (!hasGetUserMediaApi()) {
             if (isLocalLvhMe && window.location.protocol === 'http:') {
-                throw new Error(
-                    'Для http://*.lvh.me браузер блокирует доступ к микрофону. '
-                    + 'Используй HTTPS или добавь origin в chrome://flags/#unsafely-treat-insecure-origin-as-secure.'
-                );
+                throw new Error(this._ts('composer.audio_lvh_block'));
             }
-            throw new Error('Браузер не поддерживает запись с микрофона.');
+            throw new Error(this._ts('composer.audio_no_recorder'));
+        }
+        if (typeof MediaRecorder === 'undefined') {
+            throw new Error(this._ts('composer.audio_no_media_recorder'));
         }
         this._recordingChunks = [];
         this._recordingStartAt = Date.now();
         this._recordingSeconds = 0;
-        this._recordingStream = await navigator.mediaDevices.getUserMedia({ audio: true });
-        const mimeType = this._pickMediaRecorderMimeType();
-        this._recordingMimeType = mimeType !== '' ? mimeType : 'audio/webm';
-        this._mediaRecorder = mimeType !== ''
-            ? new MediaRecorder(this._recordingStream, { mimeType })
+        this._recordingStream = await getUserMediaCompat({ audio: true });
+        const pickedMime = this._pickMediaRecorderMimeType();
+        this._mediaRecorder = pickedMime !== ''
+            ? new MediaRecorder(this._recordingStream, { mimeType: pickedMime })
             : new MediaRecorder(this._recordingStream);
+        const resolvedMime = typeof this._mediaRecorder.mimeType === 'string' && this._mediaRecorder.mimeType !== ''
+            ? this._mediaRecorder.mimeType
+            : pickedMime;
+        this._recordingMimeType = resolvedMime !== '' ? resolvedMime : 'audio/mp4';
         this._mediaRecorder.ondataavailable = (event) => {
             if (event.data && event.data.size > 0) {
                 this._recordingChunks.push(event.data);
@@ -1231,26 +1275,34 @@ export class MessageComposer extends PlatformElement {
 
     async _sendRecordedAudio(blob, durationMs) {
         if (!(blob instanceof Blob) || blob.size === 0) {
-            throw new Error('Записанное аудио пустое.');
+            throw new Error(this._ts('composer.audio_empty'));
         }
         if (durationMs < 250) {
             return;
         }
         if (typeof this.channelId !== 'string' || this.channelId === '') {
-            throw new Error('Канал не выбран.');
+            throw new Error(this._ts('composer.channel_required'));
         }
-        const mimeType = blob.type || this._recordingMimeType;
+        const mimeType = (blob.type && blob.type !== '') ? blob.type : this._recordingMimeType;
         if (mimeType === '') {
-            throw new Error('mime_type аудио не определен.');
+            throw new Error(this._ts('composer.mime_required'));
         }
         this._uploading = true;
         const syncApi = this.services.get('syncApi');
         try {
-            const ext = mimeType.includes('ogg') ? 'ogg' : 'webm';
+            const lower = mimeType.toLowerCase();
+            let ext = 'webm';
+            if (lower.includes('ogg')) {
+                ext = 'ogg';
+            } else if (lower.includes('mp4') || lower.includes('m4a') || lower.includes('aac') || lower.includes('caf')) {
+                ext = 'm4a';
+            } else if (lower.includes('webm')) {
+                ext = 'webm';
+            }
             const file = new File([blob], `voice-${Date.now()}.${ext}`, { type: mimeType });
             const uploaded = await syncApi.uploadFile(file);
             if (!uploaded || typeof uploaded.file_id !== 'string' || uploaded.file_id === '') {
-                throw new Error('Некорректный ответ загрузки аудио.');
+                throw new Error(this._ts('composer.upload_audio_bad'));
             }
             const parentId = this._replyToMessage?.id ?? null;
             const contents = [
@@ -1304,6 +1356,7 @@ export class MessageComposer extends PlatformElement {
         if (!this._isMobile || !this._canStartHoldRecording()) {
             return;
         }
+        e.preventDefault();
         this._sendHoldPointerId = e.pointerId;
         this._isRecordHoldActive = true;
         this._clearSendHoldTimer();
@@ -1357,13 +1410,14 @@ export class MessageComposer extends PlatformElement {
     }
 
     render() {
+        const ts = (k, p) => this._ts(k, p);
         const mentionRows = this._mentionOpen ? this._mentionRowsFiltered() : [];
         return html`
             <div class="composer">
                 ${this._editMessage ? html`
                     <div class="draft-bar">
-                        <span>Редактирование сообщения</span>
-                        <button type="button" @click=${() => SyncStore.clearEditMessage()}>Отмена</button>
+                        <span>${ts('composer.edit_heading')}</span>
+                        <button type="button" @click=${() => SyncStore.clearEditMessage()}>${ts('composer.cancel')}</button>
                     </div>
                 ` : ''}
                 ${this._replyToMessage && !this._editMessage ? html`
@@ -1372,100 +1426,80 @@ export class MessageComposer extends PlatformElement {
                             <span class="reply-draft-author">${this._replyAuthorLabel()}</span>
                             <span class="reply-draft-text">${this._replySnippet()}</span>
                         </div>
-                        <button type="button" @click=${() => SyncStore.clearReplyToMessage()}>Отмена</button>
+                        <button type="button" @click=${() => SyncStore.clearReplyToMessage()}>${ts('composer.cancel')}</button>
                     </div>
                 ` : ''}
                 ${this._renderAttachmentsStrip()}
                 ${this._isRecording ? html`
                     <div class="recording-hint">
                         <span class="recording-hint-dot"></span>
-                        <span>Запись</span>
+                        <span>${ts('composer.recording')}</span>
                         <span class="recording-hint-time">${this._formatRecordingSeconds()}</span>
                     </div>
                 ` : ''}
                 <div class="row">
-                    <button class="icon-btn" title="Прикрепить файл" @click=${() => { this._attachMenuOpen = !this._attachMenuOpen; this._emojiOpen = false; }}>
-                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
-                            <path d="M12.5 6.5L6.4 12.6a4 4 0 105.7 5.7l7.1-7.1a6 6 0 10-8.5-8.5l-7.1 7.1" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
-                        </svg>
+                    <button class="icon-btn" title=${ts('composer.attach_file_title')} @click=${() => { this._attachMenuOpen = !this._attachMenuOpen; this._emojiOpen = false; }}>
+                        <platform-icon name="paperclip" size="18"></platform-icon>
                     </button>
 
                     <textarea
                         class="textarea"
                         rows="1"
-                        placeholder="Сообщение..."
+                        placeholder=${ts('composer.message_placeholder')}
                         .value=${this._text}
                         @input=${this._onTextInput}
+                        @focus=${this._onTextareaFocus}
                         @blur=${this._onTextareaBlur}
                         @keydown=${this._onKeyDown}
                     ></textarea>
 
                     <button
                         class="icon-btn"
-                        title="Эмодзи"
+                        title=${ts('composer.emoji_title')}
                         @click=${() => { this._emojiOpen = !this._emojiOpen; this._attachMenuOpen = false; }}
                     >
-                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
-                            <path d="M12 22a10 10 0 110-20 10 10 0 010 20z" stroke="currentColor" stroke-width="1.8"/>
-                            <path d="M8.5 10.2h.01M15.5 10.2h.01" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"/>
-                            <path d="M8.2 14.2c1.1 1.3 2.4 2 3.8 2s2.7-.7 3.8-2" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
-                        </svg>
+                        <platform-icon name="sentiment-satisfied" size="18"></platform-icon>
                     </button>
 
                     ${!this._isMobile ? html`
                         <button
                             class="icon-btn mic ${this._isRecording ? 'recording' : ''} ${this._isRecordHoldActive ? 'record-hold-active' : ''}"
-                            title="Зажмите для записи"
+                            title=${ts('composer.hold_to_record')}
                             @pointerdown=${this._onMicPointerDown}
                             @pointerup=${this._onMicPointerUp}
                             @pointercancel=${this._onMicPointerUp}
                             @pointerleave=${this._onMicPointerUp}
                         >
-                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
-                                <rect x="9" y="3" width="6" height="12" rx="3" stroke="currentColor" stroke-width="1.8"></rect>
-                                <path d="M5 11a7 7 0 0014 0M12 18v3M9 21h6" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"></path>
-                            </svg>
+                            <platform-icon name="mic" size="18"></platform-icon>
                         </button>
                     ` : ''}
 
                     <button
                         class="icon-btn send ${this._isMobile && this._isRecording ? 'recording' : ''} ${this._isMobile && this._isRecordHoldActive ? 'record-hold-active' : ''}"
-                        title=${this._isMobile && this._isRecording ? 'Остановить запись' : 'Отправить'}
+                        title=${this._isMobile && this._isRecording ? ts('composer.stop_recording') : ts('composer.send')}
                         @click=${this._onSendClick}
                         @pointerdown=${this._onSendPointerDown}
                         @pointerup=${this._onSendPointerUp}
                         @pointercancel=${this._onSendPointerCancel}
                     >
                         ${this._isMobile && this._isRecording ? html`
-                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
-                                <rect x="7" y="7" width="10" height="10" rx="2.2" fill="currentColor"></rect>
-                            </svg>
+                            <platform-icon name="stop" size="18"></platform-icon>
                         ` : html`
-                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
-                                <path d="M21.2 3.6L10.1 14.7" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
-                                <path d="M21.2 3.6l-7.2 19.2-3.3-7.7-7.7-3.3 18.2-8.2z" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
-                            </svg>
+                            <platform-icon name="send" size="18"></platform-icon>
                         `}
                     </button>
 
                     ${this._attachMenuOpen ? html`
                         <div class="attach-popup">
                             <label class="attach-item">
-                                <input type="file" accept="image/*,video/*" multiple @change=${e => this._pickAttachments('file/image', e)}>
-                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
-                                    <rect x="3" y="3" width="18" height="18" rx="3" stroke="currentColor" stroke-width="1.8"/>
-                                    <circle cx="8.5" cy="8.5" r="1.5" stroke="currentColor" stroke-width="1.5"/>
-                                    <path d="M3 16l5-5 4 4 3-3 6 6" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
-                                </svg>
-                                Фото или видео
+                                <input type="file" accept=${this.services.fileTypes.acceptStringFor('image', 'video')} multiple @change=${e => this._pickAttachments('file/image', e)}>
+                                <platform-icon name="image" size="16"></platform-icon>
+                                ${ts('composer.attach_photo_video')}
                             </label>
                             <label class="attach-item">
-                                <input type="file" accept="*/*" multiple @change=${e => this._pickAttachments('file/document', e)}>
-                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
-                                    <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8l-6-6z" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
-                                    <path d="M14 2v6h6M9 13h6M9 17h4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
-                                </svg>
-                                Файл
+                                <input type="file" accept=${this.services.fileTypes.acceptStringFor(...this.services.fileTypes.categories)} multiple @change=${e => this._pickAttachments('file/document', e)}>
+                                <platform-icon name="import" size="16"></platform-icon>
+                                ${ts('composer.attach_file')}
                             </label>
                         </div>
                     ` : ''}
@@ -1481,10 +1515,10 @@ export class MessageComposer extends PlatformElement {
                     ${this._mentionOpen ? html`
                         <div class="mention-popup" role="listbox">
                             ${this._mentionLoading
-                                ? html`<div class="mention-item" tabindex="-1">Загрузка…</div>`
+                                ? html`<div class="mention-item" tabindex="-1">${ts('composer.mention_loading')}</div>`
                                 : ''}
                             ${!this._mentionLoading && mentionRows.length === 0
-                                ? html`<div class="mention-item" tabindex="-1">Нет совпадений</div>`
+                                ? html`<div class="mention-item" tabindex="-1">${ts('composer.mention_empty')}</div>`
                                 : ''}
                             ${mentionRows.map(
                                 (r, i) => html`
@@ -1504,7 +1538,7 @@ export class MessageComposer extends PlatformElement {
                 </div>
 
                 ${this._focusedThreadId ? html`
-                    <div class="thread-hint">Фокус на тред: новые сообщения уйдут в выбранный thread_id.</div>
+                    <div class="thread-hint">${ts('composer.thread_hint')}</div>
                 ` : ''}
             </div>
         `;

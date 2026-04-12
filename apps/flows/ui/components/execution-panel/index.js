@@ -8,11 +8,12 @@
  * - Events: run-requested (detail.reuseContext), stop-requested, state-requested, tracing-requested, mocks-requested, close-requested
  */
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
+import { buttonStyles } from '@platform/lib/styles/shared/button.styles.js';
 import { executionPanelStyles } from './styles.js';
 import { renderPanel } from './templates.js';
 
 export class ExecutionPanel extends PlatformElement {
-    static styles = [PlatformElement.styles, executionPanelStyles];
+    static styles = [PlatformElement.styles, buttonStyles, executionPanelStyles];
 
     static properties = {
         runner: { type: Object },
@@ -62,10 +63,7 @@ export class ExecutionPanel extends PlatformElement {
     }
 
     get persistContextHelpText() {
-        return (
-            'Включено: каждый запуск использует тот же contextId — продолжается один state сессии. '
-            + 'Выключено: каждый запуск с новым контекстом.'
-        );
+        return this.i18n.t('execution_panel.persist_context_help');
     }
 
     _onPersistToggleClick() {
@@ -135,12 +133,12 @@ export class ExecutionPanel extends PlatformElement {
         const answer = this.message.trim();
         
         if (!this.contextId) {
-            console.warn('[ExecutionPanel] Нет contextId для resume');
+            console.warn('[ExecutionPanel] No contextId for resume');
             return;
         }
 
         if (this.inputQuestion && !answer) {
-            console.warn('[ExecutionPanel] Требуется ответ на вопрос');
+            console.warn('[ExecutionPanel] Answer required for the question');
             return;
         }
 

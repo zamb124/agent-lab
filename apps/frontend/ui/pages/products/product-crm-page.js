@@ -3,6 +3,9 @@
  */
 import { html, css } from 'lit';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
+import { I18nNs } from '@platform/services/i18n/i18n.service.js';
+import { buildServiceEntryUrl } from '@platform/lib/utils/last-visited-service.js';
+import { landNetworkleAbilityUrl } from '../../utils/land-product-images.js';
 import '@platform/lib/components/auth-modal.js';
 
 export class ProductCrmPage extends PlatformElement {
@@ -53,16 +56,20 @@ export class ProductCrmPage extends PlatformElement {
                 background-clip: text;
             }
             
-            .hero-icon {
-                width: 80px;
-                height: 80px;
-                margin: 0 auto 24px;
+            .hero-shot {
+                max-width: 1000px;
+                margin: 0 auto 32px;
+                border-radius: 20px;
+                overflow: hidden;
+                border: 1px solid rgba(255, 255, 255, 0.1);
+                box-shadow: 0 24px 64px rgba(0, 0, 0, 0.45);
             }
             
-            .hero-icon img {
+            .hero-shot img {
                 width: 100%;
-                height: 100%;
-                object-fit: contain;
+                height: auto;
+                display: block;
+                vertical-align: top;
             }
             
             .hero-description {
@@ -116,14 +123,19 @@ export class ProductCrmPage extends PlatformElement {
                 transition: all 0.3s;
             }
             
+            .feature-card::before {
+                content: '';
+                display: block;
+                width: 44px;
+                height: 4px;
+                border-radius: 2px;
+                margin-bottom: 20px;
+                background: linear-gradient(90deg, #f1c40f, #f39c12);
+            }
+            
             .feature-card:hover {
                 border-color: rgba(241, 196, 15, 0.3);
                 transform: translateY(-4px);
-            }
-            
-            .feature-icon {
-                font-size: 48px;
-                margin-bottom: 20px;
             }
             
             .feature-title {
@@ -234,16 +246,13 @@ export class ProductCrmPage extends PlatformElement {
                 gap: 20px;
             }
             
-            .benefit-icon {
+            .benefit-marker {
                 flex-shrink: 0;
-                width: 56px;
-                height: 56px;
-                display: flex;
-                align-items: center;
-                justify-content: center;
-                background: rgba(241, 196, 15, 0.15);
-                border-radius: 16px;
-                font-size: 28px;
+                width: 4px;
+                min-height: 52px;
+                border-radius: 2px;
+                margin-top: 4px;
+                background: linear-gradient(180deg, #f1c40f, #f39c12);
             }
             
             .benefit-content h3 {
@@ -345,12 +354,17 @@ export class ProductCrmPage extends PlatformElement {
 
     connectedCallback() {
         super.connectedCallback();
+        this._i18nUnsub = this.i18n.subscribe(() => this.requestUpdate());
         this.addEventListener('open-auth-modal', this._handleOpenAuthModal);
     }
 
     disconnectedCallback() {
-        super.disconnectedCallback();
+        if (this._i18nUnsub) {
+            this._i18nUnsub();
+            this._i18nUnsub = null;
+        }
         this.removeEventListener('open-auth-modal', this._handleOpenAuthModal);
+        super.disconnectedCallback();
     }
 
     _handleOpenAuthModal = () => {
@@ -360,61 +374,70 @@ export class ProductCrmPage extends PlatformElement {
         }
     };
 
+    _handleProductCtaClick = async () => {
+        const response = await fetch('/frontend/api/auth/me', {
+            credentials: 'include',
+        });
+        if (response.ok) {
+            window.location.href = buildServiceEntryUrl('crm');
+            return;
+        }
+        this._handleOpenAuthModal();
+    };
+
     render() {
+        const t = (key) => this.i18n.t(key, {}, I18nNs.FRONTEND_PRODUCTS);
         return html`
+            <landing-header></landing-header>
             <div class="page-container">
-                <landing-header></landing-header>
-                
                 <section class="hero">
-                    <div class="hero-icon">
-                        <img src="/static/core/assets/service_logos/crm_logo.svg" alt="NetWorkle" />
+                    <span class="hero-badge">${t('crm.hero_badge')}</span>
+                    <h1 class="hero-title">${t('crm.hero_title')}</h1>
+                    <div class="hero-shot">
+                        <img
+                            src=${landNetworkleAbilityUrl}
+                            alt=${t('crm.hero_visual_alt')}
+                            width="1200"
+                            height="675"
+                            loading="eager"
+                            decoding="async"
+                        />
                     </div>
-                    <span class="hero-badge">Умная записная книжка</span>
-                    <h1 class="hero-title">NetWorkle</h1>
                     <p class="hero-description">
-                        Записываете заметки после встреч и звонков — система сама находит упоминания контактов, 
-                        компаний и сделок, строя граф связей вашего бизнеса.
+                        ${t('crm.hero_description')}
                     </p>
-                    <button class="cta-btn" @click=${this._handleOpenAuthModal}>
-                        Попробовать бесплатно
+                    <button class="cta-btn" @click=${this._handleProductCtaClick}>
+                        ${t('crm.cta_try')}
                     </button>
                 </section>
                 
                 <section class="features">
                     <div class="features-grid">
                         <div class="feature-card">
-                            <div class="feature-icon">✨</div>
-                            <h3 class="feature-title">AI-структуризация</h3>
+                            <h3 class="feature-title">${t('crm.f1_title')}</h3>
                             <p class="feature-description">
-                                Пишите как удобно — AI сам выделит контакты, даты, задачи 
-                                и ключевые темы.
+                                ${t('crm.f1_desc')}
                             </p>
                         </div>
                         
                         <div class="feature-card">
-                            <div class="feature-icon">🕸️</div>
-                            <h3 class="feature-title">Граф связей</h3>
+                            <h3 class="feature-title">${t('crm.f2_title')}</h3>
                             <p class="feature-description">
-                                Видите все связи между людьми, компаниями и проектами 
-                                на интерактивной карте.
+                                ${t('crm.f2_desc')}
                             </p>
                         </div>
                         
                         <div class="feature-card">
-                            <div class="feature-icon">🔍</div>
-                            <h3 class="feature-title">Умный поиск</h3>
+                            <h3 class="feature-title">${t('crm.f3_title')}</h3>
                             <p class="feature-description">
-                                Ищите по смыслу: "о чем говорили с Иваном в прошлом месяце" — 
-                                и получаете ответ.
+                                ${t('crm.f3_desc')}
                             </p>
                         </div>
                         
                         <div class="feature-card">
-                            <div class="feature-icon">📎</div>
-                            <h3 class="feature-title">Файлы и документы</h3>
+                            <h3 class="feature-title">${t('crm.f4_title')}</h3>
                             <p class="feature-description">
-                                Прикрепляйте документы к заметкам. AI индексирует содержимое 
-                                для поиска.
+                                ${t('crm.f4_desc')}
                             </p>
                         </div>
                     </div>
@@ -422,37 +445,37 @@ export class ProductCrmPage extends PlatformElement {
                 
                 <section class="how-it-works">
                     <div class="how-it-works-container">
-                        <h2 class="how-it-works-title">Как это работает</h2>
+                        <h2 class="how-it-works-title">${t('crm.how_title')}</h2>
                         <div class="steps-grid">
                             <div class="step-item">
                                 <div class="step-number">1</div>
                                 <div class="step-content">
-                                    <h3>Записываете заметку</h3>
-                                    <p>После звонка или встречи пишите в свободной форме — что обсудили, о чем договорились.</p>
+                                    <h3>${t('crm.s1_h')}</h3>
+                                    <p>${t('crm.s1_p')}</p>
                                 </div>
                             </div>
                             
                             <div class="step-item">
                                 <div class="step-number">2</div>
                                 <div class="step-content">
-                                    <h3>AI анализирует текст</h3>
-                                    <p>Система находит имена, компании, даты, суммы и автоматически создает связи.</p>
+                                    <h3>${t('crm.s2_h')}</h3>
+                                    <p>${t('crm.s2_p')}</p>
                                 </div>
                             </div>
                             
                             <div class="step-item">
                                 <div class="step-number">3</div>
                                 <div class="step-content">
-                                    <h3>Граф растет</h3>
-                                    <p>Каждая заметка добавляет узлы и связи. Видите полную картину отношений.</p>
+                                    <h3>${t('crm.s3_h')}</h3>
+                                    <p>${t('crm.s3_p')}</p>
                                 </div>
                             </div>
                             
                             <div class="step-item">
                                 <div class="step-number">4</div>
                                 <div class="step-content">
-                                    <h3>Находите мгновенно</h3>
-                                    <p>Нужна информация — спрашиваете обычным языком и получаете точный ответ.</p>
+                                    <h3>${t('crm.s4_h')}</h3>
+                                    <p>${t('crm.s4_p')}</p>
                                 </div>
                             </div>
                         </div>
@@ -460,71 +483,71 @@ export class ProductCrmPage extends PlatformElement {
                 </section>
                 
                 <section class="benefits">
-                    <h2 class="benefits-title">Почему предприниматели выбирают NetWorkle</h2>
+                    <h2 class="benefits-title">${t('crm.benefits_title')}</h2>
                     <div class="benefits-grid">
                         <div class="benefit-item">
-                            <div class="benefit-icon">🧠</div>
+                            <div class="benefit-marker" aria-hidden="true"></div>
                             <div class="benefit-content">
-                                <h3>Ничего не забудете</h3>
-                                <p>Вся история коммуникаций в одном месте. Кто, когда, о чем — находится за секунды.</p>
+                                <h3>${t('crm.b1_h')}</h3>
+                                <p>${t('crm.b1_p')}</p>
                             </div>
                         </div>
                         
                         <div class="benefit-item">
-                            <div class="benefit-icon">🤝</div>
+                            <div class="benefit-marker" aria-hidden="true"></div>
                             <div class="benefit-content">
-                                <h3>Видите связи</h3>
-                                <p>Понимаете, кто кого знает, какие компании связаны, кто может представить нужного человека.</p>
+                                <h3>${t('crm.b2_h')}</h3>
+                                <p>${t('crm.b2_p')}</p>
                             </div>
                         </div>
                         
                         <div class="benefit-item">
-                            <div class="benefit-icon">⏰</div>
+                            <div class="benefit-marker" aria-hidden="true"></div>
                             <div class="benefit-content">
-                                <h3>Экономите время</h3>
-                                <p>Не нужно структурировать данные вручную. AI делает это автоматически.</p>
+                                <h3>${t('crm.b3_h')}</h3>
+                                <p>${t('crm.b3_p')}</p>
                             </div>
                         </div>
                         
                         <div class="benefit-item">
-                            <div class="benefit-icon">📈</div>
+                            <div class="benefit-marker" aria-hidden="true"></div>
                             <div class="benefit-content">
-                                <h3>Растете с системой</h3>
-                                <p>Чем больше заметок — тем умнее система. База знаний накапливается годами.</p>
+                                <h3>${t('crm.b4_h')}</h3>
+                                <p>${t('crm.b4_p')}</p>
                             </div>
                         </div>
                         
                         <div class="benefit-item">
-                            <div class="benefit-icon">👥</div>
+                            <div class="benefit-marker" aria-hidden="true"></div>
                             <div class="benefit-content">
-                                <h3>Командная работа</h3>
-                                <p>Делитесь контактами и историей с командой. Новый менеджер быстро входит в курс дела.</p>
+                                <h3>${t('crm.b5_h')}</h3>
+                                <p>${t('crm.b5_p')}</p>
                             </div>
                         </div>
                         
                         <div class="benefit-item">
-                            <div class="benefit-icon">🔐</div>
+                            <div class="benefit-marker" aria-hidden="true"></div>
                             <div class="benefit-content">
-                                <h3>Безопасность данных</h3>
-                                <p>Ваши заметки и контакты хранятся изолированно. Полный контроль над доступом.</p>
+                                <h3>${t('crm.b6_h')}</h3>
+                                <p>${t('crm.b6_p')}</p>
                             </div>
                         </div>
                     </div>
                 </section>
                 
                 <section class="cta-section">
-                    <h2 class="cta-title">Начните строить свой граф связей</h2>
-                    <p class="cta-subtitle">Первые 100 заметок — бесплатно</p>
-                    <button class="cta-btn" @click=${this._handleOpenAuthModal}>
-                        Создать аккаунт
+                    <h2 class="cta-title">${t('crm.cta_title')}</h2>
+                    <p class="cta-subtitle">${t('crm.cta_subtitle')}</p>
+                    <button class="cta-btn" @click=${this._handleProductCtaClick}>
+                        ${t('crm.cta_button')}
                     </button>
-                    <a href="/" class="back-link">← Вернуться на главную</a>
+                    <a href="/" class="back-link">${t('crm.back_home')}</a>
                 </section>
                 
                 <landing-footer></landing-footer>
             </div>
             
-            <auth-modal></auth-modal>
+            <auth-modal return-path=${buildServiceEntryUrl('crm')}></auth-modal>
         `;
     }
 }

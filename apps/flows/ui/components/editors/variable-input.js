@@ -230,14 +230,14 @@ export class VariableInput extends PlatformElement {
         if (filtered.length === 0) {
             return html`
                 <div class="dropdown">
-                    <div class="dropdown-empty">Нет переменных</div>
+                    <div class="dropdown-empty">${this.i18n.t('variables_panel.empty')}</div>
                 </div>
             `;
         }
         
         return html`
             <div class="dropdown">
-                <div class="dropdown-header">Переменные агента</div>
+                <div class="dropdown-header">${this.i18n.t('variables_panel.dropdown_header')}</div>
                 ${filtered.map((variable, index) => html`
                     <div 
                         class="dropdown-item ${index === this._selectedIndex ? 'selected' : ''}"

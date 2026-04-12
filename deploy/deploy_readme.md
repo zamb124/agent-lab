@@ -15,8 +15,8 @@ git push -> GitHub Actions -> ghcr.io -> SSH -> docker compose up -d
 
 | Файл | Назначение |
 |------|-----------|
-| `Dockerfile` | Мульти-стейдж: agents, frontend, crm, rag, sync, worker, scheduler, rag-worker, sync-worker, migrations, full |
-| `docker-compose-prod.yaml` | Все сервисы: postgres, redis, agents, frontend, crm, rag, sync, worker, scheduler, rag-worker, sync-worker, migrations |
+| `Dockerfile` | Мульти-стейдж: agents, frontend, crm, rag, sync, flows_worker, scheduler, crm_worker, rag_worker, sync_worker, idle_worker, migrations, full |
+| `docker-compose-prod.yaml` | Все сервисы: postgres, redis, agents, frontend, crm, rag, sync, scheduler-api, flows_worker, scheduler, crm_worker, rag_worker, sync_worker, idle_worker, migrations |
 | `.github/workflows/deploy.yml` | CI/CD пайплайн |
 | `deploy/k8.sh` | Одноразовая подготовка сервера (MicroK8s + Docker Engine + Portainer) |
 | `deploy/ingress.sh` | Настройка Ingress + cert-manager (Let's Encrypt) |
@@ -48,15 +48,21 @@ bash deploy/k8.sh
   "ingress": {
     "domain": "humanitec.ru",
     "email": "admin@humanitec.ru",
-    "subdomains": [
-      {"name": "sync", "port": 8005, "websocket": true},
-      {"name": "agents", "port": 8001, "websocket": false},
-      {"name": "crm", "port": 8003, "websocket": false},
-      {"name": "rag", "port": 8004, "websocket": false}
+    "services": [
+      {"name": "frontend", "port": 8002, "path": "/", "websocket": false},
+      {"name": "agents", "port": 8001, "path": "/flows", "websocket": false},
+      {"name": "crm", "port": 8003, "path": "/crm", "websocket": false},
+      {"name": "rag", "port": 8004, "path": "/rag", "websocket": false},
+      {"name": "sync", "port": 8005, "path": "/sync", "websocket": true},
+      {"name": "office", "port": 8008, "path": "/documents", "websocket": false}
     ]
   }
 }
 ```
+
+Без записи **`office`** + **`/documents`** запросы на `https://домен/documents` попадут во **frontend** и дадут платформенный **404**.
+
+**Wildcard TLS:** если в кластере есть секрет вроде **`humanitec-ru-wildcard-tls`** (DNS-01), скрипт **снова** добавляет в `humanitec-ingress` второй блок **`tls`** для **`*.домен`**. Раньше `kubectl apply` оставлял только apex-сертификат и **снимал** wildcard с поддоменов. Явное имя: **`ingress.wildcard_tls_secret`** в `conf.local.json`. Существующий **ClusterIssuer `letsencrypt`** больше **не перезаписывается** (иначе терялись solvers для DNS-01).
 
 Запустить:
 
@@ -113,10 +119,14 @@ Postgres и Redis при этом **не перезапускаются**.
 | crm | 8003 | CRM: entities, graph |
 | rag | 8004 | RAG: документы, поиск |
 | sync | 8005 | Инженерный чат, Git |
-| worker | - | TaskIQ worker (agents) |
+| office | 8008 | Документы OnlyOffice (BFF `/documents`) |
+| scheduler-api | 8006 | Scheduler control-plane API |
+| flows_worker | - | TaskIQ worker (flows) |
 | scheduler | - | TaskIQ scheduler |
-| rag-worker | - | TaskIQ worker (RAG) |
-| sync-worker | - | TaskIQ worker (sync realtime) |
+| crm_worker | - | TaskIQ worker (CRM) |
+| rag_worker | - | TaskIQ worker (RAG) |
+| sync_worker | - | TaskIQ worker (sync realtime) |
+| idle_worker | - | TaskIQ worker (idle platform tasks) |
 
 ---
 

@@ -205,8 +205,8 @@ export class SpanDetailsModal extends PlatformModal {
             }
             
             .chat-message.assistant {
-                background: rgba(16, 185, 129, 0.1);
-                border-left: 3px solid #10b981;
+                background: rgba(153, 166, 249, 0.1);
+                border-left: 3px solid var(--accent);
             }
             
             .chat-message.tool {
@@ -322,9 +322,13 @@ export class SpanDetailsModal extends PlatformModal {
 
     constructor() {
         super();
-        this.title = 'Детали Span';
         this.span = null;
         this._llmTab = 'request';
+    }
+
+    connectedCallback() {
+        super.connectedCallback();
+        this.title = this.i18n.t('span_details.modal_title');
     }
     
     _isLlmSpan() {
@@ -467,41 +471,41 @@ export class SpanDetailsModal extends PlatformModal {
         
         return html`
             <div class="span-detail-section">
-                <h3 class="section-title">LLM Request/Response</h3>
+                <h3 class="section-title">${this.i18n.t('span_details.section_llm')}</h3>
                 <div class="llm-section">
                     <div class="llm-tabs">
                         ${systemPrompt ? html`
                             <button 
                                 class="llm-tab ${this._llmTab === 'prompt' ? 'active' : ''}"
                                 @click=${() => this._setLlmTab('prompt')}
-                            >Prompt</button>
+                            >${this.i18n.t('span_details.tab_prompt')}</button>
                         ` : ''}
                         <button 
                             class="llm-tab ${this._llmTab === 'request' ? 'active' : ''}"
                             @click=${() => this._setLlmTab('request')}
-                        >Messages (${messages.length})</button>
+                        >${this.i18n.t('span_details.tab_messages', { count: messages.length })}</button>
                         ${hasTools ? html`
                             <button 
                                 class="llm-tab ${this._llmTab === 'tools' ? 'active' : ''}"
                                 @click=${() => this._setLlmTab('tools')}
-                            >Tools (${request?.tools?.length || 0})</button>
+                            >${this.i18n.t('span_details.tab_tools', { count: request?.tools?.length || 0 })}</button>
                         ` : ''}
                         ${hasResponseFormat ? html`
                             <button 
                                 class="llm-tab ${this._llmTab === 'schema' ? 'active' : ''}"
                                 @click=${() => this._setLlmTab('schema')}
-                            >Structured Output</button>
+                            >${this.i18n.t('span_details.structured_output')}</button>
                         ` : ''}
                         <button 
                             class="llm-tab ${this._llmTab === 'response' ? 'active' : ''}"
                             @click=${() => this._setLlmTab('response')}
-                        >Response</button>
+                        >${this.i18n.t('span_details.tab_response')}</button>
                     </div>
                     
                     ${systemPrompt ? html`
                         <div class="llm-content ${this._llmTab === 'prompt' ? 'active' : ''}">
                             <div class="chat-message system">
-                                <span class="message-role">system prompt</span>
+                                <span class="message-role">${this.i18n.t('span_details.role_system_prompt')}</span>
                                 <div class="message-content">${systemPrompt}</div>
                             </div>
                         </div>
@@ -510,7 +514,7 @@ export class SpanDetailsModal extends PlatformModal {
                     <div class="llm-content ${this._llmTab === 'request' ? 'active' : ''}">
                         ${messages.length > 0 
                             ? messages.map(msg => this._renderMessage(msg)) 
-                            : html`<div class="empty-state">No messages</div>`}
+                            : html`<div class="empty-state">${this.i18n.t('span_details.empty_messages')}</div>`}
                     </div>
                     
                     ${hasTools ? html`
@@ -539,7 +543,7 @@ export class SpanDetailsModal extends PlatformModal {
                         ${response ? html`
                             ${response.content ? html`
                                 <div class="chat-message assistant">
-                                    <span class="message-role">assistant</span>
+                                    <span class="message-role">${this.i18n.t('span_details.role_assistant')}</span>
                                     <div class="message-content">${response.content}</div>
                                 </div>
                             ` : ''}
@@ -553,7 +557,7 @@ export class SpanDetailsModal extends PlatformModal {
                                     `)}
                                 </div>
                             ` : ''}
-                        ` : 'No response data'}
+                        ` : this.i18n.t('span_details.no_response_data')}
                     </div>
                 </div>
             </div>
@@ -563,7 +567,9 @@ export class SpanDetailsModal extends PlatformModal {
     _showRawJson() {
         const modal = document.createElement('raw-json-modal');
         modal.data = this.span;
-        modal.title = `Raw JSON: ${this.span.operation_name || 'unknown'}`;
+        modal.title = this.i18n.t('span_details.raw_json_title', {
+            name: this.span.operation_name || 'unknown',
+        });
         document.body.appendChild(modal);
         modal.showModal();
         
@@ -578,7 +584,7 @@ export class SpanDetailsModal extends PlatformModal {
 
     renderHeaderActions() {
         return html`
-            <button class="header-btn" @click=${this._showRawJson} title="Показать Raw JSON">
+            <button class="header-btn" @click=${this._showRawJson} title=${this.i18n.t('span_details.raw_json_button_title')}>
                 { }
             </button>
         `;
@@ -586,7 +592,7 @@ export class SpanDetailsModal extends PlatformModal {
 
     renderBody() {
         if (!this.span) {
-            return html`<p>Нет данных span</p>`;
+            return html`<p>${this.i18n.t('span_details.empty_span')}</p>`;
         }
 
         const operationName = this.span.operation_name || 'unknown';
@@ -623,32 +629,32 @@ export class SpanDetailsModal extends PlatformModal {
         return html`
             <div class="span-details-container">
                 <div class="span-detail-section">
-                    <h3 class="section-title">Основная информация</h3>
+                    <h3 class="section-title">${this.i18n.t('span_details.section_main')}</h3>
                     <div class="detail-row">
-                        <span class="detail-label">Operation:</span>
+                        <span class="detail-label">${this.i18n.t('span_details.label_operation')}</span>
                         <span class="detail-value">${operationName}</span>
                     </div>
                     <div class="detail-row">
-                        <span class="detail-label">Kind:</span>
+                        <span class="detail-label">${this.i18n.t('span_details.label_kind')}</span>
                         <span class="detail-value">${kind}</span>
                     </div>
                     <div class="detail-row">
-                        <span class="detail-label">Status:</span>
+                        <span class="detail-label">${this.i18n.t('span_details.label_status')}</span>
                         <span class="detail-value status-${status.toLowerCase()}">${status}</span>
                     </div>
                     <div class="detail-row">
-                        <span class="detail-label">Duration:</span>
+                        <span class="detail-label">${this.i18n.t('span_details.label_duration')}</span>
                         <span class="detail-value">${duration}ms</span>
                     </div>
                     ${startTime ? html`
                         <div class="detail-row">
-                            <span class="detail-label">Start Time:</span>
+                            <span class="detail-label">${this.i18n.t('span_details.label_start_time')}</span>
                             <span class="detail-value">${startTime}</span>
                         </div>
                     ` : ''}
                     ${endTime ? html`
                         <div class="detail-row">
-                            <span class="detail-label">End Time:</span>
+                            <span class="detail-label">${this.i18n.t('span_details.label_end_time')}</span>
                             <span class="detail-value">${endTime}</span>
                         </div>
                     ` : ''}
@@ -658,7 +664,7 @@ export class SpanDetailsModal extends PlatformModal {
 
                 ${attributesList.length > 0 ? html`
                     <div class="span-detail-section">
-                        <h3 class="section-title">Атрибуты</h3>
+                        <h3 class="section-title">${this.i18n.t('span_details.section_attributes')}</h3>
                         <div class="attributes-list">
                             ${attributesList.map(([key, value]) => html`
                                 <div class="attribute-row">

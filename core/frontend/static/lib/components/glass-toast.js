@@ -12,11 +12,13 @@ export class GlassToast extends PlatformElement {
         css`
             :host {
                 display: block;
+                box-sizing: border-box;
                 position: fixed;
-                top: var(--space-6);
-                right: var(--space-6);
+                top: max(var(--space-6), env(safe-area-inset-top, 0px));
+                right: max(var(--space-6), env(safe-area-inset-right, 0px));
+                left: auto;
                 z-index: var(--z-toast);
-                max-width: 400px;
+                width: min(80vw, 400px);
                 animation: slideIn 0.3s var(--easing-spring);
             }
             
@@ -25,6 +27,8 @@ export class GlassToast extends PlatformElement {
             }
             
             .toast {
+                box-sizing: border-box;
+                width: 100%;
                 display: flex;
                 align-items: center;
                 gap: var(--space-3);

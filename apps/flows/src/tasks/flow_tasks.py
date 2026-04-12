@@ -11,12 +11,12 @@ from core.context import Context, set_context
 from core.logging import get_logger
 from core.tracing.context import set_current_trace_context
 
-from apps.broker.broker import broker
+from apps.flows_worker.broker import broker
 
 logger = get_logger(__name__)
 
 
-@broker.task(task_name="process_flow_task", queue_name="default")
+@broker.task(task_name="process_flow_task", queue_name="flows_worker")
 async def process_flow_task(
     flow_id: str,
     session_id: str,

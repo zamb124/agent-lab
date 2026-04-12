@@ -6,6 +6,7 @@ import { PlatformElement } from '@platform/lib/platform-element/index.js';
 import { buttonStyles } from '@platform/lib/styles/shared/button.styles.js';
 import { CRMStore } from '../store/crm.store.js';
 import '@platform/lib/components/platform-icon.js';
+import '../modals/share-modal.js';
 
 export class NamespaceGrantsPanel extends PlatformElement {
     static properties = {
@@ -219,34 +220,34 @@ export class NamespaceGrantsPanel extends PlatformElement {
     async _onMakePublic() {
         const crmApi = this.services.get('crmApi');
         await CRMStore.makeNamespacePublic(crmApi, this.namespace);
-        this.success('Пространство стало публичным');
+        this.success(this.i18n.t('grants.success_namespace_public'));
     }
 
-    async _onShareToUser() {
-        const userId = prompt('Введите ID пользователя:');
-        if (!userId) return;
-        
-        const crmApi = this.services.get('crmApi');
-        await CRMStore.grantNamespaceToUser(crmApi, this.namespace, userId, 'viewer');
-        this.success('Доступ предоставлен');
+    _onShareToUser() {
+        this._openShareModal('user');
     }
 
-    async _onShareToCompany() {
-        const companyId = prompt('Введите ID компании:');
-        if (!companyId) return;
-        
-        const crmApi = this.services.get('crmApi');
-        await CRMStore.grantNamespaceToCompany(crmApi, this.namespace, companyId, 'viewer');
-        this.success('Доступ предоставлен');
+    _onShareToCompany() {
+        this._openShareModal('company');
+    }
+
+    _openShareModal(shareType) {
+        const modal = document.createElement('share-modal');
+        modal.namespaceId = this.namespace;
+        modal.shareType = shareType;
+        document.body.appendChild(modal);
+        modal.showModal();
+        modal.addEventListener('close', () => modal.remove());
+        modal.addEventListener('shared', () => this._loadGrants());
     }
 
     async _onRevokeGrant(grantId) {
-        if (!confirm('Отозвать доступ?')) return;
+        if (!confirm(this.i18n.t('grants.confirm_revoke'))) return;
         
         const crmApi = this.services.get('crmApi');
         await CRMStore.revokeGrant(crmApi, grantId);
         await this._loadGrants();
-        this.success('Доступ отозван');
+        this.success(this.i18n.t('grants.success_revoked'));
     }
 
     _getGrantTypeIcon(grantType) {
@@ -264,28 +265,37 @@ export class NamespaceGrantsPanel extends PlatformElement {
 
     _getGrantTarget(grant) {
         if (grant.grant_type === 'public') {
-            return 'Публичный доступ';
+            return this.i18n.t('grants.target_public');
         }
         if (grant.grant_type === 'user') {
-            return grant.target_user_id || 'Пользователь';
+            return grant.target_user_id || this.i18n.t('grants.target_user_fallback');
         }
         if (grant.grant_type === 'company') {
-            return grant.target_company_id || 'Компания';
+            return grant.target_company_id || this.i18n.t('grants.target_company_fallback');
         }
-        return 'Неизвестно';
+        return this.i18n.t('grants.unknown');
     }
 
     _getRoleLabel(role) {
         switch (role) {
             case 'viewer':
-                return 'Просмотр';
+                return this.i18n.t('grants.role_viewer');
             case 'editor':
-                return 'Редактирование';
+                return this.i18n.t('grants.role_editor');
             case 'admin':
-                return 'Администратор';
+                return this.i18n.t('grants.role_admin');
             default:
                 return role;
         }
+    }
+
+    _formatGrantExpiry(iso) {
+        const loc = this.i18n.getCurrentLocale() === 'ru' ? 'ru-RU' : 'en-US';
+        return new Date(iso).toLocaleDateString(loc, {
+            day: 'numeric',
+            month: 'short',
+            year: 'numeric',
+        });
     }
 
     _hasPublicGrant() {
@@ -299,13 +309,13 @@ export class NamespaceGrantsPanel extends PlatformElement {
 
         return html`
             <div class="section">
-                <div class="section-title">Доступ к пространству "${this.namespace}"</div>
+                <div class="section-title">${this.i18n.t('grants.namespace_section_title', { name: this.namespace })}</div>
 
                 ${this._loading ? html`
-                    <div class="empty-grants">Загрузка...</div>
+                    <div class="empty-grants">${this.i18n.t('grants.loading')}</div>
                 ` : this._grants.length === 0 ? html`
                     <div class="empty-grants">
-                        Нет настроенных доступов. Только владелец видит это пространство.
+                        ${this.i18n.t('grants.empty_namespace')}
                     </div>
                 ` : html`
                     <div class="grants-list">
@@ -320,8 +330,10 @@ export class NamespaceGrantsPanel extends PlatformElement {
                                     </div>
                                     <div class="grant-meta">
                                         ${grant.expires_at
-                                            ? `Истекает: ${new Date(grant.expires_at).toLocaleDateString('ru-RU')}`
-                                            : 'Бессрочно'
+                                            ? this.i18n.t('grants.expires', {
+                                                  date: this._formatGrantExpiry(grant.expires_at),
+                                              })
+                                            : this.i18n.t('grants.perpetual')
                                         }
                                     </div>
                                 </div>
@@ -332,7 +344,7 @@ export class NamespaceGrantsPanel extends PlatformElement {
                                     class="revoke-btn"
                                     @click=${() => this._onRevokeGrant(grant.grant_id)}
                                 >
-                                    Отозвать
+                                    ${this.i18n.t('grants.revoke')}
                                 </button>
                             </div>
                         `)}
@@ -343,16 +355,16 @@ export class NamespaceGrantsPanel extends PlatformElement {
                     ${!this._hasPublicGrant() ? html`
                         <button class="action-btn public" @click=${this._onMakePublic}>
                             <platform-icon name="globe" size="14"></platform-icon>
-                            Сделать публичным
+                            ${this.i18n.t('grants.make_public_namespace')}
                         </button>
                     ` : ''}
                     <button class="action-btn" @click=${this._onShareToUser}>
                         <platform-icon name="user" size="14"></platform-icon>
-                        Поделиться с пользователем
+                        ${this.i18n.t('grants.share_user')}
                     </button>
                     <button class="action-btn" @click=${this._onShareToCompany}>
                         <platform-icon name="building-one" size="14"></platform-icon>
-                        Поделиться с компанией
+                        ${this.i18n.t('grants.share_company')}
                     </button>
                 </div>
             </div>

@@ -23,7 +23,9 @@ export class SelectCompanyPage extends PlatformElement {
                 display: block;
                 min-height: var(--app-vh, 100vh);
                 background: var(--landing-background, #0F0F0F);
-                padding: 40px 20px;
+                padding: max(40px, var(--platform-safe-top)) max(20px, var(--platform-safe-right))
+                    max(40px, var(--platform-safe-bottom)) max(20px, var(--platform-safe-left));
+                box-sizing: border-box;
             }
 
             .container {
@@ -175,7 +177,16 @@ export class SelectCompanyPage extends PlatformElement {
 
     async connectedCallback() {
         super.connectedCallback();
+        this._i18nUnsub = this.i18n.subscribe(() => this.requestUpdate());
         await this.loadCompanies();
+    }
+
+    disconnectedCallback() {
+        if (this._i18nUnsub) {
+            this._i18nUnsub();
+            this._i18nUnsub = null;
+        }
+        super.disconnectedCallback();
     }
 
     async loadCompanies() {
@@ -191,6 +202,17 @@ export class SelectCompanyPage extends PlatformElement {
             }
 
             const urlParams = new URLSearchParams(window.location.search);
+            if (
+                this.companies.length > 1 &&
+                urlParams.get('action') !== 'create'
+            ) {
+                const active = this.companies.find((c) => c.is_active === true);
+                if (active && active.subdomain) {
+                    this.handleCompanySelect(active);
+                    return;
+                }
+            }
+
             if (urlParams.get('action') === 'create' && this.companies.length === 0) {
                 this.showCreateModal = true;
             }
@@ -220,10 +242,11 @@ export class SelectCompanyPage extends PlatformElement {
     }
 
     render() {
+        const td = (key, params) => this.i18n.t(key, params ?? {});
         if (this.loading) {
             return html`
                 <div class="container">
-                    <div class="loading">Загрузка компаний...</div>
+                    <div class="loading">${td('select_company.loading')}</div>
                 </div>
             `;
         }
@@ -231,8 +254,8 @@ export class SelectCompanyPage extends PlatformElement {
         return html`
             <div class="container">
                 <div class="header">
-                    <h1 class="title">Выберите компанию</h1>
-                    <p class="subtitle">Выберите компанию для работы или создайте новую</p>
+                    <h1 class="title">${td('select_company.title')}</h1>
+                    <p class="subtitle">${td('select_company.subtitle')}</p>
                 </div>
 
                 ${this.error ? html`
@@ -255,8 +278,8 @@ export class SelectCompanyPage extends PlatformElement {
                 ` : html`
                     <div class="empty-state">
                         <div class="empty-icon">🏢</div>
-                        <h2 class="empty-title">У вас пока нет компаний</h2>
-                        <p class="empty-text">Создайте свою первую компанию для начала работы</p>
+                        <h2 class="empty-title">${td('select_company.empty_title')}</h2>
+                        <p class="empty-text">${td('select_company.empty_text')}</p>
                     </div>
                 `}
 
@@ -264,7 +287,7 @@ export class SelectCompanyPage extends PlatformElement {
                     class="create-button" 
                     @click=${this.handleCreateCompany}
                 >
-                    + Создать новую компанию
+                    ${td('select_company.create_button')}
                 </button>
 
                 <company-modal 
@@ -281,10 +304,11 @@ export class SelectCompanyPage extends PlatformElement {
     }
 
     _getRoleLabel(role) {
+        const td = (key) => this.i18n.t(key, {});
         const labels = {
-            'owner': 'Владелец',
-            'admin': 'Администратор',
-            'member': 'Участник'
+            owner: td('select_company.role_owner'),
+            admin: td('select_company.role_admin'),
+            member: td('select_company.role_member'),
         };
         return labels[role] || role;
     }

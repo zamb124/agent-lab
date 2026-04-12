@@ -5,6 +5,7 @@ import { html, css } from 'lit';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
 import { FrontendStore } from '../../store/frontend.store.js';
 import '@platform/lib/components/layout/page-header.js';
+import '@platform/lib/components/glass-spinner.js';
 
 export class SettingsPage extends PlatformElement {
     static styles = [
@@ -12,42 +13,6 @@ export class SettingsPage extends PlatformElement {
         css`
             :host {
                 display: block;
-            }
-
-            .page-container {
-                max-width: 1200px;
-                margin: 0 auto;
-            }
-
-            .tabs {
-                display: flex;
-                gap: var(--space-2);
-                margin-bottom: var(--space-8);
-                border-bottom: 1px solid var(--glass-border-subtle);
-                padding-bottom: var(--space-2);
-            }
-
-            .tab {
-                padding: var(--space-3) var(--space-6);
-                background: transparent;
-                border: none;
-                border-radius: var(--radius-md) var(--radius-md) 0 0;
-                color: var(--text-secondary);
-                font-size: var(--text-sm);
-                font-weight: var(--font-medium);
-                cursor: pointer;
-                transition: all var(--duration-fast);
-            }
-
-            .tab:hover {
-                color: var(--text-primary);
-                background: var(--glass-solid-subtle);
-            }
-
-            .tab.active {
-                color: var(--text-primary);
-                background: var(--accent-subtle);
-                border-bottom: 2px solid var(--accent);
             }
 
             .tab-content {
@@ -114,49 +79,7 @@ export class SettingsPage extends PlatformElement {
 
             .primary-button:hover {
                 transform: scale(1.05);
-                box-shadow: 0 8px 24px rgba(16, 185, 129, 0.4);
-            }
-
-            .providers-grid {
-                display: grid;
-                grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
-                gap: var(--space-4);
-                margin-bottom: var(--space-6);
-            }
-
-            .provider-card {
-                background: var(--glass-solid-subtle);
-                border: 1px solid var(--glass-border-subtle);
-                border-radius: var(--radius-lg);
-                padding: var(--space-5);
-                text-align: center;
-                transition: all var(--duration-fast);
-            }
-
-            .provider-card:hover {
-                background: var(--glass-solid-medium);
-                border-color: var(--glass-border-medium);
-            }
-
-            .provider-icon {
-                font-size: var(--text-5xl);
-                margin-bottom: var(--space-3);
-            }
-
-            .provider-name {
-                font-size: var(--text-base);
-                font-weight: var(--font-semibold);
-                color: var(--text-primary);
-                margin: 0 0 var(--space-2) 0;
-            }
-
-            .provider-status {
-                font-size: var(--text-xs);
-                padding: var(--space-1) var(--space-3);
-                background: var(--success-subtle);
-                color: var(--success);
-                border-radius: var(--radius-sm);
-                display: inline-block;
+                box-shadow: 0 8px 24px rgba(153, 166, 249, 0.4);
             }
 
             .section-title {
@@ -166,43 +89,18 @@ export class SettingsPage extends PlatformElement {
                 margin: 0 0 var(--space-4) 0;
             }
 
-            .info-box {
-                background: var(--accent-subtle);
-                border: 1px solid var(--accent);
-                border-radius: var(--radius-lg);
-                padding: var(--space-4);
-                margin-bottom: var(--space-6);
-                color: var(--text-secondary);
-                font-size: var(--text-sm);
-            }
-
-            .loading-state {
-                text-align: center;
-                padding: var(--space-12);
-                color: var(--text-secondary);
-            }
-
-            @media (max-width: 768px) {
-                .tabs {
-                    overflow-x: auto;
-                    -webkit-overflow-scrolling: touch;
-                }
-
-                .tab {
-                    white-space: nowrap;
-                }
-
-                .providers-grid {
-                    grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
-                }
+            .page-loading {
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                flex: 1;
+                min-height: 200px;
             }
         `
     ];
 
     constructor() {
         super();
-        this._activeTab = 'company';
-        
         this.state = this.use((s) => ({
             settings: s.entities.settings.company,
             loading: s.entities.settings.loading,
@@ -211,7 +109,16 @@ export class SettingsPage extends PlatformElement {
 
     async connectedCallback() {
         super.connectedCallback();
+        this._i18nUnsub = this.i18n.subscribe(() => this.requestUpdate());
         await this._loadSettings();
+    }
+
+    disconnectedCallback() {
+        if (this._i18nUnsub) {
+            this._i18nUnsub();
+            this._i18nUnsub = null;
+        }
+        super.disconnectedCallback();
     }
 
     async _loadSettings() {
@@ -224,67 +131,30 @@ export class SettingsPage extends PlatformElement {
     }
 
     render() {
+        const td = (key, params) => this.i18n.t(key, params ?? {});
         const { loading } = this.state.value;
         
         if (loading) {
-            return html`
-                <div class="loading-state">
-                    Загрузка...
-                </div>
-            `;
+            return html`<div class="page-loading"><glass-spinner size="lg"></glass-spinner></div>`;
         }
 
         return html`
-            <page-header title="Настройки"></page-header>
-
-            <div class="tabs">
-                <button 
-                    class="tab ${this._activeTab === 'company' ? 'active' : ''}"
-                    @click=${() => this._setTab('company')}
-                >
-                    Компания
-                </button>
-                <button 
-                    class="tab ${this._activeTab === 'security' ? 'active' : ''}"
-                    @click=${() => this._setTab('security')}
-                >
-                    Безопасность
-                </button>
-                <button 
-                    class="tab ${this._activeTab === 'integrations' ? 'active' : ''}"
-                    @click=${() => this._setTab('integrations')}
-                >
-                    Интеграции
-                </button>
-            </div>
-
-            ${this._renderTabContent()}
+            <page-header title=${td('settings_page.title')}></page-header>
+            ${this._renderCompanySettings()}
         `;
     }
 
-    _renderTabContent() {
-        switch (this._activeTab) {
-            case 'company':
-                return this._renderCompanyTab();
-            case 'security':
-                return this._renderSecurityTab();
-            case 'integrations':
-                return this._renderIntegrationsTab();
-            default:
-                throw new Error(`Unknown tab: ${this._activeTab}`);
-        }
-    }
-
-    _renderCompanyTab() {
+    _renderCompanySettings() {
+        const td = (key, params) => this.i18n.t(key, params ?? {});
         const { settings } = this.state.value;
         
         return html`
             <div class="tab-content">
-                <h2 class="section-title">Информация о компании</h2>
+                <h2 class="section-title">${td('settings_page.company_section')}</h2>
                 
                 <form @submit=${this._onSaveCompany}>
                     <div class="form-group">
-                        <label class="form-label">Название компании</label>
+                        <label class="form-label">${td('settings_page.label_company_name')}</label>
                         <input
                             type="text"
                             class="form-input"
@@ -295,7 +165,7 @@ export class SettingsPage extends PlatformElement {
                     </div>
 
                     <div class="form-group">
-                        <label class="form-label">Subdomain</label>
+                        <label class="form-label">${td('settings_page.label_subdomain')}</label>
                         <input
                             type="text"
                             class="form-input"
@@ -303,12 +173,12 @@ export class SettingsPage extends PlatformElement {
                             disabled
                         />
                         <div class="form-help">
-                            Поддомен нельзя изменить после создания
+                            ${td('settings_page.subdomain_help')}
                         </div>
                     </div>
 
                     <div class="form-group">
-                        <label class="form-label">Месячный лимит расходов (Р)</label>
+                        <label class="form-label">${td('settings_page.label_monthly_budget')}</label>
                         <input
                             type="number"
                             class="form-input"
@@ -317,96 +187,16 @@ export class SettingsPage extends PlatformElement {
                             min="0"
                         />
                         <div class="form-help">
-                            0 = без ограничений
+                            ${td('settings_page.budget_help')}
                         </div>
                     </div>
 
                     <button type="submit" class="primary-button">
-                        Сохранить изменения
+                        ${td('settings_page.save')}
                     </button>
                 </form>
             </div>
         `;
-    }
-
-    _renderSecurityTab() {
-        return html`
-            <div class="tab-content">
-                <h2 class="section-title">OAuth Провайдеры</h2>
-                
-                <div class="info-box">
-                    Настройте методы авторизации для вашей команды
-                </div>
-
-                <div class="providers-grid">
-                    <div class="provider-card">
-                        <div class="provider-icon">Y</div>
-                        <h3 class="provider-name">Yandex</h3>
-                        <span class="provider-status">Активен</span>
-                    </div>
-                    
-                    <div class="provider-card">
-                        <div class="provider-icon">G</div>
-                        <h3 class="provider-name">Google</h3>
-                        <span class="provider-status">Активен</span>
-                    </div>
-                    
-                    <div class="provider-card">
-                        <div class="provider-icon">H</div>
-                        <h3 class="provider-name">GitHub</h3>
-                        <span class="provider-status">Активен</span>
-                    </div>
-                </div>
-
-                <h2 class="section-title">Активные сессии</h2>
-                <div class="info-box">
-                    Список активных сессий будет доступен в следующей версии
-                </div>
-            </div>
-        `;
-    }
-
-    _renderIntegrationsTab() {
-        return html`
-            <div class="tab-content">
-                <h2 class="section-title">Доступные интеграции</h2>
-                
-                <div class="info-box">
-                    Интеграции позволяют подключить внешние сервисы к вашей платформе
-                </div>
-
-                <div class="providers-grid">
-                    <div class="provider-card">
-                        <div class="provider-icon">T</div>
-                        <h3 class="provider-name">Telegram</h3>
-                        <button class="primary-button" style="margin-top: var(--space-3); width: 100%;">
-                            Подключить
-                        </button>
-                    </div>
-                    
-                    <div class="provider-card">
-                        <div class="provider-icon">S</div>
-                        <h3 class="provider-name">Slack</h3>
-                        <button class="primary-button" style="margin-top: var(--space-3); width: 100%;">
-                            Подключить
-                        </button>
-                    </div>
-                    
-                    <div class="provider-card">
-                        <div class="provider-icon">W</div>
-                        <h3 class="provider-name">Webhooks</h3>
-                        <button class="primary-button" style="margin-top: var(--space-3); width: 100%;">
-                            Настроить
-                        </button>
-                    </div>
-                </div>
-            </div>
-        `;
-    }
-
-    _setTab(tab) {
-        this._activeTab = tab;
-        this.requestUpdate();
     }
 
     async _onSaveCompany(e) {
@@ -424,7 +214,7 @@ export class SettingsPage extends PlatformElement {
         const companySettings = await this.services.get('settings').getCompanySettings();
         FrontendStore.setCompanySettings(companySettings);
         
-        this.success('Настройки сохранены');
+        this.success(this.i18n.t('settings_page.toast_saved', {}));
     }
 }
 

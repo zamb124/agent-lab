@@ -35,20 +35,6 @@ class UserBrief(BaseModel):
     )
 
 
-class PaginationRequest(BaseModel):
-    """Параметры пагинации для запросов списка."""
-
-    limit: int = Field(default=50, ge=1, le=200, description="Сколько элементов вернуть.")
-    before: str | None = Field(
-        default=None,
-        description="Курсор/идентификатор для постраничной загрузки назад.",
-    )
-    after: str | None = Field(
-        default=None,
-        description="Курсор/идентификатор для постраничной загрузки вперёд.",
-    )
-
-
 ItemT = TypeVar("ItemT")
 
 

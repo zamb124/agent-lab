@@ -3,6 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, minimum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <meta name="robots" content="noindex,nofollow,noarchive">
     <title>RAG Service</title>
     <link rel="icon" type="image/svg+xml" href="/static/core/assets/service_logos/rag_logo.svg">
     <link rel="manifest" href="/manifest.json">
@@ -21,8 +22,13 @@
             "lit/directives/repeat.js": "/static/core/assets/js/lit/directives/repeat.min.js",
             "lit/directives/unsafe-html.js": "/static/core/assets/js/lit/directives/unsafe-html.min.js",
             "lit/directives/when.js": "/static/core/assets/js/lit/directives/when.min.js",
+            "lit/directives/guard.js": "/static/core/assets/js/lit/directives/guard.min.js",
             "@platform/lib/": "/static/core/lib/",
-            "@platform/services/": "/static/core/services/"
+            "@platform/services/": "/static/core/services/",
+            "@capacitor/app": "/static/core/assets/js/vendor/@capacitor/app/index.js",
+            "@capacitor/core": "/static/core/assets/js/vendor/@capacitor/core/index.js",
+            "@capacitor/splash-screen": "/static/core/assets/js/vendor/@capacitor/splash-screen/index.js",
+            "@capacitor/push-notifications": "/static/core/assets/js/vendor/@capacitor/push-notifications/index.js"
         }
     }
     </script>
@@ -33,9 +39,39 @@
     <script type="module">
         import '/static/core/lib/components/app-loader.js';
     </script>
+
+    <style>
+        rag-app:not(:defined) { opacity: 0; }
+
+        app-loader:not(:defined) {
+            position: fixed;
+            inset: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: var(--bg-gradient);
+            z-index: 9999;
+            color: rgba(255, 255, 255, 0.5);
+            font-family: 'SF Pro Display', -apple-system, BlinkMacSystemFont, sans-serif;
+        }
+
+        app-loader:not(:defined)::after {
+            content: 'RAG';
+        }
+    </style>
 </head>
-<body>
+<body class="platform-shell">
+    <app-loader id="app-loader" fullscreen></app-loader>
     <rag-app></rag-app>
     <script type="module" src="/rag/ui/static/index.js"></script>
+    <script>
+        customElements.whenDefined('rag-app').then(() => {
+            const loader = document.getElementById('app-loader');
+            if (loader) {
+                loader.classList.add('hidden');
+                setTimeout(() => loader.remove(), 400);
+            }
+        });
+    </script>
 </body>
 </html>

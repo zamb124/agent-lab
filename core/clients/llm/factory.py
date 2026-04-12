@@ -47,6 +47,34 @@ logger = get_logger(__name__)
 
 T = TypeVar("T", bound=BaseModel)
 
+
+def _merge_openai_compatible_usage_into_usage_data(
+    usage: Dict[str, Any], usage_data: Dict[str, Any]
+) -> None:
+    """
+    Заполняет usage_data из объекта usage финального чанка/ответа chat completions.
+
+    Токены — стандартные поля OpenAI. Поля cost / cost_details — расширения
+    (OpenRouter и др. совместимые шлюзы); пишем только если ключ есть и значение число.
+    """
+    usage_data["input_tokens"] = int(usage.get("prompt_tokens") or 0)
+    usage_data["output_tokens"] = int(usage.get("completion_tokens") or 0)
+    total = usage.get("total_tokens")
+    if total is not None:
+        usage_data["total_tokens"] = int(total)
+    else:
+        usage_data["total_tokens"] = usage_data["input_tokens"] + usage_data["output_tokens"]
+
+    cost = usage.get("cost")
+    if isinstance(cost, (int, float)):
+        usage_data["provider_reported_cost"] = float(cost)
+
+    details = usage.get("cost_details")
+    if isinstance(details, dict):
+        upstream = details.get("upstream_inference_cost")
+        if isinstance(upstream, (int, float)):
+            usage_data["provider_upstream_inference_cost"] = float(upstream)
+
 # Типы для messages
 MessageInput = Union[
     str,
@@ -301,6 +329,7 @@ class LLMClient:
         max_tokens: Optional[int] = None,
         default_headers: Optional[Dict[str, str]] = None,
         timeout: float = 120.0,
+        llm_provider: Optional[str] = None,
     ):
         self.model = model
         self.api_key = api_key
@@ -309,6 +338,7 @@ class LLMClient:
         self.max_tokens = max_tokens
         self.default_headers = default_headers or {}
         self.timeout = timeout
+        self.llm_provider = llm_provider if llm_provider is not None else _detect_provider(self.base_url)
 
     async def stream(
         self,
@@ -323,6 +353,9 @@ class LLMClient:
         max_tokens: Optional[int] = None,
         frequency_penalty: Optional[float] = None,
         presence_penalty: Optional[float] = None,
+        seed: Optional[int] = None,
+        reasoning_effort: Optional[str] = None,
+        extra_body: Optional[Dict[str, Any]] = None,
     ) -> AsyncGenerator[StreamEvent, None]:
         """
         Stream-first метод вызова LLM.
@@ -341,6 +374,9 @@ class LLMClient:
             max_tokens: Максимальное количество токенов (переопределяет self.max_tokens)
             frequency_penalty: Штраф за частоту токенов
             presence_penalty: Штраф за присутствие токенов
+            seed: Seed для детерминизма
+            reasoning_effort: Усилие reasoning (OpenAI-совместимые API)
+            extra_body: Доп. поля JSON-тела; мержатся последними (перекрывают остальное)
         """
         task_id = task_id or str(uuid.uuid4())
         context_id = context_id or task_id
@@ -379,11 +415,21 @@ class LLMClient:
         if presence_penalty is not None:
             body["presence_penalty"] = presence_penalty
 
+        if seed is not None:
+            body["seed"] = seed
+
+        if reasoning_effort is not None:
+            body["reasoning_effort"] = reasoning_effort
+
         if tools:
             body["tools"] = tools
         
         if response_format:
             body["response_format"] = response_format
+
+        if extra_body:
+            for key, val in extra_body.items():
+                body[key] = val
 
         logger.debug(f"LLM request: messages={len(openai_messages)}, tools={len(tools) if tools else 0}, response_format={bool(response_format)}")
         
@@ -399,7 +445,7 @@ class LLMClient:
         full_content = ""
         full_reasoning = ""
         tool_calls_buffer: Dict[int, Dict[str, Any]] = {}
-        usage_data: Dict[str, int] = {"input_tokens": 0, "output_tokens": 0, "total_tokens": 0}
+        usage_data: Dict[str, Any] = {"input_tokens": 0, "output_tokens": 0, "total_tokens": 0}
 
         async with get_httpx_client(timeout=self.timeout, proxy=True) as client:
             try:
@@ -454,10 +500,7 @@ class LLMClient:
                         
                         # Парсим usage из последнего chunk (stream_options: include_usage)
                         if chunk.get("usage"):
-                            usage = chunk["usage"]
-                            usage_data["input_tokens"] = usage.get("prompt_tokens", 0)
-                            usage_data["output_tokens"] = usage.get("completion_tokens", 0)
-                            usage_data["total_tokens"] = usage.get("total_tokens", 0)
+                            _merge_openai_compatible_usage_into_usage_data(chunk["usage"], usage_data)
                         
                         if not chunk.get("choices"):
                             continue
@@ -572,6 +615,8 @@ class LLMClient:
         final_message = new_agent_text_message(full_content) if full_content else None
         if final_message:
             final_message.metadata = {"usage": usage_data}
+        # final=False: это конец одного вызова LLM внутри задачи, не конец A2A-задачи.
+        # completed+final=True рвёт EventSubscriber до node_complete и emit_complete канала.
         yield TaskStatusUpdateEvent(
             contextId=context_id,
             taskId=task_id,
@@ -579,7 +624,7 @@ class LLMClient:
                 state=TaskState.completed if not tool_calls_buffer else TaskState.working,
                 message=final_message,
             ),
-            final=True,
+            final=False,
         )
 
         logger.log_llm_response(
@@ -666,6 +711,9 @@ class LLMClient:
         max_tokens: Optional[int] = None,
         frequency_penalty: Optional[float] = None,
         presence_penalty: Optional[float] = None,
+        seed: Optional[int] = None,
+        reasoning_effort: Optional[str] = None,
+        extra_body: Optional[Dict[str, Any]] = None,
     ) -> T: ...
 
     @overload
@@ -682,6 +730,9 @@ class LLMClient:
         max_tokens: Optional[int] = None,
         frequency_penalty: Optional[float] = None,
         presence_penalty: Optional[float] = None,
+        seed: Optional[int] = None,
+        reasoning_effort: Optional[str] = None,
+        extra_body: Optional[Dict[str, Any]] = None,
     ) -> Message: ...
 
     async def chat(
@@ -697,6 +748,9 @@ class LLMClient:
         max_tokens: Optional[int] = None,
         frequency_penalty: Optional[float] = None,
         presence_penalty: Optional[float] = None,
+        seed: Optional[int] = None,
+        reasoning_effort: Optional[str] = None,
+        extra_body: Optional[Dict[str, Any]] = None,
     ) -> Message | T:
         """
         Единый метод вызова LLM.
@@ -772,6 +826,9 @@ class LLMClient:
             max_tokens=max_tokens,
             frequency_penalty=frequency_penalty,
             presence_penalty=presence_penalty,
+            seed=seed,
+            reasoning_effort=reasoning_effort,
+            extra_body=extra_body,
         ):
             if isinstance(event, TaskArtifactUpdateEvent):
                 if event.artifact and event.artifact.parts:
@@ -839,6 +896,7 @@ def get_llm(
     provider: Optional[str] = None,
     api_key: Optional[str] = None,
     base_url: Optional[str] = None,
+    max_tokens: Optional[int] = None,
     state: Optional["ExecutionState"] = None,
 ) -> LLMClient | MockLLM:
     """
@@ -850,6 +908,7 @@ def get_llm(
         provider: Провайдер (openai, openrouter, bothub)
         api_key: API ключ (напрямую или @var:my_key)
         base_url: Base URL провайдера (напрямую или @var:my_url)
+        max_tokens: Лимит токенов ответа (если None — из настроек модели / глобальных)
         state: ExecutionState для резолюции @var:
     """
     settings = get_settings()
@@ -880,7 +939,11 @@ def get_llm(
         if temperature is not None
         else (model_config.temperature if model_config else settings.llm.temperature)
     )
-    max_tokens = model_config.max_tokens if model_config else settings.llm.max_tokens
+    resolved_max_tokens = (
+        max_tokens
+        if max_tokens is not None
+        else (model_config.max_tokens if model_config else settings.llm.max_tokens)
+    )
     timeout = settings.llm.timeout
     
     # Если указан кастомный api_key - используем его
@@ -901,9 +964,10 @@ def get_llm(
             api_key=resolved_api_key,
             base_url=actual_base_url,
             temperature=temp,
-            max_tokens=max_tokens,
+            max_tokens=resolved_max_tokens,
             timeout=timeout,
             default_headers=default_headers,
+            llm_provider=actual_provider,
         )
     
     # Иначе используем системный конфиг
@@ -919,12 +983,13 @@ def get_llm(
             api_key=cfg.api_key,
             base_url=cfg.base_url,
             temperature=temp,
-            max_tokens=max_tokens,
+            max_tokens=resolved_max_tokens,
             timeout=timeout,
             default_headers={
                 "HTTP-Referer": cfg.site_url,
                 "X-Title": cfg.site_name,
             },
+            llm_provider=actual_provider,
         )
 
     if actual_provider == "bothub":
@@ -937,8 +1002,9 @@ def get_llm(
             api_key=cfg.api_key,
             base_url=cfg.base_url,
             temperature=temp,
-            max_tokens=max_tokens,
+            max_tokens=resolved_max_tokens,
             timeout=timeout,
+            llm_provider=actual_provider,
         )
 
     if actual_provider == "openai":
@@ -951,8 +1017,9 @@ def get_llm(
             api_key=cfg.api_key,
             base_url=cfg.base_url,
             temperature=temp,
-            max_tokens=max_tokens,
+            max_tokens=resolved_max_tokens,
             timeout=timeout,
+            llm_provider=actual_provider,
         )
 
     raise ValueError(f"Неизвестный LLM провайдер: {actual_provider}")
@@ -976,6 +1043,7 @@ def get_llm_for_state(
     provider: Optional[str] = None,
     api_key: Optional[str] = None,
     base_url: Optional[str] = None,
+    max_tokens: Optional[int] = None,
 ) -> LLMClient | MockLLM:
     """
     Создает LLM клиент с учётом mock конфига из state.
@@ -987,6 +1055,7 @@ def get_llm_for_state(
         provider: Провайдер (openai, openrouter, bothub)
         api_key: API ключ (напрямую или @var:my_key)
         base_url: Base URL провайдера (напрямую или @var:my_url)
+        max_tokens: Лимит токенов ответа для ноды
         
     Returns:
         MockLLM или реальный LLMClient
@@ -1008,6 +1077,7 @@ def get_llm_for_state(
         provider=provider,
         api_key=api_key,
         base_url=base_url,
+        max_tokens=max_tokens,
         state=state,
     )
 

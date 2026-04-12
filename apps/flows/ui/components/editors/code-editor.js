@@ -6,28 +6,34 @@ import { html, css } from 'lit';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
 import { nextModalLayerZIndex } from '@platform/lib/utils/modal-z-stack.js';
 import { AppEvents } from '@platform/lib/utils/types.js';
+import '@platform/lib/components/platform-icon.js';
+import {
+    FLOWS_NODE_FILE_MIME,
+    buildPythonReadFileSnippet,
+    prefixCodeLines,
+} from '../../utils/file-signature.js';
 
 const DEFAULT_PYTHON = `def execute(args, state):
     """
-    Обработка state.
-    
+    Process state.
+
     Args:
-        args: Аргументы вызова
-        state: Текущее состояние
-    
+        args: Invocation arguments
+        state: Current execution state
+
     Returns:
-        Результат выполнения
+        Execution result dict
     """
     return {"result": "ok"}
 `;
 
 const DEFAULT_JAVASCRIPT = `async function execute(args, state) {
     /**
-     * Обработка state.
-     * 
-     * @param {Object} args - Аргументы вызова
-     * @param {Object} state - Текущее состояние
-     * @returns {Object} Результат выполнения
+     * Process state.
+     *
+     * @param {Object} args - Invocation arguments
+     * @param {Object} state - Current execution state
+     * @returns {Object} Execution result
      */
     return { result: "ok" };
 }
@@ -55,6 +61,22 @@ export class CodeEditor extends PlatformElement {
                 padding: var(--space-2) var(--space-3);
                 background: var(--glass-tint-medium);
                 border-bottom: 1px solid var(--border-subtle);
+                gap: var(--space-2);
+            }
+
+            .editor-header-start {
+                display: flex;
+                align-items: center;
+                gap: var(--space-2);
+                min-width: 0;
+                flex: 1;
+            }
+
+            .code-schema-pane-toggle {
+                display: flex;
+                align-items: center;
+                gap: var(--space-1);
+                flex-shrink: 0;
             }
             
             .editor-title {
@@ -62,11 +84,120 @@ export class CodeEditor extends PlatformElement {
                 font-weight: var(--font-medium);
                 color: var(--text-secondary);
             }
+
+            .schema-body-slot-wrap {
+                min-height: var(--editor-min-height, 200px);
+                max-height: min(70vh, 780px);
+                overflow-x: hidden;
+                overflow-y: auto;
+                display: block;
+                min-width: 0;
+                overscroll-behavior: contain;
+            }
+
+            .schema-body-slot-wrap > slot::slotted(*) {
+                display: block;
+                min-height: 0;
+                max-width: 100%;
+            }
             
             .editor-actions {
                 display: flex;
                 align-items: center;
                 gap: var(--space-2);
+                flex-shrink: 0;
+            }
+
+            .editor-actions-overflow {
+                position: relative;
+                flex-shrink: 0;
+            }
+
+            .editor-overflow-menu-btn {
+                padding: var(--space-1) var(--space-2);
+            }
+
+            .editor-overflow-dropdown {
+                position: absolute;
+                top: 100%;
+                right: 0;
+                margin-top: var(--space-1);
+                min-width: 220px;
+                max-width: min(92vw, 320px);
+                max-height: min(72vh, 480px);
+                overflow-x: hidden;
+                overflow-y: auto;
+                background: var(--glass-solid-strong);
+                border: 1px solid var(--border-default);
+                border-radius: var(--radius-md);
+                box-shadow: var(--glass-shadow-strong);
+                z-index: 120;
+                padding: var(--space-1) 0;
+            }
+
+            .editor-overflow-dropdown .templates-dropdown {
+                position: static;
+                margin-top: 0;
+                max-height: min(50vh, 360px);
+                box-shadow: none;
+                border: none;
+                border-radius: 0;
+            }
+
+            .editor-overflow-section-label {
+                padding: var(--space-1) var(--space-3) var(--space-1);
+                font-size: 10px;
+                font-weight: var(--font-semibold);
+                color: var(--text-tertiary);
+                text-transform: uppercase;
+                letter-spacing: 0.06em;
+            }
+
+            .editor-overflow-item {
+                display: flex;
+                align-items: center;
+                gap: var(--space-2);
+                width: 100%;
+                padding: var(--space-2) var(--space-3);
+                border: none;
+                background: transparent;
+                color: var(--text-primary);
+                font-size: var(--text-sm);
+                font-family: inherit;
+                text-align: left;
+                cursor: pointer;
+                border-radius: var(--radius-sm);
+            }
+
+            .editor-overflow-item:hover {
+                background: var(--glass-tint-medium);
+            }
+
+            .editor-overflow-item.active-lang {
+                color: var(--accent);
+                font-weight: var(--font-medium);
+            }
+
+            slot[name='schema-header-actions']::slotted(button) {
+                display: inline-flex;
+                align-items: center;
+                gap: var(--space-1);
+                padding: var(--space-1) var(--space-2);
+                font-size: var(--text-xs);
+                font-weight: var(--font-medium);
+                color: var(--text-secondary);
+                background: var(--glass-tint-subtle);
+                border: 1px solid var(--border-subtle);
+                border-radius: var(--radius-sm);
+                cursor: pointer;
+                transition: all var(--duration-fast) var(--easing-default);
+                font-family: inherit;
+            }
+
+            slot[name='schema-header-actions']::slotted(button):hover {
+                color: var(--text-primary);
+                border-color: var(--accent);
+                background: var(--glass-tint-medium);
             }
             
             .lang-toggle {
@@ -301,6 +432,13 @@ export class CodeEditor extends PlatformElement {
                 min-height: 0 !important;
                 overflow: auto !important;
             }
+
+            :host(.fullscreen) .schema-body-slot-wrap {
+                flex: 1 1 0%;
+                min-height: 0;
+                max-height: none;
+                overflow: auto;
+            }
         `
     ];
 
@@ -314,11 +452,20 @@ export class CodeEditor extends PlatformElement {
         showDocs: { type: Boolean, attribute: 'show-docs' },
         showTemplates: { type: Boolean, attribute: 'show-templates' },
         showLanguageSwitch: { type: Boolean, attribute: 'show-language-switch' },
+        acceptNodeFileDrop: { type: Boolean, attribute: 'accept-node-file-drop' },
+        /** Режим code-node: переключатель Код/Схема в одной шапке с кнопками редактора */
+        codeSchemaMode: { type: Boolean, attribute: 'code-schema-mode' },
+        /** Активная вкладка при codeSchemaMode: code | schema (задаёт родитель) */
+        activeSchemaPane: { type: String, attribute: 'active-schema-pane' },
+        /** Родитель в широком режиме (полноэкран модалки, развёрнутая панель) — кнопки шапки в строку, без ⋮ */
+        parentLayoutWide: { type: Boolean, attribute: 'parent-layout-wide' },
         validationStatus: { type: String },
         validationMessage: { type: String },
         _templatesOpen: { type: Boolean, state: true },
         _templates: { type: Array, state: true },
         _fullscreen: { type: Boolean, state: true },
+        _actionsMenuOpen: { type: Boolean, state: true },
+        _overflowTemplatesView: { type: Boolean, state: true },
     };
 
     constructor() {
@@ -332,11 +479,17 @@ export class CodeEditor extends PlatformElement {
         this.showDocs = true;
         this.showTemplates = true;
         this.showLanguageSwitch = true;
+        this.acceptNodeFileDrop = false;
+        this.codeSchemaMode = false;
+        this.activeSchemaPane = 'code';
+        this.parentLayoutWide = false;
         this.validationStatus = '';
         this.validationMessage = '';
         this._templatesOpen = false;
         this._templates = [];
         this._fullscreen = false;
+        this._actionsMenuOpen = false;
+        this._overflowTemplatesView = false;
         /** @type {ParentNode | null} */
         this._fsPortalParent = null;
         /** @type {ChildNode | null} */
@@ -354,6 +507,8 @@ export class CodeEditor extends PlatformElement {
         this._readonlyCompartment = null;
         this._languageCompartment = null;
         this._completionData = null;
+        /** @type {null | (() => void)} */
+        this._nodeFileDropCleanup = null;
     }
 
     get _defaultCode() {
@@ -387,20 +542,39 @@ export class CodeEditor extends PlatformElement {
             this._fsPortalNext = null;
         }
         if (this._editorView) {
+            this._teardownNodeFileDropListeners();
             this._editorView.destroy();
             this._editorView = null;
         }
     }
 
     _handleKeydown(e) {
-        if (e.key === 'Escape' && this._fullscreen) {
-            this._toggleFullscreen();
+        if (e.key === 'Escape') {
+            if (this._actionsMenuOpen) {
+                if (this._overflowTemplatesView) {
+                    this._overflowTemplatesView = false;
+                } else {
+                    this._actionsMenuOpen = false;
+                }
+                return;
+            }
+            if (this._fullscreen) {
+                this._toggleFullscreen();
+            }
         }
     }
 
     _handleClickOutside(e) {
-        if (this._templatesOpen && !e.composedPath().includes(this)) {
+        const path = e.composedPath();
+        if (this._templatesOpen && !path.includes(this)) {
             this._templatesOpen = false;
+        }
+        if (this._actionsMenuOpen) {
+            const overflowRoot = this.shadowRoot?.querySelector('.editor-actions-overflow');
+            if (overflowRoot && !path.includes(overflowRoot)) {
+                this._actionsMenuOpen = false;
+                this._overflowTemplatesView = false;
+            }
         }
     }
 
@@ -424,6 +598,34 @@ export class CodeEditor extends PlatformElement {
         
         if (changedProperties.has('language') && this._editorView && this._languageCompartment && this._cmModules) {
             this._switchLanguage();
+        }
+
+        if (
+            (changedProperties.has('acceptNodeFileDrop') || changedProperties.has('language')) &&
+            this._editorView
+        ) {
+            this._syncNodeFileDropListeners();
+        }
+
+        if (changedProperties.has('activeSchemaPane') && this.codeSchemaMode) {
+            void this._afterActiveSchemaPaneChange();
+        }
+    }
+
+    async _afterActiveSchemaPaneChange() {
+        await this.updateComplete;
+        await new Promise((r) => requestAnimationFrame(r));
+        await new Promise((r) => requestAnimationFrame(r));
+        const pane = this._effectiveSchemaPane();
+        if (pane === 'code' && this._editorView) {
+            this._editorView.requestMeasure();
+        }
+        if (pane === 'schema') {
+            const slotHost = this.querySelector('[slot="schema-body"]');
+            const jsonEd = slotHost?.querySelector?.('json-field-editor');
+            if (jsonEd && typeof jsonEd.refreshLayout === 'function') {
+                jsonEd.refreshLayout();
+            }
         }
     }
 
@@ -578,6 +780,105 @@ export class CodeEditor extends PlatformElement {
             }),
             parent: container
         });
+        this._syncNodeFileDropListeners();
+    }
+
+    _teardownNodeFileDropListeners() {
+        if (this._nodeFileDropCleanup) {
+            this._nodeFileDropCleanup();
+            this._nodeFileDropCleanup = null;
+        }
+    }
+
+    /**
+     * Отступ для вставляемого блока: по текущей строке или по контексту (пустая строка после `:`).
+     * @param {number} pos
+     * @returns {string}
+     */
+    _baseIndentAtDocPos(pos) {
+        const doc = this._editorView.state.doc;
+        const line = doc.lineAt(pos);
+        const lead = /^[\t ]*/.exec(line.text);
+        if (line.text.trim() !== '') {
+            return lead ? lead[0] : '';
+        }
+        for (let n = line.number - 1; n >= 1; n--) {
+            const prevText = doc.line(n).text;
+            if (prevText.trim() === '') {
+                continue;
+            }
+            const prevLead = /^[\t ]*/.exec(prevText);
+            const base = prevLead ? prevLead[0] : '';
+            const trimmedEnd = prevText.trimEnd();
+            if (/:\s*(#.*)?$/.test(trimmedEnd)) {
+                if (base.includes('\t')) {
+                    return `${base}\t`;
+                }
+                return `${base}    `;
+            }
+            return base;
+        }
+        return lead ? lead[0] : '';
+    }
+
+    _syncNodeFileDropListeners() {
+        this._teardownNodeFileDropListeners();
+        if (!this.acceptNodeFileDrop || !this._editorView || this.readonly) {
+            return;
+        }
+        const dom = this._editorView.dom;
+        const typesIncludeNodeFile = (e) => {
+            const types = e.dataTransfer?.types ? Array.from(e.dataTransfer.types) : [];
+            return types.includes(FLOWS_NODE_FILE_MIME);
+        };
+        const onDragOverCapture = (e) => {
+            if (!typesIncludeNodeFile(e)) {
+                return;
+            }
+            e.preventDefault();
+            e.stopImmediatePropagation();
+            e.dataTransfer.dropEffect = 'copy';
+        };
+        const onDropCapture = (e) => {
+            if (!typesIncludeNodeFile(e)) {
+                return;
+            }
+            const raw = e.dataTransfer.getData(FLOWS_NODE_FILE_MIME);
+            if (!raw) {
+                return;
+            }
+            e.preventDefault();
+            e.stopImmediatePropagation();
+            let parsed;
+            try {
+                parsed = JSON.parse(raw);
+            } catch {
+                return;
+            }
+            if (typeof parsed !== 'object' || parsed === null || typeof parsed.name !== 'string') {
+                return;
+            }
+            if (this.language !== 'python') {
+                this.warning(this.i18n.t('code_editor.node_file_drop_python_only'));
+                return;
+            }
+            let insertPos = this._editorView.posAtCoords({ x: e.clientX, y: e.clientY });
+            if (insertPos == null) {
+                insertPos = this._editorView.state.selection.main.head;
+            }
+            const baseIndent = this._baseIndentAtDocPos(insertPos);
+            const snippet = prefixCodeLines(buildPythonReadFileSnippet(parsed), baseIndent);
+            this._editorView.dispatch({
+                changes: { from: insertPos, to: insertPos, insert: snippet },
+                selection: { anchor: insertPos + snippet.length, head: insertPos + snippet.length },
+            });
+        };
+        dom.addEventListener('dragover', onDragOverCapture, true);
+        dom.addEventListener('drop', onDropCapture, true);
+        this._nodeFileDropCleanup = () => {
+            dom.removeEventListener('dragover', onDragOverCapture, true);
+            dom.removeEventListener('drop', onDropCapture, true);
+        };
     }
 
     _switchLanguage() {
@@ -697,6 +998,17 @@ export class CodeEditor extends PlatformElement {
         }
     }
 
+    insertTextAtSelection(text) {
+        if (!this._editorView || !text) {
+            return;
+        }
+        const { from, to } = this._editorView.state.selection.main;
+        this._editorView.dispatch({
+            changes: { from, to, insert: text },
+            selection: { anchor: from + text.length, head: from + text.length },
+        });
+    }
+
     replaceCode(code) {
         this.setValue(code);
     }
@@ -747,7 +1059,58 @@ export class CodeEditor extends PlatformElement {
     _selectTemplate(template) {
         this.replaceCode(template.code);
         this._templatesOpen = false;
+        this._actionsMenuOpen = false;
+        this._overflowTemplatesView = false;
         this.emit('template-selected', { template });
+    }
+
+    _closeActionsMenu() {
+        this._actionsMenuOpen = false;
+        this._overflowTemplatesView = false;
+    }
+
+    _toggleActionsMenu(e) {
+        e.stopPropagation();
+        const next = !this._actionsMenuOpen;
+        this._actionsMenuOpen = next;
+        if (!next) {
+            this._overflowTemplatesView = false;
+        }
+    }
+
+    _overflowTemplatesBack(e) {
+        e.stopPropagation();
+        this._overflowTemplatesView = false;
+    }
+
+    async _openOverflowTemplatesPanel(e) {
+        e.stopPropagation();
+        await this._loadTemplates();
+        this._overflowTemplatesView = true;
+    }
+
+    async _onOverflowCopy(e) {
+        e.stopPropagation();
+        await this._copyCode();
+        this._closeActionsMenu();
+    }
+
+    _onOverflowDocs(e) {
+        e.stopPropagation();
+        this._openDocs();
+        this._closeActionsMenu();
+    }
+
+    _onOverflowFullscreen(e) {
+        e.stopPropagation();
+        this._toggleFullscreen();
+        this._closeActionsMenu();
+    }
+
+    _onOverflowSwitchLanguage(e, lang) {
+        e.stopPropagation();
+        this._switchToLanguage(lang);
+        this._closeActionsMenu();
     }
 
     _openDocs() {
@@ -759,7 +1122,7 @@ export class CodeEditor extends PlatformElement {
     }
 
     _notifyCopied() {
-        const message = 'Код скопирован';
+        const message = this.i18n.t('code_editor.copied');
         try {
             this.success(message);
         } catch {
@@ -794,7 +1157,7 @@ export class CodeEditor extends PlatformElement {
             this._notifyCopied();
         } catch (e) {
             console.warn('Copy failed:', e);
-            this.error('Не удалось скопировать');
+            this.error(this.i18n.t('code_editor.copy_failed'));
         }
     }
 
@@ -921,6 +1284,190 @@ export class CodeEditor extends PlatformElement {
         this.validationMessage = '';
     }
 
+    _effectiveSchemaPane() {
+        if (!this.codeSchemaMode) {
+            return 'code';
+        }
+        return this.activeSchemaPane === 'schema' ? 'schema' : 'code';
+    }
+
+    _emitCodeSchemaPane(pane) {
+        if (!this.codeSchemaMode) {
+            return;
+        }
+        const next = pane === 'schema' ? 'schema' : 'code';
+        if (this._effectiveSchemaPane() === next) {
+            return;
+        }
+        this.emit('code-schema-pane-change', { pane: next });
+    }
+
+    _useCompactCodeHeaderActions() {
+        return (
+            this.codeSchemaMode &&
+            !this._fullscreen &&
+            !this.parentLayoutWide
+        );
+    }
+
+    _renderEditorActionsForCodePane() {
+        if (this._useCompactCodeHeaderActions()) {
+            return this._renderEditorActionsCompact();
+        }
+        return this._renderEditorActionsExpanded();
+    }
+
+    _renderEditorActionsExpanded() {
+        return html`
+            ${this.showLanguageSwitch
+                ? html`
+                      <div class="lang-toggle">
+                          <button
+                              type="button"
+                              class="lang-toggle-option ${this.language === 'python' ? 'active' : ''}"
+                              @click=${() => this._switchToLanguage('python')}
+                          >
+                              <platform-icon name="python" size="12" filled></platform-icon>
+                              Python
+                          </button>
+                          <button
+                              type="button"
+                              class="lang-toggle-option ${this.language === 'javascript' ? 'active' : ''}"
+                              @click=${() => this._switchToLanguage('javascript')}
+                          >
+                              <platform-icon name="javascript" size="12" filled></platform-icon>
+                              JS
+                          </button>
+                      </div>
+                  `
+                : ''}
+            ${this.showTemplates
+                ? html`
+                      <div class="templates-container">
+                          <button
+                              class="editor-btn ${this._templatesOpen ? 'active' : ''}"
+                              @click=${this._toggleTemplates}
+                          >
+                              <platform-icon file-icon name="text" size="12"></platform-icon>
+                              ${this.i18n.t('code_editor.templates')}
+                          </button>
+                          ${this._renderTemplatesDropdown()}
+                      </div>
+                  `
+                : ''}
+            ${this.showDocs
+                ? html`
+                      <button class="editor-btn" @click=${this._openDocs}>
+                          <platform-icon name="book-open" size="12"></platform-icon>
+                          ${this.i18n.t('code_editor.docs')}
+                      </button>
+                  `
+                : ''}
+            <button class="editor-btn" @click=${this._copyCode}>
+                <platform-icon name="copy" size="12"></platform-icon>
+            </button>
+            <button
+                class="editor-btn"
+                @click=${this._toggleFullscreen}
+                title="${this._fullscreen
+                    ? this.i18n.t('code_editor.fullscreen_min')
+                    : this.i18n.t('code_editor.fullscreen_max')}"
+            >
+                <platform-icon name="${this._fullscreen ? 'minimize' : 'maximize'}" size="12"></platform-icon>
+            </button>
+        `;
+    }
+
+    _renderEditorActionsCompact() {
+        return html`
+            <div class="editor-actions-overflow">
+                <button
+                    type="button"
+                    class="editor-btn editor-overflow-menu-btn"
+                    @click=${this._toggleActionsMenu}
+                    title=${this.i18n.t('code_editor.more_actions')}
+                    aria-expanded=${this._actionsMenuOpen ? 'true' : 'false'}
+                    aria-haspopup="true"
+                >
+                    <platform-icon name="more-vert" size="18"></platform-icon>
+                </button>
+                ${this._actionsMenuOpen ? this._renderOverflowMenuDropdown() : ''}
+            </div>
+        `;
+    }
+
+    _renderOverflowMenuDropdown() {
+        if (this._overflowTemplatesView) {
+            return html`
+                <div class="editor-overflow-dropdown" role="menu">
+                    <button type="button" class="editor-overflow-item" @click=${this._overflowTemplatesBack}>
+                        <platform-icon name="chevron-left" size="14"></platform-icon>
+                        ${this.i18n.t('code_editor.back')}
+                    </button>
+                    ${this._renderTemplatesDropdown()}
+                </div>
+            `;
+        }
+        return html`
+            <div class="editor-overflow-dropdown" role="menu">
+                ${this.showLanguageSwitch
+                    ? html`
+                          <div class="editor-overflow-section-label">${this.i18n.t('code_editor.language')}</div>
+                          <button
+                              type="button"
+                              class="editor-overflow-item ${this.language === 'python' ? 'active-lang' : ''}"
+                              @click=${(ev) => this._onOverflowSwitchLanguage(ev, 'python')}
+                          >
+                              <platform-icon name="python" size="14" filled></platform-icon>
+                              Python
+                          </button>
+                          <button
+                              type="button"
+                              class="editor-overflow-item ${this.language === 'javascript' ? 'active-lang' : ''}"
+                              @click=${(ev) => this._onOverflowSwitchLanguage(ev, 'javascript')}
+                          >
+                              <platform-icon name="javascript" size="14"></platform-icon>
+                              JS
+                          </button>
+                      `
+                    : ''}
+                ${this.showTemplates
+                    ? html`
+                          <button type="button" class="editor-overflow-item" @click=${this._openOverflowTemplatesPanel}>
+                              <platform-icon file-icon name="text" size="14"></platform-icon>
+                              ${this.i18n.t('code_editor.templates')}
+                          </button>
+                      `
+                    : ''}
+                ${this.showDocs
+                    ? html`
+                          <button type="button" class="editor-overflow-item" @click=${this._onOverflowDocs}>
+                              <platform-icon name="book-open" size="14"></platform-icon>
+                              ${this.i18n.t('code_editor.docs')}
+                          </button>
+                      `
+                    : ''}
+                <button type="button" class="editor-overflow-item" @click=${this._onOverflowCopy}>
+                    <platform-icon name="copy" size="14"></platform-icon>
+                    ${this.i18n.t('code_modal.copy_title')}
+                </button>
+                <button
+                    type="button"
+                    class="editor-overflow-item"
+                    @click=${this._onOverflowFullscreen}
+                    title="${this._fullscreen
+                        ? this.i18n.t('code_editor.fullscreen_min')
+                        : this.i18n.t('code_editor.fullscreen_max')}"
+                >
+                    <platform-icon name="${this._fullscreen ? 'minimize' : 'maximize'}" size="14"></platform-icon>
+                    ${this._fullscreen
+                        ? this.i18n.t('code_editor.fullscreen_min')
+                        : this.i18n.t('code_editor.fullscreen_max')}
+                </button>
+            </div>
+        `;
+    }
+
     _renderTemplatesDropdown() {
         if (!this._templatesOpen) return '';
         
@@ -945,7 +1492,7 @@ export class CodeEditor extends PlatformElement {
                 `)}
                 ${this._templates.length === 0 ? html`
                     <div class="template-item">
-                        <span class="template-desc">Нет шаблонов</span>
+                        <span class="template-desc">${this.i18n.t('code_editor.no_templates')}</span>
                     </div>
                 ` : ''}
             </div>
@@ -954,66 +1501,63 @@ export class CodeEditor extends PlatformElement {
 
     render() {
         const style = `--editor-min-height: ${this.minHeight}px`;
-        
+        const pane = this._effectiveSchemaPane();
+        const showCodeBody = !this.codeSchemaMode || pane === 'code';
+        const showSchemaBody = this.codeSchemaMode && pane === 'schema';
+
         return html`
             <div class="editor-wrapper">
                 ${this.showHeader ? html`
                     <div class="editor-header">
-                        <span class="editor-title">Код</span>
+                        <div class="editor-header-start">
+                            ${this.codeSchemaMode
+                                ? html`
+                                      <div class="code-schema-pane-toggle" role="tablist">
+                                          <button
+                                              type="button"
+                                              class="editor-btn ${pane === 'code' ? 'active' : ''}"
+                                              @click=${() => this._emitCodeSchemaPane('code')}
+                                          >
+                                              <platform-icon name="code" size="14"></platform-icon>
+                                              ${this.i18n.t('code_node_editor.pane_code')}
+                                          </button>
+                                          <button
+                                              type="button"
+                                              class="editor-btn ${pane === 'schema' ? 'active' : ''}"
+                                              @click=${() => this._emitCodeSchemaPane('schema')}
+                                          >
+                                              <platform-icon name="schema" size="14"></platform-icon>
+                                              ${this.i18n.t('code_node_editor.pane_schema')}
+                                          </button>
+                                      </div>
+                                  `
+                                : html`
+                                      <span class="editor-title">${this.i18n.t('code_editor.title_code')}</span>
+                                  `}
+                        </div>
                         <div class="editor-actions">
-                            ${this.showLanguageSwitch ? html`
-                                <div class="lang-toggle">
-                                    <button 
-                                        type="button"
-                                        class="lang-toggle-option ${this.language === 'python' ? 'active' : ''}"
-                                        @click=${() => this._switchToLanguage('python')}
-                                    >
-                                        <platform-icon name="python" size="12" filled></platform-icon>
-                                        Python
-                                    </button>
-                                    <button 
-                                        type="button"
-                                        class="lang-toggle-option ${this.language === 'javascript' ? 'active' : ''}"
-                                        @click=${() => this._switchToLanguage('javascript')}
-                                    >
-                                        <platform-icon name="javascript" size="12" filled></platform-icon>
-                                        JS
-                                    </button>
-                                </div>
-                            ` : ''}
-                            
-                            ${this.showTemplates ? html`
-                                <div class="templates-container">
-                                    <button 
-                                        class="editor-btn ${this._templatesOpen ? 'active' : ''}"
-                                        @click=${this._toggleTemplates}
-                                    >
-                                        <platform-icon name="file" size="12"></platform-icon>
-                                        Шаблоны
-                                    </button>
-                                    ${this._renderTemplatesDropdown()}
-                                </div>
-                            ` : ''}
-                            
-                            ${this.showDocs ? html`
-                                <button class="editor-btn" @click=${this._openDocs}>
-                                    <platform-icon name="book-open" size="12"></platform-icon>
-                                    Docs
-                                </button>
-                            ` : ''}
-                            
-                            <button class="editor-btn" @click=${this._copyCode}>
-                                <platform-icon name="copy" size="12"></platform-icon>
-                            </button>
-                            
-                            <button class="editor-btn" @click=${this._toggleFullscreen} title="${this._fullscreen ? 'Свернуть' : 'На весь экран'}">
-                                <platform-icon name="${this._fullscreen ? 'minimize' : 'maximize'}" size="12"></platform-icon>
-                            </button>
+                            ${showCodeBody ? this._renderEditorActionsForCodePane() : ''}
+                            ${showSchemaBody
+                                ? html`<slot name="schema-header-actions"></slot>`
+                                : ''}
                         </div>
                     </div>
                 ` : ''}
                 
-                <div id="codemirror-container" style=${style}></div>
+                <div
+                    id="codemirror-container"
+                    style=${showCodeBody ? style : `${style};display:none`}
+                ></div>
+                ${this.codeSchemaMode
+                    ? html`
+                          <div
+                              class="schema-body-slot-wrap"
+                              style=${showSchemaBody ? style : `${style};display:none`}
+                          >
+                              <slot name="schema-body"></slot>
+                          </div>
+                      `
+                    : ''}
                 
                 ${this.validationStatus ? html`
                     <div class="validation-status visible ${this.validationStatus}">

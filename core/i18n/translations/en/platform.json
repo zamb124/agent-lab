@@ -1,0 +1,62 @@
+{
+  "menu": {
+    "user_button_title": "User menu",
+    "apps": "Apps",
+    "profile": "Profile",
+    "settings": "Settings",
+    "calendar": "Calendar",
+    "documentation": "Documentation",
+    "theme_light": "Light theme",
+    "theme_dark": "Dark theme",
+    "logout": "Log out",
+    "language": "Language",
+    "user_fallback": "User"
+  },
+  "apps": {
+    "flows": {
+      "name": "Flows",
+      "description": "Design AI flows with graphs and skills, connect external systems — ship automation from idea to production with less custom code"
+    },
+    "crm": {
+      "name": "NetWorkle",
+      "description": "CRM plus a knowledge graph: contacts, relationships, and deal context in one network so nothing falls through the cracks"
+    },
+    "rag": {
+      "name": "RAG",
+      "description": "Your company knowledge base: upload documents, run semantic search, and give AI answers grounded in your own content"
+    },
+    "sync": {
+      "name": "Sync",
+      "description": "The engineering team hub: chat, Git, and calls alongside repos — align faster and ship with less friction"
+    },
+    "documents": {
+      "name": "Documents",
+      "description": "Collaborative Office editing: binding list, editor in iframe, namespace isolation, secrets only on the BFF"
+    },
+    "frontend": {
+      "name": "Console",
+      "description": "Your platform home: company settings, billing, and one-click access to every product"
+    }
+  },
+  "file_preview_modal": {
+    "title": "Text from file",
+    "loading": "Reading file…",
+    "truncated_hint": "Showing an excerpt; the full file is processed on the server during import.",
+    "cancel": "Cancel",
+    "confirm": "Continue",
+    "error_no_file": "No file selected",
+    "error_bad_response": "Invalid server response"
+  },
+  "company": {
+    "switched": "Company switched",
+    "switch_error": "Could not switch company: {{message}}",
+    "subdomain_missing": "Subdomain not found for the selected company"
+  },
+  "platform_field": {
+    "empty_value": "Not set",
+    "boolean_true": "Yes",
+    "boolean_false": "No",
+    "array_placeholder": "Enter a value and press Enter",
+    "object_placeholder": "JSON object"
+  }
+}

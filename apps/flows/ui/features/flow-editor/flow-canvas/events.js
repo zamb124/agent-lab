@@ -10,6 +10,7 @@ export function setupEvents(component) {
 
     component._editor.on('nodeRemoved', (id) => {
         component.nodeConfigs.delete(id.toString());
+        component._refreshFanInTriggers();
     });
 
     // Сохраняем обработчик для возможности отключения
@@ -30,7 +31,8 @@ export function setupEvents(component) {
         }
         component.emit('connection-created', { connection });
         component._updateVirtualNodes();
-        
+        component._refreshFanInTriggers();
+
         if (!component._isImporting) {
             component._saveSnapshot();
         }
@@ -44,7 +46,8 @@ export function setupEvents(component) {
         component._edgeLabelsManager?.remove(connection.output_id, connection.input_id);
         component.emit('connection-removed', { connection });
         component._updateVirtualNodes();
-        
+        component._refreshFanInTriggers();
+
         if (!component._isImporting) {
             component._saveSnapshot();
         }
@@ -105,6 +108,8 @@ export function setupDragDrop(component) {
 
         if (item.isResource) {
             await component.addResource(item, posX, posY);
+        } else if (item.type === 'code' && !item.isResource) {
+            component.emit('code-node-drop', { item, posX, posY });
         } else {
             await component._addNode(item, posX, posY);
         }
@@ -159,7 +164,8 @@ export function setupContextMenu(component) {
         
         if (config) {
             const hasBreakpoint = component.breakpointManager?.hasBreakpoint(config.nodeId) || false;
-            
+            const incomingCounts = component._collectIncomingEdgeCounts();
+
             component.contextMenu = {
                 x: e.clientX,
                 y: e.clientY,
@@ -167,6 +173,7 @@ export function setupContextMenu(component) {
                 nodeId: config.nodeId,
                 isEntry: component.entryNodeId === drawflowId,
                 hasBreakpoint,
+                incomingEdgeCount: incomingCounts.get(drawflowId) || 0,
             };
         }
     });
@@ -178,9 +185,20 @@ export function setupNodeClickHandling(component) {
 
     let mouseDownPos = null;
     let mouseDownTime = 0;
+    let fanInPortPointerDown = false;
 
     container.addEventListener('mousedown', (e) => {
         if (e.button !== 0) return;
+        if (e.target.closest('.drawflow-node.fan-in-active .inputs')) {
+            fanInPortPointerDown = true;
+            mouseDownPos = null;
+            return;
+        }
+        fanInPortPointerDown = false;
+        if (e.target.closest('.agent-node-tool-chip')) {
+            mouseDownPos = null;
+            return;
+        }
         const node = e.target.closest('.drawflow-node');
         if (node) {
             mouseDownPos = { x: e.clientX, y: e.clientY };
@@ -190,6 +208,16 @@ export function setupNodeClickHandling(component) {
 
     container.addEventListener('mouseup', (e) => {
         if (e.button !== 0) {
+            mouseDownPos = null;
+            fanInPortPointerDown = false;
+            return;
+        }
+        if (e.target.closest('.drawflow-node.fan-in-active .inputs') || fanInPortPointerDown) {
+            mouseDownPos = null;
+            fanInPortPointerDown = false;
+            return;
+        }
+        if (e.target.closest('.agent-node-tool-chip')) {
             mouseDownPos = null;
             return;
         }

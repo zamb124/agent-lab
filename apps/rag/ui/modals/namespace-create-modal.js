@@ -3,6 +3,7 @@
  */
 import { html, css } from 'lit';
 import { PlatformModal } from '@platform/lib/components/glass-modal.js';
+import '@platform/lib/components/platform-icon.js';
 import { buttonStyles } from '@platform/lib/styles/shared/button.styles.js';
 import { formStyles } from '@platform/lib/styles/shared/form.styles.js';
 
@@ -23,6 +24,43 @@ export class NamespaceCreateModal extends PlatformModal {
                 display: flex;
                 flex-direction: column;
                 gap: var(--space-4);
+            }
+
+            .modal-header {
+                display: flex;
+                align-items: center;
+                justify-content: space-between;
+                gap: var(--space-3);
+            }
+
+            .modal-header-buttons {
+                display: inline-flex;
+                align-items: center;
+                gap: var(--space-1);
+            }
+
+            .header-icon-btn {
+                display: inline-flex;
+                align-items: center;
+                justify-content: center;
+                width: 36px;
+                height: 36px;
+                padding: 0;
+                border: none;
+                border-radius: var(--radius-md);
+                background: transparent;
+                color: var(--text-secondary);
+                cursor: pointer;
+            }
+
+            .header-icon-btn:hover:not(:disabled) {
+                background: var(--glass-tint-subtle, rgba(0, 0, 0, 0.06));
+                color: var(--text-primary);
+            }
+
+            .header-icon-btn:disabled {
+                opacity: 0.45;
+                cursor: not-allowed;
             }
         `
     ];
@@ -97,29 +135,45 @@ export class NamespaceCreateModal extends PlatformModal {
             <div class="modal-overlay" @click=${this._handleClose}>
                 <div class="modal md" @click=${(e) => e.stopPropagation()}>
                     <div class="modal-header">
-                        <h2 class="modal-title">Создать namespace</h2>
-                        <button class="close-button" @click=${this._handleClose}>✕</button>
+                        <h2 class="modal-title">${this.i18n.t('modals.create_namespace.title')}</h2>
+                        <div class="modal-header-buttons">
+                            <button
+                                type="button"
+                                class="header-icon-btn"
+                                title=${this._loading
+                                    ? this.i18n.t('modals.create_namespace.creating')
+                                    : this.i18n.t('modals.create_namespace.create')}
+                                aria-label=${this._loading
+                                    ? this.i18n.t('modals.create_namespace.creating')
+                                    : this.i18n.t('modals.create_namespace.create')}
+                                ?disabled=${!this._name.trim() || this._loading}
+                                @click=${this._handleSubmit}
+                            >
+                                <platform-icon name="save" size="16"></platform-icon>
+                            </button>
+                            <button class="close-button" @click=${this._handleClose}>✕</button>
+                        </div>
                     </div>
                     <div class="modal-content">
                         <div class="form">
                             <div class="form-group">
-                                <label class="form-label">Название</label>
+                                <label class="form-label">${this.i18n.t('modals.create_namespace.name_label')}</label>
                                 <input 
                                     class="form-input"
                                     type="text" 
-                                    placeholder="my-namespace"
+                                    placeholder=${this.i18n.t('modals.create_namespace.name_placeholder')}
                                     .value=${this._name}
                                     @input=${this._handleNameChange}
                                 />
                                 <span class="form-hint">
-                                    Уникальное имя для namespace (латиница, цифры, дефисы)
+                                    ${this.i18n.t('modals.create_namespace.name_hint')}
                                 </span>
                             </div>
                             <div class="form-group">
-                                <label class="form-label">Описание</label>
+                                <label class="form-label">${this.i18n.t('modals.create_namespace.description_label')}</label>
                                 <textarea 
                                     class="form-textarea"
-                                    placeholder="Опишите назначение namespace..."
+                                    placeholder=${this.i18n.t('modals.create_namespace.description_placeholder')}
                                     .value=${this._description}
                                     @input=${this._handleDescriptionChange}
                                     rows="3"
@@ -129,14 +183,7 @@ export class NamespaceCreateModal extends PlatformModal {
                     </div>
                     <div class="modal-actions">
                         <button class="btn btn-secondary" @click=${this._handleClose}>
-                            Отмена
-                        </button>
-                        <button 
-                            class="btn btn-primary" 
-                            @click=${this._handleSubmit}
-                            ?disabled=${!this._name.trim() || this._loading}
-                        >
-                            ${this._loading ? 'Создание...' : 'Создать'}
+                            ${this.i18n.t('modals.create_namespace.cancel')}
                         </button>
                     </div>
                 </div>

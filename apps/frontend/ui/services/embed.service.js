@@ -7,8 +7,8 @@ export class EmbedService extends BaseService {
     /**
      * Получить список конфигураций виджетов
      */
-    async list() {
-        return this.get('/api/embed/configs');
+    async listConfigs() {
+        return super.list('/api/embed/configs');
     }
     
     /**

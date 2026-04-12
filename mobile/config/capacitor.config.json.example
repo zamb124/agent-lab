@@ -1,0 +1,39 @@
+{
+  "appId": "ru.humanitec.app",
+  "appName": "Humanitec",
+  "webDir": "www",
+  "server": {
+    "url": "https://humanitec.ru",
+    "cleartext": false,
+    "allowNavigation": [
+      "humanitec.ru",
+      "*.humanitec.ru",
+      "humanetic.ru",
+      "*.humanetic.ru",
+      "agents-lab.ru",
+      "*.agents-lab.ru",
+      "accounts.google.com",
+      "*.google.com",
+      "oauth.yandex.ru",
+      "*.yandex.ru",
+      "github.com",
+      "*.github.com",
+      "appleid.apple.com",
+      "appleid.cdn-apple.com"
+    ]
+  },
+  "ios": {
+    "contentInset": "never",
+    "limitsNavigationsToAppBoundDomains": false,
+    "overrideUserAgent": "Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Mobile/15E148 Safari/604.1"
+  },
+  "plugins": {
+    "SplashScreen": {
+      "backgroundColor": "#1a1a2e",
+      "launchShowDuration": 0,
+      "launchAutoHide": false,
+      "launchFadeOutDuration": 200,
+      "showSpinner": false
+    }
+  }
+}

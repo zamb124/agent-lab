@@ -4,6 +4,9 @@ import { formStyles } from '@platform/lib/styles/shared/form.styles.js';
 import { unsafeHTML } from 'lit/directives/unsafe-html.js';
 import '@platform/lib/components/platform-icon.js';
 import '@platform/lib/components/platform-date-picker.js';
+import { CRMStore } from '../store/crm.store.js';
+import { resolveFileIconKey } from '@platform/services/icon.service.js';
+import { getUserMediaCompat, hasGetUserMediaApi, pickVoiceMimeType } from '@platform/lib/utils/voice-recording.js';
 
 function getLocalIsoDate() {
     const now = new Date();
@@ -38,6 +41,26 @@ export class NoteContent extends PlatformElement {
         _draftText: { state: true },
         _draftSubtype: { state: true },
         _draftNoteDate: { state: true },
+        _draftVoiceMode: { state: true },
+        _draftManualVoiceId: { state: true },
+        _draftContextEntityId: { state: true },
+        _voiceSearchOpen: { state: true },
+        _voiceSearchQuery: { state: true },
+        _voiceSearchResults: { state: true },
+        _voiceSearchLoading: { state: true },
+        _voiceLookupLabel: { state: true },
+        _ctxSearchOpen: { state: true },
+        _ctxSearchQuery: { state: true },
+        _ctxSearchResults: { state: true },
+        _ctxSearchLoading: { state: true },
+        _ctxLookupLabel: { state: true },
+        _voiceRecState: { state: true },
+        _mentionTriggerIndex: { state: true },
+        _mentionQuery: { state: true },
+        _mentionCandidates: { state: true },
+        _mentionSelectedIdx: { state: true },
+        _mentionLoading: { state: true },
+        _mentionCoords: { state: true },
     };
 
     static styles = [
@@ -100,30 +123,138 @@ export class NoteContent extends PlatformElement {
                 color: var(--text-primary);
             }
 
-            .note-date {
-                margin: 0;
-                font-size: 16px;
-                line-height: 20px;
-                color: rgba(34, 34, 34, 0.3);
+            .note-view-meta-bar {
+                display: flex;
+                flex-wrap: wrap;
+                align-items: center;
+                gap: 6px 12px;
+                margin-top: 4px;
+                max-width: 100%;
+                font-size: 12px;
+                line-height: 16px;
+                color: var(--text-secondary);
             }
 
-            .note-subtype {
-                margin: 0;
+            .note-view-meta-item {
                 display: inline-flex;
                 align-items: center;
-                gap: 6px;
-                font-size: 13px;
-                line-height: 16px;
-                color: rgba(34, 34, 34, 0.55);
+                gap: 5px;
+                min-width: 0;
+                max-width: 100%;
             }
 
-            .note-edit-meta {
+            .note-view-meta-item platform-icon {
+                flex-shrink: 0;
+                color: var(--text-tertiary);
+            }
+
+            .note-view-meta-value {
+                min-width: 0;
+                color: var(--text-secondary);
+            }
+
+            .note-view-meta-ellipsis {
+                overflow: hidden;
+                text-overflow: ellipsis;
+                white-space: nowrap;
+                max-width: min(280px, 42vw);
+            }
+
+            .note-edit-meta-group {
+                display: block;
+                padding: 8px 12px;
                 margin-top: 8px;
+                border-radius: var(--radius-md);
+                background: var(--glass-tint-subtle);
+                border: 1px solid var(--border-subtle);
+            }
+
+            .note-edit-meta-row {
                 display: grid;
-                grid-template-columns: minmax(0, 240px) minmax(0, 220px);
-                gap: 12px;
-                align-items: center;
-                max-width: 520px;
+                grid-template-columns: minmax(0, 1fr) minmax(104px, 128px) minmax(0, 1fr) minmax(0, 1fr);
+                gap: 8px 10px;
+                align-items: start;
+            }
+
+            .note-meta-cell {
+                min-width: 0;
+                display: flex;
+                flex-direction: column;
+                gap: 2px;
+            }
+
+            .note-field-label {
+                display: block;
+                margin: 0 0 2px 0;
+                font-size: 12px;
+                font-weight: 500;
+                line-height: 16px;
+                color: var(--text-secondary);
+                text-transform: none;
+                letter-spacing: normal;
+            }
+
+            .note-edit-meta-group .note-field-label {
+                font-size: 10px;
+                line-height: 13px;
+                font-weight: 500;
+                margin: 0;
+                color: var(--text-tertiary);
+            }
+
+            .note-edit-meta-group .form-select {
+                min-height: 30px;
+                padding: 4px 8px;
+                font-size: 12px;
+                line-height: 16px;
+                border-radius: 8px;
+            }
+
+            .note-edit-meta-group .note-date-picker {
+                min-width: 0;
+                --platform-date-picker-labeled-bg: var(--glass-tint-subtle);
+                --platform-date-picker-labeled-border: var(--border-subtle);
+                --platform-date-picker-labeled-height: 30px;
+                --platform-date-picker-labeled-padding: 0 8px;
+                --platform-date-picker-label-size: 10px;
+                --platform-date-picker-value-size: 12px;
+            }
+
+            .note-edit-meta-group .entity-search-input {
+                padding: 5px 8px;
+                font-size: 12px;
+                line-height: 16px;
+                min-height: 30px;
+                border-radius: 8px;
+            }
+
+            .note-edit-meta-group .entity-search-clear {
+                width: 30px;
+                height: 30px;
+                border-radius: 8px;
+            }
+
+            .note-edit-meta-group .entity-search-panel {
+                max-height: 180px;
+            }
+
+            @media (min-width: 768px) {
+                .note-main.is-editing .note-header {
+                    gap: 16px;
+                    align-items: flex-start;
+                }
+            }
+
+            @media (max-width: 1100px) {
+                .note-edit-meta-row {
+                    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+                }
+            }
+
+            @media (max-width: 560px) {
+                .note-edit-meta-row {
+                    grid-template-columns: 1fr;
+                }
             }
 
             .note-subtype-select {
@@ -132,12 +263,135 @@ export class NoteContent extends PlatformElement {
 
             .note-date-picker {
                 min-width: 0;
-                --platform-date-picker-labeled-bg: rgba(34, 34, 34, 0.04);
-                --platform-date-picker-labeled-border: rgba(34, 34, 34, 0.06);
-                --platform-date-picker-labeled-height: 44px;
-                --platform-date-picker-labeled-padding: 0 12px;
-                --platform-date-picker-label-size: var(--text-xs);
-                --platform-date-picker-value-size: var(--text-lg);
+            }
+
+            .entity-search-wrap {
+                position: relative;
+                width: 100%;
+                min-width: 0;
+            }
+
+            .entity-search-input-row {
+                display: flex;
+                align-items: stretch;
+                gap: 8px;
+            }
+
+            .entity-search-input {
+                width: 100%;
+                padding: 10px 14px;
+                font-size: 14px;
+                line-height: 20px;
+                font-family: inherit;
+                color: var(--text-primary);
+                background: var(--glass-tint-subtle);
+                border: 1px solid var(--border-subtle);
+                border-radius: var(--radius-md);
+                outline: none;
+                box-shadow: none;
+                -webkit-backdrop-filter: none;
+                backdrop-filter: none;
+                transition: border-color var(--duration-fast), box-shadow var(--duration-fast);
+            }
+
+            .entity-search-input:focus {
+                border-color: var(--accent);
+                box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 15%, transparent);
+            }
+
+            .entity-search-input::placeholder {
+                color: var(--text-disabled);
+            }
+
+            .entity-search-input-row .entity-search-input {
+                flex: 1;
+                min-width: 0;
+            }
+
+            .entity-search-clear {
+                flex-shrink: 0;
+                width: 44px;
+                height: 44px;
+                border: 1px solid var(--border-subtle);
+                border-radius: var(--radius-md);
+                padding: 0;
+                display: inline-flex;
+                align-items: center;
+                justify-content: center;
+                cursor: pointer;
+                background: var(--glass-tint-medium);
+                color: var(--text-tertiary);
+                transition: background var(--duration-fast), border-color var(--duration-fast), color var(--duration-fast);
+            }
+
+            .entity-search-clear:hover {
+                border-color: var(--border-strong);
+                background: var(--glass-tint-strong);
+                color: var(--text-primary);
+            }
+
+            .entity-search-panel {
+                position: absolute;
+                left: 0;
+                right: 0;
+                top: 100%;
+                margin-top: 4px;
+                max-height: 220px;
+                overflow-y: auto;
+                padding: 8px;
+                border-radius: var(--radius-md);
+                background: var(--glass-solid-strong);
+                border: 1px solid var(--border-default);
+                box-shadow: var(--glass-shadow-medium);
+                -webkit-backdrop-filter: blur(var(--glass-blur-subtle));
+                backdrop-filter: blur(var(--glass-blur-subtle));
+                z-index: 50;
+                opacity: 0;
+                visibility: hidden;
+                pointer-events: none;
+                transform: translateY(-4px);
+                transition: opacity var(--duration-fast), visibility var(--duration-fast), transform var(--duration-fast);
+            }
+
+            .entity-search-panel.is-open {
+                opacity: 1;
+                visibility: visible;
+                pointer-events: auto;
+                transform: translateY(0);
+            }
+
+            .entity-search-hint {
+                padding: 8px 10px;
+                font-size: 13px;
+                line-height: 18px;
+                color: var(--text-tertiary);
+            }
+
+            .entity-search-row-btn {
+                display: flex;
+                flex-direction: column;
+                align-items: flex-start;
+                gap: 2px;
+                width: 100%;
+                padding: 8px 10px;
+                border: none;
+                border-radius: 8px;
+                text-align: left;
+                cursor: pointer;
+                background: transparent;
+                color: var(--text-primary);
+                font-size: 14px;
+                line-height: 18px;
+            }
+
+            .entity-search-row-btn:hover {
+                background: var(--glass-tint-medium);
+            }
+
+            .entity-search-row-secondary {
+                font-size: 12px;
+                line-height: 16px;
+                color: var(--text-tertiary);
             }
 
             .note-actions {
@@ -173,12 +427,39 @@ export class NoteContent extends PlatformElement {
                 cursor: not-allowed;
             }
 
-            .refresh-icon.spinning {
-                animation: note-refresh-spin 0.9s linear infinite;
+            .summary-refresh-btn {
+                width: 32px;
+                height: 32px;
+                border-radius: var(--radius-full);
+                border: none;
+                background: var(--crm-summary-title-gradient);
+                color: var(--text-inverse);
+                display: inline-flex;
+                align-items: center;
+                justify-content: center;
+                cursor: pointer;
+                flex-shrink: 0;
+                box-shadow: var(--glass-shadow-subtle);
+                transition: opacity var(--duration-fast), transform var(--duration-fast);
+            }
+
+            .summary-refresh-btn:hover {
+                opacity: 0.85;
+                transform: scale(1.06);
+            }
+
+            .summary-refresh-btn:disabled {
+                opacity: 0.45;
+                cursor: not-allowed;
+                transform: none;
+            }
+
+            .summary-refresh-icon.spinning {
+                animation: note-ai-rebuild-spin 0.9s linear infinite;
                 transform-origin: center;
             }
 
-            @keyframes note-refresh-spin {
+            @keyframes note-ai-rebuild-spin {
                 from {
                     transform: rotate(0deg);
                 }
@@ -188,14 +469,169 @@ export class NoteContent extends PlatformElement {
             }
 
             .round-btn.danger {
-                background: rgba(255, 136, 92, 0.15);
-                color: #ff885c;
+                background: var(--error-bg);
+                color: var(--error);
+            }
+
+            .attach-dropdown {
+                position: relative;
+            }
+
+            .attach-header-btn {
+                position: relative;
+            }
+
+            .attach-count-badge {
+                position: absolute;
+                top: -2px;
+                right: -2px;
+                min-width: 18px;
+                height: 18px;
+                padding: 0 5px;
+                border-radius: 9px;
+                background: var(--accent);
+                color: var(--text-inverse);
+                font-size: 11px;
+                font-weight: 600;
+                line-height: 18px;
+                text-align: center;
+                pointer-events: none;
+                box-sizing: border-box;
+            }
+
+            .attach-dropdown-panel {
+                position: absolute;
+                top: 100%;
+                right: 0;
+                margin-top: 0;
+                min-width: 260px;
+                max-width: min(320px, 92vw);
+                max-height: 240px;
+                overflow-y: auto;
+                padding: 8px;
+                border-radius: var(--radius-md);
+                background: var(--glass-solid-strong);
+                border: 1px solid var(--border-default);
+                box-shadow: var(--glass-shadow-medium);
+                -webkit-backdrop-filter: blur(var(--glass-blur-subtle));
+                backdrop-filter: blur(var(--glass-blur-subtle));
+                z-index: 40;
+                opacity: 0;
+                visibility: hidden;
+                transform: translateY(-4px);
+                transition: opacity var(--duration-fast), visibility var(--duration-fast), transform var(--duration-fast);
+                pointer-events: none;
+            }
+
+            .attach-dropdown:hover .attach-dropdown-panel {
+                opacity: 1;
+                visibility: visible;
+                transform: translateY(0);
+                pointer-events: auto;
+            }
+
+            .attach-dropdown-empty {
+                padding: 8px 10px;
+                font-size: 13px;
+                line-height: 18px;
+                color: var(--text-tertiary);
+            }
+
+            .attach-dropdown-row {
+                display: flex;
+                flex-wrap: wrap;
+                align-items: center;
+                justify-content: space-between;
+                gap: 8px;
+                padding: 6px 8px;
+                border-radius: 8px;
+                min-height: 32px;
+            }
+
+            .attach-dropdown-row:hover {
+                background: var(--glass-tint-medium);
+            }
+
+            .attach-summary-inline {
+                display: none;
+                width: 100%;
+                padding: 0 0 4px 22px;
+                font-size: 11px;
+                line-height: 1.5;
+                color: var(--text-tertiary);
+                white-space: normal;
+                word-break: break-word;
+            }
+
+            .attach-dropdown-row:hover .attach-summary-inline {
+                display: block;
+            }
+
+            .attach-dropdown-name {
+                min-width: 0;
+                flex: 1;
+                font-size: 13px;
+                line-height: 18px;
+                color: var(--text-primary);
+                overflow: hidden;
+                text-overflow: ellipsis;
+                white-space: nowrap;
+            }
+
+            .attach-dropdown-remove {
+                flex-shrink: 0;
+                width: 28px;
+                height: 28px;
+                border: none;
+                border-radius: 8px;
+                padding: 0;
+                display: inline-flex;
+                align-items: center;
+                justify-content: center;
+                cursor: pointer;
+                background: transparent;
+                color: var(--text-tertiary);
+            }
+
+            .attach-dropdown-remove:hover {
+                background: var(--accent-secondary-subtle);
+                color: var(--accent-secondary);
+            }
+
+            .attach-dropdown-remove:disabled {
+                opacity: 0.45;
+                cursor: not-allowed;
+            }
+
+            .attach-dropdown-download {
+                flex-shrink: 0;
+                width: 28px;
+                height: 28px;
+                border: none;
+                border-radius: 8px;
+                padding: 0;
+                display: inline-flex;
+                align-items: center;
+                justify-content: center;
+                cursor: pointer;
+                background: transparent;
+                color: var(--text-tertiary);
+            }
+
+            .attach-dropdown-download:hover {
+                background: var(--primary-soft, rgba(99,102,241,0.1));
+                color: var(--primary);
+            }
+
+            .attach-dropdown-download:disabled {
+                opacity: 0.45;
+                cursor: not-allowed;
             }
 
             .round-btn.analysis-draft {
-                background: rgba(255, 136, 92, 0.18);
-                color: var(--crm-button-secondary-bg);
-                border: 1px solid rgba(255, 136, 92, 0.45);
+                background: var(--accent-secondary-subtle);
+                color: var(--accent-secondary);
+                border: 1px solid color-mix(in srgb, var(--accent-secondary) 45%, transparent);
             }
 
             .edit-btn {
@@ -203,11 +639,17 @@ export class NoteContent extends PlatformElement {
                 border: none;
                 border-radius: 22px;
                 padding: 0 24px;
-                background: #99a6f9;
-                color: #ffffff;
+                background: var(--crm-button-primary-bg);
+                color: var(--crm-button-primary-text);
                 font-size: 16px;
                 line-height: 20px;
                 cursor: pointer;
+                transition: background var(--duration-fast), box-shadow var(--duration-fast);
+            }
+
+            .edit-btn:hover:not(:disabled) {
+                background: var(--crm-button-primary-hover);
+                box-shadow: var(--platform-btn-primary-shadow-hover);
             }
 
             .edit-btn:disabled {
@@ -217,11 +659,11 @@ export class NoteContent extends PlatformElement {
 
             .cancel-btn {
                 height: 44px;
-                border: 1px solid var(--crm-button-secondary-bg);
+                border: 1px solid var(--border-default);
                 border-radius: 22px;
                 padding: 0 18px;
-                background: var(--crm-button-secondary-bg);
-                color: var(--crm-button-secondary-text);
+                background: var(--glass-tint-medium);
+                color: var(--text-primary);
                 font-size: 14px;
                 line-height: 18px;
                 cursor: pointer;
@@ -229,8 +671,8 @@ export class NoteContent extends PlatformElement {
             }
 
             .cancel-btn:hover {
-                background: var(--crm-button-secondary-hover);
-                border-color: var(--crm-button-secondary-hover);
+                background: var(--glass-tint-strong);
+                border-color: var(--border-strong);
             }
 
             .cancel-btn:disabled {
@@ -284,14 +726,14 @@ export class NoteContent extends PlatformElement {
             }
 
             .note-markdown code {
-                background: rgba(34, 34, 34, 0.06);
+                background: var(--glass-tint-medium);
                 border-radius: 6px;
                 padding: 1px 6px;
                 font-size: 0.92em;
             }
 
             .note-markdown pre {
-                background: rgba(34, 34, 34, 0.06);
+                background: var(--glass-tint-medium);
                 border-radius: 10px;
                 padding: 12px;
                 overflow: auto;
@@ -304,30 +746,236 @@ export class NoteContent extends PlatformElement {
             }
 
             .note-title-input {
-                width: min(560px, 100%);
-                padding: 8px 12px;
-                font-size: 28px;
-                line-height: 34px;
+                width: 100%;
+                padding: 6px 2px;
+                font-size: 26px;
+                line-height: 32px;
                 font-weight: 700;
+                color: var(--text-primary);
+                background: transparent;
+                border: none;
+                border-bottom: 2px solid var(--border-subtle);
+                border-radius: 0;
+                outline: none;
+                box-shadow: none;
+                -webkit-backdrop-filter: none;
+                backdrop-filter: none;
+                font-family: inherit;
+                transition: border-color var(--duration-fast);
+            }
+
+            .note-title-input:focus {
+                border-bottom-color: var(--accent);
+            }
+
+            .note-title-input::placeholder {
+                color: var(--text-disabled);
             }
 
             .note-text-input {
                 width: 100%;
                 min-height: 180px;
-                resize: vertical;
                 font-size: 16px;
-                line-height: 20px;
-                white-space: pre-wrap;
-                overflow-x: hidden;
+                line-height: 24px;
+                color: var(--text-primary);
+                background: var(--crm-surface-muted, var(--glass-tint-subtle));
+                border: 1px solid var(--crm-stroke, var(--border-subtle));
+                border-radius: var(--radius-lg);
+                padding: 20px;
+                padding-right: 52px;
+                outline: none;
+                font-family: inherit;
+                box-shadow: none;
+                -webkit-backdrop-filter: none;
+                backdrop-filter: none;
+                transition: border-color var(--duration-fast), box-shadow var(--duration-fast);
                 overflow-y: auto;
-                overflow-wrap: anywhere;
-                word-break: break-word;
+                white-space: pre-wrap;
+                word-wrap: break-word;
+                cursor: text;
+                /* Запрещаем браузеру применять автоматическую цветовую схему к contenteditable */
+                color-scheme: inherit;
+                -webkit-text-fill-color: var(--text-primary);
+                caret-color: var(--text-primary);
+            }
+
+            .note-text-input:focus {
+                border-color: var(--accent);
+                box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 15%, transparent);
+            }
+
+            .note-text-input:empty::before {
+                content: attr(data-placeholder);
+                color: var(--text-disabled);
+                -webkit-text-fill-color: var(--text-disabled);
+                pointer-events: none;
             }
 
             .note-main.is-editing .note-text-input {
                 height: 100%;
                 min-height: 260px;
                 max-height: 100%;
+            }
+
+            .note-text-input-wrap {
+                position: relative;
+                min-height: 0;
+                height: 100%;
+                display: flex;
+                flex-direction: column;
+            }
+
+            .note-text-input-wrap .note-text-input {
+                flex: 1 1 auto;
+                min-height: 0;
+                width: 100%;
+                box-sizing: border-box;
+            }
+
+            .note-mention-dropdown {
+                position: absolute;
+                z-index: 100;
+                background: var(--crm-surface, #fff);
+                border: 1px solid var(--crm-stroke);
+                border-radius: 25px;
+                box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
+                min-width: 220px;
+                max-width: 360px;
+                max-height: 200px;
+                overflow-y: auto;
+                padding: 8px 0;
+            }
+
+            .note-mention-dropdown-hint {
+                padding: 8px 16px;
+                font-size: 13px;
+                color: var(--text-secondary);
+            }
+
+            .note-mention-dropdown-item {
+                display: flex;
+                align-items: center;
+                gap: 8px;
+                padding: 8px 16px;
+                cursor: pointer;
+                font-size: 14px;
+                line-height: 20px;
+                color: var(--text-primary);
+                transition: background var(--duration-fast);
+            }
+
+            .note-mention-dropdown-item:first-child {
+                border-radius: 25px 25px 0 0;
+            }
+
+            .note-mention-dropdown-item:last-child {
+                border-radius: 0 0 25px 25px;
+            }
+
+            .note-mention-dropdown-item:only-child {
+                border-radius: 25px;
+            }
+
+            .note-mention-dropdown-item:hover,
+            .note-mention-dropdown-item.is-selected {
+                background: var(--crm-surface-muted);
+            }
+
+            .note-mention-item-name {
+                flex: 1;
+                min-width: 0;
+                overflow: hidden;
+                text-overflow: ellipsis;
+                white-space: nowrap;
+            }
+
+            .note-mention-item-type {
+                font-size: 11px;
+                color: var(--text-tertiary);
+                background: var(--crm-surface-muted);
+                border-radius: 4px;
+                padding: 1px 5px;
+                flex-shrink: 0;
+            }
+
+            .note-entity-mention {
+                display: inline-flex;
+                align-items: center;
+                background: var(--accent-soft, rgba(var(--accent-rgb, 99, 102, 241), 0.10));
+                color: var(--accent, #6366f1);
+                border-radius: 4px;
+                padding: 0 4px;
+                font-size: 0.95em;
+                font-weight: 700;
+                cursor: pointer;
+                user-select: none;
+                transition: background var(--duration-fast);
+            }
+
+            .note-entity-mention:hover {
+                background: var(--accent-soft-hover, rgba(var(--accent-rgb, 99, 102, 241), 0.18));
+            }
+
+            .note-text-input .note-entity-mention {
+                cursor: default;
+                -webkit-text-fill-color: var(--accent, #6366f1);
+            }
+
+            .note-voice-dictate-floating {
+                position: absolute;
+                top: 12px;
+                right: 12px;
+                z-index: 2;
+                display: flex;
+                flex-direction: column;
+                align-items: flex-end;
+                gap: 6px;
+            }
+
+            .voice-dictate-btn {
+                width: 36px;
+                height: 36px;
+                border: 1px solid var(--crm-stroke);
+                border-radius: 18px;
+                display: inline-flex;
+                align-items: center;
+                justify-content: center;
+                cursor: pointer;
+                background: var(--crm-surface-muted);
+                color: var(--text-secondary);
+                padding: 0;
+                transition: background var(--duration-fast), border-color var(--duration-fast), color var(--duration-fast);
+            }
+
+            .voice-dictate-btn:hover {
+                background: var(--crm-surface);
+                border-color: var(--crm-stroke-strong);
+                color: var(--text-primary);
+            }
+
+            .voice-dictate-btn:disabled {
+                opacity: 0.55;
+                cursor: not-allowed;
+            }
+
+            .voice-dictate-btn.recording {
+                background: var(--error-bg);
+                border-color: var(--error);
+                color: var(--error);
+                animation: voice-dictate-pulse 1.4s ease-in-out infinite;
+            }
+
+            @keyframes voice-dictate-pulse {
+                0%, 100% { opacity: 1; }
+                50% { opacity: 0.6; }
+            }
+
+            .voice-dictate-label {
+                font-size: 12px;
+                line-height: 16px;
+                color: var(--text-tertiary);
+                max-width: min(200px, 42vw);
+                text-align: right;
             }
 
             .sidebar {
@@ -348,11 +996,12 @@ export class NoteContent extends PlatformElement {
             }
 
             .summary-card {
-                background: rgba(153, 166, 249, 0.2);
+                background: var(--crm-surface-elevated);
+                border: 1px solid color-mix(in srgb, var(--accent) 40%, transparent);
             }
 
             .tasks-card {
-                background: rgba(34, 34, 34, 0.05);
+                background: var(--glass-tint-medium);
             }
 
             .entities-section {
@@ -369,35 +1018,11 @@ export class NoteContent extends PlatformElement {
                 padding-bottom: 8px;
             }
 
-            .attachments-section {
-                display: flex;
-                flex-direction: column;
-                gap: 8px;
-                padding-bottom: 8px;
-            }
-
             .section-toolbar {
                 display: flex;
                 align-items: center;
                 justify-content: space-between;
                 gap: 8px;
-            }
-
-            .section-action-btn {
-                height: 30px;
-                border: none;
-                border-radius: 14px;
-                padding: 0 12px;
-                background: rgba(34, 34, 34, 0.08);
-                color: var(--text-primary);
-                font-size: 12px;
-                line-height: 14px;
-                cursor: pointer;
-            }
-
-            .section-action-btn:disabled {
-                opacity: 0.6;
-                cursor: not-allowed;
             }
 
             .card-header {
@@ -422,7 +1047,7 @@ export class NoteContent extends PlatformElement {
                 font-size: 20px;
                 line-height: 26px;
                 font-weight: 700;
-                background: linear-gradient(80.46deg, #fad17a 9.08%, #ff9a76 44.12%, #99a6f9 85.61%);
+                background: var(--accent-gradient);
                 -webkit-background-clip: text;
                 background-clip: text;
                 -webkit-text-fill-color: transparent;
@@ -430,7 +1055,7 @@ export class NoteContent extends PlatformElement {
 
             .summary-meta {
                 margin: 0;
-                color: rgba(34, 34, 34, 0.3);
+                color: var(--text-tertiary);
                 font-size: 12px;
                 line-height: 15px;
             }
@@ -459,14 +1084,13 @@ export class NoteContent extends PlatformElement {
                 border-radius: 14px;
                 font-size: 12px;
                 line-height: 15px;
-                background: #99a6f9;
-                color: rgba(34, 34, 34, 0.95);
+                background: var(--accent);
+                color: var(--text-inverse);
             }
 
             .tasks-title,
             .entities-title,
-            .relationships-title,
-            .attachments-title {
+            .relationships-title {
                 margin: 0;
                 font-size: 20px;
                 line-height: 26px;
@@ -501,16 +1125,16 @@ export class NoteContent extends PlatformElement {
                 height: 24px;
                 border-radius: 4px;
                 flex-shrink: 0;
-                border: 2px solid rgba(34, 34, 34, 0.05);
+                border: 2px solid var(--border-subtle);
                 display: inline-flex;
                 align-items: center;
                 justify-content: center;
             }
 
             .checkbox.checked {
-                background: #99a6f9;
-                border-color: #99a6f9;
-                color: #ffffff;
+                background: var(--accent);
+                border-color: var(--accent);
+                color: var(--crm-button-primary-text);
             }
 
             .task-text {
@@ -524,7 +1148,7 @@ export class NoteContent extends PlatformElement {
             }
 
             .task-text.completed {
-                color: rgba(34, 34, 34, 0.2);
+                color: var(--text-disabled);
                 text-decoration: line-through;
             }
 
@@ -534,7 +1158,7 @@ export class NoteContent extends PlatformElement {
                 border: none;
                 border-radius: 12px;
                 background: transparent;
-                color: rgba(34, 34, 34, 0.2);
+                color: var(--text-disabled);
                 flex-shrink: 0;
             }
 
@@ -548,7 +1172,7 @@ export class NoteContent extends PlatformElement {
                 padding: 12px;
                 border-radius: 16px;
                 cursor: pointer;
-                background: rgba(153, 166, 249, 0.2);
+                background: var(--accent-subtle);
                 transition: transform var(--duration-fast), filter var(--duration-fast);
             }
 
@@ -558,11 +1182,11 @@ export class NoteContent extends PlatformElement {
             }
 
             .entity-link.tone-yellow {
-                background: rgba(250, 209, 122, 0.3);
+                background: color-mix(in srgb, var(--accent-quaternary) 30%, transparent);
             }
 
             .entity-link.tone-orange {
-                background: rgba(255, 136, 92, 0.2);
+                background: color-mix(in srgb, var(--accent-secondary) 20%, transparent);
             }
 
             .entity-avatar {
@@ -574,8 +1198,8 @@ export class NoteContent extends PlatformElement {
                 display: inline-flex;
                 align-items: center;
                 justify-content: center;
-                background: linear-gradient(312.35deg, #fad17a 18.71%, #ff9a76 82.25%, #99a6f9 157.48%);
-                color: #222222;
+                background: var(--accent-gradient);
+                color: var(--text-inverse);
             }
 
             .entity-avatar img {
@@ -608,28 +1232,28 @@ export class NoteContent extends PlatformElement {
                 margin: 0;
                 font-size: 12px;
                 line-height: 12px;
-                color: rgba(34, 34, 34, 0.2);
+                color: var(--text-disabled);
             }
 
             .entity-score {
                 height: 16px;
                 border-radius: 8px;
-                background: rgba(34, 34, 34, 0.05);
+                background: var(--glass-tint-medium);
                 overflow: hidden;
                 position: relative;
             }
 
             .entity-score-fill {
                 height: 100%;
-                background: #99a6f9;
+                background: var(--accent);
             }
 
             .entity-score-fill.tone-yellow {
-                background: #fad17a;
+                background: var(--accent-quaternary);
             }
 
             .entity-score-fill.tone-orange {
-                background: #ff885c;
+                background: var(--accent-secondary);
             }
 
             .relationship-link {
@@ -642,7 +1266,7 @@ export class NoteContent extends PlatformElement {
                 padding: 12px;
                 border-radius: 16px;
                 cursor: pointer;
-                background: rgba(153, 166, 249, 0.2);
+                background: var(--accent-subtle);
                 transition: transform var(--duration-fast), filter var(--duration-fast);
             }
 
@@ -659,8 +1283,8 @@ export class NoteContent extends PlatformElement {
                 display: inline-flex;
                 align-items: center;
                 justify-content: center;
-                background: rgba(255, 255, 255, 0.65);
-                color: #222222;
+                background: var(--glass-tint-strong);
+                color: var(--text-primary);
             }
 
             .relationship-data {
@@ -685,7 +1309,7 @@ export class NoteContent extends PlatformElement {
                 margin: 0;
                 font-size: 12px;
                 line-height: 16px;
-                color: rgba(34, 34, 34, 0.55);
+                color: var(--text-secondary);
                 overflow-wrap: anywhere;
                 word-break: break-word;
             }
@@ -700,12 +1324,17 @@ export class NoteContent extends PlatformElement {
             .relationship-entity-btn {
                 border: none;
                 border-radius: 10px;
-                background: rgba(255, 255, 255, 0.75);
+                background: var(--glass-tint-strong);
                 color: var(--text-primary);
                 padding: 4px 8px;
                 font-size: 12px;
                 line-height: 16px;
                 cursor: pointer;
+                transition: background var(--duration-fast);
+            }
+
+            .relationship-entity-btn:hover:not(:disabled) {
+                background: var(--glass-tint-medium);
             }
 
             .relationship-entity-btn:disabled {
@@ -717,7 +1346,7 @@ export class NoteContent extends PlatformElement {
                 margin-left: auto;
                 font-size: 12px;
                 line-height: 16px;
-                color: rgba(34, 34, 34, 0.55);
+                color: var(--text-secondary);
             }
 
             .relationship-actions {
@@ -730,11 +1359,16 @@ export class NoteContent extends PlatformElement {
                 border: none;
                 border-radius: 12px;
                 padding: 0 10px;
-                background: rgba(255, 136, 92, 0.18);
-                color: #ff885c;
+                background: var(--accent-secondary-subtle);
+                color: var(--accent-secondary);
                 font-size: 12px;
                 line-height: 14px;
                 cursor: pointer;
+                transition: background var(--duration-fast);
+            }
+
+            .relationship-delete-btn:hover:not(:disabled) {
+                background: color-mix(in srgb, var(--accent-secondary) 25%, transparent);
             }
 
             .relationship-delete-btn:disabled {
@@ -742,63 +1376,30 @@ export class NoteContent extends PlatformElement {
                 cursor: not-allowed;
             }
 
-            .attachment-item {
-                display: flex;
-                align-items: center;
-                justify-content: space-between;
-                gap: 10px;
-                border-radius: 12px;
-                padding: 10px 12px;
-                background: rgba(34, 34, 34, 0.05);
-            }
-
-            .attachment-name {
-                min-width: 0;
-                font-size: 14px;
-                line-height: 18px;
-                color: var(--text-primary);
-                overflow-wrap: anywhere;
-                word-break: break-word;
-            }
-
-            .attachment-status {
-                font-size: 12px;
-                line-height: 16px;
-                color: rgba(34, 34, 34, 0.45);
-                flex-shrink: 0;
-            }
-
-            .attachment-actions {
-                display: inline-flex;
-                align-items: center;
-                gap: 6px;
-            }
-
-            .attachment-delete-btn {
-                border: none;
-                border-radius: 10px;
-                background: rgba(255, 136, 92, 0.18);
-                color: #ff885c;
-                padding: 4px 8px;
-                font-size: 12px;
-                line-height: 14px;
-                cursor: pointer;
-            }
-
-            .attachment-delete-btn:disabled {
-                opacity: 0.6;
-                cursor: not-allowed;
-            }
-
             @media (max-width: 1279px) {
+                :host {
+                    height: auto;
+                    min-height: 100%;
+                }
+
                 .layout {
-                    grid-template-columns: 1fr;
+                    grid-template-columns: minmax(0, 1fr);
+                    height: auto;
+                    min-height: 0;
+                    align-content: start;
+                    grid-template-rows: auto auto;
                 }
 
                 .note-main,
                 .sidebar {
                     width: 100%;
                     max-width: 100%;
+                }
+
+                .note-main.is-editing {
+                    height: auto;
+                    min-height: min(72dvh, 640px);
+                    grid-template-rows: auto minmax(260px, min(58dvh, 520px));
                 }
             }
 
@@ -827,15 +1428,10 @@ export class NoteContent extends PlatformElement {
                     line-height: 28px;
                 }
 
-                .note-date {
-                    font-size: 14px;
-                    line-height: 18px;
-                }
-
                 .note-actions {
                     width: 100%;
                     display: grid;
-                    grid-template-columns: 44px 44px minmax(0, 1fr) minmax(0, 1fr);
+                    grid-template-columns: 44px 44px 44px minmax(0, 1fr) minmax(0, 1fr);
                     gap: 10px;
                     justify-content: stretch;
                     align-items: center;
@@ -862,15 +1458,17 @@ export class NoteContent extends PlatformElement {
                 .summary-title,
                 .tasks-title,
                 .entities-title,
-                .relationships-title,
-                .attachments-title {
+                .relationships-title {
                     font-size: 18px;
                     line-height: 24px;
                 }
 
-                .note-edit-meta {
+                .note-edit-meta-group {
+                    padding: 8px 10px;
+                }
+
+                .note-edit-meta-row {
                     grid-template-columns: 1fr;
-                    max-width: 100%;
                 }
 
                 .summary-text,
@@ -920,7 +1518,7 @@ export class NoteContent extends PlatformElement {
 
             @media (max-width: 420px) {
                 .note-actions {
-                    grid-template-columns: 1fr 1fr;
+                    grid-template-columns: repeat(3, 1fr);
                 }
 
                 .round-btn {
@@ -930,6 +1528,7 @@ export class NoteContent extends PlatformElement {
 
                 .cancel-btn,
                 .edit-btn {
+                    grid-column: 1 / -1;
                     width: 100%;
                 }
 
@@ -965,6 +1564,286 @@ export class NoteContent extends PlatformElement {
         this._draftText = '';
         this._draftSubtype = '';
         this._draftNoteDate = '';
+        this._draftVoiceMode = 'default';
+        this._draftManualVoiceId = '';
+        this._draftContextEntityId = '';
+        this._voiceSearchOpen = false;
+        this._voiceSearchQuery = '';
+        this._voiceSearchResults = [];
+        this._voiceSearchLoading = false;
+        this._voiceLookupLabel = '';
+        this._ctxSearchOpen = false;
+        this._ctxSearchQuery = '';
+        this._ctxSearchResults = [];
+        this._ctxSearchLoading = false;
+        this._ctxLookupLabel = '';
+        this._voiceSearchTimer = 0;
+        this._ctxSearchTimer = 0;
+        this._onDocPointerDown = null;
+        this._voiceRecState = 'idle';
+        this._voiceMediaRecorder = null;
+        this._voiceAudioChunks = [];
+        this._mentionTriggerIndex = -1;
+        this._mentionQuery = '';
+        this._mentionCandidates = [];
+        this._mentionSelectedIdx = 0;
+        this._mentionLoading = false;
+        this._mentionCoords = null;
+        this._mentionDebounceTimer = 0;
+        this._onDocSelectionChange = null;
+        this._editableNeedsInit = false;
+    }
+
+    connectedCallback() {
+        super.connectedCallback();
+        this._onDocPointerDown = (e) => {
+            const path = e.composedPath();
+            if (path.includes(this)) {
+                if (this._mentionTriggerIndex !== -1) {
+                    const inDropdown = path.some(
+                        (el) => el instanceof Element && el.classList?.contains('note-mention-dropdown'),
+                    );
+                    if (!inDropdown) {
+                        this._hideMentionDropdown();
+                    }
+                }
+                return;
+            }
+            this._voiceSearchOpen = false;
+            this._ctxSearchOpen = false;
+            if (this._mentionTriggerIndex !== -1) {
+                this._hideMentionDropdown();
+            }
+            this.requestUpdate();
+        };
+        document.addEventListener('pointerdown', this._onDocPointerDown, true);
+
+    }
+
+    disconnectedCallback() {
+        document.removeEventListener('pointerdown', this._onDocPointerDown, true);
+        if (this._voiceSearchTimer) {
+            window.clearTimeout(this._voiceSearchTimer);
+        }
+        if (this._ctxSearchTimer) {
+            window.clearTimeout(this._ctxSearchTimer);
+        }
+        this._stopVoiceDictation();
+        super.disconnectedCallback();
+    }
+
+    _syncVoiceContextDraftsFromGraph() {
+        if (!this.note || typeof this.note.entity_id !== 'string' || this.note.entity_id.trim().length === 0) {
+            this._draftVoiceMode = 'default';
+            this._draftManualVoiceId = '';
+            this._draftContextEntityId = '';
+            this._voiceLookupLabel = '';
+            this._ctxLookupLabel = '';
+            this._voiceSearchQuery = '';
+            this._ctxSearchQuery = '';
+            this._voiceSearchOpen = false;
+            this._ctxSearchOpen = false;
+            this._voiceSearchResults = [];
+            this._ctxSearchResults = [];
+            return;
+        }
+        const rels = Array.isArray(this.relationships) ? this.relationships : [];
+        const nid = this.note.entity_id;
+        const voice = rels.find((r) => r.relationship_type === 'note_voice' && r.source_entity_id === nid);
+        const ctx = rels.find((r) => r.relationship_type === 'in_context' && r.source_entity_id === nid);
+        if (voice && typeof voice.target_entity_id === 'string') {
+            this._draftVoiceMode = 'manual';
+            this._draftManualVoiceId = voice.target_entity_id;
+        } else {
+            this._draftVoiceMode = 'default';
+            this._draftManualVoiceId = '';
+        }
+        this._draftContextEntityId = ctx && typeof ctx.target_entity_id === 'string' ? ctx.target_entity_id : '';
+        this._refreshDraftEntityLabelsFromRelated();
+    }
+
+    _entityNameFromRelated(entityId) {
+        if (typeof entityId !== 'string' || entityId.trim().length === 0) {
+            return '';
+        }
+        if (!Array.isArray(this.relatedEntities)) {
+            return '';
+        }
+        const found = this.relatedEntities.find((e) => e && e.entity_id === entityId);
+        if (!found || typeof found.name !== 'string') {
+            return '';
+        }
+        const trimmed = found.name.trim();
+        return trimmed.length > 0 ? trimmed : '';
+    }
+
+    _refreshDraftEntityLabelsFromRelated() {
+        const vid = typeof this._draftManualVoiceId === 'string' ? this._draftManualVoiceId.trim() : '';
+        const cid = typeof this._draftContextEntityId === 'string' ? this._draftContextEntityId.trim() : '';
+        if (!vid) {
+            this._voiceLookupLabel = '';
+        } else {
+            const fromRel = this._entityNameFromRelated(vid);
+            if (fromRel.length > 0) {
+                this._voiceLookupLabel = fromRel;
+            }
+        }
+        if (!cid) {
+            this._ctxLookupLabel = '';
+        } else {
+            const fromRel = this._entityNameFromRelated(cid);
+            if (fromRel.length > 0) {
+                this._ctxLookupLabel = fromRel;
+            }
+        }
+    }
+
+    _readNamespaceForSearch() {
+        const current = CRMStore.state.namespaces.current;
+        if (!current) {
+            throw new Error('Current namespace is required for entity search');
+        }
+        if (typeof current === 'string') {
+            const name = current.trim();
+            if (name.length === 0) {
+                throw new Error('Current namespace name is empty');
+            }
+            return name;
+        }
+        if (typeof current === 'object' && current !== null && typeof current.name === 'string') {
+            const name = current.name.trim();
+            if (name.length === 0) {
+                throw new Error('Current namespace name is empty');
+            }
+            return name;
+        }
+        throw new Error('Invalid current namespace');
+    }
+
+    _getContextAnchorTypeIdSet() {
+        if (!Array.isArray(this.entityTypes)) {
+            throw new Error('entityTypes must be array');
+        }
+        const ids = new Set();
+        for (const item of this.entityTypes) {
+            if (item && item.is_context_anchor === true && typeof item.type_id === 'string' && item.type_id.trim().length > 0) {
+                ids.add(item.type_id.trim());
+            }
+        }
+        return ids;
+    }
+
+    _getVoiceTargetTypeIdSet() {
+        if (!Array.isArray(this.entityTypes)) {
+            throw new Error('entityTypes must be array');
+        }
+        const ids = new Set();
+        for (const item of this.entityTypes) {
+            if (item && item.is_voice_target === true && typeof item.type_id === 'string' && item.type_id.trim().length > 0) {
+                ids.add(item.type_id.trim());
+            }
+        }
+        return ids;
+    }
+
+    _scheduleVoicePickSearch(mode) {
+        if (mode === 'voice') {
+            if (this._voiceSearchTimer) {
+                window.clearTimeout(this._voiceSearchTimer);
+            }
+            this._voiceSearchTimer = window.setTimeout(() => {
+                void this._runEntityPickSearch('voice');
+            }, 300);
+        } else {
+            if (this._ctxSearchTimer) {
+                window.clearTimeout(this._ctxSearchTimer);
+            }
+            this._ctxSearchTimer = window.setTimeout(() => {
+                void this._runEntityPickSearch('context');
+            }, 300);
+        }
+    }
+
+    async _runEntityPickSearch(mode) {
+        const isVoice = mode === 'voice';
+        const query = isVoice ? this._voiceSearchQuery : this._ctxSearchQuery;
+        const trimmed = typeof query === 'string' ? query.trim() : '';
+        if (isVoice) {
+            this._voiceSearchLoading = true;
+        } else {
+            this._ctxSearchLoading = true;
+        }
+        this.requestUpdate();
+        if (trimmed.length < 2) {
+            if (isVoice) {
+                this._voiceSearchResults = [];
+                this._voiceSearchLoading = false;
+            } else {
+                this._ctxSearchResults = [];
+                this._ctxSearchLoading = false;
+            }
+            this.requestUpdate();
+            return;
+        }
+        const crmApi = this.crmApi;
+        if (!crmApi) {
+            throw new Error('crmApi is required');
+        }
+        const currentNs = CRMStore.state.namespaces.current;
+        if (!currentNs) {
+            if (isVoice) {
+                this._voiceSearchResults = [];
+                this._voiceSearchLoading = false;
+            } else {
+                this._ctxSearchResults = [];
+                this._ctxSearchLoading = false;
+            }
+            this.requestUpdate();
+            return;
+        }
+        const namespace = this._readNamespaceForSearch();
+        const response = await crmApi.searchEntities(trimmed, { namespace, limit: 20, search_mode: 'text' });
+        const list = Array.isArray(response.items) ? response.items : [];
+        let filtered;
+        if (isVoice) {
+            const voiceTypes = this._getVoiceTargetTypeIdSet();
+            filtered = list.filter((e) => e && typeof e.entity_type === 'string' && voiceTypes.has(e.entity_type));
+        } else {
+            const allowed = this._getContextAnchorTypeIdSet();
+            filtered = list.filter((e) => e && typeof e.entity_type === 'string' && allowed.has(e.entity_type));
+        }
+        if (isVoice) {
+            this._voiceSearchResults = filtered;
+            this._voiceSearchLoading = false;
+        } else {
+            this._ctxSearchResults = filtered;
+            this._ctxSearchLoading = false;
+        }
+        this.requestUpdate();
+    }
+
+    async _ensureDraftEntityLabels() {
+        if (!this.editable) {
+            return;
+        }
+        const crmApi = this.crmApi;
+        if (!crmApi) {
+            throw new Error('crmApi is required');
+        }
+        const vid = typeof this._draftManualVoiceId === 'string' ? this._draftManualVoiceId.trim() : '';
+        const cid = typeof this._draftContextEntityId === 'string' ? this._draftContextEntityId.trim() : '';
+        if (this._draftVoiceMode === 'manual' && vid.length > 0 && this._voiceLookupLabel.length === 0) {
+            const entity = await crmApi.getEntity(vid);
+            const name = typeof entity?.name === 'string' ? entity.name.trim() : '';
+            this._voiceLookupLabel = name.length > 0 ? name : vid;
+            this.requestUpdate();
+        }
+        if (cid.length > 0 && this._ctxLookupLabel.length === 0) {
+            const entity = await crmApi.getEntity(cid);
+            const name = typeof entity?.name === 'string' ? entity.name.trim() : '';
+            this._ctxLookupLabel = name.length > 0 ? name : cid;
+            this.requestUpdate();
+        }
     }
 
     willUpdate(changedProperties) {
@@ -978,7 +1857,28 @@ export class NoteContent extends PlatformElement {
                 this._draftText = noteDescription;
                 this._draftSubtype = noteSubtype;
                 this._draftNoteDate = noteDate || getLocalIsoDate();
+                this._editableNeedsInit = true;
             }
+        }
+        if (
+            this.editable
+            && (changedProperties.has('note') || changedProperties.has('editable') || changedProperties.has('relationships'))
+        ) {
+            this._syncVoiceContextDraftsFromGraph();
+        }
+        if (this.editable && changedProperties.has('relatedEntities')) {
+            this._refreshDraftEntityLabelsFromRelated();
+        }
+    }
+
+    updated(changedProperties) {
+        super.updated(changedProperties);
+        if (this.editable) {
+            queueMicrotask(() => void this._ensureDraftEntityLabels());
+        }
+        if (this._editableNeedsInit) {
+            this._editableNeedsInit = false;
+            this._initEditableContent();
         }
     }
 
@@ -1022,6 +1922,37 @@ export class NoteContent extends PlatformElement {
         return this.relationships.filter((rel) => rel?.source_entity_id === noteId || rel?.target_entity_id === noteId);
     }
 
+    _getOutgoingRelationshipTargetEntityId(relationshipType) {
+        const noteId = this.note?.entity_id;
+        if (typeof noteId !== 'string' || noteId.trim().length === 0) {
+            return '';
+        }
+        const rels = Array.isArray(this.relationships) ? this.relationships : [];
+        const rel = rels.find(
+            (r) =>
+                r
+                && r.relationship_type === relationshipType
+                && r.source_entity_id === noteId,
+        );
+        if (!rel || typeof rel.target_entity_id !== 'string') {
+            return '';
+        }
+        const tid = rel.target_entity_id.trim();
+        return tid.length > 0 ? tid : '';
+    }
+
+    _resolveRelatedEntityDisplayName(entityId) {
+        if (typeof entityId !== 'string' || entityId.trim().length === 0) {
+            return '';
+        }
+        const trimmed = entityId.trim();
+        const resolved = this._entityNameFromRelated(trimmed);
+        if (resolved.length > 0) {
+            return resolved;
+        }
+        return trimmed;
+    }
+
     _getText(value, fallback) {
         if (typeof value === 'string' && value.trim().length > 0) {
             return value;
@@ -1030,17 +1961,20 @@ export class NoteContent extends PlatformElement {
     }
 
     _getSummaryMeta() {
+        if (this.processingEntities === true) {
+            return this.i18n.t('note_content.analysis_in_progress');
+        }
         if (typeof this.summaryGeneratedAt === 'string' && this.summaryGeneratedAt.trim().length > 0) {
-            return `Сгенерирована в ${this.summaryGeneratedAt}`;
+            return this.i18n.t('note_content.summary_generated_at', { time: this.summaryGeneratedAt });
         }
         if (
             this.hasAnalysisDraft
             && typeof this.analysisDraftGeneratedAt === 'string'
             && this.analysisDraftGeneratedAt.trim().length > 0
         ) {
-            return `Есть черновик анализа от ${this.analysisDraftGeneratedAt}`;
+            return this.i18n.t('note_content.analysis_draft_at', { time: this.analysisDraftGeneratedAt });
         }
-        return 'Нажмите обновить для генерации summary';
+        return this.i18n.t('note_content.summary_prompt');
     }
 
     _getEntityAvatarUrl(entity) {
@@ -1090,7 +2024,7 @@ export class NoteContent extends PlatformElement {
 
     _getRelationshipTypeLabel(relationshipType) {
         if (typeof relationshipType !== 'string' || relationshipType.trim().length === 0) {
-            return 'Связь';
+            return this.i18n.t('note_content.relationship');
         }
         if (!Array.isArray(this.relationshipTypes)) {
             throw new Error('relationshipTypes must be array');
@@ -1108,13 +2042,13 @@ export class NoteContent extends PlatformElement {
 
     _getEntityLabelById(entityId) {
         if (typeof entityId !== 'string' || entityId.trim().length === 0) {
-            return 'Неизвестная сущность';
+            return this.i18n.t('note_content.unknown_entity');
         }
         if (!Array.isArray(this.relatedEntities)) {
             throw new Error('relatedEntities must be an array');
         }
         if (this.note?.entity_id === entityId) {
-            return this._getText(this.note?.name, 'Текущая заметка');
+            return this._getText(this.note?.name, this.i18n.t('note_content.current_note_fallback'));
         }
         const foundEntity = this.relatedEntities.find((entity) => entity?.entity_id === entityId);
         if (!foundEntity) {
@@ -1146,7 +2080,7 @@ export class NoteContent extends PlatformElement {
         if (typeof rawWeight !== 'number' || !Number.isFinite(rawWeight)) {
             return '';
         }
-        return `Вес: ${rawWeight.toFixed(2)}`;
+        return this.i18n.t('note_content.weight_label', { value: rawWeight.toFixed(2) });
     }
 
     _getNoteSubtypeOptions() {
@@ -1169,17 +2103,53 @@ export class NoteContent extends PlatformElement {
     }
 
     _getAttachmentName(attachment) {
-        return this._getText(attachment?.filename, this._getText(attachment?.document_id, 'Файл'));
+        return this._getText(
+            attachment?.filename,
+            this._getText(attachment?.document_name, this._getText(attachment?.document_id, this.i18n.t('note_content.file_fallback'))),
+        );
     }
 
     _getAttachmentStatus(attachment) {
         return this._getText(attachment?.status, 'unknown');
     }
 
+    _getAttachmentSummary(attachment) {
+        const summaries = this.note?.attributes?.attachment_summaries;
+        if (!Array.isArray(summaries)) return null;
+        const filename = this._getAttachmentName(attachment);
+        const found = summaries.find((s) => s?.filename === filename);
+        return found?.summary ?? null;
+    }
+
+    async _downloadAttachment(attachment) {
+        const downloadUrl = attachment?.download_url;
+        const filename = this._getAttachmentName(attachment);
+        if (typeof downloadUrl !== 'string' || downloadUrl.trim().length === 0) {
+            throw new Error('Attachment download_url is missing');
+        }
+        const response = await fetch(downloadUrl, { credentials: 'include' });
+        if (!response.ok) {
+            throw new Error(`Download failed: ${response.status}`);
+        }
+        const blob = await response.blob();
+        const objectUrl = URL.createObjectURL(blob);
+        const anchor = document.createElement('a');
+        anchor.href = objectUrl;
+        anchor.download = filename;
+        anchor.style.display = 'none';
+        document.body.appendChild(anchor);
+        anchor.click();
+        anchor.remove();
+        URL.revokeObjectURL(objectUrl);
+    }
+
     _getEntityIcon(entity) {
         const typeConfig = this._getEntityTypeConfig(entity);
         if (typeConfig && typeof typeConfig.icon === 'string' && typeConfig.icon.trim().length > 0) {
             const rawIconName = typeConfig.icon.trim();
+            if (rawIconName === 'file') {
+                return 'folder';
+            }
             if (/^[a-z0-9-]+$/i.test(rawIconName)) {
                 return rawIconName;
             }
@@ -1205,7 +2175,7 @@ export class NoteContent extends PlatformElement {
 
     _hexToRgba(hexColor, alpha) {
         if (typeof hexColor !== 'string' || !hexColor.startsWith('#') || hexColor.length !== 7) {
-            return `rgba(153, 166, 249, ${alpha})`;
+            return `color-mix(in srgb, var(--accent) ${Math.round(alpha * 100)}%, transparent)`;
         }
         const red = parseInt(hexColor.slice(1, 3), 16);
         const green = parseInt(hexColor.slice(3, 5), 16);
@@ -1219,12 +2189,12 @@ export class NoteContent extends PlatformElement {
             return `background: ${this._hexToRgba(typeConfig.color, 0.2)}; color: ${typeConfig.color};`;
         }
         if (tone === 'yellow') {
-            return 'background: rgba(250, 209, 122, 0.45); color: #222222;';
+            return 'background: color-mix(in srgb, var(--accent-quaternary) 45%, transparent); color: var(--text-primary);';
         }
         if (tone === 'orange') {
-            return 'background: rgba(255, 136, 92, 0.4); color: #222222;';
+            return 'background: color-mix(in srgb, var(--accent-secondary) 40%, transparent); color: var(--text-primary);';
         }
-        return 'background: rgba(153, 166, 249, 0.4); color: #222222;';
+        return 'background: color-mix(in srgb, var(--accent) 40%, transparent); color: var(--text-primary);';
     }
 
     _getEntityScorePercent(entity) {
@@ -1267,12 +2237,14 @@ export class NoteContent extends PlatformElement {
     _emitSaveNote() {
         const title = this._draftTitle.trim();
         if (title.length === 0) {
-            throw new Error('Название заметки не может быть пустым');
+            this.error(this.i18n.t('note_content.err_empty_title'));
+            return;
         }
         const subtype = this._draftSubtype.trim();
         const noteDate = this._draftNoteDate.trim();
         if (noteDate.length === 0) {
-            throw new Error('Дата заметки не выбрана');
+            this.error(this.i18n.t('note_content.err_no_date'));
+            return;
         }
         this.emit('save-note', {
             noteId: this.note.entity_id,
@@ -1280,7 +2252,256 @@ export class NoteContent extends PlatformElement {
             description: this._draftText,
             entitySubtype: subtype.length > 0 ? subtype : null,
             noteDate,
+            voiceMode: this._draftVoiceMode,
+            voiceEntityId: (this._draftManualVoiceId || '').trim(),
+            contextEntityId: (this._draftContextEntityId || '').trim(),
         });
+    }
+
+    _onVoiceModeChange(event) {
+        const next = event.target.value;
+        this._draftVoiceMode = next;
+        if (next !== 'manual') {
+            this._draftManualVoiceId = '';
+            this._voiceLookupLabel = '';
+            this._voiceSearchQuery = '';
+            this._voiceSearchOpen = false;
+            this._voiceSearchResults = [];
+        }
+    }
+
+    _voicePickInputValue() {
+        if (this._voiceSearchOpen) {
+            return this._voiceSearchQuery;
+        }
+        const id = typeof this._draftManualVoiceId === 'string' ? this._draftManualVoiceId.trim() : '';
+        if (id.length > 0) {
+            return this._voiceLookupLabel || id;
+        }
+        return '';
+    }
+
+    _ctxPickInputValue() {
+        if (this._ctxSearchOpen) {
+            return this._ctxSearchQuery;
+        }
+        const id = typeof this._draftContextEntityId === 'string' ? this._draftContextEntityId.trim() : '';
+        if (id.length > 0) {
+            return this._ctxLookupLabel || id;
+        }
+        return '';
+    }
+
+    _onVoicePickInput(event) {
+        const value = event.target.value;
+        this._voiceSearchQuery = value;
+        this._draftManualVoiceId = '';
+        this._voiceLookupLabel = '';
+        this._voiceSearchOpen = true;
+        this._scheduleVoicePickSearch('voice');
+    }
+
+    _onVoicePickFocus() {
+        this._voiceSearchOpen = true;
+        if (this._voiceSearchQuery.trim().length === 0) {
+            const id = typeof this._draftManualVoiceId === 'string' ? this._draftManualVoiceId.trim() : '';
+            if (id.length > 0) {
+                this._voiceSearchQuery = this._voiceLookupLabel || '';
+            }
+        }
+        this._scheduleVoicePickSearch('voice');
+    }
+
+    _onCtxPickInput(event) {
+        const value = event.target.value;
+        this._ctxSearchQuery = value;
+        this._draftContextEntityId = '';
+        this._ctxLookupLabel = '';
+        this._ctxSearchOpen = true;
+        this._scheduleVoicePickSearch('context');
+    }
+
+    _onCtxPickFocus() {
+        this._ctxSearchOpen = true;
+        if (this._ctxSearchQuery.trim().length === 0) {
+            const id = typeof this._draftContextEntityId === 'string' ? this._draftContextEntityId.trim() : '';
+            if (id.length > 0) {
+                this._ctxSearchQuery = this._ctxLookupLabel || '';
+            }
+        }
+        this._scheduleVoicePickSearch('context');
+    }
+
+    _onVoicePickSelect(entity) {
+        if (!entity || typeof entity.entity_id !== 'string' || entity.entity_id.trim().length === 0) {
+            throw new Error('entity_id is required');
+        }
+        const voiceTypes = this._getVoiceTargetTypeIdSet();
+        if (!voiceTypes.has(entity.entity_type)) {
+            throw new Error(`Entity type ${entity.entity_type} is not a valid voice target`);
+        }
+        this._draftManualVoiceId = entity.entity_id.trim();
+        const name = typeof entity.name === 'string' ? entity.name.trim() : '';
+        this._voiceLookupLabel = name.length > 0 ? name : entity.entity_id.trim();
+        this._voiceSearchQuery = '';
+        this._voiceSearchOpen = false;
+        this._voiceSearchResults = [];
+    }
+
+    _onCtxPickSelect(entity) {
+        if (!entity || typeof entity.entity_id !== 'string' || entity.entity_id.trim().length === 0) {
+            throw new Error('entity_id is required');
+        }
+        const allowed = this._getContextAnchorTypeIdSet();
+        if (!allowed.has(entity.entity_type)) {
+            throw new Error('Context entity type must be a context anchor');
+        }
+        this._draftContextEntityId = entity.entity_id.trim();
+        const name = typeof entity.name === 'string' ? entity.name.trim() : '';
+        this._ctxLookupLabel = name.length > 0 ? name : entity.entity_id.trim();
+        this._ctxSearchQuery = '';
+        this._ctxSearchOpen = false;
+        this._ctxSearchResults = [];
+    }
+
+    _clearVoicePick() {
+        this._draftManualVoiceId = '';
+        this._voiceLookupLabel = '';
+        this._voiceSearchQuery = '';
+        this._voiceSearchOpen = false;
+        this._voiceSearchResults = [];
+    }
+
+    _clearCtxPick() {
+        this._draftContextEntityId = '';
+        this._ctxLookupLabel = '';
+        this._ctxSearchQuery = '';
+        this._ctxSearchOpen = false;
+        this._ctxSearchResults = [];
+    }
+
+    _renderVoiceEntityPick() {
+        const hasId = (typeof this._draftManualVoiceId === 'string' && this._draftManualVoiceId.trim().length > 0);
+        const inputValue = this._voicePickInputValue();
+        const placeholder = this.i18n.t('note_content.contact_placeholder');
+        const panelOpen = this._voiceSearchOpen;
+        const loading = this._voiceSearchLoading;
+        const results = Array.isArray(this._voiceSearchResults) ? this._voiceSearchResults : [];
+        const queryTrim = (this._voiceSearchQuery || '').trim();
+        return html`
+            <div class="entity-search-wrap">
+                <div class="entity-search-input-row">
+                    <input
+                        class="entity-search-input"
+                        type="text"
+                        autocomplete="off"
+                        placeholder=${placeholder}
+                        .value=${inputValue}
+                        @input=${this._onVoicePickInput}
+                        @focus=${this._onVoicePickFocus}
+                        aria-autocomplete="list"
+                        aria-expanded=${panelOpen ? 'true' : 'false'}
+                    />
+                    <button
+                        type="button"
+                        class="entity-search-clear"
+                        title=${this.i18n.t('note_content.entity_pick_clear_aria')}
+                        aria-label=${this.i18n.t('note_content.entity_pick_clear_aria')}
+                        ?hidden=${!hasId && queryTrim.length === 0}
+                        @click=${this._clearVoicePick}
+                    >
+                        <platform-icon name="close" size="18"></platform-icon>
+                    </button>
+                </div>
+                <div
+                    class="entity-search-panel ${panelOpen ? 'is-open' : ''}"
+                    role="listbox"
+                    aria-label=${this.i18n.t('note_content.entity_pick_list_label')}
+                    @click=${(e) => e.stopPropagation()}
+                >
+                    ${loading ? html`<div class="entity-search-hint">${this.i18n.t('note_content.entity_pick_loading')}</div>` : ''}
+                    ${!loading && panelOpen && queryTrim.length < 2 ? html`
+                        <div class="entity-search-hint">${this.i18n.t('note_content.entity_pick_min_query')}</div>
+                    ` : ''}
+                    ${!loading && panelOpen && queryTrim.length >= 2 && results.length === 0 ? html`
+                        <div class="entity-search-hint">${this.i18n.t('note_content.entity_pick_no_results')}</div>
+                    ` : ''}
+                    ${results.map((entity) => html`
+                        <button
+                            type="button"
+                            class="entity-search-row-btn"
+                            role="option"
+                            @click=${() => this._onVoicePickSelect(entity)}
+                        >
+                            <span>${this._getText(entity.name, entity.entity_id)}</span>
+                            <span class="entity-search-row-secondary">${this._getText(entity.entity_type, '')}</span>
+                        </button>
+                    `)}
+                </div>
+            </div>
+        `;
+    }
+
+    _renderCtxEntityPick() {
+        const hasId = (typeof this._draftContextEntityId === 'string' && this._draftContextEntityId.trim().length > 0);
+        const inputValue = this._ctxPickInputValue();
+        const placeholder = this.i18n.t('note_content.anchor_placeholder');
+        const panelOpen = this._ctxSearchOpen;
+        const loading = this._ctxSearchLoading;
+        const results = Array.isArray(this._ctxSearchResults) ? this._ctxSearchResults : [];
+        const queryTrim = (this._ctxSearchQuery || '').trim();
+        return html`
+            <div class="entity-search-wrap">
+                <div class="entity-search-input-row">
+                    <input
+                        class="entity-search-input"
+                        type="text"
+                        autocomplete="off"
+                        placeholder=${placeholder}
+                        .value=${inputValue}
+                        @input=${this._onCtxPickInput}
+                        @focus=${this._onCtxPickFocus}
+                        aria-autocomplete="list"
+                        aria-expanded=${panelOpen ? 'true' : 'false'}
+                    />
+                    <button
+                        type="button"
+                        class="entity-search-clear"
+                        title=${this.i18n.t('note_content.entity_pick_clear_aria')}
+                        aria-label=${this.i18n.t('note_content.entity_pick_clear_aria')}
+                        ?hidden=${!hasId && queryTrim.length === 0}
+                        @click=${this._clearCtxPick}
+                    >
+                        <platform-icon name="close" size="18"></platform-icon>
+                    </button>
+                </div>
+                <div
+                    class="entity-search-panel ${panelOpen ? 'is-open' : ''}"
+                    role="listbox"
+                    aria-label=${this.i18n.t('note_content.entity_pick_list_label')}
+                    @click=${(e) => e.stopPropagation()}
+                >
+                    ${loading ? html`<div class="entity-search-hint">${this.i18n.t('note_content.entity_pick_loading')}</div>` : ''}
+                    ${!loading && panelOpen && queryTrim.length < 2 ? html`
+                        <div class="entity-search-hint">${this.i18n.t('note_content.entity_pick_min_query')}</div>
+                    ` : ''}
+                    ${!loading && panelOpen && queryTrim.length >= 2 && results.length === 0 ? html`
+                        <div class="entity-search-hint">${this.i18n.t('note_content.entity_pick_no_results')}</div>
+                    ` : ''}
+                    ${results.map((entity) => html`
+                        <button
+                            type="button"
+                            class="entity-search-row-btn"
+                            role="option"
+                            @click=${() => this._onCtxPickSelect(entity)}
+                        >
+                            <span>${this._getText(entity.name, entity.entity_id)}</span>
+                            <span class="entity-search-row-secondary">${this._getText(entity.entity_type, '')}</span>
+                        </button>
+                    `)}
+                </div>
+            </div>
+        `;
     }
 
     _emitCancelEdit() {
@@ -1291,8 +2512,480 @@ export class NoteContent extends PlatformElement {
         this._draftTitle = event.target.value;
     }
 
+    // --- contenteditable helpers ---
+
+    _descriptionToEditableHtml(text) {
+        if (!text) {
+            return '';
+        }
+        const TOKEN_RE = /\[@([^\]]+)\]\(entity:([0-9a-f-]+)\)/gi;
+        let result = '';
+        let last = 0;
+        let match;
+        while ((match = TOKEN_RE.exec(text)) !== null) {
+            const plain = text.slice(last, match.index);
+            result += plain
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/\n/g, '<br>');
+            const name = match[1];
+            const entityId = match[2];
+            result += `<span class="note-entity-mention" data-entity-id="${entityId}" contenteditable="false">@${name.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')}</span>`;
+            last = match.index + match[0].length;
+        }
+        const tail = text.slice(last);
+        result += tail
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/\n/g, '<br>');
+        return result;
+    }
+
+    _serializeEditableContent(div) {
+        let text = '';
+        const walk = (node, isLast) => {
+            if (node.nodeType === Node.TEXT_NODE) {
+                text += node.textContent;
+                return;
+            }
+            if (node.nodeType !== Node.ELEMENT_NODE) {
+                return;
+            }
+            const el = /** @type {HTMLElement} */ (node);
+            if (el.classList.contains('note-entity-mention')) {
+                const entityId = el.dataset.entityId;
+                const name = el.textContent.replace(/^@/, '');
+                text += `[@${name}](entity:${entityId})`;
+                return;
+            }
+            if (el.tagName === 'BR') {
+                // Браузеры добавляют <br> как placeholder в конце contenteditable — не добавляем \n
+                if (!isLast) {
+                    text += '\n';
+                }
+                return;
+            }
+            const isBlock = el.tagName === 'DIV' || el.tagName === 'P';
+            if (isBlock && text.length > 0 && !text.endsWith('\n')) {
+                text += '\n';
+            }
+            const children = Array.from(el.childNodes);
+            for (let i = 0; i < children.length; i++) {
+                walk(children[i], i === children.length - 1);
+            }
+        };
+        const children = Array.from(div.childNodes);
+        for (let i = 0; i < children.length; i++) {
+            walk(children[i], i === children.length - 1);
+        }
+        return text;
+    }
+
+    _initEditableContent(keepFocus) {
+        const div = this.renderRoot.querySelector('.note-text-input');
+        if (!div) {
+            return;
+        }
+        div.innerHTML = this._descriptionToEditableHtml(this._draftText);
+        if (!keepFocus) {
+            div.focus();
+            const range = document.createRange();
+            const sel = window.getSelection();
+            if (sel) {
+                range.selectNodeContents(div);
+                range.collapse(false);
+                sel.removeAllRanges();
+                sel.addRange(range);
+            }
+        }
+    }
+
+    // --- mention detection через InputEvent.data (надёжно в любом браузере/Shadow DOM) ---
+
+    _initEditableContent() {
+        const div = this.renderRoot.querySelector('.note-text-input');
+        if (!div) {
+            return;
+        }
+        div.innerHTML = this._descriptionToEditableHtml(this._draftText);
+        div.focus();
+        const range = document.createRange();
+        const sel = window.getSelection();
+        if (sel) {
+            range.selectNodeContents(div);
+            range.collapse(false);
+            sel.removeAllRanges();
+            sel.addRange(range);
+        }
+    }
+
+    _onTextPaste(event) {
+        event.preventDefault();
+        const text = event.clipboardData?.getData('text/plain') ?? '';
+        if (!text) {
+            return;
+        }
+        const selection = this.renderRoot.ownerDocument.getSelection();
+        if (!selection || selection.rangeCount === 0) {
+            return;
+        }
+        const range = selection.getRangeAt(0);
+        range.deleteContents();
+        const lines = text.split('\n');
+        const fragment = this.renderRoot.ownerDocument.createDocumentFragment();
+        lines.forEach((line, i) => {
+            if (i > 0) {
+                fragment.appendChild(this.renderRoot.ownerDocument.createElement('br'));
+            }
+            if (line.length > 0) {
+                fragment.appendChild(this.renderRoot.ownerDocument.createTextNode(line));
+            }
+        });
+        range.insertNode(fragment);
+        range.collapse(false);
+        selection.removeAllRanges();
+        selection.addRange(range);
+        const div = event.currentTarget;
+        this._draftText = this._serializeEditableContent(div);
+    }
+
     _onTextInput(event) {
-        this._draftText = event.target.value;
+        if (event.isComposing) {
+            return;
+        }
+        const div = event.currentTarget;
+        this._draftText = this._serializeEditableContent(div);
+
+        const inputData = event.data ?? '';
+        const inputType = event.inputType ?? '';
+
+        // InputEvent.data === '@' — пользователь нажал @, где бы ни был курсор
+        if (inputData === '@') {
+            this._mentionTriggerIndex = 1;
+            this._mentionQuery = '';
+            this._mentionCandidates = [];
+            this._mentionSelectedIdx = 0;
+            this._mentionLoading = false;
+            this._mentionCoords = this._getMentionCoordsAfterAt(div);
+            this.requestUpdate();
+            return;
+        }
+
+        if (this._mentionTriggerIndex === -1) {
+            return;
+        }
+
+        if (inputType === 'insertText' && inputData && !/[\s\n\t]/.test(inputData)) {
+            // Пользователь печатает буквы после @
+            this._mentionQuery += inputData;
+            if (this._mentionQuery.length > 0) {
+                this._mentionLoading = true;
+                clearTimeout(this._mentionDebounceTimer);
+                this._mentionDebounceTimer = window.setTimeout(() => {
+                    void this._fetchMentionCandidates(this._mentionQuery);
+                }, 250);
+            }
+            this.requestUpdate();
+        } else if (inputType === 'deleteContentBackward') {
+            if (this._mentionQuery.length > 0) {
+                this._mentionQuery = this._mentionQuery.slice(0, -1);
+                if (this._mentionQuery.length > 0) {
+                    this._mentionLoading = true;
+                    clearTimeout(this._mentionDebounceTimer);
+                    this._mentionDebounceTimer = window.setTimeout(() => {
+                        void this._fetchMentionCandidates(this._mentionQuery);
+                    }, 250);
+                } else {
+                    this._mentionCandidates = [];
+                    this._mentionLoading = false;
+                }
+                this.requestUpdate();
+            } else {
+                // Удалили сам @
+                this._hideMentionDropdown();
+            }
+        } else {
+            // Пробел, Enter, вставка, удаление слова — выходим из mention-режима
+            this._hideMentionDropdown();
+        }
+    }
+
+    _getMentionCoordsAfterAt(div) {
+        // Selection API надёжен ИМЕННО в момент нажатия @
+        const wrap = div.closest('.note-text-input-wrap') || div.parentElement;
+        const wrapRect = wrap ? wrap.getBoundingClientRect() : { top: 0, left: 0 };
+        try {
+            const sel = window.getSelection();
+            if (sel && sel.rangeCount > 0) {
+                const range = sel.getRangeAt(0).cloneRange();
+                range.collapse(true);
+                const rect = range.getBoundingClientRect();
+                if (rect.width !== 0 || rect.height !== 0) {
+                    return {
+                        top: rect.bottom - wrapRect.top + 4,
+                        left: Math.max(0, rect.left - wrapRect.left),
+                    };
+                }
+            }
+        } catch (_) {
+            // ignore
+        }
+        const divRect = div.getBoundingClientRect();
+        return { top: divRect.top - wrapRect.top + 44, left: 20 };
+    }
+
+    _onTextKeyDown(event) {
+        if (this._mentionTriggerIndex === -1 || this._mentionCandidates.length === 0) {
+            return;
+        }
+        if (event.key === 'ArrowDown') {
+            event.preventDefault();
+            this._mentionSelectedIdx = Math.min(
+                this._mentionSelectedIdx + 1,
+                this._mentionCandidates.length - 1,
+            );
+            this.requestUpdate();
+        } else if (event.key === 'ArrowUp') {
+            event.preventDefault();
+            this._mentionSelectedIdx = Math.max(this._mentionSelectedIdx - 1, 0);
+            this.requestUpdate();
+        } else if (event.key === 'Enter' || event.key === 'Tab') {
+            const selected = this._mentionCandidates[this._mentionSelectedIdx];
+            if (selected) {
+                event.preventDefault();
+                this._insertMention(selected);
+            }
+        } else if (event.key === 'Escape') {
+            this._hideMentionDropdown();
+        }
+    }
+
+    async _fetchMentionCandidates(query) {
+        const crmApi = this.crmApi;
+        if (!crmApi) {
+            throw new Error('crmApi is required');
+        }
+        this._mentionLoading = true;
+        this.requestUpdate();
+        const ns = CRMStore.state?.namespaces?.current?.name ?? null;
+        const response = await crmApi.findEntitiesByText(query, ns);
+        if (this._mentionQuery !== query) {
+            return;
+        }
+        this._mentionCandidates = Array.isArray(response.entities) ? response.entities : [];
+        this._mentionSelectedIdx = 0;
+        this._mentionLoading = false;
+        this.requestUpdate();
+    }
+
+    _hideMentionDropdown() {
+        this._mentionTriggerIndex = -1;
+        this._mentionQuery = '';
+        this._mentionCandidates = [];
+        this._mentionSelectedIdx = 0;
+        this._mentionLoading = false;
+        this._mentionCoords = null;
+        clearTimeout(this._mentionDebounceTimer);
+        this.requestUpdate();
+    }
+
+    _insertMention(entity) {
+        const div = this.renderRoot.querySelector('.note-text-input');
+        if (!div) {
+            return;
+        }
+        const query = this._mentionQuery;
+        const pattern = '@' + query;
+
+        // Ищем текстовый узел с @query — знаем точный паттерн
+        const walk = (node) => {
+            if (node.nodeType === Node.TEXT_NODE) {
+                return node.textContent.includes(pattern) ? node : null;
+            }
+            if (node.nodeType === Node.ELEMENT_NODE && node.classList?.contains('note-entity-mention')) {
+                return null;
+            }
+            for (const child of node.childNodes) {
+                const found = walk(child);
+                if (found) return found;
+            }
+            return null;
+        };
+        const textNode = walk(div);
+        if (!textNode) {
+            return;
+        }
+        const text = textNode.textContent;
+        const atIdx = text.lastIndexOf(pattern);
+        if (atIdx === -1) {
+            return;
+        }
+        const endIdx = atIdx + pattern.length;
+
+        const span = document.createElement('span');
+        span.className = 'note-entity-mention';
+        span.dataset.entityId = entity.entity_id;
+        span.contentEditable = 'false';
+        span.textContent = `@${entity.name}`;
+
+        const beforeNode = document.createTextNode(text.slice(0, atIdx));
+        const afterNode = document.createTextNode('\u00a0' + text.slice(endIdx));
+        const parent = textNode.parentNode;
+        parent.insertBefore(beforeNode, textNode);
+        parent.insertBefore(span, textNode);
+        parent.insertBefore(afterNode, textNode);
+        parent.removeChild(textNode);
+
+        const sel = window.getSelection();
+        if (sel) {
+            try {
+                const r = document.createRange();
+                r.setStart(afterNode, 1);
+                r.collapse(true);
+                sel.removeAllRanges();
+                sel.addRange(r);
+            } catch (_) {
+                // best-effort
+            }
+        }
+        this._draftText = this._serializeEditableContent(div);
+        this._hideMentionDropdown();
+    }
+
+    _renderMentionDropdown() {
+        if (this._mentionTriggerIndex === -1 || !this._mentionCoords || this._mentionQuery.length === 0) {
+            return '';
+        }
+        const candidates = this._mentionCandidates;
+        const loading = this._mentionLoading;
+        if (!loading && candidates.length === 0) {
+            return '';
+        }
+        const { top, left } = this._mentionCoords;
+        return html`
+            <div
+                class="note-mention-dropdown"
+                role="listbox"
+                style="top:${top}px;left:${left}px"
+            >
+                ${loading ? html`
+                    <div class="note-mention-dropdown-hint">
+                        ${this.i18n.t('note_content.mention_searching')}
+                    </div>
+                ` : candidates.map((entity, idx) => html`
+                    <div
+                        class="note-mention-dropdown-item ${idx === this._mentionSelectedIdx ? 'is-selected' : ''}"
+                        role="option"
+                        aria-selected=${idx === this._mentionSelectedIdx}
+                        @mousedown=${(e) => { e.preventDefault(); this._insertMention(entity); }}
+                    >
+                        <span class="note-mention-item-name">${entity.name}</span>
+                        ${entity.entity_type ? html`
+                            <span class="note-mention-item-type">${entity.entity_type}</span>
+                        ` : ''}
+                    </div>
+                `)}
+            </div>
+        `;
+    }
+
+    _voiceDictateTitle() {
+        if (this._voiceRecState === 'recording') {
+            return this.i18n.t('voice_input.dictate_recording');
+        }
+        if (this._voiceRecState === 'processing') {
+            return this.i18n.t('voice_input.btn_processing');
+        }
+        return this.i18n.t('voice_input.dictate_idle');
+    }
+
+    async _onVoiceDictateToggle() {
+        if (this._voiceRecState === 'recording') {
+            this._stopVoiceDictation();
+            return;
+        }
+        if (this._voiceRecState !== 'idle') {
+            return;
+        }
+
+        const notify = this.services.get('notify');
+
+        if (!window.isSecureContext) {
+            notify.warning(this.i18n.t('voice.audio_https_only', {}, 'common'));
+            return;
+        }
+        if (!hasGetUserMediaApi()) {
+            notify.warning(this.i18n.t('voice.audio_no_recorder', {}, 'common'));
+            return;
+        }
+        if (typeof MediaRecorder === 'undefined') {
+            notify.warning(this.i18n.t('voice.audio_no_recorder', {}, 'common'));
+            return;
+        }
+
+        let stream;
+        try {
+            stream = await getUserMediaCompat({ audio: true });
+        } catch (err) {
+            const msg = err instanceof Error ? err.message : String(err);
+            notify.warning(msg || this.i18n.t('voice.audio_start_failed', {}, 'common'));
+            return;
+        }
+
+        this._voiceAudioChunks = [];
+        const mimeType = pickVoiceMimeType();
+        this._voiceMediaRecorder = mimeType
+            ? new MediaRecorder(stream, { mimeType })
+            : new MediaRecorder(stream);
+        const resolvedMime = this._voiceMediaRecorder.mimeType || mimeType || 'audio/mp4';
+
+        this._voiceMediaRecorder.ondataavailable = (e) => {
+            if (e.data.size > 0) {
+                this._voiceAudioChunks.push(e.data);
+            }
+        };
+
+        this._voiceMediaRecorder.onstop = async () => {
+            stream.getTracks().forEach(t => t.stop());
+            this._voiceRecState = 'processing';
+            const blob = new Blob(this._voiceAudioChunks, { type: resolvedMime });
+            const crmApi = this.crmApi;
+            if (!crmApi) {
+                throw new Error('crmApi is required');
+            }
+            try {
+                const result = await crmApi.voiceInput(blob);
+                this._voiceRecState = 'idle';
+                this._voiceMediaRecorder = null;
+                this._voiceAudioChunks = [];
+
+                if (!result.text || !result.text.trim()) {
+                    notify.warning(this.i18n.t('voice_input.empty_result'));
+                    return;
+                }
+                const separator = this._draftText?.trim() ? '\n\n' : '';
+                this._draftText = (this._draftText || '') + separator + result.text.trim();
+                this.requestUpdate();
+                notify.success(this.i18n.t('voice_input.dictate_appended'));
+            } catch (err) {
+                this._voiceRecState = 'idle';
+                this._voiceMediaRecorder = null;
+                this._voiceAudioChunks = [];
+                const msg = err instanceof Error ? err.message : String(err);
+                notify.error(msg || this.i18n.t('voice.audio_start_failed', {}, 'common'));
+            }
+        };
+
+        this._voiceMediaRecorder.start();
+        this._voiceRecState = 'recording';
+    }
+
+    _stopVoiceDictation() {
+        if (this._voiceMediaRecorder && this._voiceMediaRecorder.state === 'recording') {
+            this._voiceMediaRecorder.stop();
+        }
     }
 
     _onSubtypeChange(event) {
@@ -1315,20 +3008,38 @@ export class NoteContent extends PlatformElement {
             .replace(/'/g, '&#39;');
     }
 
+    _postProcessEntityMentions(htmlContent) {
+        return htmlContent.replace(
+            /<a href="entity:([0-9a-f-]+)">([^<]*)<\/a>/gi,
+            '<span class="note-entity-mention" data-entity-id="$1">$2</span>',
+        );
+    }
+
+    _onMentionChipClick(event) {
+        const chip = event.target.closest('.note-entity-mention');
+        if (!chip) {
+            return;
+        }
+        const entityId = chip.dataset.entityId;
+        if (!entityId) {
+            return;
+        }
+        this.emit('entity-open', { entity: { entity_id: entityId } });
+    }
+
     _renderMarkdown(text) {
         const escaped = this._escapeHtml(text);
         if (escaped.length === 0) {
-            return html`<p class="note-text">Без описания</p>`;
+            return html`<p class="note-text">${this.i18n.t('note_content.no_description')}</p>`;
         }
         if (window.marked && typeof window.marked.parse === 'function') {
-            const htmlContent = window.marked.parse(escaped, {
-                breaks: true,
-                gfm: true,
-            });
-            return html`<div class="note-markdown">${unsafeHTML(htmlContent)}</div>`;
+            const htmlContent = this._postProcessEntityMentions(
+                window.marked.parse(escaped, { breaks: true, gfm: true }),
+            );
+            return html`<div class="note-markdown" @click=${this._onMentionChipClick}>${unsafeHTML(htmlContent)}</div>`;
         }
-        const htmlContent = escaped.replace(/\n/g, '<br>');
-        return html`<div class="note-markdown">${unsafeHTML(htmlContent)}</div>`;
+        const htmlContent = this._postProcessEntityMentions(escaped.replace(/\n/g, '<br>'));
+        return html`<div class="note-markdown" @click=${this._onMentionChipClick}>${unsafeHTML(htmlContent)}</div>`;
     }
 
     _emitSummaryRefresh() {
@@ -1379,8 +3090,8 @@ export class NoteContent extends PlatformElement {
             throw new Error('note is required');
         }
 
-        const noteText = this.editable ? this._draftText : this._getText(this.note.description, 'Без описания');
-        const noteTitle = this.editable ? this._draftTitle : this._getText(this.note.name, 'Заметка');
+        const noteText = this.editable ? this._draftText : this._getText(this.note.description, this.i18n.t('note_content.no_description'));
+        const noteTitle = this.editable ? this._draftTitle : this._getText(this.note.name, this.i18n.t('note_content.note_title_fallback'));
         const noteDate = this._formatNoteDate(this.note.note_date || this.note.updated_at || this.note.created_at);
         const noteSubtypeLabel = this._getNoteSubtypeLabel();
         const noteSubtypeOptions = this._getNoteSubtypeOptions();
@@ -1389,6 +3100,13 @@ export class NoteContent extends PlatformElement {
         const relationships = this._getRelationships();
         const attachments = Array.isArray(this.attachments) ? this.attachments : [];
         const summaryTags = Array.isArray(this.summaryEntities) ? this.summaryEntities : [];
+        const viewSubtypeDisplay = noteSubtypeLabel.length > 0
+            ? noteSubtypeLabel
+            : this.i18n.t('note_content.no_subtype');
+        const voiceTargetId = this._getOutgoingRelationshipTargetEntityId('note_voice');
+        const viewVoiceDisplay = voiceTargetId ? this._resolveRelatedEntityDisplayName(voiceTargetId) : '';
+        const ctxTargetId = this._getOutgoingRelationshipTargetEntityId('in_context');
+        const viewContextDisplay = ctxTargetId ? this._resolveRelatedEntityDisplayName(ctxTargetId) : '';
 
         return html`
             <div class="layout ${this.editable ? 'is-editing' : ''}">
@@ -1397,46 +3115,151 @@ export class NoteContent extends PlatformElement {
                         <div class="note-title-wrap">
                             ${this.editable ? html`
                                 <input
-                                    class="form-input note-title-input"
+                                    class="note-title-input"
                                     type="text"
                                     .value=${noteTitle}
                                     @input=${this._onTitleInput}
-                                    placeholder="Название заметки"
+                                    placeholder=${this.i18n.t('note_content.title_placeholder')}
                                 />
-                                <div class="note-edit-meta">
-                                    <select
-                                        class="form-select note-subtype-select"
-                                        .value=${this._draftSubtype}
-                                        @change=${this._onSubtypeChange}
-                                    >
-                                        <option value="">Без подтипа</option>
-                                        ${noteSubtypeOptions.map((item) => html`
-                                            <option value=${item.type_id}>${this._getText(item.name, item.type_id)}</option>
-                                        `)}
-                                    </select>
-                                    <platform-date-picker
-                                        class="note-date-picker"
-                                        mode="date"
-                                        value-format="iso"
-                                        label="Дата"
-                                        .value=${this._draftNoteDate}
-                                        @change=${this._onNoteDateChange}
-                                    ></platform-date-picker>
+                                <div class="note-edit-meta-group">
+                                    <div class="note-edit-meta-row">
+                                        <div class="note-meta-cell">
+                                            <label class="note-field-label">${this.i18n.t('note_content.no_subtype')}</label>
+                                            <select
+                                                class="form-select note-subtype-select"
+                                                .value=${this._draftSubtype}
+                                                @change=${this._onSubtypeChange}
+                                            >
+                                                <option value="">${this.i18n.t('note_content.no_subtype')}</option>
+                                                ${noteSubtypeOptions.map((item) => html`
+                                                    <option value=${item.type_id}>${this._getText(item.name, item.type_id)}</option>
+                                                `)}
+                                            </select>
+                                        </div>
+                                        <div class="note-meta-cell">
+                                            <label class="note-field-label">${this.i18n.t('notes.date')}</label>
+                                            <platform-date-picker
+                                                class="note-date-picker"
+                                                mode="date"
+                                                value-format="iso"
+                                                .value=${this._draftNoteDate}
+                                                @change=${this._onNoteDateChange}
+                                            ></platform-date-picker>
+                                        </div>
+                                        <div class="note-meta-cell">
+                                            <label class="note-field-label">${this.i18n.t('note_content.note_voice')}</label>
+                                            <select
+                                                class="form-select"
+                                                .value=${this._draftVoiceMode}
+                                                @change=${this._onVoiceModeChange}
+                                            >
+                                                <option value="default">${this.i18n.t('note_content.voice_default')}</option>
+                                                <option value="self">${this.i18n.t('note_content.voice_self')}</option>
+                                                <option value="none">${this.i18n.t('note_content.voice_none')}</option>
+                                                <option value="manual">${this.i18n.t('note_content.voice_manual')}</option>
+                                            </select>
+                                            ${this._draftVoiceMode === 'manual' ? this._renderVoiceEntityPick() : ''}
+                                        </div>
+                                        <div class="note-meta-cell">
+                                            <label class="note-field-label">${this.i18n.t('note_content.context_anchor')}</label>
+                                            ${this._renderCtxEntityPick()}
+                                        </div>
+                                    </div>
                                 </div>
-                            ` : html`<h2 class="note-title">${noteTitle}</h2>`}
-                            <p class="note-date">${noteDate}</p>
-                            ${!this.editable && noteSubtypeLabel.length > 0 ? html`
-                                <p class="note-subtype">
-                                    <platform-icon name="tag" size="14"></platform-icon>
-                                    ${noteSubtypeLabel}
-                                </p>
-                            ` : ''}
+                            ` : html`
+                                <h2 class="note-title">${noteTitle}</h2>
+                                <div class="note-view-meta-bar">
+                                    <span class="note-view-meta-item">
+                                        <platform-icon name="tag" size="12"></platform-icon>
+                                        <span class="note-view-meta-value">${viewSubtypeDisplay}</span>
+                                    </span>
+                                    ${noteDate ? html`
+                                        <span class="note-view-meta-item" title=${this.i18n.t('notes.date')}>
+                                            <platform-icon name="calendar" size="12"></platform-icon>
+                                            <span class="note-view-meta-value">${noteDate}</span>
+                                        </span>
+                                    ` : ''}
+                                    ${viewVoiceDisplay ? html`
+                                        <span class="note-view-meta-item" title=${this.i18n.t('note_content.note_voice')}>
+                                            <platform-icon name="user" size="12"></platform-icon>
+                                            <span class="note-view-meta-value note-view-meta-ellipsis">${viewVoiceDisplay}</span>
+                                        </span>
+                                    ` : ''}
+                                    ${viewContextDisplay ? html`
+                                        <span class="note-view-meta-item" title=${this.i18n.t('note_content.context_anchor')}>
+                                            <platform-icon name="target" size="12"></platform-icon>
+                                            <span class="note-view-meta-value note-view-meta-ellipsis">${viewContextDisplay}</span>
+                                        </span>
+                                    ` : ''}
+                                </div>
+                            `}
                         </div>
                         <div class="note-actions">
+                            <div class="attach-dropdown">
+                                <button
+                                    class="round-btn attach-header-btn"
+                                    type="button"
+                                    title=${this.i18n.t('note_content.attach_add_title')}
+                                    aria-label=${this.i18n.t('note_content.attach_aria', { count: String(attachments.length) })}
+                                    ?disabled=${this.processingAttachment}
+                                    @click=${this._openFilePicker}
+                                >
+                                    <platform-icon name="paperclip" size="20"></platform-icon>
+                                    <span class="attach-count-badge" aria-hidden="true">${attachments.length}</span>
+                                </button>
+                                <div class="attach-dropdown-panel" role="tooltip" @click=${(e) => e.stopPropagation()}>
+                                    ${attachments.length === 0 ? html`
+                                        <div class="attach-dropdown-empty">${this.i18n.t('note_content.no_attachments')}</div>
+                                    ` : attachments.map((attachment) => {
+                                        const attachSummary = this._getAttachmentSummary(attachment);
+                                        return html`
+                                        <div class="attach-dropdown-row">
+                                            <platform-icon
+                                                file-icon
+                                                name=${resolveFileIconKey(
+                                                    this._getAttachmentName(attachment),
+                                                    typeof attachment?.content_type === 'string' ? attachment.content_type : '',
+                                                )}
+                                                size="14"
+                                            ></platform-icon>
+                                            <span class="attach-dropdown-name" title=${this._getAttachmentName(attachment)}>
+                                                ${this._getAttachmentName(attachment)}
+                                            </span>
+                                            <button
+                                                class="attach-dropdown-download"
+                                                type="button"
+                                                title=${this.i18n.t('note_content.download_file')}
+                                                @click=${() => this._downloadAttachment(attachment)}
+                                            >
+                                                <platform-icon name="save" size="16"></platform-icon>
+                                            </button>
+                                            <button
+                                                class="attach-dropdown-remove"
+                                                type="button"
+                                                title=${this.i18n.t('note_content.remove_file')}
+                                                ?disabled=${this.processingAttachment}
+                                                @click=${() => this._emitDeleteAttachment(attachment)}
+                                            >
+                                                <platform-icon name="close" size="16"></platform-icon>
+                                            </button>
+                                            ${attachSummary ? html`
+                                                <div class="attach-summary-inline">${attachSummary}</div>
+                                            ` : ''}
+                                        </div>
+                                    `;}
+                                    )}
+                                </div>
+                            </div>
+                            <input
+                                id="note-attachment-input"
+                                type="file"
+                                style="display: none;"
+                                @change=${this._onAttachmentFileSelected}
+                            />
                             <button
                                 class="round-btn"
                                 type="button"
-                                title="Поделиться"
+                                title=${this.i18n.t('note_content.share')}
                                 ?disabled=${this.draftMode}
                                 @click=${this._emitShareNote}
                             >
@@ -1445,7 +3268,7 @@ export class NoteContent extends PlatformElement {
                             <button
                                 class="round-btn danger"
                                 type="button"
-                                title="Удалить"
+                                title=${this.i18n.t('delete', {}, 'common')}
                                 ?disabled=${this.deletingNote || this.draftMode}
                                 @click=${this._emitDeleteNote}
                             >
@@ -1458,7 +3281,7 @@ export class NoteContent extends PlatformElement {
                                     ?disabled=${this.savingNote}
                                     @click=${this._emitCancelEdit}
                                 >
-                                    Отмена
+                                    ${this.i18n.t('cancel', {}, 'common')}
                                 </button>
                                 <button
                                     class="edit-btn"
@@ -1466,20 +3289,42 @@ export class NoteContent extends PlatformElement {
                                     ?disabled=${this.savingNote}
                                     @click=${this._emitSaveNote}
                                 >
-                                    ${this.savingNote ? 'Сохранение...' : 'Сохранить'}
+                                    ${this.savingNote ? this.i18n.t('note_content.saving') : this.i18n.t('save', {}, 'common')}
                                 </button>
                             ` : html`
-                                <button class="edit-btn" type="button" @click=${this._emitEditNote}>Редактировать</button>
+                                <button class="edit-btn" type="button" @click=${this._emitEditNote}>${this.i18n.t('edit', {}, 'common')}</button>
                             `}
                         </div>
                     </div>
                     ${this.editable ? html`
-                        <textarea
-                            class="form-textarea note-text-input"
-                            .value=${noteText}
-                            @input=${this._onTextInput}
-                            placeholder="Введите текст заметки"
-                        ></textarea>
+                        <div class="note-text-input-wrap">
+                            <div
+                                class="note-text-input"
+                                contenteditable="true"
+                                data-placeholder=${this.i18n.t('notes.placeholder')}
+                                @input=${this._onTextInput}
+                                @keydown=${this._onTextKeyDown}
+                                @paste=${this._onTextPaste}
+                            ></div>
+                            ${this._renderMentionDropdown()}
+                            <div class="note-voice-dictate-floating">
+                                <button
+                                    class="voice-dictate-btn ${this._voiceRecState === 'recording' ? 'recording' : ''}"
+                                    type="button"
+                                    ?disabled=${this._voiceRecState === 'processing'}
+                                    @click=${this._onVoiceDictateToggle}
+                                    title=${this._voiceDictateTitle()}
+                                >
+                                    <platform-icon
+                                        name=${this._voiceRecState === 'recording' ? 'stop' : 'microphone'}
+                                        size="16"
+                                    ></platform-icon>
+                                </button>
+                                ${this._voiceRecState === 'processing' ? html`
+                                    <span class="voice-dictate-label">${this.i18n.t('voice_input.btn_processing')}</span>
+                                ` : ''}
+                            </div>
+                        </div>
                     ` : this._renderMarkdown(noteText)}
                 </section>
 
@@ -1488,41 +3333,40 @@ export class NoteContent extends PlatformElement {
                         <div class="card-header">
                             <h3 class="summary-title">
                                 <platform-icon name="ai" size="24" colored></platform-icon>
-                                AI summary заметки
+                                ${this.i18n.t('note_content.ai_summary_title')}
                             </h3>
                             <div class="summary-actions">
                                 ${this.hasAnalysisDraft ? html`
                                     <button
                                         class="round-btn analysis-draft"
                                         type="button"
-                                        title="Открыть черновик анализа"
+                                        title=${this.i18n.t('note_content.open_draft_analysis')}
                                         @click=${this._emitOpenAnalysisDraft}
                                     >
                                         <platform-icon name="ai" size="18" colored></platform-icon>
                                     </button>
                                 ` : ''}
                                 <button
-                                    class="round-btn"
+                                    class="summary-refresh-btn"
                                     type="button"
-                                    title="Обновить"
+                                    title=${this.i18n.t('note_content.refresh')}
                                     ?disabled=${this.processingEntities || this.draftMode}
                                     @click=${this._emitSummaryRefresh}
                                 >
                                     <platform-icon
-                                        class="refresh-icon ${this.processingEntities ? 'spinning' : ''}"
+                                        class=${this.processingEntities ? 'summary-refresh-icon spinning' : 'summary-refresh-icon'}
                                         name="refresh"
                                         size="18"
-                                        colored
                                     ></platform-icon>
                                 </button>
                             </div>
                         </div>
                         <p class="summary-meta">${this._getSummaryMeta()}</p>
-                        <p class="summary-text">${this._getText(this.summaryText, 'Нет summary')}</p>
+                        <p class="summary-text">${this._getText(this.summaryText, this.i18n.t('note_content.no_summary'))}</p>
                         <div class="summary-tags">
                             ${summaryTags.map((tag) => html`
-                                <span class="summary-tag">
-                                    <platform-icon name="file" size="12"></platform-icon>
+                                    <span class="summary-tag">
+                                    <platform-icon name="folder" size="12"></platform-icon>
                                     ${tag}
                                 </span>
                             `)}
@@ -1530,7 +3374,7 @@ export class NoteContent extends PlatformElement {
                     </section>
 
                     <section class="card tasks-card">
-                        <h3 class="tasks-title">Связанные задачи</h3>
+                        <h3 class="tasks-title">${this.i18n.t('note_content.related_tasks')}</h3>
                         <div class="tasks-list">
                             ${taskEntities.map((task) => {
                                 const taskCompleted = task?.status === 'done' || task?.status === 'completed';
@@ -1540,9 +3384,9 @@ export class NoteContent extends PlatformElement {
                                             <span class="checkbox ${taskCompleted ? 'checked' : ''}">
                                                 ${taskCompleted ? html`<platform-icon name="check" size="14"></platform-icon>` : ''}
                                             </span>
-                                            <span class="task-text ${taskCompleted ? 'completed' : ''}">${this._getText(task.name, 'Задача')}</span>
+                                            <span class="task-text ${taskCompleted ? 'completed' : ''}">${this._getText(task.name, this.i18n.t('note_content.task_fallback'))}</span>
                                         </div>
-                                        <button class="task-remove" type="button" aria-label="Удалить">
+                                        <button class="task-remove" type="button" aria-label=${this.i18n.t('delete', {}, 'common')}>
                                             <platform-icon name="close" size="14"></platform-icon>
                                         </button>
                                     </div>
@@ -1552,7 +3396,7 @@ export class NoteContent extends PlatformElement {
                     </section>
 
                     <section class="entities-section">
-                        <h3 class="entities-title">Связанные сущности</h3>
+                        <h3 class="entities-title">${this.i18n.t('note_content.related_entities')}</h3>
                         ${nonTaskEntities.map((entity, index) => {
                             const tone = this._getEntityTone(index);
                             const avatarUrl = this._getEntityAvatarUrl(entity);
@@ -1566,12 +3410,12 @@ export class NoteContent extends PlatformElement {
                                 >
                                     <span class="entity-avatar" style=${this._getEntityAvatarStyle(entity, tone)}>
                                         ${avatarUrl
-                                            ? html`<img src=${avatarUrl} alt=${this._getText(entity.name, 'Entity')} />`
+                                            ? html`<img src=${avatarUrl} alt=${this._getText(entity.name, this.i18n.t('ai_entity_card.entity_fallback'))} />`
                                             : html`<platform-icon name=${entityIcon} size="28"></platform-icon>`}
                                     </span>
                                     <span class="entity-data">
                                         <span>
-                                            <p class="entity-name">${this._getText(entity.name, 'Entity')}</p>
+                                            <p class="entity-name">${this._getText(entity.name, this.i18n.t('ai_entity_card.entity_fallback'))}</p>
                                             <p class="entity-subtitle">${this._getEntitySubtitle(entity)}</p>
                                         </span>
                                         <span class="entity-score">
@@ -1588,7 +3432,7 @@ export class NoteContent extends PlatformElement {
 
                     <section class="relationships-section">
                         <div class="section-toolbar">
-                            <h3 class="relationships-title">Связи</h3>
+                            <h3 class="relationships-title">${this.i18n.t('note_content.relationships')}</h3>
                         </div>
                         ${relationships.map((relationship) => {
                             const sourceId = this._getText(relationship.source_entity_id, '');
@@ -1633,53 +3477,13 @@ export class NoteContent extends PlatformElement {
                                                 ?disabled=${this.processingRelationship || this.draftMode}
                                                 @click=${() => this._emitDeleteRelationship(relationship)}
                                             >
-                                                Удалить
+                                                ${this.i18n.t('note_content.remove')}
                                             </button>
                                         </div>
                                     </span>
                                 </div>
                             `;
                         })}
-                    </section>
-
-                    <section class="attachments-section">
-                        <div class="section-toolbar">
-                            <h3 class="attachments-title">Вложения</h3>
-                            <button
-                                class="section-action-btn"
-                                type="button"
-                                ?disabled=${this.processingAttachment || this.draftMode}
-                                @click=${this._openFilePicker}
-                            >
-                                ${this.processingAttachment ? 'Загрузка...' : 'Добавить файл'}
-                            </button>
-                            <input
-                                id="note-attachment-input"
-                                type="file"
-                                style="display: none;"
-                                @change=${this._onAttachmentFileSelected}
-                            />
-                        </div>
-                        ${attachments.length === 0 ? html`
-                            <div class="attachment-item">
-                                <span class="attachment-name">Нет вложений</span>
-                            </div>
-                        ` : attachments.map((attachment) => html`
-                            <div class="attachment-item">
-                                <span class="attachment-name">${this._getAttachmentName(attachment)}</span>
-                                <span class="attachment-actions">
-                                    <span class="attachment-status">${this._getAttachmentStatus(attachment)}</span>
-                                    <button
-                                        class="attachment-delete-btn"
-                                        type="button"
-                                        ?disabled=${this.processingAttachment || this.draftMode}
-                                        @click=${() => this._emitDeleteAttachment(attachment)}
-                                    >
-                                        Удалить
-                                    </button>
-                                </span>
-                            </div>
-                        `)}
                     </section>
                 </aside>
             </div>

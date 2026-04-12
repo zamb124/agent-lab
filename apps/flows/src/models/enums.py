@@ -40,19 +40,19 @@ class NodeType(str, Enum):
     EXTERNAL_API = "external_api"   # Вызов внешнего HTTP API
     MCP = "mcp"                     # MCP Tool как нода
     CHANNEL = "channel"             # Отправка сообщений в каналы (Telegram, Email)
+    HITL_NODE = "hitl_node"         # Передача диалога оператору очереди (operator_task)
 
 
-class ToolType(str, Enum):
+class ReactToolRole(str, Enum):
     """
-    Типы инструментов.
-    
-    Определяет способ выполнения инструмента.
+    Роль инструмента в ReAct-цикле llm_node.
+
+    Не пересекается с NodeType и с полем type у inline-tool (тип исполнения: code, flow, …).
     """
-    
-    FUNCTION = "function"           # Python функция (inline или CODE_REFERENCE)
-    EXTERNAL_API = "external_api"   # HTTP API вызов
-    SYSTEM = "system"               # Системный tool (ask_user, finish)
-    TOOL = "tool"                   # Обычный tool (default)
+
+    STANDARD = "standard"
+    REASON = "reason"
+    EXIT = "exit"
 
 
 class EventType(str, Enum):

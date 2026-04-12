@@ -4,6 +4,7 @@
 import { html, css } from 'lit';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
 import { RagStore } from '../store/rag.store.js';
+import '@platform/lib/components/platform-icon.js';
 
 export class NamespaceCard extends PlatformElement {
     static properties = {
@@ -95,17 +96,6 @@ export class NamespaceCard extends PlatformElement {
                 font-weight: 600;
                 color: var(--text-primary);
             }
-
-            .status-breakdown {
-                margin-top: var(--space-2);
-                font-size: var(--text-xs);
-                color: var(--text-tertiary);
-                line-height: 1.4;
-            }
-
-            .status-breakdown span + span::before {
-                content: ' · ';
-            }
         `
     ];
     
@@ -115,46 +105,7 @@ export class NamespaceCard extends PlatformElement {
     }
     
     _onClick() {
-        const id = this.namespace.namespace_id ?? this.namespace.name;
-        RagStore.selectNamespace(id);
-    }
-
-    /**
-     * Всего документов: агрегат из document_status_counts (тот же источник, что строка «готово»).
-     * Поле document_count в ответе GET /namespaces для identity-Namespace не заполняется.
-     */
-    _effectiveDocumentCount() {
-        const c = this.namespace.document_status_counts;
-        if (c && typeof c === 'object') {
-            return (
-                (c.pending ?? 0) +
-                (c.processing ?? 0) +
-                (c.completed ?? 0) +
-                (c.failed ?? 0)
-            );
-        }
-        return this.namespace.document_count ?? 0;
-    }
-
-    _statusCountsSubtitle() {
-        const c = this.namespace.document_status_counts;
-        if (!c || typeof c !== 'object') {
-            return null;
-        }
-        const parts = [];
-        if (c.completed > 0) {
-            parts.push(html`<span>готово: <strong>${c.completed}</strong></span>`);
-        }
-        if (c.processing > 0) {
-            parts.push(html`<span>в работе: <strong>${c.processing}</strong></span>`);
-        }
-        if (c.pending > 0) {
-            parts.push(html`<span>ожидают: <strong>${c.pending}</strong></span>`);
-        }
-        if (c.failed > 0) {
-            parts.push(html`<span>ошибки: <strong>${c.failed}</strong></span>`);
-        }
-        return parts.length ? html`<div class="status-breakdown">${parts}</div>` : null;
+        RagStore.selectNamespace(this.namespace.namespace_id);
     }
     
     render() {
@@ -170,12 +121,11 @@ export class NamespaceCard extends PlatformElement {
                 </div>
                 <div class="stats">
                     <div class="stat">
-                        <platform-icon name="file" size="16"></platform-icon>
-                        <span class="stat-value">${this._effectiveDocumentCount()}</span>
-                        <span>документов</span>
+                        <platform-icon file-icon name="text" size="16"></platform-icon>
+                        <span class="stat-value">${this.namespace.document_count || 0}</span>
+                        <span>documents</span>
                     </div>
                 </div>
-                ${this._statusCountsSubtitle()}
             </div>
         `;
     }

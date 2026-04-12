@@ -69,7 +69,7 @@ async def run(state):
                 "start": {
                     "type": "code",
                     "code": """
-def run(state):
+async def run(state):
     import time
     state['execution_start'] = time.time()
     return state
@@ -90,7 +90,7 @@ def run(state):
                 "final": {
                     "type": "code",
                     "code": """
-def run(state):
+async def run(state):
     import time
     state['execution_end'] = time.time()
     state['response'] = 'All nodes completed'
@@ -249,20 +249,20 @@ class TestParallelNodesMerge:
             nodes={
                 "start": {
                     "type": "code",
-                    "code": "def run(state):\n    state['started'] = True\n    return state",
+                    "code": "async def run(state):\n    state['started'] = True\n    return state",
                 },
                 "writer_a": {
                     "type": "code",
-                    "code": "def run(state):\n    state['field_a'] = 'value_a'\n    return state",
+                    "code": "async def run(state):\n    state['field_a'] = 'value_a'\n    return state",
                 },
                 "writer_b": {
                     "type": "code",
-                    "code": "def run(state):\n    state['field_b'] = 'value_b'\n    return state",
+                    "code": "async def run(state):\n    state['field_b'] = 'value_b'\n    return state",
                 },
                 "final": {
                     "type": "code",
                     "code": """
-def run(state):
+async def run(state):
     state['response'] = f"a={state.get('field_a')}, b={state.get('field_b')}"
     return state
 """,

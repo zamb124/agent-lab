@@ -295,7 +295,7 @@ class TestSubflowInterruptE2E:
         code_with_interrupt = '''
 from apps.flows.src.runtime.exceptions import FlowInterrupt
 
-def execute(args, state):
+async def execute(args, state):
     content = state.get("content", "")
     
     # Первый вызов - content == "start", нужно спросить имя
@@ -449,7 +449,7 @@ def execute(args, state):
         ask_user_code = '''
 from apps.flows.src.runtime.exceptions import FlowInterrupt
 
-def execute(args, state):
+async def execute(args, state):
     question = args.get("question", "")
     raise FlowInterrupt(question=question)
 '''
@@ -517,7 +517,7 @@ def execute(args, state):
                                     "code": '''
 from apps.flows.src.runtime.exceptions import FlowInterrupt
 
-def execute(args, state):
+async def execute(args, state):
     question = args.get("question", "")
     raise FlowInterrupt(question=question)
 ''',

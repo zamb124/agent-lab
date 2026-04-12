@@ -1,13 +1,13 @@
-"""Репозиторий записей звонков и встреч."""
+"""Репозиторий записей звонков."""
 
 from __future__ import annotations
 
-from datetime import UTC, datetime
+from datetime import datetime
 
-from sqlalchemy import delete, select, update
+from sqlalchemy import select, update
 
 from apps.sync.db.base import BaseSyncRepository, SyncDatabase
-from apps.sync.db.models import SyncCallMeeting, SyncCallRecording, SyncCallSpeakerSegment
+from apps.sync.db.models import SyncCallRecording
 
 
 class CallRecordingRepository(BaseSyncRepository[SyncCallRecording]):
@@ -70,116 +70,4 @@ class CallRecordingRepository(BaseSyncRepository[SyncCallRecording]):
                 .where(SyncCallRecording.recording_id == recording_id)
                 .values(**values)
             )
-            await session.commit()
-
-
-class CallMeetingRepository(BaseSyncRepository[SyncCallMeeting]):
-    def __init__(self, db: SyncDatabase) -> None:
-        super().__init__(db)
-
-    @property
-    def model_class(self) -> type[SyncCallMeeting]:
-        return SyncCallMeeting
-
-    @property
-    def id_field(self) -> str:
-        return "meeting_id"
-
-    async def list_meetings(
-        self,
-        *,
-        company_id: str,
-        channel_id: str | None,
-        space_id: str | None,
-        limit: int,
-    ) -> list[SyncCallMeeting]:
-        async with self._db.session() as session:
-            stmt = select(SyncCallMeeting).where(SyncCallMeeting.company_id == company_id)
-            if channel_id is not None:
-                stmt = stmt.where(SyncCallMeeting.channel_id == channel_id)
-            if space_id is not None:
-                stmt = stmt.where(SyncCallMeeting.space_id == space_id)
-            result = await session.execute(stmt.order_by(SyncCallMeeting.created_at.desc()).limit(limit))
-            return list(result.scalars().all())
-
-    async def get_by_recording(self, recording_id: str, company_id: str) -> SyncCallMeeting | None:
-        async with self._db.session() as session:
-            result = await session.execute(
-                select(SyncCallMeeting).where(
-                    SyncCallMeeting.recording_id == recording_id,
-                    SyncCallMeeting.company_id == company_id,
-                )
-            )
-            return result.scalar_one_or_none()
-
-    async def update_summary(self, meeting_id: str, summary_json: dict[str, object]) -> None:
-        async with self._db.session() as session:
-            await session.execute(
-                update(SyncCallMeeting)
-                .where(SyncCallMeeting.meeting_id == meeting_id)
-                .values(summary_json=summary_json, updated_at=datetime.now(UTC))
-            )
-            await session.commit()
-
-    async def set_export_status(
-        self,
-        meeting_id: str,
-        *,
-        status: str,
-        target_namespace: str | None,
-    ) -> None:
-        async with self._db.session() as session:
-            await session.execute(
-                update(SyncCallMeeting)
-                .where(SyncCallMeeting.meeting_id == meeting_id)
-                .values(
-                    export_status=status,
-                    export_target_namespace=target_namespace,
-                    updated_at=datetime.now(UTC),
-                )
-            )
-            await session.commit()
-
-
-class CallSpeakerSegmentRepository(BaseSyncRepository[SyncCallSpeakerSegment]):
-    def __init__(self, db: SyncDatabase) -> None:
-        super().__init__(db)
-
-    @property
-    def model_class(self) -> type[SyncCallSpeakerSegment]:
-        return SyncCallSpeakerSegment
-
-    @property
-    def id_field(self) -> str:
-        return "segment_id"
-
-    async def list_for_meeting(self, meeting_id: str, company_id: str) -> list[SyncCallSpeakerSegment]:
-        async with self._db.session() as session:
-            result = await session.execute(
-                select(SyncCallSpeakerSegment)
-                .where(
-                    SyncCallSpeakerSegment.meeting_id == meeting_id,
-                    SyncCallSpeakerSegment.company_id == company_id,
-                )
-                .order_by(SyncCallSpeakerSegment.started_ms.asc())
-            )
-            return list(result.scalars().all())
-
-    async def replace_for_meeting(
-        self,
-        *,
-        meeting_id: str,
-        company_id: str,
-        segments: list[SyncCallSpeakerSegment],
-    ) -> None:
-        async with self._db.session() as session:
-            await session.execute(
-                delete(SyncCallSpeakerSegment)
-                .where(
-                    SyncCallSpeakerSegment.meeting_id == meeting_id,
-                    SyncCallSpeakerSegment.company_id == company_id,
-                )
-            )
-            for segment in segments:
-                session.add(segment)
             await session.commit()

@@ -34,17 +34,19 @@ class S3Client:
         endpoint_url: Optional[str] = None,
         provider_name: str = "aws",
         track_files: bool = True,
+        bucket_config_key: Optional[str] = None,
     ):
         """
         Инициализация S3 клиента.
 
         Args:
-            bucket_name: Имя bucket
+            bucket_name: Физическое имя bucket в S3 (для вызовов API)
             access_key_id: Ключ доступа
             secret_access_key: Секретный ключ
             region_name: Регион
             endpoint_url: URL эндпоинта S3 (для совместимых сервисов)
             provider_name: Имя провайдера (aws, yandex, minio, vkcloud)
+            bucket_config_key: Ключ из settings.s3.buckets для FileRecord.s3_bucket (только из фабрики)
         """
         if not bucket_name:
             raise ValueError("bucket_name не может быть пустым")
@@ -54,6 +56,7 @@ class S3Client:
             raise ValueError("secret_access_key не может быть пустым")
 
         self.bucket_name = bucket_name
+        self.bucket_config_key = bucket_config_key
         self.access_key_id = access_key_id
         self.secret_access_key = secret_access_key
         self.region_name = region_name
@@ -65,6 +68,15 @@ class S3Client:
         self._client_lock: Optional[asyncio.Lock] = None
         self._minio_bucket_lock: Optional[asyncio.Lock] = None
         self._minio_ready_buckets: set[str] = set()
+
+    def require_bucket_config_key(self) -> str:
+        """Ключ из settings.s3.buckets для поля FileRecord.s3_bucket."""
+        raw = self.bucket_config_key
+        if raw is None or not str(raw).strip():
+            raise ValueError(
+                "S3Client без bucket_config_key: используйте S3ClientFactory.create_client_for_bucket"
+            )
+        return str(raw).strip()
 
     def _s3_endpoint_should_not_use_http_proxy(self) -> bool:
         """
@@ -399,7 +411,7 @@ class S3Client:
         client = await self._get_client()
 
         response = await client.head_object(Bucket=bucket, Key=key)
-        
+
         metadata = {
             "content_type": response.get("ContentType"),
             "content_length": response.get("ContentLength"),
@@ -407,7 +419,7 @@ class S3Client:
             "etag": response.get("ETag", "").strip('"'),
             "metadata": response.get("Metadata", {}),
         }
-        
+
         return metadata
 
     async def get_presigned_url(
@@ -474,6 +486,7 @@ class S3Client:
         prefix: str = "",
         max_keys: int = 1000,
         bucket: Optional[str] = None,
+        start_after: Optional[str] = None,
     ) -> List[Dict[str, Any]]:
         """
         Список объектов в bucket с указанным префиксом.
@@ -482,6 +495,7 @@ class S3Client:
             prefix: Префикс для фильтрации объектов
             max_keys: Максимальное количество объектов
             bucket: Имя bucket (если не указан, используется дефолтный)
+            start_after: S3 StartAfter — только ключи лексикографически после этого (инкрементальный обход)
 
         Returns:
             Список объектов с ключами и метаданными
@@ -492,11 +506,15 @@ class S3Client:
 
         client = await self._get_client()
 
-        response = await client.list_objects_v2(
-            Bucket=bucket,
-            Prefix=prefix,
-            MaxKeys=max_keys,
-        )
+        list_kw: Dict[str, Any] = {
+            "Bucket": bucket,
+            "Prefix": prefix,
+            "MaxKeys": max_keys,
+        }
+        if start_after is not None and start_after != "":
+            list_kw["StartAfter"] = start_after
+
+        response = await client.list_objects_v2(**list_kw)
 
         objects = []
         if "Contents" in response:
@@ -584,37 +602,44 @@ class S3ClientFactory:
     """Фабрика для создания S3 клиентов"""
 
     @staticmethod
-    def create_client(bucket_config: Dict[str, Any], bucket_name: str) -> S3Client:
+    def create_client(
+        bucket_config: Dict[str, Any],
+        physical_bucket_name: str,
+        *,
+        bucket_config_key: str,
+    ) -> S3Client:
         """
         Создает S3 клиент из конфигурации.
 
         Args:
             bucket_config: Конфигурация bucket
-            bucket_name: Имя bucket
+            physical_bucket_name: Имя bucket в S3 (put_object/get_object)
+            bucket_config_key: Ключ в settings.s3.buckets — пишется в FileRecord.s3_bucket
 
         Returns:
             Настроенный S3Client
         """
         if not bucket_config.enabled:
-            raise ValueError(f"Bucket {bucket_name} отключен в конфигурации")
+            raise ValueError(f"Bucket {bucket_config_key} отключен в конфигурации")
 
         if not bucket_config.access_key_id:
-            raise ValueError(f"access_key_id не настроен для bucket {bucket_name}")
+            raise ValueError(f"access_key_id не настроен для bucket {bucket_config_key}")
 
         if not bucket_config.secret_access_key:
-            raise ValueError(f"secret_access_key не настроен для bucket {bucket_name}")
+            raise ValueError(f"secret_access_key не настроен для bucket {bucket_config_key}")
 
         from core.files.s3_sigv4_clock import ensure_sigv4_clock_aligned_with_endpoint
 
         ensure_sigv4_clock_aligned_with_endpoint(bucket_config.endpoint_url)
 
         return S3Client(
-            bucket_name=bucket_name,
+            bucket_name=physical_bucket_name,
             access_key_id=bucket_config.access_key_id,
             secret_access_key=bucket_config.secret_access_key,
             region_name=bucket_config.region_name,
             endpoint_url=bucket_config.endpoint_url,
             provider_name=bucket_config.provider,
+            bucket_config_key=bucket_config_key,
         )
 
     @staticmethod
@@ -637,9 +662,12 @@ class S3ClientFactory:
             raise ValueError(f"Bucket {bucket_name} не найден в конфигурации")
 
         bucket_config = settings.s3.buckets[bucket_name]
-        # Используем bucket_name из конфига если задан, иначе ключ конфигурации
         real_bucket_name = bucket_config.bucket_name or bucket_name
-        return S3ClientFactory.create_client(bucket_config, real_bucket_name)
+        return S3ClientFactory.create_client(
+            bucket_config,
+            real_bucket_name,
+            bucket_config_key=bucket_name,
+        )
 
     @staticmethod
     def create_default_client() -> S3Client:
@@ -751,14 +779,14 @@ def build_s3_key_from_context(relative_path: str) -> str:
         "system/rag/ns1/doc.pdf"
     """
     from core.context import get_context
-    
+
     context = get_context()
     if not context.active_company:
         raise ValueError("Компания не найдена в контексте для построения S3 ключа")
-    
+
     company_slug = context.active_company.subdomain or context.active_company.company_id
     if not company_slug:
         raise ValueError(f"Company subdomain и company_id пусты: {context.active_company}")
-    
+
     return build_s3_key_for_company(company_slug, relative_path)
 

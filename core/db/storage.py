@@ -22,8 +22,7 @@ from core.db.models import (
     Users as UsersModel,
     Variables as VariablesModel,
     Usage as UsageModel,
-    Spans as SpansModel,
-    Namespaces as NamespacesModel
+    Namespaces as NamespacesModel,
 )
 
 logger = logging.getLogger(__name__)
@@ -33,7 +32,6 @@ TABLE_MODELS = {
     "users": UsersModel,
     "variables": VariablesModel,
     "usage": UsageModel,
-    "spans": SpansModel,
     "namespaces": NamespacesModel,
 }
 
@@ -521,7 +519,7 @@ class Storage:
             return result
 
     async def _get_all_by_prefix_and_table(
-        self, prefix: str, table_name: str, limit: int = 1000
+        self, prefix: str, table_name: str, limit: int = 1000, offset: int = 0
     ) -> dict[str, str]:
         """
         Низкоуровневый метод для получения всех значений по префиксу из конкретной таблицы.
@@ -531,10 +529,13 @@ class Storage:
             prefix: Финальный префикс (с префиксом компании если нужно)
             table_name: Имя таблицы
             limit: Максимальное количество результатов
-            
+            offset: Смещение (пагинация)
+
         Returns:
             Словарь {key: value_json}
         """
+        if offset < 0:
+            raise ValueError("offset должен быть >= 0")
         async with self._get_session() as session:
             model = self._get_table_model(table_name)
             
@@ -543,11 +544,17 @@ class Storage:
                     select(model.key, model.value)
                     .where(model.key.like(f"{prefix}%"))
                     .order_by(model.updated_at.desc())
+                    .offset(offset)
                     .limit(limit)
                 )
             else:
-                query = text(f"SELECT key, value FROM {table_name} WHERE key LIKE :prefix ORDER BY updated_at DESC LIMIT :limit")
-                result = await session.execute(query, {"prefix": f"{prefix}%", "limit": limit})
+                query = text(
+                    f"SELECT key, value FROM {table_name} WHERE key LIKE :prefix "
+                    "ORDER BY updated_at DESC LIMIT :limit OFFSET :offset"
+                )
+                result = await session.execute(
+                    query, {"prefix": f"{prefix}%", "limit": limit, "offset": offset}
+                )
 
             data = {}
             for row in result:
@@ -562,6 +569,22 @@ class Storage:
                     data[key] = json.dumps(value)
 
             return data
+
+    async def _count_by_prefix_and_table(self, prefix: str, table_name: str) -> int:
+        """Считает количество записей по префиксу в таблице. Используется BaseRepository."""
+        async with self._get_session() as session:
+            model = self._get_table_model(table_name)
+            if model in TABLE_MODELS.values():
+                from sqlalchemy import func as sa_func
+                result = await session.execute(
+                    select(sa_func.count()).where(model.key.like(f"{prefix}%"))
+                )
+            else:
+                result = await session.execute(
+                    text(f"SELECT COUNT(*) FROM {table_name} WHERE key LIKE :prefix"),
+                    {"prefix": f"{prefix}%"},
+                )
+            return result.scalar() or 0
 
     async def _get_many_with_table(self, keys: List[str], table_name: str) -> dict[str, str]:
         """

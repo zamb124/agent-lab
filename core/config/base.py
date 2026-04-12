@@ -3,7 +3,9 @@
 """
 
 import logging
-from pydantic import Field, ConfigDict
+from typing import Any, Dict, Optional, Self
+
+from pydantic import ConfigDict, Field, model_validator
 from pydantic_settings import BaseSettings as PydanticBaseSettings
 
 from core.config.loader import load_merged_config
@@ -26,12 +28,14 @@ from core.config.models import (
     SGRConfig,
     LegalConfig,
     TracingConfig,
+    BillingConfig,
     TasksConfig,
     CalendarSyncConfig,
     S3Config,
     LLMConfig,
     PushConfig,
     STTConfig,
+    MediaTranscriberConfig,
 )
 
 logger = logging.getLogger(__name__)
@@ -69,11 +73,43 @@ class BaseSettings(PydanticBaseSettings):
     sgr: SGRConfig = Field(default_factory=SGRConfig)
     legal: LegalConfig = Field(default_factory=LegalConfig)
     tracing: TracingConfig = Field(default_factory=TracingConfig)
+    billing: BillingConfig = Field(default_factory=BillingConfig)
     tasks: TasksConfig = Field(default_factory=TasksConfig)
     calendar_sync: CalendarSyncConfig = Field(default_factory=CalendarSyncConfig)
     push: PushConfig = Field(default_factory=PushConfig)
     calls: CallsConfig = Field(default_factory=CallsConfig)
+    media_transcriber: MediaTranscriberConfig = Field(default_factory=MediaTranscriberConfig)
     recording_max_duration_seconds: float = Field(default=3600.0)
+    transcribe_audio_redis_lock_ttl_seconds: int = Field(
+        default=600,
+        ge=60,
+        description="TTL Redis SET NX для ключа sync:transcribe_audio:{company_id}:{message_id}.",
+    )
+    ws_presence_heartbeat_interval_seconds: float = Field(
+        default=45.0,
+        ge=5.0,
+        description="Интервал продления ключа sync:ws:presence при открытом /sync/ws.",
+    )
+    ws_presence_ttl_seconds: int = Field(
+        default=120,
+        ge=30,
+        description="TTL Redis ключа sync:ws:presence:{user_id}.",
+    )
+    sync_taskiq_wait_result_timeout_seconds: float = Field(
+        default=300.0,
+        ge=30.0,
+        description="Таймаут task.wait_result для команд Sync из HTTP и /sync/ws.",
+    )
+
+    @model_validator(mode="after")
+    def _ws_presence_ttl_vs_heartbeat(self) -> Self:
+        min_ttl = int(2 * self.ws_presence_heartbeat_interval_seconds) + 1
+        if self.ws_presence_ttl_seconds < min_ttl:
+            raise ValueError(
+                f"ws_presence_ttl_seconds ({self.ws_presence_ttl_seconds}) должен быть >= {min_ttl} "
+                "(удвоенный heartbeat + 1 с)."
+            )
+        return self
 
     model_config = ConfigDict(
         env_file=[".env"],

@@ -22,7 +22,7 @@ export class ExternalApiEditor extends BaseNodeEditor {
                 
                 <div class="form-group">
                     <div class="form-label">
-                        <span class="form-label-text">Имя</span>
+                        <span class="form-label-text">${this.i18n.t('node_modal.common.field_name')}</span>
                     </div>
                     <input 
                         type="text" 
@@ -35,7 +35,7 @@ export class ExternalApiEditor extends BaseNodeEditor {
             
             <div class="form-group">
                 <div class="form-label">
-                    <span class="form-label-text">URL</span>
+                    <span class="form-label-text">${this.i18n.t('node_modal.external_api.url_label')}</span>
                 </div>
                 <input 
                     type="text" 
@@ -48,7 +48,7 @@ export class ExternalApiEditor extends BaseNodeEditor {
             
             <div class="form-group">
                 <div class="form-label">
-                    <span class="form-label-text">Method</span>
+                    <span class="form-label-text">${this.i18n.t('node_modal.external_api.method_label')}</span>
                 </div>
                 <select 
                     class="form-input form-select"
@@ -64,7 +64,7 @@ export class ExternalApiEditor extends BaseNodeEditor {
             
             <div class="form-group">
                 <div class="form-label">
-                    <span class="form-label-text">Auth Headers (JSON)</span>
+                    <span class="form-label-text">${this.i18n.t('node_modal.external_api.auth_headers_label')}</span>
                 </div>
                 <json-field-editor
                     .value=${config.auth_headers ? JSON.stringify(config.auth_headers, null, 2) : '{}'}
@@ -75,13 +75,13 @@ export class ExternalApiEditor extends BaseNodeEditor {
                         }
                     }}
                     min-height="60"
-                    hint="Поддерживает @var:path"
+                    hint=${this.i18n.t('node_modal.external_api.var_path_hint')}
                 ></json-field-editor>
             </div>
             
             <div class="form-group">
                 <div class="form-label">
-                    <span class="form-label-text">Parameters (JSON)</span>
+                    <span class="form-label-text">${this.i18n.t('node_modal.external_api.parameters_label')}</span>
                 </div>
                 <json-field-editor
                     .value=${config.parameters ? JSON.stringify(config.parameters, null, 2) : '[]'}
@@ -92,7 +92,7 @@ export class ExternalApiEditor extends BaseNodeEditor {
                         }
                     }}
                     min-height="80"
-                    hint='[{"name": "param", "source": "@state:path", "location": "query"}]'
+                    hint=${this.i18n.t('node_modal.external_api.parameters_hint')}
                 ></json-field-editor>
             </div>
             

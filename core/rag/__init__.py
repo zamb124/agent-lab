@@ -5,6 +5,8 @@ RAG система с поддержкой различных провайдер
 Провайдеры:
 - agentset: Внешний SaaS (Agentset.ai)
 - pgvector: PostgreSQL + pgvector
+
+Парсинг файлов для индексации: core.files.reader.FileReader (единая схема FileReadResult).
 """
 
 from .base_provider import BaseRAGProvider
@@ -32,14 +34,7 @@ from .rag_resource_bind import RagResourceBindParams
 from .rag_worker_tasks_port import RagWorkerTasksPort
 from .providers import AgentsetRAGProvider, PgVectorProvider
 from .repository import RAGRepository
-from .services import (
-    ChunkEnricher,
-    ChunkEnrichmentContext,
-    ChunkEnrichmentResult,
-    DocumentParser,
-    EmbeddingService,
-    NoOpChunkEnricher,
-)
+from .services import EmbeddingService
 
 __all__ = [
     "BaseRAGProvider",
@@ -68,10 +63,5 @@ __all__ = [
     "RAGRepository",
     "AgentsetRAGProvider",
     "PgVectorProvider",
-    "ChunkEnrichmentContext",
-    "ChunkEnrichmentResult",
-    "ChunkEnricher",
-    "NoOpChunkEnricher",
-    "DocumentParser",
     "EmbeddingService",
 ]

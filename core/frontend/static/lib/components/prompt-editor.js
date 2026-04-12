@@ -178,7 +178,7 @@ export class PromptEditor extends PlatformElement {
             }
             
             .cm-variable-default {
-                color: #10b981;
+                color: var(--accent);
             }
             
             .cm-for-keyword {
@@ -253,7 +253,7 @@ export class PromptEditor extends PlatformElement {
             }
             
             :host-context([data-theme="light"]) .cm-variable-default {
-                color: #059669;
+                color: #7c8af4;
             }
             
             :host-context([data-theme="light"]) .cm-for-keyword {
@@ -410,6 +410,7 @@ export class PromptEditor extends PlatformElement {
         previewMode: { type: Boolean },
         splitMode: { type: Boolean },
         fullscreenMode: { type: Boolean },
+        acceptFileDrop: { type: Boolean, attribute: 'accept-file-drop' },
     };
 
     constructor() {
@@ -427,10 +428,12 @@ export class PromptEditor extends PlatformElement {
         this.previewMode = false;
         this.splitMode = false;
         this.fullscreenMode = false;
+        this.acceptFileDrop = false;
         this._editorView = null;
         this._icons = {};
         this._cmModules = null;
         this._readonlyCompartment = null;
+        this._fileDropCleanup = null;
     }
 
     async firstUpdated() {
@@ -492,6 +495,10 @@ export class PromptEditor extends PlatformElement {
         if (changedProperties.has('splitMode') && this._cmModules) {
             this._recreateEditor();
         }
+
+        if (changedProperties.has('acceptFileDrop') && this._editorView) {
+            this._syncFileDropListeners();
+        }
     }
     
     async _recreateEditor() {
@@ -500,6 +507,7 @@ export class PromptEditor extends PlatformElement {
         const currentValue = this._editorView ? this._editorView.state.doc.toString() : this.value;
         
         if (this._editorView) {
+            this._teardownFileDropListeners();
             this._editorView.destroy();
             this._editorView = null;
         }
@@ -550,8 +558,8 @@ export class PromptEditor extends PlatformElement {
                 cm.syntaxHighlighting(cm.defaultHighlightStyle, { fallback: true }),
                 cm.EditorView.theme({
                     "&": { backgroundColor: "transparent", color: "#383a42" },
-                    ".cm-content": { caretColor: "#059669" },
-                    ".cm-cursor": { borderLeftColor: "#059669" },
+                    ".cm-content": { caretColor: "#7c8af4" },
+                    ".cm-cursor": { borderLeftColor: "#7c8af4" },
                 }, { dark: false })
             ];
 
@@ -585,6 +593,44 @@ export class PromptEditor extends PlatformElement {
             }),
             parent: container
         });
+        this._syncFileDropListeners();
+    }
+
+    _teardownFileDropListeners() {
+        if (this._fileDropCleanup) {
+            this._fileDropCleanup();
+            this._fileDropCleanup = null;
+        }
+    }
+
+    _syncFileDropListeners() {
+        this._teardownFileDropListeners();
+        if (!this.acceptFileDrop || !this._editorView) {
+            return;
+        }
+        const dom = this._editorView.dom;
+        const onDragOver = (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            const types = e.dataTransfer.types ? Array.from(e.dataTransfer.types) : [];
+            if (types.includes('text/plain')) {
+                e.dataTransfer.dropEffect = 'copy';
+            }
+        };
+        const onDrop = (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            const text = e.dataTransfer.getData('text/plain');
+            if (text) {
+                this.insertTextAtCursor(text);
+            }
+        };
+        dom.addEventListener('dragover', onDragOver);
+        dom.addEventListener('drop', onDrop);
+        this._fileDropCleanup = () => {
+            dom.removeEventListener('dragover', onDragOver);
+            dom.removeEventListener('drop', onDrop);
+        };
     }
 
     _createVariableHighlighter(cm) {
@@ -1031,6 +1077,19 @@ export class PromptEditor extends PlatformElement {
         return this.value;
     }
 
+    insertTextAtCursor(text) {
+        if (!text || !this._editorView) {
+            return;
+        }
+        const { from, to } = this._editorView.state.selection.main;
+        this._editorView.dispatch({
+            changes: { from, to, insert: text },
+            selection: { anchor: from + text.length, head: from + text.length },
+        });
+        this.value = this._editorView.state.doc.toString();
+        this.emit('change', { value: this.value });
+    }
+
     setValue(text) {
         this.value = text;
         if (this._editorView) {
@@ -1048,6 +1107,7 @@ export class PromptEditor extends PlatformElement {
 
     disconnectedCallback() {
         super.disconnectedCallback();
+        this._teardownFileDropListeners();
         if (this._editorView) {
             this._editorView.destroy();
             this._editorView = null;

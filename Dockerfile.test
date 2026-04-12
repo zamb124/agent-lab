@@ -10,6 +10,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     poppler-utils \
     libgl1 \
     libglib2.0-0 \
+    antiword \
     && rm -rf /var/lib/apt/lists/*
 
 RUN pip install --no-cache-dir uv
@@ -35,6 +36,7 @@ RUN --mount=type=cache,target=/root/.cache/uv \
     uv pip install --system --group rag-worker
 
 COPY core/ ./core/
+COPY apps/rag/ ./apps/rag/
 COPY apps/rag_worker/ ./apps/rag_worker/
 COPY apps/__init__.py ./apps/
 
@@ -43,7 +45,7 @@ ENV PYTHONUNBUFFERED=1
 ENV PYTHONDONTWRITEBYTECODE=1
 ENV TESTING=true
 
-CMD ["taskiq", "worker", "apps.rag_worker.worker:broker", "--workers", "1"]
+CMD ["taskiq", "worker", "apps.rag_worker.worker:worker_app", "--workers", "1"]
 
 # Полный образ для pytest и worker/scheduler (последний stage = default при сборке без --target)
 FROM base-test AS default

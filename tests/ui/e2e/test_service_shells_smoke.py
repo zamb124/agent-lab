@@ -65,12 +65,12 @@ async def test_crm_shell_loads(
 
 @pytest.mark.scenario(
     service="crm",
-    title="CRM: страница настроек",
-    description="Переход на /crm/settings и проверка отображения settings-page.",
+    title="CRM: хаб настроек",
+    description="Переход на /crm/settings и проверка отображения settings-hub-page с карточками.",
 )
 @pytest.mark.asyncio
 @pytest.mark.e2e
-async def test_crm_settings_page_loads(
+async def test_crm_settings_hub_loads(
     scenario: ScenarioRecorder,
     crm_ui: AppUI,
     ui_page_system: Page,
@@ -78,11 +78,17 @@ async def test_crm_settings_page_loads(
     await ui_page_system.goto(f"{crm_ui.origin}/crm/settings", wait_until="domcontentloaded")
     await scenario.step("Открыт маршрут /crm/settings", ui_page_system)
     await expect(ui_page_system.locator("crm-app")).to_be_visible(timeout=30_000)
-    await expect(ui_page_system.locator("settings-page")).to_be_visible(timeout=30_000)
+    await expect(ui_page_system.locator("settings-hub-page")).to_be_visible(timeout=30_000)
     await expect(
-        ui_page_system.get_by_text("Редактировать шаблоны пространств")
+        ui_page_system.get_by_text("Настройки CRM")
     ).to_be_visible(timeout=30_000)
-    await scenario.step("Страница настроек CRM отображена", ui_page_system)
+    await expect(
+        ui_page_system.get_by_text("Шаблоны пространств")
+    ).to_be_visible(timeout=30_000)
+    await expect(
+        ui_page_system.get_by_text("Настройки пространств")
+    ).to_be_visible(timeout=30_000)
+    await scenario.step("Хаб настроек CRM отображен с карточками", ui_page_system)
 
 
 @pytest.mark.scenario(

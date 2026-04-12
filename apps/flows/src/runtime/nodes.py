@@ -21,7 +21,7 @@ import inspect
 import json
 import uuid
 from abc import ABC, abstractmethod
-from typing import Any, Dict, List, Optional, Union
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Union
 
 from a2a.types import Message, Part, Role, TextPart
 
@@ -34,10 +34,18 @@ from apps.flows.src.mapping import MappingResolver
 from apps.flows.src.mock import get_mock_for_node
 from apps.flows.src.models import NodeLLMOverride, NodeConfig, ReactConfig
 from apps.flows.src.models.enums import NodeType
+from apps.flows.src.models.operator_schemas import OperatorTaskStatus
 from apps.flows.src.models.external_api import ExternalAPIConfig, ParameterSchema
-from core.state import ExecutionState, InterruptData
+from core.context import get_context as get_request_context
+from core.state import ExecutionState, parse_interrupt_body_from_external_dict
+from core.state.interrupt import HandoffMode, OperatorTaskInterrupt
+from apps.flows.src.state.interrupt_manager import InterruptManager
 from core.logging import get_logger
 from core.errors import ResourceNotFoundError
+from core.tracing.operation_span import traced_operation
+
+if TYPE_CHECKING:
+    from apps.flows.src.tools.node_wrapper import NodeAsToolWrapper
 
 logger = get_logger(__name__)
 
@@ -382,21 +390,18 @@ class BaseNode(ABC):
 
     def as_tool(
         self, name: Optional[str] = None, description: Optional[str] = None
-    ) -> "NodeAsTool":
+    ) -> "NodeAsToolWrapper":
         """
-        Превращает ноду в tool для использования в других нодах.
-
-        Args:
-            name: Имя tool
-            description: Описание tool
-
-        Returns:
-            NodeAsTool wrapper
+        Превращает ноду в tool (тот же NodeAsToolWrapper, что и в ToolRegistry).
         """
-        return NodeAsTool(
-            node=self,
-            name=name or f"{self.node_id}_tool",
-            description=description or self.description or f"Вызов ноды {self.node_id}",
+        from apps.flows.src.tools.node_wrapper import NodeAsToolWrapper
+
+        return NodeAsToolWrapper.from_base_node(
+            self,
+            tool_name=name or f"{self.node_id}_tool",
+            tool_description=description
+            or self.description
+            or f"Вызов ноды {self.node_id}",
         )
 
 
@@ -589,12 +594,17 @@ class LlmNode(BaseNode):
             base_url = self.llm_config_dict.get("base_url")
 
         logger.info(f"[_get_llm] node_id={self.node_id}, model={model}, temp={temp}, provider={provider}")
+        max_tok = None
+        if self._node_config and self._node_config.llm_override:
+            max_tok = self._node_config.llm_override.max_tokens
+
         return get_llm(
             model_name=model,
             temperature=temp,
             provider=provider,
             api_key=api_key,
             base_url=base_url,
+            max_tokens=max_tok,
             state=state,
         )
 
@@ -602,13 +612,9 @@ class LlmNode(BaseNode):
         """Создает конфигурацию по умолчанию."""
         llm_override = None
         if self.llm_config_dict:
-            llm_override = NodeLLMOverride(
-                model=self.llm_config_dict.get("model"),
-                temperature=self.llm_config_dict.get("temperature"),
-                provider=self.llm_config_dict.get("provider"),
-                api_key=self.llm_config_dict.get("api_key"),
-                base_url=self.llm_config_dict.get("base_url"),
-            )
+            allowed = set(NodeLLMOverride.model_fields.keys())
+            raw_llm = {k: v for k, v in self.llm_config_dict.items() if k in allowed}
+            llm_override = NodeLLMOverride.model_validate(raw_llm)
 
         react_config = None
         react_dict = self.config.get("react") if self.config else None
@@ -701,72 +707,13 @@ class LlmNode(BaseNode):
         """
         return rendered_prompt
 
-    def as_tool(
-        self, name: Optional[str] = None, description: Optional[str] = None
-    ) -> "NodeAsTool":
-        """
-        Превращает LlmNode в tool для использования в других нодах.
-
-        Args:
-            name: Имя tool
-            description: Описание tool
-
-        Returns:
-            NodeAsTool wrapper
-        """
-        return NodeAsTool(
-            node=self,
-            name=name or f"{self.llm_node_id}_tool",
-            description=description or self.llm_node_description or f"Вызов ноды {self.llm_node_name}",
-        )
-
-
-class NodeAsTool:
-    """Обертка для использования любой ноды как tool."""
-
-    def __init__(self, node: "BaseNode", name: str, description: str):
-        self.node = node
-        self.name = name
-        self.description = description
-        self.parameters = {
-            "type": "object",
-            "properties": {"request": {"type": "string", "description": "Запрос к ноде"}},
-            "required": ["request"],
-        }
-
-    async def run(self, args: Dict[str, Any], state: ExecutionState) -> str:
-        """Выполняет ноду как tool."""
-        request = args.get("request", "")
-        node_name = getattr(self.node, "llm_node_name", self.node.node_id)
-        logger.info(f"NodeAsTool: вызов {node_name} с запросом: {request[:100]}")
-        
-        state.content = request
-        await self.node.run(state)
-        return state.response or "Нет ответа от ноды"
-
-    def to_openai_schema(self) -> Dict[str, Any]:
-        """Возвращает схему для OpenAI."""
-        return {
-            "type": "function",
-            "function": {
-                "name": self.name,
-                "description": self.description,
-                "parameters": self.parameters,
-            },
-        }
-
-
 class CodeNode(BaseNode):
     """
     Универсальная нода для выполнения кода.
     
     Поддерживает разные языки (python, javascript, go).
-    Унифицированный вызов через runner.execute_tool(code, args, state).
-    
-    args_schema опционален - если задан, args заполняются из inputs,
-    если нет - args будет пустым dict.
-    
-    tool_id - загрузка готового tool из реестра вместо inline кода.
+    Только runner.execute_tool(code, args, state) по строке ``code`` из конфига;
+    ``tool_id`` — идентификатор для UI/ссылок, не путь к FunctionTool в процессе.
     """
 
     def __init__(self, node_id: str, config: Optional[Dict[str, Any]] = None):
@@ -779,7 +726,6 @@ class CodeNode(BaseNode):
         self.args_schema = cfg.get("args_schema")
         
         self._runner = None
-        self._registry_tool = None
         
         # Для Python можно загрузить из function path
         if self.language == "python" and self.code is None and cfg.get("function"):
@@ -802,38 +748,19 @@ class CodeNode(BaseNode):
 
     async def _run_impl(self, state: ExecutionState, inputs: Dict[str, Any]) -> Any:
         """
-        Выполняет код через runner.execute_tool().
-        
-        Унифицированный путь: всегда execute_tool(code, args, state).
-        args формируется из inputs (может быть пустым).
+        Выполняет только inline ``code`` через runner.execute_tool(code, args, state).
         """
-        # Загрузка tool из реестра
-        if self.tool_id:
-            return await self._run_registry_tool(state, inputs)
-        
-        if not self.code:
-            raise ValueError(f"Node '{self.node_id}': code or tool_id required")
-        
+        if not self.code or not str(self.code).strip():
+            raise ValueError(
+                f"Node '{self.node_id}': требуется непустой inline code (tool_id без кода не исполняется)"
+            )
+
         args = self._build_args(inputs)
         logger.info(f"[node:{self.node_id}] execute_tool с args: {list(args.keys())}")
-        
-        # Резолвим ресурсы для ноды
+
         resources = await self._resolve_resources(state)
-        
         runner = self._get_runner(resources=resources)
         return await runner.execute_tool(self.code, args, state)
-
-    async def _run_registry_tool(self, state: ExecutionState, inputs: Dict[str, Any]) -> Any:
-        """Выполняет tool загруженный из реестра."""
-        if self._registry_tool is None:
-            container = get_container()
-            self._registry_tool = await container.tool_registry.create_tool({"tool_id": self.tool_id})
-            if self._registry_tool is None:
-                raise ValueError(f"Tool '{self.tool_id}' not found")
-        
-        args = self._build_args(inputs)
-        logger.info(f"[node:{self.node_id}] registry tool '{self._registry_tool.name}' с args: {list(args.keys())}")
-        return await self._registry_tool.run(args, state)
 
     def _build_args(self, inputs: Dict[str, Any]) -> Dict[str, Any]:
         """Формирует args из inputs с учетом defaults из args_schema."""
@@ -914,9 +841,18 @@ class RemoteFlowNode(BaseNode):
             auth_headers=auth_headers,
         )
 
-        state.response = result.get("response", "")
-        setattr(state, "remote_status", result.get("status", "completed"))
-        return result.get("response", "")
+        if not isinstance(result, dict):
+            raise ValueError(
+                f"RemoteFlowNode: ожидался dict от a2a_client.send_task, получено {type(result)}"
+            )
+        if "response" not in result:
+            raise ValueError("RemoteFlowNode: ответ A2A без обязательного поля 'response'")
+        if "status" not in result:
+            raise ValueError("RemoteFlowNode: ответ A2A без обязательного поля 'status'")
+
+        state.response = result["response"]
+        setattr(state, "remote_status", result["status"])
+        return result["response"]
 
     async def _resolve_connection(
         self, container, variables: Dict[str, Any]
@@ -995,21 +931,31 @@ class ExternalAPINode(BaseNode):
 
         if result.get("status") == "waiting_input" and result.get("interrupt"):
             interrupt_data = result["interrupt"]
-            state.interrupt = InterruptData(question=interrupt_data.get("question", ""))
+            if not isinstance(interrupt_data, dict):
+                raise ValueError(
+                    f"ExternalAPINode: interrupt должен быть dict, получено {type(interrupt_data)}"
+                )
+            body = parse_interrupt_body_from_external_dict(interrupt_data)
+            InterruptManager.apply_interrupt(state, body, tool_call=None)
             return None
 
         if result.get("status") == "error":
-            raise ValueError(f"External API error: {result.get('error')}")
+            err = result.get("error")
+            if err is None:
+                raise ValueError("ExternalAPINode: status=error без поля 'error'")
+            raise ValueError(f"External API error: {err}")
 
         for response_field, state_field in api_cfg.state_mapping.items():
             data = result.get("data", {})
             if isinstance(data, dict) and response_field in data:
                 setattr(state, state_field, data[response_field])
 
-        setattr(state, "api_response", result.get("data"))
+        data = result.get("data")
+        setattr(state, "api_response", data)
         setattr(state, "api_status", result.get("status"))
+        setattr(state, "result", data)
 
-        return result.get("data")
+        return data
 
 
 class MCPNode(BaseNode):
@@ -1119,21 +1065,133 @@ class ChannelNode(BaseNode):
         config = {**self.channel_config}
         config = VarResolver.resolve_deep(config, all_variables)
         
-        result = await handler.execute_action(
-            action=self.action,
-            params=inputs,
-            config=config,
-            variables=all_variables,
-        )
+        async with traced_operation(
+            "flows.channel.execute_action",
+            event_type="channel.action",
+            operation_category="channel",
+            extra_attributes={
+                "platform.channel.type": self.channel.value,
+                "platform.channel.action": self.action,
+            },
+        ):
+            result = await handler.execute_action(
+                action=self.action,
+                params=inputs,
+                config=config,
+                variables=all_variables,
+            )
         
         setattr(state, "channel_result", result)
-        
+        setattr(state, "result", result)
+
         logger.info(
             f"[node:{self.node_id}] Channel {self.channel.value} "
             f"action {self.action} completed"
         )
-        
+
         return result
+
+
+class HitlNode(BaseNode):
+    """
+    Нода передачи диалога оператору очереди (персистентная задача + interrupt).
+    После complete в очереди: resume с тем же correlation — задача в БД completed,
+    нода выставляет response и отдаёт управление следующим нодам по рёбрам.
+    """
+
+    async def _run_impl(self, state: ExecutionState, inputs: Dict[str, Any]) -> Any:
+        ctx = get_request_context()
+        if ctx is None or ctx.active_company is None:
+            raise ValueError(
+                f"hitl_node {self.node_id}: нужен Context с active_company"
+            )
+        company_id = ctx.active_company.company_id
+        cid_resume = state.hitl_handoff_correlation_id
+        if isinstance(cid_resume, str) and cid_resume.strip() and state.content:
+            repo = get_container().operator_repository
+            existing_resume = await repo.get_task_by_correlation(
+                company_id, cid_resume.strip()
+            )
+            if existing_resume is None:
+                raise ValueError(
+                    f"hitl_node {self.node_id}: resume с correlation_id={cid_resume!r}, "
+                    "задача оператора не найдена"
+                )
+            if existing_resume.status != OperatorTaskStatus.COMPLETED.value:
+                raise ValueError(
+                    f"hitl_node {self.node_id}: задача оператора ещё не завершена "
+                    f"(status={existing_resume.status!r})"
+                )
+            state.hitl_handoff_correlation_id = None
+            answer = str(state.content).strip()
+            state.response = answer
+            return None
+
+        slug_in = inputs.get("assignee_queue")
+        slug_cfg = self.config.get("operator_queue_slug")
+        qid_cfg = self.config.get("operator_queue_id")
+
+        slug_effective: Optional[str] = None
+        if isinstance(slug_in, str) and slug_in.strip():
+            slug_effective = slug_in.strip()
+        elif isinstance(slug_cfg, str) and slug_cfg.strip():
+            slug_effective = slug_cfg.strip()
+        elif isinstance(qid_cfg, str) and qid_cfg.strip():
+            row = await get_container().operator_repository.get_queue_by_id(
+                company_id, qid_cfg.strip()
+            )
+            if row is None:
+                raise ValueError(
+                    f"hitl_node {self.node_id}: очередь {qid_cfg!r} не найдена"
+                )
+            slug_effective = row.slug
+        else:
+            raise ValueError(
+                f"hitl_node {self.node_id}: укажите operator_queue_slug, operator_queue_id "
+                "или input_mapping.assignee_queue"
+            )
+
+        title = inputs.get("task_title") or self.config.get("operator_task_title")
+        if not title or not str(title).strip():
+            raise ValueError(
+                f"hitl_node {self.node_id}: нужен task_title (input_mapping или operator_task_title)"
+            )
+        message = (
+            inputs.get("user_facing_message")
+            or inputs.get("question")
+            or self.config.get("operator_user_message")
+        )
+        if not message or not str(message).strip():
+            raise ValueError(
+                f"hitl_node {self.node_id}: нужен текст для пользователя "
+                "(user_facing_message / question / operator_user_message)"
+            )
+
+        raw_mode = (
+            inputs.get("handoff_mode")
+            or self.config.get("operator_handoff_mode")
+            or "single_reply"
+        )
+        mode = HandoffMode(str(raw_mode).strip())
+
+        svc = get_container().operator_handoff_service
+        cid, op_task_id = await svc.register_handoff(
+            state,
+            question=str(message).strip(),
+            task_title=str(title).strip(),
+            assignee_queue_slug=slug_effective,
+            handoff_mode=mode,
+        )
+        raise FlowInterrupt(
+            body=OperatorTaskInterrupt(
+                question=str(message).strip(),
+                task_title=str(title).strip(),
+                assignee_queue=slug_effective,
+                handoff_mode=mode,
+                operator_task_id=op_task_id,
+            ),
+            correlation_id=cid,
+        )
 
 
 async def create_node(node_id: str, node_config: Dict[str, Any]) -> BaseNode:
@@ -1142,6 +1200,7 @@ async def create_node(node_id: str, node_config: Dict[str, Any]) -> BaseNode:
     
     Zero-Guess: неизвестный тип = исключение.
     """
+    node_config = dict(node_config)
     node_type_value = node_config.get("type")
     if node_type_value is None:
         raise ValueError(f"Node '{node_id}': type is required")

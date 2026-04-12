@@ -12,9 +12,10 @@ from typing import TYPE_CHECKING, Any, Dict, List
 
 from a2a.types import Message, Part, Role, TextPart
 
+from apps.flows.src.runtime.a2a_messages import build_user_message
 from core.logging import get_logger
 from apps.flows.src.models import NodeConfig, ReactLoopMode
-from apps.flows.src.tools.base import ToolType
+from apps.flows.src.models.enums import ReactToolRole
 
 if TYPE_CHECKING:
     from core.state import ExecutionState
@@ -50,7 +51,7 @@ class BaseLlmNodeRunner(ABC):
         if react_config.loop_mode != ReactLoopMode.EXPLICIT:
             return
 
-        existing_exit = self._find_tool_by_type(ToolType.EXIT)
+        existing_exit = self._find_tool_by_react_role(ReactToolRole.EXIT)
         if existing_exit:
             logger.debug(f"[node:{self.node_config.name}] exit tool '{existing_exit.name}' already exists")
             return
@@ -71,12 +72,19 @@ class BaseLlmNodeRunner(ABC):
                 f"but it's not in tools and is not 'finish'. The node may not be able to exit."
             )
 
-    def _find_tool_by_type(self, tool_type: ToolType):
-        """Находит tool по его типу."""
+    def _find_tool_by_react_role(self, react_role: ReactToolRole):
         for tool in self.tools:
-            if getattr(tool, "tool_type", None) == tool_type:
+            if getattr(tool, "react_role", None) == react_role:
                 return tool
         return None
+
+    def _get_reason_tool_name(self) -> str | None:
+        tool = self._find_tool_by_react_role(ReactToolRole.REASON)
+        return getattr(tool, "name", None) if tool else None
+
+    def _get_exit_tool_name(self) -> str | None:
+        tool = self._find_tool_by_react_role(ReactToolRole.EXIT)
+        return getattr(tool, "name", None) if tool else None
 
     @abstractmethod
     async def run(self, input_data: Dict[str, Any], state: "ExecutionState") -> Dict[str, Any]:
@@ -108,12 +116,11 @@ class BaseLlmNodeRunner(ABC):
         """Добавляет сообщение пользователя."""
         if not self.node_config:
             raise ValueError("add_user_message: node_config required")
-        message = Message(
-            messageId=str(uuid.uuid4()),
-            role=Role.user,
-            parts=[Part(root=TextPart(text=content))],
-            taskId=state.task_id,
-            metadata={"node_id": self.node_config.node_id},
+        message = build_user_message(
+            content,
+            self.node_config.node_id,
+            context_id=state.context_id,
+            task_id=state.task_id,
         )
         self.add_message(state, message)
 

@@ -53,46 +53,6 @@ export class TestPanel extends PlatformElement {
                 cursor: not-allowed;
             }
 
-            .session-state-row {
-                display: flex;
-                flex-wrap: wrap;
-                align-items: center;
-                gap: var(--space-2);
-                margin-bottom: var(--space-3);
-                font-size: var(--text-xs);
-            }
-
-            .session-state-label {
-                color: var(--text-tertiary);
-            }
-
-            .session-state-select {
-                flex: 1;
-                min-width: 120px;
-                padding: var(--space-1) var(--space-2);
-                font-size: var(--text-xs);
-                border-radius: var(--radius-sm);
-                border: 1px solid var(--border-subtle);
-                background: var(--glass-tint-subtle);
-                color: var(--text-primary);
-            }
-
-            .session-state-btn {
-                padding: var(--space-1) var(--space-2);
-                font-size: var(--text-xs);
-                font-weight: var(--font-medium);
-                color: var(--accent-text);
-                background: var(--accent-bg);
-                border: 1px solid var(--accent);
-                border-radius: var(--radius-sm);
-                cursor: pointer;
-            }
-
-            .session-state-btn:disabled {
-                opacity: 0.5;
-                cursor: not-allowed;
-            }
-            
             .btn-validate {
                 color: var(--text-secondary);
                 background: var(--glass-tint-subtle);
@@ -271,30 +231,22 @@ export class TestPanel extends PlatformElement {
     static properties = {
         inputState: { type: Object, attribute: 'input-state' },
         defaultInputState: { type: Object },
-        flowId: { type: String, attribute: 'flow-id' },
         loading: { type: Boolean },
         result: { type: Object },
         showFullState: { type: Boolean, attribute: 'show-full-state' },
         expanded: { type: Boolean, reflect: true },
         hideInputState: { type: Boolean, attribute: 'hide-input-state', reflect: true },
-        _sessionList: { state: true },
-        _sessionLoading: { state: true },
-        _pickedSessionId: { state: true },
     };
 
     constructor() {
         super();
         this.inputState = { content: '', messages: [], variables: {} };
         this.defaultInputState = null;
-        this.flowId = '';
         this.loading = false;
         this.result = null;
         this.showFullState = false;
         this.expanded = false;
         this.hideInputState = false;
-        this._sessionList = [];
-        this._sessionLoading = false;
-        this._pickedSessionId = '';
     }
 
     getInputState() {
@@ -349,54 +301,17 @@ export class TestPanel extends PlatformElement {
         this.resetInputState();
     }
 
-    updated(changedProperties) {
-        super.updated(changedProperties);
-        if (changedProperties.has('flowId') && this.flowId) {
-            this._loadSessionsForPicker();
-        }
-    }
-
-    async _loadSessionsForPicker() {
-        if (!this.flowId) {
-            this._sessionList = [];
-            return;
-        }
-        this._sessionLoading = true;
-        try {
-            const sessions = await this.a2a.getSessions(this.flowId, { limit: 100 });
-            this._sessionList = sessions;
-        } catch (err) {
-            this.error(`Список сессий: ${err.message}`);
-        } finally {
-            this._sessionLoading = false;
-        }
-    }
-
-    _onSessionSelect(e) {
-        this._pickedSessionId = e.target.value;
-    }
-
-    async _onApplySessionState() {
-        const sessionId = this._pickedSessionId?.trim();
-        if (!sessionId) {
-            this.error('Выберите сессию');
-            return;
-        }
-        const state = await this.a2a.getSessionState(sessionId);
-        this.setInputState(state);
-    }
-
     _toggleView() {
         this.showFullState = !this.showFullState;
     }
 
     _renderResult() {
         if (this.loading) {
-            return html`<div class="result-loading">Выполнение...</div>`;
+            return html`<div class="result-loading">${this.i18n.t('test_panel.running')}</div>`;
         }
         
         if (!this.result) {
-            return html`<div class="result-placeholder">Нажмите Execute для запуска</div>`;
+            return html`<div class="result-placeholder">${this.i18n.t('test_panel.hint_execute')}</div>`;
         }
         
         if (this.result.error) {
@@ -404,7 +319,7 @@ export class TestPanel extends PlatformElement {
         }
         
         if (this.result.success === false) {
-            return html`<div class="result-error">${this.result.error || 'Ошибка выполнения'}</div>`;
+            return html`<div class="result-error">${this.result.error || this.i18n.t('test_panel.err_run')}</div>`;
         }
         
         if (this.showFullState && this.result.output_state) {
@@ -420,22 +335,22 @@ export class TestPanel extends PlatformElement {
         if (this.result.output_state?.response) {
             return html`
                 <div class="result-success">
-                    <div class="result-label">Ответ:</div>
+                    <div class="result-label">${this.i18n.t('test_panel.label_response')}</div>
                     <div class="result-content">${this.result.output_state.response}</div>
                 </div>
             `;
         }
         
         if (this.result.valid !== undefined) {
-            return html`<div class="result-success">Конфигурация валидна</div>`;
+            return html`<div class="result-success">${this.i18n.t('test_panel.config_valid')}</div>`;
         }
         
-        return html`<div class="result-success">Выполнено успешно</div>`;
+        return html`<div class="result-success">${this.i18n.t('test_panel.success')}</div>`;
     }
 
     _renderDiff(diff) {
         if (!diff || diff.length === 0) {
-            return html`<div class="result-success">State не изменился</div>`;
+            return html`<div class="result-success">${this.i18n.t('test_panel.state_unchanged')}</div>`;
         }
         
         return html`
@@ -467,42 +382,13 @@ export class TestPanel extends PlatformElement {
         return html`
             <div class="panel">
                 <div class="panel-header">
-                    <span class="panel-title">Input State (JSON)</span>
+                    <span class="panel-title">${this.i18n.t('test_panel.input_state_title')}</span>
                     <button 
                         type="button" 
                         class="panel-action"
                         @click=${this._onResetState}
-                    >↺ Сбросить</button>
+                    >↺ ${this.i18n.t('test_panel.reset')}</button>
                 </div>
-                ${this.flowId ? html`
-                    <div class="session-state-row">
-                        <label class="session-state-label">Сессия</label>
-                        <select
-                            class="session-state-select"
-                            name="session_pick"
-                            .value=${this._pickedSessionId}
-                            @change=${this._onSessionSelect}
-                            ?disabled=${this._sessionLoading}
-                        >
-                            <option value="">${this._sessionLoading ? 'Загрузка…' : '— выберите —'}</option>
-                            ${(this._sessionList || []).map(
-                                (s) => html`<option value=${s.session_id}>${s.session_id}</option>`
-                            )}
-                        </select>
-                        <button
-                            type="button"
-                            class="session-state-btn"
-                            ?disabled=${this._sessionLoading}
-                            @click=${this._onApplySessionState}
-                        >Подставить state</button>
-                        <button
-                            type="button"
-                            class="panel-action"
-                            @click=${() => this._loadSessionsForPicker()}
-                            title="Обновить список"
-                        >Обновить</button>
-                    </div>
-                ` : ''}
                 <json-field-editor
                     .value=${JSON.stringify(this.inputState, null, 2)}
                     min-height="150"
@@ -516,7 +402,7 @@ export class TestPanel extends PlatformElement {
         return html`
             <div class="test-section">
                 <div class="test-header">
-                    <span class="test-title">Тестирование</span>
+                    <span class="test-title">${this.i18n.t('test_panel.title')}</span>
                     <div class="test-actions">
                         <button 
                             type="button" 
@@ -524,7 +410,7 @@ export class TestPanel extends PlatformElement {
                             ?disabled=${this.loading}
                             @click=${this._onValidate}
                         >
-                            Validate
+                            ${this.i18n.t('test_panel.validate')}
                         </button>
                         <button 
                             type="button" 
@@ -532,7 +418,7 @@ export class TestPanel extends PlatformElement {
                             ?disabled=${this.loading}
                             @click=${this._onExecute}
                         >
-                            ${this.loading ? 'Выполнение...' : 'Execute'}
+                            ${this.loading ? this.i18n.t('test_panel.running') : this.i18n.t('test_panel.execute')}
                         </button>
                     </div>
                 </div>
@@ -542,7 +428,7 @@ export class TestPanel extends PlatformElement {
                     
                     <div class="panel">
                         <div class="panel-header">
-                            <span class="panel-title">Результат</span>
+                            <span class="panel-title">${this.i18n.t('test_panel.result_title')}</span>
                             <div class="result-meta">
                                 ${this.result && this.result.duration_ms ? html`
                                     <span class="result-duration">${this.result.duration_ms}ms</span>
@@ -552,7 +438,7 @@ export class TestPanel extends PlatformElement {
                                         type="button" 
                                         class="panel-action"
                                         @click=${this._toggleView}
-                                    >${this.showFullState ? 'Diff' : 'Full'}</button>
+                                    >${this.showFullState ? this.i18n.t('test_panel.view_diff') : this.i18n.t('test_panel.view_full')}</button>
                                 ` : ''}
                             </div>
                         </div>

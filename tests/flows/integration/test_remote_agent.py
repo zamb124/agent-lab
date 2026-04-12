@@ -224,7 +224,7 @@ class TestFlowWithRemoteAgent:
                 "prepare": {
                     "type": "code",
                     "code": """
-def run(state):
+async def run(state):
     state['content'] = state.get('content', '').upper()
     state['prepared'] = True
     return state
@@ -279,7 +279,7 @@ def run(state):
                 "process": {
                     "type": "code",
                     "code": """
-def run(state):
+async def run(state):
     response = state.get('response', '')
     state['final'] = f"Final: {response}"
     return state
@@ -322,11 +322,12 @@ class TestRemoteAgentInputMapping:
     async def mock_a2a_server_with_logging(self):
         """A2A сервер который логирует что получил на вход."""
         received_messages = []
+        public = {"base": "http://127.0.0.1:0"}
 
         async def handle_agent_card(request):
             return web.json_response({
                 "name": "Input Logging Agent",
-                "url": "http://localhost:9995",
+                "url": public["base"],
                 "skills": [{"id": "default", "name": "Default"}],
             })
 
@@ -352,10 +353,12 @@ class TestRemoteAgentInputMapping:
 
         runner = web.AppRunner(app)
         await runner.setup()
-        site = web.TCPSite(runner, "localhost", 9995)
+        site = web.TCPSite(runner, "127.0.0.1", 0)
         await site.start()
+        port = tcp_site_assigned_port(site)
+        public["base"] = f"http://127.0.0.1:{port}"
 
-        yield {"url": "http://localhost:9995", "received": received_messages}
+        yield {"url": public["base"], "received": received_messages}
 
         await runner.cleanup()
 
@@ -446,7 +449,7 @@ class TestRemoteAgentInputMapping:
                 "prepare": {
                     "type": "code",
                     "code": """
-def run(state):
+async def run(state):
     state['prepared_query'] = 'Query from function node'
     return state
 """

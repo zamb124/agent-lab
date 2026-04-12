@@ -2,13 +2,16 @@
 Роутер авторизации для Frontend сервиса
 """
 import logging
+from typing import Optional
+
 from fastapi import APIRouter, HTTPException, Query, Request
-from fastapi.responses import RedirectResponse, JSONResponse
+from fastapi.responses import RedirectResponse
 from core.identity.auth_service import AuthService
 from core.models.identity_models import AuthProvider, AuthRequest
 from core.config import get_settings
+from core.utils.tokens import TokenService
 from core.utils.domain import get_cookie_domain, build_url
-from apps.frontend.dependencies import get_container
+from apps.frontend.dependencies import ContainerDep
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/auth", tags=["auth"])
@@ -17,14 +20,15 @@ router = APIRouter(prefix="/api/auth", tags=["auth"])
 @router.get("/callback")
 async def auth_callback(
     request: Request,
+    container: ContainerDep,
     code: str = Query(...),
     state: str = Query(...),
-    provider: str = Query(None)
+    provider: str = Query(None),
+    apple_oauth_user_json: Optional[str] = Query(None, alias="user"),
 ):
     """Callback после OAuth авторизации"""
     from core.utils.domain import is_local, get_host_with_port
     
-    container = get_container()
     auth_service: AuthService = container.auth_service
     
     auth_state = await auth_service._get_auth_state(state)
@@ -52,7 +56,8 @@ async def auth_callback(
         provider=provider_enum,
         code=code,
         state=state,
-        redirect_uri=redirect_uri
+        redirect_uri=redirect_uri,
+        oauth_first_login_user_json=apple_oauth_user_json,
     )
     
     result = await auth_service.complete_auth(auth_request)
@@ -87,7 +92,15 @@ async def auth_callback(
         else:
             redirect_url = build_url(target_host, "/dashboard", company.subdomain)
     else:
-        redirect_url = build_url(target_host, "/select-company")
+        active_id = user.active_company_id
+        if active_id and active_id in user.companies:
+            company = await container.company_repository.get(active_id)
+            if company and company.subdomain:
+                redirect_url = build_url(target_host, "/dashboard", company.subdomain)
+            else:
+                redirect_url = build_url(target_host, "/select-company")
+        else:
+            redirect_url = build_url(target_host, "/select-company")
     
     response = RedirectResponse(url=redirect_url)
     
@@ -101,18 +114,8 @@ async def auth_callback(
         httponly=True,
         secure=is_production,
         samesite="lax",
-        max_age=7200
+        max_age=TokenService.SESSION_EXPIRES,
     )
     
-    return response
-
-
-@router.post("/logout")
-async def logout(request: Request):
-    """Выйти из системы"""
-    cookie_domain = get_cookie_domain(request.headers.get("host", ""))
-    
-    response = JSONResponse({"success": True})
-    response.delete_cookie("auth_token", domain=cookie_domain)
     return response
 

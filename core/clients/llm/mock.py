@@ -4,6 +4,7 @@ Mock LLM для тестов.
 
 import asyncio
 import json
+import os
 import uuid
 from typing import Any, AsyncGenerator, Dict, List, Optional, Type, TypeVar, Union, overload
 
@@ -18,7 +19,7 @@ from a2a.types import (
     TaskStatusUpdateEvent,
     TextPart,
 )
-from a2a.utils.message import get_message_text
+from a2a.utils.message import get_message_text, new_agent_text_message
 from pydantic import BaseModel
 
 from core.logging import get_logger
@@ -40,7 +41,12 @@ MessageInput = Union[
 # A2A событие от LLM
 StreamEvent = TaskArtifactUpdateEvent | TaskStatusUpdateEvent
 
-MOCK_REDIS_KEY = "mock_llm:responses"
+def _mock_redis_key() -> str:
+    """Ключ Redis для mock LLM ответов, уникальный для каждого xdist воркера."""
+    worker = os.environ.get("PYTEST_XDIST_WORKER", "")
+    if worker:
+        return f"mock_llm:responses:{worker}"
+    return "mock_llm:responses"
 
 _global_mock_registry: Dict[str, "MockLLM"] = {}
 
@@ -57,6 +63,7 @@ class MockLLM:
 
     def __init__(self, model_name: str = "mock-gpt-4"):
         self.model_name = model_name
+        self.llm_provider = "mock"
         self._response_queue: List[Any] = []
         self._responses: Dict[str, str] = {}
         self._tool_responses: Dict[str, Dict[str, Any]] = {}
@@ -104,15 +111,15 @@ class MockLLM:
             return None
         
         try:
-            data = await self._redis_client.get(MOCK_REDIS_KEY)
+            data = await self._redis_client.get(_mock_redis_key())
             if data:
                 responses = json.loads(data)
                 if responses:
                     response = responses.pop(0)
                     if responses:
-                        await self._redis_client.set(MOCK_REDIS_KEY, json.dumps(responses))
+                        await self._redis_client.set(_mock_redis_key(), json.dumps(responses))
                     else:
-                        await self._redis_client.delete(MOCK_REDIS_KEY)
+                        await self._redis_client.delete(_mock_redis_key())
                     logger.info(f"MockLLM: ответ из Redis (осталось {len(responses)})")
                     return response
         except Exception as e:
@@ -132,16 +139,16 @@ class MockLLM:
     
     async def _get_response_async(self, messages: List[Message]) -> Dict[str, Any]:
         """Асинхронный метод получения ответа с Redis поддержкой."""
-        # Сначала Redis (межпроцессный)
-        redis_response = await self._get_redis_response()
-        if redis_response is not None:
-            return self._process_response(redis_response, messages)
-        
-        # Потом локальная очередь
+        # Локальная очередь приоритетнее Redis: в одном тесте uvicorn ест очередь
+        # из configure_mock_llm, а worker — из ключа mock_llm:responses без пересечения.
         if self._response_queue:
             response = self._response_queue.pop(0)
             logger.debug(f"MockLLM: ответ из очереди (осталось {len(self._response_queue)})")
             return self._process_response(response, messages)
+
+        redis_response = await self._get_redis_response()
+        if redis_response is not None:
+            return self._process_response(redis_response, messages)
 
         return self._generate_from_patterns(messages)
 
@@ -262,6 +269,7 @@ class MockLLM:
         response_format: Optional[Dict[str, Any]] = None,
         task_id: Optional[str] = None,
         context_id: Optional[str] = None,
+        **_: Any,
     ) -> AsyncGenerator[StreamEvent, None]:
         """
         Stream метод - 100% реалистичная симуляция OpenAI streaming.
@@ -331,13 +339,15 @@ class MockLLM:
                 )
                 await asyncio.sleep(0.005)
 
-        # Tool calls стримятся по частям как в OpenAI
+        # Tool calls: как в LLMClient.stream — сначала статус с tool_calls+usage, затем
+        # второй статус (часто только usage), иначе LlmNodeRunner затирал бы tool_calls.
         if tool_calls:
+            usage_data = {"input_tokens": 0, "output_tokens": 0, "total_tokens": 0}
             message = Message(
                 message_id=str(uuid.uuid4()),
                 role=Role.agent,
                 parts=[Part(root=TextPart(text=content))],
-                metadata={"tool_calls": tool_calls},
+                metadata={"tool_calls": tool_calls, "usage": usage_data},
             )
             yield TaskStatusUpdateEvent(
                 contextId=context_id,
@@ -345,9 +355,20 @@ class MockLLM:
                 status=TaskStatus(state=TaskState.working, message=message),
                 final=False,
             )
+            final_message = new_agent_text_message(content) if content else None
+            if final_message:
+                final_message.metadata = {"usage": usage_data}
+            yield TaskStatusUpdateEvent(
+                contextId=context_id,
+                taskId=task_id,
+                status=TaskStatus(
+                    state=TaskState.working,
+                    message=final_message,
+                ),
+                final=False,
+            )
         else:
-            # Финальное событие - только если нет tool_calls
-            # Если есть tool_calls, агент продолжит после их выполнения
+            # Без tool_calls: статус завершения шага LLM (не конец A2A-задачи, см. factory.stream).
             final_message = None
             if content:
                 final_message = Message(
@@ -359,7 +380,7 @@ class MockLLM:
                 contextId=context_id,
                 taskId=task_id,
                 status=TaskStatus(state=TaskState.completed, message=final_message),
-                final=True,
+                final=False,
             )
 
     @overload
@@ -376,6 +397,9 @@ class MockLLM:
         max_tokens: Optional[int] = None,
         frequency_penalty: Optional[float] = None,
         presence_penalty: Optional[float] = None,
+        seed: Optional[int] = None,
+        reasoning_effort: Optional[str] = None,
+        extra_body: Optional[Dict[str, Any]] = None,
     ) -> T: ...
 
     @overload
@@ -392,6 +416,9 @@ class MockLLM:
         max_tokens: Optional[int] = None,
         frequency_penalty: Optional[float] = None,
         presence_penalty: Optional[float] = None,
+        seed: Optional[int] = None,
+        reasoning_effort: Optional[str] = None,
+        extra_body: Optional[Dict[str, Any]] = None,
     ) -> Message: ...
 
     async def chat(
@@ -407,10 +434,14 @@ class MockLLM:
         max_tokens: Optional[int] = None,
         frequency_penalty: Optional[float] = None,
         presence_penalty: Optional[float] = None,
+        seed: Optional[int] = None,
+        reasoning_effort: Optional[str] = None,
+        extra_body: Optional[Dict[str, Any]] = None,
     ) -> Message | T:
         """
         Единый метод вызова MockLLM (совместим с LLMClient.chat).
         """
+        del seed, reasoning_effort, extra_body
         normalized = _normalize_messages(messages)
         
         response_format = None
@@ -541,19 +572,31 @@ def configure_mock_llm_redis(redis_client, model_name: str = "mock-gpt-4") -> Op
 async def setup_mock_responses_redis(
     redis_client,
     response_queue: List[Any],
+    *,
+    key_override: Optional[str] = None,
 ) -> None:
     """
     Записывает mock ответы в Redis для межпроцессного обмена.
-    
+
     Тест вызывает эту функцию, Worker читает ответы из Redis.
     Это позволяет тестам контролировать ответы даже когда Worker
     в отдельном subprocess.
+
+    key_override: если задан, используется вместо автоматического ключа.
+    Для real_taskiq тестов передаётся базовый ключ, т.к. worker subprocess
+    не имеет PYTEST_XDIST_WORKER.
     """
-    await redis_client.set(MOCK_REDIS_KEY, json.dumps(response_queue))
-    logger.info(f"MockLLM: записано {len(response_queue)} ответов в Redis")
+    key = key_override or _mock_redis_key()
+    await redis_client.set(key, json.dumps(response_queue))
+    logger.info(f"MockLLM: записано {len(response_queue)} ответов в Redis (key={key})")
 
 
-async def clear_mock_responses_redis(redis_client) -> None:
+async def clear_mock_responses_redis(
+    redis_client,
+    *,
+    key_override: Optional[str] = None,
+) -> None:
     """Очищает mock ответы из Redis."""
-    await redis_client.delete(MOCK_REDIS_KEY)
+    key = key_override or _mock_redis_key()
+    await redis_client.delete(key)
 

@@ -237,22 +237,20 @@ class BaseRepository(ABC, Generic[T]):
         table_name = self._get_table_name()
         return await self._storage._delete_with_table(final_key, table_name)
 
-    async def list_all(self, limit: int = 100) -> List[T]:
+    async def list(self, *, limit: int, offset: int = 0) -> list[T]:
         """
-        Возвращает список всех сущностей.
-        
+        Возвращает страницу сущностей.
+
         Args:
-            limit: Максимальное количество результатов
-            
-        Returns:
-            Список сущностей
+            limit: Максимальное количество результатов (обязательный)
+            offset: Смещение для пагинации
         """
         base_prefix = self._get_prefix()
         final_prefix = self._build_final_key(base_prefix)
         table_name = self._get_table_name()
         
         all_data = await self._storage._get_all_by_prefix_and_table(
-            final_prefix, table_name, limit
+            final_prefix, table_name, limit, offset
         )
         
         entities = []
@@ -265,6 +263,13 @@ class BaseRepository(ABC, Generic[T]):
                 continue
         
         return entities
+
+    async def count_all(self) -> int:
+        """Количество всех сущностей компании в таблице."""
+        base_prefix = self._get_prefix()
+        final_prefix = self._build_final_key(base_prefix)
+        table_name = self._get_table_name()
+        return await self._storage._count_by_prefix_and_table(final_prefix, table_name)
 
     async def get_many(self, entity_ids: List[str]) -> Dict[str, T]:
         """

@@ -5,7 +5,7 @@
 и конвертации в A2A error format.
 """
 
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional
 
 
 class ImanBaseError(Exception):
@@ -320,6 +320,36 @@ class FlowInfiniteLoopError(FlowExecutionError):
         )
 
 
+class FlowPrematureCompletionError(FlowExecutionError):
+    """
+    Цикл flow остановился без достижения терминала (END / только связи to=null).
+    """
+
+    code = "FLOW_PREMATURE_COMPLETION"
+    message = "Flow завершился до терминальной ноды"
+
+    def __init__(
+        self,
+        flow_id: str,
+        reason: str,
+        *,
+        last_nodes: Optional[List[str]] = None,
+        extra: Optional[Dict[str, Any]] = None,
+        **kwargs: Any,
+    ) -> None:
+        payload: Dict[str, Any] = {"flow_id": flow_id, "reason": reason}
+        if last_nodes is not None:
+            payload["last_nodes"] = last_nodes
+        if extra:
+            payload.update(extra)
+        super().__init__(
+            message=f"Flow '{flow_id}': остановка не на END ({reason})",
+            code=self.code,
+            payload=payload,
+            **kwargs,
+        )
+
+
 class SafeEvalError(ExecutionError):
     """
     Ошибка безопасного выполнения кода.
@@ -494,6 +524,7 @@ __all__ = [
     "FlowExecutionError",
     "NodeCallLimitError",
     "FlowInfiniteLoopError",
+    "FlowPrematureCompletionError",
     "SafeEvalError",
     "ExternalAPIError",
     "TimeoutError",

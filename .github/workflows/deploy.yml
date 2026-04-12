@@ -65,12 +65,13 @@ jobs:
           host: ${{ secrets.SERVER_HOST }}
           username: ${{ secrets.SERVER_USER }}
           key: ${{ secrets.SERVER_SSH_KEY }}
-          source: "docker-compose-prod.yaml,conf.json"
+          source: "docker-compose-prod.yaml,conf.json,deploy/prepare-static.sh"
           target: /opt/agent-lab/
 
       # docker-compose-prod монтирует ./migrations/postgres/init.sql — без файла на хосте
       # первый старт Postgres с пустым volume не создаст platform_agents и остальные БД.
-      - name: Ensure migrations path on server
+      # onlyoffice-documentserver монтирует ./deploy/onlyoffice/themes/*.json — иначе Docker создаст каталог вместо файла.
+      - name: Ensure server paths for compose volume mounts
         uses: appleboy/ssh-action@v1
         with:
           host: ${{ secrets.SERVER_HOST }}
@@ -78,6 +79,7 @@ jobs:
           key: ${{ secrets.SERVER_SSH_KEY }}
           script: |
             mkdir -p /opt/agent-lab/migrations/postgres
+            mkdir -p /opt/agent-lab/deploy/onlyoffice/themes
             rm -rf /opt/agent-lab/migrations/postgres/init.sql
 
       # Без strip_components файл окажется в .../postgres/migrations/postgres/init.sql,
@@ -91,6 +93,16 @@ jobs:
           source: "migrations/postgres/init.sql,migrations/postgres/bootstrap_idempotent.sql"
           target: /opt/agent-lab/migrations/postgres/
           strip_components: 2
+
+      - name: Copy OnlyOffice theme (documentserver volume mount)
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.SERVER_HOST }}
+          username: ${{ secrets.SERVER_USER }}
+          key: ${{ secrets.SERVER_SSH_KEY }}
+          source: "deploy/onlyoffice/themes/theme-humanitec-light.json"
+          target: /opt/agent-lab/deploy/onlyoffice/themes/
+          strip_components: 3
 
       - name: Deploy on server
         uses: appleboy/ssh-action@v1
@@ -107,12 +119,16 @@ jobs:
           AUTH_GOOGLE_CLIENT_SECRET: ${{ secrets.AUTH_GOOGLE_CLIENT_SECRET }}
           AUTH_GITHUB_CLIENT_ID: ${{ secrets.AUTH_GITHUB_CLIENT_ID }}
           AUTH_GITHUB_CLIENT_SECRET: ${{ secrets.AUTH_GITHUB_CLIENT_SECRET }}
+          AUTH_APPLE_PRIVATE_KEY: ${{ secrets.AUTH_APPLE_PRIVATE_KEY }}
+          AUTH_DEMO_PASSWORD: ${{ secrets.AUTH_DEMO_PASSWORD }}
           GHCR_TOKEN: ${{ secrets.GHCR_TOKEN }}
           GITHUB_ACTOR: ${{ github.actor }}
           PUSH__ENABLED: ${{ secrets.PUSH__ENABLED }}
           PUSH__VAPID_PUBLIC_KEY: ${{ secrets.PUSH__VAPID_PUBLIC_KEY }}
           PUSH__VAPID_PRIVATE_KEY: ${{ secrets.PUSH__VAPID_PRIVATE_KEY }}
           PUSH__VAPID_EMAIL: ${{ secrets.PUSH__VAPID_EMAIL || 'ops@humanitec.ru' }}
+          # APNs: отдельный .p8 только если не тот же, что у Sign in with Apple (иначе хватит AUTH_APPLE_PRIVATE_KEY + push.apns_bundle_id в conf.json).
+          PUSH__APNS_PRIVATE_KEY: ${{ secrets.PUSH__APNS_PRIVATE_KEY }}
           LIVEKIT_API_KEY: ${{ secrets.LIVEKIT_API_KEY }}
           LIVEKIT_API_SECRET: ${{ secrets.LIVEKIT_API_SECRET }}
           LIVEKIT_PUBLIC_URL: ${{ secrets.LIVEKIT_PUBLIC_URL }}
@@ -123,12 +139,20 @@ jobs:
           LLM_OPENROUTER_API_KEY: ${{ secrets.LLM_OPENROUTER_API_KEY }}
           STT__CLOUD_RU__API_KEY: ${{ secrets.STT__CLOUD_RU__API_KEY }}
           STT_CLOUD_RU_API_KEY: ${{ secrets.STT_CLOUD_RU_API_KEY }}
+          RAG_EMBEDDING_API_KEY: ${{ secrets.RAG_EMBEDDING_API_KEY }}
+          ONLYOFFICE_JWT_SECRET: ${{ secrets.ONLYOFFICE_JWT_SECRET }}
+          OFFICE_DOCUMENT_SERVER_PUBLIC_URL: ${{ secrets.OFFICE_DOCUMENT_SERVER_PUBLIC_URL }}
+          OFFICE_CALLBACK_PUBLIC_BASE_URL: ${{ secrets.OFFICE_CALLBACK_PUBLIC_BASE_URL }}
+          YOOMONEY_ACCOUNT_NUMBER: ${{ secrets.YOOMONEY_ACCOUNT_NUMBER }}
+          YOOMONEY_NOTIFICATION_SECRET: ${{ secrets.YOOMONEY_NOTIFICATION_SECRET }}
+          YOOMONEY_CLIENT_ID: ${{ secrets.YOOMONEY_CLIENT_ID }}
+          YOOMONEY_CLIENT_SECRET: ${{ secrets.YOOMONEY_CLIENT_SECRET }}
         with:
           host: ${{ secrets.SERVER_HOST }}
           username: ${{ secrets.SERVER_USER }}
           key: ${{ secrets.SERVER_SSH_KEY }}
           command_timeout: 30m
-          envs: IMAGE_TAG,IMAGE,POSTGRES_PASSWORD,AUTH__JWT_SECRET,SELECTEL_ACCESS_KEY,SELECTEL_SECRET_KEY,AUTH_YANDEX_CLIENT_ID,AUTH_YANDEX_CLIENT_SECRET,AUTH_GOOGLE_CLIENT_ID,AUTH_GOOGLE_CLIENT_SECRET,AUTH_GITHUB_CLIENT_ID,AUTH_GITHUB_CLIENT_SECRET,GHCR_TOKEN,GITHUB_ACTOR,PUSH__ENABLED,PUSH__VAPID_PUBLIC_KEY,PUSH__VAPID_PRIVATE_KEY,PUSH__VAPID_EMAIL,LIVEKIT_API_KEY,LIVEKIT_API_SECRET,LIVEKIT_PUBLIC_URL,SERVER_HOST,TURN_SECRET,DEPLOYMENT_VERSION,LLM_BOTHUB_API_KEY,LLM_OPENROUTER_API_KEY,STT__CLOUD_RU__API_KEY,STT_CLOUD_RU_API_KEY
+          envs: IMAGE_TAG,IMAGE,POSTGRES_PASSWORD,AUTH__JWT_SECRET,SELECTEL_ACCESS_KEY,SELECTEL_SECRET_KEY,AUTH_YANDEX_CLIENT_ID,AUTH_YANDEX_CLIENT_SECRET,AUTH_GOOGLE_CLIENT_ID,AUTH_GOOGLE_CLIENT_SECRET,AUTH_GITHUB_CLIENT_ID,AUTH_GITHUB_CLIENT_SECRET,AUTH_APPLE_PRIVATE_KEY,AUTH_DEMO_PASSWORD,GHCR_TOKEN,GITHUB_ACTOR,PUSH__ENABLED,PUSH__VAPID_PUBLIC_KEY,PUSH__VAPID_PRIVATE_KEY,PUSH__VAPID_EMAIL,PUSH__APNS_PRIVATE_KEY,LIVEKIT_API_KEY,LIVEKIT_API_SECRET,LIVEKIT_PUBLIC_URL,SERVER_HOST,TURN_SECRET,DEPLOYMENT_VERSION,LLM_BOTHUB_API_KEY,LLM_OPENROUTER_API_KEY,STT__CLOUD_RU__API_KEY,STT_CLOUD_RU_API_KEY,RAG_EMBEDDING_API_KEY,ONLYOFFICE_JWT_SECRET,OFFICE_DOCUMENT_SERVER_PUBLIC_URL,OFFICE_CALLBACK_PUBLIC_BASE_URL,YOOMONEY_ACCOUNT_NUMBER,YOOMONEY_NOTIFICATION_SECRET,YOOMONEY_CLIENT_ID,YOOMONEY_CLIENT_SECRET
           script: |
             set -e
 
@@ -136,6 +160,10 @@ jobs:
             rm -f /opt/agent-lab/.env
 
             cd /opt/agent-lab
+
+            export ONLYOFFICE_JWT_SECRET="${ONLYOFFICE_JWT_SECRET:-}"
+            export OFFICE_DOCUMENT_SERVER_PUBLIC_URL="${OFFICE_DOCUMENT_SERVER_PUBLIC_URL:-}"
+            export OFFICE_CALLBACK_PUBLIC_BASE_URL="${OFFICE_CALLBACK_PUBLIC_BASE_URL:-}"
 
             if [ ! -f migrations/postgres/init.sql ]; then
               echo "FATAL: migrations/postgres/init.sql должен быть обычным файлом (см. scp strip_components)."
@@ -202,8 +230,8 @@ jobs:
             }
 
             docker compose -f docker-compose-prod.yaml up -d \
-              agents frontend crm rag sync \
-              worker scheduler rag-worker sync-worker \
+              agents frontend crm rag sync onlyoffice-documentserver office scheduler-api \
+              flows_worker scheduler crm_worker rag_worker sync_worker idle_worker \
               livekit livekit-egress coturn
 
             _egress_wait=0
@@ -218,3 +246,13 @@ jobs:
             done
 
             docker image prune -f
+
+            # Подготовка статики: извлекаем UI файлы и i18n из Docker образа
+            # static-server (nginx pod) уже настроен через ingress.sh при первом деплое
+            # При каждом деплое нужно только обновить файлы на диске
+            echo "Подготовка статики из образа ${IMAGE}..."
+            REMOTE_DIR=/opt/agent-lab IMAGE=${IMAGE} bash /opt/agent-lab/deploy/prepare-static.sh
+
+            # Перезапускаем static-server если он уже запущен (подхватывает новые файлы)
+            microk8s kubectl rollout restart deployment/static-server -n default 2>/dev/null || true
+            microk8s kubectl rollout status deployment/static-server -n default --timeout=60s 2>/dev/null || true

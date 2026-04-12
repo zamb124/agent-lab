@@ -10,6 +10,8 @@
  */
 import { html, css } from 'lit';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
+import { buttonStyles } from '@platform/lib/styles/shared/button.styles.js';
+import '@platform/lib/components/platform-icon.js';
 import { nextModalLayerZIndex } from '@platform/lib/utils/modal-z-stack.js';
 
 class CallIncoming extends PlatformElement {
@@ -23,6 +25,7 @@ class CallIncoming extends PlatformElement {
 
     static styles = [
         PlatformElement.styles,
+        buttonStyles,
         css`
         :host {
             position: fixed;
@@ -107,13 +110,6 @@ class CallIncoming extends PlatformElement {
 
         .btn {
             flex: 1;
-            padding: 10px;
-            border-radius: 12px;
-            border: none;
-            cursor: pointer;
-            font-size: 13px;
-            font-weight: 600;
-            transition: all 0.15s;
         }
 
         .btn-accept {
@@ -135,10 +131,17 @@ class CallIncoming extends PlatformElement {
         super();
         this._ringing = true;
         this._audio = null;
+        /** @type {(() => void) | null} */
+        this._i18nUnsub = null;
+    }
+
+    _tp(key, params) {
+        return this.i18n.t(key, params ?? {});
     }
 
     connectedCallback() {
         super.connectedCallback();
+        this._i18nUnsub = this.i18n.subscribe(() => this.requestUpdate());
         this.style.setProperty(
             '--platform-modal-layer-z',
             String(nextModalLayerZIndex()),
@@ -148,6 +151,8 @@ class CallIncoming extends PlatformElement {
 
     disconnectedCallback() {
         super.disconnectedCallback();
+        this._i18nUnsub?.();
+        this._i18nUnsub = null;
         this._stopRinging();
     }
 
@@ -157,7 +162,7 @@ class CallIncoming extends PlatformElement {
             this._audio.loop = true;
             this._audio.volume = 0.6;
             this._audio.play().catch(() => {});
-        } catch { /* звук необязателен */ }
+        } catch { /* optional sound */ }
     }
 
     _stopRinging() {
@@ -183,19 +188,17 @@ class CallIncoming extends PlatformElement {
             <div class="banner">
                 <div class="top">
                     <div class="icon" aria-hidden="true">
-                        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                            <path d="M22 16.92v3a2 2 0 01-2.18 2 19.79 19.79 0 01-8.63-3.07 19.5 19.5 0 01-6-6 19.79 19.79 0 01-3.07-8.67A2 2 0 014.11 2h3a2 2 0 012 1.72 12.84 12.84 0 00.7 2.81 2 2 0 01-.45 2.11L8.09 9.91a16 16 0 006 6l1.27-1.27a2 2 0 012.11-.45 12.84 12.84 0 002.81.7A2 2 0 0122 16.92z"/>
-                        </svg>
+                        <platform-icon name="phone-call" size="22" filled aria-hidden="true"></platform-icon>
                     </div>
                     <div class="info">
-                        <div class="label">Входящий звонок</div>
-                        <div class="title">${this.channelName ?? 'Звонок'}</div>
+                        <div class="label">${this._tp('call_incoming.incoming_label')}</div>
+                        <div class="title">${this.channelName ?? this._tp('chat_view.call')}</div>
                         <div class="subtitle">${this.callerName}</div>
                     </div>
                 </div>
                 <div class="actions">
-                    <button class="btn btn-accept" @click=${this._accept}>Принять</button>
-                    <button class="btn btn-decline" @click=${this._decline}>Отклонить</button>
+                    <button class="btn btn-accept" @click=${this._accept}>${this._tp('call_incoming.accept')}</button>
+                    <button class="btn btn-decline" @click=${this._decline}>${this._tp('call_incoming.decline')}</button>
                 </div>
             </div>
         `;

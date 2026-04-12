@@ -12,7 +12,7 @@ import pytest
 async def test_ws_spaces_create_via_taskiq(
     sync_service,
     sync_worker,
-    auth_token_system,
+    sync_auth_token,
     sync_db_clean: None,
 ) -> None:
     import websockets
@@ -26,7 +26,7 @@ async def test_ws_spaces_create_via_taskiq(
     }
     async with websockets.connect(
         uri,
-        additional_headers=[("Cookie", f"auth_token={auth_token_system}")],
+        additional_headers=[("Cookie", f"auth_token={sync_auth_token}")],
     ) as ws:
         await ws.send(json.dumps(frame))
         data = None
@@ -60,7 +60,7 @@ async def test_ws_rejects_without_auth_cookie(
 async def test_ws_task_error_frame(
     sync_service,
     sync_worker,
-    auth_token_system,
+    sync_auth_token,
     sync_db_clean: None,
 ) -> None:
     import websockets
@@ -74,7 +74,7 @@ async def test_ws_task_error_frame(
     }
     async with websockets.connect(
         uri,
-        additional_headers=[("Cookie", f"auth_token={auth_token_system}")],
+        additional_headers=[("Cookie", f"auth_token={sync_auth_token}")],
     ) as ws:
         await ws.send(json.dumps(frame))
         data = None
@@ -92,7 +92,7 @@ async def test_ws_task_error_frame(
 async def test_ws_two_commands_sequential(
     sync_service,
     sync_worker,
-    auth_token_system,
+    sync_auth_token,
     sync_db_clean: None,
 ) -> None:
     import websockets
@@ -104,7 +104,7 @@ async def test_ws_two_commands_sequential(
     f2 = {"id": id2, "type": "spaces.create", "payload": {"body": {"name": "WsB", "description": None}}}
     async with websockets.connect(
         uri,
-        additional_headers=[("Cookie", f"auth_token={auth_token_system}")],
+        additional_headers=[("Cookie", f"auth_token={sync_auth_token}")],
     ) as ws:
         await ws.send(json.dumps(f1))
         await ws.send(json.dumps(f2))

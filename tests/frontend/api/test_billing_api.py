@@ -129,16 +129,30 @@ class TestBillingAPI:
     async def test_create_topup_payment(
         self, 
         frontend_client: AsyncClient, 
-        auth_headers
+        auth_headers,
+        monkeypatch,
     ):
         """Создание платежа на пополнение"""
+        from core.clients.payment.factory import PaymentProviderFactory
+        from core.clients.payment.yoomoney_provider import YooMoneyConfig, YooMoneyProvider
+
+        provider = YooMoneyProvider(YooMoneyConfig(
+            provider_type="yoomoney",
+            account_number="4100999",
+            notification_secret="test_secret",
+        ))
+        monkeypatch.setattr(
+            PaymentProviderFactory, "_providers", {"yoomoney_test": provider},
+        )
+        monkeypatch.setattr(
+            PaymentProviderFactory, "get_default_provider",
+            classmethod(lambda cls: provider),
+        )
+
         response = await frontend_client.post(
             "/frontend/api/billing/topup",
             headers=auth_headers,
-            json={
-                "amount": 1000.0,
-                "payment_method": "card"
-            }
+            json={"amount": 1000.0},
         )
         
         assert response.status_code == 200

@@ -23,7 +23,7 @@ logger = get_logger(__name__)
 
 _LLM_SYNC_TASK_NAME = "sync_llm_models_task"
 _LLM_SYNC_TARGET_SERVICE = "flows"
-_LLM_SYNC_QUEUE_NAME = "default"
+_LLM_SYNC_QUEUE_NAME = "idle"
 _LLM_SYNC_PAYLOAD_MARKER = "llm_models_background_sync"
 
 

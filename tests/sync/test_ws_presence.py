@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import uuid
 
 import pytest
 
@@ -19,7 +20,7 @@ async def test_sync_ws_presence_refresh_clear() -> None:
         refresh_sync_ws_presence,
     )
 
-    uid = "test_sync_ws_presence_user"
+    uid = f"sync_presence_{uuid.uuid4().hex[:12]}"
     await refresh_sync_ws_presence(url, uid)
     assert await is_user_sync_ws_online(url, uid) is True
     await clear_sync_ws_presence(url, uid)

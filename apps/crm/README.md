@@ -173,7 +173,9 @@ result = await entity_service.analyze_text_with_ai(
 - `DELETE /entities/{entity_id}` - каскадное удаление
 - `GET /entities?entity_type=note&entity_subtype=meeting` - список
 - `GET /entities/search?query=...` - семантический поиск
-- `POST /entities/analyze` - AI анализ текста
+- `POST /entities/notes/{id}/analyze` - AI анализ заметки
+- `POST /entities/notes/{id}/apply` - применить черновик анализа
+- `POST /entities/notes/{id}/process` - полный конвейер (analyze + apply)
 
 ---
 

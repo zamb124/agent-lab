@@ -10,11 +10,12 @@ import pytest
 
 from core.context import set_context
 
-from apps.broker.broker import broker
+from apps.flows_worker.broker import broker
 from apps.flows.src.tasks.flow_tasks import process_flow_task
 from apps.flows.src.tasks.eval_task import execute_inline_code
 from apps.flows.src.tasks.tool_tasks import execute_tool
-from apps.flows.src.tasks import calendar_sync_tasks
+import apps.idle_worker.tasks.calendar_sync_tasks as calendar_sync_tasks
+from core.integrations.models import IntegrationCredential, IntegrationProvider
 from core.models import (
     CalendarEventSource,
     CalendarIntegration,
@@ -46,12 +47,7 @@ async def test_calendar_sync_tick_returns_zero_when_disabled(monkeypatch):
         calendar_sync = _FakeCalendarSync()
         database = _FakeDatabase()
 
-    async def _list_sync_enabled(self, *, limit: int):
-        _ = (self, limit)
-        raise AssertionError("list_sync_enabled must not be called when task is disabled")
-
     monkeypatch.setattr(calendar_sync_tasks, "get_settings", lambda: _FakeSettings())
-    monkeypatch.setattr(calendar_sync_tasks.CalendarIntegrationSqlRepository, "list_sync_enabled", _list_sync_enabled)
 
     result = await calendar_sync_tasks.calendar_sync_tick()
     assert result["integrations_total"] == 0
@@ -76,26 +72,33 @@ async def test_calendar_sync_tick_detects_new_events_and_sends_notification(monk
         calendar_sync = _FakeCalendarSync()
         database = _FakeDatabase()
 
-    integration = CalendarIntegration(
-        integration_id="integration-1",
+    now = datetime.now(timezone.utc)
+    credential = IntegrationCredential(
+        credential_id="integration-1",
         company_id="company-1",
         user_id="user-1",
-        provider=CalendarProvider.GOOGLE,
-        credentials=CalendarIntegrationCredentials(access_token="token", refresh_token="refresh"),
-        settings=CalendarIntegrationSettings(
-            default_calendar_id="primary",
-            sync_enabled=True,
-            sync_inbound_enabled=True,
-            sync_outbound_enabled=False,
-            notifications_enabled=True,
-        ),
-        created_at=datetime.now(timezone.utc),
-        updated_at=datetime.now(timezone.utc),
+        provider=IntegrationProvider.GOOGLE,
+        service="calendar",
+        access_token="token",
+        refresh_token="refresh",
+        metadata={
+            "calendar_settings": {
+                "default_calendar_id": "primary",
+                "sync_enabled": True,
+                "sync_inbound_enabled": True,
+                "sync_outbound_enabled": False,
+                "notifications_enabled": True,
+            },
+        },
+        created_at=now,
+        updated_at=now,
     )
 
-    async def _list_sync_enabled(self, *, limit: int):
-        _ = (self, limit)
-        return [integration]
+    async def _list_by_provider_service(self, provider, service, *, limit):
+        _ = (self, service, limit)
+        if provider == IntegrationProvider.GOOGLE:
+            return [credential]
+        return []
 
     class _FakeEvent:
         def __init__(self, event_id: str):
@@ -135,17 +138,21 @@ async def test_calendar_sync_tick_detects_new_events_and_sends_notification(monk
         _ = (user_id, notification)
         sent_notifications["count"] += 1
 
+    class _FakeCredentialRepo:
+        async def list_by_provider_service(self, provider, service, *, limit):
+            return await _list_by_provider_service(self, provider, service, limit=limit)
+
     fake_container = type(
         "Container",
         (),
         {
             "calendar_service": _FakeCalendarService(),
             "shared_storage": _FakeStorage(),
+            "integration_credential_repository": _FakeCredentialRepo(),
         },
     )()
 
     monkeypatch.setattr(calendar_sync_tasks, "get_settings", lambda: _FakeSettings())
-    monkeypatch.setattr(calendar_sync_tasks.CalendarIntegrationSqlRepository, "list_sync_enabled", _list_sync_enabled)
     monkeypatch.setattr(calendar_sync_tasks, "get_container", lambda: fake_container)
     monkeypatch.setattr(calendar_sync_tasks, "notify_user", _notify_user)
 
@@ -174,7 +181,7 @@ class TestProcessAgentTask:
             nodes={
                 "main": {
                     "type": "code",
-                    "code": "def run(state):\n    state['response'] = 'Initialized'\n    return state",
+                    "code": "async def run(state):\n    state['response'] = 'Initialized'\n    return state",
                 }
             },
             edges=[{"from": "main", "to": None}],
@@ -251,7 +258,7 @@ class TestProcessAgentTaskResume:
             nodes={
                 "main": {
                     "type": "code",
-                    "code": "def run(state):\n    state['response'] = 'Resumed'\n    return state",
+                    "code": "async def run(state):\n    state['response'] = 'Resumed'\n    return state",
                 }
             },
             edges=[{"from": "main", "to": None}],
@@ -388,7 +395,7 @@ class TestExecuteInlineCode:
         from core.state import ExecutionState
         
         code = """
-def run(state):
+async def run(state):
     state.result = state.x * 2
     return state
 """
@@ -429,7 +436,7 @@ async def run(state):
         code = """
 import json
 
-def run(state):
+async def run(state):
     data = json.loads(state.json_str)
     state.parsed = data
     return state
@@ -450,7 +457,7 @@ def run(state):
         from core.state import ExecutionState
         
         code = """
-def run(state):
+async def run(state):
     state.new_key = 'added'
     return state
 """
@@ -476,7 +483,7 @@ class TestExecuteTool:
             "tool_id": "test_calculator",
             "description": "Calculator for tests",
             "code": """
-def execute(args, state):
+async def execute(args, state):
     import re
     
     expr = args.get("expression", "0")
@@ -618,11 +625,9 @@ def execute(args, state):
             "tool_id": "test_ask_user",
             "description": "Ask user question",
             "code": """
-from apps.flows.src.runtime.exceptions import FlowInterrupt
-
-def execute(args, state):
+async def execute(args, state):
     question = args.get("question", "")
-    raise FlowInterrupt(question)
+    raise FlowInterrupt(question=question)
 """,
         }
         result = await execute_tool(

@@ -8,6 +8,7 @@ from typing import Optional
 from fastapi import APIRouter, HTTPException, Request, Query
 from fastapi.responses import StreamingResponse
 
+from apps.flows.src.dependencies import ContainerDep
 from core.context import set_context
 from core.models.context_models import Context, Company
 from core.models.embed_models import EmbedStatus
@@ -19,16 +20,13 @@ router = APIRouter(prefix="/embed", tags=["embed"])
 
 
 @router.get("/{embed_id}/settings")
-async def get_embed_settings(embed_id: str, request: Request):
+async def get_embed_settings(embed_id: str, request: Request, container: ContainerDep):
     """
     Публичный endpoint для получения настроек виджета.
     
     Возвращает только публичные настройки UI, не раскрывая внутренние детали.
     Не требует авторизации.
     """
-    from apps.flows.src.container import get_container
-    
-    container = get_container()
     
     # Находим company_id через глобальный маппинг
     embed_mapping_repo = container.embed_mapping_repository
@@ -86,6 +84,7 @@ async def get_embed_settings(embed_id: str, request: Request):
 @router.get("/{embed_id}/stream")
 async def embed_chat_stream(
     embed_id: str,
+    container: ContainerDep,
     message: str = Query(..., description="Сообщение пользователя"),
     context_id: Optional[str] = Query(None, description="ID контекста для продолжения диалога"),
     request: Request = None,
@@ -100,11 +99,8 @@ async def embed_chat_stream(
     
     Не требует JWT авторизации - безопасность через проверку домена.
     """
-    from apps.flows.src.container import get_container
     from apps.flows.src.channels.a2a import A2AChannel
     from a2a.types import MessageSendParams
-    
-    container = get_container()
     
     # Находим company_id через глобальный маппинг
     embed_mapping_repo = container.embed_mapping_repository
@@ -189,7 +185,7 @@ async def embed_chat_stream(
                     "id": f"embed_{embed_id}",
                     "result": event_data
                 }
-                yield f"data: {json.dumps(response)}\n\n"
+                yield f"data: {json.dumps(response, ensure_ascii=False, default=str)}\n\n"
         except Exception as e:
             logger.error(f"Ошибка стриминга виджета {embed_id}: {e}", exc_info=True)
             error_response = {
@@ -200,7 +196,7 @@ async def embed_chat_stream(
                     "message": "Ошибка обработки сообщения"
                 }
             }
-            yield f"data: {json.dumps(error_response)}\n\n"
+            yield f"data: {json.dumps(error_response, ensure_ascii=False, default=str)}\n\n"
     
     return StreamingResponse(
         event_generator(),

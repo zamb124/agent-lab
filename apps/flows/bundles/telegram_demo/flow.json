@@ -49,7 +49,7 @@
       "nodes": {
         "echo_process": {
           "type": "code",
-          "code": "def execute(args, state):\n    state.echo_text = f'Эхо: {state.content}'\n    return {'echo_text': state.echo_text}"
+          "code": "async def execute(args, state):\n    state.echo_text = f'Эхо: {state.content}'\n    return {'echo_text': state.echo_text}"
         },
         "echo_send": {
           "type": "channel",

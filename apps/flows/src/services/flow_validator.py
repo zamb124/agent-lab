@@ -117,6 +117,11 @@ class FlowValidator:
         # 4b. messages_filter у llm_node (список node_id)
         self._validate_messages_filters(nodes, result)
         
+        # 4c. поле files у нод (как state.files)
+        self._validate_node_files(nodes, result)
+
+        self._validate_hitl_nodes(nodes, result)
+        
         # 5. Попытка сборки (если нет критических ошибок)
         if result.valid:
             await self._try_build(nodes, edges, entry, flow_id, result)
@@ -190,8 +195,84 @@ class FlowValidator:
                 message="Граф не имеет выхода (нет терминальных нод или edges с to=null)",
                 severity=ValidationSeverity.WARNING,
             )
-    
-    def _validate_tool_type_uniqueness(
+
+        self._warn_fan_in_without_incoming_policy(nodes, edges, result)
+        if entry and entry in node_ids:
+            self._warn_cycles_reachable_from_entry(entry, edges, node_ids, result)
+
+    def _warn_fan_in_without_incoming_policy(
+        self,
+        nodes: Dict[str, Dict[str, Any]],
+        edges: List[Dict[str, Any]],
+        result: FlowValidationResult,
+    ) -> None:
+        incoming_edge_count: Dict[str, int] = {}
+        for edge in edges:
+            from_n = edge.get("from")
+            to_n = edge.get("to")
+            if from_n and to_n:
+                incoming_edge_count[to_n] = incoming_edge_count.get(to_n, 0) + 1
+        for target, edge_n in incoming_edge_count.items():
+            if edge_n < 2:
+                continue
+            cfg = nodes.get(target) or {}
+            if "incoming_policy" not in cfg:
+                result.add_error(
+                    code="fan_in_without_incoming_policy",
+                    message=(
+                        f"Нода '{target}' имеет несколько входящих веток; "
+                        f"укажите incoming_policy ('any' или 'all'), иначе по умолчанию any — "
+                        f"двойной запуск join-ноды между волнами возможен"
+                    ),
+                    severity=ValidationSeverity.WARNING,
+                    node_id=target,
+                )
+
+    def _warn_cycles_reachable_from_entry(
+        self,
+        entry: str,
+        edges: List[Dict[str, Any]],
+        node_ids: Set[str],
+        result: FlowValidationResult,
+    ) -> None:
+        adj: Dict[str, List[str]] = {n: [] for n in node_ids}
+        for edge in edges:
+            f = edge.get("from")
+            t = edge.get("to")
+            if f in node_ids and t in node_ids:
+                adj[f].append(t)
+
+        WHITE, GRAY, BLACK = 0, 1, 2
+        color: Dict[str, int] = {n: WHITE for n in node_ids}
+        cycle_found = False
+
+        def dfs(n: str) -> bool:
+            nonlocal cycle_found
+            if cycle_found:
+                return True
+            color[n] = GRAY
+            for w in adj[n]:
+                if color[w] == GRAY:
+                    cycle_found = True
+                    return True
+                if color[w] == WHITE and dfs(w):
+                    return True
+            color[n] = BLACK
+            return False
+
+        if entry in color:
+            dfs(entry)
+        if cycle_found:
+            result.add_error(
+                code="graph_cycle_reachable",
+                message=(
+                    "От entry достижим ориентированный цикл; "
+                    "для AND-join помечайте back-edges contributes_to_join=false"
+                ),
+                severity=ValidationSeverity.WARNING,
+            )
+
+    def _validate_react_role_uniqueness(
         self,
         node_id: str,
         tools: List[Any],
@@ -203,12 +284,12 @@ class FlowValidator:
         
         for tool in tools:
             if isinstance(tool, dict):
-                tool_type = tool.get("tool_type")
+                react_role = tool.get("react_role")
                 tool_name = tool.get("tool_id") or tool.get("name", "unknown")
                 
-                if tool_type == "reason":
+                if react_role == "reason":
                     reason_tools.append(tool_name)
-                elif tool_type == "exit":
+                elif react_role == "exit":
                     exit_tools.append(tool_name)
         
         if len(reason_tools) > 1:
@@ -290,7 +371,7 @@ class FlowValidator:
             
             # Валидация уникальности reason/exit tools
             if node_type == "llm_node":
-                self._validate_tool_type_uniqueness(node_id, tools, result)
+                self._validate_react_role_uniqueness(node_id, tools, result)
             for tool_ref in tools:
                 if isinstance(tool_ref, dict):
                     # Inline tool - пропускаем
@@ -451,6 +532,73 @@ class FlowValidator:
                         node_id=nid,
                         details={"messages_filter": mf, "unknown": rid},
                     )
+
+    def _validate_node_files(
+        self,
+        nodes: Dict[str, Dict[str, Any]],
+        result: FlowValidationResult,
+    ) -> None:
+        """Поле files: список объектов с непустыми строками name и path."""
+        from apps.flows.src.state.node_files import validate_node_files_list
+
+        for node_id, cfg in nodes.items():
+            if not isinstance(cfg, dict):
+                continue
+            if "files" not in cfg:
+                continue
+            raw = cfg.get("files")
+            if raw is None or raw == []:
+                continue
+            try:
+                validate_node_files_list(raw, node_id=node_id)
+            except ValueError as exc:
+                result.add_error(
+                    code="invalid_node_files",
+                    message=str(exc),
+                    node_id=node_id,
+                )
+
+    def _validate_hitl_nodes(
+        self,
+        nodes: Dict[str, Dict[str, Any]],
+        result: FlowValidationResult,
+    ) -> None:
+        """hitl_node: ровно один источник очереди (slug или id)."""
+        for nid, cfg in nodes.items():
+            if not isinstance(cfg, dict):
+                continue
+            if cfg.get("type") != "hitl_node":
+                continue
+            slug = cfg.get("operator_queue_slug")
+            qid = cfg.get("operator_queue_id")
+            has_slug = isinstance(slug, str) and bool(slug.strip())
+            has_qid = isinstance(qid, str) and bool(qid.strip())
+            im = cfg.get("input_mapping")
+            has_im_queue = (
+                isinstance(im, dict)
+                and "assignee_queue" in im
+                and isinstance(im.get("assignee_queue"), str)
+                and bool(str(im["assignee_queue"]).strip())
+            )
+            if has_slug and has_qid:
+                result.add_error(
+                    code="hitl_queue_source",
+                    message=(
+                        f"Нода '{nid}' (hitl_node): нельзя задавать одновременно "
+                        "operator_queue_slug и operator_queue_id"
+                    ),
+                    node_id=nid,
+                )
+                continue
+            if not has_slug and not has_qid and not has_im_queue:
+                result.add_error(
+                    code="hitl_queue_source",
+                    message=(
+                        f"Нода '{nid}' (hitl_node): укажите operator_queue_slug, operator_queue_id "
+                        "или input_mapping.assignee_queue"
+                    ),
+                    node_id=nid,
+                )
     
     def _parse_inline_code(
         self,

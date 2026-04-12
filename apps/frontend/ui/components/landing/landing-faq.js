@@ -4,6 +4,9 @@
 import { html, css } from 'lit';
 import { classMap } from 'lit/directives/class-map.js';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
+import { I18nNs } from '@platform/services/i18n/i18n.service.js';
+
+const FAQ_SLOT_COUNT = 10;
 
 export class LandingFaq extends PlatformElement {
     static styles = [
@@ -150,102 +153,59 @@ export class LandingFaq extends PlatformElement {
     ];
 
     static properties = {
-        faqItems: { type: Array }
+        openIndex: { type: Number }
     };
 
     constructor() {
         super();
-        this.faqItems = [
-            {
-                id: 1,
-                question: 'Что такое AI Studio и как создать своего агента?',
-                answer: 'AI Studio — это визуальный конструктор AI-агентов без программирования. Вы выбираете задачу (поддержка клиентов, обработка заявок, консультации), настраиваете поведение агента через простой интерфейс, подключаете каналы (Telegram, WhatsApp, сайт) и запускаете. Агент сразу начинает работать 24/7, отвечая клиентам и выполняя задачи по вашим правилам.',
-                open: true
-            },
-            {
-                id: 2,
-                question: 'Что такое Knowledge Base и зачем она нужна?',
-                answer: 'Knowledge Base — это умная база знаний с семантическим поиском. Загрузите документы, инструкции, FAQ, прайсы — и система автоматически их проиндексирует. Ваши AI-агенты смогут находить точные ответы в этих документах и отвечать клиентам на основе актуальной информации. Больше не нужно вручную обучать агентов — достаточно обновить документ, и агент сразу знает новую информацию.',
-                open: false
-            },
-            {
-                id: 3,
-                question: 'Какие документы можно загрузить в Knowledge Base?',
-                answer: 'Поддерживаются все популярные форматы: PDF, Word, Excel, текстовые файлы, Markdown. Можно загружать инструкции для сотрудников, базы знаний, каталоги товаров, прайс-листы, регламенты, FAQ и любые другие документы. Система автоматически разбивает их на смысловые блоки и создает семантический индекс для быстрого поиска.',
-                open: false
-            },
-            {
-                id: 4,
-                question: 'Что такое NetWorkle и чем он отличается от обычной CRM?',
-                answer: 'NetWorkle — это умная записная книжка, которая превращает любые данные в связанную базу с поиском. В отличие от CRM, здесь нет жестких форм и полей. Вы создаете записи в свободной форме (контакты, встречи, заметки, сделки), а система сама находит связи между ними и строит граф отношений. Можно искать по смыслу: "с кем я встречался на прошлой неделе" или "контакты из сферы IT".',
-                open: false
-            },
-            {
-                id: 5,
-                question: 'Как NetWorkle помогает в работе с клиентами?',
-                answer: 'NetWorkle автоматически связывает все данные: контакт клиента, историю встреч, заметки, сделки, звонки. Вы видите полную картину отношений с каждым клиентом. Семантический поиск позволяет быстро находить нужную информацию: "что мы обсуждали с Иваном в декабре" или "клиенты, которые интересовались продуктом X". Никакой ручной работы по связыванию данных.',
-                open: false
-            },
-            {
-                id: 6,
-                question: 'Можно ли использовать Knowledge Base и NetWorkle вместе с AI-агентами?',
-                answer: 'Да, именно так они работают лучше всего. AI-агент может искать ответы в Knowledge Base (документы, инструкции) и использовать данные из NetWorkle (информация о клиентах, история общения). Например, агент поддержки находит ответ в базе знаний и сразу видит историю обращений клиента. Всё работает как единая система.',
-                open: false
-            },
-            {
-                id: 9,
-                question: 'Что такое Sync и зачем он команде?',
-                answer: 'Sync — это корпоративный чат Humanitec: каналы, личные сообщения, треды и видеозвонки с демонстрацией экрана. Рядом с обсуждением можно держать контекст Git. Данные изолированы по компании, уведомления помогают не пропустить важное, если вы не в чате.',
-                open: false
-            },
-            {
-                id: 10,
-                question: 'Чем Sync отличается от обычного мессенджера?',
-                answer: 'Sync встроен в платформу: один вход с дашборда, те же пользователи и компания, что в AI Studio, Knowledge Base и NetWorkle. Есть интеграция с репозиториями для инженерных команд, гостевые ссылки на звонки и политика доступа в рамках вашей организации — не смешанный личный и рабочий контур.',
-                open: false
-            },
-            {
-                id: 7,
-                question: 'Насколько безопасно хранить данные на платформе?',
-                answer: 'Безопасность — наш приоритет. Все данные шифруются при передаче и хранении. Доступна как облачная версия, так и установка на ваши сервера (on-premise) для полного контроля. Разграничение доступа позволяет настроить, кто какие данные видит. Регулярные бэкапы защищают от потери информации.',
-                open: false
-            },
-            {
-                id: 8,
-                question: 'Нужны ли технические знания для работы с платформой?',
-                answer: 'Нет. Все сервисы имеют простой визуальный интерфейс. Создание агента, загрузка документов в базу знаний, ведение записей в NetWorkle, переписка и звонки в Sync — всё делается через понятные экраны без программирования. Для сложных задач есть тариф с поддержкой, где наша команда поможет настроить всё под ваши процессы.',
-                open: false
-            }
-        ];
+        this.openIndex = 0;
     }
 
-    _toggleFaq(id) {
-        this.faqItems = this.faqItems.map(item => ({
-            ...item,
-            open: item.id === id ? !item.open : false
-        }));
+    connectedCallback() {
+        super.connectedCallback();
+        this._i18nUnsub = this.i18n.subscribe(() => this.requestUpdate());
+    }
+
+    disconnectedCallback() {
+        if (this._i18nUnsub) {
+            this._i18nUnsub();
+            this._i18nUnsub = null;
+        }
+        super.disconnectedCallback();
+    }
+
+    _toggleFaq(index) {
+        this.openIndex = this.openIndex === index ? -1 : index;
     }
 
     render() {
+        const t = (key) => this.i18n.t(key, {}, I18nNs.LANDING);
+        const slots = Array.from({ length: FAQ_SLOT_COUNT }, (_, i) => i + 1);
         return html`
             <div class="faq-container">
-                <h2 class="faq-title">/ Вопросы & ответы</h2>
+                <h2 class="faq-title">${t('faq.tag')}</h2>
                 
                 <div class="faq-list">
-                    ${this.faqItems.map(item => html`
+                    ${slots.map((slot) => {
+                        const q = t(`faq.slot${slot}_q`);
+                        const a = t(`faq.slot${slot}_a`);
+                        const idx = slot - 1;
+                        const open = this.openIndex === idx;
+                        return html`
                         <div 
-                            class=${classMap({ 'faq-item': true, open: item.open })}
-                            @click=${() => this._toggleFaq(item.id)}
+                            class=${classMap({ 'faq-item': true, open })}
+                            @click=${() => this._toggleFaq(idx)}
                         >
                             <div class="faq-question">
-                                <span>${item.question}</span>
+                                <span>${q}</span>
                                 <div class="faq-icon">▼</div>
                             </div>
                             <div class="faq-answer">
-                                <p class="faq-answer-text">${item.answer}</p>
+                                <p class="faq-answer-text">${a}</p>
                             </div>
                         </div>
-                    `)}
+                    `;
+                    })}
                 </div>
             </div>
         `;
@@ -253,4 +213,3 @@ export class LandingFaq extends PlatformElement {
 }
 
 customElements.define('landing-faq', LandingFaq);
-

@@ -7,6 +7,7 @@ from core.identity.base_provider import BaseAuthProvider
 from core.identity.providers.yandex import YandexProvider
 from core.identity.providers.google import GoogleProvider
 from core.identity.providers.github import GithubProvider
+from core.identity.providers.apple import AppleProvider
 from core.models.identity_models import User, Company, AuthProvider, AuthSession
 
 __all__ = [
@@ -15,6 +16,7 @@ __all__ = [
     "YandexProvider",
     "GoogleProvider",
     "GithubProvider",
+    "AppleProvider",
     "User",
     "Company",
     "AuthProvider",

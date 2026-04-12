@@ -3,6 +3,8 @@
  */
 import { html, css } from 'lit';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
+import '@platform/lib/components/platform-icon.js';
+import { resolveFileIconKey } from '@platform/services/icon.service.js';
 
 export class ChatInput extends PlatformElement {
     static styles = [
@@ -124,13 +126,13 @@ export class ChatInput extends PlatformElement {
                 border: none;
                 color: white;
                 border-radius: var(--radius-xl);
-                box-shadow: 0 4px 12px rgba(16, 185, 129, 0.3);
+                box-shadow: 0 4px 12px rgba(153, 166, 249, 0.3);
                 transition: all var(--duration-normal) var(--easing-default);
             }
             
             .send-button:hover:not(:disabled) {
                 transform: translateY(-2px) scale(1.02);
-                box-shadow: 0 6px 20px rgba(16, 185, 129, 0.4);
+                box-shadow: 0 6px 20px rgba(153, 166, 249, 0.4);
             }
             
             .send-button:active:not(:disabled) {
@@ -142,6 +144,15 @@ export class ChatInput extends PlatformElement {
                 cursor: not-allowed;
                 transform: none;
                 box-shadow: none;
+            }
+            
+            .send-button.stop {
+                background: var(--error, #ef4444);
+                box-shadow: 0 4px 12px rgba(239, 68, 68, 0.3);
+            }
+            
+            .send-button.stop:hover {
+                box-shadow: 0 6px 20px rgba(239, 68, 68, 0.4);
             }
             
             .file-input {
@@ -219,6 +230,8 @@ export class ChatInput extends PlatformElement {
         placeholder: { type: String },
         maxLength: { type: Number },
         maxFileSize: { type: Number },
+        _value: { state: true },
+        _selectedFiles: { state: true },
     };
 
     constructor() {
@@ -302,20 +315,21 @@ export class ChatInput extends PlatformElement {
 
     _validateFile(file) {
         if (file.size > this.maxFileSize) {
-            this.error(`Файл ${file.name} слишком большой. Максимум ${this._formatFileSize(this.maxFileSize)}`);
+            this.error(
+                this.i18n.t('chat_input.err_file_too_large', {
+                    name: file.name,
+                    max: this._formatFileSize(this.maxFileSize),
+                })
+            );
             return false;
         }
-        
-        const allowedTypes = [
-            'image/png', 'image/jpeg', 'image/jpg', 'image/gif', 'image/webp',
-            'application/pdf', 'text/plain', 'application/json'
-        ];
-        
-        if (!allowedTypes.includes(file.type)) {
-            this.error(`Тип файла ${file.name} не поддерживается`);
+
+        const ft = this.services.fileTypes;
+        if (!ft.isAllowedFile(file, ...ft.categories)) {
+            this.error(this.i18n.t('chat_input.err_file_type', { name: file.name }));
             return false;
         }
-        
+
         return true;
     }
 
@@ -346,6 +360,10 @@ export class ChatInput extends PlatformElement {
         }
     }
 
+    _stop() {
+        this.emit('stop');
+    }
+
     render() {
         const canSend = (this._value.trim().length > 0 || this._selectedFiles.length > 0) && !this.disabled && !this.loading;
 
@@ -361,13 +379,13 @@ export class ChatInput extends PlatformElement {
                     type="file" 
                     class="file-input"
                     multiple
-                    accept="image/*,.pdf,.txt,.json"
+                    accept=${this.services.fileTypes.acceptStringFor(...this.services.fileTypes.categories)}
                     @change=${this._onFilesSelected}
                 >
                 
                 <button 
                     class="attach-button" 
-                    title="Прикрепить файл"
+                    title=${this.i18n.t('chat_input.title_attach')}
                     @click=${this._onAttachClick}
                     ?disabled=${this.disabled || this.loading}
                 >
@@ -386,16 +404,22 @@ export class ChatInput extends PlatformElement {
                     ></textarea>
                 </div>
                 
-                <button 
-                    class="send-button" 
-                    ?disabled=${!canSend}
-                    @click=${this._send}
-                >
-                    ${this.loading 
-                        ? html`<platform-spinner size="20"></platform-spinner>`
-                        : html`<platform-icon name="send" size="20"></platform-icon>`
-                    }
-                </button>
+                ${this.loading ? html`
+                    <button 
+                        class="send-button stop"
+                        @click=${this._stop}
+                    >
+                        <platform-icon name="stop" size="20" filled></platform-icon>
+                    </button>
+                ` : html`
+                    <button 
+                        class="send-button" 
+                        ?disabled=${!canSend}
+                        @click=${this._send}
+                    >
+                        <platform-icon name="send" size="20"></platform-icon>
+                    </button>
+                `}
             </div>
         `;
     }
@@ -410,7 +434,11 @@ export class ChatInput extends PlatformElement {
                         alt=${file.name}
                     >
                 ` : html`
-                    <platform-icon name="file" size="24"></platform-icon>
+                    <platform-icon
+                        file-icon
+                        name=${resolveFileIconKey(file.name || '', file.type || '')}
+                        size="24"
+                    ></platform-icon>
                 `}
                 
                 <div class="file-info">
@@ -421,7 +449,7 @@ export class ChatInput extends PlatformElement {
                 <button 
                     class="file-remove"
                     @click=${() => this._removeFile(index)}
-                    title="Удалить файл"
+                    title=${this.i18n.t('chat_input.title_remove_file')}
                 >
                     <platform-icon name="close" size="16"></platform-icon>
                 </button>

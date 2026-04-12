@@ -61,6 +61,27 @@ class NodeLLMOverride(StrictBaseModel):
     provider: Optional[str] = Field(default=None, description="Провайдер: openai, openrouter, bothub")
     api_key: Optional[str] = Field(default=None, description="API ключ (напрямую или @var:my_key)")
     base_url: Optional[str] = Field(default=None, description="Base URL провайдера (напрямую или @var:my_url)")
+    top_p: Optional[float] = Field(default=None, description="Nucleus sampling top_p")
+    top_k: Optional[int] = Field(default=None, description="Top-K семплирование")
+    frequency_penalty: Optional[float] = Field(default=None, description="Штраф за частоту токенов")
+    presence_penalty: Optional[float] = Field(default=None, description="Штраф за присутствие токенов")
+    seed: Optional[int] = Field(default=None, description="Seed для детерминизма")
+    reasoning_effort: Optional[
+        Literal["none", "minimal", "low", "medium", "high", "xhigh"]
+    ] = Field(default=None, description="Усилие reasoning (OpenAI-совместимые модели)")
+    extra_request_body: Optional[Dict[str, Any]] = Field(
+        default=None,
+        description="Доп. поля тела POST /chat/completions; мержатся поверх полей из контролов",
+    )
+
+    @field_validator("extra_request_body", mode="before")
+    @classmethod
+    def _extra_must_be_object(cls, v: Any) -> Any:
+        if v is None:
+            return None
+        if isinstance(v, dict):
+            return v
+        raise ValueError("extra_request_body должен быть объектом JSON, не массивом и не скаляром")
 
 
 class NodeConfig(StrictBaseModel):
@@ -79,6 +100,7 @@ class NodeConfig(StrictBaseModel):
     - NodeType.REMOTE_FLOW: внешний flow по A2A
     - NodeType.EXTERNAL_API: вызов HTTP API
     - NodeType.MCP: MCP tool
+    - NodeType.HITL_NODE: пауза до оператора очереди
     """
 
     model_config = ConfigDict(json_schema_extra={"storage_prefix": "node"}, populate_by_name=True)
@@ -86,6 +108,7 @@ class NodeConfig(StrictBaseModel):
     # ОБЯЗАТЕЛЬНЫЕ ПОЛЯ
     node_id: str = Field(..., description="Уникальный идентификатор ноды")
     type: NodeType = Field(..., description="Тип ноды - NodeType Enum")
+    
     name: str = Field(..., description="Название ноды")
     
     @field_validator("node_id", mode="before")
@@ -128,6 +151,22 @@ class NodeConfig(StrictBaseModel):
             "список — только сообщения с metadata.node_id из списка (user и agent по тегу)"
         ),
     )
+    incoming_policy: Literal["any", "all"] = Field(
+        default="any",
+        description=(
+            "Fan-in: any — нода ставится в очередь при первом сработавшем входе; "
+            "all — ждать все входы с contributes_to_join=true на рёбрах"
+        ),
+    )
+
+    @field_validator("incoming_policy", mode="before")
+    @classmethod
+    def validate_incoming_policy(cls, v: Any) -> str:
+        if v is None:
+            return "any"
+        if v not in ("any", "all"):
+            raise ValueError(f"incoming_policy: ожидается 'any' или 'all', получено {v!r}")
+        return v
 
     @field_validator("messages_filter", mode="before")
     @classmethod
@@ -169,13 +208,42 @@ class NodeConfig(StrictBaseModel):
         description="Маппинг полей JSON -> state fields. Если None - поля записываются напрямую"
     )
     
-    # Для function ноды
+    # Для code-ноды (inline)
     code: Optional[str] = Field(default=None, description="Inline Python код")
     
     # Ресурсы ноды
     resources: Dict[str, ResourceReference] = Field(
         default_factory=dict,
         description="Ресурсы ноды (переопределяют flow-level)"
+    )
+
+    files: List[Dict[str, Any]] = Field(
+        default_factory=list,
+        description=(
+            "Закреплённые файлы ноды (как элементы state.files: name, path; опционально "
+            "mime_type, size, file_id). При старте новой сессии агрегируются в state.files."
+        ),
+    )
+
+    operator_queue_slug: Optional[str] = Field(
+        default=None,
+        description="Slug очереди оператора (взаимоисключающе с operator_queue_id)",
+    )
+    operator_queue_id: Optional[str] = Field(
+        default=None,
+        description="UUID очереди оператора (взаимоисключающе с operator_queue_slug)",
+    )
+    operator_handoff_mode: Optional[Literal["single_reply", "takeover"]] = Field(
+        default=None,
+        description="Режим оператора: single_reply — один ответ; takeover — перехват диалога",
+    )
+    operator_task_title: Optional[str] = Field(
+        default=None,
+        description="Заголовок задачи; можно переопределить input_mapping.task_title",
+    )
+    operator_user_message: Optional[str] = Field(
+        default=None,
+        description="Текст для пользователя; можно переопределить input_mapping.user_facing_message",
     )
     
     # Общее

@@ -39,12 +39,15 @@ class FileRecord(BaseModel):
     provider: str = Field(description="Провайдер S3 (aws, yandex, minio, etc.)")
     original_name: str = Field(description="Оригинальное имя файла")
     s3_key: str = Field(description="Ключ файла в S3")
-    s3_bucket: str = Field(description="Bucket в S3")
+    s3_bucket: str = Field(description="Ключ bucket в settings.s3.buckets (не физическое имя в S3)")
     s3_endpoint: Optional[str] = Field(default=None, description="Endpoint URL провайдера")
     storage_url: Optional[str] = Field(default=None, description="Прямой URL источника файла для proxy-download")
     content_type: str = Field(description="MIME тип файла")
     file_size: int = Field(description="Размер файла в байтах")
-    checksum: Optional[str] = Field(default=None, description="MD5 или другая контрольная сумма")
+    checksum: Optional[str] = Field(
+        default=None,
+        description="SHA-256 hex содержимого файла (как при upload в core.files.api)",
+    )
     status: FileStatus = Field(default=FileStatus.UPLOADING, description="Статус файла")
     uploaded_by: Optional[str] = Field(default=None, description="ID пользователя который загрузил")
     company_id: Optional[str] = Field(default=None, description="ID компании владельца файла")
@@ -161,6 +164,50 @@ class AudioAttachmentContent(BaseModel):
     transcription_status: AudioTranscriptionStatus = Field(
         default=AudioTranscriptionStatus.IDLE,
         description="Текущий статус расшифровки аудио.",
+    )
+    transcription_text: str | None = Field(
+        default=None,
+        description="Результат распознавания речи.",
+    )
+    transcription_error: str | None = Field(
+        default=None,
+        description="Текст ошибки расшифровки.",
+    )
+    source_speech_to_chat: bool = Field(
+        default=False,
+        description="Сегмент с серверного speech-to-chat; авто-STT канала на сообщение не ставится.",
+    )
+
+
+class FileReadPreviewResponse(BaseModel):
+    """Текстовое превью содержимого файла (извлечение без vision для изображений)."""
+
+    text: str = Field(description="Извлечённый текст (может быть усечён для UI)")
+    truncated: bool = Field(description="Усечён ли текст по лимиту превью")
+    page_count: int = Field(default=0, description="Число страниц после чтения")
+    detected_kind: str = Field(description="Тип файла по FileReader")
+    mime_type: Optional[str] = Field(default=None, description="MIME после распознавания")
+    warnings: List[str] = Field(default_factory=list, description="Предупреждения парсера")
+    preview_note: Optional[str] = Field(
+        default=None,
+        description="Пояснение для пользователя (например для изображений)",
+    )
+
+
+class VideoAttachmentContent(BaseModel):
+    """Видеовложение в сообщении (запись звонка и т.п.)."""
+
+    file_id: str = Field(description="Идентификатор файла в системе.")
+    filename: str = Field(description="Оригинальное имя файла.")
+    mime_type: str = Field(description="MIME-тип, например video/mp4.")
+    size: int = Field(description="Размер файла в байтах.")
+    duration_ms: int | None = Field(
+        default=None,
+        description="Длительность в миллисекундах, если известна.",
+    )
+    transcription_status: AudioTranscriptionStatus = Field(
+        default=AudioTranscriptionStatus.IDLE,
+        description="Статус расшифровки аудиодорожки.",
     )
     transcription_text: str | None = Field(
         default=None,

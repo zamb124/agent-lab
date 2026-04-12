@@ -2,11 +2,15 @@
 
 from __future__ import annotations
 
+import asyncio
+
 from fastapi import APIRouter, HTTPException, Query
 
+from core.pagination import OffsetPage
 from apps.scheduler.dependencies import ContainerDep
 from core.context import get_context
 from core.scheduler.models import (
+    PlatformRedisScheduleSnapshot,
     PlatformScheduledTask,
     PlatformScheduleCreateRequest,
     PlatformScheduleFilter,
@@ -40,7 +44,7 @@ async def create_schedule(request: PlatformScheduleCreateRequest, container: Con
         raise HTTPException(status_code=400, detail=str(error)) from error
 
 
-@router.get("/schedules", response_model=list[PlatformScheduledTask])
+@router.get("/schedules", response_model=OffsetPage[PlatformScheduledTask])
 async def list_schedules(
     container: ContainerDep,
     status: ScheduledTaskStatus | None = Query(default=None),
@@ -48,7 +52,7 @@ async def list_schedules(
     task_name: str | None = Query(default=None),
     limit: int = Query(default=100, ge=1, le=500),
     offset: int = Query(default=0, ge=0),
-) -> list[PlatformScheduledTask]:
+) -> OffsetPage[PlatformScheduledTask]:
     company_id = _company_id_from_context()
     filters = PlatformScheduleFilter(
         status=status,
@@ -57,7 +61,11 @@ async def list_schedules(
         limit=limit,
         offset=offset,
     )
-    return await container.scheduler_service.list(company_id=company_id, filters=filters)
+    items, total = await asyncio.gather(
+        container.scheduler_service.list(company_id=company_id, filters=filters),
+        container.scheduler_service.count(company_id=company_id, filters=filters),
+    )
+    return OffsetPage[PlatformScheduledTask](items=items, total=total, limit=limit, offset=offset)
 
 
 @router.get("/schedules/{schedule_task_id}", response_model=PlatformScheduledTask)
@@ -101,5 +109,17 @@ async def run_schedule_now(schedule_task_id: str, container: ContainerDep) -> Pl
     company_id = _company_id_from_context()
     try:
         return await container.scheduler_service.run_now(company_id=company_id, schedule_task_id=schedule_task_id)
+    except ValueError as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
+
+
+@router.get("/schedules/{schedule_task_id}/redis", response_model=PlatformRedisScheduleSnapshot)
+async def get_schedule_redis_snapshot(schedule_task_id: str, container: ContainerDep) -> PlatformRedisScheduleSnapshot:
+    company_id = _company_id_from_context()
+    try:
+        return await container.scheduler_service.get_redis_snapshot(
+            company_id=company_id,
+            schedule_task_id=schedule_task_id,
+        )
     except ValueError as error:
         raise HTTPException(status_code=400, detail=str(error)) from error

@@ -1,8 +1,76 @@
 ---
-description: "Архитектурные принципы Humanitec"
-alwaysApply: false
+alwaysApply: true
 ---
 # Архитектурные принципы Humanitec
+
+## Dependency Injection (единый стандарт)
+
+### Контейнер и `@lazy`
+
+DI строится на `BaseContainer` (`core/container/base.py`) с декоратором `@lazy` — property с кешированием на экземпляре. Каждый сервис наследует `BaseContainer` и добавляет свои `@lazy` для репозиториев и сервисов.
+
+Singleton контейнера — модульная переменная `get_*_container()` на процесс; при старте HTTP-сервиса `create_service_app` кладёт тот же объект в `app.state.container`.
+
+### `dependencies.py` + `ContainerDep` (ОБЯЗАТЕЛЬНО для каждого сервиса)
+
+Каждый сервис **обязан** иметь `dependencies.py` с единственным каноничным способом получения контейнера в HTTP-слое:
+
+```python
+# apps/<service>/dependencies.py
+from typing import Annotated
+from fastapi import Depends
+from apps.<service>.container import get_<service>_container, <Service>Container
+
+def get_container() -> <Service>Container:
+    return get_<service>_container()
+
+ContainerDep = Annotated[<Service>Container, Depends(get_container)]
+```
+
+Каждый HTTP-хендлер **обязан** получать контейнер ТОЛЬКО через `ContainerDep`:
+
+```python
+from apps.<service>.dependencies import ContainerDep
+
+@router.get("/items")
+async def list_items(container: ContainerDep):
+    return await container.some_service.list()
+```
+
+### Имя параметра
+
+Строго `container` — не `c`, не `cont`, не `svc`. Единое имя упрощает grep и автодополнение.
+
+### ContainerDep обязателен для ВСЕХ HTTP-хендлеров
+
+Включая utility-эндпоинты (health, metadata, certificate и т.д.). Если хендлер не использует контейнер: `_ = container` в теле. Цель — единообразие сигнатур и возможность добавить зависимость без рефакторинга.
+
+### Никаких гранулярных get_*_service() фабрик
+
+Запрещены обёртки типа `get_entity_service()`, `get_graph_service()` в `dependencies.py`. Один хендлер — один `container: ContainerDep`, доступ через `container.entity_service`, `container.graph_service`.
+
+### Запрещено в HTTP-слое
+
+- Прямой вызов `get_*_container()` в теле хендлера
+- Локальное определение `get_container_dep()` в файлах роутеров
+- Импорт контейнера другого сервиса (`from apps.X.container import get_X_container`)
+- Создание репозиториев/сервисов в обход контейнера (`SomeRepository(db_url=...)`)
+- Смешанный стиль: `Depends(get_service)` + `get_container()` в одном хендлере
+
+### Допустимые исключения
+
+- В `core/api/*.py` — `request.app.state.container` (core не знает конкретный тип контейнера)
+- В TaskIQ задачах — `get_*_container()` напрямую (нет FastAPI request scope)
+- В каналах/триггерах flows — `get_container()` (не HTTP-контекст)
+- `core/push/delivery.py` — `PushSubscriptionRepository(db_url=...)` (вызывается из HTTP, WebSocket, workers — единый контейнер недоступен)
+- `apps/frontend/api/embed_configs.py` — допустимо использует flows container напрямую (монолит, все сервисы в одном процессе)
+- WebSocket-эндпоинты (`apps/sync/main.py:ws_endpoint`) — FastAPI `Depends()` не работает с WebSocket route handlers в том же виде, контейнер берётся через `get_*_container()`
+
+### Известные нарушения `core/ → apps/` (требуют архитектурной проработки)
+
+- `core/scheduler/scheduler.py` — импортирует брокеры всех воркеров (`apps.*_worker`)
+- `core/api/integrations.py` — `_resume_flow` импортирует `process_flow_task` из flows
+- `core/clients/llm/factory.py` — `get_mock_for_llm` из flows (тестовый путь)
 
 ## Database-First
 
