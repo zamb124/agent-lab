@@ -649,6 +649,28 @@ async def test_search_multiple_namespaces_hybrid_rrf_per_namespace(
     }
 
 
+@pytest.mark.asyncio
+async def test_search_multiple_namespaces_filters_plus_lexical_no_duplicate_kwargs(
+    rag_provider_pgvector, ns_name, rag_company_id
+):
+    """Регрессия: filters не должен оставаться в **kwargs при делегировании в Base (иначе duplicate keyword)."""
+    await rag_provider_pgvector.upload_document_from_text(
+        namespace_id=ns_name,
+        text="filters_lexical_token_xyz abc",
+        document_name="fl.txt",
+        metadata=_upload_metadata(rag_company_id),
+    )
+    out = await rag_provider_pgvector.search_multiple_namespaces(
+        [ns_name],
+        "filters_lexical_token_xyz",
+        limit=5,
+        filters=None,
+        channels={"semantic": True, "lexical": True},
+    )
+    assert ns_name in out
+    assert len(out[ns_name]) >= 1
+
+
 # -- provider_name --
 
 

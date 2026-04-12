@@ -898,7 +898,7 @@ class PgVectorProvider(BaseRAGProvider):
         limit: int = 5,
         **kwargs,
     ) -> Dict[str, List[RAGSearchResult]]:
-        filters: Optional[Dict[str, Any]] = kwargs.get("filters")
+        filters: Optional[Dict[str, Any]] = kwargs.pop("filters", None)
         use_semantic, use_lexical = self._parse_search_channel_flags(kwargs)
 
         unique_ns = list(dict.fromkeys(namespace_ids))

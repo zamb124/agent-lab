@@ -148,7 +148,7 @@ class SessionWorkerManager:
             command: Команда для запуска worker
             env: Переменные окружения
             cleanup_patterns: Паттерны для pkill (очистка старых процессов)
-            startup_wait: Верхняя граница ожидания живого процесса после Popen (секунды)
+            startup_wait: Верхняя граница короткой паузы между проверками poll() после Popen (секунды)
             log_file: Путь к файлу stdout логов
             err_file: Путь к файлу stderr логов
         """
@@ -225,6 +225,34 @@ class SessionWorkerManager:
                 self.pid_path.unlink(missing_ok=True)
                 self.ref_count_path.unlink(missing_ok=True)
         return False
+
+    def _assert_worker_subprocess_alive(
+        self,
+        worker_process: subprocess.Popen,
+        worker_log,
+        worker_err,
+    ) -> None:
+        """
+        Проверяет, что дочерний процесс не завершился сразу после Popen.
+
+        Один цикл poll → короткая пауза → poll (как taskiq_scheduler после Popen, но без секунд
+        ожидания); без длинного цикла под filelock, на который смотрят другие pytest-xdist gw.
+        """
+
+        def _fail() -> None:
+            worker_log.close()
+            worker_err.close()
+            with open(self.err_file, "r") as f:
+                err_content = f.read()
+            raise RuntimeError(
+                f"{self.name} worker failed to start. Error log:\n{err_content}"
+            )
+
+        if worker_process.poll() is not None:
+            _fail()
+        time.sleep(min(0.05, self.startup_wait))
+        if worker_process.poll() is not None:
+            _fail()
     
     def _start_worker(self) -> subprocess.Popen:
         """Запускает новый worker процесс."""
@@ -241,26 +269,10 @@ class SessionWorkerManager:
             stderr=worker_err,
             env={**os.environ, **self.env},
         )
-        
-        # Живой процесс без немедленного exit достаточен; дальше taskiq поднимется сам.
-        # Не держим секунды sleep: при pytest-xdist lock общий, другие gw ждут здесь же.
-        bootstrap_ok_at = min(0.35, self.startup_wait)
-        started = time.monotonic()
-        while True:
-            if worker_process.poll() is not None:
-                worker_log.close()
-                worker_err.close()
-                with open(self.err_file, "r") as f:
-                    err_content = f.read()
-                raise RuntimeError(
-                    f"{self.name} worker failed to start. Error log:\n{err_content}"
-                )
-            elapsed = time.monotonic() - started
-            if elapsed >= self.startup_wait:
-                break
-            if elapsed >= bootstrap_ok_at:
-                break
-            time.sleep(0.05)
+
+        # Как SessionServerManager._start_server: убеждаемся, что процесс не вышел сразу.
+        # Длинный цикл под filelock не держим — другие pytest-xdist gw ждут на том же lock.
+        self._assert_worker_subprocess_alive(worker_process, worker_log, worker_err)
         
         # Сохраняем PID
         self.pid_path.write_text(str(worker_process.pid))
@@ -428,6 +440,8 @@ def rag_worker():
         return
     
     # Один процесс: меньше гонок при нагрузочном прогоне и общей БД/S3.
+    _clear_taskiq_stream("rag", "redis://localhost:63792/1")
+
     manager = SessionWorkerManager(
         name="RAGWorker",
         lock_file=_RAG_WORKER_LOCK,
