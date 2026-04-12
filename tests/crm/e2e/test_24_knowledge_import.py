@@ -133,13 +133,14 @@ async def _ensure_import_namespace(crm_client, headers: dict, namespace: str) ->
     )
     if update_ns.status_code != 200:
         raise AssertionError(f"namespace update: {update_ns.status_code} {update_ns.text}")
-    note_ns = await crm_client.post(
-        "/crm/api/v1/entity-types/note/namespaces",
-        json={"namespace_ids": [namespace]},
-        headers=headers,
-    )
-    if note_ns.status_code != 200:
-        raise AssertionError(f"note namespace bind: {note_ns.status_code} {note_ns.text}")
+    for system_type in ("note", "meeting"):
+        bind_resp = await crm_client.post(
+            f"/crm/api/v1/entity-types/{system_type}/namespaces",
+            json={"namespace_ids": [namespace]},
+            headers=headers,
+        )
+        if bind_resp.status_code != 200:
+            raise AssertionError(f"{system_type} namespace bind: {bind_resp.status_code} {bind_resp.text}")
 
 
 async def _assert_blob_then_rollback(
