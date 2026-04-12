@@ -5,6 +5,9 @@ from __future__ import annotations
 import asyncio
 import base64
 import mimetypes
+import shutil
+import subprocess
+import tempfile
 import uuid
 from collections import defaultdict
 from io import BytesIO
@@ -217,6 +220,12 @@ class FileReader:
             result = await _read_video_impl(raw, name, mime or "video/mp4")
         elif info.detected_kind == FileReadKind.TEXT:
             result = await asyncio.to_thread(_read_plain_text_sync, raw, name, mime, opts)
+        elif info.detected_kind == FileReadKind.SPREADSHEET and info.extension == ".xls":
+            result = await asyncio.to_thread(_read_xls_sync, raw, name, mime, opts)
+        elif info.detected_kind == FileReadKind.OFFICE and info.extension == ".doc":
+            docx_bytes = await asyncio.to_thread(_convert_doc_to_docx_bytes, raw)
+            docx_name = name[: -len(".doc")] + ".docx"
+            result = await asyncio.to_thread(_read_unstructured_sync, docx_bytes, docx_name, mime, FileReadKind.OFFICE, opts)
         elif info.detected_kind in (FileReadKind.OFFICE, FileReadKind.SPREADSHEET):
             result = await asyncio.to_thread(_read_unstructured_sync, raw, name, mime, info.detected_kind, opts)
         elif info.detected_kind == FileReadKind.UNKNOWN:
@@ -375,6 +384,70 @@ def _read_plain_text_sync(
         pages=[page],
         warnings=[],
     )
+
+
+def _read_xls_sync(
+    raw: bytes,
+    file_name: str,
+    mime: Optional[str],
+    opts: ReadOptions,
+) -> FileReadResult:
+    del opts
+    import xlrd
+
+    book = xlrd.open_workbook(file_contents=raw)
+    pages: List[ReadPage] = []
+    for sheet_idx in range(book.nsheets):
+        sheet = book.sheet_by_index(sheet_idx)
+        rows: List[str] = []
+        for row_idx in range(sheet.nrows):
+            cells = []
+            for col_idx in range(sheet.ncols):
+                cell = sheet.cell(row_idx, col_idx)
+                value = cell.value
+                if cell.ctype == xlrd.XL_CELL_EMPTY:
+                    cells.append("")
+                else:
+                    cells.append(str(value).rstrip("0").rstrip(".") if isinstance(value, float) and value == int(value) else str(value))
+            row_text = "\t".join(cells).rstrip()
+            if row_text:
+                rows.append(row_text)
+        if rows:
+            pages.append(ReadPage(index=sheet_idx, text="\n".join(rows), assets=[], label=sheet.name))
+    if not pages:
+        raise FileReadError(f"xlrd не извлёк данные: {file_name}")
+    return FileReadResult(
+        file_name=file_name,
+        mime_type=mime or "application/vnd.ms-excel",
+        detected_kind=FileReadKind.SPREADSHEET,
+        page_count=len(pages),
+        pages=pages,
+        warnings=[],
+    )
+
+
+def _convert_doc_to_docx_bytes(raw: bytes) -> bytes:
+    soffice = shutil.which("soffice") or shutil.which("libreoffice")
+    if soffice is None:
+        raise FileReadError(
+            "Для чтения .doc файлов требуется LibreOffice. "
+            "Установите пакет libreoffice-headless и убедитесь, что soffice доступен в PATH."
+        )
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        src = Path(tmp_dir) / "source.doc"
+        src.write_bytes(raw)
+        result = subprocess.run(
+            [soffice, "--headless", "--convert-to", "docx", "--outdir", tmp_dir, str(src)],
+            capture_output=True,
+            timeout=60,
+        )
+        if result.returncode != 0:
+            stderr = result.stderr.decode("utf-8", errors="replace")
+            raise FileReadError(f"LibreOffice не смог конвертировать .doc файл: {stderr}")
+        out = Path(tmp_dir) / "source.docx"
+        if not out.exists():
+            raise FileReadError("LibreOffice не создал .docx файл при конвертации из .doc")
+        return out.read_bytes()
 
 
 def _read_pdf_sync(

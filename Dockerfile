@@ -13,6 +13,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     poppler-utils \
     libgl1 \
     libglib2.0-0 \
+    libreoffice-headless \
+    libreoffice-writer \
     && rm -rf /var/lib/apt/lists/*
 
 RUN pip install --no-cache-dir uv

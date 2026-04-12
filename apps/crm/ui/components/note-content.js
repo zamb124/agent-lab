@@ -529,45 +529,31 @@ export class NoteContent extends PlatformElement {
 
             .attach-dropdown-row {
                 display: flex;
+                flex-wrap: wrap;
                 align-items: center;
                 justify-content: space-between;
                 gap: 8px;
                 padding: 6px 8px;
                 border-radius: 8px;
                 min-height: 32px;
-                position: relative;
             }
 
             .attach-dropdown-row:hover {
                 background: var(--glass-tint-medium);
             }
 
-            .attach-summary-tooltip {
+            .attach-summary-inline {
                 display: none;
-                position: absolute;
-                bottom: calc(100% + 6px);
-                left: 0;
-                width: 260px;
-                z-index: 200;
-                pointer-events: none;
-            }
-
-            .attach-summary-tooltip-text {
-                background: var(--glass-solid-strong);
-                border: 1px solid var(--border-default);
-                border-radius: var(--radius-lg);
-                padding: var(--space-2) var(--space-3);
-                font-size: var(--text-xs);
+                width: 100%;
+                padding: 0 0 4px 22px;
+                font-size: 11px;
                 line-height: 1.5;
-                color: var(--text-secondary);
-                box-shadow: var(--glass-shadow-medium);
+                color: var(--text-tertiary);
                 white-space: normal;
                 word-break: break-word;
-                -webkit-backdrop-filter: blur(var(--glass-blur-subtle));
-                backdrop-filter: blur(var(--glass-blur-subtle));
             }
 
-            .attach-dropdown-row:hover .attach-summary-tooltip {
+            .attach-dropdown-row:hover .attach-summary-inline {
                 display: block;
             }
 
@@ -3178,11 +3164,6 @@ export class NoteContent extends PlatformElement {
                                         const attachSummary = this._getAttachmentSummary(attachment);
                                         return html`
                                         <div class="attach-dropdown-row">
-                                            ${attachSummary ? html`
-                                                <div class="attach-summary-tooltip" role="tooltip">
-                                                    <div class="attach-summary-tooltip-text">${attachSummary}</div>
-                                                </div>
-                                            ` : ''}
                                             <platform-icon
                                                 file-icon
                                                 name=${resolveFileIconKey(
@@ -3200,7 +3181,7 @@ export class NoteContent extends PlatformElement {
                                                 title=${this.i18n.t('note_content.download_file')}
                                                 @click=${() => this._downloadAttachment(attachment)}
                                             >
-                                                <platform-icon name="arrow-down" size="16"></platform-icon>
+                                                <platform-icon name="save" size="16"></platform-icon>
                                             </button>
                                             <button
                                                 class="attach-dropdown-remove"
@@ -3211,6 +3192,9 @@ export class NoteContent extends PlatformElement {
                                             >
                                                 <platform-icon name="close" size="16"></platform-icon>
                                             </button>
+                                            ${attachSummary ? html`
+                                                <div class="attach-summary-inline">${attachSummary}</div>
+                                            ` : ''}
                                         </div>
                                     `;}
                                     )}

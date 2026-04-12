@@ -1401,6 +1401,7 @@ class EntityService:
             note=snapshot.note,
             entities=list(snapshot.entities),
             relationships=list(snapshot.relationships),
+            known_entity_id_map=dict(snapshot.known_entity_id_map),
         )
         attrs["ai_analysis_draft"] = stored.model_dump(mode="json")
 
@@ -1695,6 +1696,8 @@ class EntityService:
         draft_entity_ids = {e.draft_entity_id for e in draft.entities if e.draft_entity_id}
         if draft.note is not None and draft.note.draft_entity_id:
             draft_entity_ids.add(draft.note.draft_entity_id)
+        # known entities не в draft.entities, но их draft_entity_id валидны
+        draft_entity_ids.update(draft.known_entity_id_map.keys())
 
         rel_tuples: Set[Tuple[str, str, str]] = set()
         for rel in draft.relationships:
@@ -1725,6 +1728,8 @@ class EntityService:
         id_map: Dict[str, str] = {}
         if draft.note is not None and draft.note.draft_entity_id:
             id_map[draft.note.draft_entity_id] = note_id
+        # known entities (member, company) разрешаются напрямую без update_entity
+        id_map.update(draft.known_entity_id_map)
 
         id_fragment, created_entity_ids, updated_entity_ids = (
             await self._apply_analysis_draft_entity_rows_with_retries(
@@ -1972,18 +1977,31 @@ class EntityService:
                         entity.dedup_existing_id = result.existing_entity_id
                         entity.dedup_existing_name = result.existing_entity_name
 
+        injected_known: list[AIExtractedEntity] = []
         if _known_entity_rows:
-            self._inject_known_entities_into_analyze_state(state, _known_entity_rows)
+            injected_known = self._inject_known_entities_into_analyze_state(state, _known_entity_rows)
 
         if progress_cb:
             await progress_cb("building_draft", 83, "Формирование черновика")
         self._assign_draft_ids_to_note_and_entities(state)
         draft_relationships = self._build_relationship_drafts_from_extracted(state)
+
+        # Собираем маппинг draft_entity_id → real entity_id для known entities
+        # и удаляем их из state.entities — они не должны отображаться в UI анализа
+        known_entity_id_map: Dict[str, str] = {}
+        if injected_known:
+            injected_known_ids = {id(e) for e in injected_known}
+            for e in injected_known:
+                if e.draft_entity_id and e.dedup_existing_id:
+                    known_entity_id_map[e.draft_entity_id] = e.dedup_existing_id
+            state.entities = [e for e in state.entities if id(e) not in injected_known_ids]
+
         ai_result = AIAnalyzeResponse(
             note=state.note,
             entities=state.entities,
             relationships=draft_relationships,
             attachment_summaries=state.attachment_summaries,
+            known_entity_id_map=known_entity_id_map,
         )
         if note_id:
             await self._persist_analysis_draft_to_note(note_id, ai_result)
@@ -2105,12 +2123,15 @@ class EntityService:
         self,
         state: _AnalyzePipelineState,
         entity_rows: list[CRMEntity],
-    ) -> None:
+    ) -> list[AIExtractedEntity]:
         """
         Добавляет known entities (member, company) в state.entities как синтетические
         черновые записи с dedup_action="merge". Это позволяет резолверу связей
         _build_relationship_drafts_from_extracted найти их в key_index и не дропать
         AI-созданные связи к автору/компании. Вызывается после dedup, до assign_draft_ids.
+
+        Возвращает список добавленных синтетических записей — caller должен удалить их
+        из state.entities после резолва связей, чтобы они не попали в черновик и UI.
         """
         occupied: set[tuple[str, str]] = set()
         if state.note is not None:
@@ -2124,6 +2145,7 @@ class EntityService:
                 self._normalize_name_for_relationship_key(ent.name),
             ))
 
+        injected: list[AIExtractedEntity] = []
         for row in entity_rows:
             k = (
                 row.entity_type.lower().strip(),
@@ -2145,6 +2167,8 @@ class EntityService:
             synthetic.dedup_action = "merge"
             synthetic.dedup_existing_id = row.entity_id
             state.entities.append(synthetic)
+            injected.append(synthetic)
+        return injected
 
     async def _call_ai_agent(
         self,

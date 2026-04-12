@@ -519,6 +519,10 @@ class AIAnalyzeResponse(BaseModel):
         default_factory=list,
         description="Резюме по каждому вложению [{filename, summary}]",
     )
+    known_entity_id_map: Dict[str, str] = Field(
+        default_factory=dict,
+        description="draft_entity_id → real entity_id для known entities (member, company)",
+    )
 
 
 class AIAnalysisDraftStored(BaseModel):
@@ -528,6 +532,10 @@ class AIAnalysisDraftStored(BaseModel):
     note: Optional[AIExtractedEntity] = None
     entities: List[AIExtractedEntity] = Field(default_factory=list)
     relationships: List[AIAnalysisRelationshipDraft] = Field(default_factory=list)
+    known_entity_id_map: Dict[str, str] = Field(
+        default_factory=dict,
+        description="draft_entity_id → real entity_id для known entities (member, company); не отображаются в UI",
+    )
 
 
 class DraftEntityPatch(BaseModel):

@@ -94,6 +94,6 @@
       }
     }
   },
-  "required": ["note", "entities", "relationships", "metadata"],
+  "required": ["note", "entities", "relationships", "metadata", "attachment_summaries"],
   "additionalProperties": false
 }

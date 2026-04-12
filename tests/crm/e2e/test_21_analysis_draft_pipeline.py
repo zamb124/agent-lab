@@ -377,7 +377,7 @@ class TestAnalysisDraftPipeline:
             ]
         )
 
-        _, an = await _analyze_note(crm_client, auth_headers_system, note_id, "check_duplicates": False)
+        _, an = await _analyze_note(crm_client, auth_headers_system, note_id, check_duplicates=False)
         assert an.status_code == 200, an.text
 
         apply_resp = await _apply_note(crm_client, auth_headers_system, note_id)

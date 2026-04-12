@@ -13,7 +13,7 @@ from apps.scheduler.main import (
     SYSTEM_SCHEDULER_COMPANY_ID,
     on_startup,
 )
-from core.config.models import BillingConfig, BillingSpanSettlementConfig, CalendarSyncConfig
+from core.config.models import BillingConfig, BillingSpanSettlementConfig, CalendarSyncConfig, PaymentProvidersConfig
 from core.scheduler.models import PlatformScheduleType, ScheduledTaskStatus
 
 
@@ -188,6 +188,7 @@ async def test_scheduler_startup_creates_calendar_sync_schedule_when_missing() -
             cron="*/1 * * * *",
         )
         billing = BillingConfig()
+        payment_providers = PaymentProvidersConfig()
 
     class _FakeSchedulerService:
         def __init__(self) -> None:
@@ -235,6 +236,7 @@ async def test_scheduler_startup_resumes_paused_calendar_sync_schedule() -> None
             cron="*/1 * * * *",
         )
         billing = BillingConfig()
+        payment_providers = PaymentProvidersConfig()
 
     class _FakeSchedulerService:
         def __init__(self) -> None:
@@ -283,6 +285,7 @@ async def test_scheduler_startup_creates_span_billing_schedule_when_enabled() ->
                 cron="*/5 * * * *",
             )
         )
+        payment_providers = PaymentProvidersConfig()
 
     class _FakeSchedulerService:
         def __init__(self) -> None:
