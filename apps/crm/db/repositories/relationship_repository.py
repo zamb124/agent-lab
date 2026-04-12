@@ -5,8 +5,8 @@
 Все связи ТОЛЬКО здесь (нет linked_entity_ids в CRMEntity)!
 """
 
-from typing import List, Optional, Dict
-from sqlalchemy import select, delete, or_, update
+from typing import List, Optional, Dict, Tuple
+from sqlalchemy import select, delete, or_, update, tuple_
 
 from apps.crm.db.base import CRMDatabase, BaseCRMRepository
 from apps.crm.db.models import Relationship
@@ -200,31 +200,50 @@ class RelationshipRepository(BaseCRMRepository[Relationship]):
     
     async def get_all_for_graph(
         self,
-        limit: int = 10000
-    ) -> List[Relationship]:
+        limit: int = 1000,
+        cursor: Optional[str] = None,
+    ) -> Tuple[List[Relationship], Optional[str], bool]:
         """
-        Получить ВСЕ relationships компании для построения полного графа.
-        
-        ВНИМАНИЕ: Использовать ТОЛЬКО если нужен весь граф в памяти.
-        Может вернуть тысячи relationships.
-        
-        Args:
-            limit: Максимальное количество relationships
-        
+        Relationships компании с cursor-пагинацией для безопасного обхода.
+
         Returns:
-            Список всех relationships компании
+            (relationships, next_cursor, has_more)
         """
+        import base64
+        import json as _json
+
         company_id = self._get_company_id()
         async with self._db.session() as session:
             stmt = select(Relationship).where(
                 Relationship.company_id == company_id
-            ).limit(limit)
-            
+            )
+
+            if cursor is not None:
+                payload = _json.loads(base64.urlsafe_b64decode(cursor.encode()).decode())
+                stmt = stmt.where(
+                    tuple_(Relationship.created_at, Relationship.relationship_id)
+                    > tuple_(payload["ts"], payload["id"])
+                )
+
+            stmt = stmt.order_by(
+                Relationship.created_at.asc(),
+                Relationship.relationship_id.asc(),
+            ).limit(limit + 1)
+
             result = await session.execute(stmt)
-            relationships = list(result.scalars().all())
-            
-            logger.info(f"Loaded {len(relationships)} relationships for graph (limit={limit})")
-            return relationships
+            rows = list(result.scalars().all())
+
+        has_more = len(rows) > limit
+        relationships = rows[:limit]
+
+        next_cursor: Optional[str] = None
+        if has_more and relationships:
+            last = relationships[-1]
+            payload = _json.dumps({"ts": last.created_at.isoformat(), "id": last.relationship_id})
+            next_cursor = base64.urlsafe_b64encode(payload.encode()).decode()
+
+        logger.debug(f"Loaded {len(relationships)} relationships for graph (limit={limit})")
+        return relationships, next_cursor, has_more
 
     async def rewrite_entity_id(
         self,

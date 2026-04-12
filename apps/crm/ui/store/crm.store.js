@@ -1457,7 +1457,7 @@ export const CRMStore = {
         }));
 
         const response = await crmApi.getNamespaces();
-        const list = response.namespaces || [];
+        const list = response.items || [];
         const currentNamespaceName = getNamespaceName(baseStore.state.namespaces.current);
         const companyId = getCompanyIdFromList(list);
         let resolvedCurrent = null;

@@ -14,7 +14,7 @@ from pydantic import BaseModel, Field
 from apps.sync.dependencies import ContainerDep
 from apps.sync.db.models import SyncMessage
 from apps.sync.message_read_helpers import message_read_from_entity
-from apps.sync.models.common import PaginationRequest, PaginationResponse, UserBrief
+from apps.sync.models.common import PaginationResponse, UserBrief
 from apps.sync.models.messages import MessageContentModel, MessageCreate, MessageEdit, MessageRead
 from apps.sync.realtime.commands import CommandEnvelope
 from apps.sync.realtime.tasks import handle_command
@@ -24,6 +24,14 @@ from core.models.identity_models import User
 
 router = APIRouter()
 MESSAGES_DEFAULT_LIMIT = 20
+
+
+class _MessagePaginationRequest(BaseModel):
+    """Параметры двунаправленной курсорной пагинации чата."""
+
+    limit: int = Field(default=50, ge=1, le=200)
+    before: str | None = Field(default=None)
+    after: str | None = Field(default=None)
 
 
 def _encode_message_cursor(*, sent_at: datetime, message_id: str) -> str:
@@ -95,7 +103,7 @@ async def list_messages(
     channel_id: str,
     request: Request,
     container: ContainerDep,
-    pagination: PaginationRequest = Depends(),
+    pagination: _MessagePaginationRequest = Depends(),
 ) -> PaginationResponse[MessageRead]:
     """Сообщения канала: полная модель с отправителем и контентом (как в MessageRead / WS)."""
     context = get_context()

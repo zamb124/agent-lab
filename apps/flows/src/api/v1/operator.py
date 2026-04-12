@@ -20,7 +20,6 @@ from apps.flows.src.models.operator_schemas import (
     OperatorQueueOut,
     OperatorQueuePatch,
     OperatorTaskCompleteBody,
-    OperatorTaskListResponse,
     OperatorTaskMessageBody,
     OperatorTaskOut,
     OperatorTaskPatch,
@@ -29,6 +28,7 @@ from apps.flows.src.models.operator_schemas import (
 from apps.flows.src.services.operator_handoff_service import parse_handoff_mode
 from core.context import get_context
 from core.logging import get_logger
+from core.pagination import OffsetPage
 
 logger = get_logger(__name__)
 
@@ -278,15 +278,14 @@ async def remove_queue_member(
     await publish_operator_tasks_refresh(container.redis_client, repo, queue_id)
 
 
-@router.get("/tasks", response_model=OperatorTaskListResponse)
+@router.get("/tasks", response_model=OffsetPage[OperatorTaskOut])
 async def list_operator_tasks(
     container: ContainerDep,
     queue_id: Optional[str] = Query(None),
     status: Optional[str] = Query(None),
-    limit: int = Query(100, ge=1, le=500),
+    limit: int = Query(100, ge=1, le=200),
     offset: int = Query(0, ge=0),
-    
-) -> OperatorTaskListResponse:
+) -> OffsetPage[OperatorTaskOut]:
     company_id, user_id = _company_and_user()
     repo = container.operator_repository
     allowed = await repo.list_queue_ids_for_user(company_id, user_id)
@@ -302,7 +301,7 @@ async def list_operator_tasks(
         )
     else:
         if not allowed:
-            return OperatorTaskListResponse(tasks=[], total=0, limit=limit, offset=offset)
+            return OffsetPage[OperatorTaskOut](items=[], total=0, limit=limit, offset=offset)
         rows, total = await repo.list_tasks(
             company_id,
             queue_ids=allowed,
@@ -312,8 +311,8 @@ async def list_operator_tasks(
         )
     rows_list = list(rows)
     flow_cfgs = await _flow_config_map_for_tasks(container, rows_list)
-    return OperatorTaskListResponse(
-        tasks=[
+    return OffsetPage[OperatorTaskOut](
+        items=[
             _task_to_out(r, flow_cfg=flow_cfgs.get(r.flow_id)) for r in rows_list
         ],
         total=total,

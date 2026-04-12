@@ -7,11 +7,11 @@ API для работы с entities.
 from typing import Any, Dict, List, Optional
 from datetime import datetime
 from fastapi import APIRouter, Body, File, HTTPException, Query, UploadFile
+from core.pagination import CursorPage
 from apps.crm.models.api import (
     EntityCreate,
     EntityUpdate,
     EntityResponse,
-    PaginatedEntityResponse,
     EntityTimelineBoundsResponse,
     EntityMergeRequest,
     EntityMergeResponse,
@@ -261,6 +261,10 @@ async def aggregate_entities(
     return facets
 
 
+_EXPORT_PAGE_SIZE = 500
+_EXPORT_MAX_ROWS = 10000
+
+
 @router.get("/export")
 async def export_entities(
     container: ContainerDep,
@@ -269,50 +273,90 @@ async def export_entities(
     entity_subtype: Optional[str] = Query(None),
     namespace: Optional[str] = Query(None),
     status: Optional[str] = Query(None),
-    limit: int = Query(10000, le=100000),
+    limit: int = Query(5000, le=_EXPORT_MAX_ROWS),
 ):
-    """Streaming export сущностей в CSV или JSON."""
+    """Streaming export сущностей постраничными чанками (не материализует весь список в памяти)."""
     import csv
     import io
     import json as json_lib
+    from fastapi.responses import StreamingResponse
 
     filters = build_crm_entity_filters_from_query(status=status)
-    entities, _, _ = await container.entity_service.list_entities(
-        entity_type=entity_type,
-        entity_subtype=entity_subtype,
-        namespace=namespace,
-        filters=filters if filters else None,
-        limit=limit,
-    )
+    filters_arg = filters if filters else None
 
     if format == "csv":
-        output = io.StringIO()
-        writer = csv.writer(output)
-        writer.writerow(["entity_id", "entity_type", "name", "description", "status", "tags", "created_at"])
-        for e in entities:
-            writer.writerow([
-                e.entity_id, e.entity_type, e.name, e.description or "",
-                e.status, ",".join(e.tags or []),
-                e.created_at.isoformat() if e.created_at else "",
-            ])
-        from fastapi.responses import StreamingResponse
+        async def _csv_generator():
+            header_buf = io.StringIO()
+            csv.writer(header_buf).writerow(
+                ["entity_id", "entity_type", "name", "description", "status", "tags", "created_at"]
+            )
+            yield header_buf.getvalue()
+
+            remaining = limit
+            cursor: Optional[str] = None
+            while remaining > 0:
+                page_size = min(_EXPORT_PAGE_SIZE, remaining)
+                batch, cursor, has_more = await container.entity_service.list_entities(
+                    entity_type=entity_type,
+                    entity_subtype=entity_subtype,
+                    namespace=namespace,
+                    filters=filters_arg,
+                    limit=page_size,
+                    cursor=cursor,
+                )
+                for e in batch:
+                    row_buf = io.StringIO()
+                    csv.writer(row_buf).writerow([
+                        e.entity_id, e.entity_type, e.name, e.description or "",
+                        e.status, ",".join(e.tags or []),
+                        e.created_at.isoformat() if e.created_at else "",
+                    ])
+                    yield row_buf.getvalue()
+                remaining -= len(batch)
+                if not has_more or cursor is None:
+                    break
+
         return StreamingResponse(
-            iter([output.getvalue()]),
+            _csv_generator(),
             media_type="text/csv",
             headers={"Content-Disposition": "attachment; filename=entities.csv"},
         )
 
-    items = [EntityResponse.model_validate(e).model_dump(mode="json") for e in entities]
-    content = json_lib.dumps(items, ensure_ascii=False, indent=2)
-    from fastapi.responses import StreamingResponse
+    async def _json_generator():
+        yield "[\n"
+        first = True
+        remaining = limit
+        cursor: Optional[str] = None
+        while remaining > 0:
+            page_size = min(_EXPORT_PAGE_SIZE, remaining)
+            batch, cursor, has_more = await container.entity_service.list_entities(
+                entity_type=entity_type,
+                entity_subtype=entity_subtype,
+                namespace=namespace,
+                filters=filters_arg,
+                limit=page_size,
+                cursor=cursor,
+            )
+            for e in batch:
+                prefix = "" if first else ",\n"
+                first = False
+                yield prefix + json_lib.dumps(
+                    EntityResponse.model_validate(e).model_dump(mode="json"),
+                    ensure_ascii=False,
+                )
+            remaining -= len(batch)
+            if not has_more or cursor is None:
+                break
+        yield "\n]"
+
     return StreamingResponse(
-        iter([content]),
+        _json_generator(),
         media_type="application/json",
         headers={"Content-Disposition": "attachment; filename=entities.json"},
     )
 
 
-@router.get("/search", response_model=PaginatedEntityResponse)
+@router.get("/search", response_model=CursorPage[EntityResponse])
 async def search_entities(
     container: ContainerDep,
     query: str = Query(...),
@@ -358,7 +402,7 @@ async def search_entities(
             resp.score = score
             resp.match_type = match_type
             items.append(resp)
-        return PaginatedEntityResponse(items=items, next_cursor=None, has_more=False)
+        return CursorPage[EntityResponse](items=items, next_cursor=None, has_more=False)
 
     if search_mode == "text":
         results = await container.entity_service.text_search(
@@ -375,7 +419,7 @@ async def search_entities(
             resp.score = score
             resp.match_type = "text"
             items.append(resp)
-        return PaginatedEntityResponse(items=items, next_cursor=None, has_more=False)
+        return CursorPage[EntityResponse](items=items, next_cursor=None, has_more=False)
 
     results = await container.entity_service.search_entities(
         query=query,
@@ -391,7 +435,7 @@ async def search_entities(
         resp.score = score
         resp.match_type = "semantic"
         items.append(resp)
-    return PaginatedEntityResponse(items=items, next_cursor=None, has_more=False)
+    return CursorPage[EntityResponse](items=items, next_cursor=None, has_more=False)
 
 
 @router.get("/timeline/bounds", response_model=EntityTimelineBoundsResponse)
@@ -520,7 +564,7 @@ async def delete_entity(
     return {"success": True}
 
 
-@router.get("", response_model=PaginatedEntityResponse)
+@router.get("", response_model=CursorPage[EntityResponse])
 async def list_entities(
     container: ContainerDep,
     entity_type: Optional[str] = Query(None),
@@ -559,7 +603,7 @@ async def list_entities(
         limit=limit,
         cursor=cursor,
     )
-    return PaginatedEntityResponse(
+    return CursorPage[EntityResponse](
         items=[EntityResponse.model_validate(e) for e in entities],
         next_cursor=next_cursor,
         has_more=has_more,

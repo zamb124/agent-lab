@@ -86,12 +86,6 @@ class OperatorTaskOut(StrictBaseModel):
     updated_at: Optional[datetime] = None
 
 
-class OperatorTaskListResponse(StrictBaseModel):
-    tasks: List[OperatorTaskOut]
-    total: int
-    limit: int
-    offset: int
-
 
 class OperatorTaskPatch(StrictBaseModel):
     status: str = Field(..., min_length=1)

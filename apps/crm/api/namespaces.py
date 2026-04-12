@@ -86,7 +86,7 @@ async def list_namespaces(
     namespaces = await namespace_repo.list_all()
     
     return NamespaceListResponse(
-        namespaces=[
+        items=[
             NamespaceResponse(
                 name=ns.name,
                 company_id=ns.company_id,

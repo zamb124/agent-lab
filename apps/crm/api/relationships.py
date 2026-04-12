@@ -8,7 +8,13 @@ from datetime import datetime, timezone
 from fastapi import APIRouter, HTTPException, Query
 from sqlalchemy.exc import IntegrityError
 
-from apps.crm.models.api import RelationshipCreate, RelationshipResponse, RelationshipTypeCreate, RelationshipTypeResponse
+from core.pagination import CursorPage
+from apps.crm.models.api import (
+    RelationshipCreate,
+    RelationshipResponse,
+    RelationshipTypeCreate,
+    RelationshipTypeResponse,
+)
 from apps.crm.models.graph import ShortestPathResponse
 from apps.crm.services.graph_service import GraphEntityLimitExceededError
 from apps.crm.dependencies import ContainerDep
@@ -21,24 +27,38 @@ logger = get_logger(__name__)
 router = APIRouter(prefix="/relationships", tags=["Relationships"])
 
 
-@router.get("", response_model=List[RelationshipResponse])
+@router.get("", response_model=CursorPage[RelationshipResponse])
 async def list_relationships(
     container: ContainerDep,
-    entity_id: str = None,
+    entity_id: Optional[str] = Query(None, description="Фильтр по entity (source или target)"),
     namespace: Optional[str] = Query(None, description="Фильтр по namespace"),
-    limit: int = Query(1000, ge=1, le=10000, description="Лимит для полного списка связей"),
+    cursor: Optional[str] = Query(None, description="Cursor для следующей страницы"),
+    limit: int = Query(200, ge=1, le=1000, description="Размер страницы"),
 ):
-    """Получить все связи (опционально для конкретной entity)"""
+    """Связи с cursor-пагинацией. Без entity_id возвращает все связи компании постранично."""
     repo = container.relationship_repository
+
+    if namespace is not None and namespace.strip() == "":
+        raise HTTPException(status_code=400, detail="namespace must not be empty")
+
     if entity_id:
         relationships = await repo.get_by_entity(entity_id)
-    else:
-        relationships = await repo.get_all_for_graph(limit=limit)
-    if namespace is None:
-        return relationships
-    if namespace.strip() == "":
-        raise HTTPException(status_code=400, detail="namespace must not be empty")
-    return [rel for rel in relationships if rel.namespace == namespace]
+        if namespace is not None:
+            relationships = [r for r in relationships if r.namespace == namespace]
+        return CursorPage[RelationshipResponse](
+            items=relationships,
+            next_cursor=None,
+            has_more=False,
+        )
+
+    batch, next_cursor, has_more = await repo.get_all_for_graph(limit=limit, cursor=cursor)
+    if namespace is not None:
+        batch = [r for r in batch if r.namespace == namespace]
+    return CursorPage[RelationshipResponse](
+        items=batch,
+        next_cursor=next_cursor,
+        has_more=has_more,
+    )
 
 
 @router.get("/{relationship_id}", response_model=RelationshipResponse)

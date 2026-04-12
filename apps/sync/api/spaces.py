@@ -2,10 +2,9 @@
 
 import uuid
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Query
 
 from apps.sync.dependencies import ContainerDep
-from apps.sync.models.common import PaginationRequest
 from apps.sync.models.spaces import SpaceRead, SpaceCreate, SpaceUpdate
 from apps.sync.realtime.command_dispatch import dispatch_sync_command
 from apps.sync.realtime.commands import CommandEnvelope
@@ -17,11 +16,14 @@ router = APIRouter()
 
 
 @router.get("/")
-async def list_spaces(container: ContainerDep, pagination: PaginationRequest = Depends()) -> list[SpaceRead]:
+async def list_spaces(
+    container: ContainerDep,
+    limit: int = Query(50, ge=1, le=200),
+) -> list[SpaceRead]:
     """Список пространств компании."""
     context = get_context()
     spaces = await container.space_repository.list_all(
-        limit=pagination.limit,
+        limit=limit,
         company_id=context.active_company.company_id,
     )
     return [

@@ -408,11 +408,8 @@ export const FlowsStore = {
         }));
         
         a2aService.listFlows().then(items => {
-            if (!Array.isArray(items)) {
-                throw new Error('API returned invalid flows list');
-            }
             baseStore.setState((s) => ({
-                flows: { ...s.flows, list: items, loading: false }
+                flows: { ...s.flows, list: items ?? [], loading: false }
             }));
         }).catch(error => {
             console.error('[Store] Failed to load flows:', error);

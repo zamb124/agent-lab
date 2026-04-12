@@ -243,7 +243,7 @@ async def list_namespaces(container: ContainerDep) -> OfficeNamespacesResponse:
         for ns in rows
         if ns.name and ns.name.strip()
     ]
-    return OfficeNamespacesResponse(namespaces=items)
+    return OfficeNamespacesResponse(items=items)
 
 
 @router.get("/namespaces/templates", response_model=list[OfficeNamespaceTemplateItem])

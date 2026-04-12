@@ -26,7 +26,7 @@ class ProviderInfo(BaseModel):
 
 class ProviderListResponse(BaseModel):
     """Ответ со списком провайдеров"""
-    providers: List[ProviderInfo]
+    items: List[ProviderInfo]
     current_provider: str
 
 
@@ -63,7 +63,7 @@ async def list_providers(
     logger.info(f"Список провайдеров запрошен: {[p.name for p in providers]}")
     
     return ProviderListResponse(
-        providers=providers,
+        items=providers,
         current_provider=settings.rag.default_provider
     )
 

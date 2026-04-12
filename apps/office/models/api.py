@@ -78,7 +78,7 @@ class OfficeNamespaceItem(BaseModel):
 
 
 class OfficeNamespacesResponse(BaseModel):
-    namespaces: List[OfficeNamespaceItem]
+    items: List[OfficeNamespaceItem]
 
 
 class OfficeNamespaceTemplateItem(BaseModel):

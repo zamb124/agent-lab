@@ -54,22 +54,17 @@ class TriggerResponse(BaseModel):
     last_error: Optional[str] = None
 
 
-class TriggerListResponse(BaseModel):
-    """Список триггеров."""
-    triggers: List[TriggerResponse]
-
-
 # CRUD endpoints
 
 @router.get("/flows/{flow_id}/triggers")
-async def list_triggers(flow_id: str, container: ContainerDep) -> TriggerListResponse:
+async def list_triggers(flow_id: str, container: ContainerDep) -> list[TriggerResponse]:
     """Получить список триггеров агента."""
     flow_config = await container.flow_repository.get(flow_id)
-    
+
     if not flow_config:
         raise HTTPException(status_code=404, detail=f"Flow not found: {flow_id}")
-    
-    triggers = [
+
+    return [
         TriggerResponse(
             trigger_id=t.trigger_id,
             name=t.name,
@@ -83,8 +78,6 @@ async def list_triggers(flow_id: str, container: ContainerDep) -> TriggerListRes
         )
         for t in flow_config.triggers.values()
     ]
-    
-    return TriggerListResponse(triggers=triggers)
 
 
 @router.get("/flows/{flow_id}/triggers/{trigger_id}")

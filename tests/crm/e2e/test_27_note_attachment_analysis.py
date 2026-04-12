@@ -43,7 +43,13 @@ async def _analyze_note_task(crm_client, headers, note_id, *, fail_on_failed=Tru
         await asyncio.sleep(0.4)
     nr = await crm_client.get(f"/crm/api/v1/entities/{note_id}", headers=headers)
     draft = nr.json().get("attributes", {}).get("ai_analysis_draft") or {}
-    return last, draft
+
+    class _R:
+        status_code = nr.status_code
+        def json(self) -> dict:
+            return draft
+
+    return last, _R()
 
 
 

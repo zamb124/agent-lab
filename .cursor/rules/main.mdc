@@ -258,6 +258,29 @@ UV: `uv add package`, `uv sync`, `uv run python file.py`, `uv run pytest`.
 - **Трейсинг:** OTEL `trace_id` + `parent_span_id`, БД `platform_tracing`, корневой span сущности через `resource_root_span`. **`tracing.mdc`**.
 - **Тарификация:** прайс в конфиге и `billing:resource_base_prices_json`, `UsageRecord`, фоновое списание по spans с `pending_settlement`. **`billing.mdc`**, атрибуты spans — **`tracing.mdc`**.
 
+## Пагинация API
+
+Единственные допустимые типы — `CursorPage[T]` и `OffsetPage[T]` из **`core/pagination.py`**. Любая другая модель пагинации запрещена.
+
+| Тип | Поля | Когда |
+|-----|------|-------|
+| `CursorPage[T]` | `items`, `next_cursor: str \| None`, `has_more: bool` | Коллекции >1K, realtime, ленты, экспорт |
+| `OffsetPage[T]` | `items`, `total: int`, `limit: int`, `offset: int` | Admin UI, поиск с прыжком по страницам, таблицы <10K |
+
+**Исключение:** двунаправленная пагинация сообщений в `sync/messages` (`before`/`after`) — остаётся локально в `sync`, в `core` не выносить.
+
+### Абсолютные запреты пагинации
+
+- Поле коллекции **никогда не называть** `data`, `results`, `tasks`, `sessions` и т.п. — **только** `items`
+- **Никаких** ad-hoc моделей пагинации в сервисах (`PaginatedXxxResponse`, `XxxListResponse` и т.д.)
+- **Никакого** `SELECT COUNT(*)` в cursor-эндпоинтах — `has_more` определяется фетчем `limit + 1`
+- **Никакого** `limit > 1000` для cursor, `limit > 200` для offset без явного обоснования
+- **Никакого** голого `list[T]` как response_model у коллекционных эндпоинтов — всегда обёртка
+
+### Cursor-кодирование
+
+Cursor = `base64url(json({"ts": "<created_at.isoformat()>", "id": "<entity_id>"}))` — keyset по `(created_at, id)`. Клиент не должен парсить cursor — он opaque.
+
 ## Навигация по правилам
 
 | Тема | Файл правила |

@@ -28,7 +28,7 @@ router = APIRouter(tags=["documents"])
 
 
 class DocumentListResponse(BaseModel):
-    documents: List[RAGDocument]
+    items: List[RAGDocument]
     namespace_id: str
     provider: str
 
@@ -141,7 +141,7 @@ async def list_documents(
         ))
 
     return DocumentListResponse(
-        documents=all_documents[:limit],
+        items=all_documents[:limit],
         namespace_id=namespace_id,
         provider=provider_name,
     )

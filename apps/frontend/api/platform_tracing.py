@@ -13,8 +13,8 @@ from apps.frontend.models import (
     PlatformTracingFacetItem,
     PlatformTracingFacetItemsResponse,
     PlatformTracingFacetsResponse,
-    PlatformTracingSpansPageResponse,
 )
+from core.pagination import CursorPage
 from core.db.repositories.company_repository import CompanyRepository
 from core.db.repositories.user_repository import UserRepository
 from core.identity.system_bootstrap import SYSTEM_COMPANY_ID
@@ -212,7 +212,7 @@ async def facet_operations(
     return PlatformTracingFacetsResponse(items=items)
 
 
-@router.get("/spans", response_model=PlatformTracingSpansPageResponse)
+@router.get("/spans", response_model=CursorPage[dict])
 async def list_spans(
     request: Request,
     container: ContainerDep,
@@ -230,7 +230,7 @@ async def list_spans(
     service_name_query: Optional[str] = Query(default=None),
     cursor: Optional[str] = Query(default=None),
     limit: int = Query(default=50, ge=1, le=ADMIN_SPANS_MAX_LIMIT),
-) -> PlatformTracingSpansPageResponse:
+) -> CursorPage[dict]:
     _require_system(request)
     _require_tracing_db()
     try:
@@ -253,7 +253,7 @@ async def list_spans(
     except ValueError as e:
         raise HTTPException(status_code=422, detail=str(e)) from e
     await _enrich_span_items(items, container.company_repository, container.user_repository)
-    return PlatformTracingSpansPageResponse(items=items, next_cursor=next_cursor)
+    return CursorPage[dict](items=items, next_cursor=next_cursor, has_more=next_cursor is not None)
 
 
 @router.get("/traces/{trace_id}")

@@ -1,13 +1,14 @@
 """Участники компании — для списка «Личные» в Sync UI."""
 
-from fastapi import APIRouter, Depends, HTTPException
+import asyncio
+
+from fastapi import APIRouter, HTTPException, Query
 
 from core.config import get_settings
 
 from apps.sync.channel_read_helpers import channel_read_from_entity
 from apps.sync.dependencies import ContainerDep
 from apps.sync.models.channels import ChannelRead
-from apps.sync.models.common import PaginationRequest
 from apps.sync.models.company_members import CompanyMemberRead
 from apps.sync.ws_presence import batch_peer_presence
 from core.context import get_context
@@ -31,12 +32,15 @@ async def list_company_members(container: ContainerDep) -> list[CompanyMemberRea
     if not redis_url:
         raise HTTPException(status_code=500, detail="database.redis_url не задан.")
 
-    presence_map = await batch_peer_presence(redis_url, member_uids)
+    presence_map, users_by_id = await asyncio.gather(
+        batch_peer_presence(redis_url, member_uids),
+        container.user_repository.get_many(member_uids),
+    )
 
     out: list[CompanyMemberRead] = []
     for uid in member_uids:
         roles_raw = company.members[uid]
-        user = await container.user_repository.get(uid)
+        user = users_by_id.get(uid)
         if user is None:
             raise HTTPException(
                 status_code=500,
@@ -62,7 +66,7 @@ async def list_company_members(container: ContainerDep) -> list[CompanyMemberRea
 async def list_shared_channels_with_member(
     peer_user_id: str,
     container: ContainerDep,
-    pagination: PaginationRequest = Depends(),
+    limit: int = Query(50, ge=1, le=200),
 ) -> list[ChannelRead]:
     """Каналы, где есть и текущий пользователь, и указанный участник компании (как в сайдбаре)."""
     context = get_context()
@@ -78,14 +82,14 @@ async def list_shared_channels_with_member(
         channels = await container.channel_repository.list_for_user(
             viewer_id,
             space_id=None,
-            limit=pagination.limit,
+            limit=limit,
             company_id=company_id,
         )
     else:
         channels = await container.channel_repository.list_channels_where_both_members(
             viewer_id,
             peer_user_id,
-            limit=pagination.limit,
+            limit=limit,
             company_id=company_id,
         )
 

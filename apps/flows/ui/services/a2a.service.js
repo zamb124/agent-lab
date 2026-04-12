@@ -9,7 +9,8 @@ export class A2AService extends BaseService {
     }
 
     async listFlows() {
-        return this.get('/api/v1/flows/');
+        const data = await this.get('/api/v1/flows/');
+        return data.items;
     }
 
     async getFlow(flowId) {
@@ -58,7 +59,7 @@ export class A2AService extends BaseService {
         if (options.offset) params.append('offset', options.offset);
         const query = params.toString();
         const response = await this.get(`/api/v1/sessions/${query ? '?' + query : ''}`);
-        return response.sessions || [];
+        return response.items || [];
     }
 
     async deleteSession(flowId, sessionId) {
@@ -82,7 +83,8 @@ export class A2AService extends BaseService {
     }
 
     async getTools() {
-        return this.get('/api/v1/tools');
+        const data = await this.get('/api/v1/tools');
+        return data.items;
     }
 
     // Resources API

@@ -258,7 +258,7 @@ export class OfficeSidebar extends PlatformElement {
         }
         try {
             const res = await api.listNamespaces();
-            const raw = res?.namespaces;
+            const raw = res?.items;
             this._namespaceRows = Array.isArray(raw) ? raw : [];
         } catch {
             this._namespaceRows = [];

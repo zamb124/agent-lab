@@ -1981,20 +1981,29 @@ class EntityService:
         if _known_entity_rows:
             injected_known = self._inject_known_entities_into_analyze_state(state, _known_entity_rows)
 
+        # Сохраняем dedup_existing_id до model_copy в _assign_draft_ids_to_note_and_entities
+        injected_known_existing_ids: set[str] = {
+            e.dedup_existing_id for e in injected_known if e.dedup_existing_id
+        }
+
         if progress_cb:
             await progress_cb("building_draft", 83, "Формирование черновика")
         self._assign_draft_ids_to_note_and_entities(state)
         draft_relationships = self._build_relationship_drafts_from_extracted(state)
 
         # Собираем маппинг draft_entity_id → real entity_id для known entities
-        # и удаляем их из state.entities — они не должны отображаться в UI анализа
+        # и удаляем их из state.entities — они не должны отображаться в UI анализа.
+        # Фильтруем по dedup_existing_id, а не по id() — _assign_draft_ids создаёт
+        # новые объекты через model_copy, поэтому id() сравнение не работает.
         known_entity_id_map: Dict[str, str] = {}
-        if injected_known:
-            injected_known_ids = {id(e) for e in injected_known}
-            for e in injected_known:
-                if e.draft_entity_id and e.dedup_existing_id:
+        if injected_known_existing_ids:
+            for e in state.entities:
+                if e.dedup_existing_id in injected_known_existing_ids and e.draft_entity_id:
                     known_entity_id_map[e.draft_entity_id] = e.dedup_existing_id
-            state.entities = [e for e in state.entities if id(e) not in injected_known_ids]
+            state.entities = [
+                e for e in state.entities
+                if e.dedup_existing_id not in injected_known_existing_ids
+            ]
 
         ai_result = AIAnalyzeResponse(
             note=state.note,

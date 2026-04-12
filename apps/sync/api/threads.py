@@ -1,9 +1,8 @@
 """API роутер для тредов (Threads)."""
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, HTTPException, Query
 
 from apps.sync.dependencies import ContainerDep
-from apps.sync.models.common import PaginationRequest
 from apps.sync.models.threads import ThreadRead, ThreadCreate, ThreadRow
 from apps.sync.realtime.commands import CommandEnvelope
 from apps.sync.realtime.tasks import handle_command
@@ -17,12 +16,12 @@ router = APIRouter()
 async def list_threads(
     channel_id: str,
     container: ContainerDep,
-    pagination: PaginationRequest = Depends(),
+    limit: int = Query(50, ge=1, le=200),
 ) -> list[ThreadRow]:
     """Список тредов в канале."""
     context = get_context()
     threads = await container.thread_repository.list_by_channel(
-        channel_id, limit=pagination.limit,
+        channel_id, limit=limit,
         company_id=context.active_company.company_id,
     )
     return [

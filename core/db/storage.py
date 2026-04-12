@@ -570,6 +570,22 @@ class Storage:
 
             return data
 
+    async def _count_by_prefix_and_table(self, prefix: str, table_name: str) -> int:
+        """Считает количество записей по префиксу в таблице. Используется BaseRepository."""
+        async with self._get_session() as session:
+            model = self._get_table_model(table_name)
+            if model in TABLE_MODELS.values():
+                from sqlalchemy import func as sa_func
+                result = await session.execute(
+                    select(sa_func.count()).where(model.key.like(f"{prefix}%"))
+                )
+            else:
+                result = await session.execute(
+                    text(f"SELECT COUNT(*) FROM {table_name} WHERE key LIKE :prefix"),
+                    {"prefix": f"{prefix}%"},
+                )
+            return result.scalar() or 0
+
     async def _get_many_with_table(self, keys: List[str], table_name: str) -> dict[str, str]:
         """
         Низкоуровневый метод для получения нескольких значений из конкретной таблицы.

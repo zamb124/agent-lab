@@ -93,7 +93,7 @@ export const RagStore = {
         
         const currentProvider = baseStore.state.providers.current;
         const response = await ragApi.getNamespaces(currentProvider);
-        const namespaces = response.namespaces || [];
+        const namespaces = response.items || [];
         
         baseStore.setState((s) => ({
             namespaces: { ...s.namespaces, list: namespaces },
@@ -113,7 +113,7 @@ export const RagStore = {
         }));
         
         const response = await ragApi.getProviders();
-        const providers = response.providers || [];
+        const providers = response.items || [];
         const currentProvider = response.current_provider || 'pgvector';
         
         baseStore.setState((s) => ({
@@ -161,7 +161,7 @@ export const RagStore = {
         
         const currentProvider = baseStore.state.providers.current;
         const response = await ragApi.getDocuments(namespaceId, currentProvider);
-        const documents = response.documents || [];
+        const documents = response.items || [];
         
         baseStore.setState((s) => ({
             namespaces: {

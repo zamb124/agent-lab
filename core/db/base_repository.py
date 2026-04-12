@@ -267,6 +267,13 @@ class BaseRepository(ABC, Generic[T]):
         
         return entities
 
+    async def count_all(self) -> int:
+        """Количество всех сущностей компании в таблице."""
+        base_prefix = self._get_prefix()
+        final_prefix = self._build_final_key(base_prefix)
+        table_name = self._get_table_name()
+        return await self._storage._count_by_prefix_and_table(final_prefix, table_name)
+
     async def get_many(self, entity_ids: List[str]) -> Dict[str, T]:
         """
         Получает несколько сущностей по списку ID.

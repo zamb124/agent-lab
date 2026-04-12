@@ -69,7 +69,13 @@ async def _analyze_note(
     assert last.get("status") == "completed", f"task failed: {last.get('error_message')}"
     nr = await crm_client.get(f"/crm/api/v1/entities/{note_id}", headers=headers)
     draft = nr.json().get("attributes", {}).get("ai_analysis_draft") or {}
-    return last, draft
+
+    class _R:
+        status_code = nr.status_code
+        def json(self) -> dict:
+            return draft
+
+    return last, _R()
 
 
 

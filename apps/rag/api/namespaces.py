@@ -28,7 +28,7 @@ class NamespaceCreateRequest(BaseModel):
 
 class NamespaceListResponse(BaseModel):
     """Ответ со списком namespaces"""
-    namespaces: List[Namespace]
+    items: List[Namespace]
     company_id: str
 
 
@@ -58,7 +58,7 @@ async def list_namespaces(
         logger.info(f"Получено {len(namespaces)} namespaces для компании {company_id}")
         
         return NamespaceListResponse(
-            namespaces=namespaces,
+            items=namespaces,
             company_id=company_id
         )
     except ValueError as e:

@@ -352,8 +352,8 @@ export class ToolPickerModal extends PlatformModal {
         this.loading = true;
         
         try {
-            const items = await this.a2a.get('/api/v1/tools/all');
-            this.allItems = items || [];
+            const data = await this.a2a.get('/api/v1/tools/all');
+            this.allItems = data.items ?? [];
         } catch (error) {
             this.error(this.i18n.t('tool_picker.err_load', { message: error.message }));
             this.allItems = [];

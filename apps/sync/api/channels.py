@@ -2,7 +2,7 @@
 
 import uuid
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, HTTPException, Query
 
 from apps.sync.channel_read_helpers import channel_read_from_entity
 from apps.sync.dependencies import ContainerDep
@@ -14,7 +14,6 @@ from apps.sync.models.channels import (
     ChannelRead,
     ChannelUpdate,
 )
-from apps.sync.models.common import PaginationRequest
 from apps.sync.realtime.command_dispatch import dispatch_sync_command
 from apps.sync.realtime.commands import CommandEnvelope
 from apps.sync.realtime.events import event_channel_member_added
@@ -30,7 +29,7 @@ router = APIRouter()
 async def list_channels(
     container: ContainerDep,
     space_id: str | None = None,
-    pagination: PaginationRequest = Depends(),
+    limit: int = Query(50, ge=1, le=200),
 ) -> list[ChannelRead]:
     """Список каналов текущего пользователя (членство). Опционально фильтр по space_id."""
     context = get_context()
@@ -39,7 +38,7 @@ async def list_channels(
     channels = await container.channel_repository.list_for_user(
         viewer_id,
         space_id=space_id,
-        limit=pagination.limit,
+        limit=limit,
         company_id=company_id,
     )
     channel_ids = [c.channel_id for c in channels]

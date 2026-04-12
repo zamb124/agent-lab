@@ -109,11 +109,6 @@ class PlatformTracingFacetItemsResponse(BaseModel):
     items: List[PlatformTracingFacetItem]
 
 
-class PlatformTracingSpansPageResponse(BaseModel):
-    """Страница spans админ-поиска с курсором."""
-
-    items: List[Dict[str, Any]]
-    next_cursor: Optional[str] = None
 
 
 class PlatformBillingPricesResponse(BaseModel):

@@ -829,7 +829,7 @@ export class OperatorWorkbenchPage extends PlatformElement {
         }
         try {
             const res = await this.a2a.listOperatorTasks({ limit: 200, offset: 0 });
-            this.tasks = res.tasks || [];
+            this.tasks = res.items || [];
         } catch (err) {
             console.error('[OperatorWorkbench] Failed to refresh tasks', err);
             return;
@@ -954,7 +954,7 @@ export class OperatorWorkbenchPage extends PlatformElement {
         this.loading = true;
         try {
             const res = await this.a2a.listOperatorTasks({ limit: 200, offset: 0 });
-            this.tasks = res.tasks || [];
+            this.tasks = res.items || [];
         } catch (e) {
             this.error(e?.message || String(e));
             this.tasks = [];

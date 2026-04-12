@@ -2,13 +2,15 @@
 API endpoints для tools.
 """
 
+import asyncio
 from typing import List, Optional
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel
 
 from apps.flows.src.dependencies import ContainerDep
 from core.logging import get_logger
+from core.pagination import OffsetPage
 from apps.flows.src.models import ToolReference, CallParameter
 from apps.flows.src.models.enums import ReactToolRole
 from apps.flows.src.tools.json_schema_parameters import call_parameters_to_parameters_schema
@@ -48,40 +50,58 @@ class ToolResponse(BaseModel):
     mcp_server_id: Optional[str] = None  # ID MCP сервера
 
 
-@router.get("/", response_model=List[ToolResponse])
+_TOOLS_MAX_LIMIT = 2000
+
+
+@router.get("/", response_model=OffsetPage[ToolResponse])
 async def list_tools(
     container: ContainerDep,
-) -> List[ToolResponse]:
-    """Список всех tools"""
-    tools = await container.tool_repository.list_all()
-    return [
-        ToolResponse(
-            tool_id=t.tool_id,
-            title=t.title,
-            description=t.description,
-            code=t.code,
-            args_schema=t.args_schema if t.args_schema else None,
-            parameters_schema=t.parameters_schema,
-            tags=t.tags or ["misc"],
-            permission=t.permission,
-            item_type="tool",
-            react_role=t.react_role.value,
-        )
-        for t in tools
-    ]
+    limit: int = Query(500, ge=1, le=_TOOLS_MAX_LIMIT, description="Максимум tools"),
+    offset: int = Query(0, ge=0, description="Смещение для пагинации"),
+) -> OffsetPage[ToolResponse]:
+    """Список tools с пагинацией."""
+    tools, total = await asyncio.gather(
+        container.tool_repository.list_all(limit=limit, offset=offset),
+        container.tool_repository.count_all(),
+    )
+    return OffsetPage[ToolResponse](
+        items=[
+            ToolResponse(
+                tool_id=t.tool_id,
+                title=t.title,
+                description=t.description,
+                code=t.code,
+                args_schema=t.args_schema if t.args_schema else None,
+                parameters_schema=t.parameters_schema,
+                tags=t.tags or ["misc"],
+                permission=t.permission,
+                item_type="tool",
+                react_role=t.react_role.value,
+            )
+            for t in tools
+        ],
+        total=total,
+        limit=limit,
+        offset=offset,
+    )
 
 
-@router.get("/all", response_model=List[ToolResponse])
+@router.get("/all", response_model=OffsetPage[ToolResponse])
 async def list_all_tools_and_flows(
     container: ContainerDep,
-) -> List[ToolResponse]:
-    """Список всех tools и flows для picker."""
-    result = []
-    
-    # Tools
-    tools = await container.tool_repository.list_all()
-    for t in tools:
-        result.append(ToolResponse(
+    limit: int = Query(500, ge=1, le=_TOOLS_MAX_LIMIT, description="Максимум tools+flows вместе"),
+    offset: int = Query(0, ge=0, description="Смещение для пагинации"),
+) -> OffsetPage[ToolResponse]:
+    """Список tools и flows для picker с общим лимитом."""
+    tools_list, flows_list, tools_count, flows_count = await asyncio.gather(
+        container.tool_repository.list_all(limit=limit, offset=offset),
+        container.flow_repository.list_all(limit=limit),
+        container.tool_repository.count_all(),
+        container.flow_repository.count_all(),
+    )
+    items = []
+    for t in tools_list:
+        items.append(ToolResponse(
             tool_id=t.tool_id,
             title=t.title,
             description=t.description,
@@ -95,11 +115,8 @@ async def list_all_tools_and_flows(
             code_mode=t.code_mode.value if t.code_mode else None,
             mcp_server_id=t.mcp_server_id,
         ))
-    
-    # Flows (как объекты выбора в picker рядом с tools)
-    flows = await container.flow_repository.list_all()
-    for flow_row in flows:
-        result.append(ToolResponse(
+    for flow_row in flows_list:
+        items.append(ToolResponse(
             tool_id=flow_row.flow_id,
             title=flow_row.name,
             description=flow_row.description,
@@ -107,8 +124,12 @@ async def list_all_tools_and_flows(
             permission=None,
             item_type="flow",
         ))
-    
-    return result
+    return OffsetPage[ToolResponse](
+        items=items,
+        total=tools_count + flows_count,
+        limit=limit,
+        offset=offset,
+    )
 
 
 class DraftParametersSchemaRequest(BaseModel):

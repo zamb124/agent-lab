@@ -2,6 +2,7 @@
 API endpoints для flows.
 """
 
+import asyncio
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
@@ -12,6 +13,7 @@ from apps.flows.src.container import FlowContainer
 from apps.flows.src.dependencies import ContainerDep
 from apps.flows.src.services.flows_loader import FlowsLoader
 from core.logging import get_logger
+from core.pagination import OffsetPage
 from apps.flows.src.models import Edge, FlowConfig, SkillConfig, NodeConfig, FlowType, ExternalAgentStatus, TriggerConfig
 from apps.flows.src.services.flow_validator import FlowValidator
 
@@ -397,19 +399,22 @@ async def validate_flow(
     )
 
 
-@router.get("/", response_model=List[FlowResponse])
+@router.get("/", response_model=OffsetPage[FlowResponse])
 async def list_flows(
     container: ContainerDep,
     type: Optional[FlowType] = None,
-    limit: int = Query(1000, ge=1, le=10000, description="Максимум flows"),
-) -> List[FlowResponse]:
+    limit: int = Query(500, ge=1, le=2000, description="Максимум flows"),
+    offset: int = Query(0, ge=0, description="Смещение для пагинации"),
+) -> OffsetPage[FlowResponse]:
     """Список всех flows с опциональным фильтром по типу (local/external)"""
-    flows = await container.flow_repository.list_all(limit=limit)
-    
-    # Фильтруем по типу если указан
+    flows, total = await asyncio.gather(
+        container.flow_repository.list_all(limit=limit, offset=offset),
+        container.flow_repository.count_all(),
+    )
+
     if type is not None:
         flows = [f for f in flows if f.type == type]
-    
+
     result = []
     for f in flows:
         skills_response = {
@@ -457,7 +462,7 @@ async def list_flows(
             })
         
         result.append(FlowResponse(**response_data))
-    return result
+    return OffsetPage[FlowResponse](items=result, total=total, limit=limit, offset=offset)
 
 
 async def _validate_tool_nodes(

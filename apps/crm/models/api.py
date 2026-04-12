@@ -86,12 +86,6 @@ class EntityResponse(BaseModel):
     updated_at: datetime
 
 
-class PaginatedEntityResponse(BaseModel):
-    """Ответ со списком entities и курсором для пагинации."""
-    items: List[EntityResponse]
-    next_cursor: Optional[str] = None
-    has_more: bool = False
-
 
 class BulkCreateRequest(BaseModel):
     """Batch создание сущностей (до 200)."""
@@ -278,6 +272,7 @@ class RelationshipResponse(BaseModel):
     updated_at: datetime
 
 
+
 class SearchMentionsRequest(BaseModel):
     """Запрос на поиск упоминаний в тексте"""
     text: str = Field(description="Текст для поиска упоминаний")
@@ -323,7 +318,7 @@ class NamespaceResponse(BaseModel):
 
 class NamespaceListResponse(BaseModel):
     """Список namespace компании."""
-    namespaces: List[NamespaceResponse]
+    items: List[NamespaceResponse]
     company_id: str
 
 
