@@ -19,7 +19,7 @@ class TestDailySummary:
     @pytest.mark.asyncio
     async def test_generate_daily_summary(self, crm_client, unique_id, auth_headers_system):
         """Саммари за день: версия источника и фоновый пересчёт без LLM, пока нет ai_analysis_applied_at."""
-        today = date.today()
+        today = f"2096-05-{hash(unique_id) % 28 + 1:02d}"
         
         for i in range(3):
             await crm_client.post("/crm/api/v1/entities/", json={
@@ -27,15 +27,15 @@ class TestDailySummary:
                 "entity_subtype": "meeting",
                 "name": f"Событие {i} {unique_id}",
                 "description": f"Описание события {i} дня",
-                "note_date": today.isoformat()
+                "note_date": today
             }, headers=auth_headers_system)
         
         first_response = await crm_client.post("/crm/api/v1/entities/daily-summary", json={
-            "date": today.isoformat()
+            "date": today
         }, headers=auth_headers_system)
         assert first_response.status_code == 200
         first_payload = first_response.json()
-        assert first_payload["date"] == today.isoformat()
+        assert first_payload["date"] == today
         assert "revalidating" in first_payload
         assert "stale" in first_payload
         assert "source_version" in first_payload
@@ -45,7 +45,7 @@ class TestDailySummary:
         await wait_daily_summary_rebuild_done(
             crm_client,
             auth_headers_system,
-            date_str=today.isoformat(),
+            date_str=today,
         )
 
     @pytest.mark.asyncio

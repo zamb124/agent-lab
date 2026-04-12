@@ -91,12 +91,21 @@ async def test_can_use_resource_insufficient_balance(frontend_container, unique_
     await frontend_container.company_repository.set(company)
     user = await frontend_container.user_repository.get(system_user_id)
     assert user is not None
+    global_key = "billing:resource_base_prices_json"
+    prev_global = await frontend_container.shared_storage.get(global_key, force_global=True)
     key = company_resource_prices_storage_key(cid)
-    await frontend_container.shared_storage.set(key, json.dumps({"llm": {"*": 9999.0}}), force_global=True)
-    ok, reason = await billing.can_use_resource(user, company, "llm:any", quantity=1)
-    assert ok is False
-    assert "Недостаточно" in reason or "недостаточно" in reason
-    await frontend_container.shared_storage.delete(key, force_global=True)
+    try:
+        await frontend_container.shared_storage.set(global_key, "{}", force_global=True)
+        await frontend_container.shared_storage.set(key, json.dumps({"llm": {"*": 9999.0}}), force_global=True)
+        ok, reason = await billing.can_use_resource(user, company, "llm:any", quantity=1)
+        assert ok is False
+        assert "Недостаточно" in reason or "недостаточно" in reason
+    finally:
+        await frontend_container.shared_storage.delete(key, force_global=True)
+        if prev_global is not None:
+            await frontend_container.shared_storage.set(global_key, prev_global, force_global=True)
+        else:
+            await frontend_container.shared_storage.delete(global_key, force_global=True)
 
 
 @pytest.mark.asyncio

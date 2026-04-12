@@ -99,6 +99,30 @@ async def test_lara_workspace_summary_note_draft_not_applied(
     unique_id: str,
 ) -> None:
     ns = f"g_{unique_id}"
+    create_ns = await crm_client.post(
+        "/crm/api/v1/namespaces",
+        json={
+            "name": ns,
+            "template_id": "sales",
+        },
+        headers=auth_headers_system,
+    )
+    assert create_ns.status_code in (201, 409), create_ns.text
+
+    editability_resp = await crm_client.get(
+        f"/crm/api/v1/namespaces/{ns}/editability",
+        headers=auth_headers_system,
+    )
+    assert editability_resp.status_code == 200, editability_resp.text
+    current_allowed = editability_resp.json().get("current_allowed_type_ids") or []
+    target_allowed = sorted({*current_allowed, "note"})
+    update_ns = await crm_client.put(
+        f"/crm/api/v1/namespaces/{ns}",
+        json={"allowed_type_ids": target_allowed},
+        headers=auth_headers_system,
+    )
+    assert update_ns.status_code == 200, update_ns.text
+
     create = await crm_client.post(
         "/crm/api/v1/entities/",
         json={

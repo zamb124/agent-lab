@@ -34,6 +34,7 @@ logger = logging.getLogger(__name__)
 
 MAX_SOURCE_TEXT_INLINE_CHARS = 100_000
 MAX_SOURCE_FILES_PER_IMPORT = 80
+ALL_NAMESPACES_TASK_KEY = "__all_namespaces__"
 
 KnowledgeImportMode = Literal["notes_only", "graph"]
 
@@ -84,6 +85,21 @@ class TaskService:
         if not ctx or not ctx.user:
             raise ValueError("Нет пользователя в контексте")
         return ctx.user.user_id
+
+    @staticmethod
+    def _normalize_task_namespace(namespace: Optional[str]) -> str:
+        if namespace is None:
+            return ALL_NAMESPACES_TASK_KEY
+        normalized = namespace.strip()
+        if not normalized:
+            return ALL_NAMESPACES_TASK_KEY
+        return normalized
+
+    @staticmethod
+    def _namespace_for_worker(task_namespace: str) -> Optional[str]:
+        if task_namespace == ALL_NAMESPACES_TASK_KEY:
+            return None
+        return task_namespace
 
     @staticmethod
     def _auth_token_from_context() -> Optional[str]:
@@ -446,11 +462,12 @@ class TaskService:
     async def start_daily_summary(
         self,
         *,
-        namespace: str,
+        namespace: Optional[str],
         date_str: str,
         reason: str = "manual",
     ) -> CRMTask:
-        ns = namespace.strip()
+        ns = self._normalize_task_namespace(namespace)
+        worker_namespace = self._namespace_for_worker(ns)
         await self._assert_no_active_task("daily_summary", {"date_str": date_str}, ns)
         task_id = str(uuid.uuid4())
         row = CRMTask(
@@ -475,7 +492,7 @@ class TaskService:
             task = await rebuild_daily_summary_task.kiq(
                 company_id=row.company_id,
                 date_str=date_str,
-                namespace=ns,
+                namespace=worker_namespace,
                 reason=reason,
                 auth_token=ctx.auth_token,
                 user_id=row.user_id,
@@ -505,12 +522,13 @@ class TaskService:
     async def start_period_summary(
         self,
         *,
-        namespace: str,
+        namespace: Optional[str],
         date_from: str,
         date_to: str,
         reason: str = "manual",
     ) -> CRMTask:
-        ns = namespace.strip()
+        ns = self._normalize_task_namespace(namespace)
+        worker_namespace = self._namespace_for_worker(ns)
         await self._assert_no_active_task(
             "period_summary", {"date_from": date_from, "date_to": date_to}, ns
         )
@@ -538,7 +556,7 @@ class TaskService:
                 company_id=row.company_id,
                 date_from=date_from,
                 date_to=date_to,
-                namespace=ns,
+                namespace=worker_namespace,
                 reason=reason,
                 auth_token=ctx.auth_token,
                 user_id=row.user_id,

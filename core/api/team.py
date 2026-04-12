@@ -32,10 +32,14 @@ async def get_team_members(request: Request) -> list[TeamMemberResponse]:
         raise HTTPException(status_code=401, detail="Authentication required")
 
     company = ctx.active_company
+    company_repo = request.app.state.container.company_repository
     user_repo = request.app.state.container.user_repository
+    stored_company = await company_repo.get(company.company_id)
+    if stored_company is None:
+        raise HTTPException(status_code=404, detail=f"Company {company.company_id} not found")
 
     members: list[TeamMemberResponse] = []
-    for user_id, roles in company.members.items():
+    for user_id, roles in stored_company.members.items():
         member_user = await user_repo.get(user_id)
         if not member_user:
             continue

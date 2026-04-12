@@ -63,12 +63,9 @@ class TestA2AFilesHandling:
 
     @pytest.fixture
     async def flow_id(self, client):
-        """Получает ID первого доступного flow."""
-        resp = await client.get("/flows/api/v1/registry/flows")
-        agents = resp.json()
-        if not agents:
-            pytest.skip("No flows available")
-        return agents[0]["url"].split("/flows/")[-1]
+        """Использует стабильный flow для A2A e2e."""
+        _ = client
+        return "example_react"
 
     @pytest.mark.asyncio
     async def test_file_saved_and_in_state(self, client, flow_id, mock_llm_with_queue, sync_tools):

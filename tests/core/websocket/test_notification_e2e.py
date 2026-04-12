@@ -8,10 +8,23 @@ import pytest
 import asyncio
 import json
 from typing import List
+import time
 
 import websockets
 
 from core.websocket.publisher import notify_user, Notification, NotificationType
+
+
+async def _recv_notification_by_title(ws, expected_title: str, timeout: float = 5.0) -> dict:
+    deadline = time.monotonic() + timeout
+    while True:
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            raise AssertionError(f"Не получено ожидаемое уведомление: {expected_title}")
+        message = await asyncio.wait_for(ws.recv(), timeout=remaining)
+        notification = json.loads(message)
+        if notification.get("title") == expected_title:
+            return notification
 
 
 @pytest.mark.asyncio
@@ -183,22 +196,21 @@ async def test_notification_priority_levels(crm_client, ws_cookie_system, system
         priorities = ["low", "normal", "high", "urgent"]
         
         for priority in priorities:
+            expected_title = f"Priority {priority}"
             await notify_user(
                 user_id=system_user_id,
                 notification=Notification(
                     type=NotificationType.SYSTEM,
-                    title=f"Priority {priority}",
+                    title=expected_title,
                     message=f"Тест приоритета {priority}",
                     service="test",
                     priority=priority
                 )
             )
-            
-            message = await asyncio.wait_for(ws.recv(), timeout=5)
-            notification = json.loads(message)
-            
+
+            notification = await _recv_notification_by_title(ws, expected_title, timeout=5)
             assert notification["priority"] == priority
-            assert notification["title"] == f"Priority {priority}"
+            assert notification["title"] == expected_title
 
 
 @pytest.mark.asyncio

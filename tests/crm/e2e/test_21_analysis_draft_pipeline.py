@@ -389,16 +389,25 @@ class TestAnalysisDraftPipeline:
         apply_resp = await _apply_note(crm_client, auth_headers_system, note_id)
         assert apply_resp.status_code == 200, apply_resp.text
         result = apply_resp.json()
-        assert len(result["created_entity_ids"]) == 1
-        assert len(result["created_relationship_ids"]) == 1
+        task_data = result.get("data") or {}
+        assert task_data.get("result_entities_count") == 1
+        assert task_data.get("result_relationships_count") == 1
 
         note_after = await crm_client.get(f"/crm/api/v1/entities/{note_id}", headers=auth_headers_system)
         assert "ai_analysis_draft" not in (note_after.json().get("attributes") or {})
 
-        rel_id = result["created_relationship_ids"][0]
-        rel = await crm_client.get(f"/crm/api/v1/relationships/{rel_id}", headers=auth_headers_system)
-        assert rel.status_code == 200, rel.text
-        rel_json = rel.json()
+        rels_resp = await crm_client.get(
+            f"/crm/api/v1/relationships?entity_id={note_id}",
+            headers=auth_headers_system,
+        )
+        assert rels_resp.status_code == 200, rels_resp.text
+        rel_items = rels_resp.json().get("items") or []
+        mention_rels = [
+            item for item in rel_items
+            if item.get("source_entity_id") == note_id and item.get("relationship_type") == "mentions"
+        ]
+        assert mention_rels, f"Expected mentions relationship from note, got: {rel_items}"
+        rel_json = mention_rels[0]
         assert rel_json["source_entity_id"] == note_id
         assert rel_json["relationship_type"] == "mentions"
 

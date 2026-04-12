@@ -22,6 +22,28 @@ def _find_outgoing(rels: list, *, source_id: str, rel_type: str) -> dict | None:
     return None
 
 
+async def _list_all_entity_types(crm_client, headers: dict) -> dict[str, dict]:
+    page_limit = 200
+    offset = 0
+    by_id: dict[str, dict] = {}
+    while True:
+        resp = await crm_client.get(
+            "/crm/api/v1/entity-types/",
+            headers=headers,
+            params={"limit": page_limit, "offset": offset},
+        )
+        assert resp.status_code == 200
+        payload = resp.json()
+        items = payload.get("items") or []
+        for item in items:
+            type_id = item.get("type_id")
+            if isinstance(type_id, str) and type_id:
+                by_id[type_id] = item
+        if len(items) < page_limit:
+            return by_id
+        offset += page_limit
+
+
 @pytest.mark.timeout(120)
 class TestSystemTypesFlags:
     """Флаги is_voice_target, extractable, is_context_anchor на системных типах."""
@@ -30,10 +52,7 @@ class TestSystemTypesFlags:
     async def test_system_types_include_member_company_namespace(
         self, crm_client, auth_headers_system
     ):
-        resp = await crm_client.get("/crm/api/v1/entity-types/", headers=auth_headers_system, params={"limit": 1000})
-        assert resp.status_code == 200
-
-        types_by_id = {t["type_id"]: t for t in resp.json()["items"]}
+        types_by_id = await _list_all_entity_types(crm_client, auth_headers_system)
 
         for type_id in ("member", "company", "namespace"):
             assert type_id in types_by_id, f"Системный тип {type_id!r} отсутствует"
@@ -47,10 +66,7 @@ class TestSystemTypesFlags:
     async def test_member_and_contact_are_voice_targets(
         self, crm_client, auth_headers_system
     ):
-        resp = await crm_client.get("/crm/api/v1/entity-types/", headers=auth_headers_system, params={"limit": 1000})
-        assert resp.status_code == 200
-
-        types_by_id = {t["type_id"]: t for t in resp.json()["items"]}
+        types_by_id = await _list_all_entity_types(crm_client, auth_headers_system)
         assert types_by_id["member"]["is_voice_target"] is True
         assert types_by_id["contact"]["is_voice_target"] is True
 
@@ -58,10 +74,7 @@ class TestSystemTypesFlags:
     async def test_non_voice_types_have_flag_false(
         self, crm_client, auth_headers_system
     ):
-        resp = await crm_client.get("/crm/api/v1/entity-types/", headers=auth_headers_system, params={"limit": 1000})
-        assert resp.status_code == 200
-
-        types_by_id = {t["type_id"]: t for t in resp.json()["items"]}
+        types_by_id = await _list_all_entity_types(crm_client, auth_headers_system)
         for type_id in ("note", "task", "namespace", "company"):
             assert types_by_id[type_id]["is_voice_target"] is False, (
                 f"Тип {type_id!r} не должен быть голосом"

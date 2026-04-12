@@ -6,6 +6,8 @@ User Story: Базовые операции создания, чтения, об
 
 import pytest
 
+pytestmark = pytest.mark.timeout(20, func_only=True)
+
 
 class TestEntityLifecycle:
     """Полный жизненный цикл entity"""

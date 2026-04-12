@@ -15,7 +15,7 @@ from datetime import datetime, timezone, date, timedelta
 import uuid
 import re
 
-from apps.crm.db.models import CRMEntity, CRMTask
+from apps.crm.db.models import CRMEntity, CRMTask, EntityType
 from apps.crm.models.api import (
     AIAnalyzeRequest,
     AIAnalyzeResponse,
@@ -65,6 +65,7 @@ from apps.crm.taskiq_analyze_errors import format_mentioned_entity_short_descrip
 from core.utils.chunked_async import map_reduce_tree, run_chunked_map
 
 _ANALYZE_ENTITY_DESCRIPTION_MIN_LEN = 12
+SUMMARY_ALL_NAMESPACES_TASK_KEY = "__all_namespaces__"
 _DAILY_SUMMARY_CARD_SNIPPET_MAX = 500
 
 _INTERFACE_LANGUAGE_NAMES_RU: dict[str, str] = {
@@ -1886,7 +1887,7 @@ class EntityService:
         """
         namespace = self._resolve_namespace_for_write(request.namespace)
         await self._ensure_namespace_exists(namespace)
-        entity_types = await self._entity_type_repo.get_all_for_company(namespace=namespace)
+        entity_types = await self._load_all_entity_types_for_namespace(namespace)
         relationship_types = await self._relationship_type_repo.get_with_prompts()
 
         prompt = self._build_composite_prompt(
@@ -2022,6 +2023,23 @@ class EntityService:
             await self._persist_analysis_draft_to_note(note_id, ai_result)
 
         return ai_result
+
+    async def _load_all_entity_types_for_namespace(self, namespace: str) -> list[EntityType]:
+        page_limit = 200
+        offset = 0
+        collected: list[EntityType] = []
+        while True:
+            batch = await self._entity_type_repo.get_all_for_company(
+                namespace=namespace,
+                limit=page_limit,
+                offset=offset,
+            )
+            if not batch:
+                return collected
+            collected.extend(batch)
+            if len(batch) < page_limit:
+                return collected
+            offset += page_limit
     
     def _build_composite_prompt(
         self,
@@ -2363,6 +2381,38 @@ class EntityService:
                 extracted = self._extract_json_from_text(plain)
                 if extracted:
                     return extracted
+            history = task_result.get("history")
+            if isinstance(history, list):
+                for message in reversed(history):
+                    if not isinstance(message, dict):
+                        continue
+                    parts = message.get("parts")
+                    if not isinstance(parts, list):
+                        continue
+                    for part in parts:
+                        if not isinstance(part, dict):
+                            continue
+                        part_kind = part.get("kind") or part.get("type")
+                        if part_kind == "text":
+                            text = part.get("text")
+                            if isinstance(text, str) and text.strip():
+                                extracted = self._extract_json_from_text(text)
+                                if extracted:
+                                    return extracted
+                        elif part_kind == "data":
+                            data = part.get("data")
+                            if isinstance(data, dict):
+                                if any(
+                                    key in data
+                                    for key in (
+                                        "entities",
+                                        "relationships",
+                                        "note",
+                                        "summary",
+                                        "structured_output",
+                                    )
+                                ):
+                                    return data
             return {}
 
         for artifact in artifacts:
@@ -3197,6 +3247,7 @@ class EntityService:
 
         user_id = self._get_user_id()
         normalized_namespace = self._normalize_namespace(namespace)
+        task_namespace = normalized_namespace or SUMMARY_ALL_NAMESPACES_TASK_KEY
         task_id: Optional[str] = None
 
         if self._task_repository is not None:
@@ -3207,7 +3258,7 @@ class EntityService:
                 stage="summarizing_day",
                 progress_pct=10,
                 company_id=company_id,
-                namespace=normalized_namespace,
+                namespace=task_namespace,
                 user_id=user_id,
                 started_at=datetime.now(timezone.utc),
                 data={"date_str": date_str, "reason": "event"},

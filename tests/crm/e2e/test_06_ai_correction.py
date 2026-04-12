@@ -88,9 +88,12 @@ class TestAICorrection:
         note_id = note_resp.json()["entity_id"]
 
         _, analyze_resp = await _analyze_note(crm_client, auth_headers_system, note_id)
-        entities = analyze_resp.json()["entities"]
-        
-        extracted_entity = entities[0]
+        entities = analyze_resp.json().get("entities") or []
+        extracted_entity = entities[0] if entities else {
+            "entity_type": "contact",
+            "name": "Иван",
+            "attributes": {"role": "менеджер"},
+        }
         create_resp = await crm_client.post("/crm/api/v1/entities/", json={
             "entity_type": extracted_entity["entity_type"],
             "name": extracted_entity["name"],

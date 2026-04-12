@@ -102,12 +102,30 @@ async def test_embedding_category_uses_embedding_tariff_bucket(
 
 
 @pytest.mark.asyncio
-async def test_resource_name_split_only_first_colon_for_category(frontend_container, system_user_id) -> None:
+async def test_resource_name_split_only_first_colon_for_category(
+    frontend_container, unique_id, system_user_id
+) -> None:
     """Категория до первого ':', остаток — ключ ресурса (в т.ч. с двоеточиями)."""
-    billing = frontend_container.billing_service
-    company = await frontend_container.company_repository.get("system")
-    assert company is not None
-    unit = await billing.get_resource_cost_for_company(company, "llm:vendor:model:v2")
+    billing = BillingService(
+        frontend_container.company_repository,
+        frontend_container.user_repository,
+        frontend_container.usage_repository,
+        tariff_prices=DEFAULT_TARIFF_PRICES,
+        resource_base_prices=PRODUCTION_LIKE_BASE,
+        shared_storage=None,
+    )
+    cid = f"split_{unique_id}"
+    company = Company(
+        company_id=cid,
+        name="Split co",
+        owner_user_id=system_user_id,
+        members={system_user_id: ["owner"]},
+        balance=1000.0,
+    )
+    await frontend_container.company_repository.set(company)
+    fresh = await frontend_container.company_repository.get(cid)
+    assert fresh is not None
+    unit = await billing.get_resource_cost_for_company(fresh, "llm:vendor:model:v2")
     assert unit == pytest.approx(0.0001 * _free_llm_mult())
 
 

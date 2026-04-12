@@ -269,7 +269,7 @@ class TestNoteVoiceAndContext:
             headers=auth_headers_system,
         )
         assert listed.status_code == 200
-        namespaces = listed.json().get("namespaces") or []
+        namespaces = listed.json().get("items") or []
         match = next((n for n in namespaces if n.get("name") == ns_name), None)
         assert match is not None
         assert match.get("crm_settings") is not None

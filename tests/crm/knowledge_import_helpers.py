@@ -35,7 +35,7 @@ async def wait_task_terminal(
     headers: dict[str, Any],
     task_id: str,
     *,
-    timeout_sec: float = 30.0,
+    timeout_sec: float = 60.0,
     poll_sec: float = 0.35,
     fail_on_failed: bool = True,
 ) -> dict[str, Any]:

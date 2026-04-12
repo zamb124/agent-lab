@@ -7,6 +7,7 @@ LLM мокируется только в сценарии mode=graph (mock_llm_r
 from __future__ import annotations
 
 import json
+import uuid
 from pathlib import Path
 
 import pytest
@@ -25,6 +26,10 @@ pytestmark = [
     pytest.mark.real_taskiq,
     pytest.mark.timeout(60, func_only=True),
 ]
+
+
+def _test_namespace(unique_id: str) -> str:
+    return f"g_{unique_id}_{uuid.uuid4().hex[:8]}"
 
 
 def _xlsx_bytes(marker: str) -> bytes:
@@ -77,6 +82,8 @@ async def _start_notes_import(
     split_by_headings: bool = False,
     chunk_max_chars: int = 50_000,
 ) -> str:
+    await _ensure_import_namespace(crm_client, headers, namespace)
+
     body: dict = {
         "namespace": namespace,
         "mode": "notes_only",
@@ -101,6 +108,38 @@ async def _start_notes_import(
     if not isinstance(task_id, str) or not task_id.strip():
         raise AssertionError(f"нет task_id: {payload}")
     return task_id.strip()
+
+
+async def _ensure_import_namespace(crm_client, headers: dict, namespace: str) -> None:
+    create_ns = await crm_client.post(
+        "/crm/api/v1/namespaces",
+        json={"name": namespace, "template_id": "sales"},
+        headers=headers,
+    )
+    if create_ns.status_code not in (201, 409):
+        raise AssertionError(f"create namespace: {create_ns.status_code} {create_ns.text}")
+    editability = await crm_client.get(
+        f"/crm/api/v1/namespaces/{namespace}/editability",
+        headers=headers,
+    )
+    if editability.status_code != 200:
+        raise AssertionError(f"namespace editability: {editability.status_code} {editability.text}")
+    allowed = editability.json().get("current_allowed_type_ids") or []
+    target_allowed = sorted({*allowed, "note"})
+    update_ns = await crm_client.put(
+        f"/crm/api/v1/namespaces/{namespace}",
+        json={"allowed_type_ids": target_allowed},
+        headers=headers,
+    )
+    if update_ns.status_code != 200:
+        raise AssertionError(f"namespace update: {update_ns.status_code} {update_ns.text}")
+    note_ns = await crm_client.post(
+        "/crm/api/v1/entity-types/note/namespaces",
+        json={"namespace_ids": [namespace]},
+        headers=headers,
+    )
+    if note_ns.status_code != 200:
+        raise AssertionError(f"note namespace bind: {note_ns.status_code} {note_ns.text}")
 
 
 async def _assert_blob_then_rollback(
@@ -133,7 +172,7 @@ class TestKnowledgeImportE2E:
     async def test_notes_only_inline_text(
         self, crm_client, crm_worker, unique_id, auth_headers_system
     ) -> None:
-        ns = f"g_{unique_id}"
+        ns = _test_namespace(unique_id)
         marker = f"KN_E2E_INLINE_{unique_id}"
         task_id = await _start_notes_import(
             crm_client,
@@ -152,7 +191,7 @@ class TestKnowledgeImportE2E:
     async def test_notes_only_markdown_file(
         self, crm_client, crm_worker, unique_id, auth_headers_system
     ) -> None:
-        ns = f"g_{unique_id}"
+        ns = _test_namespace(unique_id)
         marker = f"KN_E2E_MD_{unique_id}"
         raw = f"# Раздел\n\n{marker}\n".encode("utf-8")
         fid = await crm_upload_bytes(crm_client, auth_headers_system, f"{unique_id}.md", raw)
@@ -173,7 +212,7 @@ class TestKnowledgeImportE2E:
     async def test_notes_only_txt_file(
         self, crm_client, crm_worker, unique_id, auth_headers_system
     ) -> None:
-        ns = f"g_{unique_id}"
+        ns = _test_namespace(unique_id)
         marker = f"KN_E2E_TXT_{unique_id}"
         raw = f"plain\n{marker}\n".encode("utf-8")
         fid = await crm_upload_bytes(crm_client, auth_headers_system, f"{unique_id}.txt", raw)
@@ -194,7 +233,7 @@ class TestKnowledgeImportE2E:
     async def test_notes_only_csv_file(
         self, crm_client, crm_worker, unique_id, auth_headers_system
     ) -> None:
-        ns = f"g_{unique_id}"
+        ns = _test_namespace(unique_id)
         marker = f"KN_E2E_CSV_{unique_id}"
         raw = f"col1,col2\n1,{marker}\n".encode("utf-8")
         fid = await crm_upload_bytes(crm_client, auth_headers_system, f"{unique_id}.csv", raw)
@@ -216,7 +255,7 @@ class TestKnowledgeImportE2E:
         self, crm_client, crm_worker, unique_id, auth_headers_system
     ) -> None:
         pytest.importorskip("openpyxl")
-        ns = f"g_{unique_id}"
+        ns = _test_namespace(unique_id)
         marker = f"KN_E2E_XLSX_{unique_id}"
         raw = _xlsx_bytes(marker)
         fid = await crm_upload_bytes(crm_client, auth_headers_system, f"{unique_id}.xlsx", raw)
@@ -238,7 +277,7 @@ class TestKnowledgeImportE2E:
         self, crm_client, crm_worker, unique_id, auth_headers_system
     ) -> None:
         pytest.importorskip("docx")
-        ns = f"g_{unique_id}"
+        ns = _test_namespace(unique_id)
         marker = f"KN_E2E_DOCX_{unique_id}"
         raw = _docx_bytes(marker)
         fid = await crm_upload_bytes(crm_client, auth_headers_system, f"{unique_id}.docx", raw)
@@ -260,7 +299,7 @@ class TestKnowledgeImportE2E:
         self, crm_client, crm_worker, unique_id, auth_headers_system, tmp_path
     ) -> None:
         pytest.importorskip("fitz")
-        ns = f"g_{unique_id}"
+        ns = _test_namespace(unique_id)
         marker = f"KN_E2E_PDF_{unique_id}"
         raw = _pdf_bytes(tmp_path, marker)
         fid = await crm_upload_bytes(crm_client, auth_headers_system, f"{unique_id}.pdf", raw)
@@ -281,7 +320,7 @@ class TestKnowledgeImportE2E:
     async def test_notes_only_two_files_and_inline(
         self, crm_client, crm_worker, unique_id, auth_headers_system
     ) -> None:
-        ns = f"g_{unique_id}"
+        ns = _test_namespace(unique_id)
         m1 = f"KN_E2E_M1_{unique_id}"
         m2 = f"KN_E2E_M2_{unique_id}"
         m0 = f"KN_E2E_M0_{unique_id}"
@@ -315,7 +354,7 @@ class TestKnowledgeImportE2E:
     async def test_notes_only_split_by_headings_two_notes(
         self, crm_client, crm_worker, unique_id, auth_headers_system
     ) -> None:
-        ns = f"g_{unique_id}"
+        ns = _test_namespace(unique_id)
         a = f"KN_E2E_HA_{unique_id}"
         b = f"KN_E2E_HB_{unique_id}"
         text = f"# Part one\n\n{a}\n\n## Part two\n\n{b}\n"
@@ -337,7 +376,7 @@ class TestKnowledgeImportE2E:
     async def test_review_list_and_complete_then_rollback(
         self, crm_client, crm_worker, unique_id, auth_headers_system
     ) -> None:
-        ns = f"g_{unique_id}"
+        ns = _test_namespace(unique_id)
         marker = f"KN_E2E_REV_{unique_id}"
         task_id = await _start_notes_import(
             crm_client,
@@ -372,7 +411,7 @@ class TestKnowledgeImportE2E:
         auth_headers_system,
         mock_llm_redis,
     ) -> None:
-        ns = f"g_{unique_id}"
+        ns = _test_namespace(unique_id)
         chunk_marker = f"KN_E2E_GRAPH_CHUNK_{unique_id}"
         note_title = f"Заметка граф {unique_id}"
         task_name = f"Задача граф {unique_id}"
@@ -411,6 +450,7 @@ class TestKnowledgeImportE2E:
                 }
             ]
         )
+        await _ensure_import_namespace(crm_client, auth_headers_system, ns)
         body = {
             "namespace": ns,
             "mode": "graph",
@@ -449,7 +489,7 @@ class TestKnowledgeImportE2E:
         auth_headers_system,
         mock_llm_redis,
     ) -> None:
-        ns = f"g_{unique_id}"
+        ns = _test_namespace(unique_id)
         chunk_marker = f"KN_E2E_MEET_NOTE_{unique_id}"
         note_title = f"Заметка контейнер {unique_id}"
         meeting_name = f"Встреча E2E {unique_id}"
@@ -488,6 +528,7 @@ class TestKnowledgeImportE2E:
                 }
             ]
         )
+        await _ensure_import_namespace(crm_client, auth_headers_system, ns)
         body = {
             "namespace": ns,
             "mode": "graph",
