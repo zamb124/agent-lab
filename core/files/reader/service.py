@@ -223,9 +223,7 @@ class FileReader:
         elif info.detected_kind == FileReadKind.SPREADSHEET and info.extension == ".xls":
             result = await asyncio.to_thread(_read_xls_sync, raw, name, mime, opts)
         elif info.detected_kind == FileReadKind.OFFICE and info.extension == ".doc":
-            docx_bytes = await asyncio.to_thread(_convert_doc_to_docx_bytes, raw)
-            docx_name = name[: -len(".doc")] + ".docx"
-            result = await asyncio.to_thread(_read_unstructured_sync, docx_bytes, docx_name, mime, FileReadKind.OFFICE, opts)
+            result = await asyncio.to_thread(_read_doc_with_antiword_sync, raw, name, mime, opts)
         elif info.detected_kind in (FileReadKind.OFFICE, FileReadKind.SPREADSHEET):
             result = await asyncio.to_thread(_read_unstructured_sync, raw, name, mime, info.detected_kind, opts)
         elif info.detected_kind == FileReadKind.UNKNOWN:
@@ -426,28 +424,45 @@ def _read_xls_sync(
     )
 
 
-def _convert_doc_to_docx_bytes(raw: bytes) -> bytes:
-    soffice = shutil.which("soffice") or shutil.which("libreoffice")
-    if soffice is None:
+def _read_doc_with_antiword_sync(
+    raw: bytes,
+    file_name: str,
+    mime: Optional[str],
+    opts: ReadOptions,
+) -> FileReadResult:
+    del opts
+    antiword = shutil.which("antiword")
+    if antiword is None:
         raise FileReadError(
-            "Для чтения .doc файлов требуется LibreOffice. "
-            "Установите пакет libreoffice-headless и убедитесь, что soffice доступен в PATH."
+            "Для чтения .doc файлов требуется antiword. "
+            "Установите пакет: apt-get install antiword (Linux) или brew install antiword (Mac)."
         )
-    with tempfile.TemporaryDirectory() as tmp_dir:
-        src = Path(tmp_dir) / "source.doc"
-        src.write_bytes(raw)
+    with tempfile.NamedTemporaryFile(suffix=".doc", delete=False) as tmp:
+        tmp.write(raw)
+        tmp_path = tmp.name
+    try:
         result = subprocess.run(
-            [soffice, "--headless", "--convert-to", "docx", "--outdir", tmp_dir, str(src)],
+            [antiword, tmp_path],
             capture_output=True,
             timeout=60,
         )
-        if result.returncode != 0:
-            stderr = result.stderr.decode("utf-8", errors="replace")
-            raise FileReadError(f"LibreOffice не смог конвертировать .doc файл: {stderr}")
-        out = Path(tmp_dir) / "source.docx"
-        if not out.exists():
-            raise FileReadError("LibreOffice не создал .docx файл при конвертации из .doc")
-        return out.read_bytes()
+    finally:
+        Path(tmp_path).unlink(missing_ok=True)
+    if result.returncode != 0:
+        stderr = result.stderr.decode("utf-8", errors="replace")
+        raise FileReadError(f"antiword не смог прочитать .doc файл: {stderr}")
+    text = result.stdout.decode("utf-8", errors="replace").strip()
+    if not text:
+        raise FileReadError(f"antiword не извлёк текст из файла: {file_name}")
+    page = ReadPage(index=0, text=text, assets=[], label=None)
+    return FileReadResult(
+        file_name=file_name,
+        mime_type=mime or "application/msword",
+        detected_kind=FileReadKind.OFFICE,
+        page_count=1,
+        pages=[page],
+        warnings=[],
+    )
 
 
 def _read_pdf_sync(

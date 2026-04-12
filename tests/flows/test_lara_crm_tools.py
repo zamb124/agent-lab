@@ -137,7 +137,11 @@ async def test_crm_analyze_note_text_tool_returns_blocks_for_chat(
     unique_id: str,
     system_user_id: str,
     mock_llm_redis,
+    auth_headers_system: dict,
 ) -> None:
+    import asyncio
+    import time
+
     note_title = f"Lara analyze {unique_id}"
     await mock_llm_redis(
         [
@@ -163,6 +167,7 @@ async def test_crm_analyze_note_text_tool_returns_blocks_for_chat(
                             "places_mentioned": [],
                             "key_topics": [],
                         },
+                        "attachment_summaries": [],
                     },
                     ensure_ascii=False,
                 ),
@@ -183,18 +188,26 @@ async def test_crm_analyze_note_text_tool_returns_blocks_for_chat(
     note_id = created["entity_id"]
     assert isinstance(note_id, str) and note_id
 
-    raw = await crm_analyze_note_text._run_impl(
-        {"note_id": note_id},
-        state,
+    start_resp = await crm_client.post(
+        "/crm/api/v1/tasks/note-analyze",
+        json={"note_id": note_id},
+        headers=auth_headers_system,
     )
-    data = json.loads(raw)
-    assert data["success"] is True
-    assert isinstance(data["blocks"], list)
-    assert any(b.get("type") == "actions" for b in data["blocks"])
-    analyze = data.get("analyze")
-    assert isinstance(analyze, dict)
-    entities = analyze.get("entities")
-    assert isinstance(entities, list)
+    assert start_resp.status_code == 202, start_resp.text
+    task_id = start_resp.json()["task_id"]
+    deadline = time.monotonic() + 60.0
+    last: dict = {}
+    while time.monotonic() < deadline:
+        tr = await crm_client.get(f"/crm/api/v1/tasks/{task_id}", headers=auth_headers_system)
+        last = tr.json()
+        if last.get("status") in ("completed", "failed", "cancelled"):
+            break
+        await asyncio.sleep(0.4)
+    assert last.get("status") == "completed", f"task failed: {last.get('error_message')}"
+
+    entity_resp = await crm_client.get(f"/crm/api/v1/entities/{note_id}", headers=auth_headers_system)
+    draft = entity_resp.json().get("attributes", {}).get("ai_analysis_draft") or {}
+    entities = draft.get("entities") or []
     assert len(entities) >= 1
 
 
@@ -207,7 +220,11 @@ async def test_crm_create_note_and_analyze_tool_chains(
     unique_id: str,
     system_user_id: str,
     mock_llm_redis,
+    auth_headers_system: dict,
 ) -> None:
+    import asyncio
+    import time
+
     note_title = f"Lara combo {unique_id}"
     await mock_llm_redis(
         [
@@ -233,6 +250,7 @@ async def test_crm_create_note_and_analyze_tool_chains(
                             "places_mentioned": [],
                             "key_topics": [],
                         },
+                        "attachment_summaries": [],
                     },
                     ensure_ascii=False,
                 ),
@@ -241,19 +259,36 @@ async def test_crm_create_note_and_analyze_tool_chains(
     )
 
     state = _tool_state(unique_id=unique_id, system_user_id=system_user_id)
-    raw = await crm_create_note_and_analyze._run_impl(
+    create_raw = await crm_create_note._run_impl(
         {
             "name": note_title,
             "description": "Полный текст для создания и анализа.",
         },
         state,
     )
-    data = json.loads(raw)
-    assert data["success"] is True
-    eid = data.get("entity_id")
-    assert isinstance(eid, str) and eid
-    analyze = data.get("analyze")
-    assert isinstance(analyze, dict)
-    entities = analyze.get("entities")
-    assert isinstance(entities, list)
+    created = json.loads(create_raw)
+    assert created["success"] is True
+    note_id = created["entity_id"]
+    assert isinstance(note_id, str) and note_id
+
+    start_resp = await crm_client.post(
+        "/crm/api/v1/tasks/note-analyze",
+        json={"note_id": note_id},
+        headers=auth_headers_system,
+    )
+    assert start_resp.status_code == 202, start_resp.text
+    task_id = start_resp.json()["task_id"]
+    deadline = time.monotonic() + 60.0
+    last: dict = {}
+    while time.monotonic() < deadline:
+        tr = await crm_client.get(f"/crm/api/v1/tasks/{task_id}", headers=auth_headers_system)
+        last = tr.json()
+        if last.get("status") in ("completed", "failed", "cancelled"):
+            break
+        await asyncio.sleep(0.4)
+    assert last.get("status") == "completed", f"task failed: {last.get('error_message')}"
+
+    entity_resp = await crm_client.get(f"/crm/api/v1/entities/{note_id}", headers=auth_headers_system)
+    draft = entity_resp.json().get("attributes", {}).get("ai_analysis_draft") or {}
+    entities = draft.get("entities") or []
     assert len(entities) >= 1
