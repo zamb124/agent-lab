@@ -577,6 +577,31 @@ export class NoteContent extends PlatformElement {
                 cursor: not-allowed;
             }
 
+            .attach-dropdown-download {
+                flex-shrink: 0;
+                width: 28px;
+                height: 28px;
+                border: none;
+                border-radius: 8px;
+                padding: 0;
+                display: inline-flex;
+                align-items: center;
+                justify-content: center;
+                cursor: pointer;
+                background: transparent;
+                color: var(--text-tertiary);
+            }
+
+            .attach-dropdown-download:hover {
+                background: var(--primary-soft, rgba(99,102,241,0.1));
+                color: var(--primary);
+            }
+
+            .attach-dropdown-download:disabled {
+                opacity: 0.45;
+                cursor: not-allowed;
+            }
+
             .round-btn.analysis-draft {
                 background: var(--accent-secondary-subtle);
                 color: var(--accent-secondary);
@@ -727,8 +752,8 @@ export class NoteContent extends PlatformElement {
                 font-size: 16px;
                 line-height: 24px;
                 color: var(--text-primary);
-                background: var(--glass-tint-subtle);
-                border: 1px solid var(--border-subtle);
+                background: var(--crm-surface-muted, var(--glass-tint-subtle));
+                border: 1px solid var(--crm-stroke, var(--border-subtle));
                 border-radius: var(--radius-lg);
                 padding: 20px;
                 padding-right: 52px;
@@ -742,6 +767,10 @@ export class NoteContent extends PlatformElement {
                 white-space: pre-wrap;
                 word-wrap: break-word;
                 cursor: text;
+                /* Запрещаем браузеру применять автоматическую цветовую схему к contenteditable */
+                color-scheme: inherit;
+                -webkit-text-fill-color: var(--text-primary);
+                caret-color: var(--text-primary);
             }
 
             .note-text-input:focus {
@@ -752,6 +781,7 @@ export class NoteContent extends PlatformElement {
             .note-text-input:empty::before {
                 content: attr(data-placeholder);
                 color: var(--text-disabled);
+                -webkit-text-fill-color: var(--text-disabled);
                 pointer-events: none;
             }
 
@@ -862,6 +892,7 @@ export class NoteContent extends PlatformElement {
 
             .note-text-input .note-entity-mention {
                 cursor: default;
+                -webkit-text-fill-color: var(--accent, #6366f1);
             }
 
             .note-voice-dictate-floating {
@@ -2040,6 +2071,28 @@ export class NoteContent extends PlatformElement {
         return this._getText(attachment?.status, 'unknown');
     }
 
+    async _downloadAttachment(attachment) {
+        const downloadUrl = attachment?.download_url;
+        const filename = this._getAttachmentName(attachment);
+        if (typeof downloadUrl !== 'string' || downloadUrl.trim().length === 0) {
+            throw new Error('Attachment download_url is missing');
+        }
+        const response = await fetch(downloadUrl, { credentials: 'include' });
+        if (!response.ok) {
+            throw new Error(`Download failed: ${response.status}`);
+        }
+        const blob = await response.blob();
+        const objectUrl = URL.createObjectURL(blob);
+        const anchor = document.createElement('a');
+        anchor.href = objectUrl;
+        anchor.download = filename;
+        anchor.style.display = 'none';
+        document.body.appendChild(anchor);
+        anchor.click();
+        anchor.remove();
+        URL.revokeObjectURL(objectUrl);
+    }
+
     _getEntityIcon(entity) {
         const typeConfig = this._getEntityTypeConfig(entity);
         if (typeConfig && typeof typeConfig.icon === 'string' && typeConfig.icon.trim().length > 0) {
@@ -3066,6 +3119,14 @@ export class NoteContent extends PlatformElement {
                                             <span class="attach-dropdown-name" title=${this._getAttachmentName(attachment)}>
                                                 ${this._getAttachmentName(attachment)}
                                             </span>
+                                            <button
+                                                class="attach-dropdown-download"
+                                                type="button"
+                                                title=${this.i18n.t('note_content.download_file')}
+                                                @click=${() => this._downloadAttachment(attachment)}
+                                            >
+                                                <platform-icon name="arrow-down" size="16"></platform-icon>
+                                            </button>
                                             <button
                                                 class="attach-dropdown-remove"
                                                 type="button"

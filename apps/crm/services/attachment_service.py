@@ -165,6 +165,7 @@ class AttachmentService:
                     "filename": display_name,
                     "status": response.get("status", "unknown"),
                     "metadata": extra if isinstance(extra, dict) else {},
+                    "download_url": f"/rag/api/v1/files/download/{doc_id}",
                 })
             except Exception as e:
                 logger.warning(f"Failed to get attachment info: {doc_id}, error: {e}")
@@ -172,7 +173,8 @@ class AttachmentService:
                     "document_id": doc_id,
                     "filename": "unknown",
                     "status": "error",
-                    "metadata": {}
+                    "metadata": {},
+                    "download_url": f"/rag/api/v1/files/download/{doc_id}",
                 })
         
         return attachments

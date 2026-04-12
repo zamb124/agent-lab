@@ -158,6 +158,33 @@ class SchemaValidationError(ValueError):
         super().__init__("Schema validation failed: " + ", ".join(parts))
 
 
+def _extract_entity_type_fields(entity_type) -> list[dict[str, Any]]:
+    """Собирает список полей сущности с описанием для передачи в LLM."""
+    result: list[dict[str, Any]] = []
+    schemas: list[tuple[dict[str, Any], bool]] = [
+        (entity_type.required_fields or {}, True),
+        (entity_type.optional_fields or {}, False),
+    ]
+    for schema, required in schemas:
+        if not isinstance(schema, dict):
+            continue
+        for name, defn in schema.items():
+            if not isinstance(defn, dict):
+                continue
+            field: dict[str, Any] = {
+                "name": name,
+                "label": defn.get("label", name),
+                "required": required,
+            }
+            description = defn.get("description")
+            if description:
+                field["description"] = description
+            if defn.get("type") == "enum" and isinstance(defn.get("values"), list):
+                field["values"] = defn["values"]
+            result.append(field)
+    return result
+
+
 class _AnalyzePipelineState(BaseModel):
     """Промежуточное состояние analyze до выдачи draft-id связям (только сервис)."""
 
@@ -1953,10 +1980,18 @@ class EntityService:
                 continue
             if extract_entity_types and et.type_id not in extract_entity_types:
                 continue
-            
+
             if et.prompt:
                 prompt_parts.append(f"\n{et.name} ({et.type_id}):")
                 prompt_parts.append(et.prompt)
+                fields = _extract_entity_type_fields(et)
+                if fields:
+                    prompt_parts.append("  Поля attributes:")
+                    for field in fields:
+                        req_mark = " [обязательное]" if field["required"] else ""
+                        desc_part = f": {field['description']}" if field.get("description") else ""
+                        values_part = f" Допустимые значения: {field['values']}" if field.get("values") else ""
+                        prompt_parts.append(f"  - `{field['name']}` ({field['label']}){req_mark}{desc_part}{values_part}")
         
         prompt_parts.append("\nТИПЫ СВЯЗЕЙ:")
         
@@ -2058,7 +2093,11 @@ class EntityService:
             **_crm_llm_interface_language_vars(),
             "text": text,
             "entity_types": [
-                {"type": et.type_id, "prompt": et.prompt or ""}
+                {
+                    "type": et.type_id,
+                    "prompt": et.prompt or "",
+                    "fields": _extract_entity_type_fields(et),
+                }
                 for et in extractable_entity_types
             ],
             "relationship_types": [

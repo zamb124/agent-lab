@@ -246,7 +246,7 @@ export class GraphCanvas extends PlatformElement {
             .warmupTicks(80)
             .showNavInfo(false)
             .nodeLabel(() => '')
-            .nodeVal((node) => node.size)
+            .nodeVal((node) => Math.cbrt(node.size || 1))
             .linkLabel(() => '')
             .nodeThreeObject((node) => {
                 if (!window.THREE) {

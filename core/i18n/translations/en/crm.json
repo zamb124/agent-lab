@@ -244,6 +244,7 @@
         "search_mode_text": "Text search",
         "search_mode_semantic": "Semantic search",
         "search_mode_hybrid": "Hybrid search",
+        "search_min_score": "Min relevance threshold",
         "search_results": "Found {{count}} entities",
         "search_empty": "No entities found for this query",
         "mini_loading": "Loading graph...",
@@ -666,7 +667,17 @@
         "help_check_duplicates": "Help: check_duplicates",
         "help_context_anchor": "This type can be the target of “note in context”: topic, project, organization, or work object (deal, decision)—not a note or an atomic contact/task.",
         "help_description": "Help: description",
-        "help_prompt": "Help: prompt"
+        "help_prompt": "Help: prompt",
+        "schema_loading": "Loading field schema..."
+    },
+    "schema_builder": {
+        "add_field": "+ Field",
+        "no_fields": "No fields",
+        "remove": "Delete",
+        "ph_key": "key (snake_case)",
+        "ph_label": "label (display name)",
+        "ph_desc": "AI instruction: how to fill this field",
+        "enum_local": "Enter values manually"
     },
     "note_editor": {
         "placeholder_start": "Start writing...",
@@ -738,6 +749,7 @@
         "attach_add_title": "Attachments: add file",
         "attach_aria": "Attachments, {{count}} file(s). Click to add a file.",
         "no_attachments": "No attachments",
+        "download_file": "Download file",
         "remove_file": "Remove file",
         "share": "Share",
         "saving": "Saving...",

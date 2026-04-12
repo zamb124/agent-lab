@@ -22,6 +22,7 @@ export class SpacesPage extends PlatformElement {
         _showCreateForm: { state: true },
         _createSaving: { state: true },
         _selectedNamespaceCrmDraft: { state: true },
+        _schemaOptions: { state: true },
     };
 
     static styles = [
@@ -116,6 +117,7 @@ export class SpacesPage extends PlatformElement {
         this._showCreateForm = false;
         this._createSaving = false;
         this._selectedNamespaceCrmDraft = SpacesPage.defaultCrmDraft();
+        this._schemaOptions = null;
         this._unsubscribe = CRMStore.subscribe((state) => {
             this._namespaces = state.namespaces.list || [];
             this._entityTypes = state.entities.entityTypes || [];
@@ -123,6 +125,7 @@ export class SpacesPage extends PlatformElement {
             this._selectedNamespaceEditability = state.namespaces.settingsEditability || null;
             this._namespaceEditorLoading = Boolean(state.namespaces.settingsLoading);
             this._namespaceEditorSaving = Boolean(state.namespaces.settingsSaving);
+            this._schemaOptions = state.namespaces.schemaOptions || null;
         });
     }
 
@@ -166,6 +169,7 @@ export class SpacesPage extends PlatformElement {
         await Promise.all([
             CRMStore.loadNamespaces(crmApi),
             CRMStore.loadEntityTypes(crmApi),
+            CRMStore.loadTemplateSchemaOptions(crmApi),
         ]);
         if (this._namespaces.length > 0) {
             const selectedName = this._selectedNamespaceName && this._namespaces.some((item) => item.name === this._selectedNamespaceName)
@@ -256,17 +260,7 @@ export class SpacesPage extends PlatformElement {
 
     _startEditType(entityType) {
         this._editingTypeId = entityType.type_id;
-        this._editingTypeDraft = {
-            name: entityType.name || '',
-            description: entityType.description || '',
-            prompt: entityType.prompt || '',
-            parent_type_id: entityType.parent_type_id || '',
-            icon: entityType.icon || '',
-            color: entityType.color || '',
-            is_event: Boolean(entityType.is_event),
-            check_duplicates: entityType.check_duplicates !== false,
-            is_context_anchor: Boolean(entityType.is_context_anchor),
-        };
+        this._editingTypeDraft = EntityTypeForm.draftFromEntityType(entityType);
     }
 
     _cancelEditType() {
@@ -392,6 +386,7 @@ export class SpacesPage extends PlatformElement {
                 mode="edit"
                 type-id=${this._editingTypeId}
                 .draft=${{ ...this._editingTypeDraft }}
+                .schemaOptions=${this._schemaOptions}
                 @type-saved=${this._onTypeEdited}
                 @type-cancel=${this._cancelEditType}
             ></entity-type-form>
@@ -406,6 +401,7 @@ export class SpacesPage extends PlatformElement {
             <entity-type-form
                 mode="create"
                 .draft=${EntityTypeForm.defaultDraft()}
+                .schemaOptions=${this._schemaOptions}
                 .saving=${this._createSaving}
                 @type-saved=${this._onTypeCreated}
                 @type-cancel=${this._closeCreateForm}

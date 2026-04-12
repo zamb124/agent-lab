@@ -125,6 +125,7 @@ export class GraphPage extends PlatformElement {
         _panelVisibility: { state: true },
         _contextMenu: { state: true },
         _searchMode: { state: true },
+        _minScore: { state: true },
     };
 
     static styles = [
@@ -658,6 +659,7 @@ export class GraphPage extends PlatformElement {
         this._contextMenu = null;
         this._timelineReloadTimer = null;
         this._searchMode = 'hybrid';
+        this._minScore = 0.0;
         this._searchDebounceTimer = null;
         this._entityTypePaletteNamespace = '';
         this._onSearchQueryInput = this._onSearchQueryInput.bind(this);
@@ -1920,7 +1922,10 @@ export class GraphPage extends PlatformElement {
                 namespace: namespaceName || undefined,
                 limit: 50,
             });
-            const items = Array.isArray(searchResults?.items) ? searchResults.items : [];
+            const allItems = Array.isArray(searchResults?.items) ? searchResults.items : [];
+            const items = this._minScore > 0
+                ? allItems.filter((e) => (e.score ?? 0) >= this._minScore)
+                : allItems;
             if (items.length === 0) {
                 this._graphNodes = [];
                 this._graphEdges = [];
@@ -2125,10 +2130,12 @@ export class GraphPage extends PlatformElement {
                         .viewMode=${this._viewMode}
                         .modes=${VIEW_MODES}
                         .searchMode=${this._searchMode}
+                        .minScore=${this._minScore}
                         @search-input=${(e) => { this._entitySearchQuery = e.detail.query; if (this._searchDebounceTimer) { clearTimeout(this._searchDebounceTimer); } this._searchDebounceTimer = setTimeout(() => { this._searchDebounceTimer = null; this._onSearchEntity(); }, 400); }}
                         @search-clear=${this._clearCanvasSearchFilter}
                         @search-submit=${() => { if (this._searchDebounceTimer) { clearTimeout(this._searchDebounceTimer); this._searchDebounceTimer = null; } this._onSearchEntity(); }}
                         @search-mode-change=${(e) => { this._searchMode = e.detail.mode; if (this._entitySearchQuery.trim()) { this._onSearchEntity(); } }}
+                        @min-score-change=${(e) => { this._minScore = e.detail.minScore; if (this._entitySearchQuery.trim()) { this._onSearchEntity(); } }}
                         @mode-change=${(e) => { this._viewMode = e.detail.mode; if (e.detail.mode !== 'influence') { this._defaultOverviewActive = false; } if (e.detail.mode !== 'path') { this._canvasPathState = 'idle'; this._canvasPathHint = this.i18n.t('graph_page.hint_browse'); } this._rebuildGraphByMode(); }}
                         @refresh=${this._loadGraphData}
                     ></graph-search-pill>

@@ -7,6 +7,7 @@ export class GraphSearchPill extends PlatformElement {
         viewMode: { type: String, attribute: 'view-mode' },
         modes: { type: Array },
         searchMode: { type: String, attribute: 'search-mode' },
+        minScore: { type: Number, attribute: 'min-score' },
     };
 
     static styles = [
@@ -139,6 +140,56 @@ export class GraphSearchPill extends PlatformElement {
                 color: var(--text-primary);
             }
 
+            .score-threshold {
+                display: flex;
+                align-items: center;
+                gap: 6px;
+                pointer-events: auto;
+                background: var(--glass-solid-subtle);
+                border: 1px solid var(--glass-border-subtle);
+                border-radius: 999px;
+                padding: 4px 12px;
+                backdrop-filter: blur(6px);
+            }
+
+            .score-threshold-label {
+                font-size: 11px;
+                color: var(--text-secondary);
+                white-space: nowrap;
+                min-width: 30px;
+                text-align: right;
+            }
+
+            .score-threshold input[type="range"] {
+                -webkit-appearance: none;
+                appearance: none;
+                width: 72px;
+                height: 3px;
+                border-radius: 2px;
+                background: var(--glass-border-subtle);
+                outline: none;
+                cursor: pointer;
+            }
+
+            .score-threshold input[type="range"]::-webkit-slider-thumb {
+                -webkit-appearance: none;
+                appearance: none;
+                width: 13px;
+                height: 13px;
+                border-radius: 50%;
+                background: var(--accent);
+                cursor: pointer;
+            }
+
+            .score-threshold input[type="range"]::-moz-range-thumb {
+                width: 13px;
+                height: 13px;
+                border-radius: 50%;
+                background: var(--accent);
+                cursor: pointer;
+                border: none;
+            }
+
             @media (max-width: 1199px) {
                 .pill input {
                     width: 140px;
@@ -172,6 +223,7 @@ export class GraphSearchPill extends PlatformElement {
         this.viewMode = 'influence';
         this.modes = ['influence', 'related', 'path'];
         this.searchMode = 'hybrid';
+        this.minScore = 0.0;
     }
 
     _onInput(e) {
@@ -189,6 +241,10 @@ export class GraphSearchPill extends PlatformElement {
 
     _onSearchModeChange(mode) {
         this.emit('search-mode-change', { mode });
+    }
+
+    _onMinScoreChange(e) {
+        this.emit('min-score-change', { minScore: parseFloat(e.target.value) });
     }
 
     _onClear() {
@@ -223,6 +279,17 @@ export class GraphSearchPill extends PlatformElement {
                         <platform-icon name="refresh" size="16"></platform-icon>
                     </button>`
                 }
+            </div>
+            <div class="score-threshold" title=${this.i18n.t('graph.search_min_score')}>
+                <input
+                    type="range"
+                    min="0"
+                    max="1"
+                    step="0.05"
+                    .value=${String(this.minScore)}
+                    @input=${this._onMinScoreChange}
+                />
+                <span class="score-threshold-label">≥ ${Math.round(this.minScore * 100)}%</span>
             </div>
             <div class="search-mode-toggle">
                 ${['text', 'semantic', 'hybrid'].map((mode) => html`

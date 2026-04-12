@@ -2,9 +2,16 @@
  * Общие THREE-хелперы для мини-графа и (при необходимости) основного канваса.
  */
 
-export const GRAPH_NODE_SIZE_BASE_ROOT = 2.2;
-export const GRAPH_NODE_SIZE_BASE_LEVEL = 1.4;
-export const GRAPH_NODE_WEIGHT_BONUS_MAX = 3.5;
+// Базовый промежуточный радиус (до умножения на nodeRelSize) для каждого уровня.
+// Итоговый радиус = r * nodeRelSize * 0.5; r = base + ratio * BONUS.
+// Хранится как r^3, чтобы Math.cbrt в canvas вернул ровно r.
+export const GRAPH_NODE_BASE_RADIUS_ROOT = 1.5;
+export const GRAPH_NODE_BASE_RADIUS_LEVEL = 1.0;
+export const GRAPH_NODE_WEIGHT_BONUS_MAX = 2.5;
+
+// Алиасы для обратной совместимости с импортами, если есть
+export const GRAPH_NODE_SIZE_BASE_ROOT = GRAPH_NODE_BASE_RADIUS_ROOT;
+export const GRAPH_NODE_SIZE_BASE_LEVEL = GRAPH_NODE_BASE_RADIUS_LEVEL;
 
 /**
  * Сумма весов инцидентных рёбер по id узла для текущего среза графа.
@@ -43,10 +50,13 @@ export function maxIncidentWeightOrOne(weightByNodeId) {
 }
 
 export function computeGraphNodeDisplaySize(level, totalWeight, maxWeight) {
-    const baseSize = level === 0 ? GRAPH_NODE_SIZE_BASE_ROOT : GRAPH_NODE_SIZE_BASE_LEVEL;
+    const baseR = level === 0 ? GRAPH_NODE_BASE_RADIUS_ROOT : GRAPH_NODE_BASE_RADIUS_LEVEL;
     const safeMax = maxWeight > 0 ? maxWeight : 1;
-    const weightRatio = totalWeight / safeMax;
-    return baseSize + weightRatio * GRAPH_NODE_WEIGHT_BONUS_MAX;
+    const weightRatio = Math.min(1, totalWeight / safeMax);
+    const r = baseR + weightRatio * GRAPH_NODE_WEIGHT_BONUS_MAX;
+    // Возвращаем куб r, чтобы Math.cbrt(size) в canvas вернул ровно r.
+    // Итоговый визуальный радиус = r * nodeRelSize * 0.5.
+    return r * r * r;
 }
 
 export function createGraphTextSprite(text, color, fontSize = 16, maxLength = 20) {

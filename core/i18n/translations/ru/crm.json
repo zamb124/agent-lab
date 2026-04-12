@@ -244,6 +244,7 @@
         "search_mode_text": "Текстовый поиск",
         "search_mode_semantic": "Семантический поиск",
         "search_mode_hybrid": "Гибридный поиск",
+        "search_min_score": "Порог релевантности",
         "search_results": "Найдено {{count}} сущностей",
         "search_empty": "По запросу ничего не найдено",
         "mini_loading": "Загрузка графа...",
@@ -666,7 +667,17 @@
         "help_check_duplicates": "Справка: check_duplicates",
         "help_context_anchor": "Тип может быть целью связи «заметка в контексте»: тема, проект, организация или объект работы (сделка, решение), не заметка и не атомарный контакт/задача.",
         "help_description": "Справка: описание",
-        "help_prompt": "Справка: промпт"
+        "help_prompt": "Справка: промпт",
+        "schema_loading": "Загрузка схемы полей..."
+    },
+    "schema_builder": {
+        "add_field": "+ Поле",
+        "no_fields": "Нет полей",
+        "remove": "Удалить",
+        "ph_key": "key (snake_case)",
+        "ph_label": "label (название для пользователя)",
+        "ph_desc": "AI-подсказка: как заполнить это поле",
+        "enum_local": "Ввести значения вручную"
     },
     "note_editor": {
         "placeholder_start": "Начните писать...",
@@ -738,6 +749,7 @@
         "attach_add_title": "Вложения: добавить файл",
         "attach_aria": "Вложения, файлов: {{count}}. Нажмите, чтобы добавить файл.",
         "no_attachments": "Нет вложений",
+        "download_file": "Скачать файл",
         "remove_file": "Удалить файл",
         "share": "Поделиться",
         "saving": "Сохранение...",

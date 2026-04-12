@@ -4,6 +4,8 @@ import { PlatformModal } from '@platform/lib/components/glass-modal.js';
 import { formStyles } from '@platform/lib/styles/shared/form.styles.js';
 import { buttonStyles } from '@platform/lib/styles/shared/button.styles.js';
 import { CRMStore } from '../store/crm.store.js';
+import { createEmptySchemaFieldRow, normalizeSchemaRows, buildSchemaFromRows } from '../components/schema-field-builder.js';
+import '../components/schema-field-builder.js';
 import '@platform/lib/components/platform-icon.js';
 import '@platform/lib/components/platform-icon-picker.js';
 import '@platform/lib/components/platform-switch.js';
@@ -24,18 +26,6 @@ function getDefaultTypeDraft() {
         is_event: false,
         check_duplicates: true,
         weight_coefficient: '1.0',
-    };
-}
-
-function createEmptySchemaFieldRow(defaultType = 'string') {
-    return {
-        key: '',
-        label: '',
-        type: defaultType,
-        description: '',
-        enum_set_id: '',
-        enum_values_text: '',
-        extra: {},
     };
 }
 
@@ -367,59 +357,6 @@ export class TemplatesPage extends PlatformElement {
         return this._schemaOptions;
     }
 
-    _getDefaultFieldType() {
-        const options = this._getSchemaOptionsRequired();
-        const defaultType = options?.defaults?.field_type;
-        if (typeof defaultType === 'string' && defaultType.trim().length > 0) {
-            return defaultType.trim();
-        }
-        if (options.field_types.length === 0) {
-            throw new Error('field_types are empty');
-        }
-        const firstTypeId = options.field_types[0]?.type_id;
-        if (typeof firstTypeId !== 'string' || firstTypeId.trim().length === 0) {
-            throw new Error('field_types[0].type_id is invalid');
-        }
-        return firstTypeId;
-    }
-
-    _normalizeSchemaRows(schemaValue) {
-        if (!schemaValue || typeof schemaValue !== 'object' || Array.isArray(schemaValue)) {
-            return [];
-        }
-        return Object.entries(schemaValue).map(([fieldKey, rawValue]) => {
-            if (!rawValue || typeof rawValue !== 'object' || Array.isArray(rawValue)) {
-                throw new Error(`Schema field "${fieldKey}" must be object`);
-            }
-            const defaultType = this._getDefaultFieldType();
-            const typeId = typeof rawValue.type === 'string' && rawValue.type.trim().length > 0
-                ? rawValue.type.trim()
-                : defaultType;
-            if (rawValue.values !== undefined && !Array.isArray(rawValue.values)) {
-                throw new Error(`Schema field "${fieldKey}".values must be array`);
-            }
-            const enumValues = Array.isArray(rawValue.values) ? rawValue.values : [];
-            const normalizedValues = enumValues
-                .map((item) => (typeof item === 'string' ? item.trim() : ''))
-                .filter((item) => item.length > 0);
-            if (rawValue.enum_set_id !== undefined && typeof rawValue.enum_set_id !== 'string') {
-                throw new Error(`Schema field "${fieldKey}".enum_set_id must be string`);
-            }
-            const extra = Object.fromEntries(
-                Object.entries(rawValue).filter(([key]) => !['type', 'label', 'description', 'values', 'enum_set_id'].includes(key))
-            );
-            return {
-                key: fieldKey,
-                label: typeof rawValue.label === 'string' ? rawValue.label : '',
-                type: typeId,
-                description: typeof rawValue.description === 'string' ? rawValue.description : '',
-                enum_set_id: typeof rawValue.enum_set_id === 'string' ? rawValue.enum_set_id : '',
-                enum_values_text: normalizedValues.join(', '),
-                extra,
-            };
-        });
-    }
-
     _setSchemaRows(sectionKey, rows) {
         if (!['required_fields_rows', 'optional_fields_rows'].includes(sectionKey)) {
             throw new Error(`Unknown schema section: ${sectionKey}`);
@@ -427,104 +364,10 @@ export class TemplatesPage extends PlatformElement {
         this._typeDraft = { ...this._typeDraft, [sectionKey]: rows };
     }
 
-    _addSchemaRow(sectionKey) {
-        const rows = Array.isArray(this._typeDraft[sectionKey]) ? this._typeDraft[sectionKey] : [];
-        this._setSchemaRows(sectionKey, [...rows, createEmptySchemaFieldRow(this._getDefaultFieldType())]);
-    }
-
-    _removeSchemaRow(sectionKey, index) {
-        const rows = Array.isArray(this._typeDraft[sectionKey]) ? this._typeDraft[sectionKey] : [];
-        this._setSchemaRows(sectionKey, rows.filter((_, rowIndex) => rowIndex !== index));
-    }
-
-    _updateSchemaRow(sectionKey, index, patch) {
-        const rows = Array.isArray(this._typeDraft[sectionKey]) ? this._typeDraft[sectionKey] : [];
-        this._setSchemaRows(
-            sectionKey,
-            rows.map((row, rowIndex) => (rowIndex === index ? { ...row, ...patch } : row)),
-        );
-    }
-
-    _isEnumType(typeId) {
-        return typeId === 'enum';
-    }
-
-    _resolveEnumValues(enumValuesText) {
-        return String(enumValuesText || '')
-            .split(/[\n,]/)
-            .map((item) => item.trim())
-            .filter((item) => item.length > 0);
-    }
-
-    _buildSchemaFromRows(rows, sectionLabel) {
-        if (!Array.isArray(rows)) {
-            throw new Error(`${sectionLabel} rows must be array`);
-        }
-        const schema = {};
-        const seenKeys = new Set();
-        const schemaOptions = this._getSchemaOptionsRequired();
-        const fieldTypes = new Set(schemaOptions.field_types.map((item) => item.type_id));
-        const enumSetsMap = new Map(schemaOptions.enum_sets.map((item) => [item.enum_set_id, item.values]));
-        const maxFieldsPerSection = Number(schemaOptions?.validation_limits?.max_fields_per_section || 0);
-        if (maxFieldsPerSection > 0 && rows.length > maxFieldsPerSection) {
-            throw new Error(this.i18n.t('errors.field_limit', { section: sectionLabel, max: String(maxFieldsPerSection) }));
-        }
-
-        for (const row of rows) {
-            const key = String(row?.key || '').trim();
-            if (!key) {
-                continue;
-            }
-            if (!/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(key)) {
-                throw new Error(this.i18n.t('errors.bad_key', { section: sectionLabel, key }));
-            }
-            if (seenKeys.has(key)) {
-                throw new Error(this.i18n.t('errors.dup_key', { section: sectionLabel, key }));
-            }
-            seenKeys.add(key);
-            const typeId = String(row?.type || '').trim();
-            if (!fieldTypes.has(typeId)) {
-                throw new Error(this.i18n.t('errors.unknown_type', { section: sectionLabel, type: typeId, key }));
-            }
-            const descriptor = {
-                ...(row?.extra && typeof row.extra === 'object' ? row.extra : {}),
-                type: typeId,
-            };
-            const label = String(row?.label || '').trim();
-            if (label) {
-                descriptor.label = label;
-            }
-            const description = String(row?.description || '').trim();
-            if (description) {
-                descriptor.description = description;
-            }
-
-            if (this._isEnumType(typeId)) {
-                const enumSetId = String(row?.enum_set_id || '').trim();
-                if (enumSetId) {
-                    if (!enumSetsMap.has(enumSetId)) {
-                        throw new Error(this.i18n.t('errors.enum_set_missing', { section: sectionLabel, id: enumSetId }));
-                    }
-                    descriptor.enum_set_id = enumSetId;
-                    descriptor.values = enumSetsMap.get(enumSetId);
-                } else {
-                    const values = this._resolveEnumValues(row?.enum_values_text || '');
-                    if (values.length === 0) {
-                        throw new Error(this.i18n.t('errors.enum_needs_values', { section: sectionLabel, key }));
-                    }
-                    descriptor.values = values;
-                }
-            }
-
-            schema[key] = descriptor;
-        }
-        return schema;
-    }
-
     _getSchemaPreview(sectionKey, sectionLabel) {
         try {
             const rows = Array.isArray(this._typeDraft[sectionKey]) ? this._typeDraft[sectionKey] : [];
-            const schema = this._buildSchemaFromRows(rows, sectionLabel);
+            const schema = buildSchemaFromRows(rows, sectionLabel, this._schemaOptions, this.i18n.t.bind(this.i18n));
             return JSON.stringify(schema, null, 2);
         } catch (error) {
             const msg = error instanceof Error ? error.message : String(error);
@@ -574,8 +417,8 @@ export class TemplatesPage extends PlatformElement {
             name: item.name || '',
             description: item.description || '',
             prompt: item.prompt || '',
-            required_fields_rows: this._normalizeSchemaRows(item.required_fields || {}),
-            optional_fields_rows: this._normalizeSchemaRows(item.optional_fields || {}),
+            required_fields_rows: normalizeSchemaRows(item.required_fields || {}),
+            optional_fields_rows: normalizeSchemaRows(item.optional_fields || {}),
             namespace_ids: Array.isArray(item.namespace_ids) ? item.namespace_ids : [],
             parent_type_id: item.parent_type_id || '',
             icon: item.icon || '',
@@ -630,13 +473,17 @@ export class TemplatesPage extends PlatformElement {
                 this.error(this.i18n.t('errors.type_id_name_required'));
                 return;
             }
-            const requiredFields = this._buildSchemaFromRows(
+            const requiredFields = buildSchemaFromRows(
                 this._typeDraft.required_fields_rows,
                 this.i18n.t('schema_sections.required_fields'),
+                this._schemaOptions,
+                this.i18n.t.bind(this.i18n),
             );
-            const optionalFields = this._buildSchemaFromRows(
+            const optionalFields = buildSchemaFromRows(
                 this._typeDraft.optional_fields_rows,
                 this.i18n.t('schema_sections.optional_fields'),
+                this._schemaOptions,
+                this.i18n.t.bind(this.i18n),
             );
             for (const key of Object.keys(requiredFields)) {
                 if (Object.prototype.hasOwnProperty.call(optionalFields, key)) {
@@ -916,37 +763,18 @@ export class TemplatesPage extends PlatformElement {
                                             <span>required_fields</span>
                                             <platform-help-hint strategy="local" label=${t('page.help_required')} .text=${this.i18n.t('hints.requiredFields')}></platform-help-hint>
                                         </span>
-                                        <button class="save-btn soft-btn" @click=${() => this._addSchemaRow('required_fields_rows')} type="button">${t('page.add_field')}</button>
                                     </div>
                                     <div class="hint">${t('page.schema_hint_required')}</div>
-                                    ${Array.isArray(this._typeDraft.required_fields_rows) && this._typeDraft.required_fields_rows.length > 0
-                                        ? this._typeDraft.required_fields_rows.map((row, index) => html`
-                                            <div class="schema-field-card">
-                                                <div class="schema-field-row">
-                                                    <input class="form-input mono" placeholder=${t('page.ph_key')} .value=${row.key || ''} @input=${(e) => this._updateSchemaRow('required_fields_rows', index, { key: e.target.value })} />
-                                                    <input class="form-input" placeholder=${t('page.ph_label')} .value=${row.label || ''} @input=${(e) => this._updateSchemaRow('required_fields_rows', index, { label: e.target.value })} />
-                                                </div>
-                                                <div class="schema-field-row">
-                                                    <select class="form-select" .value=${row.type || this._getDefaultFieldType()} @change=${(e) => this._updateSchemaRow('required_fields_rows', index, { type: e.target.value })}>
-                                                        ${(this._schemaOptions?.field_types || []).map((typeItem) => html`<option value=${typeItem.type_id}>${typeItem.label}</option>`)}
-                                                    </select>
-                                                    <input class="form-input" placeholder=${t('page.ph_desc_req')} .value=${row.description || ''} @input=${(e) => this._updateSchemaRow('required_fields_rows', index, { description: e.target.value })} />
-                                                </div>
-                                                ${this._isEnumType(row.type) ? html`
-                                                    <div class="schema-field-row">
-                                                        <select class="form-select" .value=${row.enum_set_id || ''} @change=${(e) => this._updateSchemaRow('required_fields_rows', index, { enum_set_id: e.target.value })}>
-                                                            <option value="">${t('page.enum_local_values')}</option>
-                                                            ${(this._schemaOptions?.enum_sets || []).map((setItem) => html`<option value=${setItem.enum_set_id}>${setItem.label}</option>`)}
-                                                        </select>
-                                                        <input class="form-input" placeholder="values: high, medium, low" .value=${row.enum_values_text || ''} ?disabled=${Boolean(row.enum_set_id)} @input=${(e) => this._updateSchemaRow('required_fields_rows', index, { enum_values_text: e.target.value })} />
-                                                    </div>
-                                                ` : ''}
-                                                <div class="schema-field-inline">
-                                                    <button class="save-btn danger-btn" type="button" @click=${() => this._removeSchemaRow('required_fields_rows', index)}>${t('page.remove')}</button>
-                                                </div>
-                                            </div>
-                                        `)
-                                        : html`<div class="schema-empty">${t('page.no_fields')}</div>`
+                                    ${Array.isArray(this._schemaOptions?.field_types)
+                                        ? html`
+                                            <schema-field-builder
+                                                .rows=${this._typeDraft.required_fields_rows || []}
+                                                .schemaOptions=${this._schemaOptions}
+                                                .required=${true}
+                                                @rows-changed=${(e) => this._setSchemaRows('required_fields_rows', e.detail.rows)}
+                                            ></schema-field-builder>
+                                        `
+                                        : html`<div class="schema-empty">${t('page.loading_schema')}</div>`
                                     }
                                 </div>
                                 <div class="schema-section">
@@ -955,37 +783,17 @@ export class TemplatesPage extends PlatformElement {
                                             <span>optional_fields</span>
                                             <platform-help-hint strategy="local" label=${t('page.help_optional')} .text=${this.i18n.t('hints.optionalFields')}></platform-help-hint>
                                         </span>
-                                        <button class="save-btn soft-btn" @click=${() => this._addSchemaRow('optional_fields_rows')} type="button">${t('page.add_field')}</button>
                                     </div>
                                     <div class="hint">${t('page.schema_hint_optional')}</div>
-                                    ${Array.isArray(this._typeDraft.optional_fields_rows) && this._typeDraft.optional_fields_rows.length > 0
-                                        ? this._typeDraft.optional_fields_rows.map((row, index) => html`
-                                            <div class="schema-field-card">
-                                                <div class="schema-field-row">
-                                                    <input class="form-input mono" placeholder=${t('page.ph_key_opt')} .value=${row.key || ''} @input=${(e) => this._updateSchemaRow('optional_fields_rows', index, { key: e.target.value })} />
-                                                    <input class="form-input" placeholder=${t('page.ph_label_opt')} .value=${row.label || ''} @input=${(e) => this._updateSchemaRow('optional_fields_rows', index, { label: e.target.value })} />
-                                                </div>
-                                                <div class="schema-field-row">
-                                                    <select class="form-select" .value=${row.type || this._getDefaultFieldType()} @change=${(e) => this._updateSchemaRow('optional_fields_rows', index, { type: e.target.value })}>
-                                                        ${(this._schemaOptions?.field_types || []).map((typeItem) => html`<option value=${typeItem.type_id}>${typeItem.label}</option>`)}
-                                                    </select>
-                                                    <input class="form-input" placeholder=${t('page.ph_desc_opt')} .value=${row.description || ''} @input=${(e) => this._updateSchemaRow('optional_fields_rows', index, { description: e.target.value })} />
-                                                </div>
-                                                ${this._isEnumType(row.type) ? html`
-                                                    <div class="schema-field-row">
-                                                        <select class="form-select" .value=${row.enum_set_id || ''} @change=${(e) => this._updateSchemaRow('optional_fields_rows', index, { enum_set_id: e.target.value })}>
-                                                            <option value="">${t('page.enum_local_values')}</option>
-                                                            ${(this._schemaOptions?.enum_sets || []).map((setItem) => html`<option value=${setItem.enum_set_id}>${setItem.label}</option>`)}
-                                                        </select>
-                                                        <input class="form-input" placeholder="values: high, medium, low" .value=${row.enum_values_text || ''} ?disabled=${Boolean(row.enum_set_id)} @input=${(e) => this._updateSchemaRow('optional_fields_rows', index, { enum_values_text: e.target.value })} />
-                                                    </div>
-                                                ` : ''}
-                                                <div class="schema-field-inline">
-                                                    <button class="save-btn danger-btn" type="button" @click=${() => this._removeSchemaRow('optional_fields_rows', index)}>${t('page.remove')}</button>
-                                                </div>
-                                            </div>
-                                        `)
-                                        : html`<div class="schema-empty">${t('page.no_fields')}</div>`
+                                    ${Array.isArray(this._schemaOptions?.field_types)
+                                        ? html`
+                                            <schema-field-builder
+                                                .rows=${this._typeDraft.optional_fields_rows || []}
+                                                .schemaOptions=${this._schemaOptions}
+                                                @rows-changed=${(e) => this._setSchemaRows('optional_fields_rows', e.detail.rows)}
+                                            ></schema-field-builder>
+                                        `
+                                        : html`<div class="schema-empty">${t('page.loading_schema')}</div>`
                                     }
                                 </div>
                             </div>
