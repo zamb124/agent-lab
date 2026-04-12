@@ -441,7 +441,6 @@ def rag_worker():
             "AUTH__PERMISSIONS_ENABLED": "false",
             "S3__DEFAULT_BUCKET": "test-bucket",
             "S3__BUCKETS__TEST-BUCKET__ENDPOINT_URL": "http://localhost:19002",
-            "RAG__PROVIDERS__PGVECTOR__MOCK_EMBEDDINGS": "true",
         },
         cleanup_patterns=[
             "apps.rag_worker.worker",

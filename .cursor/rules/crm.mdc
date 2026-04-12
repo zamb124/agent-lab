@@ -105,11 +105,13 @@ class MyRepository(BaseCRMRepository[MyModel]):
 ### Entity Repository
 
 `EntityService` - работа с CRM-сущностями:
-- `create_entity()` - создать entity в crm_entities + индексировать в vector_documents
-- `search()` - гибридный поиск (SQL атрибуты + pgvector семантика)
+- `create_entity()` - создать entity в crm_entities + индексация search_text через **`CRMContainer.rag_repository`** (in-process pgvector → `vector_documents`)
+- `search()` (семантика) — **`RAGRepository.search`** (провайдер pgvector); списки/фильтры — SQL по `crm_entities`
 - `get_by_id()` - получить по ID
-- `update()` - обновить атрибуты + переиндексировать в vector_documents
-- `delete()` - удалить из crm_entities + vector_documents (+ cascade для relationships)
+- `update()` - обновить атрибуты + переиндексация через rag (delete + `upload_text`)
+- `delete()` - удалить из crm_entities + удаление документа в RAG (`delete_document`) (+ cascade для relationships)
+
+Источник: **`rag_repository`** из **`BaseContainer`** (тот же экземпляр, что у остальных сервисов с `get_rag_provider("pgvector")` + `service_client`).
 
 **Namespace изоляция:** фильтрация по `company_id` + `namespace` в SQL запросах.
 

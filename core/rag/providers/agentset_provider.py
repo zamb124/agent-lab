@@ -271,7 +271,9 @@ class AgentsetRAGProvider(BaseRAGProvider):
         s3_key: str,
         document_name: Optional[str] = None,
         metadata: Optional[Dict[str, Any]] = None,
-        **kwargs
+        *,
+        upload_profile: Optional[object] = None,
+        **kwargs,
     ) -> RAGDocument:
         """
         Загружает документ из S3 через signed URL.
@@ -282,6 +284,9 @@ class AgentsetRAGProvider(BaseRAGProvider):
         3. Передаем signed URL в Agentset (файл остается приватным в S3)
         4. После индексации URL протухнет, но документ уже в RAG
         """
+        if upload_profile is not None:
+            raise ValueError("upload_profile поддерживается только провайдером pgvector")
+
         # Генерируем signed URL на 24 часа для индексации Agentset
         signed_url = await self._generate_signed_url(s3_key, expiration=86400)
         
@@ -476,6 +481,10 @@ class AgentsetRAGProvider(BaseRAGProvider):
         **kwargs
     ) -> List[RAGSearchResult]:
         """Семантический поиск в Agentset"""
+        ch = kwargs.get("channels")
+        if isinstance(ch, dict) and bool(ch.get("lexical", False)):
+            raise ValueError("Лексический канал и гибридный поиск (RRF) поддерживаются только провайдером pgvector")
+
         payload = {
             "query": query,
             "topK": limit,

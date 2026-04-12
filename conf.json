@@ -96,6 +96,29 @@
     "default_model": "x-ai/grok-code-fast-1",
     "default_summarization_model": "x-ai/grok-4-fast"
   },
+  "provider_litserve": {
+    "api": {
+      "base_url": "http://127.0.0.1:8014/v1"
+    },
+    "infra": {
+      "backend": "placeholder",
+      "host": "0.0.0.0",
+      "gateway_port": 8014,
+      "accelerator": "auto",
+      "workers_per_device": 1,
+      "request_timeout_seconds": 300.0,
+      "fast_queue": false,
+      "max_passages": 128,
+      "max_query_chars": 16384,
+      "max_passage_chars": 64000,
+      "max_length": 1024,
+      "model_batch_size": 8,
+      "model_id": "BAAI/bge-reranker-v2-gemma",
+      "use_fp16": true,
+      "use_bf16": false,
+      "normalize_scores": true
+    }
+  },
   "s3": {
     "enabled": true,
     "default_bucket": "shvedzilla",
@@ -168,14 +191,22 @@
     "enabled": true,
     "default_provider": "pgvector",
     "embedding": {
-      "model": "baai/bge-m3",
-      "dimension": 1024,
-      "base_url": null
+      "provider": "provider_litserve",
+      "api": {
+        "model": "baai/bge-m3",
+        "dimension": 1024
+      }
     },
+    "reranker": {
+      "provider": "provider_litserve",
+      "api": {
+        "timeout_seconds": 60
+      }
+    },
+    "document_indexing": {},
     "providers": {
       "pgvector": {
         "enabled": true,
-        "embedding_api_key": "YOUR_EMBEDDING_API_KEY",
         "embedding_cost_per_1m_tokens": 5.0,
         "embedding_platform_markup": 1.1,
         "chunk_size": 1000,
@@ -276,9 +307,6 @@
       },
       "rag": {
         "providers": {
-          "pgvector": {
-            "embedding_api_key": "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"
-          },
           "agentset": {
             "api_key": "agentset_MrUnHaYpdrNDCMeK",
             "embedding_api_key": "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"
@@ -295,7 +323,7 @@
             "access_key_id": "minioadmin",
             "secret_access_key": "minioadmin",
             "region_name": "us-east-1",
-            "endpoint_url": "http://localhost:9000",
+            "endpoint_url": "http://127.0.0.1:19001",
             "enabled": true
           }
         }

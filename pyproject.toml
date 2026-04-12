@@ -11,6 +11,12 @@ dependencies = [
     "svglib>=1.6.0",
 ]
 [tool.uv]
+# marker-pdf объявляет openai<2; платформа — openai>=2.2.0.
+override-dependencies = [
+    "openai>=2.2.0",
+]
+# marker-pdf (pdftext) требует pypdfium2==4.30; unstructured-inference>=1.6 — pypdfium2>=5.
+# В одном lock резолвер отдаёт приоритет совместимости с marker-pdf (см. комментарий в rag.mdc).
 default-groups = [
     "core",
     "agents",
@@ -112,9 +118,12 @@ worker-base = [
 ]
 
 rag-worker = [
-    "unstructured>=0.16.0",
+    "unstructured[pdf]>=0.16.0",
+    "marker-pdf>=1.3.0",
     "tiktoken>=0.9.0",
     "beautifulsoup4>=4.12.0",
+    "chonkie>=1.6.1",
+    "tree-sitter-language-pack>=0.7.0",
 ]
 
 crm = [
@@ -122,6 +131,8 @@ crm = [
 ]
 
 rag = [
+    "chonkie>=1.6.1",
+    "litserve>=0.2.17",
     "tiktoken>=0.9.0",
 ]
 
@@ -131,7 +142,8 @@ sync = [
 ]
 
 dev = [
-    "pillow>=12.0.0",
+    # marker-pdf: Pillow<11; совместная резолюция с rag-worker.
+    "pillow>=10.1.0,<11",
     "pytest>=9.0.0",
     "pytest-asyncio>=1.3.0",
     "pytest-cov>=7.0.0",
@@ -148,6 +160,9 @@ dev = [
     "coverage>=7.4.0",
     "pytest-timeout>=2.4.0",
     "playwright>=1.58.0",
+]
+reranker-model = [
+    "flagembedding>=1.2.0",
 ]
 
 [tool.coverage.run]

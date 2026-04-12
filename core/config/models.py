@@ -2,9 +2,12 @@
 Модели конфигурации для различных компонентов системы.
 """
 
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Literal, Optional
 
-from pydantic import AliasChoices, BaseModel, Field, PrivateAttr
+from pydantic import AliasChoices, BaseModel, ConfigDict, Field, PrivateAttr, model_validator
+
+from core.config.openai_v1_base_url import normalize_openai_v1_base_url
+from core.rag_indexing_schema import IndexProfileConfig
 
 
 class AuthProviderConfig(BaseModel):
@@ -248,13 +251,37 @@ class PaymentProvidersConfig(BaseModel):
     )
 
 
-class EmbeddingConfig(BaseModel):
-    """Конфигурация embedding модели."""
+class EmbeddingApiConfig(BaseModel):
+    """Эмбеддинг: ``model``, ``dimension``, ``base_url`` в форме OpenAI/OpenRouter (единый блок для всех провайдеров)."""
+
+    model_config = ConfigDict(extra="forbid")
 
     model: str = "baai/bge-m3"
     dimension: int = 1024
-    # OpenAI-compatible POST .../embeddings; пусто = OpenRouter (EmbeddingService.OPENROUTER_URL)
+    # Явный override корня ``…/v1``; пусто при ``provider=openrouter`` — из ``llm.<active>.base_url``.
     base_url: Optional[str] = None
+
+
+class EmbeddingConfig(BaseModel):
+    """Конфигурация embedding: ``provider`` и вложенный блок ``api`` (``model``, ``dimension``, опционально ``base_url``)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    provider: Literal["openrouter", "provider_litserve"] = "openrouter"
+    api: EmbeddingApiConfig = Field(default_factory=EmbeddingApiConfig)
+
+    @model_validator(mode="before")
+    @classmethod
+    def _lift_flat_api_fields_into_api(cls, data: Any) -> Any:
+        """Плоские ``model`` / ``dimension`` / ``base_url`` на уровне ``embedding`` -> ``api`` (обратная совместимость с merge JSON)."""
+        if not isinstance(data, dict):
+            return data
+        api: Dict[str, Any] = dict(data.get("api") or {})
+        for k in ("model", "dimension", "base_url"):
+            if k in data:
+                api[k] = data.pop(k)
+        data["api"] = api
+        return data
 
 
 class RAGProviderConfig(BaseModel):
@@ -272,7 +299,7 @@ class RAGProviderConfig(BaseModel):
     # PgVector specific
     db_url: Optional[str] = None
 
-    # Embeddings - ключ для OpenRouter или другого embedding API
+    # Legacy: override ключа эмбеддингов pgvector (ENV); иначе llm.<provider>.api_key. У agentset — см. AgentsetRAGProvider.
     embedding_api_key: Optional[str] = None
     # Средняя цена за 1M токенов (в рублях). ~$0.05 ≈ 5₽
     embedding_cost_per_1m_tokens: float = 5.0
@@ -286,6 +313,129 @@ class RAGProviderConfig(BaseModel):
     extra_params: Dict[str, Any] = Field(default_factory=dict)
 
 
+class RerankerApiRuntimeConfig(BaseModel):
+    """
+    HTTP-реранкер: таймаут и опционально полный URL эндпоинта (override).
+
+    При ``provider=provider_litserve`` URL по умолчанию строится из ``provider_litserve.api.base_url`` + ``/rerank``.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    base_url: Optional[str] = None
+    timeout_seconds: float = 60.0
+
+
+class RerankerRuntimeConfig(BaseModel):
+    """Реранкер: ``provider`` + ``api``."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    provider: Literal["none", "provider_litserve"] = "none"
+    api: Optional[RerankerApiRuntimeConfig] = None
+    # Биллинг (как у embedding в pgvector): оценка по tiktoken, запись через BillingService
+    cost_per_1m_tokens: float = 5.0
+    platform_markup: float = 1.1
+    billing_model_id: str = "rerank"
+
+    @model_validator(mode="before")
+    @classmethod
+    def _merge_reranker_api(cls, data: Any) -> Any:
+        """Плоские ``base_url`` / ``timeout_seconds`` и вложенный ``api``."""
+        if not isinstance(data, dict):
+            return data
+        api: Dict[str, Any] = {}
+        if isinstance(data.get("api"), dict):
+            api.update(data["api"])
+        flat_base = data.pop("base_url", None)
+        flat_timeout = data.pop("timeout_seconds", None)
+        if flat_base is not None:
+            api["base_url"] = flat_base
+        if flat_timeout is not None:
+            api["timeout_seconds"] = float(flat_timeout)
+        if api:
+            data["api"] = api
+        return data
+
+    @model_validator(mode="after")
+    def _ensure_api_object_for_provider_litserve(self) -> "RerankerRuntimeConfig":
+        if self.provider == "provider_litserve" and self.api is None:
+            object.__setattr__(self, "api", RerankerApiRuntimeConfig())
+        return self
+
+    @property
+    def base_url(self) -> Optional[str]:
+        if self.provider != "provider_litserve" or self.api is None:
+            return None
+        u = self.api.base_url
+        if u is None or not str(u).strip():
+            return None
+        return str(u).strip()
+
+    @property
+    def timeout_seconds(self) -> float:
+        if self.provider == "provider_litserve" and self.api is not None:
+            return float(self.api.timeout_seconds)
+        return 60.0
+
+
+class ProviderLitserveApiConfig(BaseModel):
+    """OpenAI-совместимый корень (как ``llm.openrouter.base_url``): ``…/v1`` для embeddings, rerank, models."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    base_url: Optional[str] = None
+
+
+class ProviderLitserveInfraConfig(BaseModel):
+    """
+    Деплой локального OpenAI-совместимого LitServe: один HTTP-порт, воркеры эмбеддингов и реранка.
+
+    Относится к процессу ``apps.provider_litserve.main``, не к доменному ``rag.reranker``.
+    Переопределение деплоя: ``services.provider_litserve``; ENV: ``PROVIDER_LITSERVE__INFRA__*``.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    backend: Literal["placeholder", "flagllm"] = "placeholder"
+    host: str = "0.0.0.0"
+    gateway_port: int = 8014
+    accelerator: Literal["auto", "cpu", "cuda", "mps"] = "auto"
+    workers_per_device: int = 1
+    request_timeout_seconds: float = 300.0
+    fast_queue: bool = False
+
+    max_passages: int = 128
+    max_query_chars: int = 16384
+    max_passage_chars: int = 64000
+    max_length: int = 1024
+    model_batch_size: int = 8
+    model_id: str = "BAAI/bge-reranker-v2-gemma"
+
+    use_fp16: bool = True
+    use_bf16: bool = False
+    normalize_scores: bool = True
+
+    embedding_model_id: str = "BAAI/bge-m3"
+    embedding_openai_model_id: str = "baai/bge-m3"
+    rerank_openai_model_id: str = "baai/bge-reranker-v2-gemma"
+
+
+class ProviderLitserveConfig(BaseModel):
+    """Локальные модели эмбеддинга/реранка: клиентский корень API (``api``) и инфраструктура LitServe (``infra``)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    api: ProviderLitserveApiConfig = Field(default_factory=ProviderLitserveApiConfig)
+    infra: ProviderLitserveInfraConfig = Field(default_factory=ProviderLitserveInfraConfig)
+
+    def resolve_openai_v1_base_url(self) -> str:
+        raw = self.api.base_url
+        if raw is None or not str(raw).strip():
+            raise ValueError("provider_litserve.api.base_url пуст")
+        return normalize_openai_v1_base_url(str(raw).strip())
+
+
 class RAGConfig(BaseModel):
     """Конфигурация RAG системы"""
 
@@ -296,6 +446,26 @@ class RAGConfig(BaseModel):
     embedding: EmbeddingConfig = Field(default_factory=EmbeddingConfig)
 
     providers: Dict[str, RAGProviderConfig] = Field(default_factory=dict)
+    reranker: RerankerRuntimeConfig = Field(default_factory=RerankerRuntimeConfig)
+    document_indexing: IndexProfileConfig = Field(
+        default_factory=IndexProfileConfig,
+        description="Парсинг, нарезка, lexical/search_defaults для индексации и поиска (без БД-профилей).",
+    )
+
+    def get_enabled_provider_key(self, override: Optional[str] = None) -> str:
+        """Имя провайдера из ``override`` или ``default_provider`` с проверкой ``rag.enabled`` и ``providers[name].enabled``."""
+        if not self.enabled:
+            raise ValueError("RAG не включен в конфигурации (rag.enabled = false)")
+        key = (override if override is not None else self.default_provider).strip()
+        if not key:
+            raise ValueError("rag.default_provider пуст")
+        if key not in self.providers:
+            available = ", ".join(sorted(self.providers.keys()))
+            raise ValueError(f"Неизвестный RAG провайдер: {key}. Доступные: {available}")
+        pcfg = self.providers[key]
+        if not pcfg.enabled:
+            raise ValueError(f"Провайдер {key} отключен (enabled = false)")
+        return key
 
 
 class SGRConfig(BaseModel):

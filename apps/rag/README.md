@@ -1,229 +1,163 @@
 # RAG Service
 
-RAG Service - микросервис для управления документами и семантического поиска с поддержкой множественных провайдеров.
+Микросервис управления документами и поиска (RAG): REST API под **`/rag/api/v1/`**, UI в **`apps/rag/ui/`** (Lit 3, Zustand), порт **8004**.
 
-## Возможности
+Подробные инварианты конфигурации, провайдеров и индексации — **`.cursor/rules/rag.mdc`**. Каскад настроек платформы — **`configuration.mdc`**.
 
-- 🔄 **Переключение между провайдерами** (pgvector, Agentset)
-- 📁 **Управление namespaces** (создание, удаление, список)
-- 📄 **Загрузка документов** (PDF, TXT, DOCX и др.)
-- 🔍 **Семантический поиск** по документам
-- 💎 **Glassmorphism UI** с поддержкой светлой и темной темы
-- ⚡ **Реактивный интерфейс** на Lit 3 + Zustand
+## Принципы
 
-## Архитектура
+- **Провайдер** (`pgvector`, `agentset`) определяет хранение чанков и способ поиска. У namespace фиксируется провайдер создания. В запросах к API опционально передаётся **`?provider=`**; иначе используется **`rag.default_provider`** из конфигурации.
+- **Индексация асинхронная**: загрузка файла возвращает **202** и идентификатор фоновой задачи; итог смотрите по **`GET /rag/api/v1/documents/{document_id}/status`**. Для выполнения задач должен быть запущен **rag_worker** (TaskIQ).
+- **Межсервисные вызовы** к RAG идут через **`ServiceClient`** (сервис `"rag"`), с контекстом **`get_context()`**, не прямым `httpx` между сервисами.
+- **Префикс API** — только **`/rag/api/v1/...`**.
 
-```
-apps/rag/
-├── main.py                  # FastAPI приложение
-├── config.py                # Настройки сервиса
-├── container.py             # DI контейнер
-├── conf.json                # Конфигурация
-├── api/                     # REST API endpoints
-│   ├── providers.py         # Управление провайдерами
-│   ├── namespaces.py        # Управление namespaces
-│   ├── documents.py         # Управление документами
-│   └── search.py            # Семантический поиск
-└── ui/                      # Micro-frontend
-    ├── index.html
-    ├── index.js
-    ├── app/
-    │   └── rag-app.js       # Главный компонент
-    ├── components/
-    │   ├── provider-selector.js
-    │   ├── provider-badge.js
-    │   └── namespace-card.js
-    ├── features/
-    │   ├── sidebar.js
-    │   └── namespace-list.js
-    ├── services/
-    │   ├── rag-api.service.js
-    │   └── store.js         # Zustand Store
-    └── styles/
-        └── rag.css
-```
+## HTTP-контракт
 
-## API Endpoints
+### Провайдеры
 
-### Providers
-
-```
-GET    /rag/api/v1/providers
-POST   /rag/api/v1/providers/switch
-```
+| Метод | Путь |
+|-------|------|
+| GET | `/rag/api/v1/providers` |
+| POST | `/rag/api/v1/providers/switch` — тело: `{ "provider_name": "<имя>" }` |
 
 ### Namespaces
 
-```
-GET    /rag/api/v1/namespaces?provider={name}
-POST   /rag/api/v1/namespaces?provider={name}
-DELETE /rag/api/v1/namespaces/{id}?provider={name}
-```
+| Метод | Путь |
+|-------|------|
+| GET | `/rag/api/v1/namespaces` — опционально `?provider=` |
+| POST | `/rag/api/v1/namespaces` — тело: `name`, `description`; опционально `?provider=` |
+| DELETE | `/rag/api/v1/namespaces/{namespace_id}` — опционально `?provider=` |
 
-### Documents
+Ответ списка включает **`namespaces`** и агрегат **`document_status_counts_by_namespace`** (счётчики по статусам обработки документов).
+
+### Документы
+
+| Метод | Путь |
+|-------|------|
+| GET | `/rag/api/v1/namespaces/{namespace_id}/documents` — список документов и сводка (**summary**: чанки, счётчики по статусам); опционально `?provider=` |
+| POST | `/rag/api/v1/namespaces/{namespace_id}/documents` — **multipart**: поле файла **`file`**, опционально **`metadata`** (JSON-строка). Ответ **202** (принятие в очередь). Опционально `?provider=` |
+| DELETE | `/rag/api/v1/namespaces/{namespace_id}/documents/{document_id}` — опционально `?provider=` |
+| GET | `/rag/api/v1/documents/{document_id}/status` — статус индексации |
+
+Не смешивать загрузку **multipart** с телом **`application/json`** вместо поля `metadata`: для файла используется `FormData` с JSON внутри **`metadata`**.
+
+### Поиск
+
+| Метод | Путь |
+|-------|------|
+| POST | `/rag/api/v1/namespaces/{namespace_id}/search` — опционально `?provider=` |
+| POST | `/rag/api/v1/search` — поиск сразу по нескольким namespace (в теле **`namespace_ids`**); опционально `?provider=` |
+
+**Тело запроса поиска** (`SearchRequest`):
+
+- **`query`** (обязательно), **`limit`** (по умолчанию 5).
+- **`filters`** — опционально, фильтрация по метаданным.
+- **`channels`** — `{ "semantic": bool, "lexical": bool }`; должен быть включён хотя бы один канал. Оба включены — fusion (RRF) у pgvector; только semantic — вектор; только lexical — полнотекст.
+- **`rrf_k`**, **`per_channel_top_k`**, **`rerank`** — опционально.
+- Не заданные в запросе поля могут заполняться из **`rag.document_indexing.search_defaults`** в конфигурации.
+
+**Ответ**: **`results`** (список `RAGSearchResult`), **`query`**, **`namespace_id`** (для single-namespace), **`provider`**.
+
+**Ограничение**: провайдер **Agentset** не поддерживает лексический канал в комбинациях, которые требуют FTS; запрос с лексикой там приведёт к **400**. Ошибки реранкера не подавляются.
+
+## Настройки
+
+| Уровень | Назначение |
+|---------|------------|
+| **Глобальный конфиг** (`conf.json` / `conf.local.json`, приоритет у ENV) | **`rag.embedding`** — одна модель эмбеддингов на контур; **`rag.reranker`** — реранк после retrieve; **`rag.document_indexing`** — профиль индексации (split, parsing, lexical, опционально **`search_defaults`**); **`rag.providers.*`** — параметры провайдеров. |
+| **Загрузка документа** | В **`metadata`** можно передать **`index_profile_config`** (частичный оверлей к глобальному профилю), например **`split`**, **`parsing`** — глубокое слияние на стороне воркера/API. |
+
+## UI (`apps/rag/ui/`)
+
+- **HTTP**: класс **`RAGAPIService`** (`ui/services/rag-api.service.js`), базовый путь **`/rag/api/v1`** — обёртка над эндпоинтами выше (`getNamespaces`, `uploadDocument` с `metadata`, `search`, `globalSearch`, `getDocumentStatus`, и т.д.).
+- **Состояние**: **`RagStore`** (`ui/store/rag.store.js`) — провайдеры, список namespace, документы, поиск, сохраняемые **`uploadIndexProfileDefaults`** (дефолты **`split`** / **`parsing`** для поля **`metadata.index_profile_config`** при загрузке).
+- **Счётчики документов** на карточке namespace берутся из **`document_status_counts_by_namespace`** (и сопоставления с namespace), а не из одного числового поля без разбивки по статусам.
+- **Маршрутизация** (hash): `#/`, `#/namespace/:id`, `#/search`, `#/settings`.
+- Канон фронтенда платформы — **`frontend.mdc`** (импорты `@platform/...`, базовые компоненты).
+
+## Flows: ресурс `RAGResource`
+
+В графах flow ресурс **`RAGResource`** (`apps/flows/src/resources/wrappers/rag_resource.py`):
+
+- **Поиск** — **`RAGRepository.search_namespace`** (`core/rag/repository.py`) через **`ServiceClient`** → **`POST /rag/api/v1/namespaces/{namespace_id}/search`**. Дефолты **`namespace`**, **`provider`**, **`default_top_k`**, **`company_id`**, **`search_options`** — из **`RagResourceBindParams`** (`core/rag/rag_resource_bind.py`, те же поля, что у **`RAGResourceConfig`**).
+- **Загрузка текста** (`add_document`) — in-process **`RAGRepository.provider.upload_document_from_text`**.
+
+Параметры конфига: **`namespace`**, **`provider`**, **`default_top_k`**, опционально **`company_id`**, **`search_options`** и **`index_profile_config`**.
+
+**`RAGRepository`** (ядро в **`core/rag/repository.py`**) с опциональными **`service_client`**, **`bind`**, **`worker_tasks`**: HTTP-поиск; постановка задач воркера — методы **`enqueue_s3_document_index`**, **`enqueue_worker_delete_document`**, **`list_documents_via_worker`**, **`enqueue_worker_cleanup_namespace`** при **`worker_tasks=RagWorkerTasksAdapter`** (`apps/rag/services/rag_worker_tasks_adapter.py`).
+
+Результат **`search`** — список словарей: **`content`**, **`score`**, **`document_id`**, **`metadata`**.
+
+## Структура каталога
 
 ```
-GET    /rag/api/v1/namespaces/{id}/documents?provider={name}
-POST   /rag/api/v1/namespaces/{id}/documents?provider={name}
-DELETE /rag/api/v1/namespaces/{id}/documents/{doc_id}?provider={name}
-```
-
-### Search
-
-```
-POST   /rag/api/v1/namespaces/{id}/search?provider={name}
-POST   /rag/api/v1/search?provider={name}
-```
-
-## Конфигурация
-
-```json
-{
-  "rag": {
-    "enabled": true,
-    "default_provider": "pgvector",
-    "providers": {
-      "pgvector": {
-        "enabled": true,
-        "host": "localhost",
-        "port": 5433
-      },
-      "agentset": {
-        "enabled": true,
-        "api_key": "your_key",
-        "base_url": "https://api.agentset.ai"
-      }
-    }
-  }
-}
+apps/rag/
+├── main.py
+├── config.py
+├── container.py
+├── dependencies.py
+├── api/
+│   ├── providers.py
+│   ├── namespaces.py
+│   ├── documents.py
+│   └── search.py
+├── services/
+│   ├── rag_worker_tasks_adapter.py
+│   ├── rerank_after_retrieve.py
+│   └── reranker_client.py
+└── ui/
+    ├── index.html
+    ├── index.js
+    ├── app/rag-app.js
+    ├── components/
+    ├── features/
+    ├── modals/
+    ├── services/rag-api.service.js
+    └── store/rag.store.js
 ```
 
 ## Запуск
 
-### Development
+Локально (из корня репозитория):
 
 ```bash
-make run-rag
+uv run python scripts/run.py rag
 ```
 
-Или напрямую:
+Сервис: **`http://localhost:8004`**. UI: **`http://localhost:8004/rag/ui`**.
+
+Полный стек разработки: **`make app`** (см. корневой README / `scripts/run.py`).
+
+Для индексации документов дополнительно запускайте **rag-worker**: `uv run python scripts/run.py rag-worker` (или через цели в `Makefile`, если описаны).
+
+## Пример вызовов
 
 ```bash
-uv run python scripts/run_rag.py
-```
+curl -s http://localhost:8004/rag/api/v1/providers
 
-Сервис запустится на `http://localhost:8004`
+curl -s http://localhost:8004/rag/api/v1/namespaces
 
-### Production
-
-```bash
-make deploy-rag
-```
-
-## UI
-
-Micro-frontend доступен по адресу: `http://localhost:8004/rag/ui`
-
-### Архитектура UI
-
-- **Lit 3** - веб-компоненты
-- **Zustand** - state management
-- **Core Frontend** - общая библиотека компонентов и стилей
-- **Glassmorphism** - дизайн-система
-
-### Компоненты
-
-- `rag-app` - главный компонент
-- `rag-sidebar` - боковая панель навигации
-- `provider-selector` - dropdown для выбора провайдера
-- `provider-badge` - индикатор текущего провайдера
-- `namespace-card` - карточка namespace
-- `namespace-list` - список namespaces
-
-## Провайдеры
-
-### pgvector
-
-PostgreSQL с расширением pgvector для векторного поиска.
-
-```bash
-docker run -p 5433:5432 pgvector/pgvector:pg16
-```
-
-### Agentset
-
-Облачный RAG сервис.
-
-Требуется API ключ в конфигурации.
-
-## Testing
-
-```bash
-# Providers API
-curl http://localhost:8004/rag/api/v1/providers
-
-# Switch provider
-curl -X POST http://localhost:8004/rag/api/v1/providers/switch \
+curl -s -X POST http://localhost:8004/rag/api/v1/namespaces/{namespace_id}/search \
   -H "Content-Type: application/json" \
-  -d '{"provider_name": "agentset"}'
-
-# Namespaces
-curl http://localhost:8004/rag/api/v1/namespaces
-
-# Create namespace
-curl -X POST http://localhost:8004/rag/api/v1/namespaces \
-  -H "Content-Type: application/json" \
-  -d '{"name": "my_docs", "description": "My documents"}'
+  -d '{"query":"текст запроса","limit":5,"channels":{"semantic":true,"lexical":true}}'
 ```
 
-## Интеграция с Agents
-
-RAG Service интегрирован с Agents через `core/rag`:
+## Прямое использование провайдера в коде (тот же контракт поиска)
 
 ```python
 from core.rag.factory import get_rag_provider
 
 provider = get_rag_provider("pgvector")
 results = await provider.search(
-    namespace_id="my_docs",
-    query="How to use RAG?",
-    limit=5
+    namespace_id="my_namespace",
+    query="Пример",
+    limit=5,
 )
 ```
 
-## Troubleshooting
+## Устранение неполадок
 
-### PostgreSQL + pgvector не подключается
-
-Убедитесь что PostgreSQL с pgvector запущен:
-
-```bash
-docker ps | grep postgres
-```
-
-### Agentset API ошибка
-
-Проверьте API ключ в `conf.json`:
-
-```json
-{
-  "rag": {
-    "providers": {
-      "agentset": {
-        "api_key": "your_valid_key"
-      }
-    }
-  }
-}
-```
-
-## Roadmap
-
-- [ ] Document viewer
-- [ ] Advanced search filters
-- [ ] Batch document upload
-- [ ] Document versioning
-- [ ] Analytics dashboard
-- [ ] Multi-language support
-
-
+- **Документ в очереди / не индексируется** — проверьте процесс **rag_worker** и логи задач TaskIQ.
+- **Pgvector** — доступность БД RAG и миграции схемы (см. **`migrations.mdc`**).
+- **Agentset** — корректность **`api_key`** и **`base_url`** в **`rag.providers.agentset`**.
+- **Реранк / эмбеддинги** — см. **`rag.embedding`**, **`rag.reranker`** и при **`provider: provider_litserve`** — **`provider_litserve`** и **`apps/provider_litserve/README.md`**.

@@ -34,7 +34,7 @@ alwaysApply: false
 
 - **platform_agents**: KV-таблицы flows/nodes/tools/… плюс **`storage`** (префиксы `llm_model:`, embed, файлы) и **`mcp_servers`** — не путать с `storage` в `platform_shared`.
 - **platform_crm**: реляционные CRM-таблицы плюс **`vector_documents`** (pgvector) для `JOIN crm_entities` при семантическом поиске; дубли по смыслу с RAG не смешиваются: RAG-документы живут в **platform_rag**, сущности CRM — в **platform_crm**.
-- **platform_rag**: `document_processing_status`, `vector_documents` для пайплайна RAG.
+- **platform_rag**: `document_processing_status` (PK **`document_id`**, baseline **`rag_0001`**), `vector_documents` (**`content_tsv`** / GIN в **`rag_0002`**): **`rag_0001`** + **`rag_0002`** (`20260405_0002_rag_fts_and_document_status_pk.py`).
 
 У каждого дерева Alembic — **своя** физическая БД и своя строка `alembic_version`. Указывать один и тот же `…/platform_db` во всех `database.*_url` нельзя: после миграции `shared` в БД окажется ревизия `shared_0001`, а при `upgrade` для `flows` Alembic не найдёт эту ревизию в `migrations/flows/`. Локальный Postgres: `docker-compose-dev.yaml` монтирует `migrations/postgres/init.sql`, `POSTGRES_DB=platform_shared`, остальные БД создаёт init-скрипт. Физические БД **не** создаёт Alembic; при деплое после `postgres up` выполняется идемпотентный `migrations/postgres/bootstrap_idempotent.sql` (на случай, если первый init кластера не создал сервисные БД).
 

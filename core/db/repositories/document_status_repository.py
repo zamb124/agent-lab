@@ -3,14 +3,16 @@
 """
 
 from datetime import datetime, timezone
-from typing import Optional, List
-from sqlalchemy import select, update, and_
-from sqlalchemy.ext.asyncio import AsyncSession
+from typing import Any, List, Optional
 
-from core.db.models import DocumentProcessingStatus as DBDocumentStatus
-from core.rag.models import DocumentProcessingStatus as DocumentStatusModel
+from sqlalchemy import bindparam, delete, func, select, text, update
+from sqlalchemy.dialects.postgresql import insert as pg_insert
+
 from core.db.database import get_session_factory
+from core.db.models import DocumentProcessingStatus as DBDocumentStatus
+from core.db.models.rag import VectorDocument
 from core.logging import get_logger
+from core.rag.models import DocumentProcessingStatus as DocumentStatusModel
 
 logger = get_logger(__name__)
 
@@ -18,24 +20,19 @@ logger = get_logger(__name__)
 class DocumentStatusRepository:
     """
     Репозиторий для управления статусами обработки документов.
-    
-    Использует SQLAlchemy для работы с БД и возвращает Pydantic модели.
+
+    Одна строка на document_id; повторная загрузка того же файла обновляет её (UPSERT).
     """
-    
+
     def __init__(self, db_url: str):
-        """
-        Args:
-            db_url: URL базы данных
-        """
         self._db_url = db_url
         self._session_factory = None
-    
+
     async def _get_session_factory(self):
-        """Получает session factory (с кешированием)"""
         if self._session_factory is None:
             self._session_factory = await get_session_factory(self._db_url)
         return self._session_factory
-    
+
     async def create_status(
         self,
         document_id: str,
@@ -43,88 +40,193 @@ class DocumentStatusRepository:
         namespace_id: str,
         document_name: str,
         file_size: Optional[int] = None,
-        extra_metadata: Optional[dict] = None
+        extra_metadata: Optional[dict] = None,
     ) -> DocumentStatusModel:
-        """
-        Создает новую запись статуса документа.
-        
-        Args:
-            document_id: ID документа
-            task_id: ID задачи TaskIQ
-            namespace_id: ID namespace
-            document_name: Имя файла
-            file_size: Размер файла в байтах
-            extra_metadata: Дополнительные метаданные
-            
-        Returns:
-            Созданный статус документа
-        """
+        """Создаёт или сбрасывает строку статуса в pending (повторная загрузка)."""
         session_factory = await self._get_session_factory()
         async with session_factory() as session:
             now = datetime.now(timezone.utc)
-            
-            db_status = DBDocumentStatus(
+            existing_result = await session.execute(
+                select(DBDocumentStatus).where(
+                    DBDocumentStatus.document_id == document_id
+                )
+            )
+            existing = existing_result.scalar_one_or_none()
+            em = dict(extra_metadata or {})
+            if existing is not None and existing.extra_metadata:
+                em = {**dict(existing.extra_metadata), **em}
+            stmt = pg_insert(DBDocumentStatus).values(
                 document_id=document_id,
                 task_id=task_id,
                 namespace_id=namespace_id,
                 document_name=document_name,
                 status="pending",
                 file_size=file_size,
-                extra_metadata=extra_metadata or {},
+                extra_metadata=em,
                 created_at=now,
-                updated_at=now
+                updated_at=now,
             )
-            
-            session.add(db_status)
+            stmt = stmt.on_conflict_do_update(
+                index_elements=["document_id"],
+                set_={
+                    "task_id": task_id,
+                    "namespace_id": namespace_id,
+                    "document_name": document_name,
+                    "status": "pending",
+                    "file_size": file_size,
+                    "extra_metadata": em,
+                    "updated_at": now,
+                    "completed_at": None,
+                    "error_message": None,
+                    "s3_key": None,
+                    "s3_bucket": None,
+                    "chunks_count": None,
+                },
+            )
+            await session.execute(stmt)
             await session.commit()
-            await session.refresh(db_status)
-            
-            logger.info(f"Создан статус документа: {document_id} (task={task_id})")
-            
+            result = await session.execute(
+                select(DBDocumentStatus).where(
+                    DBDocumentStatus.document_id == document_id
+                )
+            )
+            db_status = result.scalar_one()
+            logger.info(
+                "Статус документа: document_id=%s task=%s (создан или сброшен в pending)",
+                document_id,
+                task_id,
+            )
             return DocumentStatusModel.model_validate(db_status)
-    
+
+    async def finalize_enqueued_indexing_task(
+        self,
+        document_id: str,
+        task_id: str,
+    ) -> DocumentStatusModel:
+        if not task_id:
+            raise ValueError("task_id обязателен")
+        session_factory = await self._get_session_factory()
+        async with session_factory() as session:
+            now = datetime.now(timezone.utc)
+            result = await session.execute(
+                select(DBDocumentStatus).where(
+                    DBDocumentStatus.document_id == document_id
+                )
+            )
+            row = result.scalar_one()
+            row.task_id = task_id
+            row.updated_at = now
+            await session.commit()
+            await session.refresh(row)
+            logger.info(
+                "Документ %s: поставлена задача индексации task_id=%s",
+                document_id,
+                task_id,
+            )
+            return DocumentStatusModel.model_validate(row)
+
+    async def try_mark_processing(self, document_id: str) -> None:
+        session_factory = await self._get_session_factory()
+        async with session_factory() as session:
+            now = datetime.now(timezone.utc)
+            await session.execute(
+                update(DBDocumentStatus)
+                .where(
+                    DBDocumentStatus.document_id == document_id,
+                    DBDocumentStatus.status == "pending",
+                )
+                .values(status="processing", updated_at=now)
+            )
+            await session.commit()
+
+    async def record_indexing_done(
+        self,
+        document_id: str,
+        chunks: int,
+        *,
+        indexing_runtime: Optional[dict[str, Any]] = None,
+    ) -> DocumentStatusModel:
+        session_factory = await self._get_session_factory()
+        async with session_factory() as session:
+            now = datetime.now(timezone.utc)
+            result = await session.execute(
+                select(DBDocumentStatus)
+                .where(DBDocumentStatus.document_id == document_id)
+                .with_for_update()
+            )
+            row = result.scalar_one()
+            if row.status == "failed":
+                await session.commit()
+                return DocumentStatusModel.model_validate(row)
+
+            row.chunks_count = int(chunks)
+            row.status = "completed"
+            row.completed_at = now
+            row.updated_at = now
+            em = dict(row.extra_metadata or {})
+            prev_runs = int(em.get("indexing_run_count", 0))
+            em["indexing_run_count"] = prev_runs + 1
+            if indexing_runtime is not None:
+                em["indexing_runtime"] = indexing_runtime
+            row.extra_metadata = em
+            await session.commit()
+            await session.refresh(row)
+            logger.info(
+                "Документ %s: индексация завершена, чанков=%s",
+                document_id,
+                chunks,
+            )
+            return DocumentStatusModel.model_validate(row)
+
+    async def record_indexing_failed(self, document_id: str, error: str) -> None:
+        session_factory = await self._get_session_factory()
+        async with session_factory() as session:
+            now = datetime.now(timezone.utc)
+            msg = str(error)
+            if len(msg) > 5000:
+                msg = msg[:4997] + "..."
+            await session.execute(
+                update(DBDocumentStatus)
+                .where(DBDocumentStatus.document_id == document_id)
+                .values(
+                    status="failed",
+                    error_message=msg,
+                    updated_at=now,
+                )
+            )
+            await session.commit()
+            logger.error(
+                "Индексация документа %s провалилась: %s",
+                document_id,
+                msg,
+            )
+
     async def get_by_document_id(self, document_id: str) -> Optional[DocumentStatusModel]:
-        """
-        Получает статус по ID документа.
-        
-        Args:
-            document_id: ID документа
-            
-        Returns:
-            Статус документа или None
-        """
         session_factory = await self._get_session_factory()
         async with session_factory() as session:
             result = await session.execute(
-                select(DBDocumentStatus).where(DBDocumentStatus.document_id == document_id)
+                select(DBDocumentStatus).where(
+                    DBDocumentStatus.document_id == document_id
+                )
             )
             db_status = result.scalar_one_or_none()
-            
+
             if db_status:
                 return DocumentStatusModel.model_validate(db_status)
             return None
-    
+
     async def get_by_task_id(self, task_id: str) -> Optional[DocumentStatusModel]:
-        """
-        Получает статус по ID задачи.
-        
-        Args:
-            task_id: ID задачи TaskIQ
-            
-        Returns:
-            Статус документа или None
-        """
         session_factory = await self._get_session_factory()
         async with session_factory() as session:
             result = await session.execute(
                 select(DBDocumentStatus).where(DBDocumentStatus.task_id == task_id)
             )
             db_status = result.scalar_one_or_none()
-            
+
             if db_status:
                 return DocumentStatusModel.model_validate(db_status)
             return None
-    
+
     async def update_status(
         self,
         document_id: str,
@@ -132,117 +234,203 @@ class DocumentStatusRepository:
         error: Optional[str] = None,
         s3_key: Optional[str] = None,
         s3_bucket: Optional[str] = None,
-        chunks_count: Optional[int] = None
+        chunks_count: Optional[int] = None,
     ) -> DocumentStatusModel:
-        """
-        Обновляет статус документа.
-        
-        Args:
-            document_id: ID документа
-            status: Новый статус (pending, processing, completed, failed)
-            error: Сообщение об ошибке (если failed)
-            s3_key: Ключ файла в S3
-            s3_bucket: Имя bucket в S3
-            chunks_count: Количество chunks
-            
-        Returns:
-            Обновленный статус
-        """
         session_factory = await self._get_session_factory()
         async with session_factory() as session:
             now = datetime.now(timezone.utc)
-            
+
             values = {
                 "status": status,
-                "updated_at": now
+                "updated_at": now,
             }
-            
+
             if error:
                 values["error_message"] = error
-            
+
             if s3_key:
                 values["s3_key"] = s3_key
-            
+
             if s3_bucket:
                 values["s3_bucket"] = s3_bucket
-            
+
             if chunks_count is not None:
                 values["chunks_count"] = chunks_count
-            
+
             if status == "completed":
                 values["completed_at"] = now
-            
+
             await session.execute(
                 update(DBDocumentStatus)
                 .where(DBDocumentStatus.document_id == document_id)
                 .values(**values)
             )
             await session.commit()
-            
+
             result = await session.execute(
-                select(DBDocumentStatus).where(DBDocumentStatus.document_id == document_id)
+                select(DBDocumentStatus).where(
+                    DBDocumentStatus.document_id == document_id
+                )
             )
             db_status = result.scalar_one()
-            
-            logger.info(f"Обновлен статус документа {document_id}: {status}")
-            
+
+            logger.info(
+                "Обновлен статус документа %s: %s",
+                document_id,
+                status,
+            )
+
             return DocumentStatusModel.model_validate(db_status)
-    
+
+    async def get_latest_by_namespace_and_document_ids(
+        self,
+        namespace_id: str,
+        document_ids: List[str],
+    ) -> dict[str, DocumentStatusModel]:
+        """Строки статуса по паре (namespace_id, document_id)."""
+        if not document_ids:
+            return {}
+        session_factory = await self._get_session_factory()
+        async with session_factory() as session:
+            result = await session.execute(
+                select(DBDocumentStatus).where(
+                    DBDocumentStatus.namespace_id == namespace_id,
+                    DBDocumentStatus.document_id.in_(document_ids),
+                )
+            )
+            rows = result.scalars().all()
+            return {str(r.document_id): DocumentStatusModel.model_validate(r) for r in rows}
+
+    async def count_effective_document_status_by_namespace(
+        self, namespace_id: str
+    ) -> dict[str, int]:
+        """
+        Число уникальных document_id в namespace по эффективному статусу:
+        строка в document_processing_status, плюс документы
+        только в vector_documents без строки статуса (считаются completed).
+        """
+        multi = await self.count_effective_document_status_for_namespaces([namespace_id])
+        return multi.get(
+            namespace_id,
+            {"pending": 0, "processing": 0, "completed": 0, "failed": 0},
+        )
+
+    async def count_effective_document_status_for_namespaces(
+        self, namespace_ids: List[str]
+    ) -> dict[str, dict[str, int]]:
+        """По каждому namespace_id — счётчики pending, processing, completed, failed."""
+        keys = ("pending", "processing", "completed", "failed")
+        empty = {k: 0 for k in keys}
+        if not namespace_ids:
+            return {}
+
+        session_factory = await self._get_session_factory()
+        async with session_factory() as session:
+            stmt = text(
+                """
+                WITH from_status AS (
+                  SELECT namespace_id, document_id, status
+                  FROM document_processing_status
+                  WHERE namespace_id IN :ns_a
+                ),
+                from_vectors AS (
+                  SELECT DISTINCT vd.namespace_id, vd.document_id
+                  FROM vector_documents vd
+                  WHERE vd.namespace_id IN :ns_b
+                ),
+                merged AS (
+                  SELECT fs.namespace_id, fs.document_id, fs.status
+                  FROM from_status fs
+                  UNION ALL
+                  SELECT fv.namespace_id, fv.document_id, 'completed'::text AS status
+                  FROM from_vectors fv
+                  WHERE NOT EXISTS (
+                    SELECT 1 FROM from_status fs2
+                    WHERE fs2.namespace_id = fv.namespace_id
+                      AND fs2.document_id = fv.document_id
+                  )
+                )
+                SELECT m.namespace_id, m.status, COUNT(*)::int AS cnt
+                FROM merged m
+                GROUP BY m.namespace_id, m.status
+                """
+            ).bindparams(
+                bindparam("ns_a", expanding=True),
+                bindparam("ns_b", expanding=True),
+            )
+            result = await session.execute(
+                stmt,
+                {"ns_a": namespace_ids, "ns_b": namespace_ids},
+            )
+            rows = result.mappings().all()
+
+        out: dict[str, dict[str, int]] = {ns: dict(empty) for ns in namespace_ids}
+        for row in rows:
+            ns = str(row["namespace_id"])
+            status = str(row["status"])
+            cnt = int(row["cnt"])
+            if ns not in out:
+                continue
+            if status not in out[ns]:
+                raise ValueError(f"Неожиданный статус в агрегации: {status!r}")
+            out[ns][status] = cnt
+
+        return out
+
     async def list_by_namespace(
         self,
         namespace_id: str,
         status: Optional[List[str]] = None,
-        limit: int = 100
+        limit: int = 100,
     ) -> List[DocumentStatusModel]:
-        """
-        Получает список статусов документов в namespace.
-        
-        Args:
-            namespace_id: ID namespace
-            status: Фильтр по статусам (если None - все)
-            limit: Максимальное количество записей
-            
-        Returns:
-            Список статусов документов
-        """
         session_factory = await self._get_session_factory()
         async with session_factory() as session:
-            query = select(DBDocumentStatus).where(
+            q = select(DBDocumentStatus).where(
                 DBDocumentStatus.namespace_id == namespace_id
             )
-            
             if status:
-                query = query.where(DBDocumentStatus.status.in_(status))
-            
-            query = query.order_by(DBDocumentStatus.created_at.desc()).limit(limit)
-            
-            result = await session.execute(query)
+                q = q.where(DBDocumentStatus.status.in_(status))
+            q = q.order_by(DBDocumentStatus.updated_at.desc().nulls_last()).limit(limit)
+            result = await session.execute(q)
             db_statuses = result.scalars().all()
-            
+
             return [DocumentStatusModel.model_validate(s) for s in db_statuses]
-    
-    async def delete_by_document_id(self, document_id: str) -> bool:
-        """
-        Удаляет статус документа.
-        
-        Args:
-            document_id: ID документа
-            
-        Returns:
-            True если удален, False если не найден
-        """
+
+    async def count_chunks_by_namespace_and_document_ids(
+        self,
+        namespace_id: str,
+        document_ids: List[str],
+    ) -> dict[str, int]:
+        """Число строк vector_documents (чанков) на документ в namespace."""
+        if not document_ids:
+            return {}
+        session_factory = await self._get_session_factory()
+        async with session_factory() as session:
+            stmt = (
+                select(VectorDocument.document_id, func.count().label("cnt"))
+                .where(
+                    VectorDocument.namespace_id == namespace_id,
+                    VectorDocument.document_id.in_(document_ids),
+                )
+                .group_by(VectorDocument.document_id)
+            )
+            result = await session.execute(stmt)
+            rows = result.all()
+        return {str(r.document_id): int(r.cnt) for r in rows}
+
+    async def delete_by_document_id(self, document_id: str) -> int:
         session_factory = await self._get_session_factory()
         async with session_factory() as session:
             result = await session.execute(
-                select(DBDocumentStatus).where(DBDocumentStatus.document_id == document_id)
+                delete(DBDocumentStatus).where(
+                    DBDocumentStatus.document_id == document_id
+                )
             )
-            db_status = result.scalar_one_or_none()
-            
-            if db_status:
-                await session.delete(db_status)
-                await session.commit()
-                logger.info(f"Удален статус документа: {document_id}")
-                return True
-            
-            return False
-
+            await session.commit()
+            n = int(result.rowcount or 0)
+            if n:
+                logger.info(
+                    "Удалена строка статуса документа document_id=%s",
+                    document_id,
+                )
+            return n

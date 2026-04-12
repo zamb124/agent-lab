@@ -8,6 +8,11 @@ export class RAGAPIService extends BaseService {
     constructor(baseURL = '/rag/api/v1') {
         super(baseURL);
     }
+
+    _pathWithProvider(path, provider) {
+        const q = provider ? { provider } : {};
+        return this._buildUrlWithParams(path, q);
+    }
     
     async getProviders() {
         return this.get('/providers');
@@ -18,33 +23,36 @@ export class RAGAPIService extends BaseService {
     }
     
     async getNamespaces(provider = null) {
-        const params = provider ? { provider } : {};
-        return this.get('/namespaces', { params });
+        return this.get('/namespaces', provider ? { provider } : {});
     }
     
     async createNamespace(name, description, provider = null) {
-        const params = provider ? { provider } : {};
-        return this.post('/namespaces', { name, description }, { params });
+        const path = this._pathWithProvider('/namespaces', provider);
+        return this.post(path, { name, description }, {});
     }
     
     async deleteNamespace(namespaceId, provider = null) {
-        const params = provider ? { provider } : {};
-        return this.delete(`/namespaces/${namespaceId}`, { params });
+        const path = this._pathWithProvider(`/namespaces/${namespaceId}`, provider);
+        return this.delete(path, {});
     }
     
     async getDocuments(namespaceId, provider = null) {
-        const params = provider ? { provider } : {};
-        return this.get(`/namespaces/${namespaceId}/documents`, { params });
+        const path = this._pathWithProvider(`/namespaces/${namespaceId}/documents`, provider);
+        return this.get(path, {});
     }
     
-    async uploadDocument(namespaceId, file, provider = null) {
+    async uploadDocument(namespaceId, file, provider = null, metadata = null) {
         const formData = new FormData();
         formData.append('file', file);
-        
-        const params = provider ? { provider } : {};
-        const url = `/namespaces/${namespaceId}/documents`;
-        
-        return this.post(url, formData, { params });
+        if (metadata && typeof metadata === 'object' && Object.keys(metadata).length > 0) {
+            formData.append('metadata', JSON.stringify(metadata));
+        }
+        const query = {};
+        if (provider) {
+            query.provider = provider;
+        }
+        const path = this._buildUrlWithParams(`/namespaces/${namespaceId}/documents`, query);
+        return this.post(path, formData, {});
     }
     
     async getDocumentStatus(documentId) {
@@ -52,26 +60,28 @@ export class RAGAPIService extends BaseService {
     }
     
     async deleteDocument(namespaceId, documentId, provider = null) {
-        const params = provider ? { provider } : {};
-        return this.delete(`/namespaces/${namespaceId}/documents/${documentId}`, { params });
+        const path = this._pathWithProvider(
+            `/namespaces/${namespaceId}/documents/${documentId}`,
+            provider,
+        );
+        return this.delete(path, {});
     }
     
-    async search(namespaceId, query, limit = 5, provider = null) {
-        const params = provider ? { provider } : {};
-        return this.post(
-            `/namespaces/${namespaceId}/search`,
-            { query, limit },
-            { params }
-        );
+    async search(namespaceId, query, limit = 5, provider = null, bodyExtra = null) {
+        const path = this._pathWithProvider(`/namespaces/${namespaceId}/search`, provider);
+        const body = { query, limit, ...(bodyExtra && typeof bodyExtra === 'object' ? bodyExtra : {}) };
+        return this.post(path, body, {});
     }
     
-    async globalSearch(query, namespaceIds, limit = 5, provider = null) {
-        const params = provider ? { provider } : {};
-        return this.post(
-            '/search',
-            { query, namespace_ids: namespaceIds, limit },
-            { params }
-        );
+    async globalSearch(query, namespaceIds, limit = 5, provider = null, bodyExtra = null) {
+        const path = this._pathWithProvider('/search', provider);
+        const body = {
+            query,
+            namespace_ids: namespaceIds,
+            limit,
+            ...(bodyExtra && typeof bodyExtra === 'object' ? bodyExtra : {}),
+        };
+        return this.post(path, body, {});
     }
 }
 

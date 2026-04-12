@@ -49,15 +49,15 @@ class TestFilteringSearch:
     
     @pytest.mark.asyncio
     async def test_semantic_search(self, crm_client, unique_id, auth_headers_system):
-        """Семантический поиск - проверяем что endpoint работает"""
+        """Семантический поиск: сущность индексируется в vector_documents (EntityRepository.create → RAGRepository в процессе crm)."""
         unique_phrase = f"уникальная_фраза_{unique_id}"
         await crm_client.post("/crm/api/v1/entities/", json={
             "entity_type": "note",
             "name": f"Searchable note {unique_id}",
             "description": f"Содержит {unique_phrase} для поиска"
         }, headers=auth_headers_system)
-        
-        # В тестах используются mock embeddings (случайные), поэтому просто проверяем что endpoint работает
+
+        # PGVECTOR_TEST_MOCK_EMBEDDINGS: векторы от hash текста; релевантность по подстроке query не гарантирована
         search_resp = await crm_client.get(f"/crm/api/v1/entities/search?query={unique_id}", headers=auth_headers_system)
         assert search_resp.status_code == 200
         

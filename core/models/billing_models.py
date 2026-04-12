@@ -23,6 +23,7 @@ class UsageType(str, Enum):
     TOOL_CALL = "tool_call"         # Вызов инструмента
     LLM_REQUEST = "llm_request"     # Запрос к LLM
     EMBEDDING_REQUEST = "embedding_request"  # Запрос к Embedding API
+    RERANK_REQUEST = "rerank_request"  # Запрос к сервису реранкинга (RAG)
     AGENT_EXECUTION = "agent_execution"  # Выполнение агента
     FLOW_EXECUTION = "flow_execution"    # Выполнение флоу
     FILE_UPLOAD = "file_upload"     # Загрузка файла
@@ -63,21 +64,25 @@ DEFAULT_TARIFF_PRICES = {
         "llm": {"*": 1.5},
         "tools": {"*": 1.5},
         "embedding": {"*": 1.5},
+        "rerank": {"*": 1.5},
     },
     TariffPlan.BASIC: {
         "llm": {"*": 1.25},
         "tools": {"*": 1.25},
         "embedding": {"*": 1.25},
+        "rerank": {"*": 1.25},
     },
     TariffPlan.PREMIUM: {
         "llm": {"*": 1.1},
         "tools": {"*": 1.1},
         "embedding": {"*": 1.1},
+        "rerank": {"*": 1.1},
     },
     TariffPlan.ENTERPRISE: {
         "llm": {"*": 1.1},
         "tools": {"*": 1.1},
         "embedding": {"*": 1.1},
+        "rerank": {"*": 1.1},
     }
 }
 

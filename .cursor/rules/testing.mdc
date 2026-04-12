@@ -4,12 +4,17 @@ alwaysApply: false
 ---
 # Правила тестирования
 
+**Зона этого файла:** фикстуры и клиенты, команды запуска, timeout/cleanup, Sync/UI/E2E-инфра, MockLLM, примеры, структура `tests/`.
+
+**Не дублируется здесь** (один источник — **`testing_invariants.mdc`**): инварианты контрактов, уровень теста «от потребителя», стиль ассертов, контракт vs реализация, DI/`patch`, чеклист стиля, **проверка записи в БД и согласованность с ответом API**, **изоляция по `company_id` / `namespace_id` и аналогам**, **чтение состояния через ORM/репозитории вместо сырого SQL**, смысл изоляции при параллельном прогоне (дополняет таблицу фикстур и `unique_id` ниже).
+
 ## Главные принципы
 
-1. **Никаких моков** — единственный мок это `MockLLM`. Реальный PostgreSQL, Redis, MinIO, TaskIQ.
-2. **Только готовые фикстуры** — запрещено создавать свои клиенты, сервисы, worker'ы.
-3. **Изоляция через `unique_id`** — обязателен в каждом тесте для всех ID.
-4. **Реальные компоненты** — `FlowFactory`, `ToolRegistry`, `S3Client`, репозитории не мокаются.
+1. **Никаких моков** — единственный обязательный мок это `MockLLM`. Реальный PostgreSQL, Redis, MinIO, TaskIQ.
+2. **RAG эмбеддинги:** по умолчанию `PgVectorProvider` ходит в реальный HTTP эмбеддер из конфигурации. **`PGVECTOR_TEST_MOCK_EMBEDDINGS=true`** — детерминированные вектора без внешнего API (имя не под префиксом `RAG__`, иначе ломается разбор `rag.embedding` в Pydantic); подмена методов `EmbeddingService` в конструкторе `PgVectorProvider` (не отдельный «тестовый» провайдер). В тестах: **`tests/fixtures/test_database_env.py`** (`TEST_DATABASE_ENV` → pytest и **`_COMMON_TEST_ENV`** в **`tests/fixtures/services.py`**); subprocess **`rag_worker`** — через **`**TEST_DATABASE_ENV`**. В **`docker-compose-test.yaml`** — для `tests-runner` и `rag-worker-test`.
+3. **Только готовые фикстуры** — запрещено создавать свои клиенты, сервисы, worker'ы.
+4. **Изоляция через `unique_id`** — обязателен в каждом тесте для всех ID.
+5. **Реальные компоненты** — `FlowFactory`, `ToolRegistry`, `S3Client`, репозитории не мокаются.
 
 Запрещено мокать: `StateRepository`, `FlowFactory`, `ToolRegistry`, `BaseChannel`, `S3Client`, любые внутренние компоненты.
 
@@ -68,7 +73,7 @@ async def test_example(app, mock_llm_with_queue, unique_id):
     result = await flow.run(state)
 ```
 
-Формат `session_id`: `{flow_id}:{context_id}`. Все `session_id`, `context_id`, `task_id`, `user_id` должны содержать `unique_id`.
+Формат `session_id`: `{flow_id}:{context_id}`. Все `session_id`, `context_id`, `task_id`, `user_id` должны содержать `unique_id`. Коллизии при `-n auto`, глобальное состояние и согласование с `xdist_group` — см. **`testing_invariants.mdc`** (§ Параллельный запуск).
 
 ---
 
@@ -100,6 +105,7 @@ async def test_example(app, mock_llm_with_queue, unique_id):
 | `make_test_state` | function | Фабрика ExecutionState с произвольными полями |
 | `taskiq_worker` | session | TaskIQ worker subprocess |
 | `rag_worker` | session | RAG worker subprocess |
+| `crm_semantic_rag_stack` | function | `rag_service` + `rag_worker` (явная зависимость для семантики CRM; `tests/crm/conftest.py`) |
 | `taskiq_scheduler` | session | TaskIQ scheduler subprocess |
 | `inline_tools` | function | Словарь inline tools |
 | `auth_headers_system` | function | Заголовки: system компания, owner |
@@ -114,6 +120,8 @@ async def test_example(app, mock_llm_with_queue, unique_id):
 ---
 
 ## Как выбрать клиент
+
+Почему чаще начинать с HTTP/ASGI к приложению — см. уровни теста в **`testing_invariants.mdc`**.
 
 **Unit тест (один сервис, без межсервисных вызовов)** → ASGI клиент (`rag_client`, `crm_client`)
 
@@ -330,12 +338,12 @@ uv run pytest tests/flows/api/test_a2a.py::TestA2A::test_message_send -v -s
 
 ## Чеклист перед коммитом
 
-- [ ] Все тесты проходят: `uv run pytest tests/`
-- [ ] Каждый тест использует `unique_id`
+- [ ] Прогон тестов зелёный: `uv run pytest tests/` (или целевой набор)
+- [ ] Стиль проверок, инварианты, `unique_id` во всех внешних ключах — **`testing_invariants.mdc`**
 - [ ] Нет собственных фикстур для сервисов/клиентов/worker'ов
 - [ ] Нет моков внутренних компонентов (кроме MockLLM)
-- [ ] Интеграционные тесты с worker помечены `@pytest.mark.real_taskiq` и используют `mock_llm_redis`
-- [ ] Новые worker фикстуры используют `SessionWorkerManager` и размещены в `tests/fixtures/workers.py`
+- [ ] Интеграционные тесты с worker — `@pytest.mark.real_taskiq` и `mock_llm_redis`
+- [ ] Новые worker фикстуры — `SessionWorkerManager`, файл `tests/fixtures/workers.py`
 
 ---
 

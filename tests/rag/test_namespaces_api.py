@@ -23,10 +23,13 @@ async def test_create_namespace(rag_client, unique_namespace_name, auth_headers_
     )
     assert response.status_code == 201
     data = response.json()
-    
-    assert data["name"] == unique_namespace_name
-    assert "name" in data
-    assert data["description"] == "Test namespace"
+
+    assert {k: data[k] for k in ("name", "description", "provider")} == {
+        "name": unique_namespace_name,
+        "description": "Test namespace",
+        "provider": "pgvector",
+    }
+    assert data.get("company_id")
 
 
 @pytest.mark.asyncio
@@ -39,9 +42,13 @@ async def test_create_namespace_minimal(rag_client, unique_namespace_name, auth_
     )
     assert response.status_code == 201
     data = response.json()
-    
-    assert data["name"] == unique_namespace_name
-    assert "name" in data
+
+    assert {k: data[k] for k in ("name", "description", "provider")} == {
+        "name": unique_namespace_name,
+        "description": None,
+        "provider": "pgvector",
+    }
+    assert data.get("company_id")
 
 
 @pytest.mark.asyncio
@@ -59,11 +66,19 @@ async def test_list_namespaces(rag_client, unique_namespace_name, auth_headers_s
     assert response.status_code == 200
     data = response.json()
     
-    assert "namespaces" in data
-    assert "company_id" in data
-    # Проверяем что список не пустой
+    assert {k: k in data for k in ("namespaces", "company_id", "document_status_counts_by_namespace")} == {
+        "namespaces": True,
+        "company_id": True,
+        "document_status_counts_by_namespace": True,
+    }
+    assert isinstance(data["document_status_counts_by_namespace"], dict)
     assert len(data["namespaces"]) > 0, f"Namespaces list is empty: {data}"
-    assert any(ns["name"] == unique_namespace_name for ns in data["namespaces"]), f"Namespace {unique_namespace_name} not found in {[ns['name'] for ns in data['namespaces']]}"
+    listed = next(ns for ns in data["namespaces"] if ns["name"] == unique_namespace_name)
+    assert {k: listed[k] for k in ("name", "provider")} == {
+        "name": unique_namespace_name,
+        "provider": "pgvector",
+    }
+    assert listed.get("company_id")
 
 
 @pytest.mark.asyncio
@@ -82,7 +97,12 @@ async def test_list_namespaces_with_provider_param(rag_client, unique_namespace_
     data = response.json()
     
     assert "company_id" in data
-    assert any(ns["name"] == unique_namespace_name for ns in data["namespaces"])
+    created = next(ns for ns in data["namespaces"] if ns["name"] == unique_namespace_name)
+    assert {k: created[k] for k in ("name", "provider")} == {
+        "name": unique_namespace_name,
+        "provider": "pgvector",
+    }
+    assert created.get("company_id")
 
 
 @pytest.mark.asyncio
@@ -114,8 +134,7 @@ async def test_delete_namespace(rag_client, unique_namespace_name, auth_headers_
     assert delete_response.status_code == 200
     data = delete_response.json()
 
-    assert data["success"] is True
-    assert data["name"] == namespace_id
+    assert {k: data[k] for k in ("success", "name")} == {"success": True, "name": namespace_id}
 
 
 @pytest.mark.asyncio

@@ -1,6 +1,6 @@
 # Deploy
 
-Деплой запускается автоматически при push в `main` или вручную через `workflow_dispatch`.
+Деплой запускается вручную через **`workflow_dispatch`** (GitHub Actions → workflow Deploy → Run workflow).
 
 ## Схема
 
@@ -8,7 +8,7 @@
 ┌─────────────────────────────────────────────────────────────────┐
 │  GitHub                                                         │
 │                                                                 │
-│  main branch                                                    │
+│  workflow_dispatch                                            │
 │      │                                                          │
 │      ▼                                                          │
 │  GitHub Actions                                                 │
@@ -18,13 +18,13 @@
 │  │  Dockerfile target  │    │  SCP → /opt/agent-lab/:      │    │
 │  │  full → собирает    │    │    docker-compose-prod.yaml  │    │
 │  │  один образ со      │───▶│    conf.json                 │    │
-│  │                     │    │    migrations/postgres/init.sql│  │
-│  │  всем кодом         │    │                              │    │
-│  │                     │    │                              │    │
-│  │  Push →             │    │  SSH → запуск на сервере     │    │
-│  │  ghcr.io/zamb124/   │    │  (секреты в env сессии)      │    │
-│  │  agent-lab:latest   │    └──────────────────────────────┘    │
-│  └─────────────────────┘                                        │
+│  │                     │    │    migrations/postgres/      │    │
+│  │  всем кодом         │    │      init.sql                │    │
+│  │                     │    │      bootstrap_idempotent.sql│    │
+│  │  Push →             │    │                              │    │
+│  │  ghcr.io/<owner>/   │    │  SSH → запуск на сервере     │    │
+│  │  agent-lab:<tag>    │    │  (секреты в env сессии)      │    │
+│  └─────────────────────┘    └──────────────────────────────┘    │
 │                                                                 │
 │  GitHub Secrets (environment: production)                       │
 │      │                                                          │
@@ -40,22 +40,29 @@
 │  └── conf.json                  ← из репо (в т.ч. services.*)   │
 │                                                                 │
 │  docker compose pull            ← тянет образ из ghcr.io        │
-│  docker compose run migrations  ← применяет миграции БД         │
-│  docker compose up -d ...       ← поднимает все сервисы         │
+│  up -d postgres redis → bootstrap_idempotent.sql (psql)       │
+│  docker compose run migrations  ← применяет миграции БД       │
+│  up -d …                        ← приложение и воркеры          │
 │                                                                 │
-│  Секреты → env vars SSH-сессии → docker compose подхватывает    │
+│  Секреты → env vars SSH-сессии → docker compose подхватывает   │
 │  из окружения (без .env файла на диске)                         │
 │                                                                 │
-│  Сервисы (один образ, разные command):                          │
-│  ┌──────────┬──────┬────────────────────────────────────────┐   │
-│  │ agents   │ 8001 │ python -m apps.flows.main             │   │
-│  │ frontend │ 8002 │ python -m apps.frontend.main           │   │
-│  │ crm      │ 8003 │ python -m apps.crm.main                │   │
-│  │ rag      │ 8004 │ python -m apps.rag.main                │   │
-│  │ sync     │ 8005 │ python -m apps.sync.main               │   │
-│  │ worker   │  —   │ taskiq worker apps.broker.worker:broker│   │
-│  │ scheduler│  —   │ taskiq scheduler ...                   │   │
-│  └──────────┴──────┴────────────────────────────────────────┘   │
+│  Сервисы (один образ приложения, разные command):               │
+│  ┌────────────────┬──────┬──────────────────────────────────┐  │
+│  │ agents         │ 8001 │ python -m apps.flows.main          │  │
+│  │ frontend       │ 8002 │ python -m apps.frontend.main       │  │
+│  │ crm            │ 8003 │ python -m apps.crm.main            │  │
+│  │ rag            │ 8004 │ python -m apps.rag.main            │  │
+│  │ sync           │ 8005 │ python -m apps.sync.main           │  │
+│  │ scheduler-api  │ 8006 │ python -m apps.scheduler.main     │  │
+│  │ worker         │  —   │ taskiq worker apps.broker…         │  │
+│  │ scheduler      │  —   │ taskiq scheduler apps.scheduler…   │  │
+│  │ rag-worker     │  —   │ taskiq worker apps.rag_worker…     │  │
+│  │ sync-worker    │  —   │ taskiq worker apps.sync_worker…    │  │
+│  │ livekit        │ 7880 │ образ livekit/livekit-server       │  │
+│  │ livekit-egress │  —   │ образ livekit/egress               │  │
+│  │ coturn         │ host │ coturn (TURN для WebRTC)           │  │
+│  └────────────────┴──────┴──────────────────────────────────┘  │
 │                                                                 │
 │  MicroK8s Ingress                                               │
 │  humanitec.ru/         → frontend :8002                         │
@@ -67,9 +74,11 @@
 └─────────────────────────────────────────────────────────────────┘
 ```
 
-## Postgres: `migrations/postgres/init.sql`
+## Postgres: `migrations/postgres/init.sql` и `bootstrap_idempotent.sql`
 
-Compose монтирует этот путь в `agentlab_postgres` как `/docker-entrypoint-initdb.d/01-init-databases.sql`. При **первом** создании тома данных выполняется SQL: дополнительные БД (`platform_agents`, …) и `CREATE EXTENSION vector` там, где нужно.
+Compose монтирует `init.sql` в `agentlab_postgres` как `/docker-entrypoint-initdb.d/01-init-databases.sql`. При **первом** создании тома данных выполняется SQL: дополнительные БД (`platform_agents`, …) и `CREATE EXTENSION vector` там, где нужно.
+
+После старта контейнера Postgres деплой выполняет **`bootstrap_idempotent.sql`** через `psql` (идемпотентные шаги для уже существующего кластера и повторных выкладок). Без этого файла на сервере шаг деплоя завершается с ошибкой.
 
 На сервере путь `/opt/agent-lab/migrations/postgres/init.sql` обязан быть **файлом**, не каталогом. Иначе в логах Postgres: `could not read from input file: Is a directory`, сервисные БД не создаются, миграции падают с `database "platform_agents" does not exist`. В workflow перед копированием `init.sql` выполняется `rm -rf` этого пути, чтобы не оставался каталог от ошибочной прошлой выкладки. Для `appleboy/scp-action` задан `strip_components: 2`, иначе файл уезжает в `.../postgres/migrations/postgres/init.sql`, нужный путь не существует и Docker создаёт **каталог** `init.sql` при первом `compose up`.
 
@@ -83,12 +92,36 @@ Compose монтирует этот путь в `agentlab_postgres` как `/doc
 
 | Источник | Что содержит | Где хранится |
 |---|---|---|
-| `conf.json` | Общие настройки и `services.<имя>` для сервисов | Git репо |
+| `conf.json` | Общие настройки, `provider_litserve`, `rag`, `services.<имя>` | Git репо |
 | GitHub Secrets | Пароли, ключи, токены | GitHub → Settings → Secrets |
 
 Секреты **никогда не попадают на диск сервера** — только в память SSH-сессии.
 
+## RAG на проде
+
+- **`rag`** (порт **8004**): HTTP API поиска и управления документами; запросы к провайдеру хранения (например **pgvector**) выполняются в процессе API.
+- **`rag-worker`**: TaskIQ-воркер **`apps.rag_worker.worker:broker`** — фоновая индексация и обслуживающие задачи (очередь в Redis). Без запущенного `rag-worker` загрузка и переиндексация документов не обрабатываются.
+
+В **`conf.json`** задаётся **`rag`** (провайдер хранения, **`rag.embedding`**, **`rag.reranker`**, профили индекса). Для **локальных** моделей эмбеддинга и реранка указывают **`provider: "provider_litserve"`** — вызовы идут на LitServe (**`provider_litserve.api.base_url`**), а не на OpenRouter / внешний LLM-only endpoint.
+
+## `provider_litserve` (локальные эмбеддинги и реранк)
+
+Контур **локального** инференса: один процесс LitServe (**`apps.provider_litserve.main`**). Запуск: **`scripts/run.py provider-litserve`**. Подробности — **`apps/provider_litserve/README.md`**.
+
+В **`conf.json`** — блок **`provider_litserve`**:
+
+- **`provider_litserve.api.base_url`** — корень клиентского API с суффиксом **`/v1`** (например `http://127.0.0.1:8014/v1`). Его должны видеть процессы **`rag`** и **`rag-worker`** (при Docker — URL хоста, `host.docker.internal` или отдельный сервис в той же сети).
+- **`provider_litserve.infra`** — **`gateway_port`** (по умолчанию **8014**), ускоритель, веса и лимиты; **не путать** с публичным **`rag.reranker`**: клиенты платформы ходят на **`api.base_url`**.
+
+Переопределение через окружение: **`PROVIDER_LITSERVE__API__BASE_URL`**, **`PROVIDER_LITSERVE__INFRA__*`** (например **`PROVIDER_LITSERVE__INFRA__GATEWAY_PORT`**). См. **`core/config/models.py`** (`ProviderLitserveConfig`).
+
+**В `docker-compose-prod.yaml` отдельного сервиса под gateway нет** — при необходимости стек поднимается на том же хосте или рядом; важно, чтобы **`provider_litserve.api.base_url`** из контейнеров `rag` / `rag-worker` открывался по сети.
+
+Альтернатива без своего gateway: **`rag.embedding.provider`** / настройки провайдера хранения с внешним API (например OpenRouter для эмбеддингов) — тогда ключи LLM из секретов ниже остаются актуальны.
+
 ## GitHub Secrets
+
+Полный список переменных, которые **`deploy.yml`** пробрасывает в SSH-сессию, смотри в файле workflow (**`env:`** у шага Deploy и **`envs:`**). Ниже — смысловые группы.
 
 ### Инфраструктура (обязательные)
 
@@ -99,7 +132,7 @@ Compose монтирует этот путь в `agentlab_postgres` как `/doc
 | `SERVER_SSH_KEY` | SSH приватный ключ |
 | `GHCR_TOKEN` | GitHub PAT с `read:packages` для pull образа |
 | `POSTGRES_PASSWORD` | Пароль PostgreSQL |
-| `AUTH_JWT_SECRET` | JWT секрет (`openssl rand -hex 32`) |
+| `AUTH_JWT_SECRET` | JWT секрет (`openssl rand -hex 32`), в env как **`AUTH__JWT_SECRET`** |
 
 ### S3 Selectel (обязательные)
 
@@ -110,12 +143,12 @@ Compose монтирует этот путь в `agentlab_postgres` как `/doc
 | `SELECTEL_ACCESS_KEY` | Selectel S3 access key |
 | `SELECTEL_SECRET_KEY` | Selectel S3 secret key |
 
-### LLM (обязательные)
+### LLM
 
 | Secret | ENV переменная | Описание |
 |---|---|---|
 | `LLM_BOTHUB_API_KEY` | `LLM__BOTHUB__API_KEY` | BotHub API key |
-| `LLM_OPENROUTER_API_KEY` | `LLM__OPENROUTER__API_KEY` | OpenRouter API key |
+| `LLM_OPENROUTER_API_KEY` | `LLM__OPENROUTER__API_KEY` | OpenRouter API key (чат; при конфиге без `provider_litserve` для эмбеддингов — источник ключей для соответствующих настроек в `conf.json`) |
 
 ### OAuth провайдеры (нужны для входа)
 
@@ -128,32 +161,51 @@ Compose монтирует этот путь в `agentlab_postgres` как `/doc
 | `AUTH_GITHUB_CLIENT_ID` | GitHub OAuth client id |
 | `AUTH_GITHUB_CLIENT_SECRET` | GitHub OAuth client secret |
 
-### RAG / Embeddings (нужны для RAG и CRM-индексации)
+### Web Push (опционально)
 
-В `docker-compose-prod.yaml` в контейнеры пробрасывается `RAG__PROVIDERS__PGVECTOR__EMBEDDING_API_KEY`. Если задан только `LLM_OPENROUTER_API_KEY`, он же подставляется для эмбеддингов (отдельный секрет не обязателен).
+| Secret | Описание |
+|---|---|
+| `PUSH__ENABLED` | Включение Web Push |
+| `PUSH__VAPID_PUBLIC_KEY` | VAPID public |
+| `PUSH__VAPID_PRIVATE_KEY` | VAPID private |
+| `PUSH__VAPID_EMAIL` | Контакт для VAPID (по умолчанию в workflow: `ops@humanitec.ru`) |
 
-| Secret | Передаётся на сервер как | Описание |
-|---|---|---|
-| `LLM_OPENROUTER_API_KEY` | `LLM_OPENROUTER_API_KEY` | OpenRouter: чат и эмбеддинги по умолчанию |
-| `RAG_EMBEDDING_API_KEY` (опционально) | `RAG_EMBEDDING_API_KEY` | Другой ключ только для embeddings (перебивает LLM-ключ в compose) |
-| `RAG_AGENTSET_API_KEY` (опционально) | не в workflow — добавь в `deploy.yml` env + `envs`, если используете Agentset | Agentset API key |
+### Звонки: LiveKit и TURN
+
+| Secret | Описание |
+|---|---|
+| `LIVEKIT_API_KEY` | Ключ API LiveKit |
+| `LIVEKIT_API_SECRET` | Секрет LiveKit |
+| `LIVEKIT_PUBLIC_URL` | Публичный **`wss://`** для клиентов |
+| `TURN_SECRET` | Секрет Coturn (`static-auth-secret`) |
+
+`SERVER_HOST` из блока инфраструктуры также подставляется в **`CALLS__TURN_HOST`** (тот же IP, что для SSH).
+
+### STT (опционально)
+
+| Secret | ENV переменная |
+|---|---|
+| `STT__CLOUD_RU__API_KEY` или `STT_CLOUD_RU_API_KEY` | `STT__CLOUD_RU__API_KEY` |
+
+### RAG: внешние провайдеры (по необходимости)
+
+Секреты для **`provider_litserve`** в **`deploy.yml` не перечислены** — URL и доступность шлюза задаются в **`conf.json`** / окружении на сервере (см. раздел **`provider_litserve`**).
+
+Для **Agentset** или отдельных ключей в **`services.rag`** при необходимости добавь секреты и проброс в **`deploy.yml`** (`env` + `envs`), как для остальных сервис-специфичных ключей.
 
 ### Платежи YooMoney (опционально)
 
-| Secret | ENV переменная |
-|---|---|
-| `YOOMONEY_ACCOUNT_NUMBER` | `PAYMENT_PROVIDERS__PROVIDERS__YOOMONEY_MAIN__ACCOUNT_NUMBER` |
-| `YOOMONEY_NOTIFICATION_SECRET` | `PAYMENT_PROVIDERS__PROVIDERS__YOOMONEY_MAIN__NOTIFICATION_SECRET` |
-| `YOOMONEY_CLIENT_ID` | `PAYMENT_PROVIDERS__PROVIDERS__YOOMONEY_MAIN__CLIENT_ID` |
-| `YOOMONEY_CLIENT_SECRET` | `PAYMENT_PROVIDERS__PROVIDERS__YOOMONEY_MAIN__CLIENT_SECRET` |
-| `YOOMONEY_ACCESS_TOKEN` | `PAYMENT_PROVIDERS__PROVIDERS__YOOMONEY_MAIN__ACCESS_TOKEN` |
+В **`deploy.yml` не пробрасываются** — при необходимости задайте на сервере через окружение compose / внешний секретный менеджер. Имена ENV по схеме Pydantic:
 
-### STT / Nano Banana (опционально)
-
-| Secret | ENV переменная |
+| Переменная окружения | Назначение |
 |---|---|
-| `STT_CLOUD_RU_API_KEY` | `STT__CLOUD_RU__API_KEY` |
-| `NANO_BANANA_API_KEY` | `NANO_BANANA__API_KEY` |
+| `PAYMENT_PROVIDERS__PROVIDERS__YOOMONEY_MAIN__ACCOUNT_NUMBER` | номер счёта |
+| `PAYMENT_PROVIDERS__PROVIDERS__YOOMONEY_MAIN__NOTIFICATION_SECRET` | секрет уведомлений |
+| `PAYMENT_PROVIDERS__PROVIDERS__YOOMONEY_MAIN__CLIENT_ID` | OAuth client id |
+| `PAYMENT_PROVIDERS__PROVIDERS__YOOMONEY_MAIN__CLIENT_SECRET` | OAuth client secret |
+| `PAYMENT_PROVIDERS__PROVIDERS__YOOMONEY_MAIN__ACCESS_TOKEN` | access token |
+
+Аналогично **`NANO_BANANA__API_KEY`** и другие ключи, которых нет в workflow, задаются вручную на стороне сервера, если они нужны в **`conf.json`**.
 
 ## OAuth Callback URLs
 

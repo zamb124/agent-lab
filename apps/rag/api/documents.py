@@ -3,18 +3,20 @@ API для управления документами RAG.
 """
 
 import json
-from typing import List, Optional, Dict, Any
+from typing import Any, Dict, List, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, File, Form
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile
 from pydantic import BaseModel
 
-from apps.rag_worker.tasks.indexing_tasks import upload_document_task
+from apps.rag_worker.tasks.indexing_tasks import index_rag_document_s3_task
 from core.context import get_context
 from core.files.models import FileResponse
 from core.files.processors import FileProcessor
 from core.logging import get_logger
 from core.rag.factory import get_rag_provider
+from core.rag.models import DocumentProcessingStatus as DocumentStatusModel
 from core.rag.models import RAGDocument
+
 from ..container import RAGContainer
 from ..dependencies import get_container_dep
 
@@ -23,10 +25,87 @@ logger = get_logger(__name__)
 router = APIRouter(tags=["documents"])
 
 
+class NamespaceDocumentsSummary(BaseModel):
+    """Агрегаты по списку документов в namespace (ответ GET …/documents)."""
+
+    total_documents: int
+    total_chunks: int
+    status_counts: Dict[str, int]
+
+
+def _split_from_status_or_metadata(
+    status: Optional[DocumentStatusModel],
+    doc_metadata: Dict[str, Any],
+) -> Optional[Dict[str, Any]]:
+    if status and status.extra_metadata:
+        rt = status.extra_metadata.get("indexing_runtime")
+        if isinstance(rt, dict):
+            sp = rt.get("split")
+            if isinstance(sp, dict):
+                return sp
+    im = doc_metadata.get("indexing_runtime")
+    if isinstance(im, dict):
+        sp = im.get("split")
+        if isinstance(sp, dict):
+            return sp
+    return None
+
+
+def _runs_and_reindex(extra: Optional[Dict[str, Any]]) -> tuple[Optional[int], Optional[int]]:
+    if not extra:
+        return None, None
+    raw = extra.get("indexing_run_count")
+    if raw is None:
+        return None, None
+    runs = int(raw)
+    return runs, max(0, runs - 1)
+
+
+def _enrich_document(
+    doc: RAGDocument,
+    status: Optional[DocumentStatusModel],
+    chunk_counts: Dict[str, int],
+) -> RAGDocument:
+    doc_id = doc.document_id
+    chunks: Optional[int] = None
+    if status is not None and status.chunks_count is not None:
+        chunks = int(status.chunks_count)
+    elif doc_id in chunk_counts:
+        chunks = int(chunk_counts[doc_id])
+    extra = status.extra_metadata if status is not None else None
+    runs, reindex = _runs_and_reindex(extra if isinstance(extra, dict) else None)
+    split = _split_from_status_or_metadata(status, doc.metadata)
+    return doc.model_copy(
+        update={
+            "chunks_count": chunks,
+            "indexing_runs": runs,
+            "reindex_count": reindex,
+            "split": split,
+        }
+    )
+
+
+def _build_summary(documents: List[RAGDocument]) -> NamespaceDocumentsSummary:
+    status_counts: Dict[str, int] = {}
+    total_chunks = 0
+    for d in documents:
+        st = str(d.status or "unknown")
+        status_counts[st] = status_counts.get(st, 0) + 1
+        c = d.chunks_count
+        if c is not None:
+            total_chunks += int(c)
+    return NamespaceDocumentsSummary(
+        total_documents=len(documents),
+        total_chunks=total_chunks,
+        status_counts=status_counts,
+    )
+
+
 class DocumentListResponse(BaseModel):
     documents: List[RAGDocument]
     namespace_id: str
     provider: str
+    summary: NamespaceDocumentsSummary
 
 
 class DocumentUploadResponse(BaseModel):
@@ -45,6 +124,7 @@ async def list_documents(
 ) -> DocumentListResponse:
     """Список документов в namespace (completed + in-progress)."""
     from core.config import get_settings
+
     settings = get_settings()
     rag_provider = get_rag_provider(provider) if provider else container.rag_provider
     provider_name = provider or settings.rag.default_provider
@@ -58,24 +138,45 @@ async def list_documents(
 
     all_documents = list(completed_docs)
     for status in processing_statuses:
-        all_documents.append(RAGDocument(
-            document_id=status.document_id,
-            name=status.document_name,
-            namespace=status.namespace_id,
-            status=status.status,
-            metadata={
-                "file_size": status.file_size,
-                "error_message": status.error_message,
-                "task_id": status.task_id,
-                "created_at": status.created_at.isoformat(),
-                "updated_at": status.updated_at.isoformat(),
-            },
-        ))
+        em = status.extra_metadata if isinstance(status.extra_metadata, dict) else {}
+        meta = {
+            "file_size": status.file_size,
+            "error_message": status.error_message,
+            "task_id": status.task_id,
+            "created_at": status.created_at.isoformat(),
+            "updated_at": status.updated_at.isoformat(),
+        }
+        if em:
+            if "indexing_runtime" in em:
+                meta["indexing_runtime"] = em["indexing_runtime"]
+        all_documents.append(
+            RAGDocument(
+                document_id=status.document_id,
+                name=status.document_name,
+                namespace=status.namespace_id,
+                status=status.status,
+                metadata=meta,
+            )
+        )
+
+    sliced = all_documents[:limit]
+    doc_ids = [d.document_id for d in sliced]
+    status_map = await status_repo.get_latest_by_namespace_and_document_ids(
+        namespace_id, doc_ids
+    )
+    chunk_counts = await status_repo.count_chunks_by_namespace_and_document_ids(
+        namespace_id, doc_ids
+    )
+    enriched = [
+        _enrich_document(doc, status_map.get(doc.document_id), chunk_counts)
+        for doc in sliced
+    ]
 
     return DocumentListResponse(
-        documents=all_documents[:limit],
+        documents=enriched,
         namespace_id=namespace_id,
         provider=provider_name,
+        summary=_build_summary(enriched),
     )
 
 
@@ -89,9 +190,14 @@ async def upload_document(
 ) -> DocumentUploadResponse:
     """
     Принимает документ, сохраняет через FileProcessor (FileRecord в shared DB),
-    запускает асинхронную индексацию в RAG.
+    ставит задачу индексации в воркер (TaskIQ) и отвечает сразу — без ожидания
+    завершения индексации; готовность по GET /documents/{document_id}/status.
+
+    Опционально в JSON ``metadata``: ``index_profile_config`` — частичный профиль
+    (слияние с ``rag.document_indexing``), например ``{"split": {"strategy": "semantic"}}``.
     """
     from core.config import get_settings
+
     settings = get_settings()
     if not settings.s3.enabled or not settings.s3.default_bucket:
         raise HTTPException(status_code=503, detail="S3 не настроен.")
@@ -111,39 +217,50 @@ async def upload_document(
         uploaded_by=user_id,
         public=False,
     )
-    file_record = file_record.model_copy(update={
-        "company_id": company_id,
-        "download_url": f"/rag/api/v1/files/download/{file_record.file_id}",
-    })
+    file_record = file_record.model_copy(
+        update={
+            "company_id": company_id,
+            "download_url": f"/rag/api/v1/files/download/{file_record.file_id}",
+        }
+    )
     await container.file_repository.set(file_record)
 
     document_id = file_record.file_id
     metadata_dict["document_id"] = document_id
     metadata_dict["s3_bucket"] = file_record.s3_bucket
+    metadata_dict["company_id"] = company_id
 
-    task_id_placeholder = f"task_{document_id}"
     status_repo = container.document_status_repository
+    task_id_placeholder = f"pending_{document_id}"
     await status_repo.create_status(
         document_id=document_id,
         task_id=task_id_placeholder,
         namespace_id=namespace_id,
         document_name=file.filename or "document",
         file_size=len(file_data),
+        extra_metadata={},
     )
 
-    task = await upload_document_task.kiq(
+    task = await index_rag_document_s3_task.kiq(
+        company_id=company_id,
         namespace_id=namespace_id,
         s3_key=file_record.s3_key,
         document_name=file.filename or "document",
-        metadata=metadata_dict,
+        metadata=dict(metadata_dict),
     )
+    task_id = task.task_id
+
+    await status_repo.finalize_enqueued_indexing_task(document_id, task_id)
 
     logger.info(
-        f"Документ принят: doc_id={document_id}, task_id={task.task_id}, s3_key={file_record.s3_key}"
+        "Документ принят: doc_id=%s, task_id=%s, s3_key=%s",
+        document_id,
+        task_id,
+        file_record.s3_key,
     )
     return DocumentUploadResponse(
         document_id=document_id,
-        task_id=task.task_id,
+        task_id=task_id,
         status="pending",
         file=FileResponse.from_record(file_record),
     )
@@ -165,8 +282,7 @@ async def delete_document(
         processor = FileProcessor(file_repository=container.file_repository)
         await processor.delete_file(document_id)
 
-    if status is not None:
-        await status_repo.delete_by_document_id(document_id)
+    await status_repo.delete_by_document_id(document_id)
 
     rag_provider = get_rag_provider(provider) if provider else container.rag_provider
     success = await rag_provider.delete_document(namespace_id, document_id)
@@ -189,3 +305,4 @@ async def get_document_status(
     if not status:
         raise HTTPException(status_code=404, detail="Document status not found")
     return status
+

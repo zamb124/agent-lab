@@ -17,6 +17,7 @@ _CUSTOM_ENTITY_TYPES = [
     {"type_id": "contact", "name": "Контакт"},
     {"type_id": "organization", "name": "Организация"},
     {"type_id": "project", "name": "Проект"},
+    {"type_id": "meeting", "name": "Встреча"},
 ]
 
 
@@ -121,6 +122,18 @@ async def ensure_crm_test_entity_types(
             namespace_id=namespace_id,
         )
     yield
+
+
+@pytest.fixture
+def crm_semantic_rag_stack(rag_service, rag_worker):
+    """
+    RAG HTTP (порт 9002) и TaskIQ rag_worker для сценариев с семантикой и pgvector.
+
+    Мок эмбеддингов без внешнего API: PGVECTOR_TEST_MOCK_EMBEDDINGS в TEST_DATABASE_ENV;
+    подмена методов EmbeddingService в PgVectorProvider при создании провайдера (тот же механизм,
+    что у subprocess rag_worker).
+    """
+    return None
 
 
 @pytest.fixture

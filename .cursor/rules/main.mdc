@@ -25,6 +25,7 @@ Python 3.13+, FastAPI, PostgreSQL (pgvector), Redis, TaskIQ, UV, Lit 3, Zustand.
 | rag_worker | — | TaskIQ worker обработки документов |
 | sync_worker | — | TaskIQ worker realtime команд sync |
 | scheduler | 8006 | Scheduler control-plane API + TaskIQ scheduler process |
+| provider_litserve | 8014 | LitServe: локальные эмбеддинги и реранк (`scripts/run.py provider-litserve`, модуль `apps.provider_litserve.main`) |
 
 ## ОБЯЗАТЕЛЬНО: Новое = правка рулов
 
@@ -172,13 +173,15 @@ service = container.entity_service
 
 Каскад: ENV (высший) -> conf.json/conf.local.json -> defaults. БД: `DATABASE__SHARED_URL`, `DATABASE__FLOWS_URL`, `DATABASE__CRM_URL`, `DATABASE__SYNC_URL`, `DATABASE__RAG_URL`, `DATABASE__REDIS_URL` (см. `configuration.mdc`, `database.mdc`). Устаревшее `DATABASE__URL` читается как алиас к `shared_url`.
 
+Инфраструктура: **`conf.json`** + чтение только через **Pydantic Settings** — см. `configuration.mdc`. Исключение только если это хранится в БД.
+
 ### Асинхронность
 
 ВСЁ асинхронное: `async/await` для БД, HTTP, LLM, тулов, фабрик.
 
 ### Межсервисное взаимодействие
 
-ТОЛЬКО `ServiceClient`. Запрещён прямой `httpx.AsyncClient` между сервисами.
+Данные peer-домена: **сначала репозиторий**, если у процесса есть доступ к соответствующей БД (см. `repository_inter_service.mdc`, `database.mdc`). HTTP к другому сервису — только когда контракт намеренно REST или БД недоступна; тогда **только** `ServiceClient`. Прямой `httpx.AsyncClient` между сервисами запрещён.
 
 ```python
 from core.clients import ServiceClient
@@ -222,6 +225,7 @@ UV: `uv add package`, `uv sync`, `uv run python file.py`, `uv run pytest`.
 | Архитектурные принципы | `architecture.mdc` |
 | Конфигурация | `configuration.mdc` |
 | БД, репозитории, модели | `database.mdc` |
+| Доступ к данным между сервисами: репозиторий vs HTTP | `repository_inter_service.mdc` |
 | ExecutionState | `execution_state.mdc` |
 | CRM: entities, graph, grants | `crm.mdc` |
 | RAG: документы, поиск, pgvector | `rag.mdc` |
@@ -229,6 +233,8 @@ UV: `uv add package`, `uv sync`, `uv run python file.py`, `uv run pytest`.
 | WebRTC звонки (Sync), LiveKit, сигналинг | `calls.mdc` |
 | Frontend: Lit 3, Zustand | `frontend.mdc` |
 | Тестирование, фикстуры | `testing.mdc` |
+| Стиль тестов: инварианты, БД/ORM, изоляция сущностей, DI, читаемость | `testing_invariants.mdc` |
+| Комментарии и описания: только текущее поведение | `documentation_as_is.mdc` |
 | TaskIQ: воркеры, задачи | `taskiq.mdc` |
 | Streaming, events, Redis Pub/Sub | `streaming.mdc` |
 | Интеграции: A2A, HTTP | `integrations.mdc` |

@@ -12,6 +12,7 @@ from typing import Any, Dict, List, Optional, Union
 from pydantic import BaseModel, Field, field_validator, model_validator
 
 from core.models import StrictBaseModel
+from core.rag.rag_resource_bind import RagResourceBindParams
 
 
 class ResourceType(str, Enum):
@@ -41,11 +42,8 @@ class CodeResourceConfig(StrictBaseModel):
     code: str = Field(..., description="Inline код с функциями/классами")
 
 
-class RAGResourceConfig(StrictBaseModel):
-    """RAG namespace как ресурс."""
-    namespace: str = Field(..., description="ID или scope namespace")
-    provider: str = Field(default="pgvector", description="RAG провайдер")
-    default_top_k: int = Field(default=5, description="Дефолтное количество результатов")
+class RAGResourceConfig(RagResourceBindParams):
+    """RAG namespace как ресурс (поля — ``RagResourceBindParams``)."""
 
 
 class FilesResourceConfig(StrictBaseModel):

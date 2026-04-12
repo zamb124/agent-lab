@@ -14,6 +14,8 @@ URL PostgreSQL для pytest и дочерних процессов (uvicorn, Ta
 _POSTGRES_TEST = "postgresql+asyncpg://platform_user:admin@localhost:54322"
 
 TEST_DATABASE_ENV: dict[str, str] = {
+    # Не RAG__*: см. PgVectorProvider — иначе pydantic кладёт значение в rag.embedding.*
+    "PGVECTOR_TEST_MOCK_EMBEDDINGS": "true",
     "DATABASE__SHARED_URL": f"{_POSTGRES_TEST}/platform_shared",
     "DATABASE__FLOWS_URL": f"{_POSTGRES_TEST}/platform_agents",
     "DATABASE__CRM_URL": f"{_POSTGRES_TEST}/platform_crm",

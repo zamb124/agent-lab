@@ -55,15 +55,21 @@ export class NamespaceCreateModal extends PlatformModal {
         if (!this._name.trim()) {
             return;
         }
-        
+
         this._resolveSubmit?.({
             name: this._name.trim(),
-            description: this._description.trim()
+            description: this._description.trim(),
         });
+        this._resolveSubmit = null;
+        this._rejectSubmit = null;
+        this.close();
     }
-    
+
     _handleClose() {
+        this.close();
         this._rejectSubmit?.(new Error('cancelled'));
+        this._rejectSubmit = null;
+        this._resolveSubmit = null;
     }
     
     render() {

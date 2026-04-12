@@ -12,9 +12,10 @@
     python scripts/run.py scheduler   # Запуск TaskIQ scheduler
     python scripts/run.py scheduler-api  # Запуск scheduler API
     python scripts/run.py rag-worker  # Запуск RAG worker
+    python scripts/run.py provider-litserve  # LitServe provider_litserve (эмбеддинги + реранк), порт 8014; uv: --group reranker-model
     python scripts/run.py sync-worker # Запуск Sync worker
     python scripts/run.py crm-worker  # Запуск CRM worker
-    python scripts/run.py all         # Все сервисы параллельно (make app)
+    python scripts/run.py all         # Все сервисы параллельно (make app); при наличии ``uv`` дочерние процессы идут через ``uv run python`` (зависимости из lockfile)
     python scripts/run.py all --kill  # то же, после SIGKILL процессов на портах 8001–8006
     python scripts/run.py kill-ports  # только освободить порты HTTP-сервисов
 
@@ -22,9 +23,10 @@
 Переменные окружения имеют приоритет над конфигами.
 """
 import os
+import shutil
 import signal
-import sys
 import subprocess
+import sys
 import threading
 import time
 from pathlib import Path
@@ -67,7 +69,7 @@ SERVICES = {
         "app": "apps.app_runtime_targets:scheduler_app",
         "port": "8006",
     },
-    
+
     # TaskIQ workers
     "worker": {
         "type": "taskiq-worker",
@@ -79,6 +81,11 @@ SERVICES = {
         "broker": "apps.app_runtime_targets:rag_taskiq_broker",
         "workers": "1",
     },
+    "provider-litserve": {
+        "type": "python-module",
+        "module": "apps.provider_litserve.main",
+        "port": "8014",
+    },
     "sync-worker": {
         "type": "taskiq-worker",
         "broker": "apps.app_runtime_targets:sync_taskiq_broker",
@@ -89,7 +96,7 @@ SERVICES = {
         "broker": "apps.app_runtime_targets:crm_taskiq_broker",
         "workers": "1",
     },
-    
+
     # TaskIQ scheduler
     "scheduler": {
         "type": "taskiq-scheduler",
@@ -98,14 +105,26 @@ SERVICES = {
 }
 
 
+def _python_cmd_prefix() -> list[str]:
+    """
+    Предпочитать ``uv run python``: зависимости из lockfile даже если родительский
+    процесс запущен не из venv (иначе ``No module named uvicorn`` / ``taskiq``).
+    """
+    uv_exe = shutil.which("uv")
+    if uv_exe:
+        return [uv_exe, "run", "python"]
+    return [sys.executable]
+
+
 def build_command(service: str) -> list[str]:
     if service not in SERVICES:
         raise ValueError(f"Неизвестный сервис: {service}")
     config = SERVICES[service]
     service_type = config["type"]
+    py = _python_cmd_prefix()
     if service_type == "uvicorn":
         return [
-            sys.executable,
+            *py,
             "-u",
             "-m",
             "uvicorn",
@@ -119,7 +138,7 @@ def build_command(service: str) -> list[str]:
         ]
     if service_type == "taskiq-worker":
         cmd = [
-            sys.executable,
+            *py,
             "-u",
             "-m",
             "taskiq",
@@ -131,13 +150,26 @@ def build_command(service: str) -> list[str]:
         return cmd
     if service_type == "taskiq-scheduler":
         return [
-            sys.executable,
+            *py,
             "-u",
             "-m",
             "taskiq",
             "scheduler",
             config["scheduler"],
         ]
+    if service_type == "python-module":
+        module_args = [
+            "-u",
+            "-m",
+            config["module"],
+            "--port",
+            config["port"],
+        ]
+        if service == "provider-litserve":
+            uv_exe = shutil.which("uv")
+            if uv_exe:
+                return [uv_exe, "run", "--group", "reranker-model", "python", *module_args]
+        return [*py, *module_args]
     raise ValueError(f"Неизвестный тип сервиса: {service_type}")
 
 

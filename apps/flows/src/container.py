@@ -85,6 +85,8 @@ class FlowContainer(BaseContainer):
             container=self,
         )
 
+    # rag_repository наследуется из BaseContainer (core/container/base.py)
+
     @lazy
     def variables_service(self):
         from apps.flows.src.variables import VariablesService

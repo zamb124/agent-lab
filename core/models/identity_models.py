@@ -4,7 +4,7 @@
 
 from datetime import datetime, timezone
 from typing import Optional, Dict, Any, List
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, field_validator
 from enum import Enum
 
 from core.fields import Field
@@ -314,6 +314,21 @@ class Namespace(BaseModel):
         title="Описание",
         description="Описание namespace"
     )
+    provider: str = Field(
+        default="pgvector",
+        title="RAG-провайдер",
+        description="Имя провайдера RAG (pgvector, agentset), в котором создан namespace; по умолчанию pgvector",
+    )
+
+    @field_validator("provider", mode="before")
+    @classmethod
+    def _coerce_provider_default(cls, value: object) -> object:
+        if value is None:
+            return "pgvector"
+        if isinstance(value, str) and value.strip() == "":
+            return "pgvector"
+        return value
+
     is_default: bool = Field(
         default=False,
         title="По умолчанию",

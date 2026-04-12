@@ -69,7 +69,7 @@ _COMMON_TEST_ENV = {
     "RAG__ENABLED": "true",
     "RAG__DEFAULT_PROVIDER": "pgvector",
     "RAG__PROVIDERS__PGVECTOR__ENABLED": "true",
-    "RAG__PROVIDERS__PGVECTOR__EMBEDDING_API_KEY": "sk-test-key",
+    "LLM__OPENROUTER__API_KEY": "sk-test-key",
 }
 
 

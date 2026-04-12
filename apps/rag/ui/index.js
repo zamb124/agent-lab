@@ -2,8 +2,6 @@
  * RAG Service UI - Entry Point
  */
 
-console.log('🚀 RAG UI загружается...');
-
 // Импорт core компонентов
 import '@platform/lib/components/platform-icon.js';
 import '@platform/lib/components/glass-button.js';
@@ -21,5 +19,3 @@ import './components/provider-selector.js';
 
 // Импорт модалок
 import './modals/namespace-create-modal.js';
-
-console.log('✅ RAG UI инициализирован');

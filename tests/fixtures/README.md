@@ -129,15 +129,17 @@ Session-scoped фикстуры для worker процессов:
 @pytest.mark.real_taskiq  # Маркер для тестов с реальным TaskIQ
 async def test_with_worker(rag_worker):
     # Worker уже запущен и готов обрабатывать задачи
-    from apps.rag_worker.tasks.indexing_tasks import upload_document_task
-    
-    task = await upload_document_task.kiq(
+    from apps.rag_worker.tasks.indexing_tasks import index_document_profile_task
+
+    task = await index_document_profile_task.kiq(
+        company_id="system",
         namespace_id="test",
         s3_key="test.txt",
         document_name="test.txt",
-        metadata={}
+        metadata={"document_id": "doc-1"},
+        index_profile_id="<uuid профиля компании>",
     )
-    
+
     result = await task.wait_result(timeout=10)
     assert result["status"] == "completed"
 ```
@@ -162,7 +164,7 @@ _COMMON_TEST_ENV = {
     "RAG__PROVIDERS__PGVECTOR__ENABLED": "true",
     "RAG__PROVIDERS__PGVECTOR__HOST": "localhost",
     "RAG__PROVIDERS__PGVECTOR__PORT": "5433",
-    "RAG__PROVIDERS__PGVECTOR__EMBEDDING_API_KEY": "sk-test-key",
+    "LLM__OPENROUTER__API_KEY": "sk-test-key",
 }
 ```
 

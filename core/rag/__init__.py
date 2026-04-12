@@ -8,35 +8,70 @@ RAG система с поддержкой различных провайдер
 """
 
 from .base_provider import BaseRAGProvider
-from .models import RAGDocument, RAGSearchResult, RAGNamespace, FlowRAGConfig
-from .factory import (
-    get_rag_provider,
-    get_default_rag_provider,
-    close_default_rag_provider
+from .chunking import split_parsed_document, split_plain_text_fixed_tokens
+from .factory import get_default_rag_provider, get_rag_provider
+from core.rag_indexing_schema import (
+    IndexProfileConfig,
+    IndexProfileLexicalConfig,
+    IndexProfileParsingConfig,
+    IndexProfileSearchDefaults,
+    IndexProfileSplitConfig,
+    IndexProfileSplitStrategy,
+    RerankerSearchDefaults,
+    SearchChannelsDefaults,
 )
-from .repository import RAGRepository
+from .models import (
+    FlowRAGConfig,
+    RAGDocument,
+    RAGNamespace,
+    RAGSearchResult,
+)
+from .parsed_document import BlockKind, ParsedBlock, ParsedDocument
+from .parsing import parse_document_bytes
+from .rag_resource_bind import RagResourceBindParams
+from .rag_worker_tasks_port import RagWorkerTasksPort
 from .providers import AgentsetRAGProvider, PgVectorProvider
-from .services import DocumentParser, EmbeddingService
+from .repository import RAGRepository
+from .services import (
+    ChunkEnricher,
+    ChunkEnrichmentContext,
+    ChunkEnrichmentResult,
+    DocumentParser,
+    EmbeddingService,
+    NoOpChunkEnricher,
+)
 
 __all__ = [
-    # Base
     "BaseRAGProvider",
-    # Models
     "RAGDocument",
     "RAGSearchResult",
     "RAGNamespace",
     "FlowRAGConfig",
-    # Factory
-    "get_rag_provider",
+    "IndexProfileConfig",
+    "IndexProfileLexicalConfig",
+    "IndexProfileParsingConfig",
+    "IndexProfileSearchDefaults",
+    "IndexProfileSplitConfig",
+    "IndexProfileSplitStrategy",
+    "RerankerSearchDefaults",
+    "SearchChannelsDefaults",
+    "BlockKind",
+    "ParsedBlock",
+    "ParsedDocument",
+    "parse_document_bytes",
+    "RagResourceBindParams",
+    "RagWorkerTasksPort",
+    "split_parsed_document",
+    "split_plain_text_fixed_tokens",
     "get_default_rag_provider",
-    "close_default_rag_provider",
-    # Repository
+    "get_rag_provider",
     "RAGRepository",
-    # Providers
     "AgentsetRAGProvider",
     "PgVectorProvider",
-    # Services
+    "ChunkEnrichmentContext",
+    "ChunkEnrichmentResult",
+    "ChunkEnricher",
+    "NoOpChunkEnricher",
     "DocumentParser",
     "EmbeddingService",
 ]
-

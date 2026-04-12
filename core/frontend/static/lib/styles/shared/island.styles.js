@@ -72,6 +72,9 @@ export const islandStyles = css`
         padding: var(--island-padding, var(--space-6));
         height: 100%;
         box-sizing: border-box;
+        overflow-y: auto;
+        overflow-x: hidden;
+        min-height: 0;
     }
 
     :host([padding="none"]) .island-content {
@@ -120,7 +123,6 @@ export const islandStyles = css`
             padding: var(--space-4);
             display: flex;
             flex-direction: column;
-            overflow-y: auto;
         }
 
         :host([padding="none"]) .island-content {
