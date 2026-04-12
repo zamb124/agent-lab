@@ -13,10 +13,10 @@ class TestCompanyInit:
     @pytest.mark.asyncio
     async def test_system_types_exist_for_company(self, crm_client, unique_id, auth_headers_system):
         """Системные типы минимального ядра существуют для компании"""
-        types_resp = await crm_client.get("/crm/api/v1/entity-types/", headers=auth_headers_system)
+        types_resp = await crm_client.get("/crm/api/v1/entity-types/", headers=auth_headers_system, params={"limit": 1000})
         assert types_resp.status_code == 200
         
-        types = types_resp.json()
+        types = types_resp.json()["items"]
         type_ids = [t["type_id"] for t in types]
         types_by_id = {t["type_id"]: t for t in types}
         
@@ -51,10 +51,10 @@ class TestCompanyInit:
     @pytest.mark.asyncio
     async def test_system_relationship_types_exist(self, crm_client, unique_id, auth_headers_system):
         """Все системные типы связей существуют и неизменяемы"""
-        types_resp = await crm_client.get("/crm/api/v1/relationships/types/", headers=auth_headers_system)
+        types_resp = await crm_client.get("/crm/api/v1/relationships/types/", headers=auth_headers_system, params={"limit": 1000})
         assert types_resp.status_code == 200
 
-        types = types_resp.json()
+        types = types_resp.json()["items"]
         types_by_id = {t["type_id"]: t for t in types}
 
         expected_type_ids = [
@@ -95,8 +95,8 @@ class TestCompanyInit:
     @pytest.mark.asyncio
     async def test_system_entity_types_have_prompts(self, crm_client, auth_headers_system):
         """Системные типы сущностей имеют промпты для AI"""
-        types_resp = await crm_client.get("/crm/api/v1/entity-types/", headers=auth_headers_system)
-        types = types_resp.json()
+        types_resp = await crm_client.get("/crm/api/v1/entity-types/", headers=auth_headers_system, params={"limit": 1000})
+        types = types_resp.json()["items"]
         
         note_type = next((t for t in types if t["type_id"] == "note"), None)
         assert note_type is not None
@@ -105,10 +105,10 @@ class TestCompanyInit:
     @pytest.mark.asyncio
     async def test_system_relationship_types_have_prompts(self, crm_client, unique_id, auth_headers_system):
         """Системные типы связей с AI-промптами: mentions, related_to, parent_of, assigned_to, belongs_to, follows_up, blocks"""
-        types_resp = await crm_client.get("/crm/api/v1/relationships/types/", headers=auth_headers_system)
+        types_resp = await crm_client.get("/crm/api/v1/relationships/types/", headers=auth_headers_system, params={"limit": 1000})
         assert types_resp.status_code == 200
 
-        types_by_id = {t["type_id"]: t for t in types_resp.json()}
+        types_by_id = {t["type_id"]: t for t in types_resp.json()["items"]}
 
         types_with_prompts = [
             "mentions", "related_to", "parent_of",

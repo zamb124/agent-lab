@@ -173,7 +173,7 @@ async def get_tools(container: ContainerDep) -> List[Dict[str, Any]]:
     Список tools в формате совместимом с platformweb.
     Совместимость с platformweb OrchestratorService.getTools()
     """
-    tools = await container.tool_repository.list_all()
+    tools = await container.tool_repository.list(limit=10000)
     return [tool.to_registry_format() for tool in tools]
 
 

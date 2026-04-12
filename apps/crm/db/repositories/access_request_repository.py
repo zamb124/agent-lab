@@ -4,7 +4,7 @@
 
 from typing import List, Optional, Type
 
-from sqlalchemy import select, update, delete
+from sqlalchemy import func, select, update, delete
 
 from apps.crm.db.base import BaseCRMRepository, CRMDatabase
 from apps.crm.db.models import AccessRequest
@@ -95,30 +95,42 @@ class AccessRequestRepository(BaseCRMRepository[AccessRequest]):
     async def list_by_company(
         self,
         company_id: str,
-        limit: int = 100
+        limit: int = 100,
+        offset: int = 0,
     ) -> List[AccessRequest]:
-        """Получает все запросы для компании"""
         async with self._db.session() as session:
             stmt = select(AccessRequest).where(
                 AccessRequest.company_id == company_id
-            ).order_by(AccessRequest.created_at.desc()).limit(limit)
-            
+            ).order_by(AccessRequest.created_at.desc()).offset(offset).limit(limit)
             result = await session.execute(stmt)
             return list(result.scalars().all())
-    
+
     async def list_by_company_and_status(
         self,
         company_id: str,
         status: str,
-        limit: int = 100
+        limit: int = 100,
+        offset: int = 0,
     ) -> List[AccessRequest]:
-        """Получает запросы для компании с фильтром по статусу"""
         async with self._db.session() as session:
             stmt = select(AccessRequest).where(
                 AccessRequest.company_id == company_id,
                 AccessRequest.status == status
-            ).order_by(AccessRequest.created_at.desc()).limit(limit)
-            
+            ).order_by(AccessRequest.created_at.desc()).offset(offset).limit(limit)
             result = await session.execute(stmt)
             return list(result.scalars().all())
+
+    async def count_by_company(
+        self,
+        company_id: str,
+        status: Optional[str] = None,
+    ) -> int:
+        async with self._db.session() as session:
+            stmt = select(func.count()).select_from(AccessRequest).where(
+                AccessRequest.company_id == company_id
+            )
+            if status is not None:
+                stmt = stmt.where(AccessRequest.status == status)
+            result = await session.execute(stmt)
+            return result.scalar() or 0
 

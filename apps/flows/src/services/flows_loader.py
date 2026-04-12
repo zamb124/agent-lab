@@ -175,21 +175,23 @@ class FlowsLoader:
         await self._load_nodes(bundle_dir, nodes_path)
 
     async def _load_tools_cache(self) -> None:
-        """Загружает все tools из БД в кеш для инлайнинга."""
-        tools = await self.tool_repository.list_all()
+        """Загружает inline tools из БД в кеш. MCP-тулы пропускаются — они проксируются через MCP-сервер."""
+        tools = await self.tool_repository.list(limit=10000)
         for tool in tools:
+            if tool.tool_id.startswith("mcp:"):
+                continue
             if not tool.code:
                 raise ValueError(
                     f"Tool '{tool.tool_id}' в БД не имеет code. "
                     f"Все tools должны иметь inline code для изоляции flow."
                 )
             self._tools_cache[tool.tool_id] = tool
-        
-        logger.info(f"Загружен кеш из {len(self._tools_cache)} tools")
+
+        logger.info(f"Загружен кеш из {len(self._tools_cache)} inline tools")
 
     async def _load_nodes_cache(self) -> None:
         """Загружает все nodes из БД в кеш для инлайнинга."""
-        nodes = await self.node_repository.list_all()
+        nodes = await self.node_repository.list(limit=10000)
         for node in nodes:
             self._nodes_cache[node.node_id] = node
         logger.info(f"Загружен кеш из {len(self._nodes_cache)} nodes")
@@ -1078,5 +1080,5 @@ async def get_all_flows(flow_repository: FlowRepository) -> Dict[str, FlowConfig
     Returns:
         Словарь {flow_id: FlowConfig}
     """
-    rows = await flow_repository.list_all()
+    rows = await flow_repository.list(limit=10000)
     return {fc.flow_id: fc for fc in rows}

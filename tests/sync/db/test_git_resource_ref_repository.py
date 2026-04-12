@@ -67,6 +67,6 @@ async def test_git_ref_company_isolation(
             extra={},
         )
     )
-    rows = await git_ref_repo.list_all(company_id=company_id)
+    rows = await git_ref_repo.list(limit=1000, company_id=company_id)
     ids = {r.git_ref_id for r in rows}
     assert ids == {g1}

@@ -264,8 +264,8 @@ export class DashboardPage extends PlatformElement {
 
     async _loadServicesStatus() {
         FrontendStore.setServicesLoading(true);
-        const statuses = await this.services.get('servicesStatus').getStatus();
-        FrontendStore.setServicesStatus(statuses);
+        const page = await this.services.get('servicesStatus').getStatus();
+        FrontendStore.setServicesStatus(page.items);
     }
 
     async _loadBilling() {

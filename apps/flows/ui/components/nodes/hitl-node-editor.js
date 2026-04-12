@@ -219,8 +219,8 @@ export class HitlNodeEditor extends BaseNodeEditor {
         this._queuesErrorDetail = '';
         this.requestUpdate();
         try {
-            const rows = await svc.listOperatorQueues();
-            this._operatorQueues = Array.isArray(rows) ? rows : [];
+            const page = await svc.listOperatorQueues();
+            this._operatorQueues = page?.items ?? [];
         } catch (err) {
             this._operatorQueues = [];
             if (this._queuesForbiddenMessage(err)) {

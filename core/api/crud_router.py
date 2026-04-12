@@ -28,7 +28,7 @@ class CRUDRouterGenerator:
     Генератор роутеров для репозиториев.
     
     Автоматически создает эндпоинты для ВСЕХ публичных методов репозитория:
-    - Стандартные CRUD (get, set, delete, list_all, get_many) - оптимизированные пути
+    - Стандартные CRUD (get, set, delete, list, get_many) - оптимизированные пути
     - Любые другие методы - через POST /method/{method_name}
     """
     
@@ -68,10 +68,9 @@ class CRUDRouterGenerator:
             limit: int = Query(100, ge=1, le=1000),
             offset: int = Query(0, ge=0)
         ):
-            """Получить список всех сущностей"""
-            all_entities = await repository.list_all(limit=limit + offset)
-            entities = all_entities[offset:] if offset > 0 else all_entities
-            return [entity.model_dump() for entity in entities[:limit]]
+            """Получить страницу сущностей."""
+            entities = await repository.list(limit=limit, offset=offset)
+            return [entity.model_dump() for entity in entities]
         
         @router.get("/{entity_id}", response_model=Dict[str, Any])
         async def get_entity(entity_id: str, repository: RepositoryDep):
@@ -119,7 +118,7 @@ class CRUDRouterGenerator:
                 continue
             
             # Пропускаем стандартные CRUD методы (уже добавлены оптимизированно)
-            if name in {'get', 'set', 'delete', 'list_all', 'get_many'}:
+            if name in {'get', 'set', 'delete', 'list', 'get_many'}:
                 continue
             
             # Проверяем что это async метод

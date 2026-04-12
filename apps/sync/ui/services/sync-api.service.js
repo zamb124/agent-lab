@@ -51,11 +51,8 @@ export class SyncAPIService extends BaseService {
     }
 
     async getCrmNamespaces() {
-        const payload = await this._crmApi.get('/namespaces');
-        if (!payload || !Array.isArray(payload.namespaces)) {
-            throw new Error(t('sync_api.err_crm_ns_payload', {}));
-        }
-        return payload.namespaces;
+        const page = await this._crmApi.list('/namespaces');
+        return page.items;
     }
 
     /**

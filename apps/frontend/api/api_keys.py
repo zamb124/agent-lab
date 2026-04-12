@@ -7,8 +7,9 @@ import secrets
 from datetime import datetime, timezone
 from typing import List
 
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, HTTPException, Query, Request
 
+from core.pagination import OffsetPage
 from apps.frontend.dependencies import ContainerDep
 from apps.frontend.models import ApiKey, ApiKeyCreate, ApiKeyCreated, ApiKeyUpdate
 from core.db.models.platform import ApiKeyRecord
@@ -45,16 +46,24 @@ def _record_to_model(record: ApiKeyRecord) -> ApiKey:
     )
 
 
-@router.get("", response_model=List[ApiKey])
-async def list_api_keys(request: Request, container: ContainerDep):
+@router.get("", response_model=OffsetPage[ApiKey])
+async def list_api_keys(
+    request: Request,
+    container: ContainerDep,
+    limit: int = Query(200, ge=1, le=1000),
+    offset: int = Query(0, ge=0),
+) -> OffsetPage[ApiKey]:
     if not hasattr(request.state, "user") or not request.state.user:
         raise HTTPException(status_code=401, detail="Необходима авторизация")
     if not hasattr(request.state, "company") or not request.state.company:
         raise HTTPException(status_code=400, detail="Компания не выбрана")
 
     company = request.state.company
-    records = await container.api_key_repository.list_by_company(company.company_id)
-    return [_record_to_model(r) for r in records]
+    records = await container.api_key_repository.list_by_company(
+        company.company_id, limit=limit, offset=offset,
+    )
+    items = [_record_to_model(r) for r in records]
+    return OffsetPage[ApiKey](items=items, total=len(items), limit=limit, offset=offset)
 
 
 @router.post("", response_model=ApiKeyCreated)

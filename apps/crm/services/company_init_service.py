@@ -124,7 +124,7 @@ class CompanyInitService:
                     extractable=template.get('extractable', True),
                     created_at=datetime.now(timezone.utc)
                 )
-                await self._entity_type_repo.create(entity_type)
+                await self._entity_type_repo.update(entity_type)
                 created_count += 1
                 continue
             await self._entity_type_repo.update_metadata(
@@ -173,7 +173,7 @@ class CompanyInitService:
                     weight_default=template.get('weight_default', 1.0),
                     created_at=datetime.now(timezone.utc)
                 )
-                await self._relationship_type_repo.create(rel_type)
+                await self._relationship_type_repo.update(rel_type)
                 created_count += 1
                 continue
             existing.name = template["name"]

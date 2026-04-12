@@ -80,7 +80,7 @@ class VariablesService:
     
     async def list_vars(self) -> Dict[str, Any]:
         """Получает все переменные компании"""
-        all_variables = await self._variable_repository.get_all_variables()
+        all_variables = await self._variable_repository.get_variables()
         
         result = {}
         for key, variable in all_variables.items():
@@ -150,7 +150,7 @@ class VariablesService:
 
     async def _get_company_variables_map(self) -> Dict[str, Any]:
         """Возвращает словарь переменных компании в формате key -> value."""
-        all_variables = await self._variable_repository.get_all_variables()
+        all_variables = await self._variable_repository.get_variables()
         return {key: variable.value for key, variable in all_variables.items()}
     
     def extract_variable_keys(self, value: Any) -> Set[str]:

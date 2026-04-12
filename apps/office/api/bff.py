@@ -16,6 +16,7 @@ from botocore.exceptions import ClientError
 from fastapi import APIRouter, File, Form, HTTPException, Query, Request, UploadFile
 from fastapi.responses import Response
 
+from core.pagination import OffsetPage
 from apps.office.config import OfficeSettings, get_office_settings
 from apps.office.container import OfficeContainer
 from apps.office.dependencies import ContainerDep
@@ -32,7 +33,6 @@ from apps.office.models.api import (
     OfficeNamespaceCreateResponse,
     OfficeNamespaceItem,
     OfficeNamespaceTemplateItem,
-    OfficeNamespacesResponse,
     OfficeDocumentCreateResponse,
     OfficeDocumentItem,
     OfficeDocumentListResponse,
@@ -230,26 +230,26 @@ async def integration_status(container: ContainerDep) -> OfficeIntegrationStatus
     return OfficeIntegrationStatusResponse(configured=ok, detail=detail)
 
 
-@router.get("/namespaces", response_model=OfficeNamespacesResponse)
-async def list_namespaces(container: ContainerDep) -> OfficeNamespacesResponse:
+@router.get("/namespaces", response_model=OffsetPage[OfficeNamespaceItem])
+async def list_namespaces(container: ContainerDep) -> OffsetPage[OfficeNamespaceItem]:
     ctx = get_context()
     if not ctx.active_company:
         raise HTTPException(status_code=403, detail="Компания не выбрана")
     if not ctx.user:
         raise HTTPException(status_code=403, detail="Пользователь не авторизован")
-    rows = await container.namespace_repository.list_all()
+    rows = await container.namespace_repository.list(limit=1000)
     items: list[OfficeNamespaceItem] = [
         OfficeNamespaceItem(name=ns.name.strip(), is_default=bool(ns.is_default))
         for ns in rows
         if ns.name and ns.name.strip()
     ]
-    return OfficeNamespacesResponse(items=items)
+    return OffsetPage[OfficeNamespaceItem](items=items, total=len(items), limit=len(items), offset=0)
 
 
-@router.get("/namespaces/templates", response_model=list[OfficeNamespaceTemplateItem])
+@router.get("/namespaces/templates", response_model=OffsetPage[OfficeNamespaceTemplateItem])
 async def list_namespace_templates_proxy(
     container: ContainerDep,
-) -> list[OfficeNamespaceTemplateItem]:
+) -> OffsetPage[OfficeNamespaceTemplateItem]:
     ctx = get_context()
     if not ctx.active_company:
         raise HTTPException(status_code=403, detail="Компания не выбрана")
@@ -260,10 +260,11 @@ async def list_namespace_templates_proxy(
         raw = await container.service_client.get("crm", path)
     except ServiceClientError as e:
         raise _http_exception_from_service_client("crm", e) from e
-    if not isinstance(raw, list):
+    if not isinstance(raw, dict) or not isinstance(raw.get("items"), list):
         raise HTTPException(status_code=502, detail="CRM: неверный формат списка шаблонов namespace")
+    raw_items = raw["items"]
     out: list[OfficeNamespaceTemplateItem] = []
-    for item in raw:
+    for item in raw_items:
         if not isinstance(item, dict):
             raise HTTPException(status_code=502, detail="CRM: элемент шаблона namespace не объект")
         tid = item.get("template_id")
@@ -289,7 +290,7 @@ async def list_namespace_templates_proxy(
                 entity_type_ids=entity_type_ids,
             )
         )
-    return out
+    return OffsetPage[OfficeNamespaceTemplateItem](items=out, total=len(out), limit=len(out), offset=0)
 
 
 @router.post("/namespaces", response_model=OfficeNamespaceCreateResponse, status_code=201)

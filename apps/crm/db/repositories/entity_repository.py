@@ -261,7 +261,7 @@ class EntityRepository(BaseCRMRepository[CRMEntity]):
             ts = ts.replace(tzinfo=timezone.utc)
         return ts, payload["id"]
 
-    async def list_all(
+    async def list_by_cursor(
         self,
         entity_type: Optional[str] = None,
         entity_subtype: Optional[str] = None,
@@ -272,7 +272,7 @@ class EntityRepository(BaseCRMRepository[CRMEntity]):
         cursor: Optional[str] = None,
     ) -> Tuple[List[CRMEntity], Optional[str], bool]:
         """
-        Получает список entities c SQL-фильтрами и cursor-пагинацией.
+        Entities c SQL-фильтрами и cursor-пагинацией.
 
         Returns:
             (entities, next_cursor, has_more)
@@ -324,7 +324,7 @@ class EntityRepository(BaseCRMRepository[CRMEntity]):
         filters: Optional[Dict[str, Any]] = None,
         company_id: Optional[str] = None,
     ) -> int:
-        """Считает entities с теми же условиями, что и list_all (без лимита)."""
+        """Считает entities с теми же условиями, что и list_by_cursor (без лимита)."""
         cid = company_id or self._get_company_id()
 
         async with self._db.session() as session:

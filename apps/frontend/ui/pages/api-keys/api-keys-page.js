@@ -235,16 +235,16 @@ export class ApiKeysPage extends PlatformElement {
     async _loadKeys() {
         const { keys } = this.state.value;
         if (keys.length > 0) return;
-        
+
         FrontendStore.setApiKeysLoading(true);
-        const apiKeys = await this.services.get('apiKeys').list();
-        FrontendStore.setApiKeys(apiKeys);
+        const page = await this.services.get('apiKeys').listKeys();
+        FrontendStore.setApiKeys(page.items);
     }
 
     async _reloadKeys() {
         FrontendStore.setApiKeysLoading(true);
-        const apiKeys = await this.services.get('apiKeys').list();
-        FrontendStore.setApiKeys(apiKeys);
+        const page = await this.services.get('apiKeys').listKeys();
+        FrontendStore.setApiKeys(page.items);
     }
 
     render() {

@@ -5,7 +5,7 @@
 """
 
 from typing import List, Optional
-from sqlalchemy import select, or_
+from sqlalchemy import func, select, or_
 
 from apps.crm.db.base import CRMDatabase, BaseCRMRepository
 from apps.crm.db.models import RelationshipType
@@ -27,21 +27,16 @@ class RelationshipTypeRepository(BaseCRMRepository[RelationshipType]):
     
     async def get_all_for_company(
         self,
-        include_system: bool = True
-    ) -> List[RelationshipType]:
-        """
-        Получает все типы связей доступные для компании.
-        
-        Args:
-            include_system: Включать системные типы (mentions, linked)
-        
-        Returns:
-            Список типов (системные + кастомные компании)
-        """
+        include_system: bool = True,
+        *,
+        limit: int = 200,
+        offset: int = 0,
+    ) -> list[RelationshipType]:
+        """Типы связей, доступные для компании."""
         company_id = self._get_company_id()
         async with self._db.session() as session:
             conditions = [RelationshipType.company_id == company_id]
-            
+
             if include_system:
                 conditions.append(
                     or_(
@@ -49,11 +44,29 @@ class RelationshipTypeRepository(BaseCRMRepository[RelationshipType]):
                         RelationshipType.is_system == True
                     )
                 )
-            
-            stmt = select(RelationshipType).where(or_(*conditions))
+
+            stmt = select(RelationshipType).where(or_(*conditions)).limit(limit).offset(offset)
             result = await session.execute(stmt)
             return list(result.scalars().all())
     
+    async def count_all_for_company(
+        self,
+        include_system: bool = True,
+    ) -> int:
+        company_id = self._get_company_id()
+        async with self._db.session() as session:
+            conditions = [RelationshipType.company_id == company_id]
+            if include_system:
+                conditions.append(
+                    or_(
+                        RelationshipType.company_id.is_(None),
+                        RelationshipType.is_system == True,
+                    )
+                )
+            stmt = select(func.count()).select_from(RelationshipType).where(or_(*conditions))
+            result = await session.execute(stmt)
+            return result.scalar() or 0
+
     async def get_with_prompts(
         self
     ) -> List[RelationshipType]:

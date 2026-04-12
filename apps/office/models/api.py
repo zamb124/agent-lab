@@ -77,10 +77,6 @@ class OfficeNamespaceItem(BaseModel):
     is_default: bool = False
 
 
-class OfficeNamespacesResponse(BaseModel):
-    items: List[OfficeNamespaceItem]
-
-
 class OfficeNamespaceTemplateItem(BaseModel):
     """Шаблон пространства (ответ CRM), для модалки создания namespace."""
 

@@ -2,13 +2,15 @@
 API для работы со связями (relationships).
 """
 
+import asyncio
 import uuid
 from typing import List, Optional
 from datetime import datetime, timezone
+
 from fastapi import APIRouter, HTTPException, Query
 from sqlalchemy.exc import IntegrityError
 
-from core.pagination import CursorPage
+from core.pagination import CursorPage, OffsetPage
 from apps.crm.models.api import (
     RelationshipCreate,
     RelationshipResponse,
@@ -125,13 +127,18 @@ async def delete_relationship(
     return {"status": "deleted"}
 
 
-@router.get("/types/", response_model=List[RelationshipTypeResponse])
+@router.get("/types/", response_model=OffsetPage[RelationshipTypeResponse])
 async def list_relationship_types(
     container: ContainerDep,
-):
-    """Получить все типы связей для компании"""
-    types = await container.relationship_type_repository.get_all_for_company(include_system=True)
-    return types
+    limit: int = Query(200, ge=1, le=1000),
+    offset: int = Query(0, ge=0),
+) -> OffsetPage[RelationshipTypeResponse]:
+    repo = container.relationship_type_repository
+    types, total = await asyncio.gather(
+        repo.get_all_for_company(include_system=True, limit=limit, offset=offset),
+        repo.count_all_for_company(include_system=True),
+    )
+    return OffsetPage[RelationshipTypeResponse](items=types, total=total, limit=limit, offset=offset)
 
 
 @router.post("/types/", response_model=RelationshipTypeResponse)

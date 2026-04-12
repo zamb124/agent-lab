@@ -94,10 +94,10 @@ class TestNamespaceEditabilityEmpty:
             headers=auth_headers_system,
         )
         assert types_resp.status_code == 200
-        remaining_type_ids = {t["type_id"] for t in types_resp.json()}
+        remaining_type_ids = {t["type_id"] for t in types_resp.json()["items"]}
         assert type_a not in remaining_type_ids
         assert type_b not in remaining_type_ids
-        for t in types_resp.json():
+        for t in types_resp.json()["items"]:
             assert "*" in t["namespace_ids"], (
                 f"Тип {t['type_id']} остался в namespace без '*' в namespace_ids"
             )
@@ -201,7 +201,7 @@ class TestNamespaceEditabilityWithEntities:
             f"/crm/api/v1/entity-types/by-namespace/{namespace_name}",
             headers=auth_headers_system,
         )
-        type_ids = [t["type_id"] for t in types_resp.json()]
+        type_ids = [t["type_id"] for t in types_resp.json()["items"]]
         assert type_used in type_ids
         assert type_unused not in type_ids
 
@@ -237,7 +237,7 @@ class TestNamespaceEditabilityWithEntities:
             f"/crm/api/v1/entity-types/by-namespace/{namespace_name}",
             headers=auth_headers_system,
         )
-        type_ids = [t["type_id"] for t in types_resp.json()]
+        type_ids = [t["type_id"] for t in types_resp.json()["items"]]
         assert type_existing in type_ids
         assert extra_type_id in type_ids
 
@@ -320,7 +320,7 @@ class TestNamespaceEditabilityWithEntities:
             f"/crm/api/v1/entity-types/by-namespace/{namespace_name}",
             headers=auth_headers_system,
         )
-        type_ids = [t["type_id"] for t in types_resp.json()]
+        type_ids = [t["type_id"] for t in types_resp.json()["items"]]
         assert type_used in type_ids
         assert type_added in type_ids
         assert type_removable not in type_ids
@@ -565,6 +565,6 @@ class TestNamespaceEditabilityEdgeCases:
             f"/crm/api/v1/entity-types/by-namespace/{namespace_name}",
             headers=auth_headers_system,
         )
-        type_ids = [t["type_id"] for t in types_resp.json()]
+        type_ids = [t["type_id"] for t in types_resp.json()["items"]]
         assert type_a in type_ids
         assert type_b not in type_ids

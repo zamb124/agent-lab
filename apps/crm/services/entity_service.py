@@ -488,7 +488,7 @@ class EntityService:
 
     async def _list_notes_for_date(self, date_str: str, namespace: Optional[str] = None) -> List[CRMEntity]:
         query_filters: dict[str, Any] = {"note_date": date_str}
-        entities, _, _ = await self._entity_repo.list_all(
+        entities, _, _ = await self._entity_repo.list_by_cursor(
             entity_type="note",
             namespace=self._normalize_namespace(namespace),
             filters=query_filters,
@@ -943,7 +943,7 @@ class EntityService:
         db_has_more = True
 
         for _ in range(max_iterations):
-            entities, repo_cursor, repo_has_more = await self._entity_repo.list_all(
+            entities, repo_cursor, repo_has_more = await self._entity_repo.list_by_cursor(
                 entity_type=entity_type,
                 entity_subtype=entity_subtype,
                 namespace=namespace,
@@ -1126,6 +1126,12 @@ class EntityService:
         if entity.entity_type == "note":
             exclusive_related_entity_ids = await self._collect_exclusive_related_entities_for_note(entity_id)
             for related_entity_id in exclusive_related_entity_ids:
+                related_entity = await self._entity_repo.get(related_entity_id)
+                if related_entity is None:
+                    logger.info(
+                        f"Skip already deleted exclusive entity for note {entity_id}: {related_entity_id}"
+                    )
+                    continue
                 await self._delete_entity_with_saga(related_entity_id)
                 logger.info(f"Deleted exclusive related entity for note {entity_id}: {related_entity_id}")
 

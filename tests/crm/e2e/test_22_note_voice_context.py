@@ -29,7 +29,7 @@ class TestNoteVoiceAndContext:
             headers=auth_headers_system,
         )
         assert resp.status_code == 200
-        types = resp.json()
+        types = resp.json()["items"]
         ids = {t["type_id"] for t in types if isinstance(t, dict) and "type_id" in t}
         assert "note_voice" in ids
         assert "in_context" in ids

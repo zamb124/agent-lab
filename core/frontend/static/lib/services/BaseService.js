@@ -13,6 +13,22 @@ export class BaseService {
         return this._fetch('GET', url, null, fetchOptions);
     }
 
+    /**
+     * GET запрос к OffsetPage-эндпоинту. Валидирует форму ответа.
+     * @param {string} path
+     * @param {{ limit?: number, offset?: number, [key: string]: unknown }} params
+     * @returns {Promise<{ items: Array, total: number, limit: number, offset: number }>}
+     */
+    async list(path, { limit = 200, offset = 0, ...params } = {}) {
+        const page = await this.get(path, { limit, offset, ...params });
+        if (!page || typeof page !== 'object' || !Array.isArray(page.items)) {
+            throw new Error(
+                `Expected OffsetPage from ${path}, got: ${JSON.stringify(page).slice(0, 200)}`,
+            );
+        }
+        return page;
+    }
+
     async getBlob(path, params = {}) {
         const pathWithParams = this._buildUrlWithParams(path, params);
         const url = `${this.baseUrl}${pathWithParams}`;

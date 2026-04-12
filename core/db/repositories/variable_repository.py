@@ -97,17 +97,17 @@ class VariableRepository(BaseRepository[VariableData]):
         
         return await self._storage._delete_with_table(final_key, table_name)
     
-    async def list_all(self, limit: int = 100) -> List[Variable]:
-        """Возвращает список всех переменных с ключами"""
+    async def list(self, *, limit: int, offset: int = 0) -> list[Variable]:
+        """Возвращает страницу переменных с ключами."""
         base_prefix = self._get_prefix()
         final_prefix = self._build_final_key(base_prefix)
         table_name = self._get_table_name()
-        
+
         all_data = await self._storage._get_all_by_prefix_and_table(
-            final_prefix, table_name, limit
+            final_prefix, table_name, limit, offset
         )
-        
-        variables = []
+
+        variables: list[Variable] = []
         for full_key, data in all_data.items():
             try:
                 var_key = full_key.split(":")[-1]
@@ -117,25 +117,17 @@ class VariableRepository(BaseRepository[VariableData]):
                     value=var_data.value,
                     secret=var_data.secret,
                     groups=var_data.groups,
-                    description=var_data.description
+                    description=var_data.description,
                 )
                 variables.append(variable)
             except Exception as e:
                 logger.error(f"Ошибка парсинга {full_key}: {e}")
                 continue
-        
+
         return variables
 
-    async def get_all_variables(self, limit: int = 1000) -> Dict[str, Variable]:
-        """
-        Получает все переменные компании.
-        
-        Args:
-            limit: Максимальное количество результатов
-            
-        Returns:
-            Словарь {key: Variable}
-        """
-        all_vars = await self.list_all(limit=limit)
-        return {var.key: var for var in all_vars}
+    async def get_variables(self, *, limit: int = 1000, offset: int = 0) -> dict[str, Variable]:
+        """Словарь {key: Variable} для текущей компании."""
+        variables = await self.list(limit=limit, offset=offset)
+        return {var.key: var for var in variables}
 

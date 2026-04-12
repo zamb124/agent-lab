@@ -73,7 +73,7 @@ async def ensure_demo_company_and_user(container: object) -> None:
         if updated:
             logger.info("Demo bootstrap: обновлены поля компании %s", company_id)
 
-    users = await user_repo.list_all(limit=10000)
+    users = await user_repo.list(limit=10000)
     matched = [
         u
         for u in users

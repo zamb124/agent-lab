@@ -7,8 +7,8 @@ export class ApiKeysService extends BaseService {
     /**
      * Получить список API ключей
      */
-    async list() {
-        return this.get('/api/api-keys');
+    async listKeys() {
+        return super.list('/api/api-keys');
     }
     
     /**

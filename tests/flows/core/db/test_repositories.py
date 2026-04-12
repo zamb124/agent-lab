@@ -111,7 +111,7 @@ class TestFlowRepository:
         container = get_container()
         repo = container.flow_repository
 
-        flows = await repo.list_all()
+        flows = await repo.list(limit=1000)
         assert isinstance(flows, list)
 
 
@@ -167,7 +167,7 @@ class TestVariableRepository:
         await repo.delete("test_var")
 
     @pytest.mark.asyncio
-    async def test_get_all_variables(self, app):
+    async def test_get_variables(self, app):
         """Получение всех переменных."""
         container = get_container()
         repo = container.variable_repository
@@ -176,7 +176,7 @@ class TestVariableRepository:
         await repo.set(Variable(key="var1", value="value1"))
         await repo.set(Variable(key="var2", value="value2"))
 
-        all_vars = await repo.get_all_variables()
+        all_vars = await repo.get_variables()
 
         assert "var1" in all_vars
         assert "var2" in all_vars

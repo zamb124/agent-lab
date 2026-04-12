@@ -19,8 +19,9 @@ class _InMemoryRepo:
         self._entities[entity_id] = entity
         return True
 
-    async def list_all(self, limit: int = 100):
-        return list(self._entities.values())[:limit]
+    async def list(self, *, limit: int, offset: int = 0):
+        items = list(self._entities.values())
+        return items[offset:offset + limit]
 
 
 class _InMemorySubdomainRepo:

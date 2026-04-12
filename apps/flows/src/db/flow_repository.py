@@ -143,17 +143,12 @@ class FlowRepository(BaseRepository[FlowConfig]):
                     logger.warning("Failed to parse flow %s: %s", entity_id, e)
         return result
 
-    async def list_all(self, limit: int = 100) -> List[FlowConfig]:
-        """
-        Список всех flow (последние версии).
-        
-        Читает из таблицы flows.
-        """
-        # Получаем все ключи из flows (не flows_versions)
+    async def list(self, *, limit: int, offset: int = 0) -> list[FlowConfig]:
+        """Страница flow (последние версии). Читает из таблицы flows."""
         base_prefix = self._get_prefix()
         final_prefix = self._build_final_key(base_prefix)
         all_data = await self._storage._get_all_by_prefix_and_table(
-            final_prefix, self._get_table_name(), limit
+            final_prefix, self._get_table_name(), limit, offset
         )
         
         items: List[FlowConfig] = []

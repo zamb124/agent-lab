@@ -202,19 +202,20 @@ async def create_queue(
     return _queue_to_out(row, i_am_member=True)
 
 
-@router.get("/queues", response_model=List[OperatorQueueOut])
+@router.get("/queues", response_model=OffsetPage[OperatorQueueOut])
 async def list_queues(
     container: ContainerDep,
-) -> List[OperatorQueueOut]:
+    limit: int = Query(200, ge=1, le=1000),
+    offset: int = Query(0, ge=0),
+) -> OffsetPage[OperatorQueueOut]:
     _require_operator_queue_manage_role()
     company_id, user_id = _company_and_user()
     repo = container.operator_repository
     my_queue_ids = set(await repo.list_queue_ids_for_user(company_id, user_id))
     rows = await repo.list_queues(company_id)
-    return [
-        _queue_to_out(r, i_am_member=r.id in my_queue_ids)
-        for r in rows
-    ]
+    items = [_queue_to_out(r, i_am_member=r.id in my_queue_ids) for r in rows]
+    page = items[offset:offset + limit]
+    return OffsetPage[OperatorQueueOut](items=page, total=len(items), limit=limit, offset=offset)
 
 
 @router.patch("/queues/{queue_id}", response_model=OperatorQueueOut)

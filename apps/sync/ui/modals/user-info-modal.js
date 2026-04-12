@@ -212,8 +212,8 @@ export class UserInfoModal extends PlatformModal {
         this._sharedChannels = [];
         try {
             const uid = this._userId();
-            const list = await syncApi.getSharedChannelsWithMember(uid);
-            this._sharedChannels = Array.isArray(list) ? list : [];
+            const page = await syncApi.getSharedChannelsWithMember(uid);
+            this._sharedChannels = page?.items ?? [];
         } catch (e) {
             const msg = e instanceof Error ? e.message : String(e);
             this._channelsError = msg;

@@ -43,7 +43,7 @@ async def test_space_crud(
     )
     await space_repo.create(space_2)
 
-    listed = await space_repo.list_all(company_id=company_id)
+    listed = await space_repo.list(limit=1000, company_id=company_id)
     assert {s.space_id for s in listed} == {s1, s2}
 
     deleted = await space_repo.delete(s2)
@@ -98,10 +98,10 @@ async def test_space_company_isolation(
     await space_repo.create(space_a)
     await space_repo.create(space_b)
 
-    list_a = await space_repo.list_all(company_id=company_a)
+    list_a = await space_repo.list(limit=1000, company_id=company_a)
     assert [s.space_id for s in list_a] == [f"{unique_id}_space_a"]
 
-    list_b = await space_repo.list_all(company_id=company_b)
+    list_b = await space_repo.list(limit=1000, company_id=company_b)
     assert [s.space_id for s in list_b] == [f"{unique_id}_space_b"]
 
 

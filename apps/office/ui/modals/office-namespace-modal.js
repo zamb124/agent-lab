@@ -125,11 +125,8 @@ export class OfficeNamespaceModal extends PlatformModal {
         if (!officeApi) {
             throw new Error('officeApi service is required');
         }
-        const list = await officeApi.listNamespaceTemplates();
-        if (!Array.isArray(list)) {
-            throw new Error('Namespace templates response must be an array');
-        }
-        this._templates = list;
+        const page = await officeApi.listNamespaceTemplates();
+        this._templates = page?.items ?? [];
         if (!this._templates.some((template) => template.template_id === this._templateId) && this._templates.length > 0) {
             this._templateId = this._templates[0].template_id;
         }

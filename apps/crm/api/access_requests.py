@@ -4,9 +4,12 @@ API для запросов доступа к entities.
 User Story: Запрос доступа к чужим entities с указанием причины.
 """
 
+import asyncio
 from typing import List, Optional
+
 from fastapi import APIRouter, HTTPException, Query
 
+from core.pagination import OffsetPage
 from apps.crm.models.access_request_models import (
     AccessRequestCreate,
     AccessRequestUpdate,
@@ -84,21 +87,26 @@ async def update_access_request(
         raise HTTPException(status_code=403, detail=str(e))
 
 
-@router.get("", response_model=List[AccessRequestResponse])
+@router.get("", response_model=OffsetPage[AccessRequestResponse])
 async def list_pending_requests(
     container: ContainerDep,
     status: Optional[str] = Query(None),
-):
-    """Получить список ожидающих запросов"""
+    limit: int = Query(100, ge=1, le=200),
+    offset: int = Query(0, ge=0),
+) -> OffsetPage[AccessRequestResponse]:
     ctx = get_context()
     if not ctx or not ctx.user:
         raise HTTPException(status_code=401, detail="Authentication required")
-    
+
     company_id = ctx.active_company.company_id if ctx.active_company else "system"
-    
-    requests = await container.access_request_service.list_requests(
-        company_id=company_id,
-        status=status
+
+    requests, total = await asyncio.gather(
+        container.access_request_service.list_requests(company_id=company_id, status=status, limit=limit, offset=offset),
+        container.access_request_service.count_requests(company_id=company_id, status=status),
     )
-    
-    return [AccessRequestResponse.model_validate(r) for r in requests]
+    return OffsetPage[AccessRequestResponse](
+        items=[AccessRequestResponse.model_validate(r) for r in requests],
+        total=total,
+        limit=limit,
+        offset=offset,
+    )

@@ -16,9 +16,10 @@ class TestFlowsAPI:
         """Список flows."""
         response = await client.get("/flows/api/v1/flows/", headers=auth_headers_system)
         assert response.status_code == 200
-        data = response.json()
+        page = response.json()
+        assert "items" in page
+        data = page["items"]
         assert isinstance(data, list)
-        # Должны быть загруженные flows из registry
         assert len(data) >= 3
 
     @pytest.mark.asyncio
@@ -319,9 +320,10 @@ class TestFlowsAPI:
         """Список flows."""
         response = await client.get("/flows/api/v1/flows/", headers=auth_headers_system)
         assert response.status_code == 200
-        data = response.json()
+        page = response.json()
+        assert "items" in page
+        data = page["items"]
         assert isinstance(data, list)
-        # Должны быть загруженные flows
         assert len(data) > 0
 
     @pytest.mark.asyncio
@@ -507,7 +509,9 @@ class TestToolsAPI:
         """Список tools."""
         response = await client.get("/flows/api/v1/tools/")
         assert response.status_code == 200
-        data = response.json()
+        page = response.json()
+        assert "items" in page
+        data = page["items"]
         assert isinstance(data, list)
 
     @pytest.mark.asyncio

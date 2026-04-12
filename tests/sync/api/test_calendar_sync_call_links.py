@@ -65,7 +65,7 @@ async def test_calendar_call_link_create_list_meetings_scheduled_detail_and_dupl
     )
     assert scheduled_list.status_code == 200
     scheduled_payload = scheduled_list.json()
-    row = next((r for r in scheduled_payload if r.get("calendar_event_id") == event_id), None)
+    row = next((r for r in scheduled_payload["items"] if r.get("calendar_event_id") == event_id), None)
     assert row is not None
     assert row["link_token"] == token
     assert row["join_url"] is not None
@@ -150,7 +150,7 @@ async def test_calendar_call_link_delete_removes_join_and_channel(
 
     listed = await sync_client.get("/sync/api/v1/channels/", headers=sync_auth_headers)
     assert listed.status_code == 200
-    channel_ids = {item["id"] for item in listed.json()}
+    channel_ids = {item["id"] for item in listed.json()["items"]}
     assert channel_id not in channel_ids
 
 
@@ -247,6 +247,6 @@ async def test_calendar_channel_type_is_calendar_meeting(
 
     listed = await sync_client.get("/sync/api/v1/channels/", headers=sync_auth_headers)
     assert listed.status_code == 200
-    row = next((c for c in listed.json() if c["id"] == channel_id), None)
+    row = next((c for c in listed.json()["items"] if c["id"] == channel_id), None)
     assert row is not None
     assert row["type"] == CHANNEL_TYPE_CALENDAR_MEETING

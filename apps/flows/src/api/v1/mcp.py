@@ -2,12 +2,14 @@
 API endpoints для MCP серверов.
 """
 
+import asyncio
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel, Field
 
+from core.pagination import OffsetPage
 from apps.flows.src.clients.mcp_client import (
     MCPClientError,
     MCPHttpClient,
@@ -108,13 +110,18 @@ def _server_to_response(server: MCPServerConfig) -> MCPServerResponse:
     )
 
 
-@router.get("/servers", response_model=List[MCPServerResponse])
+@router.get("/servers", response_model=OffsetPage[MCPServerResponse])
 async def list_servers(
     container: ContainerDep,
-) -> List[MCPServerResponse]:
-    """Список всех MCP серверов."""
-    servers = await container.mcp_server_repository.list_all()
-    return [_server_to_response(s) for s in servers]
+    limit: int = Query(200, ge=1, le=1000),
+    offset: int = Query(0, ge=0),
+) -> OffsetPage[MCPServerResponse]:
+    servers, total = await asyncio.gather(
+        container.mcp_server_repository.list(limit=limit, offset=offset),
+        container.mcp_server_repository.count_all(),
+    )
+    items = [_server_to_response(s) for s in servers]
+    return OffsetPage[MCPServerResponse](items=items, total=total, limit=limit, offset=offset)
 
 
 @router.post("/servers", response_model=MCPServerResponse)

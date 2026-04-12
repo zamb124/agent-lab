@@ -5,9 +5,10 @@ API endpoints для переменных.
 from datetime import datetime
 from typing import Any, List
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel
 
+from core.pagination import OffsetPage
 from apps.flows.src.dependencies import ContainerDep
 from core.context import get_context
 from core.db.repositories.variable_repository import Variable
@@ -36,19 +37,18 @@ class VariableResponse(BaseModel):
     system: bool = False
 
 
-@router.get("/", response_model=List[VariableResponse])
+@router.get("/", response_model=OffsetPage[VariableResponse])
 async def list_variables(
     container: ContainerDep,
-) -> List[VariableResponse]:
-    """Список всех переменных (включая системные)"""
-    # Получаем пользовательские переменные из БД
-    db_variables = await container.variable_repository.list_all()
+    limit: int = Query(200, ge=1, le=1000),
+    offset: int = Query(0, ge=0),
+) -> OffsetPage[VariableResponse]:
+    db_variables = await container.variable_repository.list(limit=limit, offset=offset)
     result = [
         VariableResponse(key=v.key, value="***" if v.secret else v.value, secret=v.secret, system=False)
         for v in db_variables
     ]
-    
-    # Добавляем системные переменные (всегда доступны)
+
     now = datetime.now()
     system_variables = {
         "current_date": now.strftime("%Y-%m-%d"),
@@ -58,27 +58,18 @@ async def list_variables(
         "current_month": now.month,
         "current_day": now.day,
     }
-    
+
     for key, value in system_variables.items():
-        result.append(
-            VariableResponse(key=key, value=value, secret=False, system=True)
-        )
-    
-    # Добавляем переменные пользователя (из контекста, если доступны)
+        result.append(VariableResponse(key=key, value=value, secret=False, system=True))
+
     context = get_context()
     if context and context.user:
-        result.append(
-            VariableResponse(key="user_id", value=context.user.user_id, secret=False, system=True)
-        )
-        result.append(
-            VariableResponse(key="user_name", value=context.user.name, secret=False, system=True)
-        )
+        result.append(VariableResponse(key="user_id", value=context.user.user_id, secret=False, system=True))
+        result.append(VariableResponse(key="user_name", value=context.user.name, secret=False, system=True))
         if context.metadata.get("email"):
-            result.append(
-                VariableResponse(key="user_email", value=context.metadata["email"], secret=False, system=True)
-            )
-    
-    return result
+            result.append(VariableResponse(key="user_email", value=context.metadata["email"], secret=False, system=True))
+
+    return OffsetPage[VariableResponse](items=result, total=len(result), limit=limit, offset=offset)
 
 
 @router.get("/{key}", response_model=VariableResponse)

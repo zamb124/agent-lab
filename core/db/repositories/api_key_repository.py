@@ -16,7 +16,13 @@ class ApiKeyRepository:
     def __init__(self, db_url: str) -> None:
         self._db_url = db_url
 
-    async def list_by_company(self, company_id: str) -> list[ApiKeyRecord]:
+    async def list_by_company(
+        self,
+        company_id: str,
+        *,
+        limit: int = 200,
+        offset: int = 0,
+    ) -> list[ApiKeyRecord]:
         session_factory = await get_session_factory(self._db_url)
         async with session_factory() as session:
             result = await session.execute(
@@ -26,6 +32,8 @@ class ApiKeyRepository:
                     ApiKeyRecord.revoked.is_(False),
                 )
                 .order_by(ApiKeyRecord.created_at.desc())
+                .limit(limit)
+                .offset(offset)
             )
             return list(result.scalars().all())
 

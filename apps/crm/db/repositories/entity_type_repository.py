@@ -6,7 +6,7 @@
 """
 
 from typing import List, Optional
-from sqlalchemy import select, update as sa_update, or_
+from sqlalchemy import func, select, update as sa_update, or_
 
 from apps.crm.db.base import CRMDatabase, BaseCRMRepository
 from apps.crm.db.models import EntityType
@@ -29,17 +29,12 @@ class EntityTypeRepository(BaseCRMRepository[EntityType]):
     async def get_all_for_company(
         self,
         include_system: bool = True,
-        namespace: Optional[str] = None
-    ) -> List[EntityType]:
-        """
-        Получает все типы доступные для компании из контекста.
-        
-        Args:
-            include_system: Включать системные типы (note, task)
-        
-        Returns:
-            Список типов (системные + кастомные компании)
-        """
+        namespace: Optional[str] = None,
+        *,
+        limit: int = 200,
+        offset: int = 0,
+    ) -> list[EntityType]:
+        """Типы, доступные для компании из контекста."""
         company_id = self._get_company_id()
         async with self._db.session() as session:
             stmt = select(EntityType).where(EntityType.company_id == company_id)
@@ -50,8 +45,26 @@ class EntityTypeRepository(BaseCRMRepository[EntityType]):
                         EntityType.namespace_ids.contains(["*"]),
                     )
                 )
+            stmt = stmt.limit(limit).offset(offset)
             result = await session.execute(stmt)
             return list(result.scalars().all())
+
+    async def count_all_for_company(
+        self,
+        namespace: Optional[str] = None,
+    ) -> int:
+        company_id = self._get_company_id()
+        async with self._db.session() as session:
+            stmt = select(func.count()).select_from(EntityType).where(EntityType.company_id == company_id)
+            if namespace:
+                stmt = stmt.where(
+                    or_(
+                        EntityType.namespace_ids.contains([namespace]),
+                        EntityType.namespace_ids.contains(["*"]),
+                    )
+                )
+            result = await session.execute(stmt)
+            return result.scalar() or 0
 
     async def get_by_type_id(
         self,
@@ -70,10 +83,13 @@ class EntityTypeRepository(BaseCRMRepository[EntityType]):
 
     async def list_allowed_for_namespace(
         self,
-        namespace: str
-    ) -> List[EntityType]:
+        namespace: str,
+        *,
+        limit: int = 200,
+        offset: int = 0,
+    ) -> list[EntityType]:
         """Возвращает типы, разрешенные в конкретном namespace."""
-        return await self.get_all_for_company(namespace=namespace)
+        return await self.get_all_for_company(namespace=namespace, limit=limit, offset=offset)
     
     async def update_metadata(
         self,

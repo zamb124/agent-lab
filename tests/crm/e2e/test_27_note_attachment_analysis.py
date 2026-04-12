@@ -300,7 +300,7 @@ class TestAnalyzeWithAttachments:
         ])
 
         task, resp = await _analyze_note_task(crm_client, auth_headers_system, note_id, check_duplicates=False)
-        assert len(resp.get("entities") or []) >= 1
+        assert len(resp.json().get("entities") or []) >= 1
 
     @pytest.mark.asyncio
     async def test_large_attachment_summarized_then_analyzed(
@@ -349,7 +349,7 @@ class TestAnalyzeWithAttachments:
         ])
 
         task, resp = await _analyze_note_task(crm_client, auth_headers_system, note_id, check_duplicates=False)
-        assert len(resp.get("entities") or []) >= 1
+        assert len(resp.json().get("entities") or []) >= 1
 
     @pytest.mark.asyncio
     async def test_attachment_chars_limit_per_file_configurable(
@@ -397,7 +397,7 @@ class TestAnalyzeWithAttachments:
         ])
 
         task, resp = await _analyze_note_task(crm_client, auth_headers_system, note_id, attachment_chars_limit_per_file=5_000, check_duplicates=False)
-        assert len(resp.get("entities") or []) >= 1
+        assert len(resp.json().get("entities") or []) >= 1
 
     @pytest.mark.asyncio
     async def test_include_attachments_false_single_llm_call(
@@ -440,7 +440,7 @@ class TestAnalyzeWithAttachments:
         ])
 
         task, resp = await _analyze_note_task(crm_client, auth_headers_system, note_id, include_attachments=False, check_duplicates=False)
-        assert len(resp.get("entities") or []) >= 1, f"Expected entities >= 1, got: {resp}"
+        assert len(resp.json().get("entities") or []) >= 1, f"Expected entities >= 1, got: {resp}"
 
 
 class TestAttachmentGuarantee:

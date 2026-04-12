@@ -309,20 +309,12 @@ export class SchedulerTasksPage extends PlatformElement {
     async _load() {
         this.loading = true;
         try {
-            const response = await this.services.get('schedulerTasks').list({
+            const page = await this.services.get('schedulerTasks').listSchedules({
                 status: this.statusFilter || undefined,
                 target_service: this.serviceFilter || undefined,
                 limit: 500,
             });
-            if (Array.isArray(response)) {
-                this.tasks = response.map((task) => this._normalizeTask(task));
-                return;
-            }
-            if (response && Array.isArray(response.items)) {
-                this.tasks = response.items.map((task) => this._normalizeTask(task));
-                return;
-            }
-            throw new Error('Scheduler list response must be array');
+            this.tasks = page.items.map((task) => this._normalizeTask(task));
         } finally {
             this.loading = false;
         }

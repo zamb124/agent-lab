@@ -403,11 +403,12 @@ class TestEvaluationResultsAPI:
         )
 
         assert response.status_code == 200
-        data = response.json()
+        page = response.json()
+        assert "items" in page
+        data = page["items"]
         assert isinstance(data, list)
         assert len(data) > 0
 
-        # Проверяем структуру результата
         result = data[0]
         assert "flow_id" in result
         assert "skill_id" in result
@@ -430,8 +431,8 @@ class TestEvaluationResultsAPI:
         )
 
         assert response.status_code == 200
-        data = response.json()
-        assert len(data) <= 2
+        page = response.json()
+        assert len(page["items"]) <= 2
 
     async def test_get_results_empty_for_unknown_flow(self, client):
         """GET /api/v1/evaluation/results для несуществующего flow возвращает пустой список."""
@@ -441,8 +442,8 @@ class TestEvaluationResultsAPI:
         )
 
         assert response.status_code == 200
-        data = response.json()
-        assert data == []
+        page = response.json()
+        assert page["items"] == []
 
     async def test_get_summary_structure(self, client, container, mock_llm):
         """GET /api/v1/evaluation/results/summary возвращает правильную структуру."""

@@ -311,9 +311,21 @@ class TaskService:
         task_type: Optional[str] = None,
         note_id: Optional[str] = None,
         limit: int = 50,
+        offset: int = 0,
     ) -> List[CRMTask]:
         return await self._task_repo.list_for_namespace(
-            namespace.strip(), task_type=task_type, note_id=note_id, limit=limit
+            namespace.strip(), task_type=task_type, note_id=note_id, limit=limit, offset=offset
+        )
+
+    async def count_tasks(
+        self,
+        namespace: str,
+        *,
+        task_type: Optional[str] = None,
+        note_id: Optional[str] = None,
+    ) -> int:
+        return await self._task_repo.count_for_namespace(
+            namespace.strip(), task_type=task_type, note_id=note_id
         )
 
     async def request_cancel(self, task_id: str) -> CRMTask:

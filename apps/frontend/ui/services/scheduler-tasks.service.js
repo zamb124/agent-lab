@@ -1,15 +1,8 @@
 import { BaseService } from '@platform/lib/services/BaseService.js';
 
 export class SchedulerTasksService extends BaseService {
-    async list(params = {}) {
-        const query = new URLSearchParams();
-        Object.entries(params).forEach(([key, value]) => {
-            if (value !== null && value !== undefined && value !== '') {
-                query.set(key, String(value));
-            }
-        });
-        const suffix = query.toString() ? `?${query.toString()}` : '';
-        return this.get(`/api/scheduler/schedules${suffix}`);
+    async listSchedules(params = {}) {
+        return super.list('/api/scheduler/schedules', params);
     }
 
     async create(payload) {

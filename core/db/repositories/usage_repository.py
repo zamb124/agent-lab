@@ -56,17 +56,9 @@ class UsageRepository(BaseRepository[UsageRecord]):
         data = entity.model_dump_json()
         return await self._storage._set_with_table(final_key, data, table_name)
 
-    async def list_by_company(self, limit: int = 10000) -> List[UsageRecord]:
-        """
-        Получает все записи использования для текущей компании.
-        
-        Args:
-            limit: Максимальное количество результатов
-            
-        Returns:
-            Список записей использования
-        """
-        return await self.list_all(limit=limit)
+    async def list_by_company(self, *, limit: int = 10000, offset: int = 0) -> list[UsageRecord]:
+        """Записи использования для текущей компании."""
+        return await self.list(limit=limit, offset=offset)
 
     async def admin_search_usage_records(
         self,

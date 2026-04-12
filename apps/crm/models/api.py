@@ -316,12 +316,6 @@ class NamespaceResponse(BaseModel):
     crm_settings: Optional[NamespaceCRMSettings] = None
 
 
-class NamespaceListResponse(BaseModel):
-    """Список namespace компании."""
-    items: List[NamespaceResponse]
-    company_id: str
-
-
 class NamespaceUpdateRequest(BaseModel):
     """Обновление существующего namespace."""
     description: Optional[str] = None

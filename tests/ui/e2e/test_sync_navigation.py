@@ -59,10 +59,10 @@ async def test_opens_channel_from_url_query(
         body = await res.text()
         raise AssertionError(f"Ожидался 200 от списка каналов, получено {res.status}: {body}")
     payload = await res.json()
-    if not isinstance(payload, list):
-        raise AssertionError("Ответ /channels/ должен быть списком.")
+    if not isinstance(payload, dict) or "items" not in payload:
+        raise AssertionError("Ответ /channels/ должен быть OffsetPage с полем items.")
     channel_id = None
-    for ch in payload:
+    for ch in payload["items"]:
         if isinstance(ch, dict) and ch.get("name") == channel_name and isinstance(ch.get("id"), str):
             channel_id = ch["id"]
             break

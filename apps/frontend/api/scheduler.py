@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from fastapi import APIRouter, Query
 
+from core.pagination import OffsetPage
 from apps.frontend.dependencies import ContainerDep
 from core.scheduler.models import (
     PlatformRedisScheduleSnapshot,
@@ -20,7 +21,7 @@ async def create_schedule(request: PlatformScheduleCreateRequest, container: Con
     return await container.scheduler_client.create_schedule(request)
 
 
-@router.get("/schedules", response_model=list[PlatformScheduledTask])
+@router.get("/schedules", response_model=OffsetPage[PlatformScheduledTask])
 async def list_schedules(
     container: ContainerDep,
     status: ScheduledTaskStatus | None = Query(default=None),
@@ -28,7 +29,7 @@ async def list_schedules(
     task_name: str | None = Query(default=None),
     limit: int = Query(default=100, ge=1, le=500),
     offset: int = Query(default=0, ge=0),
-) -> list[PlatformScheduledTask]:
+) -> OffsetPage[PlatformScheduledTask]:
     from core.scheduler.models import PlatformScheduleFilter
 
     return await container.scheduler_client.list_schedules(

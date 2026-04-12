@@ -3,7 +3,7 @@
 """
 
 from typing import List, Optional, Type, Tuple, Dict
-from sqlalchemy import select, update, delete, or_, and_, tuple_
+from sqlalchemy import func, select, update, delete, or_, and_, tuple_
 
 from apps.crm.db.models import AccessGrant
 from apps.crm.db.base import BaseCRMRepository, CRMDatabase
@@ -49,6 +49,24 @@ class AccessGrantRepository(BaseCRMRepository[AccessGrant]):
             
             result = await session.execute(query)
             return list(result.scalars().all())
+
+    async def count_by_resource(
+        self,
+        resource_type: str,
+        resource_id: str,
+        resource_company_id: Optional[str] = None,
+    ) -> int:
+        async with self._db.session() as session:
+            stmt = (
+                select(func.count())
+                .select_from(AccessGrant)
+                .where(AccessGrant.resource_type == resource_type)
+                .where(AccessGrant.resource_id == resource_id)
+            )
+            if resource_company_id:
+                stmt = stmt.where(AccessGrant.company_id == resource_company_id)
+            result = await session.execute(stmt)
+            return result.scalar() or 0
 
     async def remap_entity_resource_id(
         self,

@@ -90,19 +90,19 @@ class TestSessionsAPI:
 
         response = await client.get(
             "/flows/api/v1/sessions/",
-            params={"limit": 500},
+            params={"limit": 200},
         )
 
         assert response.status_code == 200
         data = response.json()
-        assert "sessions" in data
+        assert "items" in data
         assert "total" in data
         assert "limit" in data
         assert "offset" in data
-        assert isinstance(data["sessions"], list)
+        assert isinstance(data["items"], list)
         assert data["total"] >= 1
 
-        session_ids = [s["session_id"] for s in data["sessions"]]
+        session_ids = [s["session_id"] for s in data["items"]]
         assert session_id in session_ids
 
         await repo.delete(session_id)
@@ -139,9 +139,9 @@ class TestSessionsAPI:
         assert response.status_code == 200
         data = response.json()
         assert data["total"] == 1
-        assert len(data["sessions"]) == 1
-        assert data["sessions"][0]["user_id"] == target_user
-        assert data["sessions"][0]["session_id"] == session1_id
+        assert len(data["items"]) == 1
+        assert data["items"][0]["user_id"] == target_user
+        assert data["items"][0]["session_id"] == session1_id
 
         await repo.delete(session1_id)
         await repo.delete(session2_id)
@@ -178,8 +178,8 @@ class TestSessionsAPI:
         assert response.status_code == 200
         data = response.json()
         assert data["total"] == 1
-        assert len(data["sessions"]) == 1
-        assert data["sessions"][0]["flow_id"] == target_flow
+        assert len(data["items"]) == 1
+        assert data["items"][0]["flow_id"] == target_flow
 
         await repo.delete(session1_id)
         await repo.delete(session2_id)
@@ -258,7 +258,7 @@ class TestSessionsAPI:
         assert response.status_code == 200
         data = response.json()
         assert data["total"] == 1
-        assert data["sessions"][0]["session_id"] == session_in_range_id
+        assert data["items"][0]["session_id"] == session_in_range_id
 
         await repo.delete(session_old_id)
         await repo.delete(session_in_range_id)
@@ -298,7 +298,7 @@ class TestSessionsAPI:
         assert response.status_code == 200
         data = response.json()
         assert data["total"] == 1
-        assert data["sessions"][0]["session_id"] == session1_id
+        assert data["items"][0]["session_id"] == session1_id
 
         await repo.delete(session1_id)
         await repo.delete(session2_id)
@@ -335,11 +335,11 @@ class TestSessionsAPI:
         data2 = response2.json()
 
         assert data1["total"] == data2["total"] == 5
-        assert len(data1["sessions"]) == 2
-        assert len(data2["sessions"]) == 2
+        assert len(data1["items"]) == 2
+        assert len(data2["items"]) == 2
 
-        page1_ids = {s["session_id"] for s in data1["sessions"]}
-        page2_ids = {s["session_id"] for s in data2["sessions"]}
+        page1_ids = {s["session_id"] for s in data1["items"]}
+        page2_ids = {s["session_id"] for s in data2["items"]}
         assert page1_ids.isdisjoint(page2_ids)
 
         for i in range(5):
@@ -356,7 +356,7 @@ class TestSessionsAPI:
         assert response.status_code == 200
         data = response.json()
         assert data["total"] == 0
-        assert len(data["sessions"]) == 0
+        assert len(data["items"]) == 0
 
     @pytest.mark.asyncio
     async def test_list_sessions_response_structure(self, client, app, unique_id):
@@ -383,12 +383,12 @@ class TestSessionsAPI:
         assert response.status_code == 200
         data = response.json()
 
-        assert "sessions" in data
+        assert "items" in data
         assert "total" in data
         assert "limit" in data
         assert "offset" in data
 
-        session_data = data["sessions"][0]
+        session_data = data["items"][0]
         assert session_data["session_id"] == session_id
         assert session_data["channel"] == "a2a"
         assert session_data["user_id"] == user_id

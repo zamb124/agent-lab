@@ -35,7 +35,7 @@ async def _apply_note(crm_client, headers: dict, note_id: str):
         if last.get("status") in ("completed", "failed", "cancelled"):
             break
         await asyncio.sleep(0.3)
-    return type("FakeResp", (), {"status_code": 200 if last.get("status") == "completed" else 422, "json": lambda: last, "text": str(last)})()
+    return type("FakeResp", (), {"status_code": 200 if last.get("status") == "completed" else 422, "json": lambda self: last, "text": str(last)})()
 
 
 async def _analyze_note(

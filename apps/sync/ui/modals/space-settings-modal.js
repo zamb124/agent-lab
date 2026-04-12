@@ -70,8 +70,10 @@ export class SpaceSettingsModal extends PlatformModal {
             .actions {
                 display: flex;
                 flex-wrap: wrap;
-                justify-content: flex-end;
+                justify-content: space-between;
+                align-items: center;
                 gap: var(--space-2);
+                width: 100%;
             }
 
 
@@ -102,6 +104,7 @@ export class SpaceSettingsModal extends PlatformModal {
     constructor() {
         super();
         this.size = 'md';
+        this.headerSavePrimary = true;
         this._spaceId = null;
         this._syncedForSpaceId = null;
         this._name = '';
@@ -433,6 +436,14 @@ export class SpaceSettingsModal extends PlatformModal {
         return html`
             <div class="actions">
                 <button type="button" class="btn" @click=${this._onCancel}>${this._tp('chat_view.cancel')}</button>
+                <button
+                    type="button"
+                    class="btn btn-primary"
+                    ?disabled=${this._saving}
+                    @click=${() => this._onPrimarySave()}
+                >
+                    ${this._spaceSettingsPrimaryTitle()}
+                </button>
             </div>
         `;
     }

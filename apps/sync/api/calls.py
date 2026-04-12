@@ -6,9 +6,10 @@ from datetime import UTC, datetime, timedelta
 from typing import Optional
 from uuid import uuid4
 
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, HTTPException, Query, Request
 from fastapi.responses import JSONResponse
 
+from core.pagination import OffsetPage
 from apps.sync.constants import CHANNEL_TYPE_CALENDAR_MEETING
 from apps.sync.dependencies import ContainerDep
 from apps.sync.db.models import SyncCall, SyncCallLink, SyncChannel
@@ -267,13 +268,15 @@ async def create_call_link(body: CallLinkCreate, container: ContainerDep) -> Cal
     )
 
 
-@router.get("/links/scheduled", response_model=list[CallScheduledLinkRead])
+@router.get("/links/scheduled", response_model=OffsetPage[CallScheduledLinkRead])
 async def list_scheduled_call_links(
     start_at: datetime,
     end_at: datetime,
     container: ContainerDep,
     channel_id: str | None = None,
-) -> list[CallScheduledLinkRead]:
+    limit: int = Query(200, ge=1, le=1000),
+    offset: int = Query(0, ge=0),
+) -> OffsetPage[CallScheduledLinkRead]:
     context = get_context()
     company_id = context.active_company.company_id
     user_id = context.user.user_id
@@ -303,7 +306,8 @@ async def list_scheduled_call_links(
                 expires_at=row.expires_at,
             )
         )
-    return out
+    page = out[offset:offset + limit]
+    return OffsetPage[CallScheduledLinkRead](items=page, total=len(out), limit=limit, offset=offset)
 
 
 @router.patch("/links/{link_token}", response_model=CallLinkRead)

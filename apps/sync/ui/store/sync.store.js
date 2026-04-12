@@ -1426,7 +1426,8 @@ export const SyncStore = {
     async loadSpaces(syncApi) {
         baseStore.setState(s => ({ spaces: { ...s.spaces, loading: true } }));
         try {
-            const items = await syncApi.getSpaces();
+            const page = await syncApi.getSpaces();
+            const items = page?.items ?? page;
             this.setSpaces(items);
             const validSpaceIds = new Set(items.map(x => x.id));
             baseStore.setState(s => {
@@ -1452,7 +1453,8 @@ export const SyncStore = {
     async loadChannels(syncApi) {
         baseStore.setState(s => ({ channels: { ...s.channels, loading: true } }));
         try {
-            const items = await syncApi.getChannels();
+            const page = await syncApi.getChannels();
+            const items = page?.items ?? page;
             this.setChannels(items);
             return items;
         } catch (e) {
@@ -1464,7 +1466,8 @@ export const SyncStore = {
     async loadCompanyMembers(syncApi) {
         baseStore.setState(s => ({ companyMembers: { ...s.companyMembers, loading: true } }));
         try {
-            const items = await syncApi.getCompanyMembers();
+            const page = await syncApi.getCompanyMembers();
+            const items = page.items ?? [];
             baseStore.setState(s => {
                 const nextPresence = { ...s.peerPresenceByUserId };
                 for (const m of items) {

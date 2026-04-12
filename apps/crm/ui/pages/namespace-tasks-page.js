@@ -573,7 +573,8 @@ export class NamespaceTasksPage extends PlatformElement {
             this._loading = true;
         }
         try {
-            this._tasks = await crmApi.listTasks(ns, 100);
+            const page = await crmApi.listTasks(ns, 100);
+            this._tasks = page?.items ?? [];
         } catch (e) {
             const msg = e instanceof Error ? e.message : String(e);
             this.error(msg);

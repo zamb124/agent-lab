@@ -2,10 +2,13 @@
 API для работы с типами entities.
 """
 
+import asyncio
 from typing import List, Optional
+
 from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel
 
+from core.pagination import OffsetPage
 from apps.crm.models.api import EntityTypeCreate, EntityTypeUpdate, EntityTypeResponse
 from apps.crm.db.repositories.entity_type_repository import EntityTypeRepository
 from apps.crm.dependencies import ContainerDep
@@ -46,33 +49,55 @@ async def _backfill_missing_colors(
     return updated
 
 
-@router.get("", response_model=List[EntityTypeResponse])
+async def _collect_company_types(repo: EntityTypeRepository) -> list[EntityType]:
+    page_limit = 200
+    offset = 0
+    items: list[EntityType] = []
+    while True:
+        page = await repo.get_all_for_company(limit=page_limit, offset=offset)
+        if not page:
+            return items
+        items.extend(page)
+        if len(page) < page_limit:
+            return items
+        offset += page_limit
+
+
+@router.get("", response_model=OffsetPage[EntityTypeResponse])
 async def list_entity_types(
     container: ContainerDep,
     namespace: Optional[str] = Query(default=None, description="Фильтр разрешенных типов по namespace"),
-):
-    """Получить все типы entities для компании"""
+    limit: int = Query(200, ge=1, le=1000),
+    offset: int = Query(0, ge=0),
+) -> OffsetPage[EntityTypeResponse]:
     repo = container.entity_type_repository
-    types = await repo.get_all_for_company(namespace=namespace)
+    types, total = await asyncio.gather(
+        repo.get_all_for_company(namespace=namespace, limit=limit, offset=offset),
+        repo.count_all_for_company(namespace=namespace),
+    )
     if await _backfill_missing_colors(types, repo):
-        types = await repo.get_all_for_company(namespace=namespace)
-    return types
+        types = await repo.get_all_for_company(namespace=namespace, limit=limit, offset=offset)
+    return OffsetPage[EntityTypeResponse](items=types, total=total, limit=limit, offset=offset)
 
 
-@router.get("/by-namespace/{namespace}", response_model=List[EntityTypeResponse])
+@router.get("/by-namespace/{namespace}", response_model=OffsetPage[EntityTypeResponse])
 async def list_entity_types_by_namespace(
     namespace: str,
     container: ContainerDep,
-):
-    """Получить типы сущностей, разрешенные в namespace."""
+    limit: int = Query(200, ge=1, le=1000),
+    offset: int = Query(0, ge=0),
+) -> OffsetPage[EntityTypeResponse]:
     normalized_namespace = namespace.strip()
     if not normalized_namespace:
         raise HTTPException(status_code=422, detail="namespace is required")
     repo = container.entity_type_repository
-    types = await repo.list_allowed_for_namespace(normalized_namespace)
+    types, total = await asyncio.gather(
+        repo.get_all_for_company(namespace=normalized_namespace, limit=limit, offset=offset),
+        repo.count_all_for_company(namespace=normalized_namespace),
+    )
     if await _backfill_missing_colors(types, repo):
-        return await repo.list_allowed_for_namespace(normalized_namespace)
-    return types
+        types = await repo.get_all_for_company(namespace=normalized_namespace, limit=limit, offset=offset)
+    return OffsetPage[EntityTypeResponse](items=types, total=total, limit=limit, offset=offset)
 
 
 @router.get("/{type_id}", response_model=EntityTypeResponse)
@@ -105,7 +130,7 @@ async def create_entity_type(
     if len(namespace_ids) == 0:
         raise HTTPException(status_code=422, detail="namespace_ids must not be empty")
 
-    existing_types = await repo.get_all_for_company()
+    existing_types = await _collect_company_types(repo)
     used_colors = {
         et.color for et in existing_types
         if isinstance(et.color, str) and et.color.strip()

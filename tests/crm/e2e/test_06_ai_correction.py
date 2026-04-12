@@ -88,9 +88,8 @@ class TestAICorrection:
         note_id = note_resp.json()["entity_id"]
 
         _, analyze_resp = await _analyze_note(crm_client, auth_headers_system, note_id)
-        entities = analyze_resp["entities"]
+        entities = analyze_resp.json()["entities"]
         
-        # Сначала создаём entity на основе AI анализа
         extracted_entity = entities[0]
         create_resp = await crm_client.post("/crm/api/v1/entities/", json={
             "entity_type": extracted_entity["entity_type"],
@@ -178,7 +177,7 @@ class TestAICorrection:
         note_id = note_resp.json()["entity_id"]
 
         _, analyze_resp = await _analyze_note(crm_client, auth_headers_system, note_id)
-        entities = analyze_resp["entities"]
+        entities = analyze_resp.json()["entities"]
         
         incorrect_entity_id = None
         for entity_data in entities:
@@ -256,7 +255,7 @@ class TestAICorrection:
         note_id = note_resp.json()["entity_id"]
 
         _, analyze_resp = await _analyze_note(crm_client, auth_headers_system, note_id)
-        note_data = analyze_resp["note"]
+        note_data = analyze_resp.json()["note"]
         
         # Создаём note на основе AI анализа
         create_resp = await crm_client.post("/crm/api/v1/entities/", json={

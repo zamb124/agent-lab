@@ -172,18 +172,18 @@ class TelegramDevPolling:
                 )
                 set_context(context)
                 
-                logger.info(f"[{subdomain}] Calling list_all()...")
+                logger.info(f"[{subdomain}] Loading flows...")
                 try:
                     all_flows = await asyncio.wait_for(
-                        container.flow_repository.list_all(),
+                        container.flow_repository.list(limit=10000),
                         timeout=10.0
                     )
                     logger.info(f"[{subdomain}] Found {len(all_flows)} flows")
                 except asyncio.TimeoutError:
-                    logger.error(f"[{subdomain}] list_all() timeout!")
+                    logger.error(f"[{subdomain}] flow list timeout!")
                     continue
                 except Exception as e:
-                    logger.error(f"[{subdomain}] list_all() failed: {e}", exc_info=True)
+                    logger.error(f"[{subdomain}] flow list failed: {e}", exc_info=True)
                     continue
                 
                 for flow_cfg in all_flows:

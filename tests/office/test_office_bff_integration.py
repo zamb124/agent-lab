@@ -88,9 +88,9 @@ async def test_office_list_namespaces_uses_shared_namespace_repository(
     )
     assert r.status_code == 200
     data = r.json()
-    assert isinstance(data.get("namespaces"), list)
-    assert len(data["namespaces"]) >= 1
-    first = data["namespaces"][0]
+    assert isinstance(data.get("items"), list)
+    assert len(data["items"]) >= 1
+    first = data["items"][0]
     assert isinstance(first.get("name"), str) and first["name"].strip() != ""
     assert "is_default" in first
 

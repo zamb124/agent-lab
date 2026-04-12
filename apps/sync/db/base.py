@@ -152,13 +152,14 @@ class BaseSyncRepository(ABC, Generic[T]):
             await session.commit()
             return result.rowcount > 0
 
-    async def list_all(
+    async def list(
         self,
-        limit: int = 100,
+        *,
+        limit: int,
         offset: int = 0,
         company_id: Optional[str] = None,
-    ) -> List[T]:
-        """Получает список записей с пагинацией, фильтруя по company_id."""
+    ) -> list[T]:
+        """Возвращает страницу записей, фильтруя по company_id."""
         cid = company_id or self._get_company_id()
 
         async with self._db.session() as session:

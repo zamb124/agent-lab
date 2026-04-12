@@ -70,6 +70,6 @@ async def test_file_list_all_company_isolation(
             created_at=datetime.now(tz=UTC),
         )
     )
-    only_a = await file_repo.list_all(company_id=company_id)
+    only_a = await file_repo.list(limit=1000, company_id=company_id)
     ids = {r.file_id for r in only_a}
     assert ids == {f_a}

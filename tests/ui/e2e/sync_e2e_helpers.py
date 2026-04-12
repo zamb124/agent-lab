@@ -33,9 +33,9 @@ async def sync_api_channel_id_by_name(origin: str, auth_token: str, channel_name
         r = await client.get("/sync/api/v1/channels/")
         r.raise_for_status()
         payload = r.json()
-    if not isinstance(payload, list):
-        raise AssertionError("GET /channels/ должен вернуть список.")
-    for ch in payload:
+    if not isinstance(payload, dict) or "items" not in payload:
+        raise AssertionError("GET /channels/ должен вернуть OffsetPage с полем items.")
+    for ch in payload["items"]:
         if isinstance(ch, dict) and ch.get("name") == channel_name and isinstance(ch.get("id"), str):
             return ch["id"]
     raise AssertionError(f"Канал с именем {channel_name!r} не найден в API.")

@@ -154,10 +154,10 @@ async def test_list_documents_includes_processing_status(rag_client, unique_name
     assert list_response.status_code == 200
     data = list_response.json()
     
-    assert "documents" in data
-    assert len(data["documents"]) > 0
+    assert "items" in data
+    assert len(data["items"]) > 0
     
-    for doc in data["documents"]:
+    for doc in data["items"]:
         assert "document_id" in doc
         assert "name" in doc
         assert "status" in doc

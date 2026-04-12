@@ -330,7 +330,7 @@ async def test_llm_hitl_operator_task_then_complete_resumes_and_finishes(
 
     tasks_body = await client.get("/flows/api/v1/operator/tasks")
     assert tasks_body.status_code == 200
-    tasks = tasks_body.json()["tasks"]
+    tasks = tasks_body.json()["items"]
     op_task = next((t for t in tasks if t.get("session_id") == session_id), None)
     assert op_task is not None, "задача оператора должна быть видна участнику очереди"
 
@@ -406,7 +406,7 @@ async def test_operator_non_member_forbidden_get_task_by_id(
 
     mine = await client.get("/flows/api/v1/operator/tasks")
     assert mine.status_code == 200
-    tid = mine.json()["tasks"][0]["id"]
+    tid = mine.json()["items"][0]["id"]
 
     transport = ASGITransport(app=flows_app)
     async with AsyncClient(
@@ -463,7 +463,7 @@ async def test_operator_claim_and_patch_status(
         clear_context()
 
     lst = await client.get("/flows/api/v1/operator/tasks")
-    tid = lst.json()["tasks"][0]["id"]
+    tid = lst.json()["items"][0]["id"]
 
     cl = await client.post(f"/flows/api/v1/operator/tasks/{tid}/claim")
     assert cl.status_code == 200
@@ -560,7 +560,7 @@ async def test_full_hitl_dialogue_single_reply_then_takeover_then_followup(
 
     tasks_resp = await client.get("/flows/api/v1/operator/tasks")
     op_task_sr = next(
-        t for t in tasks_resp.json()["tasks"] if t["session_id"] == session_id
+        t for t in tasks_resp.json()["items"] if t["session_id"] == session_id
     )
     tid_sr = op_task_sr["id"]
 
@@ -627,7 +627,7 @@ async def test_full_hitl_dialogue_single_reply_then_takeover_then_followup(
     tasks_resp2 = await client.get("/flows/api/v1/operator/tasks")
     op_task_tk = next(
         t
-        for t in tasks_resp2.json()["tasks"]
+        for t in tasks_resp2.json()["items"]
         if t["session_id"] == session_id and t["id"] != tid_sr
     )
     tid_tk = op_task_tk["id"]
@@ -822,7 +822,7 @@ async def test_operator_post_message_member_sends_and_non_member_forbidden(
         clear_context()
 
     lst = await client.get("/flows/api/v1/operator/tasks")
-    tid = lst.json()["tasks"][0]["id"]
+    tid = lst.json()["items"][0]["id"]
 
     transport = ASGITransport(app=flows_app)
     async with AsyncClient(
@@ -921,7 +921,7 @@ async def test_hitl_node_single_reply_graph(
 
     tasks_resp = await client.get("/flows/api/v1/operator/tasks")
     op_task = next(
-        t for t in tasks_resp.json()["tasks"] if t["session_id"] == session_id
+        t for t in tasks_resp.json()["items"] if t["session_id"] == session_id
     )
     assert op_task["handoff_mode"] == "single_reply"
 
@@ -1010,7 +1010,7 @@ async def test_hitl_node_takeover_graph(
 
     tasks_resp = await client.get("/flows/api/v1/operator/tasks")
     op_task = next(
-        t for t in tasks_resp.json()["tasks"] if t["session_id"] == session_id
+        t for t in tasks_resp.json()["items"] if t["session_id"] == session_id
     )
     tid = op_task["id"]
     assert op_task["handoff_mode"] == "takeover"
@@ -1141,7 +1141,7 @@ async def test_operator_message_with_files_takeover(
         clear_context()
 
     lst = await client.get("/flows/api/v1/operator/tasks")
-    tid = lst.json()["tasks"][0]["id"]
+    tid = lst.json()["items"][0]["id"]
 
     await client.post(f"/flows/api/v1/operator/tasks/{tid}/claim")
 
@@ -1224,7 +1224,7 @@ async def test_operator_complete_with_files_single_reply(
 
     tasks_resp = await client.get("/flows/api/v1/operator/tasks")
     op_task = next(
-        t for t in tasks_resp.json()["tasks"] if t["session_id"] == session_id
+        t for t in tasks_resp.json()["items"] if t["session_id"] == session_id
     )
 
     done = await client.post(
@@ -1305,7 +1305,7 @@ async def test_operator_complete_with_files_takeover_dialog_log(
         clear_context()
 
     lst = await client.get("/flows/api/v1/operator/tasks")
-    tid = lst.json()["tasks"][0]["id"]
+    tid = lst.json()["items"][0]["id"]
     await client.post(f"/flows/api/v1/operator/tasks/{tid}/claim")
 
     await client.post(
@@ -1379,7 +1379,7 @@ async def test_operator_message_invalid_file_id_raises(
         clear_context()
 
     lst = await client.get("/flows/api/v1/operator/tasks")
-    tid = lst.json()["tasks"][0]["id"]
+    tid = lst.json()["items"][0]["id"]
     await client.post(f"/flows/api/v1/operator/tasks/{tid}/claim")
 
     resp = await client.post(

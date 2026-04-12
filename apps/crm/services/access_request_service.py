@@ -346,10 +346,18 @@ class AccessRequestService:
     async def list_requests(
         self,
         company_id: str,
-        status: Optional[str] = None
+        status: Optional[str] = None,
+        limit: int = 100,
+        offset: int = 0,
     ) -> List[AccessRequest]:
-        """Список запросов для компании с фильтром по статусу"""
         if status:
-            return await self._request_repo.list_by_company_and_status(company_id, status)
-        return await self._request_repo.list_by_company(company_id)
+            return await self._request_repo.list_by_company_and_status(company_id, status, limit=limit, offset=offset)
+        return await self._request_repo.list_by_company(company_id, limit=limit, offset=offset)
+
+    async def count_requests(
+        self,
+        company_id: str,
+        status: Optional[str] = None,
+    ) -> int:
+        return await self._request_repo.count_by_company(company_id, status=status)
 

@@ -282,10 +282,8 @@ export class NoteViewModal extends PlatformModal {
             ? this.note.namespace.trim()
             : 'default';
         try {
-            const tasks = await crmApi.listTasks(ns, 10, 'note_analyze', this.note.entity_id);
-            if (!Array.isArray(tasks)) {
-                return;
-            }
+            const page = await crmApi.listTasks(ns, 10, 'note_analyze', this.note.entity_id);
+            const tasks = page?.items ?? [];
             const active = tasks.find(
                 (t) => t.status === 'running' || t.status === 'pending',
             );

@@ -94,7 +94,7 @@ class TestAccessRequests:
         list_resp = await crm_client.get("/crm/api/v1/access-requests?status=pending", headers=auth_headers_system)
         assert list_resp.status_code == 200
         
-        requests = list_resp.json()
+        requests = list_resp.json()["items"]
         pending = [r for r in requests if unique_id in r.get("message", "")]
         assert len(pending) >= 1
 

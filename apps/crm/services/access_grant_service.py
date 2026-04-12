@@ -224,11 +224,17 @@ class AccessGrantService:
         self,
         resource_type: str,
         resource_id: str,
-        resource_company_id: Optional[str] = None
+        resource_company_id: Optional[str] = None,
     ) -> List[AccessGrant]:
-        """Список всех grants для ресурса"""
-        
         return await self._grant_repo.find_by_resource(resource_type, resource_id, resource_company_id)
+
+    async def count_grants(
+        self,
+        resource_type: str,
+        resource_id: str,
+        resource_company_id: Optional[str] = None,
+    ) -> int:
+        return await self._grant_repo.count_by_resource(resource_type, resource_id, resource_company_id)
     
     async def get_grant(self, grant_id: str) -> AccessGrant:
         """Получить grant по ID"""

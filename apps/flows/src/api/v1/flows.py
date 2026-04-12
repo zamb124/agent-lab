@@ -408,7 +408,7 @@ async def list_flows(
 ) -> OffsetPage[FlowResponse]:
     """Список всех flows с опциональным фильтром по типу (local/external)"""
     flows, total = await asyncio.gather(
-        container.flow_repository.list_all(limit=limit, offset=offset),
+        container.flow_repository.list(limit=limit, offset=offset),
         container.flow_repository.count_all(),
     )
 

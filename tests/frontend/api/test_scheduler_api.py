@@ -63,14 +63,18 @@ class TestFrontendSchedulerApi:
         }
 
     async def test_list_schedules(self, frontend_client_with_auth, frontend_container, monkeypatch):
+        from core.pagination import OffsetPage
+        from core.scheduler.models import PlatformScheduledTask
+
         async def _list(filters):
-            return [self._task_payload()]
+            task = PlatformScheduledTask.model_validate(self._task_payload())
+            return OffsetPage[PlatformScheduledTask](items=[task], total=1, limit=100, offset=0)
 
         monkeypatch.setattr(frontend_container.scheduler_client, "list_schedules", _list)
 
         response = await frontend_client_with_auth.get("/frontend/api/scheduler/schedules")
         assert response.status_code == 200
-        payload = response.json()
+        payload = response.json()["items"]
         assert isinstance(payload, list)
         assert payload[0]["id"] == "task-1"
         assert payload[0]["target_service"] == "flows"

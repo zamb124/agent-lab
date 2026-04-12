@@ -335,7 +335,8 @@ export class MCPServersModal extends PlatformModal {
     async _loadServers() {
         this.loading = true;
         try {
-            this.servers = await this.a2a.get('/api/v1/mcp/servers');
+            const res = await this.a2a.get('/api/v1/mcp/servers');
+            this.servers = res.items;
         } catch (error) {
             this.error(this.i18n.t('mcp_servers.err_load', { message: error.message }));
             this.servers = [];

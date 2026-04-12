@@ -4,11 +4,13 @@ API единого журнала задач CRM (crm_tasks).
 Объединяет запуск/просмотр импорта знаний и анализа заметок.
 """
 
+import asyncio
 from typing import List, Optional
 
 from fastapi import APIRouter, HTTPException, Query
 from fastapi.responses import JSONResponse
 
+from core.pagination import OffsetPage
 from apps.crm.dependencies import ContainerDep
 from apps.crm.models.api import (
     StartDailySummaryRequest,
@@ -93,18 +95,20 @@ async def start_note_analyze(
     return _to_response(row)
 
 
-@router.get("", response_model=List[TaskResponse])
+@router.get("", response_model=OffsetPage[TaskResponse])
 async def list_tasks(
     container: ContainerDep,
     namespace: str = Query(..., description="Фильтр по пространству"),
     task_type: Optional[str] = Query(None, description="Фильтр по типу задачи"),
     note_id: Optional[str] = Query(None, description="Фильтр по note_id внутри data (только note_analyze)"),
     limit: int = Query(50, ge=1, le=200),
-) -> List[TaskResponse]:
-    rows = await container.task_service.list_tasks(
-        namespace, task_type=task_type, note_id=note_id, limit=limit
+    offset: int = Query(0, ge=0),
+) -> OffsetPage[TaskResponse]:
+    rows, total = await asyncio.gather(
+        container.task_service.list_tasks(namespace, task_type=task_type, note_id=note_id, limit=limit, offset=offset),
+        container.task_service.count_tasks(namespace, task_type=task_type, note_id=note_id),
     )
-    return [_to_response(r) for r in rows]
+    return OffsetPage[TaskResponse](items=[_to_response(r) for r in rows], total=total, limit=limit, offset=offset)
 
 
 @router.get("/{task_id}", response_model=TaskResponse)

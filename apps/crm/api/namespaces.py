@@ -1,15 +1,16 @@
 """API для управления namespaces и их шаблонами в CRM."""
 
+import asyncio
 from typing import List
-from fastapi import APIRouter, HTTPException
+
+from fastapi import APIRouter, HTTPException, Query
 
 from core.logging import get_logger
-from core.context import get_context
+from core.pagination import OffsetPage
 from apps.crm.dependencies import ContainerDep
 from apps.crm.models.api import (
     NamespaceCreateRequest,
     NamespaceEditabilityResponse,
-    NamespaceListResponse,
     NamespaceResponse,
     NamespaceTemplateCreateRequest,
     NamespaceTemplateDetailsResponse,
@@ -71,21 +72,36 @@ def _normalize_allowed_type_ids(raw_value: list[str]) -> list[str]:
     return normalized
 
 
-@router.get("", response_model=NamespaceListResponse)
+async def _collect_company_type_ids(container: ContainerDep) -> set[str]:
+    page_limit = 200
+    offset = 0
+    type_ids: set[str] = set()
+    while True:
+        page = await container.entity_type_repository.get_all_for_company(
+            limit=page_limit,
+            offset=offset,
+        )
+        if not page:
+            return type_ids
+        type_ids.update(item.type_id for item in page)
+        if len(page) < page_limit:
+            return type_ids
+        offset += page_limit
+
+
+@router.get("", response_model=OffsetPage[NamespaceResponse])
 async def list_namespaces(
     container: ContainerDep,
-) -> NamespaceListResponse:
-    """
-    Список всех namespaces текущей компании.
-    Если пусто - автоматически создается default.
-    """
-    context = get_context()
-    company_id = context.active_company.company_id
-    
+    limit: int = Query(200, ge=1, le=1000),
+    offset: int = Query(0, ge=0),
+) -> OffsetPage[NamespaceResponse]:
+    """Список всех namespaces текущей компании."""
     namespace_repo = container.namespace_repository
-    namespaces = await namespace_repo.list_all()
-    
-    return NamespaceListResponse(
+    namespaces, total = await asyncio.gather(
+        namespace_repo.list(limit=limit, offset=offset),
+        namespace_repo.count_all(),
+    )
+    return OffsetPage[NamespaceResponse](
         items=[
             NamespaceResponse(
                 name=ns.name,
@@ -96,17 +112,24 @@ async def list_namespaces(
             )
             for ns in namespaces
         ],
-        company_id=company_id
+        total=total,
+        limit=limit,
+        offset=offset,
     )
 
 
-@router.get("/templates", response_model=List[NamespaceTemplateResponse])
+@router.get("/templates", response_model=OffsetPage[NamespaceTemplateResponse])
 async def list_namespace_templates(
     container: ContainerDep,
-) -> List[NamespaceTemplateResponse]:
+    limit: int = Query(200, ge=1, le=1000),
+    offset: int = Query(0, ge=0),
+) -> OffsetPage[NamespaceTemplateResponse]:
     """Список шаблонов namespace из БД."""
     template_repo = container.namespace_template_repository
-    templates = await template_repo.list_for_company()
+    templates, total = await asyncio.gather(
+        template_repo.list_for_company(limit=limit, offset=offset),
+        template_repo.count_all(),
+    )
     responses: list[NamespaceTemplateResponse] = []
     for template in templates:
         template_types = await template_repo.list_types(template.template_key)
@@ -120,7 +143,12 @@ async def list_namespace_templates(
                 entity_type_ids=[item.type_id for item in template_types],
             )
         )
-    return responses
+    return OffsetPage[NamespaceTemplateResponse](
+        items=responses,
+        total=total,
+        limit=limit,
+        offset=offset,
+    )
 
 
 @router.get("/templates/schema/options", response_model=NamespaceTemplateSchemaOptionsResponse)
@@ -366,8 +394,7 @@ async def update_namespace(
     allowed_type_ids = None
     if request.allowed_type_ids is not None:
         allowed_type_ids = _normalize_allowed_type_ids(request.allowed_type_ids)
-        all_types = await container.entity_type_repository.get_all_for_company()
-        all_type_ids = {item.type_id for item in all_types}
+        all_type_ids = await _collect_company_type_ids(container)
         unknown_type_ids = [item for item in allowed_type_ids if item not in all_type_ids]
         if unknown_type_ids:
             raise HTTPException(

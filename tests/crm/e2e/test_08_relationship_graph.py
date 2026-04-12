@@ -1249,5 +1249,5 @@ class TestSameCompanyRegression:
             headers=auth_headers_system
         )
         assert response.status_code == 200
-        rels = response.json()
+        rels = response.json()["items"]
         assert len(rels) == 0

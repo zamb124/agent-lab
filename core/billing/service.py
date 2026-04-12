@@ -309,7 +309,7 @@ class BillingService:
         """
         if self._shared_storage is None:
             return 0
-        companies = await self._company_repository.list_all(limit=limit)
+        companies = await self._company_repository.list(limit=limit)
         for company in companies:
             await self.load_settlement_rules_document_for_company(company.company_id)
         return len(companies)
@@ -619,7 +619,7 @@ class BillingService:
         if not self._usage_repository:
             raise RuntimeError("UsageRepository не настроен. Невозможно получить статистику.")
         
-        all_usage_records = await self._usage_repository.list_all(limit=10000)
+        all_usage_records = await self._usage_repository.list(limit=10000)
         
         stats = {
             "total_cost": 0.0,

@@ -7,8 +7,9 @@ import time
 from typing import List
 
 import httpx
-from fastapi import APIRouter
+from fastapi import APIRouter, Query
 
+from core.pagination import OffsetPage
 from apps.frontend.dependencies import ContainerDep
 from apps.frontend.models import ServiceStatus
 from core.clients.service_client import ServiceClientError
@@ -48,8 +49,12 @@ async def _check_service(service_client: object, name: str, health_url: str) -> 
     )
 
 
-@router.get("/status", response_model=List[ServiceStatus])
-async def get_services_status(container: ContainerDep):
+@router.get("/status", response_model=OffsetPage[ServiceStatus])
+async def get_services_status(
+    container: ContainerDep,
+    limit: int = Query(50, ge=1, le=100),
+    offset: int = Query(0, ge=0),
+):
     service_client = container.service_client
 
     tasks = [
@@ -74,4 +79,5 @@ async def get_services_status(container: ContainerDep):
         else:
             raise result
 
-    return statuses
+    page = statuses[offset:offset + limit]
+    return OffsetPage[ServiceStatus](items=page, total=len(statuses), limit=limit, offset=offset)

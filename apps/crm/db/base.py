@@ -152,12 +152,13 @@ class BaseCRMRepository(ABC, Generic[T]):
             await session.commit()
             return result.rowcount > 0
     
-    async def list_all(
-        self, 
-        limit: int = 100, 
-        offset: int = 0
-    ) -> List[T]:
-        """Получает список записей с пагинацией"""
+    async def list(
+        self,
+        *,
+        limit: int,
+        offset: int = 0,
+    ) -> list[T]:
+        """Возвращает страницу записей."""
         async with self._db.session() as session:
             stmt = select(self.model_class).limit(limit).offset(offset)
             result = await session.execute(stmt)

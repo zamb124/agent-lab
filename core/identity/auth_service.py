@@ -221,7 +221,7 @@ class AuthService:
         if norm(email) != norm(demo.email):
             return AuthResult(success=False, error_message="Неверные учётные данные")
 
-        users = await self._user_repository.list_all(limit=10000)
+        users = await self._user_repository.list(limit=10000)
         matched = [
             u
             for u in users

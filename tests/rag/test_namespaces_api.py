@@ -59,11 +59,9 @@ async def test_list_namespaces(rag_client, unique_namespace_name, auth_headers_s
     assert response.status_code == 200
     data = response.json()
     
-    assert "namespaces" in data
-    assert "company_id" in data
-    # Проверяем что список не пустой
-    assert len(data["namespaces"]) > 0, f"Namespaces list is empty: {data}"
-    assert any(ns["name"] == unique_namespace_name for ns in data["namespaces"]), f"Namespace {unique_namespace_name} not found in {[ns['name'] for ns in data['namespaces']]}"
+    assert "items" in data
+    assert len(data["items"]) > 0, f"Namespaces list is empty: {data}"
+    assert any(ns["name"] == unique_namespace_name for ns in data["items"]), f"Namespace {unique_namespace_name} not found in {[ns['name'] for ns in data['items']]}"
 
 
 @pytest.mark.asyncio
@@ -81,8 +79,7 @@ async def test_list_namespaces_with_provider_param(rag_client, unique_namespace_
     assert response.status_code == 200
     data = response.json()
     
-    assert "company_id" in data
-    assert any(ns["name"] == unique_namespace_name for ns in data["namespaces"])
+    assert any(ns["name"] == unique_namespace_name for ns in data["items"])
 
 
 @pytest.mark.asyncio

@@ -293,7 +293,7 @@ async def test_list_embed_configs(frontend_client: AsyncClient, test_auth_with_a
     )
     
     assert response.status_code == 200
-    configs = response.json()
+    configs = response.json()["items"]
     
     assert isinstance(configs, list)
     assert len(configs) >= 3
@@ -530,7 +530,7 @@ async def test_company_isolation(
     )
     
     assert list_response_1.status_code == 200
-    configs_1 = list_response_1.json()
+    configs_1 = list_response_1.json()["items"]
     config_ids_1 = [c["embed_id"] for c in configs_1]
     
     assert embed_id_1 in config_ids_1
@@ -543,7 +543,7 @@ async def test_company_isolation(
     )
     
     assert list_response_2.status_code == 200
-    configs_2 = list_response_2.json()
+    configs_2 = list_response_2.json()["items"]
     config_ids_2 = [c["embed_id"] for c in configs_2]
     
     assert embed_id_2 in config_ids_2

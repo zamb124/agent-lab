@@ -1534,10 +1534,13 @@ export class GraphPage extends PlatformElement {
     async _loadNamespaceOverviewNative() {
         await this._executeNativeAction('load namespace overview', async () => {
             const payload = {};
-            payload.namespaces = await this.crmApi.getNamespaces();
-            payload.templates = await this.crmApi.getNamespaceTemplates();
+            const nsPage = await this.crmApi.getNamespaces();
+            payload.namespaces = nsPage?.items ?? nsPage;
+            const tplPage = await this.crmApi.getNamespaceTemplates();
+            payload.templates = tplPage?.items ?? tplPage;
             if (this._grantNamespace.trim()) {
-                payload.namespace_grants = await this.crmApi.getNamespaceGrants(this._grantNamespace.trim());
+                const grantsPage = await this.crmApi.getNamespaceGrants(this._grantNamespace.trim());
+                payload.namespace_grants = grantsPage?.items ?? grantsPage;
             }
             return payload;
         });

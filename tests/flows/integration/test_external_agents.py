@@ -61,7 +61,7 @@ class TestFlowDiscoveryService:
 
         await container.flow_repository.set(agent)
 
-        all_agents = await container.flow_repository.list_all(limit=10000)
+        all_agents = await container.flow_repository.list(limit=10000)
         assert len(all_agents) >= 1
 
         found = await container.flow_repository.get("test_agent_1")
@@ -93,7 +93,7 @@ class TestFlowDiscoveryService:
         await container.flow_repository.set(agent_inactive)
 
         # Фильтруем external агентов по статусу
-        all_agents = await container.flow_repository.list_all(limit=10000)
+        all_agents = await container.flow_repository.list(limit=10000)
         active_agents = [a for a in all_agents if a.type == FlowType.EXTERNAL and a.status == ExternalAgentStatus.ACTIVE]
         agent_ids = [a.flow_id for a in active_agents]
 
@@ -118,7 +118,7 @@ class TestFlowDiscoveryService:
         await container.flow_repository.set(agent)
 
         # Ищем агента по URL
-        all_agents = await container.flow_repository.list_all(limit=10000)
+        all_agents = await container.flow_repository.list(limit=10000)
         found = None
         for a in all_agents:
             if a.type == FlowType.EXTERNAL and a.url == url:

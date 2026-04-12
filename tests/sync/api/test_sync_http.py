@@ -13,7 +13,7 @@ async def test_http_list_spaces_empty(
 ) -> None:
     r = await sync_client.get("/sync/api/v1/spaces/", headers=sync_auth_headers)
     assert r.status_code == 200
-    assert r.json() == []
+    assert r.json()["items"] == []
 
 
 @pytest.mark.asyncio
@@ -62,4 +62,4 @@ async def test_http_list_channels_empty(
 ) -> None:
     r = await sync_client.get("/sync/api/v1/channels/", headers=sync_auth_headers)
     assert r.status_code == 200
-    assert r.json() == []
+    assert r.json()["items"] == []

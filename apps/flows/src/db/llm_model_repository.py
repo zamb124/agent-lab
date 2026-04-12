@@ -32,7 +32,7 @@ class LLMModelRepository(BaseRepository[LLMModel]):
     async def list_by_provider(self, provider: str) -> List[LLMModel]:
         """Возвращает все модели указанного провайдера."""
         # Получаем все модели и фильтруем по провайдеру
-        all_models = await self.list_all(limit=10000)
+        all_models = await self.list(limit=10000)
         return [model for model in all_models if model.provider == provider]
 
     async def delete_by_provider(self, provider: str) -> int:

@@ -156,9 +156,9 @@ class HTTPRepositoryProxy(Generic[T]):
                 return False
             raise
     
-    async def list_all(self, limit: int = 100):
-        """GET /?limit={limit}"""
-        data = await self._request("GET", "", params={"limit": limit})
+    async def list(self, *, limit: int, offset: int = 0):
+        """GET /?limit={limit}&offset={offset}"""
+        data = await self._request("GET", "", params={"limit": limit, "offset": offset})
         return self._deserialize_result(data) if data else []
     
     async def get_many(self, entity_ids: list):

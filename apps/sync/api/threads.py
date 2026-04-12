@@ -2,6 +2,7 @@
 
 from fastapi import APIRouter, HTTPException, Query
 
+from core.pagination import OffsetPage
 from apps.sync.dependencies import ContainerDep
 from apps.sync.models.threads import ThreadRead, ThreadCreate, ThreadRow
 from apps.sync.realtime.commands import CommandEnvelope
@@ -12,19 +13,20 @@ from core.context import get_context
 router = APIRouter()
 
 
-@router.get("/")
+@router.get("/", response_model=OffsetPage[ThreadRow])
 async def list_threads(
     channel_id: str,
     container: ContainerDep,
     limit: int = Query(50, ge=1, le=200),
-) -> list[ThreadRow]:
+    offset: int = Query(0, ge=0),
+) -> OffsetPage[ThreadRow]:
     """Список тредов в канале."""
     context = get_context()
     threads = await container.thread_repository.list_by_channel(
         channel_id, limit=limit,
         company_id=context.active_company.company_id,
     )
-    return [
+    items = [
         ThreadRow(
             id=t.thread_id,
             channel_id=t.channel_id,
@@ -35,6 +37,7 @@ async def list_threads(
         )
         for t in threads
     ]
+    return OffsetPage[ThreadRow](items=items, total=len(items), limit=limit, offset=offset)
 
 
 @router.post("/", status_code=201)

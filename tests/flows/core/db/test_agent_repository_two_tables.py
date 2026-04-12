@@ -168,7 +168,7 @@ class TestFlowRepositoryTwoTables:
         assert retrieved_agent.name == "Test Agent v49", "Должна быть последняя версия"
         
         # list_all() ДОЛЖЕН вернуть агента (с достаточно большим limit)
-        all_agents = await repo.list_all(limit=1000)
+        all_agents = await repo.list(limit=1000)
         agent_ids = [a.flow_id for a in all_agents]
         assert flow_id in agent_ids, "list_all() ДОЛЖЕН вернуть агента независимо от количества версий"
         assert agent_ids.count(flow_id) == 1, "list_all() ДОЛЖЕН вернуть каждого агента только один раз"
@@ -219,7 +219,7 @@ class TestFlowRepositoryTwoTables:
         assert agent2 is not None, "Второй агент ДОЛЖЕН быть доступен"
         
         # list_all() ДОЛЖЕН вернуть ОБОИХ агентов (с большим limit)
-        all_agents = await repo.list_all(limit=1000)
+        all_agents = await repo.list(limit=1000)
         agent_ids = [a.flow_id for a in all_agents]
         assert many_versions_agent_id in agent_ids, "Агент с множеством версий ДОЛЖЕН быть в списке"
         assert later_agent_id in agent_ids, "Агент, идущий позже по алфавиту, ДОЛЖЕН быть в списке"
@@ -342,7 +342,7 @@ class TestFlowRepositoryTwoTables:
             assert agent is not None, f"Агент {flow_id} ДОЛЖЕН быть доступен"
         
         # list_all() ДОЛЖЕН вернуть всех агентов (с большим limit)
-        all_agents = await repo.list_all(limit=1000)
+        all_agents = await repo.list(limit=1000)
         all_agent_ids = [a.flow_id for a in all_agents]
         
         for flow_id in agent_ids:
@@ -374,7 +374,7 @@ class TestFlowRepositoryTwoTables:
             await repo.set(agent)
 
         # list_all(limit=10) ДОЛЖЕН вернуть не более 10 агентов
-        limited_agents = await repo.list_all(limit=10)
+        limited_agents = await repo.list(limit=10)
         assert len(limited_agents) <= 10, "list_all(limit=10) ДОЛЖЕН вернуть не более 10 агентов"
 
         # Cleanup

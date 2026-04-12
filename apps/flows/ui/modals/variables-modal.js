@@ -253,7 +253,8 @@ export class VariablesModal extends PlatformModal {
     async _loadVariables() {
         this.loading = true;
         try {
-            this.variables = await this.a2a.get('/api/v1/variables/');
+            const res = await this.a2a.get('/api/v1/variables/');
+            this.variables = res.items;
         } catch (error) {
             this.error(this.i18n.t('variables_modal.err_load', { message: error.message }));
             this.variables = [];

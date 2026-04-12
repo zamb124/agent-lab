@@ -545,6 +545,6 @@ class TestNewTaskEndpoints:
             headers=auth_headers_system,
         )
         assert list_resp.status_code == 200, list_resp.text
-        tasks = list_resp.json()
+        tasks = list_resp.json()["items"]
         task_ids = [t["task_id"] for t in tasks]
         assert task_id in task_ids, f"task_id {task_id} не найден в списке задач"

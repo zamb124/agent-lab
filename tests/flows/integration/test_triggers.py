@@ -304,7 +304,7 @@ class TestTriggersAPI:
         
         assert response.status_code == 200
         data = response.json()
-        assert data["triggers"] == []
+        assert data == []
         
         await container.flow_repository.delete(flow_id)
 

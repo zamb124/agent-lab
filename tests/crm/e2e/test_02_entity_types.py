@@ -13,15 +13,16 @@ class TestEntityTypes:
     @pytest.mark.asyncio
     async def test_system_types_initialized(self, crm_client, auth_headers_system):
         """Системные типы минимального ядра (note, task) инициализированы"""
-        response = await crm_client.get("/crm/api/v1/entity-types/", headers=auth_headers_system)
+        response = await crm_client.get("/crm/api/v1/entity-types/", headers=auth_headers_system, params={"limit": 1000})
         assert response.status_code == 200
         
-        types = response.json()
+        page = response.json()
+        types = page["items"]
         type_ids = [t["type_id"] for t in types]
-        
+
         assert "note" in type_ids
         assert "task" in type_ids
-        
+
         for entity_type in types:
             assert entity_type["company_id"] is not None, "Все типы должны иметь company_id"
     
@@ -81,8 +82,8 @@ class TestEntityTypes:
             "prompt": "Воркшоп с практическими заданиями"
         }, headers=auth_headers_system)
         
-        types_resp = await crm_client.get("/crm/api/v1/entity-types/", headers=auth_headers_system)
-        types = types_resp.json()
+        types_resp = await crm_client.get("/crm/api/v1/entity-types/", headers=auth_headers_system, params={"limit": 1000})
+        types = types_resp.json()["items"]
         
         workshop = next((t for t in types if t["type_id"] == f"workshop_{unique_id}"), None)
         assert workshop is not None
@@ -226,7 +227,7 @@ class TestEntityTypes:
 
         types_response = await crm_client.get(f"/crm/api/v1/entity-types/by-namespace/{namespace_name}", headers=auth_headers_system)
         assert types_response.status_code == 200
-        types = types_response.json()
+        types = types_response.json()["items"]
         assert isinstance(types, list)
         assert len(types) >= 1
 
@@ -343,7 +344,7 @@ class TestEntityTypes:
             headers=auth_headers_system,
         )
         assert types_by_namespace_resp.status_code == 200
-        type_ids = [item["type_id"] for item in types_by_namespace_resp.json()]
+        type_ids = [item["type_id"] for item in types_by_namespace_resp.json()["items"]]
         assert type_alpha in type_ids
         assert type_beta not in type_ids
 

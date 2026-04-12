@@ -35,7 +35,7 @@ async def collect_platform_tool_docs(container: FlowContainer) -> List[PlatformT
 
     ctx = get_context()
     if ctx and ctx.active_company:
-        refs = await container.tool_repository.list_all(limit=5000)
+        refs = await container.tool_repository.list(limit=5000)
         for ref in refs:
             effective = ref.effective_parameters_schema()
             args_json = json.dumps(effective, ensure_ascii=False, indent=2)

@@ -61,7 +61,7 @@ async def list_tools(
 ) -> OffsetPage[ToolResponse]:
     """Список tools с пагинацией."""
     tools, total = await asyncio.gather(
-        container.tool_repository.list_all(limit=limit, offset=offset),
+        container.tool_repository.list(limit=limit, offset=offset),
         container.tool_repository.count_all(),
     )
     return OffsetPage[ToolResponse](
@@ -94,8 +94,8 @@ async def list_all_tools_and_flows(
 ) -> OffsetPage[ToolResponse]:
     """Список tools и flows для picker с общим лимитом."""
     tools_list, flows_list, tools_count, flows_count = await asyncio.gather(
-        container.tool_repository.list_all(limit=limit, offset=offset),
-        container.flow_repository.list_all(limit=limit),
+        container.tool_repository.list(limit=limit, offset=offset),
+        container.flow_repository.list(limit=limit),
         container.tool_repository.count_all(),
         container.flow_repository.count_all(),
     )

@@ -1,9 +1,11 @@
 """API роутер для пространств (Spaces)."""
 
+import asyncio
 import uuid
 
 from fastapi import APIRouter, Query
 
+from core.pagination import OffsetPage
 from apps.sync.dependencies import ContainerDep
 from apps.sync.models.spaces import SpaceRead, SpaceCreate, SpaceUpdate
 from apps.sync.realtime.command_dispatch import dispatch_sync_command
@@ -15,18 +17,20 @@ from core.context import get_context
 router = APIRouter()
 
 
-@router.get("/")
+@router.get("/", response_model=OffsetPage[SpaceRead])
 async def list_spaces(
     container: ContainerDep,
     limit: int = Query(50, ge=1, le=200),
-) -> list[SpaceRead]:
+    offset: int = Query(0, ge=0),
+) -> OffsetPage[SpaceRead]:
     """Список пространств компании."""
     context = get_context()
-    spaces = await container.space_repository.list_all(
-        limit=limit,
-        company_id=context.active_company.company_id,
+    company_id = context.active_company.company_id
+    spaces, total = await asyncio.gather(
+        container.space_repository.list(limit=limit, offset=offset, company_id=company_id),
+        container.space_repository.count(company_id=company_id),
     )
-    return [
+    items = [
         SpaceRead(
             id=s.space_id,
             name=s.name,
@@ -40,6 +44,7 @@ async def list_spaces(
         )
         for s in spaces
     ]
+    return OffsetPage[SpaceRead](items=items, total=total, limit=limit, offset=offset)
 
 
 @router.post("/", status_code=201)

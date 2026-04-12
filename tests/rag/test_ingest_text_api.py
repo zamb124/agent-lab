@@ -56,7 +56,7 @@ async def test_ingest_text_then_search(rag_client, unique_namespace_name, auth_h
         headers=auth_headers_system,
     )
     assert listed.status_code == 200
-    doc_names = [d.get("name") for d in listed.json().get("documents", [])]
+    doc_names = [d.get("name") for d in listed.json().get("items", [])]
     assert "marker.md" in doc_names
 
     # Запрос совпадает с проиндексированным текстом чанка — при моке embeddings тот же вектор, топ-1 стабилен.

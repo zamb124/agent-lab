@@ -61,7 +61,7 @@ class FlowDiscoveryService:
         """
         url = url.rstrip("/")
 
-        stored_flows = await self._repository.list_all(limit=10000)
+        stored_flows = await self._repository.list(limit=10000)
         for existing in stored_flows:
             if existing.type == FlowType.EXTERNAL and existing.url == url:
                 logger.info(f"External flow already registered: {url}")
@@ -110,7 +110,7 @@ class FlowDiscoveryService:
     async def get_flow_by_url(self, url: str) -> Optional[FlowConfig]:
         """Внешний flow по нормализованному base URL."""
         url = url.rstrip("/")
-        stored_flows = await self._repository.list_all(limit=10000)
+        stored_flows = await self._repository.list(limit=10000)
         for row in stored_flows:
             if row.type == FlowType.EXTERNAL and row.url == url:
                 return row
@@ -118,7 +118,7 @@ class FlowDiscoveryService:
 
     async def list_agents(self, only_active: bool = True) -> List[FlowConfig]:
         """Список EXTERNAL flows (имя метода историческое; сущность — flow)."""
-        stored_flows = await self._repository.list_all(limit=10000)
+        stored_flows = await self._repository.list(limit=10000)
         external = [row for row in stored_flows if row.type == FlowType.EXTERNAL]
 
         if only_active:
@@ -127,7 +127,7 @@ class FlowDiscoveryService:
 
     async def health_check_all(self) -> Dict[str, bool]:
         """Health-check по всем записям в репозитории."""
-        rows = await self._repository.list_all(limit=10000)
+        rows = await self._repository.list(limit=10000)
         results: Dict[str, bool] = {}
 
         for row in rows:

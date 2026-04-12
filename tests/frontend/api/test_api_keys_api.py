@@ -22,7 +22,7 @@ class TestApiKeysAPI:
         )
         
         assert response.status_code == 200
-        keys = response.json()
+        keys = response.json()["items"]
         assert isinstance(keys, list)
 
     async def test_list_api_keys_unauthorized(self, frontend_client: AsyncClient):
@@ -351,7 +351,7 @@ class TestApiKeysAPI:
         )
         
         assert response2.status_code == 200
-        keys = response2.json()
+        keys = response2.json()["items"]
         
         # Список ключей company2 должен быть пустым
         assert len(keys) == 0

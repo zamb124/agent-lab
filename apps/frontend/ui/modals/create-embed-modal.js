@@ -300,8 +300,8 @@ export class CreateEmbedModal extends PlatformModal {
         }
 
         FrontendStore.setEmbedLoading(true);
-        const configs = await embedService.list();
-        FrontendStore.setEmbedConfigs(configs);
+        const page = await embedService.listConfigs();
+        FrontendStore.setEmbedConfigs(page.items);
 
         const toastKey = this._isEditMode ? 'embed_create_modal.toast_updated' : 'embed_create_modal.toast_created';
         this.success(td(toastKey));

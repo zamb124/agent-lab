@@ -121,7 +121,7 @@ async def test_get_flow_returns_source_for_listed_flows(client, auth_headers_sys
     """Список и GET отдают поле source для bundle-агента."""
     list_resp = await client.get("/flows/api/v1/flows/", headers=auth_headers_system)
     assert list_resp.status_code == 200
-    items = list_resp.json()
+    items = list_resp.json()["items"]
     example = next((x for x in items if x.get("flow_id") == "example_react"), None)
     assert example is not None, "example_react должен быть в списке после загрузки registry"
     assert example.get("source") == "file"

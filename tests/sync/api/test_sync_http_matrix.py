@@ -92,8 +92,8 @@ async def test_http_company_members_ok(
     r = await sync_client.get("/sync/api/v1/company/members", headers=sync_auth_headers)
     assert r.status_code == 200
     data = r.json()
-    assert isinstance(data, list)
-    for row in data:
+    assert isinstance(data["items"], list)
+    for row in data["items"]:
         assert "is_online" in row
         assert isinstance(row["is_online"], bool)
         assert "last_seen_at" in row
@@ -155,7 +155,7 @@ async def test_http_list_threads_and_messages(
         headers=sync_auth_headers,
     )
     assert tr.status_code == 200
-    assert tr.json() == []
+    assert tr.json()["items"] == []
     mr = await sync_client.get(
         f"/sync/api/v1/channels/{channel_id}/messages",
         headers=sync_auth_headers,

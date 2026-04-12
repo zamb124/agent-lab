@@ -2,11 +2,13 @@
 API endpoints для resources.
 """
 
+import asyncio
 from typing import Any, Dict, List, Optional
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel, Field
 
+from core.pagination import OffsetPage
 from apps.flows.src.dependencies import ContainerDep
 from apps.flows.src.models import ResourceType, ResourceDefinition
 from core.logging import get_logger
@@ -50,18 +52,22 @@ class ResourceResponse(BaseModel):
     permission: List[str] = []
 
 
-@router.get("/", response_model=List[ResourceResponse])
+@router.get("/", response_model=OffsetPage[ResourceResponse])
 async def list_resources(
     container: ContainerDep,
     type: Optional[ResourceType] = None,
-) -> List[ResourceResponse]:
-    """Список всех shared ресурсов"""
-    resources = await container.resource_repository.list_all()
-    
+    limit: int = Query(200, ge=1, le=1000),
+    offset: int = Query(0, ge=0),
+) -> OffsetPage[ResourceResponse]:
+    resources, total = await asyncio.gather(
+        container.resource_repository.list(limit=limit, offset=offset),
+        container.resource_repository.count_all(),
+    )
+
     if type:
         resources = [r for r in resources if r.type == type]
-    
-    return [
+
+    items = [
         ResourceResponse(
             resource_id=r.resource_id,
             type=r.type,
@@ -73,6 +79,7 @@ async def list_resources(
         )
         for r in resources
     ]
+    return OffsetPage[ResourceResponse](items=items, total=total, limit=limit, offset=offset)
 
 
 @router.get("/{resource_id}", response_model=ResourceResponse)

@@ -151,10 +151,13 @@ function resolveStoredNamespaceSelection(list, companyId) {
 }
 
 function normalizeEntityTypeList(payload) {
+    if (payload && Array.isArray(payload.items)) {
+        return payload.items;
+    }
     if (Array.isArray(payload)) {
         return payload;
     }
-    throw new Error('Entity types payload must be array');
+    throw new Error('Entity types payload must be OffsetPage or array');
 }
 
 function normalizeRelationshipTypeList(payload) {
@@ -1535,10 +1538,8 @@ export const CRMStore = {
         if (!crmApi) {
             throw new Error('crmApi service is required');
         }
-        const templates = await crmApi.getNamespaceTemplates();
-        if (!Array.isArray(templates)) {
-            throw new Error('Namespace templates payload must be array');
-        }
+        const page = await crmApi.getNamespaceTemplates();
+        const templates = page?.items ?? [];
         baseStore.setState((s) => ({
             namespaces: {
                 ...s.namespaces,
@@ -2345,14 +2346,13 @@ export const CRMStore = {
             accessRequests: { ...s.accessRequests, loading: true }
         }));
 
-        const requests = await crmApi.listAccessRequests(status);
+        const page = await crmApi.listAccessRequests(status);
+        const requests = page?.items ?? [];
 
         baseStore.setState((s) => ({
             accessRequests: {
                 ...s.accessRequests,
-                pending: Array.isArray(requests)
-                    ? requests.filter(r => r.status === 'pending')
-                    : [],
+                pending: requests.filter(r => r.status === 'pending'),
                 loading: false
             }
         }));

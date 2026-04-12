@@ -25,7 +25,7 @@ class TestServicesAPI:
         response = await frontend_client.get("/frontend/api/services/status")
 
         assert response.status_code == 200
-        statuses = response.json()
+        statuses = response.json()["items"]
 
         assert isinstance(statuses, list)
 
@@ -55,7 +55,7 @@ class TestServicesAPI:
         response = await frontend_client.get("/frontend/api/services/status")
 
         assert response.status_code == 200
-        statuses = response.json()
+        statuses = response.json()["items"]
 
         for service in statuses:
             if service["status"] == "healthy" and service["response_time"] is not None:
@@ -70,7 +70,7 @@ class TestServicesAPI:
         response = await frontend_client.get("/frontend/api/services/status")
 
         assert response.status_code == 200
-        statuses = response.json()
+        statuses = response.json()["items"]
 
         for service in statuses:
             assert service["url"].startswith("/")
@@ -84,7 +84,7 @@ class TestServicesAPI:
         for _ in range(3):
             response = await frontend_client.get("/frontend/api/services/status")
             assert response.status_code == 200
-            responses.append(response.json())
+            responses.append(response.json()["items"])
 
         for resp in responses:
             assert len(resp) > 0
@@ -99,7 +99,7 @@ class TestServicesAPI:
         response = await frontend_client.get("/frontend/api/services/status")
 
         assert response.status_code == 200
-        statuses = response.json()
+        statuses = response.json()["items"]
 
         assert len(statuses) == len(EXPECTED_SERVICES)
 
@@ -118,7 +118,7 @@ class TestServicesAPI:
         assert response.status_code == 200
         assert response.headers["content-type"] == "application/json"
 
-        statuses = response.json()
+        statuses = response.json()["items"]
         assert isinstance(statuses, list)
 
     async def test_services_status_all_services_listed(
@@ -129,7 +129,7 @@ class TestServicesAPI:
         response = await frontend_client.get("/frontend/api/services/status")
 
         assert response.status_code == 200
-        statuses = response.json()
+        statuses = response.json()["items"]
 
         services_dict = {s["name"]: s for s in statuses}
         for name in EXPECTED_SERVICES:
@@ -152,8 +152,8 @@ class TestServicesAPI:
         assert response1.status_code == 200
         assert response2.status_code == 200
 
-        statuses1 = {s["name"]: s["status"] for s in response1.json()}
-        statuses2 = {s["name"]: s["status"] for s in response2.json()}
+        statuses1 = {s["name"]: s["status"] for s in response1.json()["items"]}
+        statuses2 = {s["name"]: s["status"] for s in response2.json()["items"]}
 
         assert set(statuses1.keys()) == set(statuses2.keys())
         assert len(statuses1) == len(statuses2)

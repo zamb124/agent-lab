@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import Optional
 
 from core.clients.service_client import ServiceClient
+from core.pagination import OffsetPage
 from core.scheduler.models import (
     PlatformRedisScheduleSnapshot,
     PlatformScheduleCreateRequest,
@@ -27,14 +28,20 @@ class SchedulerClient:
         )
         return PlatformScheduledTask.model_validate(response)
 
-    async def list_schedules(self, filters: PlatformScheduleFilter) -> list[PlatformScheduledTask]:
+    async def list_schedules(self, filters: PlatformScheduleFilter) -> OffsetPage[PlatformScheduledTask]:
         params = filters.model_dump(mode="json", exclude_none=True)
         response = await self._service_client.get(
             "scheduler",
             "/scheduler/api/v1/schedules",
             params=params,
         )
-        return [PlatformScheduledTask.model_validate(item) for item in response]
+        items = [PlatformScheduledTask.model_validate(item) for item in response["items"]]
+        return OffsetPage[PlatformScheduledTask](
+            items=items,
+            total=response["total"],
+            limit=response["limit"],
+            offset=response["offset"],
+        )
 
     async def get_schedule(self, schedule_task_id: str) -> PlatformScheduledTask:
         response = await self._service_client.get(

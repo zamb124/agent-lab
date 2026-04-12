@@ -30,10 +30,10 @@ class TestSystemTypesFlags:
     async def test_system_types_include_member_company_namespace(
         self, crm_client, auth_headers_system
     ):
-        resp = await crm_client.get("/crm/api/v1/entity-types/", headers=auth_headers_system)
+        resp = await crm_client.get("/crm/api/v1/entity-types/", headers=auth_headers_system, params={"limit": 1000})
         assert resp.status_code == 200
 
-        types_by_id = {t["type_id"]: t for t in resp.json()}
+        types_by_id = {t["type_id"]: t for t in resp.json()["items"]}
 
         for type_id in ("member", "company", "namespace"):
             assert type_id in types_by_id, f"Системный тип {type_id!r} отсутствует"
@@ -47,10 +47,10 @@ class TestSystemTypesFlags:
     async def test_member_and_contact_are_voice_targets(
         self, crm_client, auth_headers_system
     ):
-        resp = await crm_client.get("/crm/api/v1/entity-types/", headers=auth_headers_system)
+        resp = await crm_client.get("/crm/api/v1/entity-types/", headers=auth_headers_system, params={"limit": 1000})
         assert resp.status_code == 200
 
-        types_by_id = {t["type_id"]: t for t in resp.json()}
+        types_by_id = {t["type_id"]: t for t in resp.json()["items"]}
         assert types_by_id["member"]["is_voice_target"] is True
         assert types_by_id["contact"]["is_voice_target"] is True
 
@@ -58,10 +58,10 @@ class TestSystemTypesFlags:
     async def test_non_voice_types_have_flag_false(
         self, crm_client, auth_headers_system
     ):
-        resp = await crm_client.get("/crm/api/v1/entity-types/", headers=auth_headers_system)
+        resp = await crm_client.get("/crm/api/v1/entity-types/", headers=auth_headers_system, params={"limit": 1000})
         assert resp.status_code == 200
 
-        types_by_id = {t["type_id"]: t for t in resp.json()}
+        types_by_id = {t["type_id"]: t for t in resp.json()["items"]}
         for type_id in ("note", "task", "namespace", "company"):
             assert types_by_id[type_id]["is_voice_target"] is False, (
                 f"Тип {type_id!r} не должен быть голосом"

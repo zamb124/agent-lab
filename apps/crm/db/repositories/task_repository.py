@@ -117,6 +117,7 @@ class TaskRepository(BaseCRMRepository[CRMTask]):
         task_type: Optional[str] = None,
         note_id: Optional[str] = None,
         limit: int = 50,
+        offset: int = 0,
         company_id: Optional[str] = None,
     ) -> List[CRMTask]:
         cid = company_id or self._get_company_id()
@@ -129,9 +130,30 @@ class TaskRepository(BaseCRMRepository[CRMTask]):
                 stmt = stmt.where(CRMTask.task_type == task_type)
             if note_id is not None:
                 stmt = stmt.where(CRMTask.data["note_id"].as_string() == note_id)
-            stmt = stmt.order_by(CRMTask.created_at.desc()).limit(limit)
+            stmt = stmt.order_by(CRMTask.created_at.desc()).offset(offset).limit(limit)
             result = await session.execute(stmt)
             return list(result.scalars().all())
+
+    async def count_for_namespace(
+        self,
+        namespace: str,
+        *,
+        task_type: Optional[str] = None,
+        note_id: Optional[str] = None,
+        company_id: Optional[str] = None,
+    ) -> int:
+        cid = company_id or self._get_company_id()
+        async with self._db.session() as session:
+            stmt = select(func.count()).select_from(CRMTask).where(
+                CRMTask.company_id == cid,
+                CRMTask.namespace == namespace,
+            )
+            if task_type is not None:
+                stmt = stmt.where(CRMTask.task_type == task_type)
+            if note_id is not None:
+                stmt = stmt.where(CRMTask.data["note_id"].as_string() == note_id)
+            result = await session.execute(stmt)
+            return result.scalar() or 0
 
     async def find_active_by_data_keys(
         self,

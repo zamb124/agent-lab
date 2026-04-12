@@ -154,7 +154,7 @@ class TestMCPSyncAPI:
         # Проверяем что tools появились в /tools/all
         tools_resp = await client.get("/flows/api/v1/tools/all")
         assert tools_resp.status_code == 200
-        all_tools = tools_resp.json()
+        all_tools = tools_resp.json()["items"]
         
         mcp_tools = [t for t in all_tools if t.get("mcp_server_id") == server_id]
         assert len(mcp_tools) > 0, "MCP tools должны появиться в общем списке"
@@ -230,7 +230,7 @@ class TestMCPSyncAPI:
         # List
         list_resp = await client.get("/flows/api/v1/mcp/servers")
         assert list_resp.status_code == 200
-        servers = list_resp.json()
+        servers = list_resp.json()["items"]
         assert any(s["server_id"] == server_id for s in servers)
         
         # Delete

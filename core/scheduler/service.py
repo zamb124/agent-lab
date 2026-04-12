@@ -205,6 +205,9 @@ class SchedulerService:
         tasks = await self._repository.list(company_id=company_id, filters=filters)
         return [self._enrich_next_run_at(task) for task in tasks]
 
+    async def count(self, company_id: str, filters: PlatformScheduleFilter) -> int:
+        return await self._repository.count(company_id=company_id, filters=filters)
+
     async def pause(self, company_id: str, schedule_task_id: str) -> PlatformScheduledTask:
         task = await self.get(company_id, schedule_task_id)
         if task.status != ScheduledTaskStatus.PENDING:

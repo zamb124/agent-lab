@@ -18,11 +18,20 @@ class NamespaceTemplateRepository(BaseCRMRepository[NamespaceTemplate]):
     def id_field(self) -> str:
         return "template_key"
 
-    async def list_for_company(self, company_id: Optional[str] = None) -> list[NamespaceTemplate]:
+    async def list_for_company(
+        self,
+        company_id: Optional[str] = None,
+        *,
+        limit: int = 200,
+        offset: int = 0,
+    ) -> list[NamespaceTemplate]:
         effective_company_id = company_id or self._get_company_id()
         async with self._db.session() as session:
-            stmt = select(NamespaceTemplate).where(
-                NamespaceTemplate.company_id == effective_company_id
+            stmt = (
+                select(NamespaceTemplate)
+                .where(NamespaceTemplate.company_id == effective_company_id)
+                .limit(limit)
+                .offset(offset)
             )
             result = await session.execute(stmt)
             return list(result.scalars().all())

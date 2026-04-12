@@ -6,9 +6,10 @@ import logging
 import uuid
 from datetime import datetime, timezone
 from typing import Optional, List
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, HTTPException, Query, Request
 from pydantic import BaseModel, Field
 
+from core.pagination import OffsetPage
 from core.models.embed_models import EmbedConfig, EmbedStatus, EmbedMapping
 from apps.frontend.dependencies import ContainerDep
 from apps.flows.src.models import FlowType
@@ -181,10 +182,12 @@ async def create_embed_config(
     )
 
 
-@router.get("", response_model=List[EmbedConfigResponse])
+@router.get("", response_model=OffsetPage[EmbedConfigResponse])
 async def list_embed_configs(
     request: Request,
-    container: ContainerDep
+    container: ContainerDep,
+    limit: int = Query(200, ge=1, le=1000),
+    offset: int = Query(0, ge=0),
 ):
     """
     Получение списка всех конфигураций виджетов компании.
@@ -201,11 +204,11 @@ async def list_embed_configs(
         raise HTTPException(status_code=400, detail="Необходимо выбрать компанию")
     
     embed_config_repo = container.embed_config_repository
-    configs = await embed_config_repo.list()
+    configs = await embed_config_repo.list(limit=limit, offset=offset)
     
     logger.info(f"Получен список из {len(configs)} конфигураций для компании {company_id}")
-    
-    return [
+
+    items = [
         EmbedConfigResponse(
             embed_id=c.embed_id,
             name=c.name,
@@ -229,6 +232,7 @@ async def list_embed_configs(
         )
         for c in configs
     ]
+    return OffsetPage[EmbedConfigResponse](items=items, total=len(items), limit=limit, offset=offset)
 
 
 @router.get("/{embed_id}", response_model=EmbedConfigResponse)

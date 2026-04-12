@@ -130,7 +130,7 @@ async def test_company_creation_with_agents_initialization(
         # Ждем пока агенты появятся в БД
         agents_loaded = False
         for attempt in range(max_wait):
-            agents = await agent_repo.list_all()
+            agents = await agent_repo.list(limit=1000)
             
             if len(agents) > 0:
                 agents_loaded = True
@@ -145,7 +145,7 @@ async def test_company_creation_with_agents_initialization(
         )
         
         # Проверка что загружены ТОЛЬКО public агенты
-        agents = await agent_repo.list_all()
+        agents = await agent_repo.list(limit=1000)
         agent_ids = [agent.flow_id for agent in agents]
         
         print(f"📋 Загруженные агенты: {agent_ids}")
@@ -173,7 +173,7 @@ async def test_company_creation_with_agents_initialization(
         
         # Шаг 6: Проверка что tools тоже загружены
         tool_repo = container.tool_repository
-        tools = await tool_repo.list_all()
+        tools = await tool_repo.list(limit=1000)
         
         print(f"📋 Загружено tools: {len(tools)} шт")
         
@@ -199,7 +199,7 @@ async def test_company_creation_with_agents_initialization(
         
         assert api_response.status_code == 200, f"API failed: {api_response.text}"
         
-        api_agents = api_response.json()
+        api_agents = api_response.json()["items"]
         api_agent_ids = [agent["flow_id"] for agent in api_agents]
         
         print(f"✅ API вернул {len(api_agents)} агентов: {api_agent_ids[:5]}...")  # Показываем первые 5
@@ -478,9 +478,9 @@ async def test_company_agents_api_with_context(
             },
         )
         if r1.status_code == 200 and r2.status_code == 200:
-            j1 = r1.json()
-            j2 = r2.json()
-            if isinstance(j1, list) and isinstance(j2, list) and len(j1) > 0 and len(j2) > 0:
+            j1 = r1.json()["items"]
+            j2 = r2.json()["items"]
+            if len(j1) > 0 and len(j2) > 0:
                 flows_ready = True
                 break
         await asyncio.sleep(0.1)
@@ -499,7 +499,7 @@ async def test_company_agents_api_with_context(
     )
     
     assert response1.status_code == 200
-    agents1 = response1.json()
+    agents1 = response1.json()["items"]
     print(f"✅ Компания 1 видит {len(agents1)} агентов")
     assert len(agents1) > 0, "Компания 1 должна видеть агенты"
     
@@ -513,7 +513,7 @@ async def test_company_agents_api_with_context(
     )
     
     assert response2.status_code == 200
-    agents2 = response2.json()
+    agents2 = response2.json()["items"]
     print(f"✅ Компания 2 видит {len(agents2)} агентов")
     assert len(agents2) > 0, "Компания 2 должна видеть агенты"
     

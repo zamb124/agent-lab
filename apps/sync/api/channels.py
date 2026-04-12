@@ -1,5 +1,6 @@
 """API роутер для каналов (Channels)."""
 
+import asyncio
 import uuid
 
 from fastapi import APIRouter, HTTPException, Query
@@ -20,17 +21,19 @@ from apps.sync.realtime.events import event_channel_member_added
 from apps.sync.realtime.publish_events import publish_realtime_events
 from apps.sync.realtime.tasks import handle_command
 from core.config import get_settings
+from core.pagination import OffsetPage
 from core.context import get_context
 
 router = APIRouter()
 
 
-@router.get("/")
+@router.get("/", response_model=OffsetPage[ChannelRead])
 async def list_channels(
     container: ContainerDep,
     space_id: str | None = None,
     limit: int = Query(50, ge=1, le=200),
-) -> list[ChannelRead]:
+    offset: int = Query(0, ge=0),
+) -> OffsetPage[ChannelRead]:
     """Список каналов текущего пользователя (членство). Опционально фильтр по space_id."""
     context = get_context()
     company_id = context.active_company.company_id
@@ -39,6 +42,7 @@ async def list_channels(
         viewer_id,
         space_id=space_id,
         limit=limit,
+        offset=offset,
         company_id=company_id,
     )
     channel_ids = [c.channel_id for c in channels]
@@ -60,7 +64,7 @@ async def list_channels(
                 lane_summary=summ,
             )
         )
-    return out
+    return OffsetPage[ChannelRead](items=out, total=len(out), limit=limit, offset=offset)
 
 
 @router.patch("/{channel_id}")

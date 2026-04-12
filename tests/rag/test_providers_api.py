@@ -16,12 +16,11 @@ async def test_list_providers(rag_client, auth_headers_system):
     assert response.status_code == 200
     data = response.json()
     
-    assert "providers" in data
+    assert "items" in data
     assert "current_provider" in data
-    assert len(data["providers"]) > 0
+    assert len(data["items"]) > 0
     
-    # Проверяем структуру провайдера
-    provider = data["providers"][0]
+    provider = data["items"][0]
     assert "name" in provider
     assert "enabled" in provider
     assert "is_default" in provider
@@ -35,8 +34,7 @@ async def test_list_providers_pgvector_present(rag_client, auth_headers_system):
     assert response.status_code == 200
     data = response.json()
     
-    providers = data["providers"]
-    pgvector = next((p for p in providers if p["name"] == "pgvector"), None)
+    pgvector = next((p for p in data["items"] if p["name"] == "pgvector"), None)
     
     assert pgvector is not None
     assert pgvector["enabled"] is True

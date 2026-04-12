@@ -5,6 +5,25 @@
 import pytest
 
 
+async def _list_all_operator_queues(client, headers: dict) -> list[dict]:
+    limit = 200
+    offset = 0
+    items: list[dict] = []
+    while True:
+        response = await client.get(
+            "/flows/api/v1/operator/queues",
+            headers=headers,
+            params={"limit": limit, "offset": offset},
+        )
+        assert response.status_code == 200, response.text
+        page = response.json()
+        page_items = page["items"]
+        items.extend(page_items)
+        if len(page_items) < limit:
+            return items
+        offset += limit
+
+
 @pytest.mark.asyncio
 async def test_operator_create_and_list_queues(client, app, unique_id, auth_headers_system):
     slug = f"opq_{unique_id}"
@@ -17,12 +36,7 @@ async def test_operator_create_and_list_queues(client, app, unique_id, auth_head
     data = create.json()
     assert data["slug"] == slug
 
-    lst = await client.get(
-        "/flows/api/v1/operator/queues",
-        headers=auth_headers_system,
-    )
-    assert lst.status_code == 200
-    queues = lst.json()
+    queues = await _list_all_operator_queues(client, auth_headers_system)
     assert any(q.get("slug") == slug for q in queues)
 
 
@@ -60,12 +74,7 @@ async def test_operator_admin_joins_queue_without_prior_membership(
         name="Empty queue",
         slug=slug,
     )
-    lst = await client.get(
-        "/flows/api/v1/operator/queues",
-        headers=auth_headers_system,
-    )
-    assert lst.status_code == 200, lst.text
-    queues = lst.json()
+    queues = await _list_all_operator_queues(client, auth_headers_system)
     row = next(q for q in queues if q.get("slug") == slug)
     assert row.get("i_am_member") is False
 
@@ -76,12 +85,8 @@ async def test_operator_admin_joins_queue_without_prior_membership(
     )
     assert add.status_code == 200, add.text
 
-    lst2 = await client.get(
-        "/flows/api/v1/operator/queues",
-        headers=auth_headers_system,
-    )
-    assert lst2.status_code == 200
-    row2 = next(q for q in lst2.json() if q.get("slug") == slug)
+    queues2 = await _list_all_operator_queues(client, auth_headers_system)
+    row2 = next(q for q in queues2 if q.get("slug") == slug)
     assert row2.get("i_am_member") is True
 
 
@@ -108,11 +113,8 @@ async def test_operator_member_can_leave_queue(
     )
     assert rm.status_code in (200, 204), rm.text
 
-    lst = await client.get(
-        "/flows/api/v1/operator/queues",
-        headers=auth_headers_system,
-    )
-    row = next(q for q in lst.json() if q.get("slug") == slug)
+    queues = await _list_all_operator_queues(client, auth_headers_system)
+    row = next(q for q in queues if q.get("slug") == slug)
     assert row.get("i_am_member") is False
 
     denied = await client.get(
@@ -140,5 +142,5 @@ async def test_operator_list_tasks_empty_for_non_member(
     )
     assert other.status_code == 200
     body = other.json()
-    assert body["tasks"] == []
+    assert body["items"] == []
     assert body["total"] == 0

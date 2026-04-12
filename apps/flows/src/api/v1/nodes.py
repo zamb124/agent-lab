@@ -2,11 +2,13 @@
 API endpoints для nodes.
 """
 
+import asyncio
 from typing import Any, Dict, List, Optional
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel
 
+from core.pagination import OffsetPage
 from apps.flows.src.dependencies import ContainerDep
 from core.logging import get_logger
 from apps.flows.src.models import NodeConfig, ToolReference, NodeLLMOverride
@@ -118,13 +120,18 @@ def _node_to_response(node: NodeConfig) -> NodeResponse:
     )
 
 
-@router.get("/", response_model=List[NodeResponse])
+@router.get("/", response_model=OffsetPage[NodeResponse])
 async def list_nodes(
     container: ContainerDep,
-) -> List[NodeResponse]:
-    """Список всех нод"""
-    nodes = await container.node_repository.list_all()
-    return [_node_to_response(n) for n in nodes]
+    limit: int = Query(200, ge=1, le=1000),
+    offset: int = Query(0, ge=0),
+) -> OffsetPage[NodeResponse]:
+    nodes, total = await asyncio.gather(
+        container.node_repository.list(limit=limit, offset=offset),
+        container.node_repository.count_all(),
+    )
+    items = [_node_to_response(n) for n in nodes]
+    return OffsetPage[NodeResponse](items=items, total=total, limit=limit, offset=offset)
 
 
 @router.post("/", response_model=NodeResponse)

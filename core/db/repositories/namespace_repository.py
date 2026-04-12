@@ -37,21 +37,21 @@ class NamespaceRepository(BaseRepository[Namespace]):
         """ID = name"""
         return entity.name
     
-    async def list_all(self, limit: int = 10000) -> List[Namespace]:
+    async def list(self, *, limit: int, offset: int = 0) -> list[Namespace]:
         """
-        Возвращает все namespace компании.
-        Если пусто - создает default.
+        Возвращает страницу namespace компании.
+        Если пусто и offset=0 — создает default.
         """
-        namespaces = await super().list_all(limit)
-        
-        if not namespaces:
+        namespaces = await super().list(limit=limit, offset=offset)
+
+        if not namespaces and offset == 0:
             namespaces = [await self._create_default()]
-        
+
         return namespaces
-    
-    async def list_by_company(self, company_id: str) -> List[Namespace]:
-        """Алиас для list_all - компания берется из контекста"""
-        return await self.list_all()
+
+    async def list_by_company(self, company_id: str, *, limit: int = 200, offset: int = 0) -> list[Namespace]:
+        """Алиас — компания берется из контекста."""
+        return await self.list(limit=limit, offset=offset)
 
     async def _create_default(self) -> Namespace:
         """Создает default namespace для текущей компании"""

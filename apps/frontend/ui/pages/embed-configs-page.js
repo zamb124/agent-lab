@@ -161,14 +161,14 @@ export class EmbedConfigsPage extends PlatformElement {
         if (configs.length > 0) return;
         
         FrontendStore.setEmbedLoading(true);
-        const embedConfigs = await this.services.get('embed').list();
-        FrontendStore.setEmbedConfigs(embedConfigs);
+        const page = await this.services.get('embed').listConfigs();
+        FrontendStore.setEmbedConfigs(page.items);
     }
 
     async _reloadConfigs() {
         FrontendStore.setEmbedLoading(true);
-        const embedConfigs = await this.services.get('embed').list();
-        FrontendStore.setEmbedConfigs(embedConfigs);
+        const page = await this.services.get('embed').listConfigs();
+        FrontendStore.setEmbedConfigs(page.items);
     }
 
     _handleCreate() {

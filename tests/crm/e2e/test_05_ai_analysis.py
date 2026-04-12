@@ -376,10 +376,11 @@ class TestAIAnalysis:
         }, headers=auth_headers_system)
         note_id = note_resp.json()["entity_id"]
         
-        _, result = await _analyze_note(
+        _, response = await _analyze_note(
             crm_client, auth_headers_system, note_id,
             extract_relationship_types=[f"works_on_{unique_id}"],
         )
+        result = response.json()
         
         custom_rel = next(
             (r for r in result["relationships"] if r["relationship_type"] == f"works_on_{unique_id}"),

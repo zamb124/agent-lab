@@ -237,16 +237,13 @@ class BaseRepository(ABC, Generic[T]):
         table_name = self._get_table_name()
         return await self._storage._delete_with_table(final_key, table_name)
 
-    async def list_all(self, limit: int = 100, offset: int = 0) -> List[T]:
+    async def list(self, *, limit: int, offset: int = 0) -> list[T]:
         """
-        Возвращает список всех сущностей.
-        
-        Args:
-            limit: Максимальное количество результатов
-            offset: Смещение (пагинация)
+        Возвращает страницу сущностей.
 
-        Returns:
-            Список сущностей
+        Args:
+            limit: Максимальное количество результатов (обязательный)
+            offset: Смещение для пагинации
         """
         base_prefix = self._get_prefix()
         final_prefix = self._build_final_key(base_prefix)

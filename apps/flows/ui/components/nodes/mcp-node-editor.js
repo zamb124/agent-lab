@@ -80,7 +80,8 @@ export class MCPNodeEditor extends BaseNodeEditor {
 
     async _loadMCPServers() {
         try {
-            const servers = await this.a2a.get('/api/v1/mcp/servers');
+            const serversPage = await this.a2a.get('/api/v1/mcp/servers');
+            const servers = serversPage.items;
             this.mcpServers = servers || [];
             
             if (this.nodeConfig?.server_id) {

@@ -48,7 +48,7 @@ async def ensure_system_admin_membership(
     """Гарантирует system-компанию и при наличии пользователя user_email — роль admin в ней."""
     system_company = await ensure_system_company_exists(container)
 
-    users = await container.user_repository.list_all(limit=10000)
+    users = await container.user_repository.list(limit=10000)
     matched_users = [user for user in users if user_email in user.emails]
     if not matched_users:
         logger.warning(

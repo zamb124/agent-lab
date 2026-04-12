@@ -61,7 +61,7 @@ async def _resolve_company_for_billing_admin(container: "FrontendContainer", raw
         co = await container.company_repository.get(mapped_id)
         if co is not None:
             return co
-    companies = await container.company_repository.list_all(limit=_BILLING_COMPANY_LIST_CAP)
+    companies = await container.company_repository.list(limit=_BILLING_COMPANY_LIST_CAP)
     for co in companies:
         if co.subdomain and co.subdomain.lower() == q_lower:
             return co
@@ -138,7 +138,7 @@ async def companies_billing_overview(
     offset: int = Query(default=0, ge=0),
 ) -> PlatformBillingCompaniesOverviewResponse:
     _require_system(request)
-    all_companies = await container.company_repository.list_all(
+    all_companies = await container.company_repository.list(
         limit=_BILLING_COMPANY_LIST_CAP, offset=0
     )
     sorted_companies = sorted(
@@ -195,7 +195,7 @@ async def facet_billing_companies(
 ) -> PlatformTracingFacetItemsResponse:
     _require_system(request)
     frag = (q or "").strip().lower()
-    companies = await container.company_repository.list_all(limit=_BILLING_COMPANY_LIST_CAP)
+    companies = await container.company_repository.list(limit=_BILLING_COMPANY_LIST_CAP)
     matched = [c for c in companies if _company_matches_billing_facet_query(c, frag)]
 
     def sort_key(c: Company) -> tuple[int, str]:

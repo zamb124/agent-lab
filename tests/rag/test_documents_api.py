@@ -89,10 +89,10 @@ async def test_list_documents(rag_client, unique_namespace_name, auth_headers_sy
     assert response.status_code == 200
     data = response.json()
     
-    assert "documents" in data
+    assert "items" in data
     assert "namespace_id" in data
     assert "provider" in data
-    assert len(data["documents"]) > 0
+    assert len(data["items"]) > 0
 
 
 @pytest.mark.asyncio
@@ -114,8 +114,8 @@ async def test_list_documents_empty_namespace(rag_client, unique_namespace_name,
     assert response.status_code == 200
     data = response.json()
     
-    assert "documents" in data
-    assert len(data["documents"]) == 0
+    assert "items" in data
+    assert len(data["items"]) == 0
 
 
 @pytest.mark.asyncio
@@ -146,7 +146,7 @@ async def test_list_documents_with_limit(rag_client, unique_namespace_name, auth
     assert response.status_code == 200
     data = response.json()
     
-    assert len(data["documents"]) <= 2
+    assert len(data["items"]) <= 2
 
 
 @pytest.mark.asyncio
@@ -225,7 +225,7 @@ async def test_upload_multiple_documents(rag_client, unique_namespace_name, auth
         headers=auth_headers_system
     )
     assert list_response.status_code == 200
-    documents = list_response.json()["documents"]
+    documents = list_response.json()["items"]
     
     assert len(documents) >= 3
 

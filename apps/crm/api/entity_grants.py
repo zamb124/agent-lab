@@ -2,9 +2,12 @@
 API для управления грантами доступа к entities.
 """
 
+import asyncio
 from typing import List
-from fastapi import APIRouter, HTTPException
 
+from fastapi import APIRouter, HTTPException, Query
+
+from core.pagination import OffsetPage
 from apps.crm.models.grant_models import GrantToUserRequest, GrantToCompanyRequest, AccessGrantResponse
 from apps.crm.dependencies import ContainerDep
 from core.context import get_context
@@ -84,11 +87,17 @@ async def grant_to_company(
         raise HTTPException(status_code=403, detail=str(e))
 
 
-@router.get("", response_model=List[AccessGrantResponse])
+@router.get("", response_model=OffsetPage[AccessGrantResponse])
 async def list_grants(
     entity_id: str,
     container: ContainerDep,
-):
-    """Список всех grants для entity"""
-    grants = await container.access_grant_service.list_grants("entity", entity_id)
-    return [AccessGrantResponse.model_validate(g) for g in grants]
+    limit: int = Query(200, ge=1, le=1000),
+    offset: int = Query(0, ge=0),
+) -> OffsetPage[AccessGrantResponse]:
+    grants, total = await asyncio.gather(
+        container.access_grant_service.list_grants("entity", entity_id),
+        container.access_grant_service.count_grants("entity", entity_id),
+    )
+    all_items = [AccessGrantResponse.model_validate(g) for g in grants]
+    page = all_items[offset:offset + limit]
+    return OffsetPage[AccessGrantResponse](items=page, total=total, limit=limit, offset=offset)

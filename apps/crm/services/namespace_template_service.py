@@ -14,6 +14,8 @@ from core.db.repositories.namespace_repository import NamespaceRepository
 
 
 class NamespaceTemplateService:
+    _PAGE_LIMIT = 200
+
     def __init__(
         self,
         template_repo: NamespaceTemplateRepository,
@@ -27,6 +29,21 @@ class NamespaceTemplateService:
         self._namespace_repo = namespace_repo
         self._entity_repo = entity_repo
         self._company_init_service = company_init_service
+
+    async def _load_company_types(self) -> list[EntityType]:
+        items: list[EntityType] = []
+        offset = 0
+        while True:
+            page = await self._entity_type_repo.get_all_for_company(
+                limit=self._PAGE_LIMIT,
+                offset=offset,
+            )
+            if not page:
+                return items
+            items.extend(page)
+            if len(page) < self._PAGE_LIMIT:
+                return items
+            offset += self._PAGE_LIMIT
 
     async def create_namespace_from_template(
         self,
@@ -57,7 +74,7 @@ class NamespaceTemplateService:
         )
         await self._namespace_repo.set(namespace)
 
-        existing_types = await self._entity_type_repo.get_all_for_company()
+        existing_types = await self._load_company_types()
         existing_types_map = {item.type_id: item for item in existing_types}
 
         for item in template_types:
@@ -82,7 +99,7 @@ class NamespaceTemplateService:
                     is_context_anchor=item.is_context_anchor,
                     is_voice_target=item.is_voice_target,
                 )
-                runtime_type = await self._entity_type_repo.create(runtime_type)
+                runtime_type = await self._entity_type_repo.update(runtime_type)
                 existing_types_map[runtime_type.type_id] = runtime_type
             else:
                 await self._entity_type_repo.update_metadata(
@@ -114,7 +131,7 @@ class NamespaceTemplateService:
         return namespace
 
     async def get_namespace_editability(self, namespace_name: str) -> dict[str, Any]:
-        all_types = await self._entity_type_repo.get_all_for_company()
+        all_types = await self._load_company_types()
 
         cross_namespace_type_ids = {
             t.type_id for t in all_types if "*" in (t.namespace_ids or [])
@@ -173,7 +190,7 @@ class NamespaceTemplateService:
 
             current_allowed_type_ids = set(editability["current_allowed_type_ids"])
             if requested_set != current_allowed_type_ids:
-                all_types = await self._entity_type_repo.get_all_for_company()
+                all_types = await self._load_company_types()
                 for item in all_types:
                     current_ns = set(item.namespace_ids or [])
                     has_namespace = namespace_name in current_ns

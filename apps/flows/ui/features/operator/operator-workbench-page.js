@@ -874,8 +874,8 @@ export class OperatorWorkbenchPage extends PlatformElement {
         if (!this.a2a) return;
         this.queuesLoading = true;
         try {
-            const list = await this.a2a.listOperatorQueues();
-            this.queues = Array.isArray(list) ? list : [];
+            const page = await this.a2a.listOperatorQueues();
+            this.queues = page?.items ?? [];
         } catch (e) {
             this.error(e?.message || String(e));
             this.queues = [];

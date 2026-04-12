@@ -2,12 +2,15 @@
 API для управления namespaces.
 """
 
+import asyncio
 from typing import List, Optional
 import traceback
+
 from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel
 
 from core.logging import get_logger
+from core.pagination import OffsetPage
 from core.rag.models import RAGNamespace
 from core.context import get_context
 from core.models.identity_models import Namespace
@@ -26,41 +29,26 @@ class NamespaceCreateRequest(BaseModel):
     description: Optional[str] = None
 
 
-class NamespaceListResponse(BaseModel):
-    """Ответ со списком namespaces"""
-    items: List[Namespace]
-    company_id: str
-
-
-@router.get("/namespaces", response_model=NamespaceListResponse)
+@router.get("/namespaces", response_model=OffsetPage[Namespace])
 async def list_namespaces(
     container: ContainerDep,
     provider: Optional[str] = Query(None, description="RAG provider (pgvector, agentset)"),
-) -> NamespaceListResponse:
-    """
-    Получает список namespaces текущей компании.
-    
-    Args:
-        provider: Имя провайдера (опционально, по умолчанию используется default_provider)
-    
-    Returns:
-        Список namespaces компании и имя провайдера
-    """
-    settings = get_settings()
-    
+    limit: int = Query(200, ge=1, le=1000),
+    offset: int = Query(0, ge=0),
+) -> OffsetPage[Namespace]:
     try:
         context = get_context()
         company_id = context.active_company.company_id
-        
+
         namespace_repo = container.namespace_repository
-        namespaces = await namespace_repo.list_by_company(company_id)
-        
-        logger.info(f"Получено {len(namespaces)} namespaces для компании {company_id}")
-        
-        return NamespaceListResponse(
-            items=namespaces,
-            company_id=company_id
+        namespaces, total = await asyncio.gather(
+            namespace_repo.list_by_company(company_id, limit=limit, offset=offset),
+            namespace_repo.count_all(),
         )
+
+        logger.info(f"Получено {len(namespaces)} namespaces для компании {company_id}")
+
+        return OffsetPage[Namespace](items=namespaces, total=total, limit=limit, offset=offset)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
