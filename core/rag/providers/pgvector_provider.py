@@ -9,11 +9,11 @@ import uuid
 from typing import Any, Dict, List, Optional, Union
 
 import tiktoken
-from sqlalchemy import delete, func, select, text
+from sqlalchemy import and_, delete, func, or_, select, text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 from core.db.models import VectorDocument
-from core.rag.base_provider import BaseRAGProvider
+from core.rag.base_provider import BaseRAGProvider, validate_metadata_filters
 from core.rag.embedding_runtime import RagEmbeddingRuntime
 from core.rag.models import RAGDocument, RAGNamespace, RAGSearchResult
 from core.files.reader import FileReader
@@ -401,12 +401,24 @@ class PgVectorProvider(BaseRAGProvider):
         chunk_metas = [pair[1] for pair in chunk_pairs]
 
         embeddings = await self._embedding_service.generate_embeddings(chunks)
+        embedding_tokens = self._embedding_service.count_tokens(chunks)
+        index_profile_config = metadata.get("index_profile_config")
+        if index_profile_config is not None and not isinstance(index_profile_config, dict):
+            raise ValueError("index_profile_config должен быть объектом")
+        indexing_runtime: Dict[str, Any] = dict(index_profile_config or {})
+        indexing_runtime["embedding"] = self._embedding_service.runtime_snapshot(
+            embedding_tokens=embedding_tokens
+        )
 
         rows = []
         for i, (chunk, emb, chunk_meta) in enumerate(zip(chunks, embeddings, chunk_metas)):
+            chunk_row_id = uuid.uuid5(
+                uuid.NAMESPACE_URL,
+                f"rag://{namespace_id}/{document_id}/{i}",
+            ).hex
             rows.append(
                 VectorDocument(
-                    id=f"{document_id}_{i}",
+                    id=chunk_row_id,
                     namespace_id=namespace_id,
                     company_id=metadata.get("company_id"),
                     document_id=document_id,
@@ -418,6 +430,7 @@ class PgVectorProvider(BaseRAGProvider):
                     metadata_={
                         **metadata,
                         **chunk_meta,
+                        "indexing_runtime": indexing_runtime,
                         "document_id": document_id,
                         "document_name": document_name,
                         "chunk_index": i,
@@ -431,7 +444,7 @@ class PgVectorProvider(BaseRAGProvider):
             await session.commit()
 
         logger.info(f"Загружен документ '{document_name}' в {namespace_id}: {len(chunks)} chunks")
-        merged_doc_meta = {**metadata, "total_chunks": len(chunks)}
+        merged_doc_meta = {**metadata, "indexing_runtime": indexing_runtime, "total_chunks": len(chunks)}
         return RAGDocument(
             document_id=document_id,
             name=document_name,
@@ -538,10 +551,7 @@ class PgVectorProvider(BaseRAGProvider):
             )
 
             if where:
-                for key, value in where.items():
-                    stmt = stmt.where(
-                        VectorDocument.metadata_[key].as_string() == str(value)
-                    )
+                stmt = stmt.where(self._build_metadata_filter_expression(where))
 
             stmt = stmt.limit(limit)
             result = await session.execute(stmt)
@@ -566,6 +576,53 @@ class PgVectorProvider(BaseRAGProvider):
 
         logger.info(f"Найдено {len(docs)} документов с фильтрами в {namespace_id}")
         return docs
+
+    def _metadata_expr_for_scalar(self, key: str, value: Any):
+        if isinstance(value, bool):
+            return VectorDocument.metadata_[key].as_boolean()
+        if isinstance(value, int) and not isinstance(value, bool):
+            return VectorDocument.metadata_[key].as_integer()
+        if isinstance(value, float):
+            return VectorDocument.metadata_[key].as_float()
+        return VectorDocument.metadata_[key].as_string()
+
+    def _build_field_operator_expression(self, key: str, operator: str, op_value: Any):
+        if operator == "$eq":
+            return self._metadata_expr_for_scalar(key, op_value) == op_value
+        if operator == "$ne":
+            return self._metadata_expr_for_scalar(key, op_value) != op_value
+        if operator == "$gt":
+            return VectorDocument.metadata_[key].as_float() > float(op_value)
+        if operator == "$gte":
+            return VectorDocument.metadata_[key].as_float() >= float(op_value)
+        if operator == "$lt":
+            return VectorDocument.metadata_[key].as_float() < float(op_value)
+        if operator == "$lte":
+            return VectorDocument.metadata_[key].as_float() <= float(op_value)
+        if operator == "$in":
+            return self._metadata_expr_for_scalar(key, op_value[0]).in_(op_value)
+        if operator == "$nin":
+            return self._metadata_expr_for_scalar(key, op_value[0]).notin_(op_value)
+        raise ValueError(f"RAG filters: неподдерживаемый оператор {operator}")
+
+    def _build_metadata_filter_expression(self, filters: Dict[str, Any]):
+        validate_metadata_filters(filters)
+        return self._build_metadata_filter_node(filters)
+
+    def _build_metadata_filter_node(self, node: Dict[str, Any]):
+        if "$and" in node:
+            return and_(*[self._build_metadata_filter_node(item) for item in node["$and"]])
+        if "$or" in node:
+            return or_(*[self._build_metadata_filter_node(item) for item in node["$or"]])
+
+        expressions = []
+        for key, value in node.items():
+            if isinstance(value, dict):
+                op, op_value = next(iter(value.items()))
+                expressions.append(self._build_field_operator_expression(key, op, op_value))
+                continue
+            expressions.append(self._metadata_expr_for_scalar(key, value) == value)
+        return and_(*expressions)
 
     async def delete_document(self, namespace_id: str, document_id: str) -> bool:
         async with self._session_factory() as session:
@@ -592,6 +649,12 @@ class PgVectorProvider(BaseRAGProvider):
         **kwargs,
     ) -> List[RAGSearchResult]:
         query_embedding = await self._embedding_service.generate_embedding(query)
+        channels = kwargs.get("channels")
+        use_hybrid_rrf = (
+            isinstance(channels, dict)
+            and bool(channels.get("semantic"))
+            and bool(channels.get("lexical"))
+        )
 
         async with self._session_factory() as session:
             distance_expr = VectorDocument.embedding.cosine_distance(query_embedding)
@@ -606,17 +669,7 @@ class PgVectorProvider(BaseRAGProvider):
             )
 
             if filters:
-                for key, value in filters.items():
-                    if isinstance(value, dict):
-                        for op, op_value in value.items():
-                            if op == "$eq":
-                                stmt = stmt.where(
-                                    VectorDocument.metadata_[key].as_string() == str(op_value)
-                                )
-                    else:
-                        stmt = stmt.where(
-                            VectorDocument.metadata_[key].as_string() == str(value)
-                        )
+                stmt = stmt.where(self._build_metadata_filter_expression(filters))
 
             result = await session.execute(stmt)
             rows = result.all()
@@ -633,6 +686,8 @@ class PgVectorProvider(BaseRAGProvider):
                     document_name=doc.document_name or "",
                     metadata=doc.metadata_ or {},
                     namespace=namespace_id,
+                    chunk_id=doc.id,
+                    provenance={"channel": "hybrid_rrf"} if use_hybrid_rrf else {},
                 )
             )
 

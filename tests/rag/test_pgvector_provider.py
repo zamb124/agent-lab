@@ -481,6 +481,192 @@ async def test_list_documents_with_filters(rag_provider_pgvector, ns_name, rag_c
     ]
 
 
+@pytest.mark.asyncio
+async def test_search_with_chroma_like_operators(rag_provider_pgvector, ns_name, rag_company_id):
+    """Поиск поддерживает Chroma-like операторы и вложенные логические группы."""
+    doc_web_high = await rag_provider_pgvector.upload_document_from_text(
+        namespace_id=ns_name,
+        text="alpha token web high",
+        document_name="web-high.txt",
+        metadata=_upload_metadata(
+            rag_company_id,
+            {"category": "web", "priority": "high", "year": 2024, "active": True},
+        ),
+    )
+    doc_ml_low = await rag_provider_pgvector.upload_document_from_text(
+        namespace_id=ns_name,
+        text="beta token ml low",
+        document_name="ml-low.txt",
+        metadata=_upload_metadata(
+            rag_company_id,
+            {"category": "ml", "priority": "low", "year": 2022, "active": False},
+        ),
+    )
+    doc_web_old = await rag_provider_pgvector.upload_document_from_text(
+        namespace_id=ns_name,
+        text="gamma token web low old",
+        document_name="web-old.txt",
+        metadata=_upload_metadata(
+            rag_company_id,
+            {"category": "web", "priority": "low", "year": 2019, "active": True},
+        ),
+    )
+
+    only_new = await rag_provider_pgvector.search(
+        ns_name,
+        "token",
+        limit=20,
+        filters={"year": {"$gte": 2023}},
+    )
+    assert {r.document_id for r in only_new} == {doc_web_high.document_id}
+
+    only_not_ml = await rag_provider_pgvector.search(
+        ns_name,
+        "token",
+        limit=20,
+        filters={"category": {"$nin": ["ml"]}},
+    )
+    assert {r.document_id for r in only_not_ml} == {
+        doc_web_high.document_id,
+        doc_web_old.document_id,
+    }
+
+    nested = await rag_provider_pgvector.search(
+        ns_name,
+        "token",
+        limit=20,
+        filters={
+            "$and": [
+                {"category": {"$in": ["web"]}},
+                {
+                    "$or": [
+                        {"priority": {"$eq": "high"}},
+                        {"year": {"$lt": 2020}},
+                    ]
+                },
+            ]
+        },
+    )
+    assert {r.document_id for r in nested} == {
+        doc_web_high.document_id,
+        doc_web_old.document_id,
+    }
+    assert doc_ml_low.document_id not in {r.document_id for r in nested}
+
+
+@pytest.mark.asyncio
+async def test_search_with_invalid_chroma_filter_raises(rag_provider_pgvector, ns_name, rag_company_id):
+    """Невалидный фильтр вызывает ValueError без молчаливого fallback."""
+    await rag_provider_pgvector.upload_document_from_text(
+        namespace_id=ns_name,
+        text="token",
+        document_name="doc.txt",
+        metadata=_upload_metadata(rag_company_id, {"category": "web", "year": 2024}),
+    )
+
+    with pytest.raises(ValueError, match="неподдерживаемый оператор"):
+        await rag_provider_pgvector.search(
+            ns_name,
+            "token",
+            limit=5,
+            filters={"category": {"$contains": "web"}},
+        )
+
+    with pytest.raises(ValueError, match="должен быть массивом минимум из 2 условий"):
+        await rag_provider_pgvector.search(
+            ns_name,
+            "token",
+            limit=5,
+            filters={"$and": [{"category": "web"}]},
+        )
+
+
+@pytest.mark.asyncio
+async def test_search_all_filter_operators_matrix(rag_provider_pgvector, ns_name, rag_company_id):
+    """Полная матрица операторов и комбинаций на реальном pgvector."""
+    docs: dict[str, str] = {}
+    dataset = [
+        ("token r1", "r1.txt", {"category": "web", "priority": "high", "year": 2024, "rank": 10, "active": True}),
+        ("token r2", "r2.txt", {"category": "web", "priority": "low", "year": 2021, "rank": 7, "active": True}),
+        ("token r3", "r3.txt", {"category": "ml", "priority": "low", "year": 2019, "rank": 5, "active": False}),
+        ("token r4", "r4.txt", {"category": "ops", "priority": "high", "year": 2022, "rank": 8, "active": False}),
+    ]
+    for text, name, meta in dataset:
+        doc = await rag_provider_pgvector.upload_document_from_text(
+            namespace_id=ns_name,
+            text=text,
+            document_name=name,
+            metadata=_upload_metadata(rag_company_id, meta),
+        )
+        docs[name] = doc.document_id
+
+    async def _names(filters: dict[str, Any]) -> set[str]:
+        out = await rag_provider_pgvector.search(ns_name, "token", limit=50, filters=filters)
+        by_id = {doc_id: doc_name for doc_name, doc_id in docs.items()}
+        return {by_id[item.document_id] for item in out}
+
+    assert await _names({"category": "web"}) == {"r1.txt", "r2.txt"}
+    assert await _names({"priority": {"$eq": "high"}}) == {"r1.txt", "r4.txt"}
+    assert await _names({"priority": {"$ne": "high"}}) == {"r2.txt", "r3.txt"}
+    assert await _names({"year": {"$gt": 2022}}) == {"r1.txt"}
+    assert await _names({"year": {"$gte": 2022}}) == {"r1.txt", "r4.txt"}
+    assert await _names({"year": {"$lt": 2021}}) == {"r3.txt"}
+    assert await _names({"year": {"$lte": 2021}}) == {"r2.txt", "r3.txt"}
+    assert await _names({"category": {"$in": ["web", "ops"]}}) == {"r1.txt", "r2.txt", "r4.txt"}
+    assert await _names({"category": {"$nin": ["web"]}}) == {"r3.txt", "r4.txt"}
+    assert await _names({"active": {"$eq": True}}) == {"r1.txt", "r2.txt"}
+    assert await _names({"active": {"$in": [False]}}) == {"r3.txt", "r4.txt"}
+    assert await _names({"category": "web", "active": True}) == {"r1.txt", "r2.txt"}
+    assert await _names(
+        {
+            "$or": [
+                {"category": "ml"},
+                {"$and": [{"priority": "high"}, {"year": {"$gte": 2022}}]},
+            ]
+        }
+    ) == {"r1.txt", "r3.txt", "r4.txt"}
+
+
+@pytest.mark.asyncio
+async def test_list_documents_with_nested_filters_matrix(rag_provider_pgvector, ns_name, rag_company_id):
+    """list_documents_with_filters использует тот же Chroma-like контракт, что и search."""
+    await rag_provider_pgvector.upload_document_from_text(
+        namespace_id=ns_name,
+        text="token d1",
+        document_name="d1.txt",
+        metadata=_upload_metadata(rag_company_id, {"category": "web", "year": 2024, "active": True}),
+    )
+    await rag_provider_pgvector.upload_document_from_text(
+        namespace_id=ns_name,
+        text="token d2",
+        document_name="d2.txt",
+        metadata=_upload_metadata(rag_company_id, {"category": "ops", "year": 2022, "active": False}),
+    )
+    await rag_provider_pgvector.upload_document_from_text(
+        namespace_id=ns_name,
+        text="token d3",
+        document_name="d3.txt",
+        metadata=_upload_metadata(rag_company_id, {"category": "ml", "year": 2018, "active": False}),
+    )
+
+    docs = await rag_provider_pgvector.list_documents_with_filters(
+        ns_name,
+        where={
+            "$or": [
+                {"$and": [{"category": {"$in": ["web", "ops"]}}, {"year": {"$gte": 2022}}]},
+                {"active": {"$eq": False}, "year": {"$lt": 2020}},
+            ]
+        },
+    )
+    assert {doc.name for doc in docs} == {"d1.txt", "d2.txt", "d3.txt"}
+
+    with pytest.raises(ValueError, match="должен содержать ровно один оператор"):
+        await rag_provider_pgvector.list_documents_with_filters(
+            ns_name,
+            where={"year": {"$gte": 2020, "$lte": 2024}},
+        )
+
+
 # -- Namespace isolation --
 
 

@@ -14,6 +14,8 @@ from __future__ import annotations
 from typing import Any, Dict, List, Optional
 
 from core.clients.service_client import ServiceClientError
+from core.context import get_context
+from core.models.identity_models import Namespace
 from core.rag.index_profile_merge import merge_index_profile_dict_overlays
 from core.rag.rag_resource_bind import RagResourceBindParams
 
@@ -119,6 +121,15 @@ class RAGResource:
         Загрузить текст документа в namespace.
         """
         repo = self._container.rag_repository
+        context = get_context()
+        if context is None or context.active_company is None:
+            raise ValueError("RAGResource.add_document: контекст с active_company обязателен")
+        namespace_repo = self._container.namespace_repository
+        existing_namespace = await namespace_repo.get(self._bind.namespace)
+        if existing_namespace is None:
+            await namespace_repo.set(
+                Namespace(name=self._bind.namespace, company_id=context.active_company.company_id)
+            )
         doc_metadata = {**(metadata or {})}
         doc_metadata["document_id"] = document_id
 

@@ -119,13 +119,17 @@ def _bundle_cache_key(bundle: ResolvedRagProvider) -> str:
     return json.dumps(payload, sort_keys=True, ensure_ascii=True)
 
 
-def get_rag_provider(provider_name: Optional[str] = None) -> BaseRAGProvider:
+def get_rag_provider(
+    provider_name: Optional[str] = None,
+    *,
+    settings: BaseSettings | None = None,
+) -> BaseRAGProvider:
     """
     Создаёт RAG провайдер из ``get_settings()``: активный ключ, ``RAGProviderConfig.model_dump()``,
     для ``pgvector`` — ``resolve_rag_embedding_runtime(rag.embedding, llm, provider_litserve)``.
     """
-    settings = get_settings()
-    bundle = resolve_rag_provider_bundle(settings, provider_name)
+    active_settings = settings or get_settings()
+    bundle = resolve_rag_provider_bundle(active_settings, provider_name)
     cache_key = _bundle_cache_key(bundle)
     cached = _provider_instances_cache.get(cache_key)
     if cached is not None:

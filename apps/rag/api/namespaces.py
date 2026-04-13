@@ -15,7 +15,7 @@ from core.rag.models import RAGNamespace
 from core.context import get_context
 from core.models.identity_models import Namespace
 from core.rag.factory import get_rag_provider
-from core.config import get_settings
+from apps.rag.config import get_rag_settings
 from ..dependencies import ContainerDep
 
 logger = get_logger(__name__)
@@ -76,7 +76,8 @@ async def create_namespace(
         context = get_context()
         company_id = context.active_company.company_id
         
-        rag_provider = get_rag_provider(provider) if provider else get_rag_provider()
+        settings = get_rag_settings()
+        rag_provider = get_rag_provider(provider, settings=settings) if provider else get_rag_provider(settings=settings)
         
         # Провайдер сам добавит company_id через контекст
         rag_namespace = await rag_provider.create_namespace(
@@ -122,7 +123,8 @@ async def delete_namespace(
         context = get_context()
         company_id = context.active_company.company_id
         
-        rag_provider = get_rag_provider(provider) if provider else get_rag_provider()
+        settings = get_rag_settings()
+        rag_provider = get_rag_provider(provider, settings=settings) if provider else get_rag_provider(settings=settings)
         namespace_repo = container.namespace_repository
         
         # Удаляем документы из провайдера (может не быть, если namespace пустой)

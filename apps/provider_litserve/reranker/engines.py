@@ -24,7 +24,10 @@ def parse_rerank_body(raw: Any) -> dict[str, Any]:
         b = RerankQueryPassagesRequest.model_validate(raw)
     except ValidationError as e:
         raise HTTPException(status_code=422, detail=e.errors()) from e
-    return {"model": b.model, "query": b.query, "passages": b.passages}
+    payload: dict[str, Any] = {"query": b.query, "passages": b.passages}
+    if b.model is not None:
+        payload["model"] = b.model
+    return payload
 
 
 class LocalRerankerEngine:

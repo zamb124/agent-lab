@@ -288,3 +288,179 @@ async def test_search_nonexistent_namespace(rag_client, auth_headers_system):
         # Если 200, то должны быть пустые результаты
         assert len(data.get("results", [])) == 0
 
+
+@pytest.mark.asyncio
+async def test_search_with_chroma_like_filters(rag_client, unique_namespace_name, auth_headers_system):
+    """POST /namespaces/{id}/search поддерживает вложенные Chroma-like filters."""
+    ns_response = await rag_client.post(
+        "/rag/api/v1/namespaces",
+        json={"name": unique_namespace_name},
+        headers=auth_headers_system,
+    )
+    namespace_id = ns_response.json()["name"]
+
+    ingest_one = await rag_client.post(
+        f"/rag/api/v1/namespaces/{namespace_id}/ingest-text",
+        json={
+            "text": "token alpha",
+            "document_name": "alpha.txt",
+            "metadata": {"category": "web", "priority": "high", "year": 2024},
+        },
+        headers=auth_headers_system,
+    )
+    assert ingest_one.status_code == 200
+
+    ingest_two = await rag_client.post(
+        f"/rag/api/v1/namespaces/{namespace_id}/ingest-text",
+        json={
+            "text": "token beta",
+            "document_name": "beta.txt",
+            "metadata": {"category": "ml", "priority": "low", "year": 2022},
+        },
+        headers=auth_headers_system,
+    )
+    assert ingest_two.status_code == 200
+
+    response = await rag_client.post(
+        f"/rag/api/v1/namespaces/{namespace_id}/search",
+        json={
+            "query": "token",
+            "limit": 10,
+            "filters": {
+                "$and": [
+                    {"category": {"$in": ["web", "ops"]}},
+                    {"year": {"$gte": 2023}},
+                ]
+            },
+        },
+        headers=auth_headers_system,
+    )
+    assert response.status_code == 200
+    data = response.json()
+    assert len(data["results"]) >= 1
+    assert {item["metadata"]["document_name"] for item in data["results"]} == {"alpha.txt"}
+
+
+@pytest.mark.asyncio
+async def test_search_with_invalid_filters_returns_400(
+    rag_client, unique_namespace_name, auth_headers_system
+):
+    """POST /namespaces/{id}/search возвращает 400 на невалидный фильтр."""
+    ns_response = await rag_client.post(
+        "/rag/api/v1/namespaces",
+        json={"name": unique_namespace_name},
+        headers=auth_headers_system,
+    )
+    namespace_id = ns_response.json()["name"]
+
+    invalid_operator_response = await rag_client.post(
+        f"/rag/api/v1/namespaces/{namespace_id}/search",
+        json={
+            "query": "token",
+            "limit": 3,
+            "filters": {"category": {"$contains": "web"}},
+        },
+        headers=auth_headers_system,
+    )
+    assert invalid_operator_response.status_code == 400
+
+    invalid_logical_response = await rag_client.post(
+        f"/rag/api/v1/namespaces/{namespace_id}/search",
+        json={
+            "query": "token",
+            "limit": 3,
+            "filters": {"$and": [{"category": "web"}]},
+        },
+        headers=auth_headers_system,
+    )
+    assert invalid_logical_response.status_code == 400
+
+
+@pytest.mark.asyncio
+async def test_search_filter_operators_via_api_matrix(
+    rag_client, unique_namespace_name, auth_headers_system
+):
+    """API поддерживает полный набор операторов Chroma-like для filters."""
+    ns_response = await rag_client.post(
+        "/rag/api/v1/namespaces",
+        json={"name": unique_namespace_name},
+        headers=auth_headers_system,
+    )
+    namespace_id = ns_response.json()["name"]
+
+    payloads = [
+        ("api-r1", {"category": "web", "priority": "high", "year": 2024, "active": True}),
+        ("api-r2", {"category": "web", "priority": "low", "year": 2021, "active": True}),
+        ("api-r3", {"category": "ml", "priority": "low", "year": 2019, "active": False}),
+        ("api-r4", {"category": "ops", "priority": "high", "year": 2022, "active": False}),
+    ]
+    for text, metadata in payloads:
+        response = await rag_client.post(
+            f"/rag/api/v1/namespaces/{namespace_id}/ingest-text",
+            json={"text": text, "document_name": f"{text}.txt", "metadata": metadata},
+            headers=auth_headers_system,
+        )
+        assert response.status_code == 200
+
+    async def _search(filters: dict) -> set[str]:
+        response = await rag_client.post(
+            f"/rag/api/v1/namespaces/{namespace_id}/search",
+            json={"query": "api-r", "limit": 20, "filters": filters},
+            headers=auth_headers_system,
+        )
+        assert response.status_code == 200
+        data = response.json()
+        return {item["metadata"]["document_name"] for item in data["results"]}
+
+    assert await _search({"priority": {"$eq": "high"}}) == {"api-r1.txt", "api-r4.txt"}
+    assert await _search({"priority": {"$ne": "high"}}) == {"api-r2.txt", "api-r3.txt"}
+    assert await _search({"year": {"$gt": 2022}}) == {"api-r1.txt"}
+    assert await _search({"year": {"$gte": 2022}}) == {"api-r1.txt", "api-r4.txt"}
+    assert await _search({"year": {"$lt": 2021}}) == {"api-r3.txt"}
+    assert await _search({"year": {"$lte": 2021}}) == {"api-r2.txt", "api-r3.txt"}
+    assert await _search({"category": {"$in": ["web", "ops"]}}) == {
+        "api-r1.txt",
+        "api-r2.txt",
+        "api-r4.txt",
+    }
+    assert await _search({"category": {"$nin": ["web"]}}) == {"api-r3.txt", "api-r4.txt"}
+    assert await _search({"active": {"$eq": False}}) == {"api-r3.txt", "api-r4.txt"}
+    assert await _search(
+        {
+            "$or": [
+                {"category": "ml"},
+                {"$and": [{"priority": "high"}, {"year": {"$gte": 2022}}]},
+            ]
+        }
+    ) == {"api-r1.txt", "api-r3.txt", "api-r4.txt"}
+
+
+@pytest.mark.asyncio
+async def test_search_invalid_filter_matrix_returns_400(
+    rag_client, unique_namespace_name, auth_headers_system
+):
+    """API возвращает 400 для разных классов невалидных фильтров."""
+    ns_response = await rag_client.post(
+        "/rag/api/v1/namespaces",
+        json={"name": unique_namespace_name},
+        headers=auth_headers_system,
+    )
+    namespace_id = ns_response.json()["name"]
+
+    invalid_filters = [
+        {"$and": [{"category": "web"}]},
+        {"category": {"$contains": "web"}},
+        {"year": {"$gt": "2020"}},
+        {"category": {"$in": ["web", 1]}},
+        {"$and": [{"category": "web"}], "category": "ml"},
+        {},
+    ]
+
+    for filters in invalid_filters:
+        response = await rag_client.post(
+            f"/rag/api/v1/namespaces/{namespace_id}/search",
+            json={"query": "x", "limit": 3, "filters": filters},
+            headers=auth_headers_system,
+        )
+        assert response.status_code == 400, filters
+

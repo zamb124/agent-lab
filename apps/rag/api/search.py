@@ -7,10 +7,11 @@ from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel
 
 from core.logging import get_logger
+from core.rag.base_provider import validate_metadata_filters
 from core.rag.models import RAGSearchResult
 from core.context import get_context
 from core.rag.factory import get_rag_provider
-from core.config import get_settings
+from apps.rag.config import get_rag_settings
 from ..dependencies import ContainerDep
 from .namespace_access import require_registered_rag_namespace
 
@@ -54,10 +55,12 @@ async def search_in_namespace(
     """
     await require_registered_rag_namespace(namespace_id, container)
 
-    settings = get_settings()
+    settings = get_rag_settings()
     
     try:
-        rag_provider = get_rag_provider(provider) if provider else get_rag_provider()
+        if request.filters is not None:
+            validate_metadata_filters(request.filters)
+        rag_provider = get_rag_provider(provider, settings=settings) if provider else get_rag_provider(settings=settings)
         provider_name = provider or settings.rag.default_provider
         
         results = await rag_provider.search(
@@ -124,10 +127,10 @@ async def global_search(
     for ns_id in valid_namespace_ids:
         await require_registered_rag_namespace(ns_id, container)
     
-    settings = get_settings()
+    settings = get_rag_settings()
     
     try:
-        rag_provider = get_rag_provider(provider) if provider else get_rag_provider()
+        rag_provider = get_rag_provider(provider, settings=settings) if provider else get_rag_provider(settings=settings)
         provider_name = provider or settings.rag.default_provider
         
         results = await rag_provider.search_multiple_namespaces(

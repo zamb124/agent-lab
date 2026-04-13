@@ -307,3 +307,13 @@ class EmbeddingService:
     def get_active_model(self) -> Optional[str]:
         """Возвращает текущую активную модель (или None если ещё не определена)"""
         return self._active_model
+
+    def runtime_snapshot(self, *, embedding_tokens: int) -> dict[str, Any]:
+        """Текущее состояние runtime для записи в indexing_runtime."""
+        return {
+            "provider": "openrouter",
+            "api_url": self.api_url,
+            "model_used": self.model,
+            "dimension": self.get_embedding_dimension(),
+            "embedding_tokens": embedding_tokens,
+        }

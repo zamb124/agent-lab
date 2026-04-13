@@ -10,7 +10,7 @@ from pathlib import Path
 from typing import Optional, List, Dict, Any
 from urllib.parse import urlparse, unquote
 
-from ..base_provider import BaseRAGProvider
+from ..base_provider import BaseRAGProvider, validate_metadata_filters
 from core.rag.models import RAGDocument, RAGSearchResult, RAGNamespace
 from core.http import get_httpx_client
 # S3ClientFactory используется через базовый класс BaseRAGProvider
@@ -493,6 +493,7 @@ class AgentsetRAGProvider(BaseRAGProvider):
         }
         
         if filters:
+            validate_metadata_filters(filters)
             payload["filter"] = filters
         
         response = await self._client.post(f"/v1/namespace/{namespace_id}/search", json=payload)

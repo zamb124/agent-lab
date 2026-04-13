@@ -7,8 +7,8 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
 from core.logging import get_logger
-from core.config import get_settings
 from core.rag.factory import get_rag_provider
+from apps.rag.config import get_rag_settings
 from ..dependencies import ContainerDep
 
 logger = get_logger(__name__)
@@ -45,7 +45,7 @@ async def list_providers(
     Returns:
         Список провайдеров с их статусом и текущий активный провайдер
     """
-    settings = get_settings()
+    settings = get_rag_settings()
     
     if not settings.rag.enabled:
         raise HTTPException(status_code=503, detail="RAG is disabled")
@@ -80,7 +80,8 @@ async def switch_provider(
     Для постоянного изменения нужно обновить конфигурацию.
     """
     try:
-        provider = get_rag_provider(request.provider_name)
+        settings = get_rag_settings()
+        provider = get_rag_provider(request.provider_name, settings=settings)
         logger.info(f"Провайдер переключен на: {request.provider_name}")
         return {
             "success": True,

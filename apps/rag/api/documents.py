@@ -15,6 +15,7 @@ from core.files.processors import FileProcessor
 from core.logging import get_logger
 from core.rag.factory import get_rag_provider
 from core.rag.models import RAGDocument
+from apps.rag.config import get_rag_settings
 from ..dependencies import ContainerDep
 from .namespace_access import (
     require_registered_rag_namespace,
@@ -68,8 +69,6 @@ async def ingest_text(
     Синхронная индексация произвольного текста в namespace (без файла и S3).
     Namespace должен существовать в репозитории текущей компании.
     """
-    from core.config import get_settings
-
     await require_registered_rag_namespace(namespace_id, container)
     validate_rag_user_metadata(request.metadata)
     text = validate_ingest_text_body(request.text)
@@ -84,8 +83,8 @@ async def ingest_text(
     if request.document_id:
         merged_meta["document_id"] = request.document_id
 
-    settings = get_settings()
-    rag_provider = get_rag_provider(provider) if provider else get_rag_provider()
+    settings = get_rag_settings()
+    rag_provider = get_rag_provider(provider, settings=settings) if provider else get_rag_provider(settings=settings)
     provider_name = provider or settings.rag.default_provider
 
     doc = await rag_provider.upload_document_from_text(
@@ -112,9 +111,8 @@ async def list_documents(
     provider: Optional[str] = Query(None),
 ) -> DocumentListResponse:
     """Список документов в namespace (completed + in-progress)."""
-    from core.config import get_settings
-    settings = get_settings()
-    rag_provider = get_rag_provider(provider) if provider else get_rag_provider()
+    settings = get_rag_settings()
+    rag_provider = get_rag_provider(provider, settings=settings) if provider else get_rag_provider(settings=settings)
     provider_name = provider or settings.rag.default_provider
 
     completed_docs = await rag_provider.list_documents(namespace_id, limit=limit)
@@ -159,8 +157,7 @@ async def upload_document(
     Принимает документ, сохраняет через FileProcessor (FileRecord в shared DB),
     запускает асинхронную индексацию в RAG.
     """
-    from core.config import get_settings
-    settings = get_settings()
+    settings = get_rag_settings()
     if not settings.s3.enabled or not settings.s3.default_bucket:
         raise HTTPException(status_code=503, detail="S3 не настроен.")
 
@@ -239,7 +236,8 @@ async def delete_document(
     if status is not None:
         await status_repo.delete_by_document_id(document_id)
 
-    rag_provider = get_rag_provider(provider) if provider else get_rag_provider()
+    settings = get_rag_settings()
+    rag_provider = get_rag_provider(provider, settings=settings) if provider else get_rag_provider(settings=settings)
     success = await rag_provider.delete_document(namespace_id, document_id)
 
     if not success and status is None and file_record is None:

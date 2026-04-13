@@ -23,6 +23,7 @@ class UsageType(str, Enum):
     TOOL_CALL = "tool_call"         # Вызов инструмента
     LLM_REQUEST = "llm_request"     # Запрос к LLM
     EMBEDDING_REQUEST = "embedding_request"  # Запрос к Embedding API
+    RERANK_REQUEST = "rerank_request"  # Запрос к rerank API
     AGENT_EXECUTION = "agent_execution"  # Выполнение агента
     FLOW_EXECUTION = "flow_execution"    # Выполнение флоу
     FILE_UPLOAD = "file_upload"     # Загрузка файла

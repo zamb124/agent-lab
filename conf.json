@@ -393,6 +393,11 @@
         "port": 8004,
         "debug": true
       },
+      "provider_litserve": {
+        "api": {
+          "base_url": "http://127.0.0.1:8014/v1"
+        }
+      },
       "auth": {
         "permissions_enabled": true
       },
