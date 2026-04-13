@@ -84,6 +84,21 @@ export function getLastVisitedService() {
 }
 
 /**
+ * Возвращает URL входа в последний посещённый сервис.
+ * Если сервис не сохранён — возвращает fallback-путь.
+ * @param {{ fallbackPath?: string }} [options]
+ * @returns {string}
+ */
+export function getLastVisitedServiceEntryUrl(options = {}) {
+    const { fallbackPath = '/select-company' } = options;
+    const id = getLastVisitedService();
+    if (!id) {
+        return fallbackPath;
+    }
+    return buildServiceEntryUrl(id);
+}
+
+/**
  * Из значения getBaseUrl() вида `/flows` или `/frontend` извлекает id сервиса.
  * @param {string} baseUrl
  * @returns {'flows' | 'crm' | 'rag' | 'sync' | 'documents' | 'frontend' | null}

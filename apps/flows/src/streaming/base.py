@@ -323,6 +323,39 @@ class BaseEmitter(ABC):
         
         await self._publish(event)
 
+    async def emit_ui_event(
+        self,
+        event_type: str,
+        payload: Dict[str, Any],
+        *,
+        event_id: Optional[str] = None,
+        version: str = "1.0",
+    ) -> None:
+        """Публикует UI событие в A2A stream как artifact 'ui_event'."""
+        normalized_event_id = event_id or str(uuid.uuid4())
+        artifact = Artifact(
+            artifact_id=str(uuid.uuid4()),
+            name="ui_event",
+            parts=[
+                DataPart(
+                    data={
+                        "id": normalized_event_id,
+                        "type": event_type,
+                        "payload": payload,
+                        "version": version,
+                    }
+                )
+            ],
+        )
+        event = TaskArtifactUpdateEvent(
+            task_id=self.state.task_id,
+            context_id=self.state.context_id,
+            artifact=artifact,
+            append=False,
+            last_chunk=True,
+        )
+        await self._publish(event)
+
     async def emit_breakpoint(
         self,
         node_id: str,

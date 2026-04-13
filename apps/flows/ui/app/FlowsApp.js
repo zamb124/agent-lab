@@ -10,6 +10,7 @@ import { readUrlState, updateUrl, removeUrlParams } from '../utils/url-sync.js';
 import { canManageOperatorWorkbench } from '../utils/operator-workbench-access.js';
 import '../components/sidebar/flows-sidebar.js';
 import '../features/operator/operator-workbench-page.js';
+import '@platform/lib/embed-chat/platform-lara-assistant.js';
 
 export class FlowsApp extends PlatformApp {
     static styles = [
@@ -99,16 +100,302 @@ export class FlowsApp extends PlatformApp {
     constructor() {
         super();
         this._onOperatorAuthChange = () => this.requestUpdate();
+        this._laraInvocationContext = null;
+        this._onLaraOpenRequested = (event) => {
+            const detail = event?.detail && typeof event.detail === 'object' ? event.detail : {};
+            this._setLaraInvocationContext(detail);
+        };
+        this._laraHandledEventKeys = new Set();
+        this._onLaraUiEvent = (event) => {
+            const detail = event?.detail && typeof event.detail === 'object' ? event.detail : null;
+            if (!detail || detail.source === 'flows_app') {
+                return;
+            }
+            const eventType = typeof detail.type === 'string' ? detail.type.trim() : '';
+            if (!eventType) {
+                return;
+            }
+            const payload = detail.payload && typeof detail.payload === 'object' ? detail.payload : {};
+            const eventId =
+                detail.id != null && String(detail.id).trim()
+                    ? String(detail.id).trim()
+                    : `${eventType}:${JSON.stringify(payload)}`;
+            if (this._laraHandledEventKeys.has(eventId)) {
+                return;
+            }
+            this._laraHandledEventKeys.add(eventId);
+            if (eventType === 'patch_applied') {
+                void this._handleLaraPatchApplied(payload);
+                return;
+            }
+            if (eventType === 'patch_proposed') {
+                this._emitLaraEvent('patch_proposed', payload);
+                return;
+            }
+            if (eventType === 'navigate') {
+                this._handleLaraNavigate(payload);
+            }
+        };
+        this._laraActionHandlers = {
+            'lara:context_requested': (payload) => this._emitLaraEvent('context_requested', payload),
+            'lara:navigate': (payload) => this._emitLaraEvent('navigate', payload),
+            'lara:patch_proposed': (payload) => this._emitLaraEvent('patch_proposed', payload),
+            'lara:patch_applied': (payload) => this._emitLaraEvent('patch_applied', payload),
+        };
     }
 
     async connectedCallback() {
         await super.connectedCallback();
         window.addEventListener(AppEvents.AUTH_CHANGE, this._onOperatorAuthChange);
+        window.addEventListener('flows-lara-open', this._onLaraOpenRequested);
+        this.addEventListener('lara:event', this._onLaraUiEvent);
     }
 
     disconnectedCallback() {
         window.removeEventListener(AppEvents.AUTH_CHANGE, this._onOperatorAuthChange);
+        window.removeEventListener('flows-lara-open', this._onLaraOpenRequested);
+        this.removeEventListener('lara:event', this._onLaraUiEvent);
         super.disconnectedCallback();
+    }
+
+    _emitLaraEvent(type, payload = {}) {
+        const detail = {
+            type,
+            version: '1.0',
+            payload,
+            source: 'flows_app',
+            timestamp: new Date().toISOString(),
+        };
+        this.dispatchEvent(
+            new CustomEvent('lara:event', {
+                detail,
+                bubbles: true,
+                composed: true,
+            }),
+        );
+        this.dispatchEvent(
+            new CustomEvent(`lara:${type}`, {
+                detail,
+                bubbles: true,
+                composed: true,
+            }),
+        );
+    }
+
+    _inferLaraScreen(explicitScreen, context) {
+        if (typeof explicitScreen === 'string' && explicitScreen) {
+            return explicitScreen;
+        }
+        if (context.node_id) {
+            return 'flow_editor_node';
+        }
+        if (context.flow_id && context.selection_source !== 'global_launcher') {
+            return 'flow_editor';
+        }
+        if (context.flow_id) {
+            return 'flow_chat';
+        }
+        return 'flow_list';
+    }
+
+    _buildLaraFlowsContext(options = {}) {
+        const state = FlowsStore.state;
+        const editorState = state.editor || {};
+        const flowsState = state.flows || {};
+        const appState = state.app || {};
+
+        // Источник правды для состояния экрана — store на момент отправки сообщения.
+        // detail из launcher используем только как fallback, если в store ещё нет данных.
+        const resolvedFlowId =
+            editorState.flowId || flowsState.currentId || options.flow_id || options.flowId || null;
+        const resolvedSkillId =
+            editorState.currentSkillId ||
+            appState.currentSkillId ||
+            options.skill_id ||
+            options.skillId ||
+            'base';
+        const resolvedNodeId = editorState.selectedNodeId || options.node_id || options.nodeId || null;
+        const skillsData = editorState.skillsData || { nodes: {}, edges: [], entry: null, variables: {}, resources: {} };
+        const selectedNode = resolvedNodeId ? skillsData.nodes?.[resolvedNodeId] || null : null;
+        const flowConfig = editorState.flowConfig || null;
+        const flowFromList = flowsState.list?.find((item) => item.flow_id === resolvedFlowId) || null;
+        const flowPayload = flowConfig && flowConfig.flow_id === resolvedFlowId ? flowConfig : flowFromList;
+        const selectionSource = options.selection_source || options.selectionSource || 'global_launcher';
+
+        const context = {
+            app_surface: 'flows',
+            flow_id: resolvedFlowId,
+            skill_id: resolvedSkillId || 'base',
+            node_id: resolvedNodeId,
+            node_type: selectedNode?.type || null,
+            selection_source: selectionSource,
+            node_payload: selectedNode || null,
+            flow_payload: flowPayload || null,
+            context_version: Date.now(),
+        };
+        context.screen = this._inferLaraScreen(options.screen, context);
+        return context;
+    }
+
+    _flattenLaraContext(context) {
+        const nodePayloadJson = context.node_payload ? JSON.stringify(context.node_payload) : '';
+        const flowPayloadJson = context.flow_payload ? JSON.stringify(context.flow_payload) : '';
+        const contextJson = JSON.stringify(context);
+        return {
+            lara_ui_context: context,
+            lara_ui_context_json: contextJson,
+            app_surface: context.app_surface,
+            screen: context.screen,
+            flow_id: context.flow_id || '',
+            skill_id: context.skill_id || 'base',
+            node_id: context.node_id || '',
+            node_type: context.node_type || '',
+            selection_source: context.selection_source,
+            node_payload_json: nodePayloadJson,
+            flow_payload_json: flowPayloadJson,
+            context_version: context.context_version,
+        };
+    }
+
+    _setLaraInvocationContext(options = {}) {
+        this._laraInvocationContext = this._buildLaraFlowsContext(options);
+    }
+
+    _laraEmbedContextVariables = async () => {
+        const context = this._buildLaraFlowsContext(this._laraInvocationContext || {});
+        this._laraInvocationContext = context;
+        return this._flattenLaraContext(context);
+    };
+
+    _resolveTargetNode(flowConfig, skillId, nodeId) {
+        if (!nodeId) {
+            throw new Error('node_id is required for node patch');
+        }
+        if (skillId && skillId !== 'base') {
+            const skill = flowConfig.skills?.[skillId];
+            if (!skill) {
+                throw new Error(`Skill "${skillId}" not found`);
+            }
+            const node = skill.nodes?.[nodeId];
+            if (!node) {
+                throw new Error(`Node "${nodeId}" not found in skill "${skillId}"`);
+            }
+            return { target: node, scope: 'skill' };
+        }
+        const node = flowConfig.nodes?.[nodeId];
+        if (!node) {
+            throw new Error(`Node "${nodeId}" not found`);
+        }
+        return { target: node, scope: 'base' };
+    }
+
+    async _handleLaraPatchApplied(payload = {}) {
+        try {
+            const a2a = this.services.get('a2a');
+            const flowId = payload.flow_id || payload.flowId || this._laraInvocationContext?.flow_id;
+            if (!flowId) {
+                throw new Error('flow_id is required');
+            }
+            const skillId = payload.skill_id || payload.skillId || this._laraInvocationContext?.skill_id || 'base';
+            const nodeId = payload.node_id || payload.nodeId || this._laraInvocationContext?.node_id || null;
+            const patchKind = payload.patch_kind || payload.patchKind || (nodeId ? 'node' : 'flow');
+
+            const flowConfig = await a2a.getFlow(flowId);
+            const nextFlowConfig = structuredClone(flowConfig);
+
+            if (patchKind === 'flow') {
+                const flowChanges = payload.flow_changes || payload.flowChanges || {};
+                if (!flowChanges || typeof flowChanges !== 'object') {
+                    throw new Error('flow_changes must be an object');
+                }
+                Object.assign(nextFlowConfig, flowChanges);
+            } else {
+                const changes = payload.changes || {};
+                if (!changes || typeof changes !== 'object') {
+                    throw new Error('changes must be an object');
+                }
+                const resolved = this._resolveTargetNode(nextFlowConfig, skillId, nodeId);
+                Object.assign(resolved.target, changes);
+            }
+
+            await a2a.saveFlowConfig(flowId, nextFlowConfig);
+
+            const editorFlowId = FlowsStore.state.editor?.flowId;
+            if (editorFlowId === flowId) {
+                await FlowsStore.loadFlow(flowId, a2a, skillId);
+                if (nodeId) {
+                    FlowsStore.selectNode(nodeId);
+                }
+            }
+            window.dispatchEvent(
+                new CustomEvent('flows-editor-node-updated-by-lara', {
+                    detail: {
+                        flow_id: flowId,
+                        skill_id: skillId,
+                        node_id: nodeId,
+                        patch_kind: patchKind,
+                    },
+                    bubbles: true,
+                    composed: true,
+                }),
+            );
+
+            this._setLaraInvocationContext({
+                flow_id: flowId,
+                skill_id: skillId,
+                node_id: nodeId,
+                selection_source: 'panel_launcher',
+            });
+            this._emitLaraEvent('patch_applied', {
+                flow_id: flowId,
+                skill_id: skillId,
+                node_id: nodeId,
+                patch_kind: patchKind,
+            });
+        } catch (error) {
+            this._emitLaraEvent('error', {
+                source: 'flows-app.patch_applied',
+                message: error instanceof Error ? error.message : String(error),
+            });
+        }
+    }
+
+    _handleLaraNavigate(payload = {}) {
+        const flowId = payload.flow_id || payload.flowId || null;
+        const skillId = payload.skill_id || payload.skillId || 'base';
+        const nodeId = payload.node_id || payload.nodeId || null;
+        const openEditor = payload.open_editor !== false;
+
+        if (flowId) {
+            if (skillId && skillId !== 'base') {
+                FlowsStore.setCurrentFlowAndSkill(flowId, skillId);
+            } else {
+                FlowsStore.setCurrentFlow(flowId);
+            }
+        }
+        if (flowId && openEditor) {
+            this._openEditorFromUrl(flowId, skillId === 'base' ? null : skillId);
+        }
+        if (nodeId) {
+            window.dispatchEvent(
+                new CustomEvent('flows-editor-select-node', {
+                    detail: { flowId, skillId, nodeId },
+                    bubbles: true,
+                    composed: true,
+                }),
+            );
+        }
+        this._setLaraInvocationContext({
+            flow_id: flowId,
+            skill_id: skillId,
+            node_id: nodeId,
+            selection_source: 'panel_launcher',
+        });
+        this._emitLaraEvent('navigate', {
+            flow_id: flowId,
+            skill_id: skillId,
+            node_id: nodeId,
+        });
     }
 
     _toggleMobileMenu() {
@@ -329,6 +616,18 @@ export class FlowsApp extends PlatformApp {
                 .skillId=${currentSkillId || ''}
                 .skillName=${currentSkillName}
             ></platform-chat>
+            <platform-lara-assistant
+                toggle-event-name="flows-lara-open"
+                flow-id="lara"
+                skill-id="flows"
+                .flowsBaseUrl=${'/flows'}
+                ?use-credentials=${true}
+                .assistantTitle=${'Lara'}
+                .locale=${this.services.get('i18n').getCurrentLocale()}
+                .getExtraMetadataVariables=${this._laraEmbedContextVariables}
+                .getContextVariables=${this._laraEmbedContextVariables}
+                .actionHandlers=${this._laraActionHandlers}
+            ></platform-lara-assistant>
         `;
     }
 }

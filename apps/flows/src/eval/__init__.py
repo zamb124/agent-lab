@@ -22,6 +22,9 @@ from apps.flows.src.eval.state_utils import (
     get_tool_result,
     get_user,
     merge_state,
+    pop_ui_events,
+    push_ui_event,
+    push_ui_events,
     set_nested,
 )
 from apps.flows.src.eval.wrappers import (
@@ -54,6 +57,9 @@ __all__ = [
     "get_messages",
     "add_user_message",
     "add_agent_message",
+    "push_ui_event",
+    "push_ui_events",
+    "pop_ui_events",
     "ask_user",
     "extract_json",
     "SafeLLMClient",

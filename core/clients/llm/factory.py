@@ -48,6 +48,18 @@ logger = get_logger(__name__)
 T = TypeVar("T", bound=BaseModel)
 
 
+def _masked_headers(headers: Dict[str, str]) -> Dict[str, str]:
+    sanitized = dict(headers)
+    auth_header = sanitized.get("Authorization")
+    if auth_header:
+        sanitized["Authorization"] = "Bearer ***"
+    return sanitized
+
+
+def _pretty_json(data: Dict[str, Any]) -> str:
+    return json.dumps(data, ensure_ascii=False, indent=2)
+
+
 def _merge_openai_compatible_usage_into_usage_data(
     usage: Dict[str, Any], usage_data: Dict[str, Any]
 ) -> None:
@@ -432,15 +444,10 @@ class LLMClient:
                 body[key] = val
 
         logger.debug(f"LLM request: messages={len(openai_messages)}, tools={len(tools) if tools else 0}, response_format={bool(response_format)}")
-        
-        # Логируем полный body для отладки (без секретных данных)
-        debug_body = {**body}
-        if "messages" in debug_body:
-            debug_body["messages"] = [
-                {**msg, "content": msg["content"][:200] + "..." if len(msg.get("content", "")) > 200 else msg.get("content", "")}
-                for msg in debug_body["messages"]
-            ]
-        logger.debug(f"LLM request body: {json.dumps(debug_body, indent=2, ensure_ascii=False)}")
+        logger.info(
+            "LLM STREAM REQUEST:\n"
+            f"{_pretty_json({'url': f'{self.base_url}/chat/completions', 'headers': _masked_headers(headers), 'body': body})}"
+        )
 
         full_content = ""
         full_reasoning = ""
@@ -632,6 +639,7 @@ class LLMClient:
                 "content": full_content,
                 "reasoning": full_reasoning if full_reasoning else None,
                 "tool_calls": list(tool_calls_buffer.values()) if tool_calls_buffer else None,
+                "usage": usage_data,
             }
         )
 
@@ -673,6 +681,10 @@ class LLMClient:
             body["response_format"] = {"type": "json_object"}
         
         logger.info(f"LLM invoke: model={self.model}, messages={len(openai_messages)}, json_output={json_output}")
+        logger.info(
+            "LLM INVOKE REQUEST:\n"
+            f"{_pretty_json({'url': f'{self.base_url}/chat/completions', 'headers': _masked_headers(headers), 'body': body})}"
+        )
         
         async with get_httpx_client(timeout=self.timeout, proxy=True) as client:
             response = await client.post(
@@ -687,6 +699,7 @@ class LLMClient:
                 response.raise_for_status()
             
             result = response.json()
+            logger.info(f"LLM INVOKE RESPONSE:\n{_pretty_json(result)}")
         
         content = result["choices"][0]["message"]["content"]
         

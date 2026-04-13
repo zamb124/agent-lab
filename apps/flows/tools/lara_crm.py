@@ -5,11 +5,12 @@
 from __future__ import annotations
 
 import json
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Literal, Optional
 from urllib.parse import quote
 
 from pydantic import AliasChoices, BaseModel, ConfigDict, Field, field_validator
 
+from apps.flows.src.eval.state_utils import push_ui_event
 from apps.flows.src.tools import tool
 from core.clients.service_client import ServiceClient, ServiceClientError
 from core.context import get_context
@@ -161,6 +162,57 @@ class PushEmbedBlocksArgs(BaseModel):
             "Одна JSON-строка: массив объектов блоков UI. У каждого объекта поле type: "
             "card | table | actions | file_card | text и поля по схеме блока."
         ),
+    )
+
+
+class FlowsReadContextArgs(BaseModel):
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+
+    flow_id: str = Field(..., min_length=1, description="ID flow в сервисе flows.")
+    skill_id: Optional[str] = Field(
+        None,
+        description="ID skill. Для базового графа передай base или оставь пустым.",
+    )
+    node_id: Optional[str] = Field(
+        None,
+        description="ID ноды в выбранном графе. Если не передан, вернётся только контекст flow/skill.",
+    )
+
+
+class FlowsPatchNodeArgs(BaseModel):
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+
+    flow_id: str = Field(..., min_length=1, description="ID flow.")
+    node_id: str = Field(..., min_length=1, description="ID ноды для изменения.")
+    patch_json: str = Field(
+        ...,
+        min_length=2,
+        description="JSON-объект изменений ноды. Пример: {\"prompt\": \"...\"}.",
+    )
+    skill_id: Optional[str] = Field(
+        None,
+        description="ID skill. Для base можно не передавать.",
+    )
+    mode: Literal["propose", "apply"] = Field(
+        "apply",
+        description="propose — показать патч без сохранения; apply — сохранить в flow.",
+    )
+
+
+class FlowsPatchFlowArgs(BaseModel):
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+
+    flow_id: str = Field(..., min_length=1, description="ID flow.")
+    patch_json: str = Field(
+        ...,
+        min_length=2,
+        description=(
+            "JSON-объект изменений flow. Разрешённые поля: name, description, tags, variables."
+        ),
+    )
+    mode: Literal["propose", "apply"] = Field(
+        "apply",
+        description="propose — показать патч без сохранения; apply — сохранить в flow.",
     )
 
 
@@ -494,3 +546,292 @@ async def push_embed_blocks(blocks_json: str, state: Optional[dict] = None) -> s
     if not isinstance(parsed, list):
         raise ValueError("blocks_json must be a JSON array")
     return json.dumps({"blocks": parsed}, ensure_ascii=False)
+
+
+@tool(
+    name="flows_read_context",
+    description=(
+        "Возвращает контекст flow/skill/node для Lara в сервисе flows: текущий граф, "
+        "конфиг ноды и метаданные для принятия решения."
+    ),
+    tags=["flows", "lara", "query"],
+    args_schema=FlowsReadContextArgs,
+    mock_response=lambda args, state=None: json.dumps(
+        {
+            "success": True,
+            "flow_id": args.get("flow_id", "flow_mock"),
+            "skill_id": args.get("skill_id", "base"),
+            "node_id": args.get("node_id"),
+            "blocks": [{"type": "text", "text": "Mock: контекст flow получен."}],
+        },
+        ensure_ascii=False,
+    ),
+)
+async def flows_read_context(
+    flow_id: str,
+    skill_id: Optional[str] = None,
+    node_id: Optional[str] = None,
+    state: Optional[dict] = None,
+) -> str:
+    def normalize_skill_id(raw_skill_id: Optional[str]) -> str:
+        if raw_skill_id is None:
+            return "base"
+        cleaned_skill_id = raw_skill_id.strip()
+        if not cleaned_skill_id or cleaned_skill_id == "default":
+            return "base"
+        return cleaned_skill_id
+
+    def resolve_node_scope(flow_data: Dict[str, Any], resolved_skill: str) -> Dict[str, Any]:
+        if resolved_skill == "base":
+            nodes = flow_data.get("nodes", {})
+            if not isinstance(nodes, dict):
+                raise ValueError("Flow base nodes are invalid")
+            return nodes
+        skills = flow_data.get("skills") or {}
+        skill = skills.get(resolved_skill)
+        if not isinstance(skill, dict):
+            raise ValueError(f"Skill '{resolved_skill}' not found in flow '{flow_data.get('flow_id')}'")
+        nodes = skill.get("nodes")
+        if not isinstance(nodes, dict):
+            raise ValueError(f"Skill '{resolved_skill}' has no nodes")
+        return nodes
+
+    def require_node(flow_data: Dict[str, Any], resolved_skill: str, required_node_id: str) -> Dict[str, Any]:
+        nodes = resolve_node_scope(flow_data, resolved_skill)
+        node = nodes.get(required_node_id)
+        if not isinstance(node, dict):
+            raise ValueError(f"Node '{required_node_id}' not found in skill '{resolved_skill}'")
+        return node
+
+    client = ServiceClient()
+    flow_config = await client.get("flows", f"/flows/api/v1/flows/{quote(flow_id, safe='')}")
+    if not isinstance(flow_config, dict):
+        raise ValueError("Invalid flow response")
+
+    resolved_skill_id = normalize_skill_id(skill_id)
+    selected_node = None
+    if node_id:
+        selected_node = require_node(flow_config, resolved_skill_id, node_id)
+
+    payload = {
+        "success": True,
+        "flow_id": flow_id,
+        "skill_id": resolved_skill_id,
+        "node_id": node_id or None,
+        "flow": flow_config,
+        "node": selected_node,
+        "blocks": [
+            {
+                "type": "card",
+                "title": flow_config.get("name") or flow_id,
+                "subtitle": f"Flow: {flow_id} | Skill: {resolved_skill_id}",
+            }
+        ],
+    }
+    return json.dumps(payload, ensure_ascii=False)
+
+
+@tool(
+    name="flows_patch_node",
+    description=(
+        "Готовит patch ноды flow для применения во внешнем UI. "
+        "Возвращает node_before/node_after и ui_events; сам tool не сохраняет flow."
+    ),
+    tags=["flows", "lara", "mutation"],
+    args_schema=FlowsPatchNodeArgs,
+    mock_response=lambda args, state=None: json.dumps(
+        {
+            "success": True,
+            "flow_id": args.get("flow_id", "flow_mock"),
+            "skill_id": args.get("skill_id", "base"),
+            "node_id": args.get("node_id", "main"),
+            "mode": args.get("mode", "apply"),
+            "blocks": [{"type": "text", "text": "Mock: patch ноды обработан."}],
+        },
+        ensure_ascii=False,
+    ),
+)
+async def flows_patch_node(
+    flow_id: str,
+    node_id: str,
+    patch_json: str,
+    skill_id: Optional[str] = None,
+    mode: Literal["propose", "apply"] = "apply",
+    state: Optional[dict] = None,
+) -> str:
+    def normalize_skill_id(raw_skill_id: Optional[str]) -> str:
+        if raw_skill_id is None:
+            return "base"
+        cleaned_skill_id = raw_skill_id.strip()
+        if not cleaned_skill_id or cleaned_skill_id == "default":
+            return "base"
+        return cleaned_skill_id
+
+    def resolve_node_scope(flow_data: Dict[str, Any], resolved_skill: str) -> Dict[str, Any]:
+        if resolved_skill == "base":
+            nodes = flow_data.get("nodes", {})
+            if not isinstance(nodes, dict):
+                raise ValueError("Flow base nodes are invalid")
+            return nodes
+        skills = flow_data.get("skills") or {}
+        skill = skills.get(resolved_skill)
+        if not isinstance(skill, dict):
+            raise ValueError(f"Skill '{resolved_skill}' not found in flow '{flow_data.get('flow_id')}'")
+        nodes = skill.get("nodes")
+        if not isinstance(nodes, dict):
+            raise ValueError(f"Skill '{resolved_skill}' has no nodes")
+        return nodes
+
+    def require_node(flow_data: Dict[str, Any], resolved_skill: str, required_node_id: str) -> Dict[str, Any]:
+        nodes = resolve_node_scope(flow_data, resolved_skill)
+        node = nodes.get(required_node_id)
+        if not isinstance(node, dict):
+            raise ValueError(f"Node '{required_node_id}' not found in skill '{resolved_skill}'")
+        return node
+
+    patch = json.loads(patch_json)
+    if not isinstance(patch, dict):
+        raise ValueError("patch_json must be a JSON object")
+
+    resolved_skill_id = normalize_skill_id(skill_id)
+    client = ServiceClient()
+    flow_config = await client.get("flows", f"/flows/api/v1/flows/{quote(flow_id, safe='')}")
+    if not isinstance(flow_config, dict):
+        raise ValueError("Invalid flow response")
+
+    node_before = require_node(flow_config, resolved_skill_id, node_id)
+    node_after = {**node_before, **patch}
+    event_type = "patch_applied" if mode == "apply" else "patch_proposed"
+    event_payload = {
+        "patch_kind": "node",
+        "flow_id": flow_id,
+        "skill_id": resolved_skill_id,
+        "node_id": node_id,
+        "changes": patch,
+        "open_editor": True,
+    }
+    summary = (
+        f"Patch для ноды {node_id} отправлен в UI."
+        if mode == "apply"
+        else f"Patch подготовлен для ноды {node_id}."
+    )
+    push_ui_event(
+        state,
+        event_type=event_type,
+        payload=event_payload,
+        event_id=f"flows-node-{flow_id}-{resolved_skill_id}-{node_id}-{mode}",
+        version="1.0",
+    )
+
+    return json.dumps(
+        {
+            "success": True,
+            "mode": mode,
+            "flow_id": flow_id,
+            "skill_id": resolved_skill_id,
+            "node_id": node_id,
+            "node_before": node_before,
+            "node_after": node_after,
+            "blocks": [
+                {"type": "text", "text": summary},
+                {
+                    "type": "actions",
+                    "buttons": [
+                        {
+                            "action_id": f"lara:{event_type}",
+                            "label": "Открыть результат в редакторе",
+                            "payload": event_payload,
+                        }
+                    ],
+                },
+            ],
+        },
+        ensure_ascii=False,
+    )
+
+
+@tool(
+    name="flows_patch_flow",
+    description=(
+        "Готовит patch к самому flow (name/description/tags/variables) для применения во внешнем UI. "
+        "Возвращает flow_before/flow_after и ui_events; сам tool не сохраняет flow."
+    ),
+    tags=["flows", "lara", "mutation"],
+    args_schema=FlowsPatchFlowArgs,
+    mock_response=lambda args, state=None: json.dumps(
+        {
+            "success": True,
+            "flow_id": args.get("flow_id", "flow_mock"),
+            "mode": args.get("mode", "apply"),
+            "blocks": [{"type": "text", "text": "Mock: patch flow обработан."}],
+        },
+        ensure_ascii=False,
+    ),
+)
+async def flows_patch_flow(
+    flow_id: str,
+    patch_json: str,
+    mode: Literal["propose", "apply"] = "apply",
+    state: Optional[dict] = None,
+) -> str:
+    patch = json.loads(patch_json)
+    if not isinstance(patch, dict):
+        raise ValueError("patch_json must be a JSON object")
+
+    allowed_fields = {"name", "description", "tags", "variables"}
+    unsupported = sorted(set(patch.keys()) - allowed_fields)
+    if unsupported:
+        raise ValueError(
+            f"Unsupported flow patch fields: {', '.join(unsupported)}. "
+            "Allowed: name, description, tags, variables."
+        )
+
+    client = ServiceClient()
+    flow_config = await client.get("flows", f"/flows/api/v1/flows/{quote(flow_id, safe='')}")
+    if not isinstance(flow_config, dict):
+        raise ValueError("Invalid flow response")
+
+    flow_after = dict(flow_config)
+    flow_after.update(patch)
+    event_type = "patch_applied" if mode == "apply" else "patch_proposed"
+    summary = (
+        f"Patch для flow {flow_id} отправлен в UI."
+        if mode == "apply"
+        else f"Patch подготовлен для flow {flow_id}."
+    )
+    event_payload = {
+        "patch_kind": "flow",
+        "flow_id": flow_id,
+        "flow_changes": patch,
+        "open_editor": True,
+    }
+    push_ui_event(
+        state,
+        event_type=event_type,
+        payload=event_payload,
+        event_id=f"flows-flow-{flow_id}-{mode}",
+        version="1.0",
+    )
+    return json.dumps(
+        {
+            "success": True,
+            "mode": mode,
+            "flow_id": flow_id,
+            "flow_before": flow_config,
+            "flow_after": flow_after,
+            "blocks": [
+                {"type": "text", "text": summary},
+                {
+                    "type": "actions",
+                    "buttons": [
+                        {
+                            "action_id": f"lara:{event_type}",
+                            "label": "Открыть результат в редакторе",
+                            "payload": event_payload,
+                        }
+                    ],
+                },
+            ],
+        },
+        ensure_ascii=False,
+    )

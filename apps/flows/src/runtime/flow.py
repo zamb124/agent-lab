@@ -96,6 +96,28 @@ class Flow:
 
         self._join_required = self._build_join_required_predecessors()
 
+    async def _emit_pending_ui_events(self, emitter: Emitter, state: ExecutionState) -> None:
+        raw_events = getattr(state, "ui_events_pending", None)
+        if raw_events is None:
+            return
+        if not isinstance(raw_events, list):
+            raise ValueError("state.ui_events_pending must be a list")
+        events = list(raw_events)
+        setattr(state, "ui_events_pending", [])
+        for event in events:
+            event_type = event.get("type")
+            payload = event.get("payload")
+            if not isinstance(event_type, str) or not isinstance(payload, dict):
+                continue
+            event_id = event.get("id")
+            version = event.get("version", "1.0")
+            await emitter.emit_ui_event(
+                event_type=event_type,
+                payload=payload,
+                event_id=event_id if isinstance(event_id, str) else None,
+                version=version if isinstance(version, str) else "1.0",
+            )
+
     def _normalize_edges(self, edges: List[Any]) -> List[Dict[str, Any]]:
         """Нормализует edges в list of dicts."""
         result = []
@@ -262,6 +284,7 @@ class Flow:
                             preview = str(result_state.response)
                         elif result_state.result is not None:
                             preview = str(result_state.result)
+                        await self._emit_pending_ui_events(emitter, result_state)
                         await emitter.emit_node_complete(node_id, preview)
                         return result_state
 

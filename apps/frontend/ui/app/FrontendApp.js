@@ -12,7 +12,10 @@ import { EmbedService } from '../services/embed.service.js';
 import { FlowsCatalogService } from '../services/flows-catalog.service.js';
 import { SchedulerTasksService } from '../services/scheduler-tasks.service.js';
 import { FrontendStore, getConsoleViewForPath } from '../store/frontend.store.js';
-import { replaceLocationToLastVisitedNonFrontendService } from '@platform/lib/utils/last-visited-service.js';
+import {
+    getLastVisitedServiceEntryUrl,
+    replaceLocationToLastVisitedNonFrontendService,
+} from '@platform/lib/utils/last-visited-service.js';
 import '@platform/lib/components/layout/platform-island.js';
 import '@platform/lib/components/auth-modal.js';
 
@@ -128,6 +131,7 @@ export class FrontendApp extends PlatformApp {
         super();
         this._isLanding = false;
         this._dashboardLastServiceRedirectDone = false;
+        this._rootLastServiceRedirectInProgress = false;
         this._islandLoading = false;
         this._prevView = null;
 
@@ -302,21 +306,40 @@ export class FrontendApp extends PlatformApp {
         const path = window.location.pathname;
         
         // Публичные страницы без авторизации
-        if (path === '/' || path.startsWith('/products/') || path === '/policy' || path === '/terms') {
+        if (path === '/') {
+            const isAuthenticated = await this.auth.validateToken();
+            if (!isAuthenticated) {
+                this._isLanding = true;
+                this._productPage = null;
+                this._rootLastServiceRedirectInProgress = false;
+                return true;
+            }
+            this._isLanding = false;
+            this._productPage = null;
+            this._rootLastServiceRedirectInProgress = true;
+            const targetUrl = getLastVisitedServiceEntryUrl({ fallbackPath: '/select-company' });
+            window.location.replace(targetUrl);
+            return true;
+        }
+
+        if (path.startsWith('/products/') || path === '/policy' || path === '/terms') {
             this._isLanding = true;
             this._productPage = path.startsWith('/products/') ? path : null;
+            this._rootLastServiceRedirectInProgress = false;
             return true;
         }
 
         if (path === '/login' || path === '/frontend/login') {
             this._isLanding = true;
             this._productPage = null;
+            this._rootLastServiceRedirectInProgress = false;
             return true;
         }
         
         if (path === '/select-company') {
             this._isLanding = true;
             this._productPage = null;
+            this._rootLastServiceRedirectInProgress = false;
             return await this.auth.validateToken();
         }
 
@@ -324,11 +347,13 @@ export class FrontendApp extends PlatformApp {
         if (path === '/join') {
             this._isLanding = true;
             this._productPage = null;
+            this._rootLastServiceRedirectInProgress = false;
             return true;
         }
         
         this._isLanding = false;
         this._productPage = null;
+        this._rootLastServiceRedirectInProgress = false;
         return await this.auth.validateToken();
     }
     
@@ -401,6 +426,16 @@ export class FrontendApp extends PlatformApp {
                 <div class="loading-container">
                     <div class="loading-spinner"></div>
                     <div class="loading-text">${t('frontend_app.redirect_login')}</div>
+                </div>
+            `;
+        }
+
+        if (this._rootLastServiceRedirectInProgress) {
+            const t = (k) => this.i18n.t(k, {});
+            return html`
+                <div class="loading-container">
+                    <div class="loading-spinner"></div>
+                    <div class="loading-text">${t('frontend_app.loading_short')}</div>
                 </div>
             `;
         }

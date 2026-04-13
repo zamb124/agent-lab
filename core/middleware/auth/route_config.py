@@ -354,9 +354,9 @@ ROUTE_RULES: List[RouteRule] = [
     # LitServe Service
     RouteRule("/litserve/ui/static/*", auth_required=False, context_type="anonymous"),
     RouteRule("/litserve/api/*", context_type="api", auth_required=True),
-    RouteRule("/litserve", auth_required=False, context_type="anonymous"),
-    RouteRule("/litserve/", auth_required=False, context_type="anonymous"),
-    RouteRule("/litserve/*", auth_required=False, context_type="anonymous"),
+    RouteRule("/litserve", context_type="frontend", auth_required=True),
+    RouteRule("/litserve/", context_type="frontend", auth_required=True),
+    RouteRule("/litserve/*", context_type="frontend", auth_required=True),
     # OpenAI-совместимые эндпоинты живут в корне хоста и авторизуются на уровне handler/dependency.
     RouteRule("/v1/*", auth_required=False, context_type="anonymous"),
 

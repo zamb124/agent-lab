@@ -3,7 +3,7 @@
   "name": "Lara",
   "description": "Мультисервисный ассистент: навыки по сервисам (CRM — skill crm)",
   "version": "1.0.0",
-  "tags": ["lara", "assistant", "multiservice", "crm"],
+  "tags": ["lara", "assistant", "multiservice", "crm", "flows"],
   "permission": ["admin", "developers"],
   "entry": "main",
   "nodes": {
@@ -61,6 +61,31 @@
             "crm_analyze_note_text",
             "create_file",
             "read_file",
+            "push_embed_blocks"
+          ],
+          "output_key": "response"
+        }
+      }
+    },
+    "flows": {
+      "name": "Flows Builder",
+      "description": "Lara для работы с flow/skill/node и patch-изменениями редактора",
+      "tags": ["flows", "lara"],
+      "permission": [],
+      "nodes_mode": "merge",
+      "nodes": {
+        "main": {
+          "name": "Lara Flows",
+          "prompt": "prompts/flows.md",
+          "llm": {
+            "model": "qwen/qwen3.5-397b-a17b",
+            "temperature": 0.2
+          },
+          "tools": [
+            "ask_user",
+            "flows_read_context",
+            "flows_patch_node",
+            "flows_patch_flow",
             "push_embed_blocks"
           ],
           "output_key": "response"

@@ -249,14 +249,20 @@ class AuthMiddleware(BaseHTTPMiddleware):
             if not is_public_path:
                 logger.debug(f"Токен найден в cookies для {path}")
         
+        token_from_authorization = False
         if not token:
             auth_header = request.headers.get("authorization", "")
             if auth_header.startswith("Bearer "):
                 token = auth_header[7:]
+                token_from_authorization = True
                 if not is_public_path:
                     logger.debug(f"Токен найден в Authorization header")
         
         if not token:
+            return None, None
+
+        # OpenAI-совместимые клиенты передают Bearer API key (не JWT) на /v1/*.
+        if token_from_authorization and path.startswith("/v1/") and token.count(".") != 2:
             return None, None
         
         token_service = get_token_service()

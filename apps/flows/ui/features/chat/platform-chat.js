@@ -376,6 +376,22 @@ export class PlatformChat extends PlatformIsland {
         }));
     }
 
+    _openLaraFromChat() {
+        window.dispatchEvent(
+            new CustomEvent('flows-lara-open', {
+                detail: {
+                    open: true,
+                    selection_source: 'global_launcher',
+                    screen: 'flow_chat',
+                    flow_id: this.flowId || null,
+                    skill_id: this.skillId || 'base',
+                },
+                bubbles: true,
+                composed: true,
+            }),
+        );
+    }
+
     _isActiveTakeover() {
         const msgs = FlowsStore.state.chat.messages;
         for (let i = msgs.length - 1; i >= 0; i--) {
@@ -974,6 +990,9 @@ export class PlatformChat extends PlatformIsland {
                         </div>
                     </div>
                     <div class="chat-actions">
+                        <button class="action-btn" @click=${this._openLaraFromChat} title=${this.i18n.t('platform_chat.title_lara')}>
+                            <platform-icon name="ai" size="20"></platform-icon>
+                        </button>
                         <button class="action-btn" @click=${this._openSessions} title=${this.i18n.t('platform_chat.title_sessions')}>
                             <platform-icon name="folder" size="20"></platform-icon>
                         </button>
@@ -993,6 +1012,10 @@ export class PlatformChat extends PlatformIsland {
                                 <button class="actions-dropdown-item" @click=${() => { this._openSessions(); this._closeActionsMenu(); }}>
                                     <platform-icon name="folder" size="16"></platform-icon>
                                     <span>${this.i18n.t('platform_chat.menu_sessions')}</span>
+                                </button>
+                                <button class="actions-dropdown-item" @click=${() => { this._openLaraFromChat(); this._closeActionsMenu(); }}>
+                                    <platform-icon name="ai" size="16"></platform-icon>
+                                    <span>${this.i18n.t('platform_chat.menu_lara')}</span>
                                 </button>
                                 <button class="actions-dropdown-item" @click=${() => { this._editFlow(); this._closeActionsMenu(); }}>
                                     <platform-icon name="settings" size="16"></platform-icon>

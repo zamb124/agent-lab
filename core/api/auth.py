@@ -253,8 +253,6 @@ async def _complete_oauth_callback(
     oauth_first_login_user_json: Optional[str] = None,
 ) -> RedirectResponse:
     """Общая логика GET/POST callback (Apple form_post передаёт поля в теле формы)."""
-    from core.utils.domain import get_cookie_domain
-
     settings = get_settings()
 
     if error:
@@ -294,6 +292,7 @@ async def _complete_oauth_callback(
 
     original_host = auth_state.get("original_host")
     redirect_uri = auth_state.get("redirect_uri")
+    return_path = auth_state.get("return_path")
 
     logger.info(f"auth_callback: redirect_uri={redirect_uri}, original_host={original_host}")
 
@@ -314,8 +313,31 @@ async def _complete_oauth_callback(
         raise HTTPException(status_code=400, detail=result.error_message)
 
     target_host = original_host or request.headers.get("host", "")
+    if return_path:
+        if not return_path.startswith("/"):
+            raise HTTPException(status_code=400, detail="Некорректный return_path")
+        redirect_url = build_url(target_host, return_path)
+    elif not result.user.companies or len(result.user.companies) == 0:
+        redirect_url = build_url(target_host, "/select-company?action=create")
+    elif len(result.user.companies) == 1:
+        company_id = list(result.user.companies.keys())[0]
+        company = await auth_service._company_repository.get(company_id)
+        if not company or not company.subdomain:
+            redirect_url = build_url(target_host, "/select-company?action=create")
+        else:
+            redirect_url = build_url(target_host, "/dashboard", company.subdomain)
+    else:
+        active_company_id = result.user.active_company_id
+        if active_company_id and active_company_id in result.user.companies:
+            company = await auth_service._company_repository.get(active_company_id)
+            if company and company.subdomain:
+                redirect_url = build_url(target_host, "/dashboard", company.subdomain)
+            else:
+                redirect_url = build_url(target_host, "/select-company")
+        else:
+            redirect_url = build_url(target_host, "/select-company")
 
-    response = RedirectResponse(url="/select-company")
+    response = RedirectResponse(url=redirect_url)
     is_production = settings.server.env == "production"
 
     cookie_domain = get_cookie_domain(target_host)

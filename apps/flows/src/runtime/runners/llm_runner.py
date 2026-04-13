@@ -467,6 +467,7 @@ class LlmNodeRunner(BaseLlmNodeRunner):
                                     )
                                 )
                                 await emitter.emit_tool_result(exit_tool_name, final_response, exit_call_id)
+                                await self._emit_pending_ui_events(emitter, state)
                                 
                                 state.response = final_response
                                 InterruptManager.clear_interrupt_path(state)
@@ -525,11 +526,14 @@ class LlmNodeRunner(BaseLlmNodeRunner):
                                     await emitter.emit_tool_result(
                                         tool_name, tr["content"], tool_call_id
                                     )
+                                    await self._emit_pending_ui_events(emitter, state)
 
                                 pending_reasoning = getattr(state, "_pending_reasoning", None)
                                 if pending_reasoning:
                                     await emitter.emit_reasoning(pending_reasoning)
                                     delattr(state, "_pending_reasoning")
+
+                                await self._emit_pending_ui_events(emitter, state)
 
                             except FlowInterrupt as e:
                                 interrupted_tc = tool_calls[0]
@@ -886,3 +890,29 @@ class LlmNodeRunner(BaseLlmNodeRunner):
                     }
                 )
         return schema
+
+    async def _emit_pending_ui_events(
+        self,
+        emitter: BaseEmitter,
+        state: ExecutionState,
+    ) -> None:
+        raw_events = getattr(state, "ui_events_pending", None)
+        if raw_events is None:
+            return
+        if not isinstance(raw_events, list):
+            raise ValueError("state.ui_events_pending must be a list")
+        events = list(raw_events)
+        setattr(state, "ui_events_pending", [])
+        for event in events:
+            event_type = event.get("type")
+            payload = event.get("payload")
+            if not isinstance(event_type, str) or not isinstance(payload, dict):
+                continue
+            event_id = event.get("id")
+            version = event.get("version", "1.0")
+            await emitter.emit_ui_event(
+                event_type=event_type,
+                payload=payload,
+                event_id=event_id if isinstance(event_id, str) else None,
+                version=version if isinstance(version, str) else "1.0",
+            )

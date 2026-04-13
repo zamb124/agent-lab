@@ -50,6 +50,16 @@ Tools = inline конфиги внутри ноды / FlowConfig. Встроен
 
 **`load_tools_to_db`** (**`flows_loader.py`**): у **`FunctionTool`** / класса **`BaseTool`** с Pydantic **`args_schema`** в **`tool_repository`** пишется **`parameters_schema`** — полная JSON Schema объекта аргументов (**`pydantic_model_to_parameters_schema`**, см. **`apps/flows/src/tools/json_schema_parameters.py`**: **`default`**, **`minimum`**, **`minLength`**, **`items`** и т.д.). Параллельно в **`args_schema`** остаётся плоский **`CallParameter`** для API/редактора. У **`CodeTool`** схема для LLM — либо готовый **`parameters_schema`** из конфига, либо сборка из **`args_schema`** через **`resolve_tool_parameters_schema`**. Старые записи в БД без **`parameters_schema`** по-прежнему работают за счёт резолва из **`args_schema`**. После изменения модели тула — перезагрузка тулов в БД (старт flows / **`load_tools_to_db`**).
 
+### Event-first для UI-операций
+
+Если tool инициирует изменение интерфейса (например, patch графа в редакторе), tool возвращает событие в `tool_result`, а применение выполняет фронтенд:
+
+- в `tool_result` поле `ui_events: [{ id, type, payload, version }]`;
+- embed-чат автоматически диспатчит `lara:event` и `lara:<type>`;
+- host-приложение (`apps/*/ui`) ловит событие и применяет изменение через свои сервисы/store.
+
+Прямое применение UI-изменений из tool через backend-мутацию для таких сценариев не использовать.
+
 ## Структура tool
 
     {

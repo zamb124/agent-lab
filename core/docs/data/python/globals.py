@@ -230,6 +230,41 @@ GLOBALS: List[Dict[str, Any]] = [
         "perspectives": ["editor", "flow", "node"],
         "tags": ["messages", "utility"],
     },
+    {
+        "name": "push_ui_event",
+        "type": "function",
+        "doc": (
+            "Поставить одно UI-событие в очередь state для стрима:\n"
+            "push_ui_event(state, 'patch_applied', {'flow_id': 'f1', 'changes': {...}}, event_id='evt-1')\n"
+            "Событие уходит в A2A как artifact.name='ui_event'."
+        ),
+        "perspectives": ["editor", "flow", "tool", "node"],
+        "tags": ["ui", "events", "streaming"],
+    },
+    {
+        "name": "push_ui_events",
+        "type": "function",
+        "doc": (
+            "Поставить несколько UI-событий (список dict):\n"
+            "push_ui_events(state, [\n"
+            "  {'type': 'patch_proposed', 'payload': {...}},\n"
+            "  {'type': 'navigate', 'payload': {...}},\n"
+            "])"
+        ),
+        "perspectives": ["editor", "flow", "tool", "node"],
+        "tags": ["ui", "events", "streaming"],
+    },
+    {
+        "name": "pop_ui_events",
+        "type": "function",
+        "doc": (
+            "Извлечь и очистить очередь UI-событий из state:\n"
+            "events = pop_ui_events(state)\n"
+            "# -> [{'id','type','payload','version'}, ...]"
+        ),
+        "perspectives": ["editor", "flow", "tool", "node"],
+        "tags": ["ui", "events", "streaming"],
+    },
     # Interrupt
     {
         "name": "ask_user",

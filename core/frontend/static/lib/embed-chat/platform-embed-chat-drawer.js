@@ -2,6 +2,7 @@ import { LitElement, html, css, nothing } from 'lit';
 import { embedChatLabelsForLang } from './embed-chat-default-labels.js';
 import { readEmbedChatUrlParams, applyEmbedChatDrawerSizeVars } from './embed-chat-url-params.js';
 import { resolveEmbedChatTheme } from './embed-chat-theme.js';
+import { nextModalLayerZIndex } from '../utils/modal-z-stack.js';
 import '@platform/lib/components/platform-icon.js';
 import './platform-embed-chat.js';
 
@@ -30,6 +31,7 @@ export class PlatformEmbedChatDrawer extends LitElement {
         labels: { type: Object },
         getAuthToken: { type: Object },
         getExtraMetadataVariables: { type: Object },
+        getContextVariables: { type: Object },
         actionHandlers: { type: Object },
         /** Имя в шапке панели и для внутреннего чата; внешние сайты: атрибут assistant-title или ?embed_assistant_name= */
         assistantTitle: { type: String, attribute: 'assistant-title' },
@@ -99,7 +101,10 @@ export class PlatformEmbedChatDrawer extends LitElement {
 
         @media (max-width: 767px) {
             .fab {
-                display: none;
+                width: 52px;
+                height: 52px;
+                right: max(12px, env(safe-area-inset-right, 0px));
+                bottom: max(12px, env(safe-area-inset-bottom, 0px));
             }
         }
 
@@ -217,6 +222,13 @@ export class PlatformEmbedChatDrawer extends LitElement {
             flex-shrink: 0;
             padding: 4px 4px 12px 8px;
             border-bottom: 1px solid var(--embed-drawer-panel-border, rgba(255, 255, 255, 0.1));
+        }
+        .panel-head.panel-head--draggable {
+            cursor: grab;
+            user-select: none;
+        }
+        .panel-head.panel-head--dragging {
+            cursor: grabbing;
         }
 
         .panel-head-title {
@@ -344,6 +356,7 @@ export class PlatformEmbedChatDrawer extends LitElement {
         this.labels = {};
         this.getAuthToken = undefined;
         this.getExtraMetadataVariables = undefined;
+        this.getContextVariables = undefined;
         this.actionHandlers = {};
         this.toggleEventName = 'humanitec-embed-chat-toggle';
         this.showLocaleControl = false;
@@ -363,6 +376,13 @@ export class PlatformEmbedChatDrawer extends LitElement {
         this._drawerOwnsNativeFullscreen = false;
         this.panelMaximized = false;
         this.fabUnreadCount = 0;
+        this._layerBaseZIndex = nextModalLayerZIndex();
+        this._panelDragActive = false;
+        this._panelDragPosition = null;
+        this._panelDragContext = null;
+        this._onPanelDragPointerMove = this._onPanelDragPointerMove.bind(this);
+        this._onPanelDragPointerUp = this._onPanelDragPointerUp.bind(this);
+        this._onViewportResize = this._onViewportResize.bind(this);
     }
 
     _applyEmbedUrlParams() {
@@ -390,6 +410,7 @@ export class PlatformEmbedChatDrawer extends LitElement {
         this._applyEmbedUrlParams();
         this._onPopStateEmbedParams = () => this._applyEmbedUrlParams();
         window.addEventListener('popstate', this._onPopStateEmbedParams);
+        window.addEventListener('resize', this._onViewportResize);
         this._onPlatformThemeChange = () => {
             if ((this.theme || 'auto').toLowerCase() === 'auto') {
                 this.requestUpdate();
@@ -402,10 +423,12 @@ export class PlatformEmbedChatDrawer extends LitElement {
                 return;
             }
             if (document.fullscreenElement === panel) {
+                this._stopPanelDrag();
                 this._panelNativeFullscreen = true;
                 return;
             }
             if (this._panelNativeFullscreen || this._drawerOwnsNativeFullscreen) {
+                this._stopPanelDrag();
                 this._panelNativeFullscreen = false;
                 this._drawerOwnsNativeFullscreen = false;
                 if (this.panelMaximized) {
@@ -418,10 +441,12 @@ export class PlatformEmbedChatDrawer extends LitElement {
     }
 
     disconnectedCallback() {
+        this._stopPanelDrag();
         if (this._onPopStateEmbedParams) {
             window.removeEventListener('popstate', this._onPopStateEmbedParams);
             this._onPopStateEmbedParams = null;
         }
+        window.removeEventListener('resize', this._onViewportResize);
         if (this._onPlatformThemeChange) {
             window.removeEventListener('theme-change', this._onPlatformThemeChange);
             this._onPlatformThemeChange = null;
@@ -443,6 +468,12 @@ export class PlatformEmbedChatDrawer extends LitElement {
         if (changed.has('toggleEventName')) {
             this._bindToggleListener();
         }
+        if ((changed.has('open') && !this.open) || (changed.has('panelMaximized') && this.panelMaximized)) {
+            this._stopPanelDrag();
+        }
+        if (changed.has('open') && this.open) {
+            this.updateComplete.then(() => this._syncPanelToViewport());
+        }
         const resolved = resolveEmbedChatTheme(this.theme);
         if (this.getAttribute('data-embed-theme') !== resolved) {
             this.setAttribute('data-embed-theme', resolved);
@@ -460,9 +491,11 @@ export class PlatformEmbedChatDrawer extends LitElement {
     _bindToggleListener() {
         this._unbindToggleListener();
         const name = (this.toggleEventName && String(this.toggleEventName).trim()) || 'humanitec-embed-chat-toggle';
-        this._boundToggle = () => {
-            const next = !this.open;
+        this._boundToggle = (event) => {
+            const requestedOpen = event?.detail?.open;
+            const next = typeof requestedOpen === 'boolean' ? requestedOpen : !this.open;
             if (next) {
+                this._layerBaseZIndex = nextModalLayerZIndex();
                 this.fabUnreadCount = 0;
             }
             this.open = next;
@@ -502,7 +535,10 @@ export class PlatformEmbedChatDrawer extends LitElement {
     _toggle() {
         const next = !this.open;
         if (next) {
+            this._layerBaseZIndex = nextModalLayerZIndex();
             this.fabUnreadCount = 0;
+        } else {
+            this._stopPanelDrag();
         }
         this.open = next;
     }
@@ -520,6 +556,21 @@ export class PlatformEmbedChatDrawer extends LitElement {
         }
         this.fabUnreadCount += 1;
         this.requestUpdate();
+    }
+
+    onLaraEvent(handler) {
+        if (typeof handler !== 'function') {
+            throw new Error('onLaraEvent expects a function');
+        }
+        this.addEventListener('lara:event', handler);
+        return () => this.offLaraEvent(handler);
+    }
+
+    offLaraEvent(handler) {
+        if (typeof handler !== 'function') {
+            throw new Error('offLaraEvent expects a function');
+        }
+        this.removeEventListener('lara:event', handler);
     }
 
     _fabBadgeText() {
@@ -540,7 +591,175 @@ export class PlatformEmbedChatDrawer extends LitElement {
         return tpl.includes('{count}') ? tpl.replace(/\{count\}/g, c) : `${L.fab_aria_open} (${c})`;
     }
 
+    _layerZIndex(step = 0) {
+        return String(this._layerBaseZIndex + step);
+    }
+
+    _isPanelDraggable() {
+        if (!this.open) {
+            return false;
+        }
+        if (this.panelMaximized || this._panelNativeFullscreen || this._drawerOwnsNativeFullscreen) {
+            return false;
+        }
+        return !this._isMobileViewportForNativeFullscreen();
+    }
+
+    _panelInlineStyle() {
+        let style = `z-index:${this._layerZIndex(2)}`;
+        if (this._panelDragPosition && !this.panelMaximized) {
+            style += `;top:${this._panelDragPosition.top}px;left:${this._panelDragPosition.left}px;right:auto;bottom:auto`;
+        }
+        return style;
+    }
+
+    _bindPanelDragListeners() {
+        window.addEventListener('pointermove', this._onPanelDragPointerMove);
+        window.addEventListener('pointerup', this._onPanelDragPointerUp);
+        window.addEventListener('pointercancel', this._onPanelDragPointerUp);
+    }
+
+    _unbindPanelDragListeners() {
+        window.removeEventListener('pointermove', this._onPanelDragPointerMove);
+        window.removeEventListener('pointerup', this._onPanelDragPointerUp);
+        window.removeEventListener('pointercancel', this._onPanelDragPointerUp);
+    }
+
+    _stopPanelDrag() {
+        this._panelDragContext = null;
+        this._unbindPanelDragListeners();
+        if (this._panelDragActive) {
+            this._panelDragActive = false;
+            this.requestUpdate();
+        }
+    }
+
+    _clampPanelDragPosition(top, left, width, height) {
+        const maxLeft = Math.max(0, window.innerWidth - width);
+        const maxTop = Math.max(0, window.innerHeight - height);
+        const clampedLeft = Math.min(Math.max(left, 0), maxLeft);
+        const clampedTop = Math.min(Math.max(top, 0), maxTop);
+        return { top: clampedTop, left: clampedLeft };
+    }
+
+    _syncPanelToViewport() {
+        if (!this.open || this.panelMaximized) {
+            return;
+        }
+        if (this._isMobileViewportForNativeFullscreen()) {
+            this._stopPanelDrag();
+            if (this._panelDragPosition) {
+                this._panelDragPosition = null;
+                this.requestUpdate();
+            }
+            return;
+        }
+        if (!this._panelDragPosition) {
+            return;
+        }
+        const panel = this.renderRoot?.querySelector('.panel');
+        if (!(panel instanceof HTMLElement)) {
+            return;
+        }
+        const width = panel.offsetWidth;
+        const height = panel.offsetHeight;
+        if (width <= 0 || height <= 0) {
+            return;
+        }
+        const clamped = this._clampPanelDragPosition(
+            this._panelDragPosition.top,
+            this._panelDragPosition.left,
+            width,
+            height,
+        );
+        if (clamped.top === this._panelDragPosition.top && clamped.left === this._panelDragPosition.left) {
+            return;
+        }
+        this._panelDragPosition = clamped;
+        this._applyPanelDragPosition(panel);
+        this.requestUpdate();
+    }
+
+    _onViewportResize() {
+        this._syncPanelToViewport();
+    }
+
+    _applyPanelDragPosition(panel) {
+        if (!(panel instanceof HTMLElement) || !this._panelDragPosition || this.panelMaximized) {
+            return;
+        }
+        panel.style.top = `${this._panelDragPosition.top}px`;
+        panel.style.left = `${this._panelDragPosition.left}px`;
+        panel.style.right = 'auto';
+        panel.style.bottom = 'auto';
+    }
+
+    _onPanelHeadPointerDown(event) {
+        if (!this._isPanelDraggable()) {
+            return;
+        }
+        if (event.button !== 0) {
+            return;
+        }
+        const target = event.target;
+        if (!(target instanceof Element)) {
+            return;
+        }
+        if (target.closest('.panel-head-actions')) {
+            return;
+        }
+        const panel = this.renderRoot?.querySelector('.panel');
+        if (!(panel instanceof HTMLElement)) {
+            return;
+        }
+        const rect = panel.getBoundingClientRect();
+        const initial = this._clampPanelDragPosition(rect.top, rect.left, rect.width, rect.height);
+        this._panelDragPosition = initial;
+        this._panelDragContext = {
+            pointerId: event.pointerId,
+            offsetX: event.clientX - initial.left,
+            offsetY: event.clientY - initial.top,
+            width: rect.width,
+            height: rect.height,
+        };
+        this._panelDragActive = true;
+        this._bindPanelDragListeners();
+        this._applyPanelDragPosition(panel);
+        this.requestUpdate();
+        event.preventDefault();
+    }
+
+    _onPanelDragPointerMove(event) {
+        if (!this._panelDragContext) {
+            return;
+        }
+        if (event.pointerId !== this._panelDragContext.pointerId) {
+            return;
+        }
+        const nextLeft = event.clientX - this._panelDragContext.offsetX;
+        const nextTop = event.clientY - this._panelDragContext.offsetY;
+        this._panelDragPosition = this._clampPanelDragPosition(
+            nextTop,
+            nextLeft,
+            this._panelDragContext.width,
+            this._panelDragContext.height,
+        );
+        const panel = this.renderRoot?.querySelector('.panel');
+        this._applyPanelDragPosition(panel);
+    }
+
+    _onPanelDragPointerUp(event) {
+        if (!this._panelDragContext) {
+            return;
+        }
+        if (event.pointerId !== this._panelDragContext.pointerId) {
+            return;
+        }
+        this._stopPanelDrag();
+    }
+
     _close() {
+        this._stopPanelDrag();
         const panel = this.renderRoot?.querySelector('.panel');
         const fs = typeof document !== 'undefined' ? document.fullscreenElement : null;
         if (this._drawerOwnsNativeFullscreen || this._panelNativeFullscreen || (fs && panel && fs === panel)) {
@@ -555,6 +774,7 @@ export class PlatformEmbedChatDrawer extends LitElement {
     }
 
     async _togglePanelFullscreen() {
+        this._stopPanelDrag();
         const panel = this.renderRoot?.querySelector('.panel');
         if (!panel) {
             return;
@@ -614,11 +834,20 @@ export class PlatformEmbedChatDrawer extends LitElement {
         const fabAria = this.open ? L.fab_aria_close : this._fabOpenAriaLabel(L);
         const embedTheme = resolveEmbedChatTheme(this.theme);
         const fsLabel = this.panelMaximized ? L.panel_exit_fullscreen : L.panel_fullscreen;
+        const panelHeadClass = `panel-head ${this._isPanelDraggable() ? 'panel-head--draggable' : ''} ${
+            this._panelDragActive ? 'panel-head--dragging' : ''
+        }`;
 
         return html`
             ${!this.open
                 ? html`
-                      <button type="button" class="fab" aria-label=${fabAria} @click=${this._toggle}>
+                      <button
+                          type="button"
+                          class="fab"
+                          style="z-index:${this._layerZIndex(3)}"
+                          aria-label=${fabAria}
+                          @click=${this._toggle}
+                      >
                 ${this.fabUnreadCount > 0
                     ? html`<span class="fab-badge" aria-hidden="true">${this._fabBadgeText()}</span>`
                     : nothing}
@@ -661,16 +890,18 @@ export class PlatformEmbedChatDrawer extends LitElement {
 
             <div
                 class="backdrop ${this.open ? '' : 'backdrop--hidden'}"
+                style="z-index:${this._layerZIndex(1)}"
                 aria-hidden="true"
                 @click=${this._close}
             ></div>
             <div
                 class="panel ${this.panelMaximized ? 'panel--maximized' : ''} ${!this.open ? 'panel--collapsed' : ''}"
+                style=${this._panelInlineStyle()}
                 aria-hidden=${this.open ? 'false' : 'true'}
                 ?inert=${!this.open}
                 @click=${(e) => e.stopPropagation()}
             >
-                <div class="panel-head">
+                <div class=${panelHeadClass} @pointerdown=${this._onPanelHeadPointerDown}>
                     <span class="panel-head-title">${headTitle}</span>
                     <div class="panel-head-actions">
                         <button
@@ -720,6 +951,7 @@ export class PlatformEmbedChatDrawer extends LitElement {
                     ?enable-voice=${this.enableVoice}
                     .getAuthToken=${this.getAuthToken}
                     .getExtraMetadataVariables=${this.getExtraMetadataVariables}
+                    .getContextVariables=${this.getContextVariables}
                     .actionHandlers=${this.actionHandlers && typeof this.actionHandlers === 'object'
                         ? this.actionHandlers
                         : {}}

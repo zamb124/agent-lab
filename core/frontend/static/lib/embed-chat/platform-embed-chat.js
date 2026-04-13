@@ -33,6 +33,7 @@ let mid = 0;
  * - showLocaleControl: переключатель ru/en/auto в композере
  * - hideHeader: скрыть внутренний header (например когда заголовок и действия в drawer)
  * - getExtraMetadataVariables: async () => Record<string, unknown> — доп. ключи в metadata.variables (мёрж после языка)
+ * - getContextVariables: async () => Record<string, unknown> — контекст экрана/сущности для ассистента (мёрж после getExtraMetadataVariables)
  * - assistantTitle (assistant-title): имя в шапке; иначе title; иначе labels.title из локали (?embed_assistant_name= на странице — см. drawer)
  *
  * Событие (после завершения стрима ответа на отправку пользователя): **`humanitec-embed-chat-assistant-reply-completed`**, bubbles + composed — для счётчика на FAB drawer.
@@ -52,6 +53,7 @@ export class PlatformEmbedChat extends LitElement {
         showLocaleControl: { type: Boolean, attribute: 'show-locale-control' },
         hideHeader: { type: Boolean, attribute: 'hide-header' },
         getExtraMetadataVariables: { type: Object },
+        getContextVariables: { type: Object },
         greetingSent: { type: Boolean, state: true },
         _credentials: { state: true },
         _credPopover: { state: true },
@@ -353,6 +355,7 @@ export class PlatformEmbedChat extends LitElement {
         this.interfaceLocale = 'auto';
         this.showLocaleControl = false;
         this.hideHeader = false;
+        this.getContextVariables = undefined;
         this.getAuthToken = undefined;
         this.actionHandlers = {};
         /** @type {Array<object>} */
@@ -369,6 +372,7 @@ export class PlatformEmbedChat extends LitElement {
         /** @type {Array<{provider:string, service:string}>} */
         this._credentials = [];
         this._credPopover = null;
+        this._uiEventDispatchKeys = new Set();
         this._onCredClickOutside = this._onCredClickOutside.bind(this);
         registerBuiltinEmbedBlocks();
     }
@@ -446,11 +450,92 @@ export class PlatformEmbedChat extends LitElement {
         if (!actionId || typeof actionId !== 'string') {
             return;
         }
+        const laraEventType =
+            actionId.startsWith('lara:') ? actionId.slice('lara:'.length) : payload?.lara_event_type;
+        if (typeof laraEventType === 'string' && laraEventType.trim()) {
+            this._emitLaraEvent(laraEventType.trim(), payload || {});
+        }
         const fn = this.actionHandlers[actionId];
         if (typeof fn === 'function') {
             fn(payload || {});
         }
     };
+
+    _emitLaraEvent(type, payload = {}) {
+        const detail = {
+            type,
+            version: '1.0',
+            payload,
+            timestamp: new Date().toISOString(),
+        };
+        this.dispatchEvent(
+            new CustomEvent('lara:event', {
+                bubbles: true,
+                composed: true,
+                detail,
+            }),
+        );
+        this.dispatchEvent(
+            new CustomEvent(`lara:${type}`, {
+                bubbles: true,
+                composed: true,
+                detail,
+            }),
+        );
+    }
+
+    _uiEventDispatchKey(uiEvent, index, messageId) {
+        const eventId =
+            uiEvent.id != null && String(uiEvent.id).trim() ? String(uiEvent.id).trim() : `idx:${index}`;
+        const eventType = String(uiEvent.type || '').trim();
+        const payload = uiEvent.payload && typeof uiEvent.payload === 'object' ? uiEvent.payload : {};
+        return `${messageId || 'no-message'}|${eventType}|${eventId}|${JSON.stringify(payload)}`;
+    }
+
+    _emitUiEvents(uiEvents, messageId) {
+        if (!Array.isArray(uiEvents) || uiEvents.length === 0) {
+            return;
+        }
+        uiEvents.forEach((uiEvent, index) => {
+            if (!uiEvent || typeof uiEvent !== 'object') {
+                return;
+            }
+            const type = typeof uiEvent.type === 'string' ? uiEvent.type.trim() : '';
+            if (!type) {
+                return;
+            }
+            const dedupeKey = this._uiEventDispatchKey(uiEvent, index, messageId);
+            if (this._uiEventDispatchKeys.has(dedupeKey)) {
+                return;
+            }
+            this._uiEventDispatchKeys.add(dedupeKey);
+            const payload = uiEvent.payload && typeof uiEvent.payload === 'object' ? uiEvent.payload : {};
+            const detail = {
+                id: uiEvent.id || null,
+                type,
+                version:
+                    uiEvent.version != null && String(uiEvent.version).trim()
+                        ? String(uiEvent.version).trim()
+                        : '1.0',
+                payload,
+                timestamp: new Date().toISOString(),
+            };
+            this.dispatchEvent(
+                new CustomEvent('lara:event', {
+                    bubbles: true,
+                    composed: true,
+                    detail,
+                }),
+            );
+            this.dispatchEvent(
+                new CustomEvent(`lara:${type}`, {
+                    bubbles: true,
+                    composed: true,
+                    detail,
+                }),
+            );
+        });
+    }
 
     async _getEmbedAuthHeaders() {
         if (typeof this.getAuthToken !== 'function') {
@@ -619,7 +704,19 @@ export class PlatformEmbedChat extends LitElement {
                 extraVars = raw;
             }
         }
-        const variables = { ...langVars, ...extraVars };
+        let contextVars = {};
+        if (typeof this.getContextVariables === 'function') {
+            const raw = await this.getContextVariables();
+            if (raw && typeof raw === 'object' && !Array.isArray(raw)) {
+                contextVars = raw;
+            }
+        }
+        const variables = { ...langVars, ...extraVars, ...contextVars };
+        this._emitLaraEvent('context_requested', {
+            flow_id: this.flowId,
+            skill_id: this.skillId || null,
+            variables,
+        });
 
         try {
             await streamEmbedA2A(
@@ -639,6 +736,11 @@ export class PlatformEmbedChat extends LitElement {
         } catch (err) {
             const m = err instanceof Error ? err.message : String(err);
             this._patchMessage(assistantMsg.id, { content: m, streaming: false });
+            this._emitLaraEvent('error', {
+                message: m,
+                flow_id: this.flowId,
+                skill_id: this.skillId || null,
+            });
         } finally {
             this._loading = false;
             this._sseOpen = false;
@@ -746,10 +848,16 @@ export class PlatformEmbedChat extends LitElement {
             this.requestUpdate();
             return;
         }
+        if (reduced.uiEvent && typeof reduced.uiEvent === 'object') {
+            this._emitUiEvents([reduced.uiEvent], messageId);
+        }
         const patch = reduced.patch;
         if (patch && Object.keys(patch).length > 0) {
             const merged = { ...msg, ...patch };
             this._messages = this._messages.map((m) => (m.id === messageId ? merged : m));
+            if (Array.isArray(patch.uiEvents) && patch.uiEvents.length > 0) {
+                this._emitUiEvents(patch.uiEvents, messageId);
+            }
         }
         this.requestUpdate();
     }
@@ -757,6 +865,7 @@ export class PlatformEmbedChat extends LitElement {
     _newChat() {
         this._pendingAssistantReplyNotify = false;
         this._contextId = `${Date.now()}`;
+        this._uiEventDispatchKeys.clear();
         const g = this._lb('greeting', '');
         this._messages = g
             ? [

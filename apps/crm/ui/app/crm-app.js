@@ -24,7 +24,7 @@ import '../modals/access-request-modal.js';
 import '../modals/namespace-modal.js';
 import '../components/crm-sidebar.js';
 import '../components/crm-mobile-app-header.js';
-import '@platform/lib/embed-chat/platform-embed-chat-drawer.js';
+import '@platform/lib/embed-chat/platform-lara-assistant.js';
 import {
     flowsEmbedShouldSendCredentials,
     resolveCrmLaraFlowsBaseUrl,
@@ -624,8 +624,7 @@ export class CRMApp extends PlatformApp {
                 ></ai-analysis-modal>
             ` : ''}
 
-            <platform-embed-chat-drawer
-                theme="auto"
+            <platform-lara-assistant
                 .assistantTitle=${this.i18n.t('app_shell.embed_assistant_name')}
                 .flowsBaseUrl=${resolveCrmLaraFlowsBaseUrl()}
                 flow-id="lara"
@@ -635,7 +634,7 @@ export class CRMApp extends PlatformApp {
                 .getAuthToken=${this._laraEmbedGetAuthToken}
                 .getExtraMetadataVariables=${this._laraEmbedExtraMetadataVariables}
                 .locale=${this.services.get('i18n').getCurrentLocale()}
-            ></platform-embed-chat-drawer>
+            ></platform-lara-assistant>
         `;
     }
 }

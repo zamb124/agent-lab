@@ -20,6 +20,8 @@ from core.errors import SafeEvalError
 if TYPE_CHECKING:
     from core.state import ExecutionState
 
+UI_EVENTS_KEY = "ui_events_pending"
+
 
 def deep_copy_state(state: 'ExecutionState | dict') -> 'ExecutionState | dict':
     """
@@ -360,3 +362,80 @@ def extract_json(text: str) -> Any:
         Распарсенный JSON или None
     """
     return extract_json_from_response(text)
+
+
+def push_ui_event(
+    state: "ExecutionState | dict | None",
+    event_type: str,
+    payload: Dict[str, Any],
+    *,
+    event_id: Optional[str] = None,
+    version: str = "1.0",
+) -> Dict[str, Any]:
+    """Добавляет UI событие в очередь state для последующей публикации в stream."""
+    if state is None:
+        raise SafeEvalError("state is required")
+    if not isinstance(event_type, str) or not event_type.strip():
+        raise SafeEvalError("event_type must be a non-empty string")
+    if not isinstance(payload, dict):
+        raise SafeEvalError("payload must be a dict")
+    if not isinstance(version, str) or not version.strip():
+        raise SafeEvalError("version must be a non-empty string")
+
+    event = {
+        "id": (event_id.strip() if isinstance(event_id, str) and event_id.strip() else str(uuid.uuid4())),
+        "type": event_type.strip(),
+        "payload": payload,
+        "version": version.strip(),
+    }
+    events = get_nested(state, UI_EVENTS_KEY, default=None)
+    if events is None:
+        events = []
+        set_nested(state, UI_EVENTS_KEY, events)
+    if not isinstance(events, list):
+        raise SafeEvalError(f"state.{UI_EVENTS_KEY} must be a list")
+    events.append(event)
+    return event
+
+
+def push_ui_events(
+    state: "ExecutionState | dict | None",
+    events: List[Dict[str, Any]],
+) -> List[Dict[str, Any]]:
+    """Добавляет пачку UI событий в очередь state."""
+    if not isinstance(events, list):
+        raise SafeEvalError("events must be a list")
+    queued: List[Dict[str, Any]] = []
+    for item in events:
+        if not isinstance(item, dict):
+            raise SafeEvalError("each event must be a dict")
+        event_type = item.get("type")
+        payload = item.get("payload")
+        event_id = item.get("id")
+        version = item.get("version", "1.0")
+        if not isinstance(payload, dict):
+            raise SafeEvalError("event payload must be a dict")
+        queued.append(
+            push_ui_event(
+                state,
+                event_type=event_type,
+                payload=payload,
+                event_id=event_id if isinstance(event_id, str) else None,
+                version=version if isinstance(version, str) else "1.0",
+            )
+        )
+    return queued
+
+
+def pop_ui_events(state: "ExecutionState | dict | None") -> List[Dict[str, Any]]:
+    """Извлекает и очищает очередь UI событий из state."""
+    if state is None:
+        raise SafeEvalError("state is required")
+    events = get_nested(state, UI_EVENTS_KEY, default=None)
+    if events is None:
+        return []
+    if not isinstance(events, list):
+        raise SafeEvalError(f"state.{UI_EVENTS_KEY} must be a list")
+    extracted = list(events)
+    set_nested(state, UI_EVENTS_KEY, [])
+    return extracted

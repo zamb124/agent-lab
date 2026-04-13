@@ -46,6 +46,28 @@ flow-editor-page .canvas-area {
     overflow: hidden;
 }
 
+flow-editor-page .lara-editor-launcher {
+    position: absolute;
+    top: var(--space-4, 16px);
+    right: 360px;
+    z-index: 21;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    border-radius: 10px;
+    border: 1px solid var(--border-default, rgba(255, 255, 255, 0.12));
+    background: var(--glass-solid-strong, rgba(40, 40, 64, 0.92));
+    color: var(--text-primary, rgba(255, 255, 255, 0.92));
+    height: 32px;
+    padding: 0 10px;
+    cursor: pointer;
+}
+
+flow-editor-page .lara-editor-launcher:hover {
+    border-color: var(--accent, #6366f1);
+    color: var(--accent, #6366f1);
+}
+
 flow-editor-page .panel-backdrop {
     position: fixed;
     inset: 0;
@@ -193,6 +215,25 @@ flow-editor-page .floating-panel-body {
     min-height: 0;
     overflow-y: auto;
     padding: var(--space-4, 16px);
+}
+
+flow-editor-page .floating-panel-body.lara-node-updated-glow {
+    animation: laraNodeUpdatedGlow 3.2s ease-out;
+}
+
+@keyframes laraNodeUpdatedGlow {
+    0% {
+        box-shadow: inset 0 0 0 1px rgba(99, 102, 241, 0.35), inset 0 0 0 9999px rgba(99, 102, 241, 0.2);
+        background: rgba(99, 102, 241, 0.16);
+    }
+    40% {
+        box-shadow: inset 0 0 0 1px rgba(99, 102, 241, 0.28), inset 0 0 0 9999px rgba(99, 102, 241, 0.12);
+        background: rgba(99, 102, 241, 0.08);
+    }
+    100% {
+        box-shadow: inset 0 0 0 1px rgba(99, 102, 241, 0), inset 0 0 0 9999px rgba(99, 102, 241, 0);
+        background: transparent;
+    }
 }
 
 @media (max-width: 480px) {

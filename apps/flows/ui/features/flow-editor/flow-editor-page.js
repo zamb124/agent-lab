@@ -54,6 +54,45 @@ export class FlowEditorPage extends PlatformElement {
         this._panelEntering = false;
         this._confirmModal = null;
         this._reloadFromBundleBusy = false;
+        this._onExternalEditorNodeSelect = (event) => {
+            const detail = event?.detail || {};
+            const targetFlowId = detail.flowId || detail.flow_id;
+            if (targetFlowId && targetFlowId !== this.flowId) {
+                return;
+            }
+            const targetNodeId = detail.nodeId || detail.node_id;
+            if (targetNodeId) {
+                FlowsStore.selectNode(targetNodeId);
+            }
+        };
+        this._laraNodeUpdateFlashTimer = null;
+        this._onLaraNodeUpdated = (event) => {
+            const detail = event?.detail || {};
+            const targetFlowId = detail.flowId || detail.flow_id || null;
+            if (targetFlowId && targetFlowId !== this.flowId) {
+                return;
+            }
+            const targetNodeId = detail.nodeId || detail.node_id || null;
+            const selectedNodeId = this.state.value.selectedNodeId || null;
+            if (!targetNodeId || targetNodeId !== selectedNodeId) {
+                return;
+            }
+            const panelBody = this.querySelector('.floating-panel-body');
+            if (!(panelBody instanceof HTMLElement)) {
+                return;
+            }
+            panelBody.classList.remove('lara-node-updated-glow');
+            // force reflow to restart animation when updates are frequent
+            void panelBody.offsetWidth;
+            panelBody.classList.add('lara-node-updated-glow');
+            if (this._laraNodeUpdateFlashTimer) {
+                clearTimeout(this._laraNodeUpdateFlashTimer);
+            }
+            this._laraNodeUpdateFlashTimer = setTimeout(() => {
+                panelBody.classList.remove('lara-node-updated-glow');
+                this._laraNodeUpdateFlashTimer = null;
+            }, 3200);
+        };
     }
 
     async connectedCallback() {
@@ -86,11 +125,53 @@ export class FlowEditorPage extends PlatformElement {
         
         this._handleDocumentClick = this._handleDocumentClick.bind(this);
         document.addEventListener('click', this._handleDocumentClick);
+        window.addEventListener('flows-editor-select-node', this._onExternalEditorNodeSelect);
+        window.addEventListener('flows-editor-node-updated-by-lara', this._onLaraNodeUpdated);
     }
 
     disconnectedCallback() {
         super.disconnectedCallback();
         document.removeEventListener('click', this._handleDocumentClick);
+        window.removeEventListener('flows-editor-select-node', this._onExternalEditorNodeSelect);
+        window.removeEventListener('flows-editor-node-updated-by-lara', this._onLaraNodeUpdated);
+        if (this._laraNodeUpdateFlashTimer) {
+            clearTimeout(this._laraNodeUpdateFlashTimer);
+            this._laraNodeUpdateFlashTimer = null;
+        }
+    }
+
+    _openLaraForEditor() {
+        window.dispatchEvent(
+            new CustomEvent('flows-lara-open', {
+                detail: {
+                    open: true,
+                    selection_source: 'panel_launcher',
+                    screen: 'flow_editor',
+                    flow_id: this.flowId || null,
+                    skill_id: this.state.value.currentSkillId || 'base',
+                },
+                bubbles: true,
+                composed: true,
+            }),
+        );
+    }
+
+    _openLaraForSelectedNode() {
+        const selectedNodeId = this.state.value.selectedNodeId || null;
+        window.dispatchEvent(
+            new CustomEvent('flows-lara-open', {
+                detail: {
+                    open: true,
+                    selection_source: 'node_launcher',
+                    screen: selectedNodeId ? 'flow_editor_node' : 'flow_editor',
+                    flow_id: this.flowId || null,
+                    skill_id: this.state.value.currentSkillId || 'base',
+                    node_id: selectedNodeId,
+                },
+                bubbles: true,
+                composed: true,
+            }),
+        );
     }
 
     _handleDocumentClick(e) {
@@ -1163,6 +1244,13 @@ export class FlowEditorPage extends PlatformElement {
                         <span class="floating-panel-name">${selectedNode.name || selectedNode.nodeId || selectedNodeId}</span>
                     </div>
                     <div class="floating-panel-actions">
+                        <button
+                            class="floating-panel-btn"
+                            @click=${this._openLaraForSelectedNode}
+                            title="${this.i18n.t('editor.open_lara_for_node')}"
+                        >
+                            <platform-icon name="ai" size="16"></platform-icon>
+                        </button>
                         <button 
                             class="floating-panel-btn expand-btn" 
                             @click=${this._toggleExpanded} 
@@ -1320,6 +1408,14 @@ export class FlowEditorPage extends PlatformElement {
                     ></node-types-sidebar>
                     
                     <div class="canvas-area">
+                        <button
+                            class="lara-editor-launcher"
+                            @click=${this._openLaraForEditor}
+                            title="${this.i18n.t('editor.open_lara_for_editor')}"
+                        >
+                            <platform-icon name="ai" size="16"></platform-icon>
+                            <span>${this.i18n.t('editor.open_lara_short')}</span>
+                        </button>
                         <flow-canvas
                             @node-selected=${this._onNodeSelected}
                             @node-unselected=${this._onNodeUnselected}

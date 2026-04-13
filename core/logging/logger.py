@@ -133,7 +133,7 @@ class Logger:
     def log_llm_response(self, response: Any) -> None:
         """Логирует ответ от LLM"""
         response_str = json.dumps(response, ensure_ascii=False, indent=2)
-        self._logger.debug(f"LLM RESPONSE:\n{response_str}")
+        self._logger.info(f"LLM RESPONSE:\n{response_str}")
 
 
 def get_logger(name: str) -> Logger:

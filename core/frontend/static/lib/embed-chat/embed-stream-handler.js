@@ -122,6 +122,13 @@ function reduceArtifactUpdate(msg, result, out) {
     }
 
     if (artifact?.parts) {
+        if (artifact.name === 'ui_event') {
+            const dataPart = artifact.parts.find((p) => p.data && typeof p.data === 'object');
+            if (dataPart) {
+                out.uiEvent = dataPart.data;
+            }
+            return out;
+        }
         const text = artifact.parts.map(partText).join('');
         if (text) {
             if (artifact.name === 'reasoning') {

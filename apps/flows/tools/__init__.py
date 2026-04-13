@@ -29,6 +29,9 @@ from .lara_crm import (
     crm_create_note,
     crm_create_note_and_analyze,
     crm_search_entities,
+    flows_patch_flow,
+    flows_patch_node,
+    flows_read_context,
     push_embed_blocks,
 )
 from .math_tools import calculator
@@ -49,6 +52,9 @@ __all__ = [
     "crm_create_note",
     "crm_create_note_and_analyze",
     "crm_search_entities",
+    "flows_patch_flow",
+    "flows_patch_node",
+    "flows_read_context",
     "cancel_scheduled_task",
     "create_file",
     "fill_docx_template",

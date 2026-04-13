@@ -29,6 +29,7 @@ emitter = Emitter(redis_client, state)
 await emitter.emit_text("Hello")                                      # текстовый чанк
 await emitter.emit_tool_call("calculator", {"expr": "2+2"}, call_id) # вызов tool
 await emitter.emit_tool_result("calculator", 4, call_id)              # результат tool
+await emitter.emit_ui_event("patch_applied", {"flow_id": "f1"})        # UI событие (artifact ui_event)
 await emitter.emit_complete("Done!")                                   # завершение
 await emitter.emit_interrupt(state.interrupt)                          # interrupt (input-required); metadata.platform_interrupt
 await emitter.emit_error("Connection failed")                          # ошибка
@@ -104,6 +105,14 @@ event = TaskArtifactUpdateEvent(
     append=True   # False — заменить артефакт
 )
 ```
+
+### UI события в протоколе (канон)
+
+- Для сигналов UI используется **`TaskArtifactUpdateEvent`** с `artifact.name = "ui_event"`.
+- В `artifact.parts` кладётся `DataPart` с объектом:
+  `{"id": "...", "type": "...", "payload": {...}, "version": "1.0"}`
+- Одно UI событие = одно stream-сообщение (`one-event-per-message`).
+- Новый `kind` в A2A для UI не вводится.
 
 ## Полный поток выполнения
 

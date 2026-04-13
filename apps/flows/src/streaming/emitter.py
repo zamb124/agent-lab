@@ -3,7 +3,7 @@ Emitter - публикация A2A событий в Redis Pub/Sub.
 """
 
 import json
-from typing import Any
+from typing import Any, Dict, Optional
 
 from core.clients import RedisClient
 from core.logging import get_logger
@@ -61,6 +61,21 @@ class Emitter(BaseEmitter):
             json.dumps(event_dict, default=str, ensure_ascii=False),
         )
         logger.debug(f"[Emitter] Published {event_kind} to {channel}")
+
+    async def emit_ui_event(
+        self,
+        event_type: str,
+        payload: Dict[str, Any],
+        *,
+        event_id: Optional[str] = None,
+        version: str = "1.0",
+    ) -> None:
+        await super().emit_ui_event(
+            event_type=event_type,
+            payload=payload,
+            event_id=event_id,
+            version=version,
+        )
 
 
 # Алиас для обратной совместимости

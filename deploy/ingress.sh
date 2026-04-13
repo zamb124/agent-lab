@@ -164,12 +164,13 @@ while IFS= read -r entry; do
   name="$(echo "${entry}" | jq -r '.name')"
   port="$(echo "${entry}" | jq -r '.port')"
   upstream_host="$(echo "${entry}" | jq -r '.upstream_host // .upstream_ip // empty')"
+  k8s_name="$(echo "${name}" | tr '_' '-')"
   if [[ -n "${upstream_host}" ]]; then
     endpoint_ip="${upstream_host}"
   else
     endpoint_ip="${HOST_IP}"
   fi
-  svc="${name}-svc"
+  svc="${k8s_name}-svc"
 
   log "  ${svc} -> ${endpoint_ip}:${port}"
   ${SSH} "microk8s kubectl apply -f -" <<EOF
@@ -415,7 +416,7 @@ STATICPATHS
     | sort_by(.path | length)
     | reverse
     | .[]
-    | "      - path: \(.path)\n        pathType: Prefix\n        backend:\n          service:\n            name: \(.name)-svc\n            port:\n              number: \(.port)"
+    | "      - path: \(.path)\n        pathType: Prefix\n        backend:\n          service:\n            name: \(.name | gsub("_"; "-"))-svc\n            port:\n              number: \(.port)"
   ' "${CONF_LOCAL_JSON}"
 }
 
