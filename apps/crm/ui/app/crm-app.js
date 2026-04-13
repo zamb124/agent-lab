@@ -629,6 +629,7 @@ export class CRMApp extends PlatformApp {
                 .flowsBaseUrl=${resolveCrmLaraFlowsBaseUrl()}
                 flow-id="lara"
                 skill-id="crm"
+                event-namespace="assistant"
                 toggle-event-name="humanitec-embed-chat-toggle"
                 ?use-credentials=${flowsEmbedShouldSendCredentials(resolveCrmLaraFlowsBaseUrl())}
                 .getAuthToken=${this._laraEmbedGetAuthToken}

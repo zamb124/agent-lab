@@ -8,6 +8,7 @@ import base64
 import copy
 import pathlib
 import uuid
+from datetime import UTC, datetime
 from typing import Any, Dict, List, Optional, TYPE_CHECKING
 
 from a2a.types import Message, Part, Role, TextPart
@@ -371,6 +372,8 @@ def push_ui_event(
     *,
     event_id: Optional[str] = None,
     version: str = "1.0",
+    source: str = "assistant",
+    correlation_id: Optional[str] = None,
 ) -> Dict[str, Any]:
     """Добавляет UI событие в очередь state для последующей публикации в stream."""
     if state is None:
@@ -381,12 +384,17 @@ def push_ui_event(
         raise SafeEvalError("payload must be a dict")
     if not isinstance(version, str) or not version.strip():
         raise SafeEvalError("version must be a non-empty string")
+    if not isinstance(source, str) or not source.strip():
+        raise SafeEvalError("source must be a non-empty string")
 
     event = {
         "id": (event_id.strip() if isinstance(event_id, str) and event_id.strip() else str(uuid.uuid4())),
         "type": event_type.strip(),
         "payload": payload,
         "version": version.strip(),
+        "timestamp": datetime.now(UTC).isoformat(),
+        "source": source.strip(),
+        "correlation_id": correlation_id.strip() if isinstance(correlation_id, str) and correlation_id.strip() else None,
     }
     events = get_nested(state, UI_EVENTS_KEY, default=None)
     if events is None:
@@ -413,6 +421,8 @@ def push_ui_events(
         payload = item.get("payload")
         event_id = item.get("id")
         version = item.get("version", "1.0")
+        source = item.get("source", "assistant")
+        correlation_id = item.get("correlation_id")
         if not isinstance(payload, dict):
             raise SafeEvalError("event payload must be a dict")
         queued.append(
@@ -422,6 +432,8 @@ def push_ui_events(
                 payload=payload,
                 event_id=event_id if isinstance(event_id, str) else None,
                 version=version if isinstance(version, str) else "1.0",
+                source=source if isinstance(source, str) else "assistant",
+                correlation_id=correlation_id if isinstance(correlation_id, str) else None,
             )
         )
     return queued

@@ -34,6 +34,7 @@ let mid = 0;
  * - hideHeader: скрыть внутренний header (например когда заголовок и действия в drawer)
  * - getExtraMetadataVariables: async () => Record<string, unknown> — доп. ключи в metadata.variables (мёрж после языка)
  * - getContextVariables: async () => Record<string, unknown> — контекст экрана/сущности для ассистента (мёрж после getExtraMetadataVariables)
+ * - eventNamespace: префикс событий для внешнего хоста (по умолчанию assistant)
  * - assistantTitle (assistant-title): имя в шапке; иначе title; иначе labels.title из локали (?embed_assistant_name= на странице — см. drawer)
  *
  * Событие (после завершения стрима ответа на отправку пользователя): **`humanitec-embed-chat-assistant-reply-completed`**, bubbles + composed — для счётчика на FAB drawer.
@@ -52,6 +53,7 @@ export class PlatformEmbedChat extends LitElement {
         interfaceLocale: { type: String, attribute: 'interface-locale' },
         showLocaleControl: { type: Boolean, attribute: 'show-locale-control' },
         hideHeader: { type: Boolean, attribute: 'hide-header' },
+        eventNamespace: { type: String, attribute: 'event-namespace' },
         getExtraMetadataVariables: { type: Object },
         getContextVariables: { type: Object },
         greetingSent: { type: Boolean, state: true },
@@ -355,6 +357,7 @@ export class PlatformEmbedChat extends LitElement {
         this.interfaceLocale = 'auto';
         this.showLocaleControl = false;
         this.hideHeader = false;
+        this.eventNamespace = 'assistant';
         this.getContextVariables = undefined;
         this.getAuthToken = undefined;
         this.actionHandlers = {};
@@ -450,10 +453,13 @@ export class PlatformEmbedChat extends LitElement {
         if (!actionId || typeof actionId !== 'string') {
             return;
         }
-        const laraEventType =
-            actionId.startsWith('lara:') ? actionId.slice('lara:'.length) : payload?.lara_event_type;
-        if (typeof laraEventType === 'string' && laraEventType.trim()) {
-            this._emitLaraEvent(laraEventType.trim(), payload || {});
+        const eventPrefix = `${this._normalizedEventNamespace()}:`;
+        const assistantEventType =
+            actionId.startsWith(eventPrefix)
+                ? actionId.slice(eventPrefix.length)
+                : payload?.assistant_event_type;
+        if (typeof assistantEventType === 'string' && assistantEventType.trim()) {
+            this._emitAssistantEvent(assistantEventType.trim(), payload || {});
         }
         const fn = this.actionHandlers[actionId];
         if (typeof fn === 'function') {
@@ -461,22 +467,29 @@ export class PlatformEmbedChat extends LitElement {
         }
     };
 
-    _emitLaraEvent(type, payload = {}) {
+    _normalizedEventNamespace() {
+        const raw = typeof this.eventNamespace === 'string' ? this.eventNamespace.trim() : '';
+        return raw || 'assistant';
+    }
+
+    _emitAssistantEvent(type, payload = {}) {
+        const eventNamespace = this._normalizedEventNamespace();
         const detail = {
             type,
             version: '1.0',
             payload,
+            namespace: eventNamespace,
             timestamp: new Date().toISOString(),
         };
         this.dispatchEvent(
-            new CustomEvent('lara:event', {
+            new CustomEvent(`${eventNamespace}:event`, {
                 bubbles: true,
                 composed: true,
                 detail,
             }),
         );
         this.dispatchEvent(
-            new CustomEvent(`lara:${type}`, {
+            new CustomEvent(`${eventNamespace}:${type}`, {
                 bubbles: true,
                 composed: true,
                 detail,
@@ -518,17 +531,26 @@ export class PlatformEmbedChat extends LitElement {
                         ? String(uiEvent.version).trim()
                         : '1.0',
                 payload,
+                source:
+                    uiEvent.source != null && String(uiEvent.source).trim()
+                        ? String(uiEvent.source).trim()
+                        : this._normalizedEventNamespace(),
+                correlation_id:
+                    uiEvent.correlation_id != null && String(uiEvent.correlation_id).trim()
+                        ? String(uiEvent.correlation_id).trim()
+                        : null,
                 timestamp: new Date().toISOString(),
             };
+            const eventNamespace = this._normalizedEventNamespace();
             this.dispatchEvent(
-                new CustomEvent('lara:event', {
+                new CustomEvent(`${eventNamespace}:event`, {
                     bubbles: true,
                     composed: true,
                     detail,
                 }),
             );
             this.dispatchEvent(
-                new CustomEvent(`lara:${type}`, {
+                new CustomEvent(`${eventNamespace}:${type}`, {
                     bubbles: true,
                     composed: true,
                     detail,
@@ -712,7 +734,7 @@ export class PlatformEmbedChat extends LitElement {
             }
         }
         const variables = { ...langVars, ...extraVars, ...contextVars };
-        this._emitLaraEvent('context_requested', {
+        this._emitAssistantEvent('context_requested', {
             flow_id: this.flowId,
             skill_id: this.skillId || null,
             variables,
@@ -736,7 +758,7 @@ export class PlatformEmbedChat extends LitElement {
         } catch (err) {
             const m = err instanceof Error ? err.message : String(err);
             this._patchMessage(assistantMsg.id, { content: m, streaming: false });
-            this._emitLaraEvent('error', {
+            this._emitAssistantEvent('error', {
                 message: m,
                 flow_id: this.flowId,
                 skill_id: this.skillId || null,

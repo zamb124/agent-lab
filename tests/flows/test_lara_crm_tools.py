@@ -66,8 +66,18 @@ async def test_crm_create_note_tool_returns_blocks_for_chat(
     system_user_id: str,
 ) -> None:
     state = _tool_state(unique_id=unique_id, system_user_id=system_user_id)
+    propose_raw = await crm_create_note._run_impl(
+        {"name": f"Lara note {unique_id}", "description": "Тело заметки для теста тула.", "mode": "propose"},
+        state,
+    )
+    proposed = json.loads(propose_raw)
     raw = await crm_create_note._run_impl(
-        {"name": f"Lara note {unique_id}", "description": "Тело заметки для теста тула."},
+        {
+            "name": f"Lara note {unique_id}",
+            "description": "Тело заметки для теста тула.",
+            "mode": "apply",
+            "pending_action_id": proposed["pending_action_id"],
+        },
         state,
     )
     data = json.loads(raw)
@@ -176,10 +186,21 @@ async def test_crm_analyze_note_text_tool_returns_blocks_for_chat(
     )
 
     state = _tool_state(unique_id=unique_id, system_user_id=system_user_id)
+    create_propose_raw = await crm_create_note._run_impl(
+        {
+            "name": note_title,
+            "description": "Текст заметки для AI-анализа.",
+            "mode": "propose",
+        },
+        state,
+    )
+    create_proposed = json.loads(create_propose_raw)
     create_raw = await crm_create_note._run_impl(
         {
             "name": note_title,
             "description": "Текст заметки для AI-анализа.",
+            "mode": "apply",
+            "pending_action_id": create_proposed["pending_action_id"],
         },
         state,
     )
@@ -259,10 +280,21 @@ async def test_crm_create_note_and_analyze_tool_chains(
     )
 
     state = _tool_state(unique_id=unique_id, system_user_id=system_user_id)
+    create_propose_raw = await crm_create_note._run_impl(
+        {
+            "name": note_title,
+            "description": "Полный текст для создания и анализа.",
+            "mode": "propose",
+        },
+        state,
+    )
+    create_proposed = json.loads(create_propose_raw)
     create_raw = await crm_create_note._run_impl(
         {
             "name": note_title,
             "description": "Полный текст для создания и анализа.",
+            "mode": "apply",
+            "pending_action_id": create_proposed["pending_action_id"],
         },
         state,
     )

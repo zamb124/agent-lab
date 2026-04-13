@@ -93,7 +93,7 @@ async def test_flows_read_context_returns_selected_node(
 
 
 @pytest.mark.asyncio
-async def test_flows_patch_node_apply_returns_ui_event_without_persist(
+async def test_flows_patch_node_confirm_first_apply_persists_flow(
     flows_service,
     flows_client,
     auth_headers_system,
@@ -105,26 +105,44 @@ async def test_flows_patch_node_apply_returns_ui_event_without_persist(
     state = _tool_state(unique_id=unique_id, system_user_id=system_user_id)
     new_prompt = f"Updated prompt {unique_id}"
 
-    raw = await flows_patch_node._run_impl(
+    propose_raw = await flows_patch_node._run_impl(
+        {
+            "flow_id": flow_id,
+            "skill_id": "base",
+            "node_id": "main",
+            "patch_json": json.dumps({"prompt": new_prompt}),
+            "mode": "propose",
+        },
+        state,
+    )
+    proposed = json.loads(propose_raw)
+    pending_action_id = proposed["pending_action_id"]
+    assert proposed["success"] is True
+    pending_events = getattr(state, "ui_events_pending")
+    assert pending_events[0]["type"] == "action_previewed"
+    assert pending_events[0]["payload"]["changes"]["prompt"] == new_prompt
+
+    apply_raw = await flows_patch_node._run_impl(
         {
             "flow_id": flow_id,
             "skill_id": "base",
             "node_id": "main",
             "patch_json": json.dumps({"prompt": new_prompt}),
             "mode": "apply",
+            "pending_action_id": pending_action_id,
         },
         state,
     )
-    data = json.loads(raw)
+    data = json.loads(apply_raw)
     assert data["success"] is True
     assert data["node_after"]["prompt"] == new_prompt
     pending_events = getattr(state, "ui_events_pending")
-    assert pending_events[0]["type"] == "patch_applied"
-    assert pending_events[0]["payload"]["changes"]["prompt"] == new_prompt
+    assert pending_events[-1]["type"] == "action_applied"
+    assert pending_events[-1]["payload"]["changes"]["prompt"] == new_prompt
 
     flow_resp = await flows_client.get(f"/flows/api/v1/flows/{flow_id}", headers=auth_headers_system)
     assert flow_resp.status_code == 200, flow_resp.text
-    assert flow_resp.json()["nodes"]["main"]["prompt"] != new_prompt
+    assert flow_resp.json()["nodes"]["main"]["prompt"] == new_prompt
 
 
 @pytest.mark.asyncio
@@ -151,8 +169,9 @@ async def test_flows_patch_flow_propose_does_not_persist(
     data = json.loads(raw)
     assert data["success"] is True
     assert data["flow_after"]["name"] == proposed_name
+    assert isinstance(data.get("pending_action_id"), str) and data["pending_action_id"]
     pending_events = getattr(state, "ui_events_pending")
-    assert pending_events[0]["type"] == "patch_proposed"
+    assert pending_events[0]["type"] == "action_previewed"
     assert pending_events[0]["payload"]["flow_changes"]["name"] == proposed_name
 
     flow_resp = await flows_client.get(f"/flows/api/v1/flows/{flow_id}", headers=auth_headers_system)

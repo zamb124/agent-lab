@@ -235,7 +235,8 @@ GLOBALS: List[Dict[str, Any]] = [
         "type": "function",
         "doc": (
             "Поставить одно UI-событие в очередь state для стрима:\n"
-            "push_ui_event(state, 'patch_applied', {'flow_id': 'f1', 'changes': {...}}, event_id='evt-1')\n"
+            "push_ui_event(state, 'action_applied', {'flow_id': 'f1', 'changes': {...}}, "
+            "event_id='evt-1', version='2.0', source='assistant', correlation_id='corr-1')\n"
             "Событие уходит в A2A как artifact.name='ui_event'."
         ),
         "perspectives": ["editor", "flow", "tool", "node"],
@@ -247,7 +248,7 @@ GLOBALS: List[Dict[str, Any]] = [
         "doc": (
             "Поставить несколько UI-событий (список dict):\n"
             "push_ui_events(state, [\n"
-            "  {'type': 'patch_proposed', 'payload': {...}},\n"
+            "  {'type': 'action_previewed', 'payload': {...}, 'version': '2.0'},\n"
             "  {'type': 'navigate', 'payload': {...}},\n"
             "])"
         ),
@@ -260,7 +261,7 @@ GLOBALS: List[Dict[str, Any]] = [
         "doc": (
             "Извлечь и очистить очередь UI-событий из state:\n"
             "events = pop_ui_events(state)\n"
-            "# -> [{'id','type','payload','version'}, ...]"
+            "# -> [{'id','type','payload','version','timestamp','source','correlation_id'}, ...]"
         ),
         "perspectives": ["editor", "flow", "tool", "node"],
         "tags": ["ui", "events", "streaming"],

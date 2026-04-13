@@ -14,6 +14,7 @@ export class PlatformLaraAssistant extends LitElement {
         locale: { type: String },
         useCredentials: { type: Boolean, attribute: 'use-credentials' },
         toggleEventName: { type: String, attribute: 'toggle-event-name' },
+        eventNamespace: { type: String, attribute: 'event-namespace' },
         getAuthToken: { type: Object },
         getExtraMetadataVariables: { type: Object },
         getContextVariables: { type: Object },
@@ -33,6 +34,7 @@ export class PlatformLaraAssistant extends LitElement {
         this.locale = 'ru';
         this.useCredentials = false;
         this.toggleEventName = 'humanitec-embed-chat-toggle';
+        this.eventNamespace = 'assistant';
         this.getAuthToken = undefined;
         this.getExtraMetadataVariables = undefined;
         this.getContextVariables = undefined;
@@ -50,6 +52,7 @@ export class PlatformLaraAssistant extends LitElement {
                 .locale=${this.locale || 'ru'}
                 ?use-credentials=${this.useCredentials}
                 toggle-event-name=${this.toggleEventName || 'humanitec-embed-chat-toggle'}
+                event-namespace=${this.eventNamespace || 'assistant'}
                 .getAuthToken=${this.getAuthToken}
                 .getExtraMetadataVariables=${this.getExtraMetadataVariables}
                 .getContextVariables=${this.getContextVariables}

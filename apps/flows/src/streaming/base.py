@@ -4,6 +4,7 @@
 
 import uuid
 from abc import ABC, abstractmethod
+from datetime import datetime, timezone
 from typing import TYPE_CHECKING, Any, AsyncIterator, Dict, List, Optional, Union
 
 from a2a.types import (
@@ -330,6 +331,8 @@ class BaseEmitter(ABC):
         *,
         event_id: Optional[str] = None,
         version: str = "1.0",
+        source: str = "assistant",
+        correlation_id: Optional[str] = None,
     ) -> None:
         """Публикует UI событие в A2A stream как artifact 'ui_event'."""
         normalized_event_id = event_id or str(uuid.uuid4())
@@ -343,6 +346,9 @@ class BaseEmitter(ABC):
                         "type": event_type,
                         "payload": payload,
                         "version": version,
+                        "timestamp": datetime.now(timezone.utc).isoformat(),
+                        "source": source,
+                        "correlation_id": correlation_id,
                     }
                 )
             ],

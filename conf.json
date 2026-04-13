@@ -324,6 +324,11 @@
       "server": {
         "name": "crm",
         "port": 8003
+      },
+      "provider_litserve": {
+        "api": {
+          "base_url": "http://127.0.0.1:8014/v1"
+        }
       }
     },
     "sync": {
@@ -397,11 +402,6 @@
             "api_key": "agentset_MrUnHaYpdrNDCMeK",
             "embedding_api_key": "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"
           }
-        }
-      },
-      "provider_litserve": {
-        "api": {
-          "base_url": "http://127.0.0.1:8014/v1"
         }
       },
       "s3": {

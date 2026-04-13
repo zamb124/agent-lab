@@ -5,15 +5,22 @@
 from __future__ import annotations
 
 import json
+from datetime import UTC, datetime
 from typing import Any, Dict, List, Literal, Optional
 from urllib.parse import quote
+from uuid import uuid4
 
 from pydantic import AliasChoices, BaseModel, ConfigDict, Field, field_validator
 
 from apps.flows.src.eval.state_utils import push_ui_event
+from apps.flows.src.container import get_container
 from apps.flows.src.tools import tool
 from core.clients.service_client import ServiceClient, ServiceClientError
 from core.context import get_context
+from core.logging import get_logger
+
+logger = get_logger(__name__)
+PENDING_ACTION_TTL_SECONDS = 60 * 60
 
 
 def _require_context_namespace() -> str:
@@ -21,6 +28,100 @@ def _require_context_namespace() -> str:
     if ctx is None:
         raise RuntimeError("Context is not set")
     return ctx.active_namespace or "default"
+
+
+def _require_company_id() -> str:
+    ctx = get_context()
+    if ctx is None or ctx.active_company is None:
+        raise RuntimeError("Active company is not set in context")
+    return ctx.active_company.company_id
+
+
+def _utc_now() -> str:
+    return datetime.now(UTC).isoformat()
+
+
+def _pending_action_cache_key(company_id: str, pending_action_id: str) -> str:
+    return f"assistant_action_pending:{company_id}:{pending_action_id}"
+
+
+async def _save_pending_action(action: Dict[str, Any]) -> None:
+    company_id = _require_company_id()
+    pending_action_id = action.get("pending_action_id")
+    if not isinstance(pending_action_id, str) or not pending_action_id:
+        raise ValueError("pending_action_id is required")
+    container = get_container()
+    await container.redis_client.set(
+        _pending_action_cache_key(company_id, pending_action_id),
+        json.dumps(action, ensure_ascii=False),
+        ttl=PENDING_ACTION_TTL_SECONDS,
+    )
+
+
+async def _load_pending_action(pending_action_id: str) -> Dict[str, Any]:
+    company_id = _require_company_id()
+    container = get_container()
+    raw_action = await container.redis_client.get(_pending_action_cache_key(company_id, pending_action_id))
+    if not raw_action:
+        raise ValueError(f"Pending action '{pending_action_id}' not found or expired")
+    if isinstance(raw_action, bytes):
+        raw_action = raw_action.decode("utf-8")
+    parsed_action = json.loads(raw_action)
+    if not isinstance(parsed_action, dict):
+        raise ValueError("Pending action payload is invalid")
+    return parsed_action
+
+
+async def _update_pending_action(action: Dict[str, Any]) -> None:
+    await _save_pending_action(action)
+
+
+def _build_action_envelope(
+    *,
+    capability: str,
+    operation: str,
+    target: Dict[str, Any],
+    payload: Dict[str, Any],
+    risk: Literal["low", "medium", "high"],
+    preview_summary: str,
+    preview_diff: Dict[str, Any],
+    idempotency_key: Optional[str] = None,
+) -> Dict[str, Any]:
+    action_id = str(uuid4())
+    resolved_idempotency_key = idempotency_key if idempotency_key else action_id
+    return {
+        "pending_action_id": action_id,
+        "action_id": action_id,
+        "idempotency_key": resolved_idempotency_key,
+        "status": "previewed",
+        "requires_confirmation": True,
+        "capability": capability,
+        "operation": operation,
+        "target": target,
+        "payload": payload,
+        "preview": {
+            "summary": preview_summary,
+            "diff": preview_diff,
+            "risk": risk,
+        },
+        "created_at": _utc_now(),
+        "updated_at": _utc_now(),
+    }
+
+
+def _audit_action(stage: str, action: Dict[str, Any], extra: Optional[Dict[str, Any]] = None) -> None:
+    payload = {
+        "stage": stage,
+        "pending_action_id": action.get("pending_action_id"),
+        "capability": action.get("capability"),
+        "operation": action.get("operation"),
+        "target": action.get("target"),
+        "idempotency_key": action.get("idempotency_key"),
+        "status": action.get("status"),
+    }
+    if extra:
+        payload.update(extra)
+    logger.info("assistant_action_audit %s", json.dumps(payload, ensure_ascii=False))
 
 
 def _analyze_mock(args: dict, state: Any = None) -> str:
@@ -93,6 +194,18 @@ class CrmCreateNoteArgs(BaseModel):
     namespace: Optional[str] = Field(
         None,
         description="Пространство имён CRM; null — из контекста сессии.",
+    )
+    mode: Literal["propose", "apply"] = Field(
+        "propose",
+        description="propose — подготовить создание заметки для подтверждения; apply — выполнить по pending_action_id.",
+    )
+    pending_action_id: Optional[str] = Field(
+        None,
+        description="ID действия из propose. Обязателен для mode=apply.",
+    )
+    idempotency_key: Optional[str] = Field(
+        None,
+        description="Идемпотентный ключ выполнения. Если не передан, используется pending_action_id.",
     )
 
     @field_validator("note_date", "namespace", mode="before")
@@ -194,8 +307,16 @@ class FlowsPatchNodeArgs(BaseModel):
         description="ID skill. Для base можно не передавать.",
     )
     mode: Literal["propose", "apply"] = Field(
-        "apply",
-        description="propose — показать патч без сохранения; apply — сохранить в flow.",
+        "propose",
+        description="propose — подготовить действие и ждать подтверждения; apply — применить по pending_action_id.",
+    )
+    pending_action_id: Optional[str] = Field(
+        None,
+        description="ID действия из propose. Обязателен для mode=apply.",
+    )
+    idempotency_key: Optional[str] = Field(
+        None,
+        description="Идемпотентный ключ выполнения. Если не передан, используется pending_action_id.",
     )
 
 
@@ -211,8 +332,16 @@ class FlowsPatchFlowArgs(BaseModel):
         ),
     )
     mode: Literal["propose", "apply"] = Field(
-        "apply",
-        description="propose — показать патч без сохранения; apply — сохранить в flow.",
+        "propose",
+        description="propose — подготовить действие и ждать подтверждения; apply — применить по pending_action_id.",
+    )
+    pending_action_id: Optional[str] = Field(
+        None,
+        description="ID действия из propose. Обязателен для mode=apply.",
+    )
+    idempotency_key: Optional[str] = Field(
+        None,
+        description="Идемпотентный ключ выполнения. Если не передан, используется pending_action_id.",
     )
 
 
@@ -349,49 +478,113 @@ async def crm_create_note(
     description: str,
     note_date: Optional[str] = None,
     namespace: Optional[str] = None,
+    mode: Literal["propose", "apply"] = "propose",
+    pending_action_id: Optional[str] = None,
+    idempotency_key: Optional[str] = None,
     state: Optional[dict] = None,
 ) -> str:
     ns = namespace if namespace and str(namespace).strip() else _require_context_namespace()
-    payload: Dict[str, Any] = {
+    create_payload: Dict[str, Any] = {
         "entity_type": "note",
         "namespace": ns,
         "name": name.strip(),
         "description": description,
     }
     if note_date and str(note_date).strip():
-        payload["note_date"] = str(note_date).strip()
+        create_payload["note_date"] = str(note_date).strip()
 
+    if mode == "propose":
+        action = _build_action_envelope(
+            capability="crm.entity",
+            operation="create_note",
+            target={"service": "crm", "resource": "entity", "entity_type": "note", "namespace": ns},
+            payload={"create_payload": create_payload},
+            risk="medium",
+            preview_summary=f"Подготовлено создание заметки '{name.strip()}'.",
+            preview_diff={"after": create_payload},
+            idempotency_key=idempotency_key,
+        )
+        await _save_pending_action(action)
+        _audit_action("preview", action)
+        push_ui_event(
+            state,
+            event_type="action_previewed",
+            payload={"action": action, "capability": "crm.entity", "operation": "create_note"},
+            event_id=f"crm-note-preview-{action['pending_action_id']}",
+            version="2.0",
+        )
+        return json.dumps(
+            {
+                "success": True,
+                "mode": "propose",
+                "pending_action_id": action["pending_action_id"],
+                "action": action,
+                "blocks": [
+                    {"type": "text", "text": "Черновик создания заметки готов. Подтвердите применение."},
+                    {
+                        "type": "actions",
+                        "buttons": [
+                            {
+                                "action_id": "assistant:action_apply",
+                                "label": "Создать заметку",
+                                "payload": {"pending_action_id": action["pending_action_id"]},
+                            }
+                        ],
+                    },
+                ],
+            },
+            ensure_ascii=False,
+        )
+
+    if not pending_action_id:
+        raise ValueError("pending_action_id is required for mode=apply")
+    action = await _load_pending_action(pending_action_id)
+    if action.get("operation") != "create_note":
+        raise ValueError(f"Pending action '{pending_action_id}' has incompatible operation")
+    if action.get("status") == "applied":
+        _audit_action("idempotent_replay", action)
+        return json.dumps(action.get("result", {"success": True, "mode": "apply"}), ensure_ascii=False)
+
+    stored_payload = action.get("payload") or {}
+    payload = stored_payload.get("create_payload")
+    if not isinstance(payload, dict):
+        raise ValueError("Pending action payload is invalid")
     client = ServiceClient()
-    try:
-        entity = await client.post("crm", "/crm/api/v1/entities", json=payload)
-    except ServiceClientError as exc:
-        return json.dumps({"success": False, "error": str(exc)}, ensure_ascii=False)
-
+    entity = await client.post("crm", "/crm/api/v1/entities", json=payload)
     if not isinstance(entity, dict) or not entity.get("entity_id"):
-        return json.dumps({"success": False, "error": "CRM create note: invalid response"}, ensure_ascii=False)
+        raise ValueError("CRM create note: invalid response")
 
     eid = entity["entity_id"]
-    blocks = [
-        {
-            "type": "card",
-            "title": entity.get("name") or name,
-            "subtitle": eid,
-        },
-        {
-            "type": "actions",
-            "buttons": [
-                {
-                    "action_id": "open_entity",
-                    "label": "Открыть сущность",
-                    "payload": {"entity_id": eid},
-                }
-            ],
-        },
-    ]
-    return json.dumps(
-        {"success": True, "entity_id": eid, "entity": entity, "blocks": blocks},
-        ensure_ascii=False,
+    result = {
+        "success": True,
+        "mode": "apply",
+        "pending_action_id": pending_action_id,
+        "entity_id": eid,
+        "entity": entity,
+        "blocks": [
+            {"type": "card", "title": entity.get("name") or payload.get("name") or "Note", "subtitle": eid},
+            {
+                "type": "actions",
+                "buttons": [
+                    {"action_id": "open_entity", "label": "Открыть сущность", "payload": {"entity_id": eid}}
+                ],
+            },
+        ],
+    }
+    action["status"] = "applied"
+    action["applied_at"] = _utc_now()
+    action["updated_at"] = _utc_now()
+    action["result"] = result
+    await _update_pending_action(action)
+    _audit_action("apply", action, {"entity_id": eid})
+    push_ui_event(
+        state,
+        event_type="action_applied",
+        payload={"action": action, "capability": "crm.entity", "operation": "create_note", "entity_id": eid},
+        event_id=f"crm-note-apply-{pending_action_id}",
+        version="2.0",
     )
+    return json.dumps(result, ensure_ascii=False)
 
 
 @tool(
@@ -421,20 +614,20 @@ async def crm_create_note_and_analyze(
     namespace: Optional[str] = None,
     state: Optional[dict] = None,
 ) -> str:
-    create_args: Dict[str, Any] = {"name": name, "description": description}
+    ns = namespace if namespace and str(namespace).strip() else _require_context_namespace()
+    create_payload: Dict[str, Any] = {
+        "entity_type": "note",
+        "namespace": ns,
+        "name": name.strip(),
+        "description": description,
+    }
     if note_date and str(note_date).strip():
-        create_args["note_date"] = str(note_date).strip()
-    if namespace and str(namespace).strip():
-        create_args["namespace"] = str(namespace).strip()
-
-    created_raw = await crm_create_note._run_impl(create_args, state)
-    created = json.loads(created_raw)
-    if not created.get("success"):
-        return created_raw
-
-    eid = created.get("entity_id")
-    if not eid or not isinstance(eid, str):
-        return json.dumps({"success": False, "error": "create_note: missing entity_id"}, ensure_ascii=False)
+        create_payload["note_date"] = str(note_date).strip()
+    client = ServiceClient()
+    created = await client.post("crm", "/crm/api/v1/entities", json=create_payload)
+    if not isinstance(created, dict) or not created.get("entity_id"):
+        raise ValueError("create_note: missing entity_id")
+    eid = created["entity_id"]
 
     analyze_args: Dict[str, Any] = {"note_id": eid}
     if extract_entity_types:
@@ -656,7 +849,9 @@ async def flows_patch_node(
     node_id: str,
     patch_json: str,
     skill_id: Optional[str] = None,
-    mode: Literal["propose", "apply"] = "apply",
+    mode: Literal["propose", "apply"] = "propose",
+    pending_action_id: Optional[str] = None,
+    idempotency_key: Optional[str] = None,
     state: Optional[dict] = None,
 ) -> str:
     def normalize_skill_id(raw_skill_id: Optional[str]) -> str:
@@ -701,8 +896,110 @@ async def flows_patch_node(
 
     node_before = require_node(flow_config, resolved_skill_id, node_id)
     node_after = {**node_before, **patch}
-    event_type = "patch_applied" if mode == "apply" else "patch_proposed"
+    action_target = {"service": "flows", "resource": "node", "flow_id": flow_id, "skill_id": resolved_skill_id, "node_id": node_id}
+    action_payload = {"patch_kind": "node", "flow_id": flow_id, "skill_id": resolved_skill_id, "node_id": node_id, "changes": patch}
+
+    if mode == "propose":
+        action = _build_action_envelope(
+            capability="flows.config",
+            operation="patch_node",
+            target=action_target,
+            payload=action_payload,
+            risk="medium",
+            preview_summary=f"Подготовлен патч ноды {node_id}.",
+            preview_diff={"node_before": node_before, "node_after": node_after},
+            idempotency_key=idempotency_key,
+        )
+        await _save_pending_action(action)
+        _audit_action("preview", action)
+        preview_payload = {
+            "action": action,
+            "patch_kind": "node",
+            "flow_id": flow_id,
+            "skill_id": resolved_skill_id,
+            "node_id": node_id,
+            "changes": patch,
+            "open_editor": True,
+        }
+        push_ui_event(
+            state,
+            event_type="action_previewed",
+            payload=preview_payload,
+            event_id=f"flows-node-preview-{action['pending_action_id']}",
+            version="2.0",
+        )
+        return json.dumps(
+            {
+                "success": True,
+                "mode": mode,
+                "flow_id": flow_id,
+                "skill_id": resolved_skill_id,
+                "node_id": node_id,
+                "pending_action_id": action["pending_action_id"],
+                "action": action,
+                "node_before": node_before,
+                "node_after": node_after,
+                "blocks": [
+                    {"type": "text", "text": f"Черновик готов. Подтвердите применение для ноды {node_id}."},
+                    {
+                        "type": "actions",
+                        "buttons": [
+                            {
+                                "action_id": "assistant:action_apply",
+                                "label": "Применить изменение",
+                                "payload": {
+                                    "pending_action_id": action["pending_action_id"],
+                                    "flow_id": flow_id,
+                                    "skill_id": resolved_skill_id,
+                                    "node_id": node_id,
+                                },
+                            }
+                        ],
+                    },
+                ],
+            },
+            ensure_ascii=False,
+        )
+
+    if not pending_action_id:
+        raise ValueError("pending_action_id is required for mode=apply")
+
+    action = await _load_pending_action(pending_action_id)
+    if action.get("operation") != "patch_node":
+        raise ValueError(f"Pending action '{pending_action_id}' has incompatible operation")
+    if action.get("status") == "applied":
+        _audit_action("idempotent_replay", action)
+        return json.dumps(action.get("result", {"success": True, "mode": "apply"}), ensure_ascii=False)
+    stored_payload = action.get("payload") or {}
+    if stored_payload.get("flow_id") != flow_id or stored_payload.get("node_id") != node_id:
+        raise ValueError("pending_action_id does not match flow_id/node_id")
+    if stored_payload.get("changes") != patch:
+        raise ValueError("Patch mismatch with pending action payload")
+
+    refreshed_flow = await client.get("flows", f"/flows/api/v1/flows/{quote(flow_id, safe='')}")
+    if not isinstance(refreshed_flow, dict):
+        raise ValueError("Invalid flow response")
+    mutable_flow = dict(refreshed_flow)
+    if resolved_skill_id == "base":
+        mutable_nodes = dict(mutable_flow.get("nodes", {}))
+        if node_id not in mutable_nodes:
+            raise ValueError(f"Node '{node_id}' not found in flow '{flow_id}'")
+        mutable_nodes[node_id] = {**mutable_nodes[node_id], **patch}
+        mutable_flow["nodes"] = mutable_nodes
+    else:
+        mutable_skills = dict(mutable_flow.get("skills") or {})
+        mutable_skill = dict(mutable_skills.get(resolved_skill_id) or {})
+        mutable_skill_nodes = dict(mutable_skill.get("nodes") or {})
+        if node_id not in mutable_skill_nodes:
+            raise ValueError(f"Node '{node_id}' not found in skill '{resolved_skill_id}'")
+        mutable_skill_nodes[node_id] = {**mutable_skill_nodes[node_id], **patch}
+        mutable_skill["nodes"] = mutable_skill_nodes
+        mutable_skills[resolved_skill_id] = mutable_skill
+        mutable_flow["skills"] = mutable_skills
+
+    await client.put("flows", f"/flows/api/v1/flows/{quote(flow_id, safe='')}", json=mutable_flow)
     event_payload = {
+        "action": action,
         "patch_kind": "node",
         "flow_id": flow_id,
         "skill_id": resolved_skill_id,
@@ -710,44 +1007,31 @@ async def flows_patch_node(
         "changes": patch,
         "open_editor": True,
     }
-    summary = (
-        f"Patch для ноды {node_id} отправлен в UI."
-        if mode == "apply"
-        else f"Patch подготовлен для ноды {node_id}."
-    )
     push_ui_event(
         state,
-        event_type=event_type,
+        event_type="action_applied",
         payload=event_payload,
-        event_id=f"flows-node-{flow_id}-{resolved_skill_id}-{node_id}-{mode}",
-        version="1.0",
+        event_id=f"flows-node-apply-{pending_action_id}",
+        version="2.0",
     )
-
-    return json.dumps(
-        {
-            "success": True,
-            "mode": mode,
-            "flow_id": flow_id,
-            "skill_id": resolved_skill_id,
-            "node_id": node_id,
-            "node_before": node_before,
-            "node_after": node_after,
-            "blocks": [
-                {"type": "text", "text": summary},
-                {
-                    "type": "actions",
-                    "buttons": [
-                        {
-                            "action_id": f"lara:{event_type}",
-                            "label": "Открыть результат в редакторе",
-                            "payload": event_payload,
-                        }
-                    ],
-                },
-            ],
-        },
-        ensure_ascii=False,
-    )
+    result = {
+        "success": True,
+        "mode": mode,
+        "flow_id": flow_id,
+        "skill_id": resolved_skill_id,
+        "node_id": node_id,
+        "pending_action_id": pending_action_id,
+        "node_before": node_before,
+        "node_after": node_after,
+        "blocks": [{"type": "text", "text": f"Изменение для ноды {node_id} применено."}],
+    }
+    action["status"] = "applied"
+    action["applied_at"] = _utc_now()
+    action["updated_at"] = _utc_now()
+    action["result"] = result
+    await _update_pending_action(action)
+    _audit_action("apply", action)
+    return json.dumps(result, ensure_ascii=False)
 
 
 @tool(
@@ -771,7 +1055,9 @@ async def flows_patch_node(
 async def flows_patch_flow(
     flow_id: str,
     patch_json: str,
-    mode: Literal["propose", "apply"] = "apply",
+    mode: Literal["propose", "apply"] = "propose",
+    pending_action_id: Optional[str] = None,
+    idempotency_key: Optional[str] = None,
     state: Optional[dict] = None,
 ) -> str:
     patch = json.loads(patch_json)
@@ -793,13 +1079,82 @@ async def flows_patch_flow(
 
     flow_after = dict(flow_config)
     flow_after.update(patch)
-    event_type = "patch_applied" if mode == "apply" else "patch_proposed"
-    summary = (
-        f"Patch для flow {flow_id} отправлен в UI."
-        if mode == "apply"
-        else f"Patch подготовлен для flow {flow_id}."
-    )
-    event_payload = {
+
+    if mode == "propose":
+        action = _build_action_envelope(
+            capability="flows.config",
+            operation="patch_flow",
+            target={"service": "flows", "resource": "flow", "flow_id": flow_id},
+            payload={"patch_kind": "flow", "flow_id": flow_id, "flow_changes": patch},
+            risk="low",
+            preview_summary=f"Подготовлен патч flow {flow_id}.",
+            preview_diff={"flow_before": flow_config, "flow_after": flow_after},
+            idempotency_key=idempotency_key,
+        )
+        await _save_pending_action(action)
+        _audit_action("preview", action)
+        preview_payload = {
+            "action": action,
+            "patch_kind": "flow",
+            "flow_id": flow_id,
+            "flow_changes": patch,
+            "open_editor": True,
+        }
+        push_ui_event(
+            state,
+            event_type="action_previewed",
+            payload=preview_payload,
+            event_id=f"flows-flow-preview-{action['pending_action_id']}",
+            version="2.0",
+        )
+        return json.dumps(
+            {
+                "success": True,
+                "mode": mode,
+                "flow_id": flow_id,
+                "pending_action_id": action["pending_action_id"],
+                "action": action,
+                "flow_before": flow_config,
+                "flow_after": flow_after,
+                "blocks": [
+                    {"type": "text", "text": f"Черновик готов. Подтвердите применение для flow {flow_id}."},
+                    {
+                        "type": "actions",
+                        "buttons": [
+                            {
+                                "action_id": "assistant:action_apply",
+                                "label": "Применить изменение",
+                                "payload": {"pending_action_id": action["pending_action_id"], "flow_id": flow_id},
+                            }
+                        ],
+                    },
+                ],
+            },
+            ensure_ascii=False,
+        )
+
+    if not pending_action_id:
+        raise ValueError("pending_action_id is required for mode=apply")
+    action = await _load_pending_action(pending_action_id)
+    if action.get("operation") != "patch_flow":
+        raise ValueError(f"Pending action '{pending_action_id}' has incompatible operation")
+    if action.get("status") == "applied":
+        _audit_action("idempotent_replay", action)
+        return json.dumps(action.get("result", {"success": True, "mode": "apply"}), ensure_ascii=False)
+    stored_payload = action.get("payload") or {}
+    if stored_payload.get("flow_id") != flow_id:
+        raise ValueError("pending_action_id does not match flow_id")
+    if stored_payload.get("flow_changes") != patch:
+        raise ValueError("Patch mismatch with pending action payload")
+
+    refreshed_flow = await client.get("flows", f"/flows/api/v1/flows/{quote(flow_id, safe='')}")
+    if not isinstance(refreshed_flow, dict):
+        raise ValueError("Invalid flow response")
+    updated_flow = dict(refreshed_flow)
+    updated_flow.update(patch)
+    await client.put("flows", f"/flows/api/v1/flows/{quote(flow_id, safe='')}", json=updated_flow)
+    apply_payload = {
+        "action": action,
         "patch_kind": "flow",
         "flow_id": flow_id,
         "flow_changes": patch,
@@ -807,31 +1162,24 @@ async def flows_patch_flow(
     }
     push_ui_event(
         state,
-        event_type=event_type,
-        payload=event_payload,
-        event_id=f"flows-flow-{flow_id}-{mode}",
-        version="1.0",
+        event_type="action_applied",
+        payload=apply_payload,
+        event_id=f"flows-flow-apply-{pending_action_id}",
+        version="2.0",
     )
-    return json.dumps(
-        {
-            "success": True,
-            "mode": mode,
-            "flow_id": flow_id,
-            "flow_before": flow_config,
-            "flow_after": flow_after,
-            "blocks": [
-                {"type": "text", "text": summary},
-                {
-                    "type": "actions",
-                    "buttons": [
-                        {
-                            "action_id": f"lara:{event_type}",
-                            "label": "Открыть результат в редакторе",
-                            "payload": event_payload,
-                        }
-                    ],
-                },
-            ],
-        },
-        ensure_ascii=False,
-    )
+    result = {
+        "success": True,
+        "mode": mode,
+        "flow_id": flow_id,
+        "pending_action_id": pending_action_id,
+        "flow_before": flow_config,
+        "flow_after": flow_after,
+        "blocks": [{"type": "text", "text": f"Изменение для flow {flow_id} применено."}],
+    }
+    action["status"] = "applied"
+    action["applied_at"] = _utc_now()
+    action["updated_at"] = _utc_now()
+    action["result"] = result
+    await _update_pending_action(action)
+    _audit_action("apply", action)
+    return json.dumps(result, ensure_ascii=False)

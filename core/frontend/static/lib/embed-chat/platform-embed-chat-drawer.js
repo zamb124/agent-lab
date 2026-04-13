@@ -32,6 +32,7 @@ export class PlatformEmbedChatDrawer extends LitElement {
         getAuthToken: { type: Object },
         getExtraMetadataVariables: { type: Object },
         getContextVariables: { type: Object },
+        eventNamespace: { type: String, attribute: 'event-namespace' },
         actionHandlers: { type: Object },
         /** Имя в шапке панели и для внутреннего чата; внешние сайты: атрибут assistant-title или ?embed_assistant_name= */
         assistantTitle: { type: String, attribute: 'assistant-title' },
@@ -357,6 +358,7 @@ export class PlatformEmbedChatDrawer extends LitElement {
         this.getAuthToken = undefined;
         this.getExtraMetadataVariables = undefined;
         this.getContextVariables = undefined;
+        this.eventNamespace = 'assistant';
         this.actionHandlers = {};
         this.toggleEventName = 'humanitec-embed-chat-toggle';
         this.showLocaleControl = false;
@@ -558,19 +560,33 @@ export class PlatformEmbedChatDrawer extends LitElement {
         this.requestUpdate();
     }
 
-    onLaraEvent(handler) {
+    _assistantEventName() {
+        const raw = typeof this.eventNamespace === 'string' ? this.eventNamespace.trim() : '';
+        const ns = raw || 'assistant';
+        return `${ns}:event`;
+    }
+
+    onAssistantEvent(handler) {
         if (typeof handler !== 'function') {
-            throw new Error('onLaraEvent expects a function');
+            throw new Error('onAssistantEvent expects a function');
         }
-        this.addEventListener('lara:event', handler);
-        return () => this.offLaraEvent(handler);
+        this.addEventListener(this._assistantEventName(), handler);
+        return () => this.offAssistantEvent(handler);
+    }
+
+    offAssistantEvent(handler) {
+        if (typeof handler !== 'function') {
+            throw new Error('offAssistantEvent expects a function');
+        }
+        this.removeEventListener(this._assistantEventName(), handler);
+    }
+
+    onLaraEvent(handler) {
+        return this.onAssistantEvent(handler);
     }
 
     offLaraEvent(handler) {
-        if (typeof handler !== 'function') {
-            throw new Error('offLaraEvent expects a function');
-        }
-        this.removeEventListener('lara:event', handler);
+        this.offAssistantEvent(handler);
     }
 
     _fabBadgeText() {
@@ -952,6 +968,7 @@ export class PlatformEmbedChatDrawer extends LitElement {
                     .getAuthToken=${this.getAuthToken}
                     .getExtraMetadataVariables=${this.getExtraMetadataVariables}
                     .getContextVariables=${this.getContextVariables}
+                    .eventNamespace=${this.eventNamespace || 'assistant'}
                     .actionHandlers=${this.actionHandlers && typeof this.actionHandlers === 'object'
                         ? this.actionHandlers
                         : {}}

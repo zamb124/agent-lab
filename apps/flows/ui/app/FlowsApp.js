@@ -124,12 +124,12 @@ export class FlowsApp extends PlatformApp {
                 return;
             }
             this._laraHandledEventKeys.add(eventId);
-            if (eventType === 'patch_applied') {
+            if (eventType === 'action_applied') {
                 void this._handleLaraPatchApplied(payload);
                 return;
             }
-            if (eventType === 'patch_proposed') {
-                this._emitLaraEvent('patch_proposed', payload);
+            if (eventType === 'action_previewed') {
+                this._emitLaraEvent('action_previewed', payload);
                 return;
             }
             if (eventType === 'navigate') {
@@ -137,10 +137,11 @@ export class FlowsApp extends PlatformApp {
             }
         };
         this._laraActionHandlers = {
-            'lara:context_requested': (payload) => this._emitLaraEvent('context_requested', payload),
-            'lara:navigate': (payload) => this._emitLaraEvent('navigate', payload),
-            'lara:patch_proposed': (payload) => this._emitLaraEvent('patch_proposed', payload),
-            'lara:patch_applied': (payload) => this._emitLaraEvent('patch_applied', payload),
+            'assistant:context_requested': (payload) => this._emitLaraEvent('context_requested', payload),
+            'assistant:navigate': (payload) => this._emitLaraEvent('navigate', payload),
+            'assistant:action_previewed': (payload) => this._emitLaraEvent('action_previewed', payload),
+            'assistant:action_applied': (payload) => this._emitLaraEvent('action_applied', payload),
+            'assistant:action_apply': (payload) => this._emitLaraEvent('action_apply_requested', payload),
         };
     }
 
@@ -148,13 +149,13 @@ export class FlowsApp extends PlatformApp {
         await super.connectedCallback();
         window.addEventListener(AppEvents.AUTH_CHANGE, this._onOperatorAuthChange);
         window.addEventListener('flows-lara-open', this._onLaraOpenRequested);
-        this.addEventListener('lara:event', this._onLaraUiEvent);
+        this.addEventListener('assistant:event', this._onLaraUiEvent);
     }
 
     disconnectedCallback() {
         window.removeEventListener(AppEvents.AUTH_CHANGE, this._onOperatorAuthChange);
         window.removeEventListener('flows-lara-open', this._onLaraOpenRequested);
-        this.removeEventListener('lara:event', this._onLaraUiEvent);
+        this.removeEventListener('assistant:event', this._onLaraUiEvent);
         super.disconnectedCallback();
     }
 
@@ -167,14 +168,14 @@ export class FlowsApp extends PlatformApp {
             timestamp: new Date().toISOString(),
         };
         this.dispatchEvent(
-            new CustomEvent('lara:event', {
+            new CustomEvent('assistant:event', {
                 detail,
                 bubbles: true,
                 composed: true,
             }),
         );
         this.dispatchEvent(
-            new CustomEvent(`lara:${type}`, {
+            new CustomEvent(`assistant:${type}`, {
                 detail,
                 bubbles: true,
                 composed: true,
@@ -208,7 +209,7 @@ export class FlowsApp extends PlatformApp {
         // detail из launcher используем только как fallback, если в store ещё нет данных.
         const resolvedFlowId =
             editorState.flowId || flowsState.currentId || options.flow_id || options.flowId || null;
-        const resolvedSkillId =
+        const resolvedTargetSkillId =
             editorState.currentSkillId ||
             appState.currentSkillId ||
             options.skill_id ||
@@ -225,7 +226,7 @@ export class FlowsApp extends PlatformApp {
         const context = {
             app_surface: 'flows',
             flow_id: resolvedFlowId,
-            skill_id: resolvedSkillId || 'base',
+            target_skill_id: resolvedTargetSkillId || 'base',
             node_id: resolvedNodeId,
             node_type: selectedNode?.type || null,
             selection_source: selectionSource,
@@ -247,7 +248,9 @@ export class FlowsApp extends PlatformApp {
             app_surface: context.app_surface,
             screen: context.screen,
             flow_id: context.flow_id || '',
-            skill_id: context.skill_id || 'base',
+            target_skill_id: context.target_skill_id || 'base',
+            skill_id: context.target_skill_id || 'base',
+            assistant_skill_id: 'flows',
             node_id: context.node_id || '',
             node_type: context.node_type || '',
             selection_source: context.selection_source,
@@ -291,35 +294,20 @@ export class FlowsApp extends PlatformApp {
 
     async _handleLaraPatchApplied(payload = {}) {
         try {
-            const a2a = this.services.get('a2a');
             const flowId = payload.flow_id || payload.flowId || this._laraInvocationContext?.flow_id;
             if (!flowId) {
                 throw new Error('flow_id is required');
             }
-            const skillId = payload.skill_id || payload.skillId || this._laraInvocationContext?.skill_id || 'base';
+            const skillId =
+                payload.skill_id ||
+                payload.skillId ||
+                this._laraInvocationContext?.target_skill_id ||
+                this._laraInvocationContext?.skill_id ||
+                'base';
             const nodeId = payload.node_id || payload.nodeId || this._laraInvocationContext?.node_id || null;
             const patchKind = payload.patch_kind || payload.patchKind || (nodeId ? 'node' : 'flow');
 
-            const flowConfig = await a2a.getFlow(flowId);
-            const nextFlowConfig = structuredClone(flowConfig);
-
-            if (patchKind === 'flow') {
-                const flowChanges = payload.flow_changes || payload.flowChanges || {};
-                if (!flowChanges || typeof flowChanges !== 'object') {
-                    throw new Error('flow_changes must be an object');
-                }
-                Object.assign(nextFlowConfig, flowChanges);
-            } else {
-                const changes = payload.changes || {};
-                if (!changes || typeof changes !== 'object') {
-                    throw new Error('changes must be an object');
-                }
-                const resolved = this._resolveTargetNode(nextFlowConfig, skillId, nodeId);
-                Object.assign(resolved.target, changes);
-            }
-
-            await a2a.saveFlowConfig(flowId, nextFlowConfig);
-
+            const a2a = this.services.get('a2a');
             const editorFlowId = FlowsStore.state.editor?.flowId;
             if (editorFlowId === flowId) {
                 await FlowsStore.loadFlow(flowId, a2a, skillId);
@@ -346,7 +334,7 @@ export class FlowsApp extends PlatformApp {
                 node_id: nodeId,
                 selection_source: 'panel_launcher',
             });
-            this._emitLaraEvent('patch_applied', {
+            this._emitLaraEvent('action_applied', {
                 flow_id: flowId,
                 skill_id: skillId,
                 node_id: nodeId,
@@ -354,7 +342,7 @@ export class FlowsApp extends PlatformApp {
             });
         } catch (error) {
             this._emitLaraEvent('error', {
-                source: 'flows-app.patch_applied',
+                source: 'flows-app.action_applied',
                 message: error instanceof Error ? error.message : String(error),
             });
         }
@@ -618,6 +606,7 @@ export class FlowsApp extends PlatformApp {
             ></platform-chat>
             <platform-lara-assistant
                 toggle-event-name="flows-lara-open"
+                event-namespace="assistant"
                 flow-id="lara"
                 skill-id="flows"
                 .flowsBaseUrl=${'/flows'}

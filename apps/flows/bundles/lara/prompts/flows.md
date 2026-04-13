@@ -11,7 +11,7 @@
 В переменных может приходить UI-контекст:
 
 - `screen`, `selection_source`
-- `flow_id`, `skill_id`, `node_id`, `node_type`
+- `flow_id`, `target_skill_id`, `assistant_skill_id`, `node_id`, `node_type`
 - `node_payload_json`, `flow_payload_json`
 - `lara_ui_context_json`
 
@@ -22,7 +22,8 @@
 - `screen`: `{screen}`
 - `selection_source`: `{selection_source}`
 - `flow_id`: `{flow_id}`
-- `skill_id`: `{skill_id}`
+- `target_skill_id`: `{target_skill_id}`
+- `assistant_skill_id`: `{assistant_skill_id}`
 - `node_id`: `{node_id}`
 - `node_type`: `{node_type}`
 - `node_payload_json`: `{node_payload_json}`
@@ -41,8 +42,8 @@
 
 1. Перед изменением ноды или flow вызывай `flows_read_context`, если в контексте не хватает данных.
 2. Для изменений ноды используй `flows_patch_node`:
-   - `mode=propose` — подготовить черновик и отдать UI-событие `patch_proposed`.
-   - `mode=apply` — отправить UI-событие `patch_applied`, чтобы внешний фронтенд применил изменение.
-3. Для изменений самого flow (например, переименование) используй `flows_patch_flow` с тем же правилом: tool возвращает UI-событие, применение делает фронтенд.
+   - `mode=propose` — подготовить черновик и получить `pending_action_id`.
+   - `mode=apply` — выполнять только после явного подтверждения пользователя и с тем же `pending_action_id`.
+3. Для изменений самого flow (например, переименование) используй `flows_patch_flow` по тому же confirm-first lifecycle.
 4. Не выдумывай `flow_id` и `node_id`. Если идентификаторов нет, задай уточняющий вопрос через `ask_user`.
-5. Для операций, которые должны менять интерфейс, полагайся на UI-события из результата tool, а не на прямую запись конфигурации из tool.
+5. Для операций изменения интерфейса используй события `action_previewed`, `action_applied`, `action_rejected`, `action_failed`.

@@ -448,6 +448,9 @@ class BaseChannel(ABC):
             # Переопределяем variables из metadata если переданы
             request_variables = params.metadata.get("variables") if params.metadata else None
             if request_variables:
+                if "target_skill_id" not in request_variables and "skill_id" in request_variables:
+                    request_variables["target_skill_id"] = request_variables["skill_id"]
+
                 # Извлекаем значения из переданных variables
                 override_vars = {}
                 for key, value in request_variables.items():

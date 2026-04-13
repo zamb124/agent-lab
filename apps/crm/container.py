@@ -236,8 +236,9 @@ def get_crm_container() -> CRMContainer:
     """Получает контейнер (создает при первом вызове)"""
     global _crm_container
     if _crm_container is None:
-        from core.config import get_settings
-        settings = get_settings()
+        from apps.crm.config import get_crm_settings
+
+        settings = get_crm_settings()
         
         if not settings.database.crm_url:
             raise ValueError("database.crm_url не задан")

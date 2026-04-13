@@ -111,11 +111,15 @@ class Flow:
                 continue
             event_id = event.get("id")
             version = event.get("version", "1.0")
+            source = event.get("source", "assistant")
+            correlation_id = event.get("correlation_id")
             await emitter.emit_ui_event(
                 event_type=event_type,
                 payload=payload,
                 event_id=event_id if isinstance(event_id, str) else None,
                 version=version if isinstance(version, str) else "1.0",
+                source=source if isinstance(source, str) else "assistant",
+                correlation_id=correlation_id if isinstance(correlation_id, str) else None,
             )
 
     def _normalize_edges(self, edges: List[Any]) -> List[Dict[str, Any]]:
