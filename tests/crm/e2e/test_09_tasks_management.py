@@ -49,9 +49,16 @@ class TestTasksManagement:
             }, headers=auth_headers_system)
             task_ids.append(resp.json()["entity_id"])
         
-        list_resp = await crm_client.get(
-            f"/crm/api/v1/entities/?entity_type=task&user_id={test_user_id}&sort=priority&order=desc"
-        , headers=auth_headers_system)
+        list_resp = await crm_client.post(
+            "/crm/api/v1/entities/query",
+            json={
+                "entity_type": "task",
+                "limit": 100,
+                "filters": {"field": "user_id", "op": "$eq", "value": test_user_id},
+            },
+            headers=auth_headers_system,
+        )
+        assert list_resp.status_code == 200
         tasks = list_resp.json()["items"]
         
         assert len(tasks) >= 4
@@ -98,9 +105,21 @@ class TestTasksManagement:
             "user_id": test_user_id
         }, headers=auth_headers_system)
         
-        today_tasks_resp = await crm_client.get(
-            f"/crm/api/v1/entities/?entity_type=task&user_id={test_user_id}&due_date={today.isoformat()}"
-        , headers=auth_headers_system)
+        today_tasks_resp = await crm_client.post(
+            "/crm/api/v1/entities/query",
+            json={
+                "entity_type": "task",
+                "limit": 100,
+                "filters": {
+                    "$and": [
+                        {"field": "user_id", "op": "$eq", "value": test_user_id},
+                        {"field": "due_date", "op": "$eq", "value": today.isoformat()},
+                    ]
+                },
+            },
+            headers=auth_headers_system,
+        )
+        assert today_tasks_resp.status_code == 200
         today_tasks = today_tasks_resp.json()["items"]
         assert len(today_tasks) >= 1
         for t in today_tasks:
@@ -114,7 +133,7 @@ class TestTasksManagement:
         await crm_client.post("/crm/api/v1/entities/", json={
             "entity_type": "task",
             "name": f"Ivan task {unique_id}",
-            "assignees": ["ivan"],
+            "tags": ["ivan"],
             "user_id": test_user_id
         }, headers=auth_headers_system)
         
@@ -125,9 +144,21 @@ class TestTasksManagement:
             "user_id": test_user_id
         }, headers=auth_headers_system)
         
-        ivan_tasks_resp = await crm_client.get(
-            f"/crm/api/v1/entities/?entity_type=task&user_id={test_user_id}&assignee=ivan"
-        , headers=auth_headers_system)
+        ivan_tasks_resp = await crm_client.post(
+            "/crm/api/v1/entities/query",
+            json={
+                "entity_type": "task",
+                "limit": 100,
+                "filters": {
+                    "$and": [
+                        {"field": "user_id", "op": "$eq", "value": test_user_id},
+                        {"field": "tags", "op": "$contains", "value": "ivan"},
+                    ]
+                },
+            },
+            headers=auth_headers_system,
+        )
+        assert ivan_tasks_resp.status_code == 200
         ivan_tasks = ivan_tasks_resp.json()["items"]
         assert len(ivan_tasks) >= 1
         for t in ivan_tasks:
@@ -148,9 +179,22 @@ class TestTasksManagement:
         }, headers=auth_headers_system)
         assert resp.status_code == 200
         
-        overdue_resp = await crm_client.get(
-            f"/crm/api/v1/entities/?entity_type=task&user_id={test_user_id}&overdue=true"
-        , headers=auth_headers_system)
+        overdue_resp = await crm_client.post(
+            "/crm/api/v1/entities/query",
+            json={
+                "entity_type": "task",
+                "limit": 100,
+                "filters": {
+                    "$and": [
+                        {"field": "user_id", "op": "$eq", "value": test_user_id},
+                        {"field": "due_date", "op": "$lt", "value": date.today().isoformat()},
+                        {"field": "status", "op": "$ne", "value": "completed"},
+                    ]
+                },
+            },
+            headers=auth_headers_system,
+        )
+        assert overdue_resp.status_code == 200
         overdue_tasks = overdue_resp.json()["items"]
         assert len(overdue_tasks) >= 1
         for t in overdue_tasks:

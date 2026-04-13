@@ -138,10 +138,11 @@ async def wait_for_crm_semantic_search_hit(
 ) -> None:
     """Ждём, пока только что созданная сущность попадёт в pgvector (дедуп в analyze)."""
     for attempt in range(max_attempts):
-        response = await crm_client.get(
-            "/crm/api/v1/entities/search",
-            params={
+        response = await crm_client.post(
+            "/crm/api/v1/entities/query",
+            json={
                 "query": query,
+                "search_mode": "hybrid",
                 "entity_type": entity_type,
                 "namespace": namespace,
                 "limit": 5,

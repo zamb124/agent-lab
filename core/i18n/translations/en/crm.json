@@ -585,6 +585,8 @@
         "tags_label": "Tags",
         "tags_placeholder": "Enter a tag...",
         "date_label": "Date",
+        "attributes_label": "Entity fields",
+        "add_attribute_filter": "Add condition",
         "reset": "Reset filters"
     },
     "entity_card": {

@@ -254,6 +254,7 @@ const baseStore = new BaseStore('crm', {
             search: '',
             search_mode: 'hybrid',
             user_id: null,
+            attribute_filters: [],
         },
         entitiesLoading: false,
         loadingMore: false,
@@ -1848,36 +1849,84 @@ export const CRMStore = {
                     search: '',
                     search_mode: 'hybrid',
                     user_id: null,
+                    attribute_filters: [],
                 }
             }
         }));
     },
 
-    _buildEntityQueryParams(params = {}) {
+    _buildDslFilterTree(filters) {
+        const nodes = [];
+        if (filters.status) {
+            nodes.push({ field: 'status', op: '$eq', value: filters.status });
+        }
+        if (filters.priority) {
+            nodes.push({ field: 'priority', op: '$eq', value: filters.priority });
+        }
+        if (filters.user_id) {
+            nodes.push({ field: 'user_id', op: '$eq', value: filters.user_id });
+        }
+        if (Array.isArray(filters.tags)) {
+            for (const tag of filters.tags) {
+                if (typeof tag === 'string' && tag.trim().length > 0) {
+                    nodes.push({ field: 'tags', op: '$contains', value: tag.trim() });
+                }
+            }
+        }
+        if (filters.date_from) {
+            nodes.push({ field: 'note_date', op: '$gte', value: filters.date_from });
+        }
+        if (filters.date_to) {
+            nodes.push({ field: 'note_date', op: '$lte', value: filters.date_to });
+        }
+        const attributeFilters = Array.isArray(filters.attribute_filters) ? filters.attribute_filters : [];
+        for (const condition of attributeFilters) {
+            if (!condition || typeof condition !== 'object') {
+                continue;
+            }
+            if (typeof condition.field !== 'string' || condition.field.trim().length === 0) {
+                continue;
+            }
+            if (typeof condition.op !== 'string' || condition.op.trim().length === 0) {
+                continue;
+            }
+            if (condition.value === null || condition.value === undefined || condition.value === '') {
+                continue;
+            }
+            nodes.push({
+                field: condition.field.trim(),
+                op: condition.op.trim(),
+                value: condition.value,
+            });
+        }
+
+        if (nodes.length === 0) {
+            return null;
+        }
+        if (nodes.length === 1) {
+            return nodes[0];
+        }
+        return { $and: nodes };
+    },
+
+    _buildEntityQueryPayload(params = {}) {
         const filters = baseStore.state.entities.filters;
         const currentNamespace = baseStore.state.namespaces.current;
         const namespaceName = getNamespaceName(currentNamespace);
-
-        const queryParams = {
+        const payload = {
             entity_type: params.entity_type || filters.entity_type,
             entity_subtype: params.entity_subtype || filters.entity_subtype,
-            namespace: namespaceName,
-            status: filters.status,
-            priority: filters.priority,
-            date_from: filters.date_from,
-            date_to: filters.date_to,
-            tags: filters.tags.length > 0 ? filters.tags.join(',') : undefined,
-            user_id: filters.user_id,
+            namespace: params.namespace || namespaceName,
             limit: params.limit || 100,
+            cursor: params.cursor || undefined,
+            search_mode: filters.search_mode || 'hybrid',
+            filters: this._buildDslFilterTree(filters),
         };
+        return payload;
+    },
 
-        Object.keys(queryParams).forEach(key => {
-            if (queryParams[key] === null || queryParams[key] === undefined) {
-                delete queryParams[key];
-            }
-        });
-
-        return { queryParams, namespaceName };
+    buildEntityQueryPayload(params = {}) {
+        return this._buildEntityQueryPayload(params);
     },
 
     async loadEntities(crmApi, params = {}) {
@@ -1891,15 +1940,13 @@ export const CRMStore = {
 
         const filters = baseStore.state.entities.filters;
         const searchTrimmed = typeof filters.search === 'string' ? filters.search.trim() : '';
-        const { queryParams, namespaceName } = this._buildEntityQueryParams(params);
+        const requestPayload = this._buildEntityQueryPayload(params);
 
         let response;
         if (searchTrimmed) {
-            const searchMode = filters.search_mode || 'hybrid';
-            const searchParams = { ...queryParams, namespace: namespaceName, search_mode: searchMode };
-            response = await crmApi.searchEntities(searchTrimmed, searchParams);
+            response = await crmApi.searchEntities(searchTrimmed, requestPayload);
         } else {
-            response = await crmApi.getEntities(queryParams);
+            response = await crmApi.getEntities(requestPayload);
         }
 
         const list = Array.isArray(response.items) ? response.items : [];
@@ -1948,15 +1995,16 @@ export const CRMStore = {
 
         const filters = baseStore.state.entities.filters;
         const searchTrimmed = typeof filters.search === 'string' ? filters.search.trim() : '';
-        const { queryParams } = this._buildEntityQueryParams();
+        const requestPayload = this._buildEntityQueryPayload({ cursor: nextCursor });
 
         let response;
         if (searchTrimmed) {
-            const searchMode = filters.search_mode || 'hybrid';
-            const searchParams = { ...queryParams, search_mode: searchMode };
-            response = await crmApi.searchEntities(searchTrimmed, searchParams);
+            baseStore.setState((s) => ({
+                entities: { ...s.entities, loadingMore: false, hasMore: false, nextCursor: null }
+            }));
+            return;
         } else {
-            response = await crmApi.getEntities({ ...queryParams, cursor: nextCursor });
+            response = await crmApi.getEntities(requestPayload);
         }
 
         const page = Array.isArray(response.items) ? response.items : [];

@@ -1920,11 +1920,12 @@ export class GraphPage extends PlatformElement {
         this._loading = true;
         try {
             const namespaceName = this._getNamespaceName();
-            const searchResults = await this.crmApi.searchEntities(query, {
-                search_mode: this._searchMode,
+            const queryPayload = CRMStore.buildEntityQueryPayload({
                 namespace: namespaceName || undefined,
                 limit: 50,
             });
+            queryPayload.search_mode = this._searchMode;
+            const searchResults = await this.crmApi.searchEntities(query, queryPayload);
             const allItems = Array.isArray(searchResults?.items) ? searchResults.items : [];
             const items = this._minScore > 0
                 ? allItems.filter((e) => (e.score ?? 0) >= this._minScore)

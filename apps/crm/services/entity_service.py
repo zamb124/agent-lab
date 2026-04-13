@@ -357,6 +357,164 @@ class EntityService:
             return True
         return isinstance(value, python_type)
 
+    @staticmethod
+    def _build_filter_operator_matrix() -> Dict[str, set[str]]:
+        return {
+            "string": {"$eq", "$ne", "$contains", "$in", "$nin"},
+            "text": {"$eq", "$ne", "$contains", "$in", "$nin"},
+            "enum": {"$eq", "$ne", "$in", "$nin"},
+            "integer": {"$eq", "$ne", "$gt", "$gte", "$lt", "$lte", "$in", "$nin"},
+            "number": {"$eq", "$ne", "$gt", "$gte", "$lt", "$lte", "$in", "$nin"},
+            "boolean": {"$eq", "$ne", "$in", "$nin"},
+            "date": {"$eq", "$ne", "$gt", "$gte", "$lt", "$lte", "$in", "$nin"},
+            "datetime": {"$eq", "$ne", "$gt", "$gte", "$lt", "$lte", "$in", "$nin"},
+            "array": {"$contains", "$in", "$nin"},
+            "object": {"$eq", "$ne"},
+        }
+
+    @staticmethod
+    def _build_system_field_types() -> Dict[str, str]:
+        return {
+            "entity_type": "string",
+            "entity_subtype": "string",
+            "namespace": "string",
+            "status": "string",
+            "priority": "string",
+            "user_id": "string",
+            "name": "text",
+            "description": "text",
+            "note_date": "date",
+            "due_date": "date",
+            "created_at": "datetime",
+            "tags": "array",
+        }
+
+    @staticmethod
+    def _collect_entity_type_field_specs(entity_type_model: EntityType) -> Dict[str, Dict[str, Any]]:
+        field_specs: Dict[str, Dict[str, Any]] = {}
+        required_fields = entity_type_model.required_fields or {}
+        optional_fields = entity_type_model.optional_fields or {}
+        for field_name, spec in {**required_fields, **optional_fields}.items():
+            if isinstance(spec, dict):
+                field_specs[field_name] = spec
+        return field_specs
+
+    @staticmethod
+    def _validate_filter_value_type(field_type: str, operator: str, value: Any) -> None:
+        def _validate_scalar(candidate: Any) -> None:
+            if field_type in {"string", "text", "enum"}:
+                if not isinstance(candidate, str):
+                    raise ValueError(f"Filter value must be string for field type {field_type}")
+                return
+            if field_type == "integer":
+                if not isinstance(candidate, int) or isinstance(candidate, bool):
+                    raise ValueError("Filter value must be integer")
+                return
+            if field_type == "number":
+                if not isinstance(candidate, (int, float)) or isinstance(candidate, bool):
+                    raise ValueError("Filter value must be number")
+                return
+            if field_type == "boolean":
+                if not isinstance(candidate, bool):
+                    raise ValueError("Filter value must be boolean")
+                return
+            if field_type == "date":
+                if not isinstance(candidate, str):
+                    raise ValueError("Date filter value must be ISO date string")
+                date.fromisoformat(candidate)
+                return
+            if field_type == "datetime":
+                if not isinstance(candidate, str):
+                    raise ValueError("Datetime filter value must be ISO datetime string")
+                datetime.fromisoformat(candidate.replace("Z", "+00:00"))
+                return
+            if field_type == "array":
+                if not isinstance(candidate, (str, int, float, bool)):
+                    raise ValueError("Array filter scalar value must be primitive")
+                return
+            if field_type == "object":
+                if not isinstance(candidate, dict):
+                    raise ValueError("Object filter value must be object")
+                return
+
+        if operator in {"$in", "$nin"}:
+            if not isinstance(value, list) or len(value) == 0:
+                raise ValueError(f"{operator} requires non-empty array value")
+            for item in value:
+                _validate_scalar(item)
+            return
+
+        if field_type == "array" and operator == "$contains":
+            if not isinstance(value, (str, int, float, bool)):
+                raise ValueError("$contains for array field requires primitive value")
+            return
+
+        _validate_scalar(value)
+
+    async def resolve_filter_field_types(
+        self,
+        *,
+        namespace: str,
+        entity_type: Optional[str],
+        entity_subtype: Optional[str],
+        filters: Optional[Dict[str, Any]],
+    ) -> Dict[str, str]:
+        if filters is None:
+            return {}
+
+        system_field_types = self._build_system_field_types()
+        field_specs: Dict[str, Dict[str, Any]] = {}
+        type_id = entity_subtype or entity_type
+        if type_id is not None:
+            entity_type_model = await self._entity_type_repo.get_by_type_id(type_id)
+            if entity_type_model is None:
+                raise ValueError(f"Entity type not found: {type_id}")
+            allowed_namespaces = entity_type_model.namespace_ids or []
+            if "*" not in allowed_namespaces and namespace not in allowed_namespaces:
+                raise ValueError(f"Entity type '{type_id}' is not allowed in namespace '{namespace}'")
+            field_specs = self._collect_entity_type_field_specs(entity_type_model)
+        operator_matrix = self._build_filter_operator_matrix()
+        used_field_types: Dict[str, str] = {}
+
+        def _resolve_field_type(field_name: str) -> str:
+            if field_name in system_field_types:
+                return system_field_types[field_name]
+            if not field_name.startswith("attributes."):
+                raise ValueError(f"Unsupported filter field: {field_name}")
+            if type_id is None:
+                raise ValueError("entity_type or entity_subtype is required for attributes.* filters")
+            attr_name = field_name.split(".", 1)[1]
+            field_spec = field_specs.get(attr_name)
+            if field_spec is None:
+                raise ValueError(f"Attribute field '{attr_name}' is not defined in schema")
+            field_type = field_spec.get("type")
+            if not isinstance(field_type, str) or field_type.strip() == "":
+                raise ValueError(f"Field '{attr_name}' has invalid schema type")
+            return field_type
+
+        def _validate_node(node: Dict[str, Any]) -> None:
+            if "$and" in node:
+                for child in node["$and"]:
+                    _validate_node(child)
+                return
+            if "$or" in node:
+                for child in node["$or"]:
+                    _validate_node(child)
+                return
+
+            field_name = node["field"]
+            operator = node["op"]
+            value = node["value"]
+            field_type = _resolve_field_type(field_name)
+            allowed_ops = operator_matrix.get(field_type, {"$eq", "$ne"})
+            if operator not in allowed_ops:
+                raise ValueError(f"Operator '{operator}' is not allowed for field type '{field_type}'")
+            self._validate_filter_value_type(field_type, operator, value)
+            used_field_types[field_name] = field_type
+
+        _validate_node(filters)
+        return used_field_types
+
     async def _load_namespace_crm_settings(self, namespace: str) -> NamespaceCRMSettings:
         ns = await self._namespace_repo.get(namespace)
         if ns is None or ns.crm_settings is None:
@@ -488,11 +646,16 @@ class EntityService:
             await self._relationship_repo.create(ctx_row)
 
     async def _list_notes_for_date(self, date_str: str, namespace: Optional[str] = None) -> List[CRMEntity]:
-        query_filters: dict[str, Any] = {"note_date": date_str}
+        query_filters: dict[str, Any] = {
+            "field": "note_date",
+            "op": "$eq",
+            "value": date_str,
+        }
         entities, _, _ = await self._entity_repo.list_by_cursor(
             entity_type="note",
             namespace=self._normalize_namespace(namespace),
             filters=query_filters,
+            filter_field_types={"note_date": "date"},
             limit=1000,
         )
         return entities
@@ -923,6 +1086,7 @@ class EntityService:
         entity_subtype: Optional[str] = None,
         namespace: Optional[str] = None,
         filters: Optional[Dict[str, Any]] = None,
+        filter_field_types: Optional[Dict[str, str]] = None,
         limit: int = 100,
         cursor: Optional[str] = None,
     ) -> tuple[list[CRMEntity], Optional[str], bool]:
@@ -949,6 +1113,7 @@ class EntityService:
                 entity_subtype=entity_subtype,
                 namespace=namespace,
                 filters=filters,
+                filter_field_types=filter_field_types,
                 limit=limit * oversample_factor,
                 cursor=current_cursor,
             )
@@ -1171,6 +1336,7 @@ class EntityService:
         entity_subtype: Optional[str] = None,
         namespace: Optional[str] = None,
         filters: Optional[Dict[str, Any]] = None,
+        filter_field_types: Optional[Dict[str, str]] = None,
         limit: int = 100,
     ) -> List[Tuple[CRMEntity, float]]:
         """Семантический поиск entities с фильтрацией по грантам. Возвращает (entity, score)."""
@@ -1180,6 +1346,7 @@ class EntityService:
             entity_subtype=entity_subtype,
             namespace=namespace,
             filters=filters,
+            filter_field_types=filter_field_types,
             limit=limit,
         )
         entities = [entity for entity, _ in results]
@@ -1196,6 +1363,7 @@ class EntityService:
         entity_subtype: Optional[str] = None,
         namespace: Optional[str] = None,
         filters: Optional[Dict[str, Any]] = None,
+        filter_field_types: Optional[Dict[str, str]] = None,
         limit: int = 100,
     ) -> List[Tuple[CRMEntity, float, str]]:
         """Гибридный поиск RRF (tsvector + pgvector) с фильтрацией по грантам."""
@@ -1205,6 +1373,7 @@ class EntityService:
             entity_subtype=entity_subtype,
             namespace=namespace,
             filters=filters,
+            filter_field_types=filter_field_types,
             limit=limit,
         )
         entities = [entity for entity, _, _ in results]
@@ -1221,6 +1390,7 @@ class EntityService:
         entity_subtype: Optional[str] = None,
         namespace: Optional[str] = None,
         filters: Optional[Dict[str, Any]] = None,
+        filter_field_types: Optional[Dict[str, str]] = None,
         limit: int = 100,
     ) -> List[Tuple[CRMEntity, float]]:
         """FTS поиск с ранжированием по ts_rank и фильтрацией по грантам."""
@@ -1230,6 +1400,7 @@ class EntityService:
             entity_subtype=entity_subtype,
             namespace=namespace,
             filters=filters,
+            filter_field_types=filter_field_types,
             limit=limit,
         )
         entities = [entity for entity, _ in results]

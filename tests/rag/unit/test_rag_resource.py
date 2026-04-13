@@ -80,8 +80,16 @@ async def test_add_document_passes_metadata_through(
     doc = MagicMock()
     doc.document_id = "fid"
     mock_upload = AsyncMock(return_value=doc)
+    mock_namespace_get = AsyncMock(return_value=object())
 
-    with patch.object(PgVectorProvider, "upload_document_from_text", mock_upload):
+    with (
+        patch.object(
+            flow_container_for_rag_unit.namespace_repository,
+            "get",
+            mock_namespace_get,
+        ),
+        patch.object(PgVectorProvider, "upload_document_from_text", mock_upload),
+    ):
         r = RAGResource(namespace="ns-a", container=flow_container_for_rag_unit)
         await r.add_document(
             "fid",
@@ -103,8 +111,16 @@ async def test_add_document_merges_index_profile_config(
     doc = MagicMock()
     doc.document_id = "fid"
     mock_upload = AsyncMock(return_value=doc)
+    mock_namespace_get = AsyncMock(return_value=object())
 
-    with patch.object(PgVectorProvider, "upload_document_from_text", mock_upload):
+    with (
+        patch.object(
+            flow_container_for_rag_unit.namespace_repository,
+            "get",
+            mock_namespace_get,
+        ),
+        patch.object(PgVectorProvider, "upload_document_from_text", mock_upload),
+    ):
         r = RAGResource(
             namespace="ns-a",
             container=flow_container_for_rag_unit,

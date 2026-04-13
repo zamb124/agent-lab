@@ -2,7 +2,7 @@
 Pydantic модели для API endpoints.
 """
 
-from pydantic import BaseModel, Field, ConfigDict
+from pydantic import BaseModel, Field, ConfigDict, model_validator
 from typing import Dict, Any, List, Optional, Literal
 from datetime import date, datetime
 
@@ -85,6 +85,62 @@ class EntityResponse(BaseModel):
     created_at: datetime
     updated_at: datetime
 
+
+
+class EntitySearchFilterNode(BaseModel):
+    """DSL-узел фильтра поиска сущностей."""
+
+    model_config = ConfigDict(populate_by_name=True, extra="forbid")
+
+    and_nodes: Optional[List["EntitySearchFilterNode"]] = Field(default=None, alias="$and")
+    or_nodes: Optional[List["EntitySearchFilterNode"]] = Field(default=None, alias="$or")
+    field: Optional[str] = None
+    op: Optional[str] = None
+    value: Optional[Any] = None
+
+    @model_validator(mode="after")
+    def validate_shape(self) -> "EntitySearchFilterNode":
+        has_and = self.and_nodes is not None
+        has_or = self.or_nodes is not None
+        has_leaf = self.field is not None or self.op is not None or self.value is not None
+
+        if has_and and has_or:
+            raise ValueError("Filter node cannot include both $and and $or")
+        if (has_and or has_or) and has_leaf:
+            raise ValueError("Logical filter node cannot include field/op/value")
+
+        if has_and:
+            if len(self.and_nodes) < 2:
+                raise ValueError("$and requires at least 2 child nodes")
+            return self
+        if has_or:
+            if len(self.or_nodes) < 2:
+                raise ValueError("$or requires at least 2 child nodes")
+            return self
+
+        if self.field is None or self.op is None:
+            raise ValueError("Leaf filter node requires field and op")
+        if self.value is None:
+            raise ValueError("Leaf filter node requires value")
+        return self
+
+
+EntitySearchFilterNode.model_rebuild()
+
+
+class EntitySearchQueryRequest(BaseModel):
+    """POST-контракт поиска/листинга сущностей через DSL-фильтры."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    query: Optional[str] = None
+    search_mode: Literal["text", "semantic", "hybrid"] = "hybrid"
+    entity_type: Optional[str] = None
+    entity_subtype: Optional[str] = None
+    namespace: Optional[str] = None
+    filters: Optional[EntitySearchFilterNode] = None
+    cursor: Optional[str] = None
+    limit: int = Field(default=100, ge=1, le=1000)
 
 
 class BulkCreateRequest(BaseModel):

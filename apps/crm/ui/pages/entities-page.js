@@ -12,6 +12,7 @@ import '../modals/entity-modal.js';
 import '../modals/entity-merge-modal.js';
 import '@platform/lib/components/platform-icon.js';
 import '@platform/lib/components/platform-date-picker.js';
+import '@platform/lib/components/fields/platform-field.js';
 import '@platform/lib/components/glass-spinner.js';
 
 const MERGE_DRAG_MIME = 'application/x-crm-entity-merge';
@@ -42,6 +43,7 @@ export class EntitiesPage extends PlatformElement {
         _dateFrom: { state: true },
         _dateTo: { state: true },
         _aggregate: { state: true },
+        _attributeFilters: { state: true },
     };
 
     static styles = [
@@ -549,6 +551,35 @@ export class EntitiesPage extends PlatformElement {
                 --platform-date-picker-label-size: 11px;
                 --platform-date-picker-value-size: 12px;
                 max-width: 220px;
+            }
+
+            .attribute-filters-block {
+                display: flex;
+                flex-direction: column;
+                gap: var(--space-2);
+                min-width: 320px;
+            }
+
+            .attribute-filter-row {
+                display: flex;
+                align-items: center;
+                gap: var(--space-2);
+                flex-wrap: wrap;
+            }
+
+            .attribute-select {
+                padding: 4px 8px;
+                border: 1px solid var(--glass-border-subtle);
+                border-radius: var(--radius-md);
+                background: transparent;
+                color: var(--text-primary);
+                font-size: var(--text-xs);
+                min-width: 140px;
+            }
+
+            .attribute-filter-value {
+                min-width: 180px;
+                flex: 1;
             }
 
 
@@ -1065,6 +1096,7 @@ export class EntitiesPage extends PlatformElement {
         this._dateFrom = null;
         this._dateTo = null;
         this._aggregate = null;
+        this._attributeFilters = [];
         this._goToImportWizard = this._goToImportWizard.bind(this);
         this._scrollObserver = null;
 
@@ -1083,6 +1115,9 @@ export class EntitiesPage extends PlatformElement {
             this._dateFrom = state.entities.filters.date_from;
             this._dateTo = state.entities.filters.date_to;
             this._aggregate = state.entities.aggregate || null;
+            this._attributeFilters = Array.isArray(state.entities.filters.attribute_filters)
+                ? state.entities.filters.attribute_filters
+                : [];
             this._isMobile = state.ui.isMobile;
 
             const prevNs = this._currentNamespace;
@@ -1267,12 +1302,90 @@ export class EntitiesPage extends PlatformElement {
         return this._entityTypes.filter(t => t.parent_type_id === this._selectedType);
     }
 
+    _getActiveSchemaType() {
+        const typeId = this._selectedSubtype || this._selectedType;
+        if (!typeId) {
+            return null;
+        }
+        return this._entityTypes.find((item) => item.type_id === typeId) || null;
+    }
+
+    _getSchemaFieldOptions() {
+        const activeType = this._getActiveSchemaType();
+        if (!activeType) {
+            return [];
+        }
+        const fields = [];
+        const schema = {
+            ...(activeType.required_fields || {}),
+            ...(activeType.optional_fields || {}),
+        };
+        for (const [fieldKey, fieldSpec] of Object.entries(schema)) {
+            if (!fieldSpec || typeof fieldSpec !== 'object') {
+                continue;
+            }
+            const fieldType = typeof fieldSpec.type === 'string' ? fieldSpec.type : 'string';
+            const label = typeof fieldSpec.label === 'string' ? fieldSpec.label : fieldKey;
+            fields.push({
+                path: `attributes.${fieldKey}`,
+                label,
+                type: fieldType,
+                values: Array.isArray(fieldSpec.values) ? fieldSpec.values : [],
+            });
+        }
+        return fields;
+    }
+
+    _getOperatorsForFieldType(fieldType) {
+        const map = {
+            string: ['$eq', '$ne', '$contains', '$in', '$nin'],
+            text: ['$eq', '$ne', '$contains', '$in', '$nin'],
+            enum: ['$eq', '$ne', '$in', '$nin'],
+            integer: ['$eq', '$ne', '$gt', '$gte', '$lt', '$lte', '$in', '$nin'],
+            number: ['$eq', '$ne', '$gt', '$gte', '$lt', '$lte', '$in', '$nin'],
+            boolean: ['$eq', '$ne', '$in', '$nin'],
+            date: ['$eq', '$ne', '$gt', '$gte', '$lt', '$lte', '$in', '$nin'],
+            datetime: ['$eq', '$ne', '$gt', '$gte', '$lt', '$lte', '$in', '$nin'],
+            array: ['$contains', '$in', '$nin'],
+        };
+        return map[fieldType] || ['$eq', '$ne'];
+    }
+
+    _upsertAttributeFilter(index, patch) {
+        const next = [...this._attributeFilters];
+        next[index] = { ...next[index], ...patch };
+        CRMStore.setEntityFilters({ attribute_filters: next });
+    }
+
+    _removeAttributeFilter(index) {
+        CRMStore.setEntityFilters({
+            attribute_filters: this._attributeFilters.filter((_, itemIndex) => itemIndex !== index),
+        });
+        this._applyFilters();
+    }
+
+    _addAttributeFilter() {
+        const fields = this._getSchemaFieldOptions();
+        if (fields.length === 0) {
+            return;
+        }
+        const first = fields[0];
+        const defaultOp = this._getOperatorsForFieldType(first.type)[0];
+        CRMStore.setEntityFilters({
+            attribute_filters: [
+                ...this._attributeFilters,
+                { field: first.path, op: defaultOp, value: '', field_type: first.type },
+            ],
+        });
+    }
+
     _hasExpandedFilters() {
         return this._selectedSubtype
             || (this._filterTags && this._filterTags.length > 0)
             || this._dateFrom
             || this._dateTo
-            || this._searchMode !== 'hybrid';
+            || this._searchMode !== 'hybrid'
+            || this._attributeFilters.length > 0;
     }
 
     async _applyFilters() {
@@ -1736,6 +1849,75 @@ export class EntitiesPage extends PlatformElement {
                                 .value=${{ start: this._dateFrom, end: this._dateTo }}
                                 @change=${this._onDateRangeChange}
                             ></platform-date-picker>
+                        </div>
+
+                        <div class="expanded-filter-group attribute-filters-block">
+                            <span class="expanded-filter-label">${this.i18n.t('entity_filters.attributes_label')}</span>
+                            ${this._attributeFilters.map((condition, index) => {
+                                const schemaFields = this._getSchemaFieldOptions();
+                                const selectedField = schemaFields.find((item) => item.path === condition.field) || schemaFields[0];
+                                const fieldType = selectedField ? selectedField.type : 'string';
+                                const fieldConfig = selectedField && fieldType === 'enum'
+                                    ? { values: selectedField.values }
+                                    : {};
+                                const operators = this._getOperatorsForFieldType(fieldType);
+                                const selectedOperator = operators.includes(condition.op) ? condition.op : operators[0];
+
+                                return html`
+                                    <div class="attribute-filter-row">
+                                        <select
+                                            class="attribute-select"
+                                            .value=${selectedField?.path || ''}
+                                            @change=${(event) => {
+                                                const nextField = schemaFields.find((item) => item.path === event.target.value);
+                                                if (!nextField) {
+                                                    return;
+                                                }
+                                                const nextOperators = this._getOperatorsForFieldType(nextField.type);
+                                                this._upsertAttributeFilter(index, {
+                                                    field: nextField.path,
+                                                    field_type: nextField.type,
+                                                    op: nextOperators[0],
+                                                    value: '',
+                                                });
+                                            }}
+                                        >
+                                            ${schemaFields.map((item) => html`
+                                                <option value=${item.path}>${item.label}</option>
+                                            `)}
+                                        </select>
+                                        <select
+                                            class="attribute-select"
+                                            .value=${selectedOperator}
+                                            @change=${(event) => {
+                                                this._upsertAttributeFilter(index, { op: event.target.value });
+                                                this._applyFiltersDebounced();
+                                            }}
+                                        >
+                                            ${operators.map((op) => html`<option value=${op}>${op}</option>`)}
+                                        </select>
+                                        <platform-field
+                                            class="attribute-filter-value"
+                                            .type=${fieldType}
+                                            .config=${fieldConfig}
+                                            .value=${condition.value}
+                                            mode="edit"
+                                            @change=${(event) => {
+                                                this._upsertAttributeFilter(index, { value: event.detail.value });
+                                                this._applyFiltersDebounced();
+                                            }}
+                                        ></platform-field>
+                                        <button
+                                            type="button"
+                                            class="tag-add-btn"
+                                            @click=${() => this._removeAttributeFilter(index)}
+                                        >&times;</button>
+                                    </div>
+                                `;
+                            })}
+                            <button type="button" class="tag-add-btn" @click=${this._addAttributeFilter}>
+                                ${this.i18n.t('entity_filters.add_attribute_filter')}
+                            </button>
                         </div>
                     </div>
                 </div>

@@ -585,6 +585,8 @@
         "tags_label": "Теги",
         "tags_placeholder": "Введите тег...",
         "date_label": "Дата",
+        "attributes_label": "Поля сущности",
+        "add_attribute_filter": "Добавить условие",
         "reset": "Сбросить фильтры"
     },
     "entity_card": {

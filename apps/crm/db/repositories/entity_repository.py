@@ -11,7 +11,21 @@ import logging
 from datetime import date, datetime, timezone
 from typing import Any, ClassVar, Dict, List, Optional, Tuple, Type
 
-from sqlalchemy import delete, func, or_, select, update, text, tuple_
+from sqlalchemy import (
+    Boolean,
+    Date,
+    DateTime,
+    Float,
+    Integer,
+    and_,
+    cast,
+    delete,
+    func,
+    or_,
+    select,
+    tuple_,
+    update,
+)
 
 from apps.crm.db.base import BaseCRMRepository, CRMDatabase
 from apps.crm.db.models import CRMEntity
@@ -266,6 +280,7 @@ class EntityRepository(BaseCRMRepository[CRMEntity]):
         entity_subtype: Optional[str] = None,
         namespace: Optional[str] = None,
         filters: Optional[Dict[str, Any]] = None,
+        filter_field_types: Optional[Dict[str, str]] = None,
         limit: int = 100,
         company_id: Optional[str] = None,
         cursor: Optional[str] = None,
@@ -289,7 +304,7 @@ class EntityRepository(BaseCRMRepository[CRMEntity]):
                 stmt = stmt.where(CRMEntity.namespace == namespace)
 
             if filters:
-                stmt = self._apply_filters(stmt, filters)
+                stmt = self._apply_filter_tree(stmt, filters, filter_field_types)
 
             if cursor:
                 cursor_ts, cursor_id = self.decode_cursor(cursor)
@@ -321,6 +336,7 @@ class EntityRepository(BaseCRMRepository[CRMEntity]):
         entity_subtype: Optional[str] = None,
         namespace: Optional[str] = None,
         filters: Optional[Dict[str, Any]] = None,
+        filter_field_types: Optional[Dict[str, str]] = None,
         company_id: Optional[str] = None,
     ) -> int:
         """Считает entities с теми же условиями, что и list_by_cursor (без лимита)."""
@@ -337,7 +353,7 @@ class EntityRepository(BaseCRMRepository[CRMEntity]):
                 stmt = stmt.where(CRMEntity.namespace == namespace)
 
             if filters:
-                stmt = self._apply_filters(stmt, filters)
+                stmt = self._apply_filter_tree(stmt, filters, filter_field_types)
 
             result = await session.execute(stmt)
             value = result.scalar()
@@ -394,60 +410,136 @@ class EntityRepository(BaseCRMRepository[CRMEntity]):
             min_created_at, max_created_at, total_entities = result.one()
             return min_created_at, max_created_at, int(total_entities or 0)
 
-    def _apply_filters(self, stmt, filters: Dict[str, Any]):
-        """Применяет фильтры к SQL-запросу."""
-        for key, value in filters.items():
-            if key == "search":
-                tsquery = func.plainto_tsquery("simple", value)
-                stmt = stmt.where(CRMEntity.search_vector.op("@@")(tsquery))
-            elif key == "tags":
-                if isinstance(value, dict) and "$contains" in value:
-                    tag = value["$contains"]
-                    stmt = stmt.where(CRMEntity.tags.contains([tag]))
-            elif key == "status":
-                stmt = stmt.where(CRMEntity.status == value)
-            elif key == "priority":
-                stmt = stmt.where(CRMEntity.priority == value)
-            elif key in ("note_date", "due_date"):
-                column = getattr(CRMEntity, key)
-                if isinstance(value, dict):
-                    for op, op_value in value.items():
-                        d = date.fromisoformat(op_value) if isinstance(op_value, str) else op_value
-                        if op == "$gte":
-                            stmt = stmt.where(column >= d)
-                        elif op == "$lte":
-                            stmt = stmt.where(column <= d)
-                        elif op == "$eq":
-                            stmt = stmt.where(column == d)
-                elif isinstance(value, str):
-                    stmt = stmt.where(column == date.fromisoformat(value))
-            elif key == "created_at":
-                column = CRMEntity.created_at
-                if isinstance(value, dict):
-                    for op, op_value in value.items():
-                        dt_value = self._parse_datetime_filter_value(op_value)
-                        if op == "$gte":
-                            stmt = stmt.where(column >= dt_value)
-                        elif op == "$lte":
-                            stmt = stmt.where(column <= dt_value)
-                        elif op == "$eq":
-                            stmt = stmt.where(column == dt_value)
-                else:
-                    dt_value = self._parse_datetime_filter_value(value)
-                    stmt = stmt.where(column == dt_value)
-            elif isinstance(value, dict):
-                for op, op_value in value.items():
-                    column = getattr(CRMEntity, key, None)
-                    if column is not None:
-                        if op == "$eq":
-                            stmt = stmt.where(column == op_value)
-                        elif op == "$ne":
-                            stmt = stmt.where(column != op_value)
-            else:
-                column = getattr(CRMEntity, key, None)
-                if column is not None:
-                    stmt = stmt.where(column == value)
-        return stmt
+    @staticmethod
+    def _parse_date_filter_value(value: Any) -> date:
+        if isinstance(value, date):
+            return value
+        if isinstance(value, str):
+            return date.fromisoformat(value)
+        raise ValueError("Unsupported date filter value type")
+
+    def _apply_filter_tree(
+        self,
+        stmt,
+        filters: Dict[str, Any],
+        field_types: Optional[Dict[str, str]],
+    ):
+        if not field_types:
+            raise ValueError("field_types are required when filters are provided")
+        expression = self._build_filter_expression(filters, field_types)
+        return stmt.where(expression)
+
+    def _build_filter_expression(self, node: Dict[str, Any], field_types: Dict[str, str]):
+        if "$and" in node:
+            and_nodes = node["$and"]
+            return and_(*[self._build_filter_expression(item, field_types) for item in and_nodes])
+        if "$or" in node:
+            or_nodes = node["$or"]
+            return or_(*[self._build_filter_expression(item, field_types) for item in or_nodes])
+
+        field_name = node["field"]
+        operator = node["op"]
+        value = node["value"]
+        field_type = field_types[field_name]
+        column_expr = self._resolve_field_expression(field_name, field_type)
+        return self._build_leaf_expression(column_expr, field_name, field_type, operator, value)
+
+    def _resolve_field_expression(self, field_name: str, field_type: str):
+        if field_name.startswith("attributes."):
+            attr_name = field_name.split(".", 1)[1]
+            if field_type == "integer":
+                return cast(CRMEntity.attributes[attr_name].astext, Integer)
+            if field_type == "number":
+                return cast(CRMEntity.attributes[attr_name].astext, Float)
+            if field_type == "boolean":
+                return cast(CRMEntity.attributes[attr_name].astext, Boolean)
+            if field_type == "date":
+                return cast(CRMEntity.attributes[attr_name].astext, Date)
+            if field_type == "datetime":
+                return cast(CRMEntity.attributes[attr_name].astext, DateTime(timezone=True))
+            if field_type == "array":
+                return CRMEntity.attributes[attr_name]
+            return CRMEntity.attributes[attr_name].astext
+
+        if field_name == "entity_type":
+            return CRMEntity.entity_type
+        if field_name == "entity_subtype":
+            return CRMEntity.entity_subtype
+        if field_name == "namespace":
+            return CRMEntity.namespace
+        if field_name == "status":
+            return CRMEntity.status
+        if field_name == "priority":
+            return CRMEntity.priority
+        if field_name == "user_id":
+            return CRMEntity.user_id
+        if field_name == "name":
+            return CRMEntity.name
+        if field_name == "description":
+            return CRMEntity.description
+        if field_name == "note_date":
+            return CRMEntity.note_date
+        if field_name == "due_date":
+            return CRMEntity.due_date
+        if field_name == "created_at":
+            return CRMEntity.created_at
+        if field_name == "tags":
+            return CRMEntity.tags
+        raise ValueError(f"Unsupported filter field: {field_name}")
+
+    def _coerce_scalar_value(self, field_type: str, value: Any):
+        if field_type == "integer":
+            return int(value)
+        if field_type == "number":
+            return float(value)
+        if field_type == "boolean":
+            if isinstance(value, bool):
+                return value
+            raise ValueError("Boolean filter value must be bool")
+        if field_type == "date":
+            return self._parse_date_filter_value(value)
+        if field_type == "datetime":
+            return self._parse_datetime_filter_value(value)
+        return value
+
+    def _build_leaf_expression(
+        self,
+        column_expr,
+        field_name: str,
+        field_type: str,
+        operator: str,
+        value: Any,
+    ):
+        if operator == "$contains":
+            if field_name == "tags":
+                return CRMEntity.tags.contains([value])
+            if field_type == "array":
+                return column_expr.contains([value])
+            return column_expr.ilike(f"%{value}%")
+
+        if operator in {"$in", "$nin"}:
+            if not isinstance(value, list) or len(value) == 0:
+                raise ValueError(f"{operator} requires non-empty list value")
+            coerced_values = [self._coerce_scalar_value(field_type, item) for item in value]
+            expression = column_expr.in_(coerced_values)
+            if operator == "$nin":
+                return ~expression
+            return expression
+
+        coerced = self._coerce_scalar_value(field_type, value)
+        if operator == "$eq":
+            return column_expr == coerced
+        if operator == "$ne":
+            return column_expr != coerced
+        if operator == "$gt":
+            return column_expr > coerced
+        if operator == "$gte":
+            return column_expr >= coerced
+        if operator == "$lt":
+            return column_expr < coerced
+        if operator == "$lte":
+            return column_expr <= coerced
+        raise ValueError(f"Unsupported filter operator: {operator}")
 
     async def count_by_namespace(
         self,
@@ -505,6 +597,7 @@ class EntityRepository(BaseCRMRepository[CRMEntity]):
         entity_subtype: Optional[str] = None,
         namespace: Optional[str] = None,
         filters: Optional[Dict[str, Any]] = None,
+        filter_field_types: Optional[Dict[str, str]] = None,
         limit: int = 10,
         company_id: Optional[str] = None,
     ) -> List[Tuple[CRMEntity, float]]:
@@ -571,7 +664,7 @@ class EntityRepository(BaseCRMRepository[CRMEntity]):
                 if namespace:
                     stmt = stmt.where(CRMEntity.namespace == namespace)
                 if filters:
-                    stmt = self._apply_filters(stmt, filters)
+                    stmt = self._apply_filter_tree(stmt, filters, filter_field_types)
                 result = await session.execute(stmt)
                 matched_entities = list(result.scalars().all())
 
@@ -598,6 +691,7 @@ class EntityRepository(BaseCRMRepository[CRMEntity]):
         entity_subtype: Optional[str] = None,
         namespace: Optional[str] = None,
         filters: Optional[Dict[str, Any]] = None,
+        filter_field_types: Optional[Dict[str, str]] = None,
         limit: int = 10,
         company_id: Optional[str] = None,
     ) -> List[Tuple[CRMEntity, float, str]]:
@@ -610,10 +704,24 @@ class EntityRepository(BaseCRMRepository[CRMEntity]):
         rrf_max = 2.0 / (k + 1)  # теоретический максимум при ранге 1 в обоих списках
 
         fts_entities = await self.fts_search_ranked(
-            query, entity_type, entity_subtype, namespace, filters, limit * 3, company_id,
+            query,
+            entity_type,
+            entity_subtype,
+            namespace,
+            filters,
+            filter_field_types,
+            limit * 3,
+            company_id,
         )
         semantic_entities = await self.search_with_similarity(
-            query, entity_type, entity_subtype, namespace, filters, limit * 3, company_id,
+            query,
+            entity_type,
+            entity_subtype,
+            namespace,
+            filters,
+            filter_field_types,
+            limit * 3,
+            company_id,
         )
 
         fts_ranks: Dict[str, int] = {}
@@ -658,6 +766,7 @@ class EntityRepository(BaseCRMRepository[CRMEntity]):
         entity_subtype: Optional[str] = None,
         namespace: Optional[str] = None,
         filters: Optional[Dict[str, Any]] = None,
+        filter_field_types: Optional[Dict[str, str]] = None,
         limit: int = 30,
         company_id: Optional[str] = None,
     ) -> List[Tuple[CRMEntity, float]]:
@@ -683,7 +792,7 @@ class EntityRepository(BaseCRMRepository[CRMEntity]):
             if namespace:
                 stmt = stmt.where(CRMEntity.namespace == namespace)
             if filters:
-                stmt = self._apply_filters(stmt, filters)
+                stmt = self._apply_filter_tree(stmt, filters, filter_field_types)
 
             result = await session.execute(stmt)
             rows = result.all()

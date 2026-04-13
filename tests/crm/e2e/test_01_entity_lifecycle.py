@@ -105,8 +105,14 @@ class TestEntityLifecycle:
                 "user_id": test_user_id
             }, headers=auth_headers_system)
         
-        # Фильтруем по user_id через API
-        list_resp = await crm_client.get(f"/crm/api/v1/entities/?user_id={test_user_id}", headers=auth_headers_system)
+        list_resp = await crm_client.post(
+            "/crm/api/v1/entities/query",
+            json={
+                "limit": 100,
+                "filters": {"field": "user_id", "op": "$eq", "value": test_user_id},
+            },
+            headers=auth_headers_system,
+        )
         assert list_resp.status_code == 200
         
         payload = list_resp.json()
@@ -138,7 +144,15 @@ class TestEntityLifecycle:
             "user_id": test_user_id
         }, headers=auth_headers_system)
         
-        list_resp = await crm_client.get(f"/crm/api/v1/entities/?entity_type=note&user_id={test_user_id}", headers=auth_headers_system)
+        list_resp = await crm_client.post(
+            "/crm/api/v1/entities/query",
+            json={
+                "entity_type": "note",
+                "limit": 100,
+                "filters": {"field": "user_id", "op": "$eq", "value": test_user_id},
+            },
+            headers=auth_headers_system,
+        )
         entities = list_resp.json()["items"]
         
         assert len(entities) >= 2
@@ -173,7 +187,16 @@ class TestEntityLifecycle:
             "user_id": test_user_id
         }, headers=auth_headers_system)
 
-        list_resp = await crm_client.get(f"/crm/api/v1/entities/?entity_type=note&entity_subtype=meeting_{unique_id}&user_id={test_user_id}", headers=auth_headers_system)
+        list_resp = await crm_client.post(
+            "/crm/api/v1/entities/query",
+            json={
+                "entity_type": "note",
+                "entity_subtype": f"meeting_{unique_id}",
+                "limit": 100,
+                "filters": {"field": "user_id", "op": "$eq", "value": test_user_id},
+            },
+            headers=auth_headers_system,
+        )
         entities = list_resp.json()["items"]
         
         assert len(entities) >= 2

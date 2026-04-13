@@ -388,12 +388,13 @@ class TestSearchModes:
             headers=auth_headers_system,
         )
 
-        resp = await crm_client.get(
-            "/crm/api/v1/entities/search",
-            params={
+        resp = await crm_client.post(
+            "/crm/api/v1/entities/query",
+            json={
                 "query": marker,
                 "search_mode": "text",
                 "entity_type": "note",
+                "limit": 50,
             },
             headers=auth_headers_system,
         )
@@ -424,12 +425,13 @@ class TestSearchModes:
             query=marker, entity_type="note",
         )
 
-        resp = await crm_client.get(
-            "/crm/api/v1/entities/search",
-            params={
+        resp = await crm_client.post(
+            "/crm/api/v1/entities/query",
+            json={
                 "query": marker,
                 "search_mode": "hybrid",
                 "entity_type": "note",
+                "limit": 50,
             },
             headers=auth_headers_system,
         )
@@ -464,12 +466,13 @@ class TestSearchModes:
             headers=auth_headers_system,
         )
 
-        resp = await crm_client.get(
-            "/crm/api/v1/entities/search",
-            params={
+        resp = await crm_client.post(
+            "/crm/api/v1/entities/query",
+            json={
                 "query": marker,
                 "search_mode": "text",
-                "status": "archived",
+                "limit": 50,
+                "filters": {"field": "status", "op": "$eq", "value": "archived"},
             },
             headers=auth_headers_system,
         )
@@ -701,9 +704,9 @@ class TestAccessLevel:
         )
         assert create_resp.status_code == 200
 
-        list_resp = await crm_client.get(
-            "/crm/api/v1/entities/",
-            params={"entity_type": "note"},
+        list_resp = await crm_client.post(
+            "/crm/api/v1/entities/query",
+            json={"entity_type": "note", "limit": 100},
             headers=auth_headers_system,
         )
         assert list_resp.status_code == 200

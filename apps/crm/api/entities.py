@@ -22,6 +22,7 @@ from apps.crm.models.api import (
     NoteProcessingConfig,
     NoteProcessingResult,
     SearchMentionsRequest,
+    EntitySearchQueryRequest,
     BulkCreateRequest,
     BulkCreateResponse,
     BulkUpdateRequest,
@@ -46,47 +47,6 @@ from core.websocket.publisher import notify_user, Notification, NotificationType
 from taskiq.exceptions import TaskiqResultTimeoutError
 
 router = APIRouter(prefix="/entities", tags=["Entities"])
-
-
-def build_crm_entity_filters_from_query(
-    *,
-    status: Optional[str] = None,
-    priority: Optional[str] = None,
-    tags: Optional[str] = None,
-    user_id: Optional[str] = None,
-    substring_search: Optional[str] = None,
-    date_from: Optional[str] = None,
-    date_to: Optional[str] = None,
-    created_at_from: Optional[datetime] = None,
-    created_at_to: Optional[datetime] = None,
-) -> Dict[str, Any]:
-    """Общие фильтры списка и семантического поиска (без дублирования логики)."""
-    filters: Dict[str, Any] = {}
-    if status:
-        filters["status"] = status
-    if priority:
-        filters["priority"] = priority
-    if tags:
-        filters["tags"] = {"$contains": tags}
-    if user_id:
-        filters["user_id"] = user_id
-    if substring_search:
-        filters["search"] = substring_search
-    if date_from:
-        filters["note_date"] = {"$gte": date_from}
-    if date_to:
-        if "note_date" in filters:
-            filters["note_date"]["$lte"] = date_to
-        else:
-            filters["note_date"] = {"$lte": date_to}
-    if created_at_from:
-        filters["created_at"] = {"$gte": created_at_from}
-    if created_at_to:
-        if "created_at" in filters:
-            filters["created_at"]["$lte"] = created_at_to
-        else:
-            filters["created_at"] = {"$lte": created_at_to}
-    return filters
 
 
 @router.get("/person-entity/self", response_model=EntityResponse)
@@ -261,6 +221,98 @@ async def aggregate_entities(
     return facets
 
 
+async def _execute_entity_query(
+    *,
+    container: ContainerDep,
+    body: EntitySearchQueryRequest,
+) -> CursorPage[EntityResponse]:
+    filters_dict = (
+        body.filters.model_dump(by_alias=True, exclude_none=True)
+        if body.filters is not None
+        else None
+    )
+    namespace_name = body.namespace or "default"
+    filter_field_types = await container.entity_service.resolve_filter_field_types(
+        namespace=namespace_name,
+        entity_type=body.entity_type,
+        entity_subtype=body.entity_subtype,
+        filters=filters_dict,
+    )
+
+    if body.query is None or body.query.strip() == "":
+        entities, next_cursor, has_more = await container.entity_service.list_entities(
+            entity_type=body.entity_type,
+            entity_subtype=body.entity_subtype,
+            namespace=body.namespace,
+            filters=filters_dict,
+            filter_field_types=filter_field_types,
+            limit=body.limit,
+            cursor=body.cursor,
+        )
+        return CursorPage[EntityResponse](
+            items=[EntityResponse.model_validate(e) for e in entities],
+            next_cursor=next_cursor,
+            has_more=has_more,
+        )
+
+    if body.cursor is not None:
+        raise HTTPException(status_code=422, detail="cursor is not supported for search query mode")
+
+    query = body.query.strip()
+    if body.search_mode == "hybrid":
+        results = await container.entity_service.hybrid_search(
+            query=query,
+            entity_type=body.entity_type,
+            entity_subtype=body.entity_subtype,
+            namespace=body.namespace,
+            filters=filters_dict,
+            filter_field_types=filter_field_types,
+            limit=body.limit,
+        )
+        items = []
+        for entity, score, match_type in results:
+            resp = EntityResponse.model_validate(entity)
+            resp.score = score
+            resp.match_type = match_type
+            items.append(resp)
+        return CursorPage[EntityResponse](items=items, next_cursor=None, has_more=False)
+
+    if body.search_mode == "text":
+        results = await container.entity_service.text_search(
+            query=query,
+            entity_type=body.entity_type,
+            entity_subtype=body.entity_subtype,
+            namespace=body.namespace,
+            filters=filters_dict,
+            filter_field_types=filter_field_types,
+            limit=body.limit,
+        )
+        items = []
+        for entity, score in results:
+            resp = EntityResponse.model_validate(entity)
+            resp.score = score
+            resp.match_type = "text"
+            items.append(resp)
+        return CursorPage[EntityResponse](items=items, next_cursor=None, has_more=False)
+
+    results = await container.entity_service.search_entities(
+        query=query,
+        entity_type=body.entity_type,
+        entity_subtype=body.entity_subtype,
+        namespace=body.namespace,
+        filters=filters_dict,
+        filter_field_types=filter_field_types,
+        limit=body.limit,
+    )
+    items = []
+    for entity, score in results:
+        resp = EntityResponse.model_validate(entity)
+        resp.score = score
+        resp.match_type = "semantic"
+        items.append(resp)
+    return CursorPage[EntityResponse](items=items, next_cursor=None, has_more=False)
+
+
 _EXPORT_PAGE_SIZE = 500
 _EXPORT_MAX_ROWS = 10000
 
@@ -281,8 +333,16 @@ async def export_entities(
     import json as json_lib
     from fastapi.responses import StreamingResponse
 
-    filters = build_crm_entity_filters_from_query(status=status)
-    filters_arg = filters if filters else None
+    filters_arg = None
+    filter_field_types: Dict[str, str] = {}
+    if status:
+        filters_arg = {"field": "status", "op": "$eq", "value": status}
+        filter_field_types = await container.entity_service.resolve_filter_field_types(
+            namespace=namespace or "default",
+            entity_type=entity_type,
+            entity_subtype=entity_subtype,
+            filters=filters_arg,
+        )
 
     if format == "csv":
         async def _csv_generator():
@@ -301,6 +361,7 @@ async def export_entities(
                     entity_subtype=entity_subtype,
                     namespace=namespace,
                     filters=filters_arg,
+                    filter_field_types=filter_field_types,
                     limit=page_size,
                     cursor=cursor,
                 )
@@ -334,6 +395,7 @@ async def export_entities(
                 entity_subtype=entity_subtype,
                 namespace=namespace,
                 filters=filters_arg,
+                filter_field_types=filter_field_types,
                 limit=page_size,
                 cursor=cursor,
             )
@@ -359,83 +421,21 @@ async def export_entities(
 @router.get("/search", response_model=CursorPage[EntityResponse])
 async def search_entities(
     container: ContainerDep,
-    query: str = Query(...),
-    entity_type: Optional[str] = Query(None),
-    entity_subtype: Optional[str] = Query(None),
-    namespace: Optional[str] = Query(None, description="Фильтр по namespace"),
-    search_mode: str = Query("hybrid", description="text | semantic | hybrid"),
-    status: Optional[str] = Query(None, description="Как у списка: статус"),
-    priority: Optional[str] = Query(None, description="Как у списка: приоритет"),
-    tags: Optional[str] = Query(None),
-    user_id: Optional[str] = Query(None),
-    date_from: Optional[str] = Query(None),
-    date_to: Optional[str] = Query(None),
-    created_at_from: Optional[datetime] = Query(None, description="Фильтр created_at >= value"),
-    created_at_to: Optional[datetime] = Query(None, description="Фильтр created_at <= value"),
-    limit: int = Query(100, le=1000),
 ):
-    """Поиск entities: text (FTS), semantic (RAG vector), hybrid (RRF)."""
-    filters = build_crm_entity_filters_from_query(
-        status=status,
-        priority=priority,
-        tags=tags,
-        user_id=user_id,
-        substring_search=None,
-        date_from=date_from,
-        date_to=date_to,
-        created_at_from=created_at_from,
-        created_at_to=created_at_to,
-    )
+    _ = container
+    raise HTTPException(status_code=410, detail="Use POST /crm/api/v1/entities/query")
 
-    if search_mode == "hybrid":
-        results = await container.entity_service.hybrid_search(
-            query=query,
-            entity_type=entity_type,
-            entity_subtype=entity_subtype,
-            namespace=namespace,
-            filters=filters if filters else None,
-            limit=limit,
-        )
-        items = []
-        for entity, score, match_type in results:
-            resp = EntityResponse.model_validate(entity)
-            resp.score = score
-            resp.match_type = match_type
-            items.append(resp)
-        return CursorPage[EntityResponse](items=items, next_cursor=None, has_more=False)
 
-    if search_mode == "text":
-        results = await container.entity_service.text_search(
-            query=query,
-            entity_type=entity_type,
-            entity_subtype=entity_subtype,
-            namespace=namespace,
-            filters=filters if filters else None,
-            limit=limit,
-        )
-        items = []
-        for entity, score in results:
-            resp = EntityResponse.model_validate(entity)
-            resp.score = score
-            resp.match_type = "text"
-            items.append(resp)
-        return CursorPage[EntityResponse](items=items, next_cursor=None, has_more=False)
-
-    results = await container.entity_service.search_entities(
-        query=query,
-        entity_type=entity_type,
-        entity_subtype=entity_subtype,
-        namespace=namespace,
-        filters=filters if filters else None,
-        limit=limit,
-    )
-    items = []
-    for entity, score in results:
-        resp = EntityResponse.model_validate(entity)
-        resp.score = score
-        resp.match_type = "semantic"
-        items.append(resp)
-    return CursorPage[EntityResponse](items=items, next_cursor=None, has_more=False)
+@router.post("/query", response_model=CursorPage[EntityResponse])
+async def query_entities(
+    body: EntitySearchQueryRequest,
+    container: ContainerDep,
+):
+    """Единый POST endpoint для листинга и поиска сущностей по DSL-фильтрам."""
+    try:
+        return await _execute_entity_query(container=container, body=body)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
 
 
 @router.get("/timeline/bounds", response_model=EntityTimelineBoundsResponse)
@@ -567,47 +567,9 @@ async def delete_entity(
 @router.get("", response_model=CursorPage[EntityResponse])
 async def list_entities(
     container: ContainerDep,
-    entity_type: Optional[str] = Query(None),
-    entity_subtype: Optional[str] = Query(None),
-    namespace: Optional[str] = Query(None, description="Фильтр по namespace"),
-    status: Optional[str] = Query(None, description="Фильтр по статусу (active, archived, ...)"),
-    priority: Optional[str] = Query(None, description="Фильтр по приоритету (low, medium, high, urgent)"),
-    tags: Optional[str] = Query(None),
-    user_id: Optional[str] = Query(None),
-    search: Optional[str] = Query(None, description="Полнотекстовый поиск по name/description/attributes"),
-    date_from: Optional[str] = Query(None),
-    date_to: Optional[str] = Query(None),
-    created_at_from: Optional[datetime] = Query(None, description="Фильтр created_at >= value"),
-    created_at_to: Optional[datetime] = Query(None, description="Фильтр created_at <= value"),
-    cursor: Optional[str] = Query(None, description="Cursor для пагинации (из предыдущего ответа)"),
-    limit: int = Query(100, le=1000),
 ):
-    """Получить список entities с cursor-пагинацией и фильтрацией."""
-    filters = build_crm_entity_filters_from_query(
-        status=status,
-        priority=priority,
-        tags=tags,
-        user_id=user_id,
-        substring_search=search,
-        date_from=date_from,
-        date_to=date_to,
-        created_at_from=created_at_from,
-        created_at_to=created_at_to,
-    )
-
-    entities, next_cursor, has_more = await container.entity_service.list_entities(
-        entity_type=entity_type,
-        entity_subtype=entity_subtype,
-        namespace=namespace,
-        filters=filters if filters else None,
-        limit=limit,
-        cursor=cursor,
-    )
-    return CursorPage[EntityResponse](
-        items=[EntityResponse.model_validate(e) for e in entities],
-        next_cursor=next_cursor,
-        has_more=has_more,
-    )
+    _ = container
+    raise HTTPException(status_code=410, detail="Use POST /crm/api/v1/entities/query")
 
 
 @router.post("/daily-summary")

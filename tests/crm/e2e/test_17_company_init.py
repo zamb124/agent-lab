@@ -83,7 +83,12 @@ class TestCompanyInit:
     @pytest.mark.asyncio
     async def test_company_entity_organization_created(self, crm_client, unique_id, auth_headers_system):
         """Entity типа 'organization' для компании создается автоматически"""
-        orgs_resp = await crm_client.get("/crm/api/v1/entities/?entity_type=organization", headers=auth_headers_system)
+        orgs_resp = await crm_client.post(
+            "/crm/api/v1/entities/query",
+            json={"entity_type": "organization", "limit": 100},
+            headers=auth_headers_system,
+        )
+        assert orgs_resp.status_code == 200
         orgs = orgs_resp.json()["items"]
         
         assert len(orgs) >= 1

@@ -7,9 +7,66 @@ export class CRMAPIService extends BaseService {
     constructor(baseUrl = '/crm/api/v1') {
         super(baseUrl);
     }
+
+    _buildEntityDslFilters(params = {}) {
+        const nodes = [];
+        if (params.filters && typeof params.filters === 'object') {
+            nodes.push(params.filters);
+        }
+        if (typeof params.status === 'string' && params.status.trim()) {
+            nodes.push({ field: 'status', op: '$eq', value: params.status.trim() });
+        }
+        if (typeof params.priority === 'string' && params.priority.trim()) {
+            nodes.push({ field: 'priority', op: '$eq', value: params.priority.trim() });
+        }
+        if (typeof params.user_id === 'string' && params.user_id.trim()) {
+            nodes.push({ field: 'user_id', op: '$eq', value: params.user_id.trim() });
+        }
+        if (typeof params.date_from === 'string' && params.date_from.trim()) {
+            nodes.push({ field: 'note_date', op: '$gte', value: params.date_from.trim() });
+        }
+        if (typeof params.date_to === 'string' && params.date_to.trim()) {
+            nodes.push({ field: 'note_date', op: '$lte', value: params.date_to.trim() });
+        }
+        if (typeof params.created_at_from === 'string' && params.created_at_from.trim()) {
+            nodes.push({ field: 'created_at', op: '$gte', value: params.created_at_from.trim() });
+        }
+        if (typeof params.created_at_to === 'string' && params.created_at_to.trim()) {
+            nodes.push({ field: 'created_at', op: '$lte', value: params.created_at_to.trim() });
+        }
+        const rawTags = Array.isArray(params.tags)
+            ? params.tags
+            : (typeof params.tags === 'string' ? params.tags.split(',') : []);
+        for (const tag of rawTags) {
+            if (typeof tag === 'string' && tag.trim()) {
+                nodes.push({ field: 'tags', op: '$contains', value: tag.trim() });
+            }
+        }
+        if (nodes.length === 0) {
+            return null;
+        }
+        if (nodes.length === 1) {
+            return nodes[0];
+        }
+        return { $and: nodes };
+    }
+
+    _buildEntityQueryBody(params = {}, query = null) {
+        const body = {
+            query,
+            search_mode: params.search_mode || 'hybrid',
+            entity_type: params.entity_type || null,
+            entity_subtype: params.entity_subtype || null,
+            namespace: params.namespace || null,
+            cursor: params.cursor || null,
+            limit: typeof params.limit === 'number' ? params.limit : 100,
+            filters: this._buildEntityDslFilters(params),
+        };
+        return body;
+    }
     
     async getEntities(params = {}) {
-        return this.get('/entities', params);
+        return this.post('/entities/query', this._buildEntityQueryBody(params, null));
     }
 
     async getEntityTimelineBounds(params = {}) {
@@ -91,7 +148,7 @@ export class CRMAPIService extends BaseService {
         if (!query) {
             throw new Error('Search query is required');
         }
-        return this.get('/entities/search', { query, ...params });
+        return this.post('/entities/query', this._buildEntityQueryBody(params, query));
     }
 
     async getLaraWorkspaceSummary(namespace) {

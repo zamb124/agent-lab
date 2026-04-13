@@ -46,9 +46,16 @@ class TestHistoricalNotes:
                 "user_id": test_user_id
             }, headers=auth_headers_system)
         
-        list_resp = await crm_client.get(
-            f"/crm/api/v1/entities/?entity_type=note&user_id={test_user_id}&sort=note_date&order=asc"
-        , headers=auth_headers_system)
+        list_resp = await crm_client.post(
+            "/crm/api/v1/entities/query",
+            json={
+                "entity_type": "note",
+                "limit": 100,
+                "filters": {"field": "user_id", "op": "$eq", "value": test_user_id},
+            },
+            headers=auth_headers_system,
+        )
+        assert list_resp.status_code == 200
         notes = list_resp.json()["items"]
         
         assert len(notes) >= 3
@@ -69,9 +76,22 @@ class TestHistoricalNotes:
             "user_id": test_user_id
         }, headers=auth_headers_system)
         
-        filter_resp = await crm_client.get(
-            f"/crm/api/v1/entities/?entity_type=note&user_id={test_user_id}&note_date_from={start_date}&note_date_to={end_date}"
-        , headers=auth_headers_system)
+        filter_resp = await crm_client.post(
+            "/crm/api/v1/entities/query",
+            json={
+                "entity_type": "note",
+                "limit": 100,
+                "filters": {
+                    "$and": [
+                        {"field": "user_id", "op": "$eq", "value": test_user_id},
+                        {"field": "note_date", "op": "$gte", "value": start_date},
+                        {"field": "note_date", "op": "$lte", "value": end_date},
+                    ]
+                },
+            },
+            headers=auth_headers_system,
+        )
+        assert filter_resp.status_code == 200
         filtered = filter_resp.json()["items"]
         assert len(filtered) >= 1
         for n in filtered:
