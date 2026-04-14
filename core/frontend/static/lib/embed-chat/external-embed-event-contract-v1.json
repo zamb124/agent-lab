@@ -1,0 +1,152 @@
+{
+  "name": "External Embed Event Contract",
+  "contract_version": "1.0.0",
+  "namespace": "assistant",
+  "event_envelope": {
+    "required": [
+      "version",
+      "id",
+      "type",
+      "timestamp",
+      "source",
+      "payload"
+    ],
+    "optional": [
+      "correlation_id"
+    ],
+    "versioning_policy": {
+      "semver": "major.minor.patch",
+      "patch": "Новые значения payload без изменения структуры обязательных полей",
+      "minor": "Добавление опциональных полей envelope/payload и новых типов событий",
+      "major": "Удаление/переименование полей, смена семантики обязательных полей"
+    }
+  },
+  "events": [
+    {
+      "type": "assistant:context_requested",
+      "payload_required": [
+        "flow_id"
+      ],
+      "payload_optional": [
+        "skill_id",
+        "variables"
+      ]
+    },
+    {
+      "type": "assistant:navigate",
+      "payload_required": [],
+      "payload_optional": [
+        "flow_id",
+        "skill_id",
+        "node_id",
+        "open_editor"
+      ]
+    },
+    {
+      "type": "assistant:action_invoked",
+      "payload_required": [
+        "action_id",
+        "action_kind"
+      ],
+      "payload_optional": [
+        "pending_action_id",
+        "arguments",
+        "context"
+      ]
+    },
+    {
+      "type": "assistant:action_previewed",
+      "payload_required": [
+        "action"
+      ],
+      "payload_optional": [
+        "patch_kind",
+        "flow_id",
+        "skill_id",
+        "node_id",
+        "changes",
+        "flow_changes"
+      ]
+    },
+    {
+      "type": "assistant:action_applied",
+      "payload_required": [
+        "action"
+      ],
+      "payload_optional": [
+        "patch_kind",
+        "flow_id",
+        "skill_id",
+        "node_id",
+        "changes",
+        "flow_changes",
+        "entity_id"
+      ]
+    },
+    {
+      "type": "assistant:action_rejected",
+      "payload_required": [
+        "action"
+      ],
+      "payload_optional": [
+        "reason"
+      ]
+    },
+    {
+      "type": "assistant:action_failed",
+      "payload_required": [
+        "message"
+      ],
+      "payload_optional": [
+        "action"
+      ]
+    },
+    {
+      "type": "assistant:error",
+      "payload_required": [
+        "message"
+      ],
+      "payload_optional": [
+        "flow_id",
+        "skill_id",
+        "source"
+      ]
+    },
+    {
+      "type": "assistant:ack",
+      "payload_required": [
+        "id"
+      ],
+      "payload_optional": [
+        "meta"
+      ]
+    },
+    {
+      "type": "assistant:nack",
+      "payload_required": [
+        "id"
+      ],
+      "payload_optional": [
+        "reason",
+        "meta"
+      ]
+    }
+  ],
+  "compatibility_and_deprecation": {
+    "support_window": "2 minor versions",
+    "deprecated_field_announcement": "Поле помечается в changelog контракта и остаётся минимум 1 minor release",
+    "removal_rule": "Удаление только в major версии"
+  },
+  "delivery": {
+    "ack_nack_optional": true,
+    "ack_id_field": "id",
+    "retry": {
+      "enabled_by_default": false,
+      "embed_chat_controls": [
+        "event-ack-retries",
+        "event-ack-timeout-ms"
+      ]
+    },
+    "dedupe_rule": "Получатель должен дедуплицировать по event id"
+  }
+}
