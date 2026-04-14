@@ -700,6 +700,9 @@ export class PlatformEmbedChat extends LitElement {
         if (!this.flowsBaseUrl || !this.useCredentials) {
             return;
         }
+        if (typeof this.getAuthToken === 'function') {
+            return;
+        }
         const headers = await this._getEmbedAuthHeaders();
         const resp = await fetch(`${this.flowsBaseUrl}/api/v1/integrations/credentials`, {
             headers,
@@ -713,6 +716,9 @@ export class PlatformEmbedChat extends LitElement {
 
     async _deleteEmbedCredential(provider, service) {
         if (!this.flowsBaseUrl || !this.useCredentials) {
+            return;
+        }
+        if (typeof this.getAuthToken === 'function') {
             return;
         }
         const headers = await this._getEmbedAuthHeaders();

@@ -514,7 +514,7 @@ async def get_embed_code(
   assistant.setAttribute('theme', {theme_js});
   assistant.setAttribute('event-namespace', 'assistant');
   assistant.setAttribute('toggle-event-name', 'humanitec-embed-chat-toggle');
-  assistant.setAttribute('use-credentials', 'false');
+  assistant.useCredentials = false;
   assistant.setAttribute('locale', {locale_js});
   assistant.showLauncher = {show_launcher_js};
   assistant.flowsBaseUrl = {flows_base_url_js};
