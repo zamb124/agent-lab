@@ -274,6 +274,11 @@
         "port": 8001,
         "debug": true
       },
+      "cors_allow_origins": [
+        "https://larashved.ru",
+        "https://www.larashved.ru",
+        "http://localhost:8000"
+      ],
       "provider_litserve": {
         "api": {
           "base_url": "http://127.0.0.1:8014/v1"
