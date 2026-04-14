@@ -40,6 +40,10 @@ flows:
     public: true
     description: "Lara: ассистент CRM (заметки, анализ, файлы, UI-блоки в чате)"
 
+  - id: psychologist_assistant
+    public: true
+    description: "Ассистент Лары Швед: эмпатичный агент с доступом к базе знаний через RAG и прямыми контактами психолога"
+
 
 # Тулы
 # ВСЕ тулы загружаются в system namespace при старте
