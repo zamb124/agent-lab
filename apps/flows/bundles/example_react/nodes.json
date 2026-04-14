@@ -2,7 +2,7 @@
   {
     "id": "example_main_agent",
     "type": "llm_node",
-    "name": "Главная нода примера",
+    "name": "Main Node",
     "description": "Демонстрационная llm_node с полным набором возможностей",
     "prompt_file": "prompts/main.md",
     "tools": [

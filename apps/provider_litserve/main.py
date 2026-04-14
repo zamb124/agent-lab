@@ -373,6 +373,7 @@ async def _start_litserver_runtime(app: FastAPI) -> None:
     lit_server.verify_worker_status()
 
     consumer_id = 0
+    lit_server.app.response_queue_id = consumer_id
     app.response_queue_id = consumer_id
     for lit_api in lit_server.litapi_connector:
         if lit_api.spec:

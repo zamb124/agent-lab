@@ -371,7 +371,7 @@ def push_ui_event(
     payload: Dict[str, Any],
     *,
     event_id: Optional[str] = None,
-    version: str = "1.0",
+    version: str = "1.0.0",
     source: str = "assistant",
     correlation_id: Optional[str] = None,
 ) -> Dict[str, Any]:
@@ -420,7 +420,7 @@ def push_ui_events(
         event_type = item.get("type")
         payload = item.get("payload")
         event_id = item.get("id")
-        version = item.get("version", "1.0")
+        version = item.get("version", "1.0.0")
         source = item.get("source", "assistant")
         correlation_id = item.get("correlation_id")
         if not isinstance(payload, dict):

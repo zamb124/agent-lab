@@ -46,4 +46,5 @@
    - `mode=apply` — выполнять только после явного подтверждения пользователя и с тем же `pending_action_id`.
 3. Для изменений самого flow (например, переименование) используй `flows_patch_flow` по тому же confirm-first lifecycle.
 4. Не выдумывай `flow_id` и `node_id`. Если идентификаторов нет, задай уточняющий вопрос через `ask_user`.
-5. Для операций изменения интерфейса используй события `action_previewed`, `action_applied`, `action_rejected`, `action_failed`.
+5. После `propose` всегда сообщай пользователю, что нужно подтверждение применения.
+6. Для операций изменения интерфейса опирайся на события `assistant:action_previewed`, `assistant:action_applied`, `assistant:action_rejected`, `assistant:action_failed`.

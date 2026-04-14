@@ -62,41 +62,6 @@ services:
     networks:
       - dev-net
 
-  provider_litserve:
-    platform: "linux/amd64"
-    build:
-      context: .
-      dockerfile: Dockerfile
-      target: full
-    container_name: agentlab_provider_litserve_dev
-    command: ["python", "-m", "apps.provider_litserve.main"]
-    ports:
-      - "8014:8014"
-    volumes:
-      - ./conf.json:/app/conf.json:ro
-      - provider_litserve_dev_data:/var/lib/provider_litserve
-    environment:
-      - PROVIDER_LITSERVE__INFRA__BACKEND=flagllm
-      - PROVIDER_LITSERVE__INFRA__HOST=0.0.0.0
-      - PROVIDER_LITSERVE__INFRA__GATEWAY_PORT=8014
-      - PROVIDER_LITSERVE__INFRA__MODEL_ID=${PROVIDER_LITSERVE__INFRA__MODEL_ID:-BAAI/bge-reranker-v2-gemma}
-      - PROVIDER_LITSERVE__INFRA__EMBEDDING_MODEL_ID=${PROVIDER_LITSERVE__INFRA__EMBEDDING_MODEL_ID:-BAAI/bge-m3}
-      - PROVIDER_LITSERVE__INFRA__SQLITE_PATH=/var/lib/provider_litserve/registry.db
-      - HF_TOKEN=${HF_TOKEN:-}
-    depends_on:
-      postgres:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8014/health"]
-      interval: 10s
-      timeout: 5s
-      retries: 10
-      start_period: 20s
-    networks:
-      - dev-net
-
   # External Cat Agent опционален - требует сборки образа, что замедляет запуск:
   # external-cat-agent-dev:
   #   platform: "linux/amd64"
@@ -284,8 +249,6 @@ volumes:
   redis_dev_data:
     driver: local
   minio_dev_data:
-    driver: local
-  provider_litserve_dev_data:
     driver: local
 networks:
   dev-net:

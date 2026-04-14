@@ -117,31 +117,6 @@ export class PlatformEmbedChatDrawer extends LitElement {
             box-shadow: 0 10px 32px rgba(60, 50, 140, 0.18);
         }
 
-        .backdrop {
-            position: fixed;
-            inset: 0;
-            z-index: 24990;
-            background: rgba(0, 0, 0, 0.45);
-            opacity: 1;
-            visibility: visible;
-            transition:
-                opacity 0.34s cubic-bezier(0.22, 1, 0.36, 1),
-                visibility 0s linear 0s;
-        }
-
-        .backdrop.backdrop--hidden {
-            opacity: 0;
-            visibility: hidden;
-            pointer-events: none;
-            transition:
-                opacity 0.28s cubic-bezier(0.22, 1, 0.36, 1),
-                visibility 0s linear 0.28s;
-        }
-
-        :host([data-embed-theme='light']) .backdrop {
-            background: rgba(22, 26, 38, 0.28);
-        }
-
         .panel {
             position: fixed;
             z-index: 24995;
@@ -206,8 +181,6 @@ export class PlatformEmbedChatDrawer extends LitElement {
         }
 
         @media (prefers-reduced-motion: reduce) {
-            .backdrop,
-            .backdrop.backdrop--hidden,
             .panel,
             .panel.panel--collapsed,
             .panel:fullscreen {
@@ -774,7 +747,7 @@ export class PlatformEmbedChatDrawer extends LitElement {
         this._stopPanelDrag();
     }
 
-    _close() {
+    _minimize() {
         this._stopPanelDrag();
         const panel = this.renderRoot?.querySelector('.panel');
         const fs = typeof document !== 'undefined' ? document.fullscreenElement : null;
@@ -905,17 +878,10 @@ export class PlatformEmbedChatDrawer extends LitElement {
                 : ''}
 
             <div
-                class="backdrop ${this.open ? '' : 'backdrop--hidden'}"
-                style="z-index:${this._layerZIndex(1)}"
-                aria-hidden="true"
-                @click=${this._close}
-            ></div>
-            <div
                 class="panel ${this.panelMaximized ? 'panel--maximized' : ''} ${!this.open ? 'panel--collapsed' : ''}"
                 style=${this._panelInlineStyle()}
                 aria-hidden=${this.open ? 'false' : 'true'}
                 ?inert=${!this.open}
-                @click=${(e) => e.stopPropagation()}
             >
                 <div class=${panelHeadClass} @pointerdown=${this._onPanelHeadPointerDown}>
                     <span class="panel-head-title">${headTitle}</span>
@@ -943,17 +909,18 @@ export class PlatformEmbedChatDrawer extends LitElement {
                         <button
                             type="button"
                             class="close-btn"
-                            title=${L.panel_close}
-                            aria-label=${L.panel_close}
-                            @click=${this._close}
+                            title=${L.panel_minimize}
+                            aria-label=${L.panel_minimize}
+                            @click=${this._minimize}
                         >
-                            <platform-icon name="close" size="18" aria-hidden="true"></platform-icon>
+                            <platform-icon name="minimize" size="18" aria-hidden="true"></platform-icon>
                         </button>
                     </div>
                 </div>
                 <platform-embed-chat
                     @humanitec-embed-chat-assistant-reply-completed=${this._onEmbedAssistantReplyCompleted}
                     ?hide-header=${true}
+                    ?visible=${this.open}
                     embed-theme=${embedTheme}
                     interface-locale=${this._interfaceLocaleForChat()}
                     ?show-locale-control=${this.showLocaleControl}

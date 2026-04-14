@@ -31,6 +31,7 @@ from apps.flows.src.eval.import_policy import safe_inline_import
 from apps.flows.src.eval.platform_services import (
     get_file_bytes,
     get_google_oauth_token,
+    get_lara_facade,
     get_oauth_service,
     get_operator_handoff_service,
     get_schedule_service,
@@ -222,6 +223,7 @@ class PythonNamespaceBuilder:
         namespace["get_oauth_service"] = get_oauth_service
         namespace["get_file_bytes"] = get_file_bytes
         namespace["get_google_oauth_token"] = get_google_oauth_token
+        namespace["get_lara_facade"] = get_lara_facade
         namespace["GoogleDocsClient"] = GoogleDocsClient
         namespace["quote"] = quote
         namespace["_require_context_namespace"] = _inline_require_context_namespace

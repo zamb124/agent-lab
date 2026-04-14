@@ -68,13 +68,19 @@ class Emitter(BaseEmitter):
         payload: Dict[str, Any],
         *,
         event_id: Optional[str] = None,
-        version: str = "1.0",
+        version: str = "1.0.0",
+        timestamp: str,
+        source: str = "assistant",
+        correlation_id: Optional[str] = None,
     ) -> None:
         await super().emit_ui_event(
             event_type=event_type,
             payload=payload,
             event_id=event_id,
             version=version,
+            timestamp=timestamp,
+            source=source,
+            correlation_id=correlation_id,
         )
 
 

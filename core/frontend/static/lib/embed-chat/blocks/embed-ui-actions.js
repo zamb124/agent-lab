@@ -27,13 +27,32 @@ export class EmbedUiActions extends LitElement {
     `;
 
     _onClick(btn) {
+        const actionIdRaw = btn?.action_id;
+        const actionKindRaw = btn?.action_kind;
+        const actionId = typeof actionIdRaw === 'string' ? actionIdRaw.trim() : '';
+        const actionKind = typeof actionKindRaw === 'string' ? actionKindRaw.trim() : '';
+        if (!actionId || !actionKind) {
+            throw new Error('embed-ui-actions: button must include non-empty action_id and action_kind');
+        }
         this.dispatchEvent(
             new CustomEvent('embed-block-action', {
                 bubbles: true,
                 composed: true,
                 detail: {
-                    action_id: btn.action_id,
-                    payload: btn.payload ?? {},
+                    action_id: actionId,
+                    action_kind: actionKind,
+                    pending_action_id:
+                        typeof btn?.pending_action_id === 'string' && btn.pending_action_id.trim()
+                            ? btn.pending_action_id.trim()
+                            : null,
+                    arguments:
+                        btn?.arguments && typeof btn.arguments === 'object' && !Array.isArray(btn.arguments)
+                            ? btn.arguments
+                            : {},
+                    context:
+                        btn?.context && typeof btn.context === 'object' && !Array.isArray(btn.context)
+                            ? btn.context
+                            : {},
                 },
             }),
         );

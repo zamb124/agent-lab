@@ -16,6 +16,7 @@ import './embed-block-renderer.js';
 import './embed-chat-input.js';
 
 let mid = 0;
+const ASSISTANT_EVENT_SCHEMA_VERSION = '1.0.0';
 
 /**
  * Автономный чат: A2A stream + блоки. Без apps/crm, apps/flows.
@@ -53,7 +54,10 @@ export class PlatformEmbedChat extends LitElement {
         interfaceLocale: { type: String, attribute: 'interface-locale' },
         showLocaleControl: { type: Boolean, attribute: 'show-locale-control' },
         hideHeader: { type: Boolean, attribute: 'hide-header' },
+        visible: { type: Boolean, reflect: true },
         eventNamespace: { type: String, attribute: 'event-namespace' },
+        eventAckRetries: { type: Number, attribute: 'event-ack-retries' },
+        eventAckTimeoutMs: { type: Number, attribute: 'event-ack-timeout-ms' },
         getExtraMetadataVariables: { type: Object },
         getContextVariables: { type: Object },
         greetingSent: { type: Boolean, state: true },
@@ -241,6 +245,22 @@ export class PlatformEmbedChat extends LitElement {
         .embed-stream-dots {
             color: var(--embed-chat-muted);
         }
+        .embed-stream-caret {
+            display: inline-block;
+            margin-left: 2px;
+            color: var(--embed-chat-muted);
+            animation: embed-caret-blink 1s steps(1, end) infinite;
+        }
+        @keyframes embed-caret-blink {
+            0%,
+            49% {
+                opacity: 1;
+            }
+            50%,
+            100% {
+                opacity: 0;
+            }
+        }
         .embed-operator-reply {
             margin-top: 12px;
             padding: 10px 12px;
@@ -357,7 +377,10 @@ export class PlatformEmbedChat extends LitElement {
         this.interfaceLocale = 'auto';
         this.showLocaleControl = false;
         this.hideHeader = false;
+        this.visible = true;
         this.eventNamespace = 'assistant';
+        this.eventAckRetries = 0;
+        this.eventAckTimeoutMs = 2500;
         this.getContextVariables = undefined;
         this.getAuthToken = undefined;
         this.actionHandlers = {};
@@ -376,6 +399,12 @@ export class PlatformEmbedChat extends LitElement {
         this._credentials = [];
         this._credPopover = null;
         this._uiEventDispatchKeys = new Set();
+        this._greetingTypingRunId = 0;
+        this._pendingEventAcks = new Map();
+        this._boundAckListener = (event) => this._handleHostEventAck(event, true);
+        this._boundNackListener = (event) => this._handleHostEventAck(event, false);
+        this._ackEventName = null;
+        this._nackEventName = null;
         this._onCredClickOutside = this._onCredClickOutside.bind(this);
         registerBuiltinEmbedBlocks();
     }
@@ -440,30 +469,88 @@ export class PlatformEmbedChat extends LitElement {
         super.connectedCallback();
         this.addEventListener('embed-block-action', this._onBlockAction);
         document.addEventListener('click', this._onCredClickOutside);
+        this._bindAckListeners();
     }
 
     disconnectedCallback() {
         super.disconnectedCallback();
         this.removeEventListener('embed-block-action', this._onBlockAction);
         document.removeEventListener('click', this._onCredClickOutside);
+        this._unbindAckListeners();
+        this._pendingEventAcks.forEach((pending) => {
+            if (pending.timer) {
+                clearTimeout(pending.timer);
+            }
+        });
+        this._pendingEventAcks.clear();
+    }
+
+    _bindAckListeners() {
+        this._unbindAckListeners();
+        const ns = this._normalizedEventNamespace();
+        this._ackEventName = `${ns}:ack`;
+        this._nackEventName = `${ns}:nack`;
+        window.addEventListener(this._ackEventName, this._boundAckListener);
+        window.addEventListener(this._nackEventName, this._boundNackListener);
+    }
+
+    _unbindAckListeners() {
+        if (this._ackEventName) {
+            window.removeEventListener(this._ackEventName, this._boundAckListener);
+        }
+        if (this._nackEventName) {
+            window.removeEventListener(this._nackEventName, this._boundNackListener);
+        }
+        this._ackEventName = null;
+        this._nackEventName = null;
+    }
+
+    _handleHostEventAck(event, accepted) {
+        const detail = event?.detail && typeof event.detail === 'object' ? event.detail : {};
+        const eventId = typeof detail.id === 'string' ? detail.id.trim() : '';
+        if (!eventId) {
+            return;
+        }
+        const pending = this._pendingEventAcks.get(eventId);
+        if (!pending) {
+            return;
+        }
+        if (pending.timer) {
+            clearTimeout(pending.timer);
+        }
+        this._pendingEventAcks.delete(eventId);
+        if (!accepted && pending.retriesLeft > 0) {
+            this._dispatchAssistantEnvelope(pending.envelope, pending.retriesLeft - 1);
+        }
     }
 
     _onBlockAction = (e) => {
-        const { action_id: actionId, payload } = e.detail || {};
-        if (!actionId || typeof actionId !== 'string') {
+        const detail = e.detail && typeof e.detail === 'object' ? e.detail : {};
+        const actionId = typeof detail.action_id === 'string' ? detail.action_id.trim() : '';
+        const actionKind = typeof detail.action_kind === 'string' ? detail.action_kind.trim() : '';
+        if (!actionId || !actionKind) {
             return;
         }
-        const eventPrefix = `${this._normalizedEventNamespace()}:`;
-        const assistantEventType =
-            actionId.startsWith(eventPrefix)
-                ? actionId.slice(eventPrefix.length)
-                : payload?.assistant_event_type;
-        if (typeof assistantEventType === 'string' && assistantEventType.trim()) {
-            this._emitAssistantEvent(assistantEventType.trim(), payload || {});
-        }
-        const fn = this.actionHandlers[actionId];
+        const payload = {
+            action_id: actionId,
+            action_kind: actionKind,
+            pending_action_id:
+                typeof detail.pending_action_id === 'string' && detail.pending_action_id.trim()
+                    ? detail.pending_action_id.trim()
+                    : null,
+            arguments:
+                detail.arguments && typeof detail.arguments === 'object' && !Array.isArray(detail.arguments)
+                    ? detail.arguments
+                    : {},
+            context:
+                detail.context && typeof detail.context === 'object' && !Array.isArray(detail.context)
+                    ? detail.context
+                    : {},
+        };
+        this._emitAssistantEvent('action_invoked', payload);
+        const fn = this.actionHandlers['assistant:action_invoked'];
         if (typeof fn === 'function') {
-            fn(payload || {});
+            fn(payload);
         }
     };
 
@@ -472,15 +559,32 @@ export class PlatformEmbedChat extends LitElement {
         return raw || 'assistant';
     }
 
-    _emitAssistantEvent(type, payload = {}) {
+    _newEventId() {
+        return `${Date.now()}-${Math.random().toString(16).slice(2)}-${mid++}`;
+    }
+
+    _buildAssistantEnvelope(type, payload = {}, overrides = {}) {
         const eventNamespace = this._normalizedEventNamespace();
-        const detail = {
+        const envelope = {
+            version: ASSISTANT_EVENT_SCHEMA_VERSION,
+            id: typeof overrides.id === 'string' && overrides.id.trim() ? overrides.id.trim() : this._newEventId(),
             type,
-            version: '1.0',
-            payload,
-            namespace: eventNamespace,
+            source:
+                typeof overrides.source === 'string' && overrides.source.trim()
+                    ? overrides.source.trim()
+                    : eventNamespace,
+            correlation_id:
+                typeof overrides.correlation_id === 'string' && overrides.correlation_id.trim()
+                    ? overrides.correlation_id.trim()
+                    : null,
             timestamp: new Date().toISOString(),
+            payload,
         };
+        return envelope;
+    }
+
+    _dispatchAssistantEnvelope(detail, retriesLeft = null) {
+        const eventNamespace = this._normalizedEventNamespace();
         this.dispatchEvent(
             new CustomEvent(`${eventNamespace}:event`, {
                 bubbles: true,
@@ -489,12 +593,32 @@ export class PlatformEmbedChat extends LitElement {
             }),
         );
         this.dispatchEvent(
-            new CustomEvent(`${eventNamespace}:${type}`, {
+            new CustomEvent(`${eventNamespace}:${detail.type}`, {
                 bubbles: true,
                 composed: true,
                 detail,
             }),
         );
+        const totalRetries = Number.isInteger(this.eventAckRetries) ? this.eventAckRetries : 0;
+        const timeoutMs = Number.isInteger(this.eventAckTimeoutMs) ? this.eventAckTimeoutMs : 2500;
+        const nextRetries = retriesLeft == null ? totalRetries : retriesLeft;
+        if (nextRetries <= 0) {
+            return;
+        }
+        const timer = setTimeout(() => {
+            const pending = this._pendingEventAcks.get(detail.id);
+            if (!pending) {
+                return;
+            }
+            this._pendingEventAcks.delete(detail.id);
+            this._dispatchAssistantEnvelope(detail, pending.retriesLeft - 1);
+        }, timeoutMs);
+        this._pendingEventAcks.set(detail.id, { envelope: detail, retriesLeft: nextRetries, timer });
+    }
+
+    _emitAssistantEvent(type, payload = {}) {
+        const detail = this._buildAssistantEnvelope(type, payload);
+        this._dispatchAssistantEnvelope(detail);
     }
 
     _uiEventDispatchKey(uiEvent, index, messageId) {
@@ -509,6 +633,7 @@ export class PlatformEmbedChat extends LitElement {
         if (!Array.isArray(uiEvents) || uiEvents.length === 0) {
             return;
         }
+        this._mergeBlocksFromUiEvents(uiEvents, messageId);
         uiEvents.forEach((uiEvent, index) => {
             if (!uiEvent || typeof uiEvent !== 'object') {
                 return;
@@ -523,40 +648,44 @@ export class PlatformEmbedChat extends LitElement {
             }
             this._uiEventDispatchKeys.add(dedupeKey);
             const payload = uiEvent.payload && typeof uiEvent.payload === 'object' ? uiEvent.payload : {};
-            const detail = {
+            const detail = this._buildAssistantEnvelope(type, payload, {
                 id: uiEvent.id || null,
-                type,
-                version:
-                    uiEvent.version != null && String(uiEvent.version).trim()
-                        ? String(uiEvent.version).trim()
-                        : '1.0',
-                payload,
-                source:
-                    uiEvent.source != null && String(uiEvent.source).trim()
-                        ? String(uiEvent.source).trim()
-                        : this._normalizedEventNamespace(),
-                correlation_id:
-                    uiEvent.correlation_id != null && String(uiEvent.correlation_id).trim()
-                        ? String(uiEvent.correlation_id).trim()
-                        : null,
-                timestamp: new Date().toISOString(),
-            };
-            const eventNamespace = this._normalizedEventNamespace();
-            this.dispatchEvent(
-                new CustomEvent(`${eventNamespace}:event`, {
-                    bubbles: true,
-                    composed: true,
-                    detail,
-                }),
-            );
-            this.dispatchEvent(
-                new CustomEvent(`${eventNamespace}:${type}`, {
-                    bubbles: true,
-                    composed: true,
-                    detail,
-                }),
-            );
+                source: uiEvent.source || null,
+                correlation_id: uiEvent.correlation_id || null,
+            });
+            this._dispatchAssistantEnvelope(detail);
         });
+    }
+
+    _mergeBlocksFromUiEvents(uiEvents, messageId) {
+        const msg = this._findMessage(messageId);
+        if (!msg) {
+            return;
+        }
+        const currentBlocks = Array.isArray(msg.blocks) ? msg.blocks : [];
+        let nextBlocks = currentBlocks;
+        let changed = false;
+        for (const uiEvent of uiEvents) {
+            if (!uiEvent || typeof uiEvent !== 'object') {
+                continue;
+            }
+            const payload = uiEvent.payload && typeof uiEvent.payload === 'object' ? uiEvent.payload : {};
+            const payloadBlocks = Array.isArray(payload.blocks) ? payload.blocks : [];
+            if (payloadBlocks.length === 0) {
+                continue;
+            }
+            const validBlocks = payloadBlocks.filter(
+                (b) => b && typeof b === 'object' && typeof b.type === 'string' && b.type.trim(),
+            );
+            if (validBlocks.length === 0) {
+                continue;
+            }
+            nextBlocks = nextBlocks.concat(validBlocks);
+            changed = true;
+        }
+        if (changed) {
+            this._patchMessage(messageId, { blocks: nextBlocks });
+        }
     }
 
     async _getEmbedAuthHeaders() {
@@ -611,29 +740,66 @@ export class PlatformEmbedChat extends LitElement {
 
     async firstUpdated() {
         this._loadEmbedCredentials();
-        if (this.greetingSent) {
+        this._startGreetingTypingIfNeeded();
+    }
+
+    _startGreetingTypingIfNeeded() {
+        if (this.greetingSent || !this.visible) {
             return;
         }
-        const g = this._lb('greeting', '');
-        if (g) {
-            this._messages = [
-                {
-                    id: `sys_${++mid}`,
-                    role: 'assistant',
-                    content: g,
-                    blocks: [],
-                    toolCalls: [],
-                    toolResults: [],
-                },
-            ];
-            this.greetingSent = true;
-            this._stickToBottom = true;
-            this.requestUpdate();
+        const greetingText = this._lb('greeting', '');
+        if (!greetingText) {
+            return;
         }
+        this.greetingSent = true;
+        this._stickToBottom = true;
+        void this._animateGreetingTyping(greetingText);
+    }
+
+    async _animateGreetingTyping(text) {
+        const greetingText = typeof text === 'string' ? text : '';
+        if (!greetingText) {
+            return;
+        }
+        const runId = ++this._greetingTypingRunId;
+        const messageId = `sys_${++mid}`;
+        this._messages = [
+            {
+                id: messageId,
+                role: 'assistant',
+                content: '',
+                blocks: [],
+                toolCalls: [],
+                toolResults: [],
+                streaming: true,
+            },
+        ];
+        this.requestUpdate();
+
+        const chunkSize = 3;
+        const delayMs = 14;
+        for (let cursor = 0; cursor < greetingText.length; cursor += chunkSize) {
+            if (runId !== this._greetingTypingRunId) {
+                return;
+            }
+            const content = greetingText.slice(0, cursor + chunkSize);
+            this._patchMessage(messageId, { content, streaming: true });
+            await new Promise((resolve) => setTimeout(resolve, delayMs));
+        }
+        if (runId !== this._greetingTypingRunId) {
+            return;
+        }
+        this._patchMessage(messageId, { content: greetingText, streaming: false });
     }
 
     updated(changed) {
         super.updated(changed);
+        if (changed.has('visible')) {
+            this._startGreetingTypingIfNeeded();
+        }
+        if (changed.has('eventNamespace')) {
+            this._bindAckListeners();
+        }
         if (!this._stickToBottom) {
             return;
         }
@@ -886,25 +1052,14 @@ export class PlatformEmbedChat extends LitElement {
 
     _newChat() {
         this._pendingAssistantReplyNotify = false;
+        this._greetingTypingRunId += 1;
         this._contextId = `${Date.now()}`;
         this._uiEventDispatchKeys.clear();
-        const g = this._lb('greeting', '');
-        this._messages = g
-            ? [
-                  {
-                      id: `sys_${++mid}`,
-                      role: 'assistant',
-                      content: g,
-                      operatorReply: '',
-                      blocks: [],
-                      toolCalls: [],
-                      toolResults: [],
-                  },
-              ]
-            : [];
-        this.greetingSent = Boolean(g);
+        this._messages = [];
+        this.greetingSent = false;
         this._stickToBottom = true;
         this.requestUpdate();
+        this._startGreetingTypingIfNeeded();
     }
 
     /** Сброс диалога; вызывается с хоста (drawer) при скрытом внутреннем header. */
@@ -1078,7 +1233,7 @@ export class PlatformEmbedChat extends LitElement {
         return html`
             <div class="msg assistant">
                 <div class="embed-msg-md">${unsafeHTML(bodyHtml)}</div>
-                ${m.streaming ? html`<span class="embed-stream-dots"> ...</span>` : nothing}
+                ${m.streaming ? html`<span class="embed-stream-caret" aria-hidden="true">|</span>` : nothing}
                 ${interrupt}
                 ${operatorReplyHtml}
                 ${blocks}

@@ -126,6 +126,13 @@ class NamespaceTemplateService:
                     runtime_type.type_id, [namespace_name],
                 )
 
+        note_type = existing_types_map.get("note")
+        if note_type is None:
+            raise ValueError("System entity type 'note' is required")
+        note_namespaces = note_type.namespace_ids or []
+        if namespace_name not in note_namespaces:
+            await self._entity_type_repo.add_namespace_ids("note", [namespace_name])
+
         await self._company_init_service._ensure_namespace_entity(company_id, namespace_name)
 
         return namespace

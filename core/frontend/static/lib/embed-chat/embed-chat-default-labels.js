@@ -10,6 +10,7 @@ export const EMBED_CHAT_DEFAULT_LABELS = {
         fab_aria_open_unread: 'Открыть чат, новых ответов: {count}',
         fab_aria_close: 'Закрыть панель',
         panel_close: 'Закрыть',
+        panel_minimize: 'Свернуть',
         panel_fullscreen: 'Расширить окно',
         panel_exit_fullscreen: 'Обычный размер',
         greeting:
@@ -38,6 +39,7 @@ export const EMBED_CHAT_DEFAULT_LABELS = {
         fab_aria_open_unread: 'Open chat, new replies: {count}',
         fab_aria_close: 'Close panel',
         panel_close: 'Close',
+        panel_minimize: 'Minimize',
         panel_fullscreen: 'Expand panel',
         panel_exit_fullscreen: 'Normal size',
         greeting: 'Hi. Ask a question or attach a file — answers use your flow tools.',

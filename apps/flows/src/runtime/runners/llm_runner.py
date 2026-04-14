@@ -37,6 +37,7 @@ from apps.flows.src.models.enums import NodeType
 from apps.flows.src.state.interrupt_manager import InterruptManager
 from core.state import ExecutionState, InterruptPathItem, PromptHistoryItem
 from apps.flows.src.streaming import Emitter, BaseEmitter
+from apps.flows.src.streaming.ui_events import emit_pending_ui_events
 from core.tracing import TraceContext, get_tracer
 from core.tracing.context import get_current_trace_context
 from apps.flows.src.variables import VariableResolver
@@ -896,27 +897,4 @@ class LlmNodeRunner(BaseLlmNodeRunner):
         emitter: BaseEmitter,
         state: ExecutionState,
     ) -> None:
-        raw_events = getattr(state, "ui_events_pending", None)
-        if raw_events is None:
-            return
-        if not isinstance(raw_events, list):
-            raise ValueError("state.ui_events_pending must be a list")
-        events = list(raw_events)
-        setattr(state, "ui_events_pending", [])
-        for event in events:
-            event_type = event.get("type")
-            payload = event.get("payload")
-            if not isinstance(event_type, str) or not isinstance(payload, dict):
-                continue
-            event_id = event.get("id")
-            version = event.get("version", "1.0")
-            source = event.get("source", "assistant")
-            correlation_id = event.get("correlation_id")
-            await emitter.emit_ui_event(
-                event_type=event_type,
-                payload=payload,
-                event_id=event_id if isinstance(event_id, str) else None,
-                version=version if isinstance(version, str) else "1.0",
-                source=source if isinstance(source, str) else "assistant",
-                correlation_id=correlation_id if isinstance(correlation_id, str) else None,
-            )
+        await emit_pending_ui_events(emitter=emitter, state=state)

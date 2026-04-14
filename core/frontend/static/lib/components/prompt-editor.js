@@ -453,7 +453,7 @@ export class PromptEditor extends PlatformElement {
     }
     
     async _loadIcons() {
-        const iconNames = ['full-screen', 'off-screen', 'layout-two'];
+        const iconNames = ['fullscreen', 'minimize', 'list'];
         await Promise.all(iconNames.map(async (name) => {
             try {
                 this._icons[name] = await this.icon.load(name);
@@ -1143,7 +1143,7 @@ export class PromptEditor extends PlatformElement {
                                 @click=${this._toggleSplit}
                                 title="Split view"
                             >
-                                ${this._icons['layout-two'] ? unsafeHTML(this._icons['layout-two']) : '⊞'}
+                                ${this._icons['list'] ? unsafeHTML(this._icons['list']) : '⊞'}
                             </button>
                         ` : ''}
                         <button 
@@ -1153,8 +1153,8 @@ export class PromptEditor extends PlatformElement {
                             title="${this.fullscreenMode ? 'Выйти из полноэкранного режима' : 'Полноэкранный режим'}"
                         >
                             ${this.fullscreenMode 
-                                ? (this._icons['off-screen'] ? unsafeHTML(this._icons['off-screen']) : '⊠')
-                                : (this._icons['full-screen'] ? unsafeHTML(this._icons['full-screen']) : '⊡')
+                                ? (this._icons['minimize'] ? unsafeHTML(this._icons['minimize']) : '⊠')
+                                : (this._icons['fullscreen'] ? unsafeHTML(this._icons['fullscreen']) : '⊡')
                             }
                         </button>
                         ${this.showAiButton ? html`

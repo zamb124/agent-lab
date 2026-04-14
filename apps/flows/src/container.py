@@ -218,6 +218,18 @@ class FlowContainer(BaseContainer):
         )
 
     @lazy
+    def lara_action_engine(self):
+        from apps.flows.src.services.lara_action_engine import LaraActionEngine
+
+        return LaraActionEngine(redis_client=self.redis_client)
+
+    @lazy
+    def lara_facade(self):
+        from apps.flows.src.eval.lara_facade import LaraFacade
+
+        return LaraFacade(action_engine=self.lara_action_engine)
+
+    @lazy
     def flow_factory(self):
         from apps.flows.src.services import FlowFactory
         return FlowFactory(

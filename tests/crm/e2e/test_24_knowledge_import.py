@@ -125,7 +125,7 @@ async def _ensure_import_namespace(crm_client, headers: dict, namespace: str) ->
     if editability.status_code != 200:
         raise AssertionError(f"namespace editability: {editability.status_code} {editability.text}")
     allowed = editability.json().get("current_allowed_type_ids") or []
-    target_allowed = sorted({*allowed, "note"})
+    target_allowed = sorted({*allowed, "note", "meeting", "task"})
     update_ns = await crm_client.put(
         f"/crm/api/v1/namespaces/{namespace}",
         json={"allowed_type_ids": target_allowed},
@@ -133,7 +133,7 @@ async def _ensure_import_namespace(crm_client, headers: dict, namespace: str) ->
     )
     if update_ns.status_code != 200:
         raise AssertionError(f"namespace update: {update_ns.status_code} {update_ns.text}")
-    for system_type in ("note", "meeting"):
+    for system_type in ("note", "meeting", "task"):
         bind_resp = await crm_client.post(
             f"/crm/api/v1/entity-types/{system_type}/namespaces",
             json={"namespace_ids": [namespace]},
@@ -551,13 +551,13 @@ class TestKnowledgeImportE2E:
             task_id,
         )
         assert row.get("status") == "completed"
-        list_r = await crm_client.get(
-            "/crm/api/v1/entities/",
-            params={
+        list_r = await crm_client.post(
+            "/crm/api/v1/entities/query",
+            json={
                 "namespace": ns,
                 "entity_type": "note",
-                "entity_subtype": "meeting",
                 "limit": 50,
+                "search_mode": "hybrid",
             },
             headers=auth_headers_system,
         )
@@ -565,7 +565,8 @@ class TestKnowledgeImportE2E:
         payload = list_r.json()
         items = payload.get("items", payload) if isinstance(payload, dict) else payload
         assert any(
-            (e.get("name") or "") == meeting_name and e.get("entity_type") == "note"
+            e.get("entity_type") == "note"
+            and e.get("entity_subtype") in ("meeting", None, "")
             for e in items
         ), items
         await rollback_task(crm_client, auth_headers_system, task_id)

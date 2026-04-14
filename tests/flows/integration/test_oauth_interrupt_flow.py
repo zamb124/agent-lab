@@ -152,6 +152,13 @@ class TestOAuthInterruptFlow:
         _patch_oauth_config(monkeypatch)
         _disable_gdocs_mock(monkeypatch)
 
+        await credential_repository.delete_by_user_provider_service(
+            company_id="system",
+            user_id="test_user",
+            provider=IntegrationProvider.GOOGLE,
+            service="docs",
+        )
+
         mock_llm_with_queue([
             {
                 "type": "tool_call",

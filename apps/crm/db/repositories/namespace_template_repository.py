@@ -3,7 +3,7 @@
 from typing import Optional
 from uuid import uuid4
 
-from sqlalchemy import delete, select
+from sqlalchemy import delete, func, select
 
 from apps.crm.db.base import BaseCRMRepository, CRMDatabase
 from apps.crm.db.models import NamespaceTemplate, NamespaceTemplateType
@@ -35,6 +35,18 @@ class NamespaceTemplateRepository(BaseCRMRepository[NamespaceTemplate]):
             )
             result = await session.execute(stmt)
             return list(result.scalars().all())
+
+    async def count_all(self, company_id: Optional[str] = None) -> int:
+        effective_company_id = company_id or self._get_company_id()
+        async with self._db.session() as session:
+            stmt = select(func.count()).where(
+                NamespaceTemplate.company_id == effective_company_id
+            )
+            result = await session.execute(stmt)
+            value = result.scalar()
+            if value is None:
+                raise ValueError("Namespace templates count returned empty value")
+            return int(value)
 
     async def get_by_template_id(
         self,

@@ -560,18 +560,34 @@ class TestAnalysisDraftApplyPartialFailureCompensation:
         assert isinstance(draft_raw, dict)
         assert draft_raw.get("draft_version") == 1
 
+        ok_task_filter = {"field": "name", "op": "$eq", "value": ok_name}
+        ok_task_filter_types = await entity_service.resolve_filter_field_types(
+            namespace="default",
+            entity_type="task",
+            entity_subtype=None,
+            filters=ok_task_filter,
+        )
         ok_tasks, _, _ = await entity_service.list_entities(
             entity_type="task",
             namespace="default",
-            filters={"name": ok_name},
+            filters=ok_task_filter,
+            filter_field_types=ok_task_filter_types,
             limit=20,
         )
         assert ok_tasks == []
 
+        fail_contact_filter = {"field": "name", "op": "$eq", "value": fail_name}
+        fail_contact_filter_types = await entity_service.resolve_filter_field_types(
+            namespace="default",
+            entity_type="contact",
+            entity_subtype=None,
+            filters=fail_contact_filter,
+        )
         fail_contacts, _, _ = await entity_service.list_entities(
             entity_type="contact",
             namespace="default",
-            filters={"name": fail_name},
+            filters=fail_contact_filter,
+            filter_field_types=fail_contact_filter_types,
             limit=20,
         )
         assert fail_contacts == []

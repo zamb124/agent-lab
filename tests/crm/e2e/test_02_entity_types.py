@@ -200,6 +200,16 @@ class TestEntityTypes:
         namespace = response.json()
         assert namespace["name"] == f"sales_{unique_id}"
 
+        namespace_types_response = await crm_client.get(
+            f"/crm/api/v1/entity-types/by-namespace/sales_{unique_id}",
+            headers=auth_headers_system,
+        )
+        assert namespace_types_response.status_code == 200
+        namespace_type_ids = {
+            item["type_id"] for item in namespace_types_response.json()["items"]
+        }
+        assert "note" in namespace_type_ids
+
     @pytest.mark.asyncio
     async def test_list_entity_types_by_namespace(self, crm_client, unique_id, auth_headers_system):
         namespace_name = f"dev_{unique_id}"

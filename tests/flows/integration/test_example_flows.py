@@ -185,7 +185,7 @@ class TestExampleReactAgent:
         
         main_agent = await container.node_repository.get("example_main_agent")
         assert main_agent is not None, "example_main_agent не найден"
-        assert main_agent.name == "Главная нода примера"
+        assert main_agent.name == "Main Node"
         assert "calculator" in [t.tool_id for t in main_agent.tools]
         assert "example_subflow" in [t.tool_id for t in main_agent.tools]
 

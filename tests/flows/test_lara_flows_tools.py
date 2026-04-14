@@ -121,6 +121,9 @@ async def test_flows_patch_node_confirm_first_apply_persists_flow(
     pending_events = getattr(state, "ui_events_pending")
     assert pending_events[0]["type"] == "action_previewed"
     assert pending_events[0]["payload"]["changes"]["prompt"] == new_prompt
+    preview_buttons = pending_events[0]["payload"]["blocks"][1]["buttons"]
+    assert preview_buttons[0]["action_kind"] == "apply"
+    assert preview_buttons[0]["action_id"] == "flows.node.patch.apply"
 
     apply_raw = await flows_patch_node._run_impl(
         {
@@ -173,6 +176,9 @@ async def test_flows_patch_flow_propose_does_not_persist(
     pending_events = getattr(state, "ui_events_pending")
     assert pending_events[0]["type"] == "action_previewed"
     assert pending_events[0]["payload"]["flow_changes"]["name"] == proposed_name
+    preview_buttons = pending_events[0]["payload"]["blocks"][1]["buttons"]
+    assert preview_buttons[0]["action_kind"] == "apply"
+    assert preview_buttons[0]["action_id"] == "flows.flow.patch.apply"
 
     flow_resp = await flows_client.get(f"/flows/api/v1/flows/{flow_id}", headers=auth_headers_system)
     assert flow_resp.status_code == 200, flow_resp.text

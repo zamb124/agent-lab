@@ -240,7 +240,7 @@ class TelegramDevPolling:
         try:
             # Ключи company:{subdomain}:...
             all_data = await container.flow_repository._storage._get_all_by_prefix_and_table(
-                "company:", "flows", 1000
+                "company:", "storage", 1000
             )
             
             subdomains = set()

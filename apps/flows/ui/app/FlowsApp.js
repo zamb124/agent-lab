@@ -128,8 +128,8 @@ export class FlowsApp extends PlatformApp {
                 void this._handleLaraPatchApplied(payload);
                 return;
             }
-            if (eventType === 'action_previewed') {
-                this._emitLaraEvent('action_previewed', payload);
+            if (eventType === 'action_invoked') {
+                this._handleLaraActionInvoked(payload);
                 return;
             }
             if (eventType === 'navigate') {
@@ -137,11 +137,7 @@ export class FlowsApp extends PlatformApp {
             }
         };
         this._laraActionHandlers = {
-            'assistant:context_requested': (payload) => this._emitLaraEvent('context_requested', payload),
-            'assistant:navigate': (payload) => this._emitLaraEvent('navigate', payload),
-            'assistant:action_previewed': (payload) => this._emitLaraEvent('action_previewed', payload),
-            'assistant:action_applied': (payload) => this._emitLaraEvent('action_applied', payload),
-            'assistant:action_apply': (payload) => this._emitLaraEvent('action_apply_requested', payload),
+            'assistant:action_invoked': (payload) => this._handleLaraActionInvoked(payload),
         };
     }
 
@@ -160,11 +156,14 @@ export class FlowsApp extends PlatformApp {
     }
 
     _emitLaraEvent(type, payload = {}) {
+        const eventId = `${Date.now()}-${Math.random().toString(16).slice(2)}`;
         const detail = {
+            id: eventId,
             type,
-            version: '1.0',
+            version: '1.0.0',
             payload,
             source: 'flows_app',
+            correlation_id: null,
             timestamp: new Date().toISOString(),
         };
         this.dispatchEvent(
@@ -262,6 +261,25 @@ export class FlowsApp extends PlatformApp {
 
     _setLaraInvocationContext(options = {}) {
         this._laraInvocationContext = this._buildLaraFlowsContext(options);
+    }
+
+    _handleLaraActionInvoked(payload = {}) {
+        const actionKindRaw = payload.action_kind;
+        const actionKind = typeof actionKindRaw === 'string' ? actionKindRaw.trim() : '';
+        if (!actionKind) {
+            throw new Error('action_kind is required for action_invoked');
+        }
+        if (actionKind === 'navigate') {
+            const navigatePayload =
+                payload.context && typeof payload.context === 'object'
+                    ? payload.context
+                    : payload.arguments && typeof payload.arguments === 'object'
+                      ? payload.arguments
+                      : {};
+            this._handleLaraNavigate(navigatePayload);
+            return;
+        }
+        this._emitLaraEvent('action_invoked', payload);
     }
 
     _laraEmbedContextVariables = async () => {

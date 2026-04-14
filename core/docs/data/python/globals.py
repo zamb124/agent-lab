@@ -235,8 +235,8 @@ GLOBALS: List[Dict[str, Any]] = [
         "type": "function",
         "doc": (
             "Поставить одно UI-событие в очередь state для стрима:\n"
-            "push_ui_event(state, 'action_applied', {'flow_id': 'f1', 'changes': {...}}, "
-            "event_id='evt-1', version='2.0', source='assistant', correlation_id='corr-1')\n"
+            "push_ui_event(state, 'action_invoked', {'action_id': 'flows.node.patch.apply', 'action_kind': 'apply'}, "
+            "event_id='evt-1', version='1.0.0', source='assistant', correlation_id='corr-1')\n"
             "Событие уходит в A2A как artifact.name='ui_event'."
         ),
         "perspectives": ["editor", "flow", "tool", "node"],
@@ -248,7 +248,7 @@ GLOBALS: List[Dict[str, Any]] = [
         "doc": (
             "Поставить несколько UI-событий (список dict):\n"
             "push_ui_events(state, [\n"
-            "  {'type': 'action_previewed', 'payload': {...}, 'version': '2.0'},\n"
+            "  {'type': 'action_previewed', 'payload': {...}, 'version': '1.0.0'},\n"
             "  {'type': 'navigate', 'payload': {...}},\n"
             "])"
         ),
@@ -485,6 +485,18 @@ GLOBALS: List[Dict[str, Any]] = [
         ),
         "perspectives": ["editor", "flow", "tool", "node"],
         "tags": ["operator", "hitl", "platform"],
+    },
+    {
+        "name": "get_lara_facade",
+        "type": "function",
+        "doc": (
+            "Фасад confirm-first операций Lara:\n"
+            "facade = get_lara_facade()\n"
+            "preview = await facade.preview_node_patch(flow_id=..., node_id=..., patch=..., skill_id='base', state=state, idempotency_key=None)\n"
+            "applied = await facade.apply_node_patch(pending_action_id=..., state=state, idempotency_key=None)"
+        ),
+        "perspectives": ["editor", "flow", "tool", "node"],
+        "tags": ["lara", "assistant", "platform"],
     },
     {
         "name": "BaseTool",

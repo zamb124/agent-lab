@@ -75,6 +75,12 @@ export function mergeBlocksFromToolResult(existing, toolResult) {
     if (!incoming || incoming.length === 0) {
         return existing || [];
     }
+    const displayOnly = incoming.filter(
+        (block) => block && typeof block === 'object' && block.type !== 'actions',
+    );
+    if (displayOnly.length === 0) {
+        return existing || [];
+    }
     const base = Array.isArray(existing) ? [...existing] : [];
-    return base.concat(incoming);
+    return base.concat(displayOnly);
 }

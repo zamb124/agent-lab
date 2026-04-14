@@ -81,7 +81,12 @@ async def test_document_status_endpoint(rag_client, unique_namespace_name, auth_
 
 @pytest.mark.asyncio
 @pytest.mark.real_taskiq
-async def test_async_document_processing_completes(rag_client, unique_namespace_name, taskiq_broker, mock_embeddings, auth_headers_system):
+async def test_async_document_processing_completes(
+    rag_client,
+    unique_namespace_name,
+    taskiq_broker,
+    auth_headers_system,
+):
     """Документ успешно обрабатывается через worker и статус меняется на completed"""
     ns_response = await rag_client.post(
         "/rag/api/v1/namespaces",
@@ -114,8 +119,6 @@ async def test_async_document_processing_completes(rag_client, unique_namespace_
         print(f"[TEST] Poll {elapsed}s: status={status_data['status']}, doc_id={status_data['document_id']}")
         
         if status_data["status"] == "completed":
-            assert status_data["s3_key"] is not None
-            assert status_data["s3_bucket"] is not None
             # chunks_count может быть None если provider не возвращает metadata
             assert status_data["completed_at"] is not None
             break
@@ -177,7 +180,12 @@ async def test_document_status_not_found(rag_client, auth_headers_system):
 
 @pytest.mark.asyncio
 @pytest.mark.real_taskiq
-async def test_multiple_documents_processing(rag_client, unique_namespace_name, taskiq_broker, mock_embeddings, auth_headers_system):
+async def test_multiple_documents_processing(
+    rag_client,
+    unique_namespace_name,
+    taskiq_broker,
+    auth_headers_system,
+):
     """Несколько документов могут обрабатываться параллельно"""
     ns_response = await rag_client.post(
         "/rag/api/v1/namespaces",

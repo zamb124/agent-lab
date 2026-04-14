@@ -4,7 +4,6 @@
 
 import uuid
 from abc import ABC, abstractmethod
-from datetime import datetime, timezone
 from typing import TYPE_CHECKING, Any, AsyncIterator, Dict, List, Optional, Union
 
 from a2a.types import (
@@ -330,7 +329,8 @@ class BaseEmitter(ABC):
         payload: Dict[str, Any],
         *,
         event_id: Optional[str] = None,
-        version: str = "1.0",
+        version: str = "1.0.0",
+        timestamp: str,
         source: str = "assistant",
         correlation_id: Optional[str] = None,
     ) -> None:
@@ -346,7 +346,7 @@ class BaseEmitter(ABC):
                         "type": event_type,
                         "payload": payload,
                         "version": version,
-                        "timestamp": datetime.now(timezone.utc).isoformat(),
+                        "timestamp": timestamp,
                         "source": source,
                         "correlation_id": correlation_id,
                     }

@@ -155,6 +155,28 @@ class BaseChannel(ABC):
             return context.metadata.get("grps", []) or []
         
         return getattr(context, "user_groups", []) or []
+
+    async def _normalize_request_variables(self, request_variables: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Нормализует metadata.variables от клиента перед merge в runtime_flow.variables.
+
+        Контракт:
+        - резолвим только верхнеуровневые строковые ссылки "@var:*";
+        - вложенные структуры считаем данными UI-контекста и не интерпретируем как переменные.
+        """
+        normalized: Dict[str, Any] = dict(request_variables)
+        if "target_skill_id" not in normalized and "skill_id" in normalized:
+            normalized["target_skill_id"] = normalized["skill_id"]
+
+        container = get_container()
+        resolved: Dict[str, Any] = {}
+        for key, value in normalized.items():
+            raw_value = value["value"] if isinstance(value, dict) and "value" in value else value
+            if isinstance(raw_value, str) and raw_value.startswith("@var:"):
+                resolved[key] = await container.variables_service.resolve(raw_value)
+            else:
+                resolved[key] = raw_value
+        return resolved
     
     async def check_permissions(
         self,
@@ -448,20 +470,7 @@ class BaseChannel(ABC):
             # Переопределяем variables из metadata если переданы
             request_variables = params.metadata.get("variables") if params.metadata else None
             if request_variables:
-                if "target_skill_id" not in request_variables and "skill_id" in request_variables:
-                    request_variables["target_skill_id"] = request_variables["skill_id"]
-
-                # Извлекаем значения из переданных variables
-                override_vars = {}
-                for key, value in request_variables.items():
-                    if isinstance(value, dict) and "value" in value:
-                        override_vars[key] = value["value"]
-                    else:
-                        override_vars[key] = value
-                
-                # Резолвим @var:key ссылки в переопределенных переменных
-                # VariablesService.resolve() рекурсивно резолвит словарь
-                resolved_override_vars = await container.variables_service.resolve(override_vars)
+                resolved_override_vars = await self._normalize_request_variables(request_variables)
                 # Извлекаем значения если они были в FlowVariableConfig формате
                 final_override_vars = {}
                 for key, value in resolved_override_vars.items():

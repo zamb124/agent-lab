@@ -29,6 +29,7 @@ from apps.flows.src.state.interrupt_manager import InterruptManager
 from core.state import ExecutionState
 from core.state.interrupt import OperatorTaskInterrupt
 from apps.flows.src.streaming import Emitter
+from apps.flows.src.streaming.ui_events import emit_pending_ui_events
 from apps.flows.src.mapping import MappingResolver
 from core.logging import get_logger
 from core.tracing import get_tracer
@@ -97,30 +98,7 @@ class Flow:
         self._join_required = self._build_join_required_predecessors()
 
     async def _emit_pending_ui_events(self, emitter: Emitter, state: ExecutionState) -> None:
-        raw_events = getattr(state, "ui_events_pending", None)
-        if raw_events is None:
-            return
-        if not isinstance(raw_events, list):
-            raise ValueError("state.ui_events_pending must be a list")
-        events = list(raw_events)
-        setattr(state, "ui_events_pending", [])
-        for event in events:
-            event_type = event.get("type")
-            payload = event.get("payload")
-            if not isinstance(event_type, str) or not isinstance(payload, dict):
-                continue
-            event_id = event.get("id")
-            version = event.get("version", "1.0")
-            source = event.get("source", "assistant")
-            correlation_id = event.get("correlation_id")
-            await emitter.emit_ui_event(
-                event_type=event_type,
-                payload=payload,
-                event_id=event_id if isinstance(event_id, str) else None,
-                version=version if isinstance(version, str) else "1.0",
-                source=source if isinstance(source, str) else "assistant",
-                correlation_id=correlation_id if isinstance(correlation_id, str) else None,
-            )
+        await emit_pending_ui_events(emitter=emitter, state=state)
 
     def _normalize_edges(self, edges: List[Any]) -> List[Dict[str, Any]]:
         """Нормализует edges в list of dicts."""

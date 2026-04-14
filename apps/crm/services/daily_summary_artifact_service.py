@@ -77,7 +77,7 @@ class DailySummaryArtifactService:
             raw = await client.download_bytes(key=key)
         except ClientError as exc:
             code = exc.response.get("Error", {}).get("Code", "")
-            if code in ("404", "NoSuchKey", "NotFound"):
+            if code in ("404", "NoSuchKey", "NotFound", "NoSuchBucket"):
                 return None
             raise
         finally:
@@ -122,7 +122,7 @@ class DailySummaryArtifactService:
             raw = await client.download_bytes(key=key)
         except ClientError as exc:
             code = exc.response.get("Error", {}).get("Code", "")
-            if code in ("404", "NoSuchKey", "NotFound"):
+            if code in ("404", "NoSuchKey", "NotFound", "NoSuchBucket"):
                 return None
             raise
         finally:

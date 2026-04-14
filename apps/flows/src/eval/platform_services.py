@@ -10,6 +10,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
+    from apps.flows.src.eval.lara_facade import LaraFacade
     from apps.flows.src.services.operator_handoff_service import OperatorHandoffService
     from apps.flows.src.services.schedule_service import ScheduleService
     from core.integrations.oauth_service import OAuthService
@@ -32,6 +33,12 @@ def get_oauth_service() -> "OAuthService":
     from apps.flows.src.container import get_container
 
     return get_container().oauth_service
+
+
+def get_lara_facade() -> "LaraFacade":
+    from apps.flows.src.container import get_container
+
+    return get_container().lara_facade
 
 
 async def get_file_bytes(file_id: str) -> bytes:

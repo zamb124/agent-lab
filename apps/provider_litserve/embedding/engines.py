@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import logging
+import time
 from typing import Any
 
 import numpy as np
@@ -15,6 +17,8 @@ from apps.provider_litserve.openai_server_contracts import (
     normalize_embedding_inputs,
 )
 from apps.provider_litserve.runtime_models import allowed_api_model_ids, resolve_hf_model_id
+
+logger = logging.getLogger(__name__)
 
 
 def parse_embedding_body(raw: Any) -> dict[str, Any]:
@@ -36,7 +40,7 @@ class LocalEmbeddingEngine:
         self._device = "cpu"
 
     def setup(self, device: str | None) -> None:
-        """Запоминает устройство; веса подгружаются при первом ``embed`` (startup без sentence-transformers)."""
+        """Запоминает устройство для последующей загрузки модели."""
         if device:
             self._device = device
 
@@ -49,7 +53,10 @@ class LocalEmbeddingEngine:
             raise RuntimeError(
                 "Локальный эмбеддер: установите зависимости (uv sync --group reranker-model)"
             ) from e
+        logger.info("Loading SentenceTransformer model '%s' on '%s'", hf_model_id, self._device)
+        started_at = time.monotonic()
         model = SentenceTransformer(hf_model_id, device=self._device)
+        logger.info("Model '%s' loaded in %.2fs", hf_model_id, time.monotonic() - started_at)
         self._models[hf_model_id] = model
         return model
 
@@ -83,7 +90,14 @@ class LocalEmbeddingEngine:
             )
 
         model = self._ensure_model(hf_model_id)
+        started_at = time.monotonic()
         raw = model.encode(texts, normalize_embeddings=True)
+        logger.info(
+            "Embedding generated: model='%s', texts=%d, duration=%.2fs",
+            canonical,
+            len(texts),
+            time.monotonic() - started_at,
+        )
         if not isinstance(raw, np.ndarray):
             raw = np.asarray(raw)
         vectors = [raw[i].tolist() for i in range(raw.shape[0])]

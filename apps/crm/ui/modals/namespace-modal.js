@@ -135,8 +135,13 @@ export class NamespaceModal extends PlatformModal {
         return value || 'folder';
     }
 
+    _normalizedName() {
+        return this._name.trim();
+    }
+
     async _onSave() {
-        if (!this._name.trim()) {
+        const namespaceName = this._normalizedName();
+        if (!namespaceName) {
             this.error(this.i18n.t('namespace_modal.err_name_required'));
             return;
         }
@@ -146,14 +151,14 @@ export class NamespaceModal extends PlatformModal {
             const crmApi = this.services.get('crmApi');
             await CRMStore.createNamespace(
                 crmApi,
-                this._name.trim(),
+                namespaceName,
                 this._description.trim() || null,
                 this._templateId
             );
 
             this.success(this.i18n.t('namespace_modal.success_created'));
             this.dispatchEvent(new CustomEvent('saved', {
-                detail: { name: this._name.trim() },
+                detail: { name: namespaceName },
                 bubbles: true,
                 composed: true,
             }));
@@ -163,7 +168,6 @@ export class NamespaceModal extends PlatformModal {
                 ? error.message
                 : this.i18n.t('namespace_modal.err_create');
             this.error(message);
-            throw error;
         } finally {
             this._saving = false;
         }
@@ -229,7 +233,7 @@ export class NamespaceModal extends PlatformModal {
             : this.i18n.t('namespace_modal.submit');
         return this._renderHeaderSaveIcon({
             onClick: () => this._onSave(),
-            disabled: this._saving || !this._name.trim(),
+            disabled: this._saving || !this._normalizedName(),
             title,
         });
     }
