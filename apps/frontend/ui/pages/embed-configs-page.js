@@ -42,6 +42,12 @@ export class EmbedConfigsPage extends PlatformElement {
                 border-top: 1px solid var(--border-subtle);
                 color: var(--text-primary);
             }
+
+            .mono {
+                font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace);
+                font-size: var(--text-xs);
+                white-space: nowrap;
+            }
             
             .status-badge {
                 padding: var(--space-1) var(--space-3);
@@ -256,6 +262,7 @@ export class EmbedConfigsPage extends PlatformElement {
                     <thead>
                         <tr>
                             <th>${td('embed_page.col_name')}</th>
+                            <th>${td('embed_page.col_embed_id')}</th>
                             <th>${td('embed_page.col_flow')}</th>
                             <th>${td('embed_page.col_skill')}</th>
                             <th>${td('embed_page.col_status')}</th>
@@ -267,6 +274,7 @@ export class EmbedConfigsPage extends PlatformElement {
                         ${configs.map((config) => html`
                             <tr>
                                 <td>${config.name}</td>
+                                <td class="mono">${config.embed_id}</td>
                                 <td>${config.flow_id}</td>
                                 <td>${config.skill_id}</td>
                                 <td>

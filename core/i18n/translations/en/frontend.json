@@ -479,6 +479,7 @@
     "empty_title": "No widgets",
     "empty_description": "Create your first embeddable widget",
     "col_name": "Name",
+    "col_embed_id": "Embed ID",
     "col_flow": "Flow",
     "col_skill": "Skill",
     "col_status": "Status",

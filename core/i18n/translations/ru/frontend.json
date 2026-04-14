@@ -479,6 +479,7 @@
     "empty_title": "Нет виджетов",
     "empty_description": "Создайте первый встраиваемый виджет",
     "col_name": "Название",
+    "col_embed_id": "Embed ID",
     "col_flow": "Flow",
     "col_skill": "Skill",
     "col_status": "Статус",

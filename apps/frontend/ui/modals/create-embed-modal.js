@@ -178,7 +178,7 @@ export class CreateEmbedModal extends PlatformModal {
     setEditConfig(config) {
         this._editConfig = config;
         this._name = config.name;
-        this._flowId = config.flow_id;
+        this._flowId = String(config.flow_id ?? config.flowId ?? '').trim();
         this._skillId = config.skill_id || 'default';
         this._position = config.position || 'bottom-right';
         this._theme = config.theme || 'dark';
@@ -221,8 +221,38 @@ export class CreateEmbedModal extends PlatformModal {
         this.requestUpdate();
     }
 
+    _getFlowId(flow) {
+        if (!flow || typeof flow !== 'object') {
+            return '';
+        }
+        if (typeof flow.flow_id === 'string') {
+            return flow.flow_id.trim();
+        }
+        if (typeof flow.id === 'string') {
+            return flow.id.trim();
+        }
+        return '';
+    }
+
     _flowsList() {
-        const flows = Array.isArray(this._flows) ? [...this._flows] : [];
+        const flows = (Array.isArray(this._flows) ? this._flows : [])
+            .map((flow) => {
+                const flowId = this._getFlowId(flow);
+                if (!flowId) {
+                    return null;
+                }
+                const flowName = typeof flow.name === 'string' && flow.name.trim() ? flow.name.trim() : flowId;
+                const flowType = typeof flow.type === 'string' && flow.type.trim()
+                    ? flow.type.trim().toLowerCase()
+                    : 'external';
+                return {
+                    ...flow,
+                    flow_id: flowId,
+                    name: flowName,
+                    type: flowType,
+                };
+            })
+            .filter((flow) => flow !== null);
         const currentFlowId = this._flowId?.trim();
         if (!currentFlowId) {
             return flows;
@@ -243,7 +273,11 @@ export class CreateEmbedModal extends PlatformModal {
     }
 
     _selectedFlow() {
-        return this._flowsList().find((f) => f.flow_id === this._flowId) ?? null;
+        const currentFlowId = this._flowId?.trim();
+        if (!currentFlowId) {
+            return null;
+        }
+        return this._flowsList().find((f) => f.flow_id === currentFlowId) ?? null;
     }
 
     _skillChoices() {
@@ -255,7 +289,7 @@ export class CreateEmbedModal extends PlatformModal {
     }
 
     _onFlowChange(e) {
-        this._flowId = e.target.value;
+        this._flowId = String(e.target.value || '').trim();
         const flow = this._selectedFlow();
         if (!flow || flow.type !== 'local') {
             this._skillId = 'default';
