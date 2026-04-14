@@ -1,14 +1,13 @@
-import { LitElement, html, css, nothing } from 'lit';
+import { LitElement, html, css, nothing } from './lit-shim.js';
 import { embedChatLabelsForLang } from './embed-chat-default-labels.js';
 import { readEmbedChatUrlParams, applyEmbedChatDrawerSizeVars } from './embed-chat-url-params.js';
 import { resolveEmbedChatTheme } from './embed-chat-theme.js';
 import { nextModalLayerZIndex } from '../utils/modal-z-stack.js';
-import '@platform/lib/components/platform-icon.js';
 import './platform-embed-chat.js';
 
 /**
  * Панель + FAB: только Lit + platform-embed-chat. Без PlatformElement;
- * кнопки шапки — platform-icon; иконка FAB — та же разметка, что в core/assets/icons/ai.svg (встроена, без отдельного fetch).
+ * кнопки шапки и иконка FAB встроены SVG, без внешнего fetch.
  * Переключение: клик по FAB или CustomEvent `humanitec-embed-chat-toggle` на window.
  * Тема: атрибут theme="light"|"dark"|"auto" (по умолчанию auto — как data-theme на documentElement).
  * Параметры URL страницы: см. embed-chat-url-params.js (embed_theme, embed_lang, embed_width, embed_assistant_name, …).
@@ -27,6 +26,8 @@ export class PlatformEmbedChatDrawer extends LitElement {
         open: { type: Boolean, reflect: true },
         /** light | dark | auto — auto синхронизируется с document.documentElement[data-theme] и theme-change */
         theme: { type: String },
+        /** Показывать встроенную FAB-кнопку запуска чата */
+        showLauncher: { type: Boolean, attribute: 'show-launcher' },
         /** Поверх дефолтных строк (embed-chat-default-labels) */
         labels: { type: Object },
         getAuthToken: { type: Object },
@@ -251,8 +252,7 @@ export class PlatformEmbedChatDrawer extends LitElement {
             --embed-drawer-close-hover: rgba(28, 31, 46, 0.08);
         }
 
-        .close-btn svg,
-        .close-btn platform-icon {
+        .close-btn svg {
             width: 18px;
             height: 18px;
             display: block;
@@ -327,6 +327,7 @@ export class PlatformEmbedChatDrawer extends LitElement {
         this.locale = '';
         this.open = false;
         this.theme = 'auto';
+        this.showLauncher = true;
         this.labels = {};
         this.getAuthToken = undefined;
         this.getExtraMetadataVariables = undefined;
@@ -823,12 +824,13 @@ export class PlatformEmbedChatDrawer extends LitElement {
         const fabAria = this.open ? L.fab_aria_close : this._fabOpenAriaLabel(L);
         const embedTheme = resolveEmbedChatTheme(this.theme);
         const fsLabel = this.panelMaximized ? L.panel_exit_fullscreen : L.panel_fullscreen;
+        const showLauncherButton = this.showLauncher && !this.open;
         const panelHeadClass = `panel-head ${this._isPanelDraggable() ? 'panel-head--draggable' : ''} ${
             this._panelDragActive ? 'panel-head--dragging' : ''
         }`;
 
         return html`
-            ${!this.open
+            ${showLauncherButton
                 ? html`
                       <button
                           type="button"
@@ -893,7 +895,14 @@ export class PlatformEmbedChatDrawer extends LitElement {
                             aria-label=${L.new_chat}
                             @click=${this._onNewChat}
                         >
-                            <platform-icon name="edit" size="18" aria-hidden="true"></platform-icon>
+                            <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                                <path
+                                    d="M4 20h4l10-10-4-4L4 16v4Z"
+                                    stroke="currentColor"
+                                    stroke-width="2"
+                                    stroke-linejoin="round"
+                                />
+                            </svg>
                         </button>
                         <button
                             type="button"
@@ -903,8 +912,24 @@ export class PlatformEmbedChatDrawer extends LitElement {
                             @click=${this._togglePanelFullscreen}
                         >
                             ${this.panelMaximized
-                                ? html`<platform-icon name="minimize" size="18" aria-hidden="true"></platform-icon>`
-                                : html`<platform-icon name="fullscreen" size="18" aria-hidden="true"></platform-icon>`}
+                                ? html`<svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                                      <path
+                                          d="M8 3H3v5M16 3h5v5M8 21H3v-5M16 21h5v-5"
+                                          stroke="currentColor"
+                                          stroke-width="2"
+                                          stroke-linecap="round"
+                                          stroke-linejoin="round"
+                                      />
+                                  </svg>`
+                                : html`<svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                                      <path
+                                          d="M9 3H3v6M15 3h6v6M9 21H3v-6M15 21h6v-6"
+                                          stroke="currentColor"
+                                          stroke-width="2"
+                                          stroke-linecap="round"
+                                          stroke-linejoin="round"
+                                      />
+                                  </svg>`}
                         </button>
                         <button
                             type="button"
@@ -913,7 +938,14 @@ export class PlatformEmbedChatDrawer extends LitElement {
                             aria-label=${L.panel_minimize}
                             @click=${this._minimize}
                         >
-                            <platform-icon name="minimize" size="18" aria-hidden="true"></platform-icon>
+                            <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                                <path
+                                    d="M5 12h14"
+                                    stroke="currentColor"
+                                    stroke-width="2"
+                                    stroke-linecap="round"
+                                />
+                            </svg>
                         </button>
                     </div>
                 </div>

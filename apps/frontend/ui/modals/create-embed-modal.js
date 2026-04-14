@@ -169,6 +169,9 @@ export class CreateEmbedModal extends PlatformModal {
         this._flowsLoading = true;
         this._position = 'bottom-right';
         this._theme = 'dark';
+        this._showLauncher = true;
+        this._assistantTitle = '';
+        this._interfaceLocale = 'auto';
         this._editConfig = null;
     }
 
@@ -179,6 +182,9 @@ export class CreateEmbedModal extends PlatformModal {
         this._skillId = config.skill_id || 'default';
         this._position = config.position || 'bottom-right';
         this._theme = config.theme || 'dark';
+        this._showLauncher = config.show_launcher !== false;
+        this._assistantTitle = config.assistant_title || '';
+        this._interfaceLocale = config.interface_locale || 'auto';
         this.requestUpdate();
     }
 
@@ -216,7 +222,24 @@ export class CreateEmbedModal extends PlatformModal {
     }
 
     _flowsList() {
-        return Array.isArray(this._flows) ? this._flows : [];
+        const flows = Array.isArray(this._flows) ? [...this._flows] : [];
+        const currentFlowId = this._flowId?.trim();
+        if (!currentFlowId) {
+            return flows;
+        }
+        const alreadyPresent = flows.some((f) => f.flow_id === currentFlowId);
+        if (alreadyPresent) {
+            return flows;
+        }
+        if (this._isEditMode) {
+            flows.push({
+                flow_id: currentFlowId,
+                name: currentFlowId,
+                type: 'external',
+                skills: {},
+            });
+        }
+        return flows;
     }
 
     _selectedFlow() {
@@ -288,6 +311,9 @@ export class CreateEmbedModal extends PlatformModal {
             skill_id: skillId,
             position: this._position,
             theme: this._theme,
+            show_launcher: this._showLauncher,
+            assistant_title: this._assistantTitle.trim() || null,
+            interface_locale: this._interfaceLocale,
             status: 'active',
         };
 
@@ -399,6 +425,35 @@ export class CreateEmbedModal extends PlatformModal {
                       : html``}
             </div>
 
+            <div class="flow-skill-row flow-skill-row--split">
+                <div class="form-group">
+                    <label class="form-label">${td('embed_create_modal.label_assistant_title')}</label>
+                    <input
+                        class="form-input"
+                        type="text"
+                        placeholder=${td('embed_create_modal.placeholder_assistant_title')}
+                        .value=${this._assistantTitle}
+                        @input=${(e) => { this._assistantTitle = e.target.value; this.requestUpdate(); }}
+                        ?disabled=${this._loading}
+                    />
+                    <div class="form-hint">${td('embed_create_modal.assistant_title_hint')}</div>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">${td('embed_create_modal.label_interface_locale')}</label>
+                    <select
+                        class="form-select"
+                        .value=${this._interfaceLocale}
+                        @change=${(e) => { this._interfaceLocale = e.target.value; this.requestUpdate(); }}
+                        ?disabled=${this._loading}
+                    >
+                        <option value="auto">${td('embed_create_modal.locale_auto')}</option>
+                        <option value="ru">${td('embed_create_modal.locale_ru')}</option>
+                        <option value="en">${td('embed_create_modal.locale_en')}</option>
+                    </select>
+                    <div class="form-hint">${td('embed_create_modal.interface_locale_hint')}</div>
+                </div>
+            </div>
+
             <div class="form-group">
                 <label class="form-label">${td('embed_create_modal.position_label')}</label>
                 <div class="position-options">
@@ -418,6 +473,18 @@ export class CreateEmbedModal extends PlatformModal {
                         ${this._renderThemeChip('auto', 'theme-auto', td('embed_create_modal.theme_auto'))}
                     </div>
                 </div>
+            </div>
+            <div class="form-group">
+                <label class="form-label">
+                    <input
+                        type="checkbox"
+                        .checked=${this._showLauncher}
+                        @change=${(e) => { this._showLauncher = e.target.checked; this.requestUpdate(); }}
+                        ?disabled=${this._loading}
+                    />
+                    ${td('embed_create_modal.label_show_launcher')}
+                </label>
+                <div class="form-hint">${td('embed_create_modal.show_launcher_hint')}</div>
             </div>
         `;
     }

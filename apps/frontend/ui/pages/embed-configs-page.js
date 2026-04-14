@@ -130,6 +130,15 @@ export class EmbedConfigsPage extends PlatformElement {
                 font-size: var(--text-base);
                 margin: 0 0 var(--space-6) 0;
             }
+
+            .wizard-note {
+                margin-bottom: var(--space-4);
+                padding: var(--space-3) var(--space-4);
+                border-radius: var(--radius-md);
+                background: var(--glass-tint-subtle);
+                color: var(--text-secondary);
+                font-size: var(--text-sm);
+            }
         `
     ];
 
@@ -224,6 +233,7 @@ export class EmbedConfigsPage extends PlatformElement {
                 <page-header title=${td('embed_page.title')}>
                     <button slot="actions" class="primary-button" @click=${this._handleCreate}>${td('embed_page.create')}</button>
                 </page-header>
+                <div class="wizard-note">${td('embed_page.external_wizard_note')}</div>
                 <div class="empty-state">
                     <div class="empty-icon">E</div>
                     <h2 class="empty-title">${td('embed_page.empty_title')}</h2>
@@ -239,6 +249,7 @@ export class EmbedConfigsPage extends PlatformElement {
             <page-header title=${td('embed_page.title')}>
                 <button slot="actions" class="primary-button" @click=${this._handleCreate}>${td('embed_page.create')}</button>
             </page-header>
+            <div class="wizard-note">${td('embed_page.external_wizard_note')}</div>
             
             <div class="configs-table">
                 <table>

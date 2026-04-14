@@ -1,4 +1,4 @@
-import { LitElement, html, css } from 'lit';
+import { LitElement, html, css } from './lit-shim.js';
 import { getEmbedBlockEntry } from './block-registry.js';
 import './blocks/embed-ui-fallback.js';
 

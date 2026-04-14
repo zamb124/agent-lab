@@ -3,7 +3,9 @@
 """
 
 import logging
+import hashlib
 import uuid
+from datetime import datetime, timezone, timedelta
 from typing import Optional
 from fastapi import Request, HTTPException
 from fastapi.responses import RedirectResponse, JSONResponse
@@ -13,7 +15,7 @@ from core.context import set_context, clear_context
 from core.config import get_settings
 from core.models.identity_models import User, Company
 from core.models.context_models import Context, Language
-from core.utils.tokens import get_token_service, TokenData
+from core.utils.tokens import get_token_service, TokenData, TokenType
 
 from .route_config import (
     RouteMatcher,
@@ -28,6 +30,7 @@ from .platform_handlers import get_platform_handler
 logger = logging.getLogger(__name__)
 
 TRACE_ID_HEADER = "X-Trace-Id"
+EMBED_SESSION_TOKEN_REQUIRED_SCOPES = {"agents:read", "agents:write"}
 
 
 class CompanyCreationRequired(Exception):
@@ -104,7 +107,7 @@ class AuthMiddleware(BaseHTTPMiddleware):
             )
             
             # Сохраняем token_data для эндпоинтов типа /auth/me
-            token_data, _ = self._extract_token(request)
+            token_data, _ = await self._extract_token(request, container)
             
             set_context(context)
             request.state.context = context
@@ -145,7 +148,7 @@ class AuthMiddleware(BaseHTTPMiddleware):
         # Анонимный контекст (но пробуем загрузить пользователя если токен есть)
         if rule.context_type == "anonymous":
             company = await company_resolver.resolve(request, context_type="anonymous")
-            token_data, auth_token = self._extract_token(request)
+            token_data, auth_token = await self._extract_token(request, container)
             user = await self._get_user(container, token_data) if token_data else None
             return await context_factory.create(
                 request, "anonymous", company, user, token_data,
@@ -153,14 +156,16 @@ class AuthMiddleware(BaseHTTPMiddleware):
             )
         
         # Авторизованный контекст
-        token_data, auth_token = self._extract_token(request)
+        token_data, auth_token = await self._extract_token(request, container)
         
         if rule.auth_required and not token_data:
             raise HTTPException(status_code=401, detail="Unauthorized")
         
         user = await self._get_user(container, token_data) if token_data else None
         
-        if rule.auth_required and not user:
+        token_type = token_data.token_type if token_data else None
+        is_embed_session = token_type == TokenType.EMBED_SESSION
+        if rule.auth_required and not user and not is_embed_session:
             raise HTTPException(status_code=401, detail="User not found")
         
         company = await company_resolver.resolve(request, token_data, rule.context_type)
@@ -230,7 +235,11 @@ class AuthMiddleware(BaseHTTPMiddleware):
         logger.info(f"{rule.channel.title()} webhook: компания {company.company_id}, trace_id={trace_id}")
         return context
     
-    def _extract_token(self, request: Request) -> tuple[Optional[TokenData], Optional[str]]:
+    async def _extract_token(
+        self,
+        request: Request,
+        container,
+    ) -> tuple[Optional[TokenData], Optional[str]]:
         """
         Извлекает и валидирует токен из запроса.
         
@@ -261,9 +270,18 @@ class AuthMiddleware(BaseHTTPMiddleware):
         if not token:
             return None, None
 
-        # OpenAI-совместимые клиенты передают Bearer API key (не JWT) на /v1/*.
-        if token_from_authorization and path.startswith("/v1/") and token.count(".") != 2:
-            return None, None
+        if token_from_authorization and token.count(".") != 2:
+            if path.startswith("/v1/"):
+                return None, None
+            api_key_token_data = await self._build_api_key_token_data(
+                container=container,
+                raw_token=token,
+                path=path,
+            )
+            if api_key_token_data is None:
+                logger.warning(f"API ключ невалиден или не имеет доступа к {path}")
+                return None, None
+            return api_key_token_data, token
         
         token_service = get_token_service()
         token_data = token_service.validate_token(token)
@@ -275,6 +293,49 @@ class AuthMiddleware(BaseHTTPMiddleware):
             logger.warning(f"Токен невалиден или истёк для {path}")
         
         return token_data, token if token_data else None
+
+    @staticmethod
+    def _required_api_key_scopes_for_path(path: str) -> set[str]:
+        if path.startswith("/frontend/api/embed/configs/") and path.endswith("/session-token"):
+            return EMBED_SESSION_TOKEN_REQUIRED_SCOPES
+        return set()
+
+    async def _build_api_key_token_data(
+        self,
+        *,
+        container,
+        raw_token: str,
+        path: str,
+    ) -> Optional[TokenData]:
+        if not raw_token.startswith("hum_"):
+            return None
+        key_hash = hashlib.sha256(raw_token.encode()).hexdigest()
+        api_key_record = await container.api_key_repository.get_by_hash(key_hash)
+        if api_key_record is None:
+            return None
+
+        required_scopes = self._required_api_key_scopes_for_path(path)
+        if required_scopes and not (set(api_key_record.scopes) & required_scopes):
+            return None
+
+        await container.api_key_repository.touch_last_used(
+            key_id=api_key_record.key_id,
+            company_id=api_key_record.company_id,
+        )
+        now = datetime.now(timezone.utc)
+        return TokenData(
+            user_id=api_key_record.created_by,
+            company_id=api_key_record.company_id,
+            roles=[],
+            token_type=TokenType.API,
+            iat=now,
+            exp=now + timedelta(days=365),
+            metadata={
+                "auth_kind": "api_key",
+                "api_key_id": api_key_record.key_id,
+                "api_key_scopes": api_key_record.scopes,
+            },
+        )
     
     async def _get_user(self, container, token_data: TokenData) -> Optional[User]:
         """Получает пользователя по данным токена"""

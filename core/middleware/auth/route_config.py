@@ -157,9 +157,6 @@ ROUTE_RULES: List[RouteRule] = [
     RouteRule("/api/billing/yoomoney/callback", auth_required=False, context_type="anonymous"),
     RouteRule("/frontend/api/billing/yoomoney/callback", auth_required=False, context_type="anonymous"),
     
-    # API для встраивания - публичный доступ для встраиваемых виджетов
-    RouteRule("/flows/api/v1/embed/*", auth_required=False, context_type="anonymous"),
-    
     # ============================================================================
     # АВТОРИЗАЦИЯ ТРЕБУЕТСЯ, НО СУБДОМЕН НЕ ОБЯЗАТЕЛЕН
     # ============================================================================

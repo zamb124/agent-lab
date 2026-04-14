@@ -489,7 +489,8 @@
     "delete": "Удалить",
     "info_wip": "Функция редактирования в разработке",
     "confirm_delete": "Удалить виджет? Это действие нельзя отменить.",
-    "toast_deleted": "Виджет удален"
+    "toast_deleted": "Виджет удален",
+    "external_wizard_note": "Канонический путь: Platform Embed Chat + short-lived embed-session token endpoint."
   },
   "embed_create_modal": {
     "err_name": "Введите название виджета",
@@ -517,6 +518,16 @@
     "theme_light": "Светлая",
     "theme_dark": "Тёмная",
     "theme_auto": "Как в системе",
+    "label_assistant_title": "Имя ассистента",
+    "placeholder_assistant_title": "Ассистент Лары Швед",
+    "assistant_title_hint": "Будет показано в заголовке виджета",
+    "label_interface_locale": "Язык интерфейса",
+    "locale_auto": "Авто",
+    "locale_ru": "Русский",
+    "locale_en": "English",
+    "interface_locale_hint": "Язык UI embed-чата для внешнего сайта",
+    "label_show_launcher": "Показывать кнопку запуска",
+    "show_launcher_hint": "Отключите, если сайт открывает чат своей кнопкой через событие toggle",
     "cancel": "Отмена",
     "creating": "Создание...",
     "submit": "Создать виджет",
@@ -534,7 +545,8 @@
     "header": "Код для встраивания",
     "copy_title": "Скопировать код",
     "loading": "Загрузка...",
-    "description": "Вставьте этот код на свой сайт перед закрывающим тегом </body>:"
+    "description": "Вставьте этот код на свой сайт перед закрывающим тегом </body>:",
+    "token_endpoint_description": "Endpoint для выдачи short-lived embed-session токена (используйте server-to-server интеграцию на стороне сайта):"
   },
   "team_modal": {
     "err_owner_role": "Роль владельца нельзя снять с владельца компании",

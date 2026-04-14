@@ -1,4 +1,4 @@
-import { LitElement, html, css } from 'lit';
+import { LitElement, html, css } from '../lit-shim.js';
 
 export class EmbedUiFallback extends LitElement {
     static properties = {

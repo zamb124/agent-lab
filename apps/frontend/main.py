@@ -31,6 +31,12 @@ from core.identity.system_bootstrap import ensure_system_admin_membership
 
 logger = logging.getLogger(__name__)
 
+_FRONTEND_DEV_CORS_ORIGIN_REGEX = (
+    r"^https?://(localhost|127\.0\.0\.1)(:\d+)?$"
+    r"|"
+    r"^https?://([a-z0-9-]+\.)*lvh\.me(:\d+)?$"
+)
+
 
 INDEXABLE_PUBLIC_PATHS: tuple[str, ...] = (
     "/",
@@ -113,6 +119,12 @@ async def on_startup(app: FastAPI, container, settings: FrontendSettings) -> Non
 
 
 # Создаем приложение через фабрику (автоматически подключает middleware, контейнер и т.д.)
+_frontend_settings = get_frontend_settings()
+_frontend_cors_regex = getattr(_frontend_settings, "cors_allow_origin_regex", None)
+_frontend_cors_origins = list(getattr(_frontend_settings, "cors_allow_origins", []))
+if _frontend_cors_regex is None and _frontend_settings.server.debug and os.getenv("TESTING") != "true":
+    _frontend_cors_regex = _FRONTEND_DEV_CORS_ORIGIN_REGEX
+
 app = create_service_app(
     service_name="frontend",
     settings_class=FrontendSettings,
@@ -142,6 +154,8 @@ app = create_service_app(
     api_version=None,
     include_crud_routers=False,
     documentation_gateway_prefix="frontend",
+    cors_origins=_frontend_cors_origins,
+    cors_allow_origin_regex=_frontend_cors_regex,
 )
 
 # Монтирование core/frontend (общая библиотека) - СНАЧАЛА монтируем статику!

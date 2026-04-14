@@ -1,5 +1,5 @@
-import { LitElement, html, css, nothing } from 'lit';
-import { unsafeHTML } from 'lit/directives/unsafe-html.js';
+import { LitElement, html, css, nothing } from './lit-shim.js';
+import { unsafeHTML } from './unsafe-html-shim.js';
 import { streamEmbedA2A } from './embed-a2a-stream.js';
 import { embedAssistantMarkdownToHtml } from './embed-chat-markdown.js';
 import {

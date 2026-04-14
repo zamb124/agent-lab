@@ -489,7 +489,8 @@
     "delete": "Delete",
     "info_wip": "Editing is not available yet",
     "confirm_delete": "Delete this widget? This cannot be undone.",
-    "toast_deleted": "Widget deleted"
+    "toast_deleted": "Widget deleted",
+    "external_wizard_note": "Canonical path: Platform Embed Chat + short-lived embed-session token endpoint."
   },
   "embed_create_modal": {
     "err_name": "Enter widget name",
@@ -517,6 +518,16 @@
     "theme_light": "Light",
     "theme_dark": "Dark",
     "theme_auto": "Match system",
+    "label_assistant_title": "Assistant title",
+    "placeholder_assistant_title": "Lara Shved Assistant",
+    "assistant_title_hint": "Displayed in the widget header",
+    "label_interface_locale": "Interface language",
+    "locale_auto": "Auto",
+    "locale_ru": "Russian",
+    "locale_en": "English",
+    "interface_locale_hint": "UI language of the embed chat on external websites",
+    "label_show_launcher": "Show launcher button",
+    "show_launcher_hint": "Turn off if the website opens chat via its own toggle button",
     "cancel": "Cancel",
     "creating": "Creating...",
     "submit": "Create widget",
@@ -534,7 +545,8 @@
     "header": "Embed code",
     "copy_title": "Copy code",
     "loading": "Loading...",
-    "description": "Paste this snippet before the closing </body> tag:"
+    "description": "Paste this snippet before the closing </body> tag:",
+    "token_endpoint_description": "Endpoint for issuing short-lived embed-session tokens (use server-to-server integration on your website backend):"
   },
   "team_modal": {
     "err_owner_role": "Cannot remove owner role from the company owner",

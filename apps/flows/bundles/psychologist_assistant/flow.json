@@ -11,8 +11,8 @@
       "name": "Lara Shved Assistant",
       "prompt": "prompts/base.md",
       "llm": {
-        "model": "gpt-4o",
-        "temperature": 0.4
+        "model": "qwen/qwen3.5-397b-a17b",
+        "temperature": 0.2
       },
       "resources": {
         "kb": {
@@ -48,6 +48,10 @@
     }
   ],
   "variables": {
-    "user_name": ""
+    "user_name": "",
+    "embed_allowed_origins": [
+      "http://localhost:8000",
+      "https://larashved.ru"
+    ]
   }
 }

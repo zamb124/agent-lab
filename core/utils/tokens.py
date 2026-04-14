@@ -18,6 +18,7 @@ class TokenType(str, Enum):
     """Тип токена"""
     SESSION = "session"  # Обычный токен авторизации (7 дней)
     API = "api"          # Перманентный API токен (до 2 лет)
+    EMBED_SESSION = "embed_session"  # Короткоживущий токен встраиваемого чата
 
 
 class TokenData(BaseModel):
@@ -38,6 +39,7 @@ class TokenService:
     
     SESSION_EXPIRES = 86400 * 7           # 7 дней
     API_TOKEN_EXPIRES = 86400 * 365 * 2   # 2 года
+    EMBED_SESSION_EXPIRES = 300           # 5 минут
     
     def __init__(self):
         settings = get_settings()
@@ -74,7 +76,12 @@ class TokenService:
             JWT токен
         """
         if expires_in is None:
-            expires_in = self.API_TOKEN_EXPIRES if token_type == TokenType.API else self.SESSION_EXPIRES
+            if token_type == TokenType.API:
+                expires_in = self.API_TOKEN_EXPIRES
+            elif token_type == TokenType.EMBED_SESSION:
+                expires_in = self.EMBED_SESSION_EXPIRES
+            else:
+                expires_in = self.SESSION_EXPIRES
         
         now = datetime.now(timezone.utc)
         expires_at = now + timedelta(seconds=expires_in)
@@ -126,6 +133,25 @@ class TokenService:
             roles=roles,
             token_type=TokenType.API,
             expires_in=expires_in,
+        )
+
+    def create_embed_session_token(
+        self,
+        *,
+        user_id: str,
+        company_id: str,
+        roles: Optional[List[str]] = None,
+        expires_in: int = EMBED_SESSION_EXPIRES,
+        metadata: Optional[Dict[str, Any]] = None,
+    ) -> str:
+        """Создает короткоживущий токен для внешнего embed-чата."""
+        return self.create_token(
+            user_id=user_id,
+            company_id=company_id,
+            roles=roles,
+            token_type=TokenType.EMBED_SESSION,
+            expires_in=expires_in,
+            metadata=metadata,
         )
     
     def validate_token(self, token: str) -> Optional[TokenData]:

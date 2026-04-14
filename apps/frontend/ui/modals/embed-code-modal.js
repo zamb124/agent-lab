@@ -47,6 +47,7 @@ export class EmbedCodeModal extends PlatformModal {
         this.open = false;
         this._embedId = '';
         this._code = '';
+        this._tokenEndpoint = '';
         this._loading = false;
     }
 
@@ -71,6 +72,7 @@ export class EmbedCodeModal extends PlatformModal {
         try {
             const data = await this.services.get('embed').getCode(embedId);
             this._code = data.html_code;
+            this._tokenEndpoint = data.token_endpoint || '';
         } catch (error) {
             const message = error instanceof Error ? error.message : this.i18n.t('embed_code_modal.load_error', {});
             this.error(message);
@@ -163,6 +165,10 @@ export class EmbedCodeModal extends PlatformModal {
                     ${td('embed_code_modal.description')}
                 </p>
                 <div class="code-block">${this._code}</div>
+                <p class="modal-description">
+                    ${td('embed_code_modal.token_endpoint_description')}
+                </p>
+                <div class="code-block">${this._tokenEndpoint}</div>
             `;
     }
 

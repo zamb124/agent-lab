@@ -22,7 +22,7 @@ export class EmbedService extends BaseService {
      * Обновить конфигурацию виджета
      */
     async update(embedId, data) {
-        return this.put(`/api/embed/configs/${embedId}`, data);
+        return this.patch(`/api/embed/configs/${embedId}`, data);
     }
     
     /**

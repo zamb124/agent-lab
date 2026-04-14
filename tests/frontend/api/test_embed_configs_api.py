@@ -471,14 +471,57 @@ async def test_get_embed_code(frontend_client: AsyncClient, test_auth_with_agent
     
     # Проверяем что в коде есть нужные элементы
     html_code = data["html_code"]
-    assert "HumanitecChat" in html_code
+    assert "platform-lara-assistant" in html_code
     assert embed_id in html_code
-    assert "chat-widget" in html_code
+    assert "/static/core/lib/embed-chat/platform-lara-assistant.js" in html_code
+    assert "session-token" in html_code
+    assert data["token_endpoint"].endswith(f"/frontend/api/embed/configs/{embed_id}/session-token")
     
     # Cleanup
     await frontend_client.delete(
         f"/frontend/api/embed/configs/{embed_id}",
         headers=auth_headers
+    )
+
+
+@pytest.mark.asyncio
+async def test_issue_embed_session_token(frontend_client: AsyncClient, test_auth_with_agent):
+    auth_headers, flows_container, company_id = test_auth_with_agent
+
+    create_response = await frontend_client.post(
+        "/frontend/api/embed/configs",
+        headers=auth_headers,
+        json={
+            "name": "Session Token Widget",
+            "flow_id": "test_agent",
+            "allowed_origins": ["https://larashved.ru"],
+        },
+    )
+    assert create_response.status_code == 200
+    embed_id = create_response.json()["embed_id"]
+
+    token_response = await frontend_client.post(
+        f"/frontend/api/embed/configs/{embed_id}/session-token",
+        headers=auth_headers,
+        json={"origin": "https://larashved.ru", "expires_in_seconds": 300},
+    )
+    assert token_response.status_code == 200
+    payload = token_response.json()
+    assert payload["token"]
+    assert payload["token_type"] == "Bearer"
+    assert payload["flow_id"] == "test_agent"
+    assert payload["skill_id"] == "default"
+
+    deny_response = await frontend_client.post(
+        f"/frontend/api/embed/configs/{embed_id}/session-token",
+        headers=auth_headers,
+        json={"origin": "https://evil.example", "expires_in_seconds": 300},
+    )
+    assert deny_response.status_code == 403
+
+    await frontend_client.delete(
+        f"/frontend/api/embed/configs/{embed_id}",
+        headers=auth_headers,
     )
 
 
@@ -600,4 +643,217 @@ async def test_create_config_with_nonexistent_agent(frontend_client: AsyncClient
     # Должна быть ошибка 404 - агент не найден
     assert response.status_code == 404
     assert "не найден" in response.json()["detail"].lower()
+
+
+@pytest.mark.asyncio
+async def test_create_config_rejects_invalid_interface_locale(frontend_client: AsyncClient, test_auth_with_agent):
+    auth_headers, _, _ = test_auth_with_agent
+    response = await frontend_client.post(
+        "/frontend/api/embed/configs",
+        headers=auth_headers,
+        json={
+            "name": "Invalid Locale Widget",
+            "flow_id": "test_agent",
+            "interface_locale": "de",
+        },
+    )
+    assert response.status_code == 400
+    assert "interface_locale" in response.json()["detail"]
+
+
+@pytest.mark.asyncio
+async def test_issue_embed_session_token_requires_auth(frontend_client: AsyncClient, test_auth_with_agent):
+    auth_headers, _, _ = test_auth_with_agent
+    create_response = await frontend_client.post(
+        "/frontend/api/embed/configs",
+        headers=auth_headers,
+        json={"name": "No Auth Token", "flow_id": "test_agent"},
+    )
+    assert create_response.status_code == 200
+    embed_id = create_response.json()["embed_id"]
+
+    unauthorized = await frontend_client.post(
+        f"/frontend/api/embed/configs/{embed_id}/session-token",
+        json={"origin": "https://larashved.ru", "expires_in_seconds": 300},
+    )
+    assert unauthorized.status_code == 401
+
+    await frontend_client.delete(f"/frontend/api/embed/configs/{embed_id}", headers=auth_headers)
+
+
+@pytest.mark.asyncio
+async def test_issue_embed_session_token_with_hum_api_key(frontend_client: AsyncClient, test_auth_with_agent):
+    auth_headers, _, _ = test_auth_with_agent
+    create_response = await frontend_client.post(
+        "/frontend/api/embed/configs",
+        headers=auth_headers,
+        json={
+            "name": "Hum API Key Token Widget",
+            "flow_id": "test_agent",
+            "allowed_origins": ["http://localhost:8000"],
+        },
+    )
+    assert create_response.status_code == 200
+    embed_id = create_response.json()["embed_id"]
+
+    from apps.frontend.container import get_frontend_container
+    from core.utils.tokens import get_token_service
+
+    token_data = get_token_service().validate_token(auth_headers["Authorization"].replace("Bearer ", ""))
+    assert token_data is not None
+    company = await get_frontend_container().company_repository.get(token_data.company_id)
+    assert company is not None
+    members = dict(company.members or {})
+    members[token_data.user_id] = ["admin"]
+    company.members = members
+    await get_frontend_container().company_repository.set(company)
+
+    api_key_response = await frontend_client.post(
+        "/frontend/api/api-keys",
+        headers=auth_headers,
+        json={"name": "Embed issuer key", "scopes": ["agents:read"]},
+    )
+    assert api_key_response.status_code == 200
+    api_key_secret = api_key_response.json()["secret"]
+    assert api_key_secret.startswith("hum_")
+
+    token_response = await frontend_client.post(
+        f"/frontend/api/embed/configs/{embed_id}/session-token",
+        headers={"Authorization": f"Bearer {api_key_secret}"},
+        json={"origin": "http://localhost:8000", "expires_in_seconds": 300},
+    )
+    assert token_response.status_code == 200
+    token_data = token_response.json()
+    assert token_data["token_type"] == "Bearer"
+    assert token_data["flow_id"] == "test_agent"
+
+    await frontend_client.delete(f"/frontend/api/embed/configs/{embed_id}", headers=auth_headers)
+
+
+@pytest.mark.asyncio
+async def test_issue_embed_session_token_for_disabled_config(frontend_client: AsyncClient, test_auth_with_agent):
+    auth_headers, _, _ = test_auth_with_agent
+    create_response = await frontend_client.post(
+        "/frontend/api/embed/configs",
+        headers=auth_headers,
+        json={"name": "Disabled Token Widget", "flow_id": "test_agent"},
+    )
+    assert create_response.status_code == 200
+    embed_id = create_response.json()["embed_id"]
+
+    disable_response = await frontend_client.patch(
+        f"/frontend/api/embed/configs/{embed_id}",
+        headers=auth_headers,
+        json={"status": "disabled"},
+    )
+    assert disable_response.status_code == 200
+
+    token_response = await frontend_client.post(
+        f"/frontend/api/embed/configs/{embed_id}/session-token",
+        headers=auth_headers,
+        json={"origin": "https://larashved.ru", "expires_in_seconds": 300},
+    )
+    assert token_response.status_code == 403
+    assert "отключена" in token_response.json()["detail"]
+
+    await frontend_client.delete(f"/frontend/api/embed/configs/{embed_id}", headers=auth_headers)
+
+
+@pytest.mark.asyncio
+async def test_embed_code_includes_assistant_title_and_locale(frontend_client: AsyncClient, test_auth_with_agent):
+    auth_headers, _, _ = test_auth_with_agent
+    create_response = await frontend_client.post(
+        "/frontend/api/embed/configs",
+        headers=auth_headers,
+        json={
+            "name": "Code Params Widget",
+            "flow_id": "test_agent",
+            "assistant_title": "Lara QA",
+            "interface_locale": "ru",
+            "theme": "light",
+            "show_launcher": False,
+        },
+    )
+    assert create_response.status_code == 200
+    embed_id = create_response.json()["embed_id"]
+
+    code_response = await frontend_client.get(
+        f"/frontend/api/embed/configs/{embed_id}/code",
+        headers=auth_headers,
+    )
+    assert code_response.status_code == 200
+    html_code = code_response.json()["html_code"]
+    assert "assistant.setAttribute('assistant-title', \"Lara QA\")" in html_code
+    assert "assistant.setAttribute('locale', \"ru\")" in html_code
+    assert "assistant.setAttribute('theme', \"light\")" in html_code
+    assert "assistant.showLauncher = false;" in html_code
+
+    await frontend_client.delete(f"/frontend/api/embed/configs/{embed_id}", headers=auth_headers)
+
+
+@pytest.mark.asyncio
+async def test_create_config_uses_flow_embed_allowed_origins(frontend_client: AsyncClient, test_auth_with_agent):
+    auth_headers, flows_container, company_id = test_auth_with_agent
+    import uuid
+    from core.context import Context, clear_context, set_context
+    from core.models.identity_models import Company, User
+    from apps.flows.src.models.flow_config import FlowConfig
+
+    flow_id = f"test_embed_origins_{uuid.uuid4().hex[:8]}"
+    set_context(
+        Context(
+            user=User(user_id="test_user", name="Test"),
+            active_company=Company(company_id=company_id, name="Test Company"),
+            session_id="test",
+            channel="test",
+        )
+    )
+    try:
+        await flows_container.flow_repository.set(
+            FlowConfig(
+                flow_id=flow_id,
+                name="Test Embed Origins Flow",
+                entry="main",
+                nodes={"main": {"type": "llm_node", "prompt": "Test", "next": None}},
+                variables={
+                    "embed_allowed_origins": [
+                        "http://localhost:8000",
+                        "https://larashved.ru",
+                    ]
+                },
+            )
+        )
+    finally:
+        clear_context()
+
+    response = await frontend_client.post(
+        "/frontend/api/embed/configs",
+        headers=auth_headers,
+        json={
+            "name": "Flow Origins Widget",
+            "flow_id": flow_id,
+            "allowed_origins": [],
+        },
+    )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["allowed_origins"] == [
+        "http://localhost:8000",
+        "https://larashved.ru",
+    ]
+
+    await frontend_client.delete(f"/frontend/api/embed/configs/{data['embed_id']}", headers=auth_headers)
+
+    set_context(
+        Context(
+            user=User(user_id="test_user", name="Test"),
+            active_company=Company(company_id=company_id, name="Test Company"),
+            session_id="test",
+            channel="test",
+        )
+    )
+    try:
+        await flows_container.flow_repository.delete(flow_id)
+    finally:
+        clear_context()
 

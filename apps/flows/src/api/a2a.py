@@ -34,6 +34,7 @@ from apps.flows.src.container import FlowContainer
 from apps.flows.src.dependencies import ContainerDep
 from core.logging import get_logger
 from apps.flows.src.models import FlowConfig
+from core.utils.tokens import TokenData, TokenType
 
 logger = get_logger(__name__)
 
@@ -67,6 +68,61 @@ A2A_METHODS = {
 }
 
 _STREAM_METHODS = {"message/stream", "tasks/resubscribe"}
+
+
+def _is_embed_session_token(token_data: Optional[TokenData]) -> bool:
+    return token_data is not None and token_data.token_type == TokenType.EMBED_SESSION
+
+
+def _validate_embed_session_request(
+    *,
+    request: Request,
+    token_data: TokenData,
+    flow_id: str,
+    method: str,
+    params_dict: Dict[str, Any],
+) -> Optional[Dict[str, Any]]:
+    """Проверяет claims embed-session токена для A2A вызова."""
+    metadata = token_data.metadata if isinstance(token_data.metadata, dict) else {}
+    embed_flow_id = metadata.get("embed_flow_id")
+    if not isinstance(embed_flow_id, str) or not embed_flow_id.strip():
+        return {"code": -32000, "message": "Invalid embed session token: embed_flow_id is required"}
+    if flow_id != embed_flow_id.strip():
+        return {"code": -32000, "message": "Embed session token is not allowed for this flow"}
+
+    if method not in {"message/send", "message/stream"}:
+        return {"code": -32000, "message": "Embed session token supports only message/send and message/stream"}
+
+    allowed_origin = metadata.get("allowed_origin")
+    origin = request.headers.get("origin", "")
+    if isinstance(allowed_origin, str) and allowed_origin.strip():
+        if origin != allowed_origin.strip():
+            return {"code": -32000, "message": "Origin is not allowed for this embed session token"}
+
+    allowed_skill_id = metadata.get("embed_skill_id")
+    if isinstance(allowed_skill_id, str) and allowed_skill_id.strip():
+        effective_skill_id = allowed_skill_id.strip()
+        metadata_dict = params_dict.get("metadata")
+        if metadata_dict is None:
+            params_dict["metadata"] = {"skill": effective_skill_id}
+        elif isinstance(metadata_dict, dict):
+            request_skill = metadata_dict.get("skill")
+            if request_skill is None:
+                metadata_dict["skill"] = effective_skill_id
+            elif str(request_skill).strip() != effective_skill_id:
+                return {"code": -32000, "message": "Embed session token is not allowed for this skill"}
+        else:
+            return {"code": -32602, "message": "Invalid params: metadata must be object"}
+
+    logger.info(
+        "embed_session_validated flow_id=%s skill_id=%s company_id=%s origin=%s issuer=%s",
+        flow_id,
+        metadata.get("embed_skill_id", "default"),
+        token_data.company_id,
+        origin,
+        metadata.get("issued_by", "unknown"),
+    )
+    return None
 
 
 def _sse_error_response(rpc_id: str | None, code: int, message: str) -> StreamingResponse:
@@ -244,6 +300,24 @@ async def json_rpc_handler(
     method = body.get("method")
     params_dict = body.get("params", {})
     
+    token_data = getattr(request.state, "token_data", None)
+    if _is_embed_session_token(token_data):
+        if not isinstance(token_data, TokenData):
+            return {
+                "jsonrpc": "2.0",
+                "id": rpc_id,
+                "error": {"code": -32000, "message": "Invalid embed session token"},
+            }
+        embed_error = _validate_embed_session_request(
+            request=request,
+            token_data=token_data,
+            flow_id=flow_id,
+            method=method,
+            params_dict=params_dict,
+        )
+        if embed_error is not None:
+            return {"jsonrpc": "2.0", "id": rpc_id, "error": embed_error}
+
     # Версия: приоритет query param > metadata.version
     metadata = params_dict.get("metadata") or {}
     version = v or metadata.get("version")

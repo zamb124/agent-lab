@@ -67,6 +67,11 @@ class EmbedConfig(BaseModel):
         title="Позиция",
         description="Позиция на странице (bottom-right, bottom-left)",
     )
+    show_launcher: bool = Field(
+        default=True,
+        title="Показывать кнопку запуска",
+        description="Показывать встроенную FAB кнопку запуска embed-чата",
+    )
     show_reasoning: bool = Field(
         default=False,
         title="Показывать reasoning",
@@ -86,6 +91,16 @@ class EmbedConfig(BaseModel):
         default=None,
         title="Приветствие",
         description="Приветственное сообщение при загрузке чата",
+    )
+    assistant_title: Optional[str] = Field(
+        default=None,
+        title="Имя ассистента",
+        description="Кастомное имя ассистента в шапке embed-чата",
+    )
+    interface_locale: str = Field(
+        default="auto",
+        title="Язык интерфейса",
+        description="Язык интерфейса embed-чата (auto, ru, en)",
     )
     placeholder: str = Field(
         default="Введите сообщение...",

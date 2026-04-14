@@ -22,7 +22,6 @@ from core.models.identity_models import User, Company
 from core.utils.tokens import get_token_service
 from apps.flows.src.api import a2a_router, chat_router, registry_router, websocket_router
 from apps.flows.src.api.v1 import api_v1_router
-from apps.flows.src.api.embed import router as embed_router
 from apps.flows.config import FlowSettings, get_settings
 from apps.flows.src.container import get_container
 from apps.flows.src.services.flows_loader import load_flows_to_db, load_tools_to_db
@@ -214,6 +213,8 @@ async def on_shutdown(app: FastAPI, container):
 
 _flow_settings = get_settings()
 _cors_regex = _flow_settings.cors_allow_origin_regex
+if "*" in _flow_settings.cors_allow_origins:
+    raise ValueError("flows.cors_allow_origins не может содержать '*' для embed/A2A")
 if _cors_regex is None and _flow_settings.server.debug and os.getenv("TESTING") != "true":
     _cors_regex = _FLOWS_DEV_CORS_ORIGIN_REGEX
 
@@ -227,7 +228,6 @@ app = create_service_app(
         chat_router,
         websocket_router,
         a2a_router,
-        embed_router,
     ],
     repository_names=["flow_repository", "node_repository", "tool_repository"],
     on_startup=on_startup,

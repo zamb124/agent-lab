@@ -1,4 +1,4 @@
-import { LitElement, html } from 'lit';
+import { LitElement, html } from './lit-shim.js';
 import './platform-embed-chat-drawer.js';
 
 /**
@@ -10,6 +10,8 @@ export class PlatformLaraAssistant extends LitElement {
         flowsBaseUrl: { type: String, attribute: 'flows-base-url' },
         flowId: { type: String, attribute: 'flow-id' },
         skillId: { type: String, attribute: 'skill-id' },
+        theme: { type: String, attribute: 'theme' },
+        showLauncher: { type: Boolean, attribute: 'show-launcher' },
         assistantTitle: { type: String, attribute: 'assistant-title' },
         locale: { type: String },
         useCredentials: { type: Boolean, attribute: 'use-credentials' },
@@ -30,6 +32,8 @@ export class PlatformLaraAssistant extends LitElement {
         this.flowsBaseUrl = '';
         this.flowId = 'lara';
         this.skillId = '';
+        this.theme = 'auto';
+        this.showLauncher = true;
         this.assistantTitle = 'Lara';
         this.locale = 'ru';
         this.useCredentials = false;
@@ -44,7 +48,8 @@ export class PlatformLaraAssistant extends LitElement {
     render() {
         return html`
             <platform-embed-chat-drawer
-                theme="auto"
+                .theme=${this.theme || 'auto'}
+                .showLauncher=${this.showLauncher}
                 .flowsBaseUrl=${this.flowsBaseUrl}
                 flow-id=${this.flowId || 'lara'}
                 skill-id=${this.skillId || ''}
