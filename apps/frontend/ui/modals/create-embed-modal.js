@@ -236,6 +236,14 @@ export class CreateEmbedModal extends PlatformModal {
         return '';
     }
 
+    _normalizeFlowId(value) {
+        return String(value ?? '').trim();
+    }
+
+    _isSameFlowId(left, right) {
+        return this._normalizeFlowId(left) === this._normalizeFlowId(right);
+    }
+
     _flowsList() {
         const flows = (Array.isArray(this._flows) ? this._flows : [])
             .map((flow) => {
@@ -255,31 +263,29 @@ export class CreateEmbedModal extends PlatformModal {
                 };
             })
             .filter((flow) => flow !== null);
-        const currentFlowId = this._flowId?.trim();
+        const currentFlowId = this._normalizeFlowId(this._flowId);
         if (!currentFlowId) {
             return flows;
         }
-        const alreadyPresent = flows.some((f) => f.flow_id === currentFlowId);
+        const alreadyPresent = flows.some((f) => this._isSameFlowId(f.flow_id, currentFlowId));
         if (alreadyPresent) {
             return flows;
         }
-        if (this._isEditMode) {
-            flows.push({
-                flow_id: currentFlowId,
-                name: currentFlowId,
-                type: 'external',
-                skills: {},
-            });
-        }
+        flows.push({
+            flow_id: currentFlowId,
+            name: currentFlowId,
+            type: 'external',
+            skills: {},
+        });
         return flows;
     }
 
     _selectedFlow() {
-        const currentFlowId = this._flowId?.trim();
+        const currentFlowId = this._normalizeFlowId(this._flowId);
         if (!currentFlowId) {
             return null;
         }
-        return this._flowsList().find((f) => f.flow_id === currentFlowId) ?? null;
+        return this._flowsList().find((f) => this._isSameFlowId(f.flow_id, currentFlowId)) ?? null;
     }
 
     _skillChoices() {
@@ -430,7 +436,9 @@ export class CreateEmbedModal extends PlatformModal {
                         <option value="">${td('embed_create_modal.flow_placeholder')}</option>
                         ${this._flowsList().map(
                             (f) => html`
-                                <option value=${f.flow_id}>${f.name} (${f.flow_id})</option>
+                                <option value=${f.flow_id} ?selected=${this._isSameFlowId(f.flow_id, this._flowId)}>
+                                    ${f.name} (${f.flow_id})
+                                </option>
                             `,
                         )}
                     </select>

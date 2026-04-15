@@ -550,7 +550,7 @@
     "copy_title": "Скопировать код",
     "loading": "Загрузка...",
     "description": "Вставьте этот код на свой сайт перед закрывающим тегом </body>:",
-    "token_endpoint_description": "Endpoint для выдачи short-lived embed-session токена (используйте server-to-server интеграцию на стороне сайта):"
+    "token_endpoint_description": "Endpoint платформы для server-to-server выдачи short-lived embed-session токена. Вызывается только backend вашего сайта, не браузер:"
   },
   "team_modal": {
     "err_owner_role": "Роль владельца нельзя снять с владельца компании",

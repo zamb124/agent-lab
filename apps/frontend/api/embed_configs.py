@@ -488,18 +488,23 @@ async def get_embed_code(
     assistant_title_js = json.dumps(assistant_title, ensure_ascii=False)
     locale_js = json.dumps(config.interface_locale, ensure_ascii=False)
     flows_base_url_js = json.dumps(f"{base_url}/flows", ensure_ascii=False)
-    token_endpoint_js = json.dumps(token_endpoint, ensure_ascii=False)
 
     html_code = f'''<!-- Humanitec Platform Embed Chat -->
 <script type="module" src="{script_url}"></script>
 <script>
+  const EMBED_ID = {embed_id_js};
+
+  // Строгий S2S контракт: браузер запрашивает токен только у backend вашего сайта.
+  // Прямой вызов platform token endpoint из браузера не поддерживается.
   async function getEmbedToken() {{
-    // Рекомендуемый путь: ваш backend получает short-lived token server-to-server
-    const response = await fetch({token_endpoint_js}, {{
+    const response = await fetch('/api/chat-token', {{
       method: 'POST',
-      credentials: 'include',
       headers: {{ 'Content-Type': 'application/json' }},
-      body: JSON.stringify({{ origin: window.location.origin, expires_in_seconds: 300 }})
+      body: JSON.stringify({{
+        embed_id: EMBED_ID,
+        origin: window.location.origin,
+        expires_in_seconds: 300
+      }})
     }});
     if (!response.ok) throw new Error('Cannot get embed session token');
     const data = await response.json();
@@ -517,7 +522,70 @@ async def get_embed_code(
   assistant.showLauncher = {show_launcher_js};
   assistant.flowsBaseUrl = {flows_base_url_js};
   assistant.getAuthToken = getEmbedToken;
+  assistant.getExtraMetadataVariables = async () => {{
+    return {{
+      page_url: window.location.href,
+      page_title: document.title
+    }};
+  }};
+  assistant.getContextVariables = async () => {{
+    return {{
+      viewport_width: window.innerWidth,
+      viewport_height: window.innerHeight
+    }};
+  }};
   document.body.appendChild(assistant);
+
+  // Runtime модификации чата на лету через публичные свойства web-component.
+  function setEmbedTheme(nextTheme) {{
+    assistant.setAttribute('theme', String(nextTheme));
+  }}
+
+  function setEmbedLocale(nextLocale) {{
+    assistant.setAttribute('locale', String(nextLocale));
+  }}
+
+  function setEmbedLauncherVisible(visible) {{
+    assistant.showLauncher = Boolean(visible);
+  }}
+
+  function setEmbedAssistantTitle(nextTitle) {{
+    assistant.setAttribute('assistant-title', String(nextTitle));
+  }}
+
+  function setEmbedFlowsBaseUrl(nextBaseUrl) {{
+    assistant.flowsBaseUrl = String(nextBaseUrl);
+  }}
+
+  function setEmbedEventNamespace(nextNamespace) {{
+    assistant.setAttribute('event-namespace', String(nextNamespace));
+  }}
+
+  function setEmbedToggleEventName(nextEventName) {{
+    assistant.setAttribute('toggle-event-name', String(nextEventName));
+  }}
+
+  function setEmbedMetadataHooks(extraMetadataProvider, contextProvider) {{
+    assistant.getExtraMetadataVariables = extraMetadataProvider;
+    assistant.getContextVariables = contextProvider;
+  }}
+
+  function setEmbedAuthProvider(authProvider) {{
+    assistant.getAuthToken = authProvider;
+  }}
+
+  // Пример: window.humanitecEmbed.setTheme('dark')
+  window.humanitecEmbed = {{
+    setTheme: setEmbedTheme,
+    setLocale: setEmbedLocale,
+    setLauncherVisible: setEmbedLauncherVisible,
+    setAssistantTitle: setEmbedAssistantTitle,
+    setFlowsBaseUrl: setEmbedFlowsBaseUrl,
+    setEventNamespace: setEmbedEventNamespace,
+    setToggleEventName: setEmbedToggleEventName,
+    setMetadataHooks: setEmbedMetadataHooks,
+    setAuthProvider: setEmbedAuthProvider,
+  }};
 </script>'''
     
     return EmbedCodeResponse(

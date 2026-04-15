@@ -477,13 +477,63 @@ async def test_get_embed_code(frontend_client: AsyncClient, test_auth_with_agent
     assert "flow-id" not in html_code
     assert "skill-id" not in html_code
     assert "/static/core/lib/embed-chat/platform-lara-assistant.js" in html_code
-    assert "session-token" in html_code
+    assert "fetch('/api/chat-token'" in html_code
+    assert "embed_id: EMBED_ID" in html_code
+    assert "session-token" not in html_code
+    assert "credentials: 'include'" not in html_code
+    assert "window.humanitecEmbed" in html_code
+    assert "setTheme: setEmbedTheme" in html_code
+    assert "setLocale: setEmbedLocale" in html_code
+    assert "setLauncherVisible: setEmbedLauncherVisible" in html_code
+    assert "setAssistantTitle: setEmbedAssistantTitle" in html_code
+    assert "setMetadataHooks: setEmbedMetadataHooks" in html_code
+    assert "setAuthProvider: setEmbedAuthProvider" in html_code
     assert data["token_endpoint"].endswith(f"/frontend/api/embed/configs/{embed_id}/session-token")
     
     # Cleanup
     await frontend_client.delete(
         f"/frontend/api/embed/configs/{embed_id}",
         headers=auth_headers
+    )
+
+
+@pytest.mark.asyncio
+async def test_get_embed_code_has_no_browser_direct_fallback_patterns(
+    frontend_client: AsyncClient,
+    test_auth_with_agent,
+):
+    auth_headers, _, _ = test_auth_with_agent
+    create_response = await frontend_client.post(
+        "/frontend/api/embed/configs",
+        headers=auth_headers,
+        json={
+            "name": "Code Contract Test",
+            "flow_id": "test_agent",
+        },
+    )
+    assert create_response.status_code == 200
+    embed_id = create_response.json()["embed_id"]
+
+    response = await frontend_client.get(
+        f"/frontend/api/embed/configs/{embed_id}/code",
+        headers=auth_headers,
+    )
+    assert response.status_code == 200
+    html_code = response.json()["html_code"]
+
+    assert "fetch('/api/chat-token'" in html_code
+    assert "const EMBED_ID =" in html_code
+    assert "getEmbedToken()" in html_code
+
+    assert "fetch(\"http" not in html_code
+    assert "fetch(\"https" not in html_code
+    assert "/frontend/api/embed/configs/" not in html_code
+    assert "/session-token" not in html_code
+    assert "credentials: 'include'" not in html_code
+
+    await frontend_client.delete(
+        f"/frontend/api/embed/configs/{embed_id}",
+        headers=auth_headers,
     )
 
 

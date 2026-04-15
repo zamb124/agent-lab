@@ -550,7 +550,7 @@
     "copy_title": "Copy code",
     "loading": "Loading...",
     "description": "Paste this snippet before the closing </body> tag:",
-    "token_endpoint_description": "Endpoint for issuing short-lived embed-session tokens (use server-to-server integration on your website backend):"
+    "token_endpoint_description": "Platform endpoint for server-to-server issuing short-lived embed-session tokens. Call it only from your website backend, never from the browser:"
   },
   "team_modal": {
     "err_owner_role": "Cannot remove owner role from the company owner",
