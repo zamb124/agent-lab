@@ -1,0 +1,22 @@
+[
+  {
+    "id": "internship_contract_filler_main",
+    "type": "llm_node",
+    "name": "Агент заполнения договора стажировки",
+    "description": "Собирает обязательные поля и формирует заполненный договор стажировки по DOCX шаблону.",
+    "prompt_file": "prompts/main.md",
+    "tools": ["fill_docx_template", "gdocs_create_document"],
+    "files": [
+      {
+        "name": "internship_contract_ru.docx",
+        "path": "http://localhost:8001/static/templates/internship_contract_ru.docx",
+        "url": "http://localhost:8001/static/templates/internship_contract_ru.docx",
+        "mime_type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+      }
+    ],
+    "llm": {
+      "model": "gpt-4o",
+      "temperature": 0.1
+    }
+  }
+]

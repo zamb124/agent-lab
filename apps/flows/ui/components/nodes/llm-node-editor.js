@@ -794,7 +794,7 @@ export class LlmNodeEditor extends BaseNodeEditor {
     }
     
     _onRemoveTool(toolId) {
-        const tools = (this.config.tools || []).filter(t => {
+        const tools = (this.nodeConfig?.tools || []).filter((t) => {
             const tid = typeof t === 'string' ? t : t.tool_id;
             return tid !== toolId;
         });

@@ -44,6 +44,10 @@ flows:
     public: true
     description: "Ассистент Лары Швед: эмпатичный агент с доступом к базе знаний через RAG и прямыми контактами психолога"
 
+  - id: internship_contract_filler
+    public: true
+    description: "Агент заполнения договора стажировки по DOCX-шаблону с выдачей готового файла"
+
 
 # Тулы
 # ВСЕ тулы загружаются в system namespace при старте

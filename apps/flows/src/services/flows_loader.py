@@ -295,6 +295,7 @@ class FlowsLoader:
                 tools=tools,
                 llm_override=llm_override,
                 code=raw_node.get("code"),
+                files=raw_node.get("files", []),
                 local_variables=raw_node.get("variables", {}),
                 source="file",
             )
