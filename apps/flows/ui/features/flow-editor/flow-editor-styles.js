@@ -46,28 +46,6 @@ flow-editor-page .canvas-area {
     overflow: hidden;
 }
 
-flow-editor-page .lara-editor-launcher {
-    position: absolute;
-    top: var(--space-4, 16px);
-    right: 360px;
-    z-index: 21;
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    border-radius: 10px;
-    border: 1px solid var(--border-default, rgba(255, 255, 255, 0.12));
-    background: var(--glass-solid-strong, rgba(40, 40, 64, 0.92));
-    color: var(--text-primary, rgba(255, 255, 255, 0.92));
-    height: 32px;
-    padding: 0 10px;
-    cursor: pointer;
-}
-
-flow-editor-page .lara-editor-launcher:hover {
-    border-color: var(--accent, #6366f1);
-    color: var(--accent, #6366f1);
-}
-
 flow-editor-page .panel-backdrop {
     position: fixed;
     inset: 0;

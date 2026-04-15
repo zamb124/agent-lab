@@ -1380,6 +1380,7 @@ export class FlowEditorPage extends PlatformElement {
                 <editor-header
                     flow-name=${flowConfig?.name || 'New Flow'}
                     flow-source=${flowConfig?.source || ''}
+                    ?has-bundle-update=${!!flowConfig?.has_bundle_update}
                     ?reload-from-bundle-loading=${this._reloadFromBundleBusy}
                     ?saving=${isSaving}
                     .mode=${this.editorMode}
@@ -1389,6 +1390,7 @@ export class FlowEditorPage extends PlatformElement {
                     @mode-changed=${this._onModeChanged}
                     @stop-agent-requested=${this._onStopAgent}
                     @show-code=${this._onShowCode}
+                    @open-lara-editor=${this._openLaraForEditor}
                     @reload-from-bundle-requested=${this._onReloadFromBundleRequested}
                 ></editor-header>
                 
@@ -1408,14 +1410,6 @@ export class FlowEditorPage extends PlatformElement {
                     ></node-types-sidebar>
                     
                     <div class="canvas-area">
-                        <button
-                            class="lara-editor-launcher"
-                            @click=${this._openLaraForEditor}
-                            title="${this.i18n.t('editor.open_lara_for_editor')}"
-                        >
-                            <platform-icon name="ai" size="16"></platform-icon>
-                            <span>${this.i18n.t('editor.open_lara_short')}</span>
-                        </button>
                         <flow-canvas
                             @node-selected=${this._onNodeSelected}
                             @node-unselected=${this._onNodeUnselected}

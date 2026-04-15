@@ -102,6 +102,22 @@ export class FlowCard extends PlatformElement {
                 margin-top: 2px;
             }
 
+            .flow-meta {
+                display: flex;
+                align-items: center;
+                gap: var(--space-2);
+                margin-top: 2px;
+            }
+
+            .bundle-update-indicator {
+                width: 8px;
+                height: 8px;
+                border-radius: 50%;
+                background: var(--warning, #f59e0b);
+                box-shadow: 0 0 0 2px rgba(245, 158, 11, 0.24);
+                flex-shrink: 0;
+            }
+
             .flow-actions {
                 display: none;
                 gap: var(--space-1);
@@ -342,7 +358,15 @@ export class FlowCard extends PlatformElement {
                     </div>
                     <div class="flow-info">
                         <div class="flow-name">${this.flow.name || this.flow.flow_id}</div>
-                        <div class="flow-subid">${this.flow.flow_id}</div>
+                        <div class="flow-meta">
+                            <div class="flow-subid">${this.flow.flow_id}</div>
+                            ${this.flow.has_bundle_update
+                                ? html`<span
+                                    class="bundle-update-indicator"
+                                    title=${this.i18n.t('flow_card.bundle_update_available')}
+                                ></span>`
+                                : ''}
+                        </div>
                     </div>
                     <div class="flow-actions">
                         <button 

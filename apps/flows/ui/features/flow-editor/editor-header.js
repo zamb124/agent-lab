@@ -181,6 +181,25 @@ export class EditorHeader extends PlatformElement {
                 padding: 0;
                 justify-content: center;
             }
+
+            .reload-btn-wrap {
+                position: relative;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+            }
+
+            .reload-update-indicator {
+                position: absolute;
+                top: 3px;
+                right: 3px;
+                width: 7px;
+                height: 7px;
+                border-radius: 50%;
+                background: var(--warning, #f59e0b);
+                box-shadow: 0 0 0 2px rgba(245, 158, 11, 0.2);
+                pointer-events: none;
+            }
         `
     ];
 
@@ -191,6 +210,7 @@ export class EditorHeader extends PlatformElement {
         agentExecutionRunning: { type: Boolean, attribute: 'agent-execution-running' },
         flowSource: { type: String, attribute: 'flow-source' },
         reloadFromBundleLoading: { type: Boolean, attribute: 'reload-from-bundle-loading' },
+        hasBundleUpdate: { type: Boolean, attribute: 'has-bundle-update' },
     };
 
     constructor() {
@@ -201,6 +221,7 @@ export class EditorHeader extends PlatformElement {
         this.agentExecutionRunning = false;
         this.flowSource = '';
         this.reloadFromBundleLoading = false;
+        this.hasBundleUpdate = false;
     }
 
     _canReloadFromBundle() {
@@ -251,7 +272,14 @@ export class EditorHeader extends PlatformElement {
         this.emit('show-code');
     }
 
+    _onOpenLaraEditor() {
+        this.emit('open-lara-editor');
+    }
+
     render() {
+        const reloadTitle = this.hasBundleUpdate
+            ? this.i18n.t('editor_header.bundle_update_available')
+            : this.i18n.t('llm_node.reload_from_bundle_title');
         return html`
             <header class="header">
                 <div class="header-left">
@@ -291,21 +319,33 @@ export class EditorHeader extends PlatformElement {
                                 size="18"
                             ></platform-icon>
                         </button>
-                        <button
-                            type="button"
-                            class="mode-btn"
-                            title=${this.i18n.t('llm_node.reload_from_bundle_title')}
-                            ?disabled=${!this._canReloadFromBundle() || this.reloadFromBundleLoading}
-                            @click=${this._onReloadFromBundleClick}
-                        >
-                            ${this.reloadFromBundleLoading
-                                ? html`<platform-spinner size="18"></platform-spinner>`
-                                : html`<platform-icon name="refresh" size="18"></platform-icon>`}
-                        </button>
+                        <div class="reload-btn-wrap" title=${reloadTitle}>
+                            <button
+                                type="button"
+                                class="mode-btn"
+                                title=${reloadTitle}
+                                ?disabled=${!this._canReloadFromBundle() || this.reloadFromBundleLoading}
+                                @click=${this._onReloadFromBundleClick}
+                            >
+                                ${this.reloadFromBundleLoading
+                                    ? html`<platform-spinner size="18"></platform-spinner>`
+                                    : html`<platform-icon name="refresh" size="18"></platform-icon>`}
+                            </button>
+                            ${this.hasBundleUpdate
+                                ? html`<span class="reload-update-indicator"></span>`
+                                : ''}
+                        </div>
                     </div>
                 </div>
                 
                 <div class="header-right">
+                    <button
+                        class="header-btn icon-btn"
+                        @click=${this._onOpenLaraEditor}
+                        title=${this.i18n.t('editor.open_lara_for_editor')}
+                    >
+                        <platform-icon name="ai" size="16"></platform-icon>
+                    </button>
                     <button class="header-btn" @click=${this._onShowCode} title=${this.i18n.t('editor_header.title_code')}>
                         <platform-icon name="code" size="16"></platform-icon>
                         ${this.i18n.t('editor_header.btn_code')}

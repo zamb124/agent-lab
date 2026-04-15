@@ -22,6 +22,105 @@ from apps.flows.src.services.flow_validator import FlowValidator
 logger = get_logger(__name__)
 
 
+def _flow_semantic_payload(flow_cfg: FlowConfig) -> Dict[str, Any]:
+    """Детерминированный payload для сравнения текущего flow и bundle."""
+    payload = flow_cfg.model_dump(
+        mode="json",
+        exclude={
+            "version",
+            "created_at",
+            "updated_at",
+            "source",
+            "public_fields",
+        },
+    )
+    return payload
+
+
+def _build_bundle_index(flows_root: Path) -> Dict[str, str]:
+    """flow_id -> bundle_id для записей из registry.yaml."""
+    registry_path = flows_root / "registry.yaml"
+    bundles_dir = flows_root / "bundles"
+
+    if not registry_path.exists():
+        raise HTTPException(status_code=500, detail=f"Registry not found: {registry_path}")
+
+    with open(registry_path, "r", encoding="utf-8") as f:
+        registry_data = yaml.safe_load(f) or {}
+
+    registry_flows = registry_data.get("flows")
+    if not isinstance(registry_flows, list):
+        raise HTTPException(status_code=500, detail="Registry field 'flows' must be a list")
+
+    flow_to_bundle: Dict[str, str] = {}
+    for entry in registry_flows:
+        if isinstance(entry, str):
+            bundle_id = entry
+        elif isinstance(entry, dict):
+            bundle_id = entry.get("id")
+        else:
+            raise HTTPException(status_code=500, detail="Registry flow entry must be string or object")
+        if not isinstance(bundle_id, str) or not bundle_id:
+            raise HTTPException(status_code=500, detail="Registry flow entry must include non-empty string 'id'")
+
+        flow_path = bundles_dir / bundle_id / "flow.json"
+        if not flow_path.exists():
+            raise HTTPException(status_code=500, detail=f"Bundle flow.json not found for '{bundle_id}'")
+
+        with open(flow_path, "r", encoding="utf-8") as f:
+            raw_flow = json.load(f)
+
+        flow_id = raw_flow.get("flow_id") or raw_flow.get("id")
+        if not isinstance(flow_id, str) or not flow_id:
+            raise HTTPException(status_code=500, detail=f"Bundle '{bundle_id}' must define non-empty flow_id")
+
+        flow_to_bundle[flow_id] = bundle_id
+
+    return flow_to_bundle
+
+
+async def _get_bundle_update_flags(
+    flows: List[FlowConfig],
+    container: ContainerDep,
+    flows_root: Path,
+) -> Dict[str, bool]:
+    """Возвращает признак наличия обновлений bundle для flow с source=file."""
+    flow_to_bundle = _build_bundle_index(flows_root)
+    file_flow_ids = [f.flow_id for f in flows if (getattr(f, "source", None) or "manual") == "file"]
+    if not file_flow_ids:
+        return {}
+
+    bundles_dir = flows_root / "bundles"
+    loader = FlowsLoader(
+        bundles_dir=bundles_dir,
+        flow_repository=container.flow_repository,
+        node_repository=container.node_repository,
+        tool_repository=container.tool_repository,
+        registry_path=flows_root / "registry.yaml",
+    )
+    await loader._load_tools_cache()
+    await loader._load_nodes_cache()
+
+    flags: Dict[str, bool] = {}
+    for flow_cfg in flows:
+        source_value = getattr(flow_cfg, "source", None) or "manual"
+        if source_value != "file":
+            continue
+
+        bundle_id = flow_to_bundle.get(flow_cfg.flow_id)
+        if not bundle_id:
+            raise HTTPException(status_code=500, detail=f"Bundle mapping not found for flow '{flow_cfg.flow_id}'")
+
+        await loader._preload_nodes_to_cache(bundle_id)
+        bundle_cfg = await loader.build_flow_bundle_config(bundle_id)
+        if bundle_cfg is None:
+            raise HTTPException(status_code=500, detail=f"Failed to build bundle config for '{bundle_id}'")
+
+        flags[flow_cfg.flow_id] = _flow_semantic_payload(flow_cfg) != _flow_semantic_payload(bundle_cfg)
+
+    return flags
+
+
 def _generate_flow_url(flow_id: str, flow_kind: Optional[FlowType] = None, external_url: Optional[str] = None) -> str:
     """Публичный URL flow (или внешний base URL для EXTERNAL)."""
     if flow_kind == FlowType.EXTERNAL and external_url:
@@ -297,6 +396,7 @@ class FlowResponse(BaseModel):
     skills: Dict[str, SkillResponse] = {}
     evaluation: Optional[Dict[str, Any]] = None
     hidden: bool = False
+    has_bundle_update: bool = False
     
     # EXTERNAL flow (A2A)
     url: Optional[str] = None
@@ -426,6 +526,9 @@ async def list_flows(
     if type is not None:
         flows = [f for f in flows if f.type == type]
 
+    flows_root = Path(__file__).resolve().parents[3]
+    bundle_update_flags = await _get_bundle_update_flags(flows, container, flows_root)
+
     result = []
     for f in flows:
         skills_response = {
@@ -446,6 +549,7 @@ async def list_flows(
             "tags": f.tags,
             "hidden": hidden,
             "source": getattr(f, "source", None) or "manual",
+            "has_bundle_update": bundle_update_flags.get(f.flow_id, False),
         }
         
         # LOCAL flow
@@ -499,14 +603,18 @@ async def list_store_bundles(container: ContainerDep) -> List[FlowStoreBundleRes
 
     result: list[FlowStoreBundleResponse] = []
     for entry in registry_flows:
-        if not isinstance(entry, dict):
-            raise HTTPException(status_code=500, detail="Registry flow entry must be an object with id/public fields")
+        if isinstance(entry, str):
+            bundle_id = entry
+            is_public = True
+        elif isinstance(entry, dict):
+            bundle_id = entry.get("id")
+            is_public = entry.get("public", False)
+        else:
+            raise HTTPException(status_code=500, detail="Registry flow entry must be string or object")
 
-        is_public = entry.get("public", False)
         if not is_public:
             continue
 
-        bundle_id = entry.get("id")
         if not isinstance(bundle_id, str) or not bundle_id:
             raise HTTPException(status_code=500, detail="Registry flow entry must include non-empty string 'id'")
 
@@ -711,6 +819,13 @@ async def get_flow(
             for trigger_id, trigger in flow_cfg.triggers.items():
                 triggers_response[trigger_id] = trigger.model_dump() if hasattr(trigger, 'model_dump') else trigger
         
+        source_value = getattr(flow_cfg, "source", None) or "manual"
+        bundle_update = False
+        if source_value == "file":
+            flows_root = Path(__file__).resolve().parents[3]
+            bundle_flags = await _get_bundle_update_flags([flow_cfg], container, flows_root)
+            bundle_update = bundle_flags.get(flow_cfg.flow_id, False)
+
         return FlowResponse(
             flow_id=flow_cfg.flow_id,
             version=flow_cfg.version or "",
@@ -729,6 +844,7 @@ async def get_flow(
             triggers=triggers_response,
             resources=flow_cfg.resources or {},
             source=getattr(flow_cfg, "source", None) or "manual",
+            has_bundle_update=bundle_update,
         )
     except HTTPException:
         raise

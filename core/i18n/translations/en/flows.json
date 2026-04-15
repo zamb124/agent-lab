@@ -178,7 +178,8 @@
     "no_skills": "No skills",
     "delete_title": "Delete",
     "open_chat_title": "Open chat",
-    "edit_title": "Edit"
+    "edit_title": "Edit",
+    "bundle_update_available": "Bundle update available"
   },
   "chat_message": {
     "breakpoint_continue": "Continue",
@@ -554,7 +555,8 @@
     "title_code": "View code",
     "btn_code": "Code",
     "btn_publish": "Publish",
-    "status_draft": "Draft"
+    "status_draft": "Draft",
+    "bundle_update_available": "Update available"
   },
   "node_types_sidebar": {
     "triggers_title": "Triggers",

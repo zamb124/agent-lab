@@ -178,7 +178,8 @@
     "no_skills": "Нет skills",
     "delete_title": "Удалить",
     "open_chat_title": "Открыть чат",
-    "edit_title": "Редактировать"
+    "edit_title": "Редактировать",
+    "bundle_update_available": "Есть обновление из bundle"
   },
   "chat_message": {
     "breakpoint_continue": "Продолжить",
@@ -554,7 +555,8 @@
     "title_code": "Просмотр кода",
     "btn_code": "Код",
     "btn_publish": "Опубликовать",
-    "status_draft": "Черновик"
+    "status_draft": "Черновик",
+    "bundle_update_available": "Есть обновление"
   },
   "node_types_sidebar": {
     "triggers_title": "Триггеры",

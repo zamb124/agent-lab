@@ -198,10 +198,20 @@ class FlowsLoader:
 
     async def _load_flow_bundle(self, bundle_id: str) -> str | None:
         """Один каталог bundle -> FlowConfig в БД. Nodes предзагружены в _preload_nodes_to_cache."""
-        bundle_dir = self.bundles_dir / bundle_id
-        
-        config_path = bundle_dir / "flow.json"
+        flow_config = await self.build_flow_bundle_config(bundle_id)
+        if flow_config is None:
+            return None
 
+        # Сохраняем в БД
+        await self.flow_repository.set(flow_config)
+
+        logger.info(f"  {bundle_id}: {flow_config.name}")
+        return flow_config.flow_id
+
+    async def build_flow_bundle_config(self, bundle_id: str) -> FlowConfig | None:
+        """Собирает FlowConfig из bundle без сохранения в БД."""
+        bundle_dir = self.bundles_dir / bundle_id
+        config_path = bundle_dir / "flow.json"
         if not config_path.exists():
             logger.warning(f"flow.json не найден: {bundle_dir}")
             return None
@@ -209,31 +219,19 @@ class FlowsLoader:
         with open(config_path, "r", encoding="utf-8") as f:
             raw_config = json.load(f)
 
-        # Загружаем промпты для нод и встраиваем в конфиг
         nodes = await self._load_nodes_with_prompts(bundle_dir, raw_config)
-
-        # Применяем defaults к нодам
         nodes = self._apply_defaults(nodes)
-
-        # Инлайним tools - заменяем tool_id на полные конфиги с кодом
         nodes = self._inline_tools_in_nodes(nodes)
 
-        # Загружаем edges
         edges = raw_config.get("edges", [])
-
-        # Загружаем skills с промптами
         skills = await self._load_skills_with_prompts(bundle_dir, raw_config)
-        
-        # Инлайним tools в skills nodes
         skills = self._inline_tools_in_skills(skills)
 
-        # Загружаем evaluation - это просто словарь тест-кейсов (фильтруем ключи начинающиеся с "_")
         evaluation = raw_config.get("evaluation")
         if evaluation:
             evaluation = {k: v for k, v in evaluation.items() if not k.startswith("_")}
 
-        # Создаем FlowConfig
-        flow_config = FlowConfig(
+        return FlowConfig(
             flow_id=raw_config.get("flow_id") or raw_config.get("id"),
             name=raw_config.get("name", ""),
             description=raw_config.get("description", ""),
@@ -246,12 +244,6 @@ class FlowsLoader:
             evaluation=evaluation,
             source="file",
         )
-
-        # Сохраняем в БД
-        await self.flow_repository.set(flow_config)
-
-        logger.info(f"  {bundle_id}: {flow_config.name}")
-        return flow_config.flow_id
 
     async def _load_nodes(self, bundle_dir: Path, nodes_path: Path) -> None:
         """Загружает ноды из nodes.json в БД."""
