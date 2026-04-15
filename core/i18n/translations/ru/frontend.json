@@ -543,6 +543,7 @@
   "embed_code_modal": {
     "load_error": "Ошибка загрузки кода виджета",
     "err_no_code": "Нет кода для копирования",
+    "err_no_token_endpoint": "Нет endpoint для копирования",
     "toast_copied": "Код скопирован в буфер обмена",
     "err_copy_failed": "Не удалось скопировать: {{msg}}. Откройте сайт по HTTPS или скопируйте вручную.",
     "err_copy_cmd": "Команда копирования не выполнена",
@@ -550,7 +551,16 @@
     "copy_title": "Скопировать код",
     "loading": "Загрузка...",
     "description": "Вставьте этот код на свой сайт перед закрывающим тегом </body>:",
-    "token_endpoint_description": "Endpoint платформы для server-to-server выдачи short-lived embed-session токена. Вызывается только backend вашего сайта, не браузер:"
+    "token_howto_title": "Как получить токен для чата (S2S):",
+    "token_howto_step_1": "На вашем backend реализуйте endpoint POST /api/chat-token.",
+    "token_howto_step_2": "Внутри backend вызовите endpoint платформы ниже с issuer token (hum_...).",
+    "token_howto_step_3": "Верните token в браузер; frontend должен вызывать только /api/chat-token.",
+    "token_endpoint_description": "Endpoint платформы для server-to-server выдачи short-lived embed-session токена. Вызывается только backend вашего сайта, не браузер:",
+    "copy_token_endpoint": "Скопировать endpoint",
+    "backend_proxy_example_title": "Пример backend-запроса в платформу",
+    "copy_backend_proxy_example": "Скопировать backend пример",
+    "client_backend_example_title": "Пример вызова вашего backend из браузера",
+    "copy_client_backend_example": "Скопировать пример /api/chat-token"
   },
   "team_modal": {
     "err_owner_role": "Роль владельца нельзя снять с владельца компании",

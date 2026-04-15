@@ -543,6 +543,7 @@
   "embed_code_modal": {
     "load_error": "Failed to load widget code",
     "err_no_code": "Nothing to copy",
+    "err_no_token_endpoint": "No endpoint to copy",
     "toast_copied": "Code copied to clipboard",
     "err_copy_failed": "Could not copy: {{msg}}. Use HTTPS or copy manually.",
     "err_copy_cmd": "Copy command did not run",
@@ -550,7 +551,16 @@
     "copy_title": "Copy code",
     "loading": "Loading...",
     "description": "Paste this snippet before the closing </body> tag:",
-    "token_endpoint_description": "Platform endpoint for server-to-server issuing short-lived embed-session tokens. Call it only from your website backend, never from the browser:"
+    "token_howto_title": "How to obtain chat token (S2S):",
+    "token_howto_step_1": "Implement POST /api/chat-token on your backend.",
+    "token_howto_step_2": "Inside backend, call the platform endpoint below with issuer token (hum_...).",
+    "token_howto_step_3": "Return token to browser; frontend must call only /api/chat-token.",
+    "token_endpoint_description": "Platform endpoint for server-to-server issuing short-lived embed-session tokens. Call it only from your website backend, never from the browser:",
+    "copy_token_endpoint": "Copy endpoint",
+    "backend_proxy_example_title": "Backend request example to platform",
+    "copy_backend_proxy_example": "Copy backend example",
+    "client_backend_example_title": "Browser call example to your backend",
+    "copy_client_backend_example": "Copy /api/chat-token example"
   },
   "team_modal": {
     "err_owner_role": "Cannot remove owner role from the company owner",

@@ -20,6 +20,25 @@ export class EmbedCodeModal extends PlatformModal {
                 line-height: 1.5;
             }
 
+            .steps {
+                margin: 0 0 16px 0;
+                padding-left: 18px;
+                color: var(--text-secondary);
+                line-height: 1.6;
+                font-size: 14px;
+            }
+
+            .steps li {
+                margin-bottom: 6px;
+            }
+
+            .section-title {
+                margin: 16px 0 8px;
+                font-size: 13px;
+                font-weight: 600;
+                color: var(--text-primary);
+            }
+
             .code-block {
                 background: var(--glass-tint-subtle);
                 border: 1px solid var(--border-default);
@@ -31,6 +50,12 @@ export class EmbedCodeModal extends PlatformModal {
                 white-space: pre;
                 color: var(--text-primary);
                 line-height: 1.5;
+            }
+
+            .code-actions {
+                display: flex;
+                justify-content: flex-end;
+                margin: 8px 0 16px;
             }
 
             .loading-state {
@@ -134,6 +159,64 @@ export class EmbedCodeModal extends PlatformModal {
         }
     }
 
+    _buildBackendTokenProxyExample() {
+        const endpoint = this._tokenEndpoint || 'https://api.humanitec.ru/frontend/api/embed/configs/embed_xxx/session-token';
+        const escapedEndpoint = endpoint.replaceAll('"', '\\"');
+        return `curl -X POST "${escapedEndpoint}" \\
+  -H "Authorization: Bearer hum_YOUR_ISSUER_TOKEN" \\
+  -H "Content-Type: application/json" \\
+  -d '{"origin":"https://your-site.example","expires_in_seconds":300}'`;
+    }
+
+    _buildClientBackendCallExample() {
+        return `fetch('/api/chat-token', {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({
+    embed_id: '${this._embedId}',
+    origin: window.location.origin,
+    expires_in_seconds: 300
+  })
+});`;
+    }
+
+    async _handleCopyTokenEndpoint() {
+        const td = (k, p) => this.i18n.t(k, p ?? {});
+        if (!this._tokenEndpoint) {
+            this.error(td('embed_code_modal.err_no_token_endpoint'));
+            return;
+        }
+        try {
+            await this._copyToClipboard(this._tokenEndpoint);
+            this.success(td('embed_code_modal.toast_copied'));
+        } catch (e) {
+            const msg = e instanceof Error ? e.message : String(e);
+            this.error(td('embed_code_modal.err_copy_failed', { msg }));
+        }
+    }
+
+    async _handleCopyBackendProxyExample() {
+        const td = (k, p) => this.i18n.t(k, p ?? {});
+        try {
+            await this._copyToClipboard(this._buildBackendTokenProxyExample());
+            this.success(td('embed_code_modal.toast_copied'));
+        } catch (e) {
+            const msg = e instanceof Error ? e.message : String(e);
+            this.error(td('embed_code_modal.err_copy_failed', { msg }));
+        }
+    }
+
+    async _handleCopyClientBackendExample() {
+        const td = (k, p) => this.i18n.t(k, p ?? {});
+        try {
+            await this._copyToClipboard(this._buildClientBackendCallExample());
+            this.success(td('embed_code_modal.toast_copied'));
+        } catch (e) {
+            const msg = e instanceof Error ? e.message : String(e);
+            this.error(td('embed_code_modal.err_copy_failed', { msg }));
+        }
+    }
+
     renderHeader() {
         return this.i18n.t('embed_code_modal.header', {});
     }
@@ -158,17 +241,48 @@ export class EmbedCodeModal extends PlatformModal {
 
     renderBody() {
         const td = (k) => this.i18n.t(k, {});
+        const backendProxyExample = this._buildBackendTokenProxyExample();
+        const clientBackendExample = this._buildClientBackendCallExample();
         return this._loading
             ? html`<div class="loading-state">${td('embed_code_modal.loading')}</div>`
             : html`
+                <p class="modal-description">${td('embed_code_modal.token_howto_title')}</p>
+                <ol class="steps">
+                    <li>${td('embed_code_modal.token_howto_step_1')}</li>
+                    <li>${td('embed_code_modal.token_howto_step_2')}</li>
+                    <li>${td('embed_code_modal.token_howto_step_3')}</li>
+                </ol>
+
                 <p class="modal-description">
                     ${td('embed_code_modal.description')}
                 </p>
                 <div class="code-block">${this._code}</div>
+
                 <p class="modal-description">
                     ${td('embed_code_modal.token_endpoint_description')}
                 </p>
                 <div class="code-block">${this._tokenEndpoint}</div>
+                <div class="code-actions">
+                    <button class="btn btn-secondary" @click=${this._handleCopyTokenEndpoint}>
+                        ${td('embed_code_modal.copy_token_endpoint')}
+                    </button>
+                </div>
+
+                <p class="section-title">${td('embed_code_modal.backend_proxy_example_title')}</p>
+                <div class="code-block">${backendProxyExample}</div>
+                <div class="code-actions">
+                    <button class="btn btn-secondary" @click=${this._handleCopyBackendProxyExample}>
+                        ${td('embed_code_modal.copy_backend_proxy_example')}
+                    </button>
+                </div>
+
+                <p class="section-title">${td('embed_code_modal.client_backend_example_title')}</p>
+                <div class="code-block">${clientBackendExample}</div>
+                <div class="code-actions">
+                    <button class="btn btn-secondary" @click=${this._handleCopyClientBackendExample}>
+                        ${td('embed_code_modal.copy_client_backend_example')}
+                    </button>
+                </div>
             `;
     }
 
