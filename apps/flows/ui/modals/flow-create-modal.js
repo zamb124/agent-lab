@@ -16,6 +16,12 @@ export class FlowCreateModal extends PlatformModal {
     static styles = [
         PlatformModal.styles,
         css`
+            :host .modal-content {
+                height: min(74vh, 760px);
+                overflow-y: auto;
+                overflow-x: hidden;
+            }
+
             .header-search {
                 width: min(360px, 45vw);
                 height: 36px;
@@ -44,6 +50,8 @@ export class FlowCreateModal extends PlatformModal {
                 grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
                 gap: var(--space-4);
                 padding: var(--space-2) 0;
+                min-height: 184px;
+                align-content: start;
             }
             
             .template-card {
@@ -57,6 +65,7 @@ export class FlowCreateModal extends PlatformModal {
                 transition: all var(--duration-normal) var(--easing-default);
                 position: relative;
                 overflow: hidden;
+                animation: flowCreateCardEnter 160ms var(--easing-default);
             }
             
             .template-card::before {
@@ -122,6 +131,7 @@ export class FlowCreateModal extends PlatformModal {
                 border: 2px solid var(--border-subtle);
                 border-radius: var(--radius-xl);
                 transition: all var(--duration-normal) var(--easing-default);
+                animation: flowCreateCardEnter 160ms var(--easing-default);
             }
 
             .store-card:hover {
@@ -193,12 +203,28 @@ export class FlowCreateModal extends PlatformModal {
                 color: var(--text-secondary);
                 font-size: var(--text-sm);
                 text-align: center;
+                min-height: 184px;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                animation: flowCreateCardEnter 140ms var(--easing-default);
             }
             
             .modal-message {
                 font-size: var(--text-sm);
                 color: var(--text-secondary);
                 margin-bottom: var(--space-4);
+            }
+
+            @keyframes flowCreateCardEnter {
+                from {
+                    opacity: 0;
+                    transform: translateY(4px);
+                }
+                to {
+                    opacity: 1;
+                    transform: translateY(0);
+                }
             }
         `
     ];
