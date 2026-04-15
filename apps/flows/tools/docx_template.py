@@ -29,8 +29,7 @@ _FILL_DOCX_DESCRIPTION = """
 - variables (объект): данные для подстановки. Строки, числа, bool, null, вложенные объекты и массивы;
   даты как строки в ISO; в inline-коде допускаются date/datetime/Decimal (см. DocxTemplater, date_iso).
 - output_original_name: имя результата с расширением .docx (обязательно).
-  Ключ должен быть строго `output_original_name` (snake_case, через `_`, без пробелов).
-  Неверно: `output_original name`, `outputOriginalName`, `output-original-name`.
+  Ключ должен быть СТРОГО `output_original_name` (snake_case, через `_`, без пробелов).
 - file_name: имя шаблона как в state.files[].name (как у read_file); если не указано — первый файл .docx в state.files.
 - strict: если true — в variables должны быть ровно все переменные верхнего уровня из шаблона, без лишних ключей.
 
