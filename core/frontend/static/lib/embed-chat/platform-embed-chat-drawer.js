@@ -18,6 +18,7 @@ export class PlatformEmbedChatDrawer extends LitElement {
     static properties = {
         flowsBaseUrl: { type: String, attribute: 'flows-base-url' },
         flowId: { type: String, attribute: 'flow-id' },
+        embedId: { type: String, attribute: 'embed-id' },
         skillId: { type: String, attribute: 'skill-id' },
         useCredentials: { type: Boolean, attribute: 'use-credentials' },
         enableVoice: { type: Boolean, attribute: 'enable-voice' },
@@ -321,6 +322,7 @@ export class PlatformEmbedChatDrawer extends LitElement {
         super();
         this.flowsBaseUrl = '';
         this.flowId = '';
+        this.embedId = '';
         this.skillId = '';
         this.useCredentials = false;
         this.enableVoice = true;
@@ -958,6 +960,7 @@ export class PlatformEmbedChatDrawer extends LitElement {
                     ?show-locale-control=${this.showLocaleControl}
                     .flowsBaseUrl=${this.flowsBaseUrl}
                     flow-id=${this.flowId || ''}
+                    embed-id=${this.embedId || ''}
                     skill-id=${this.skillId || ''}
                     .assistantTitle=${headTitle}
                     .title=${headTitle}

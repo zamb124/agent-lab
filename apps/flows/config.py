@@ -94,8 +94,8 @@ class FlowSettings(BaseSettings):
     cors_allow_origins: List[str] = Field(
         default_factory=list,
         description=(
-            "Явные Origin для CORS (embed/A2A с fetch credentials или Authorization). "
-            "Прод: домены партнёрских сайтов. См. также cors_allow_origin_regex."
+            "Явные Origin для общего сервисного CORS (non-embed маршруты). "
+            "Embed A2A CORS настраивается отдельно через embed-конфигурацию."
         ),
     )
     cors_allow_origin_regex: Optional[str] = Field(
@@ -104,6 +104,10 @@ class FlowSettings(BaseSettings):
             "Regex для разрешённого Origin. Если None и server.debug — в apps/flows/main.py "
             "подставляется dev-паттерн localhost и *.lvh.me."
         ),
+    )
+    dynamic_embed_cors_enabled: bool = Field(
+        default=True,
+        description="Включает dynamic CORS для /flows/api/v1/embed/{embed_id} по EmbedConfig.allowed_origins",
     )
 
 

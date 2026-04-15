@@ -6,7 +6,8 @@
 /**
  * @param {object} options
  * @param {string} options.baseUrl - origin + префикс flows, без завершающего слэша (например https://host/flows)
- * @param {string} options.flowId
+ * @param {string} [options.flowId]
+ * @param {string} [options.embedId]
  * @param {string} options.message
  * @param {string} [options.contextId]
  * @param {string|null} [options.skillId]
@@ -20,6 +21,7 @@ export async function streamEmbedA2A(options, onEvent) {
     const {
         baseUrl,
         flowId,
+        embedId,
         message,
         contextId = null,
         skillId = null,
@@ -29,12 +31,17 @@ export async function streamEmbedA2A(options, onEvent) {
         credentials = 'omit',
     } = options;
 
-    if (!baseUrl || !flowId) {
-        throw new Error('baseUrl and flowId are required');
+    if (!baseUrl) {
+        throw new Error('baseUrl is required');
+    }
+    if (!embedId && !flowId) {
+        throw new Error('embedId or flowId is required');
     }
 
     const root = baseUrl.replace(/\/$/, '');
-    const url = `${root}/api/v1/${encodeURIComponent(flowId)}`;
+    const url = embedId
+        ? `${root}/api/v1/embed/${encodeURIComponent(embedId)}`
+        : `${root}/api/v1/${encodeURIComponent(flowId)}`;
 
     const a2aFileParts = (files || []).map((f) => {
         if (f && typeof f === 'object' && f.file && typeof f.file === 'object' && f.file.bytes != null) {

@@ -29,6 +29,7 @@ from fastapi.responses import JSONResponse, StreamingResponse
 
 from apps.flows.src.channels import PermissionDenied
 from apps.flows.src.channels.a2a import A2AChannel
+from apps.flows.src.services.embed_target_resolver import EmbedTarget, resolve_embed_target
 from core.context import get_context
 from apps.flows.src.container import FlowContainer
 from apps.flows.src.dependencies import ContainerDep
@@ -78,12 +79,21 @@ def _validate_embed_session_request(
     *,
     request: Request,
     token_data: TokenData,
+    embed_id: str | None,
     flow_id: str,
     method: str,
     params_dict: Dict[str, Any],
+    expected_skill_id: str | None = None,
 ) -> Optional[Dict[str, Any]]:
     """Проверяет claims embed-session токена для A2A вызова."""
     metadata = token_data.metadata if isinstance(token_data.metadata, dict) else {}
+    embed_token_id = metadata.get("embed_id")
+    if embed_id is not None:
+        if not isinstance(embed_token_id, str) or not embed_token_id.strip():
+            return {"code": -32000, "message": "Invalid embed session token: embed_id is required"}
+        if embed_token_id.strip() != embed_id:
+            return {"code": -32000, "message": "Embed session token is not allowed for this embed"}
+
     embed_flow_id = metadata.get("embed_flow_id")
     if not isinstance(embed_flow_id, str) or not embed_flow_id.strip():
         return {"code": -32000, "message": "Invalid embed session token: embed_flow_id is required"}
@@ -100,6 +110,9 @@ def _validate_embed_session_request(
             return {"code": -32000, "message": "Origin is not allowed for this embed session token"}
 
     allowed_skill_id = metadata.get("embed_skill_id")
+    if expected_skill_id is not None and isinstance(allowed_skill_id, str) and allowed_skill_id.strip():
+        if allowed_skill_id.strip() != expected_skill_id:
+            return {"code": -32000, "message": "Embed session token skill mismatch"}
     if isinstance(allowed_skill_id, str) and allowed_skill_id.strip():
         effective_skill_id = allowed_skill_id.strip()
         metadata_dict = params_dict.get("metadata")
@@ -262,12 +275,13 @@ async def _handle_resubscribe_streaming(
         yield f"data: {json.dumps(response, ensure_ascii=False, default=str)}\n\n"
 
 
-@router.post("/{flow_id}")
-async def json_rpc_handler(
-    flow_id: str, 
+async def _json_rpc_handler_internal(
+    *,
+    flow_id: str,
     request: Request,
     container: ContainerDep,
     v: Optional[str] = None,
+    embed_target: EmbedTarget | None = None,
 ):
     """
     JSON-RPC handler для A2A протокола.
@@ -311,12 +325,35 @@ async def json_rpc_handler(
         embed_error = _validate_embed_session_request(
             request=request,
             token_data=token_data,
+            embed_id=embed_target.embed_id if embed_target is not None else None,
             flow_id=flow_id,
             method=method,
             params_dict=params_dict,
+            expected_skill_id=embed_target.skill_id if embed_target is not None else None,
         )
         if embed_error is not None:
             return {"jsonrpc": "2.0", "id": rpc_id, "error": embed_error}
+
+    if embed_target is not None:
+        metadata_dict = params_dict.get("metadata")
+        if metadata_dict is None:
+            params_dict["metadata"] = {"skill": embed_target.skill_id}
+        elif isinstance(metadata_dict, dict):
+            request_skill = metadata_dict.get("skill")
+            if request_skill is None:
+                metadata_dict["skill"] = embed_target.skill_id
+            elif str(request_skill).strip() != embed_target.skill_id:
+                return {
+                    "jsonrpc": "2.0",
+                    "id": rpc_id,
+                    "error": {"code": -32000, "message": "Embed config skill mismatch"},
+                }
+        else:
+            return {
+                "jsonrpc": "2.0",
+                "id": rpc_id,
+                "error": {"code": -32602, "message": "Invalid params: metadata must be object"},
+            }
 
     # Версия: приоритет query param > metadata.version
     metadata = params_dict.get("metadata") or {}
@@ -499,6 +536,56 @@ async def json_rpc_handler(
         if method in _STREAM_METHODS:
             return _sse_error_response(rpc_id, -32000, str(e))
         return {"jsonrpc": "2.0", "id": rpc_id, "error": {"code": -32000, "message": str(e)}}
+
+
+@router.post("/{flow_id}")
+async def json_rpc_handler(
+    flow_id: str,
+    request: Request,
+    container: ContainerDep,
+    v: Optional[str] = None,
+):
+    return await _json_rpc_handler_internal(
+        flow_id=flow_id,
+        request=request,
+        container=container,
+        v=v,
+    )
+
+
+@router.post("/embed/{embed_id}")
+async def json_rpc_embed_handler(
+    embed_id: str,
+    request: Request,
+    container: ContainerDep,
+    v: Optional[str] = None,
+):
+    embed_target = await resolve_embed_target(container, embed_id)
+    if embed_target is None:
+        return JSONResponse(
+            {
+                "jsonrpc": "2.0",
+                "id": None,
+                "error": {"code": -32000, "message": f"Embed not found: {embed_id}"},
+            },
+            status_code=404,
+        )
+    if not embed_target.active:
+        return JSONResponse(
+            {
+                "jsonrpc": "2.0",
+                "id": None,
+                "error": {"code": -32000, "message": f"Embed disabled: {embed_id}"},
+            },
+            status_code=403,
+        )
+    return await _json_rpc_handler_internal(
+        flow_id=embed_target.flow_id,
+        request=request,
+        container=container,
+        v=v,
+        embed_target=embed_target,
+    )
 
 
 @router.get("/{flow_id}/skills")

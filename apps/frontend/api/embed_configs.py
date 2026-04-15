@@ -484,8 +484,7 @@ async def get_embed_code(
     assistant_title = config.assistant_title or config.name
     theme_js = json.dumps(config.theme, ensure_ascii=False)
     show_launcher_js = json.dumps(config.show_launcher, ensure_ascii=False)
-    flow_id_js = json.dumps(config.flow_id, ensure_ascii=False)
-    skill_id_js = json.dumps(config.skill_id, ensure_ascii=False)
+    embed_id_js = json.dumps(config.embed_id, ensure_ascii=False)
     assistant_title_js = json.dumps(assistant_title, ensure_ascii=False)
     locale_js = json.dumps(config.interface_locale, ensure_ascii=False)
     flows_base_url_js = json.dumps(f"{base_url}/flows", ensure_ascii=False)
@@ -508,8 +507,7 @@ async def get_embed_code(
   }}
 
   const assistant = document.createElement('platform-lara-assistant');
-  assistant.setAttribute('flow-id', {flow_id_js});
-  assistant.setAttribute('skill-id', {skill_id_js});
+  assistant.setAttribute('embed-id', {embed_id_js});
   assistant.setAttribute('assistant-title', {assistant_title_js});
   assistant.setAttribute('theme', {theme_js});
   assistant.setAttribute('event-namespace', 'assistant');

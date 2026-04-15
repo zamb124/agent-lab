@@ -25,6 +25,7 @@ from apps.flows.src.api.v1 import api_v1_router
 from apps.flows.config import FlowSettings, get_settings
 from apps.flows.src.container import get_container
 from apps.flows.src.services.flows_loader import load_flows_to_db, load_tools_to_db
+from apps.flows.src.middleware.embed_dynamic_cors import EmbedDynamicCorsMiddleware
 from core.logging import get_logger
 
 logger = get_logger(__name__)
@@ -248,6 +249,9 @@ app = create_service_app(
     version="2.0.0",
     mount_repo_documentation=False,
 )
+
+if _flow_settings.dynamic_embed_cors_enabled:
+    app.add_middleware(EmbedDynamicCorsMiddleware, container=get_container())
 
 # Документация (локальная статика apps/flows/site)
 docs_path = Path(__file__).parent / "site"

@@ -121,7 +121,7 @@ async def test_embed_session_token_streams_via_a2a(
         },
     }
     stream_response = await flows_client.post(
-        f"/flows/api/v1/{flow_id}",
+        f"/flows/api/v1/embed/{embed_id}",
         headers={
             "Authorization": f"Bearer {embed_token}",
             "Origin": "https://larashved.ru",
@@ -178,7 +178,7 @@ async def test_embed_session_token_streams_via_a2a_with_hum_api_key(
         },
     }
     stream_response = await flows_client.post(
-        f"/flows/api/v1/{flow_id}",
+        f"/flows/api/v1/embed/{embed_id}",
         headers={
             "Authorization": f"Bearer {embed_token}",
             "Origin": "https://larashved.ru",
@@ -224,29 +224,28 @@ async def test_embed_session_token_rejects_wrong_origin(
         },
     }
     deny_response = await flows_client.post(
-        f"/flows/api/v1/{flow_id}",
+        f"/flows/api/v1/embed/{embed_id}",
         headers={
             "Authorization": f"Bearer {embed_token}",
             "Origin": "https://evil.example",
         },
         json=rpc_body,
     )
-    assert deny_response.status_code == 200
-    deny_payload = deny_response.json()
-    assert deny_payload["error"]["code"] == -32000
-    assert "Origin is not allowed" in deny_payload["error"]["message"]
+    assert deny_response.status_code == 403
 
     await frontend_client.delete(f"/frontend/api/embed/configs/{embed_id}", headers=auth_headers)
 
 
 @pytest.mark.asyncio
-async def test_embed_session_token_rejects_wrong_flow(
+async def test_embed_session_token_rejects_wrong_embed_id(
     flows_client: AsyncClient,
     frontend_client: AsyncClient,
     embed_test_auth,
+    unique_id,
 ):
     auth_headers, flow_id, _, _ = embed_test_auth
     embed_id = await _create_embed(frontend_client, auth_headers, flow_id)
+    other_embed_id = await _create_embed(frontend_client, auth_headers, flow_id)
     token_response = await frontend_client.post(
         f"/frontend/api/embed/configs/{embed_id}/session-token",
         headers=auth_headers,
@@ -255,21 +254,20 @@ async def test_embed_session_token_rejects_wrong_flow(
     assert token_response.status_code == 200
     embed_token = token_response.json()["token"]
 
-    wrong_flow_id = f"{flow_id}_other"
     rpc_body = {
         "jsonrpc": "2.0",
-        "id": "test-flow-mismatch",
+        "id": f"test-embed-mismatch-{unique_id}",
         "method": "message/send",
         "params": {
             "message": {
-                "messageId": "m-flow-mismatch",
+                "messageId": f"m-embed-mismatch-{unique_id}",
                 "role": "user",
                 "parts": [{"kind": "text", "text": "Привет"}],
             }
         },
     }
     deny_response = await flows_client.post(
-        f"/flows/api/v1/{wrong_flow_id}",
+        f"/flows/api/v1/embed/{other_embed_id}",
         headers={
             "Authorization": f"Bearer {embed_token}",
             "Origin": "https://larashved.ru",
@@ -279,9 +277,10 @@ async def test_embed_session_token_rejects_wrong_flow(
     assert deny_response.status_code == 200
     deny_payload = deny_response.json()
     assert deny_payload["error"]["code"] == -32000
-    assert "not allowed for this flow" in deny_payload["error"]["message"]
+    assert "not allowed for this embed" in deny_payload["error"]["message"]
 
     await frontend_client.delete(f"/frontend/api/embed/configs/{embed_id}", headers=auth_headers)
+    await frontend_client.delete(f"/frontend/api/embed/configs/{other_embed_id}", headers=auth_headers)
 
 
 @pytest.mark.asyncio
@@ -315,7 +314,7 @@ async def test_embed_session_token_rejects_wrong_skill(
         },
     }
     deny_response = await flows_client.post(
-        f"/flows/api/v1/{flow_id}",
+        f"/flows/api/v1/embed/{embed_id}",
         headers={
             "Authorization": f"Bearer {embed_token}",
             "Origin": "https://larashved.ru",
@@ -353,7 +352,7 @@ async def test_embed_session_token_rejects_forbidden_method(
         "params": {"id": "t1"},
     }
     deny_response = await flows_client.post(
-        f"/flows/api/v1/{flow_id}",
+        f"/flows/api/v1/embed/{embed_id}",
         headers={
             "Authorization": f"Bearer {embed_token}",
             "Origin": "https://larashved.ru",
@@ -411,6 +410,52 @@ async def test_embed_session_token_requires_origin_when_origins_limited(
     )
     assert response.status_code == 400
     assert "origin обязателен" in response.json()["detail"]
+
+    await frontend_client.delete(f"/frontend/api/embed/configs/{embed_id}", headers=auth_headers)
+
+
+@pytest.mark.asyncio
+async def test_embed_route_preflight_allows_configured_origin(
+    flows_client: AsyncClient,
+    frontend_client: AsyncClient,
+    embed_test_auth,
+):
+    auth_headers, flow_id, _, _ = embed_test_auth
+    embed_id = await _create_embed(frontend_client, auth_headers, flow_id)
+
+    response = await flows_client.options(
+        f"/flows/api/v1/embed/{embed_id}",
+        headers={
+            "Origin": "https://larashved.ru",
+            "Access-Control-Request-Method": "POST",
+            "Access-Control-Request-Headers": "authorization,content-type",
+        },
+    )
+    assert response.status_code == 204
+    assert response.headers.get("Access-Control-Allow-Origin") == "https://larashved.ru"
+    assert response.headers.get("Access-Control-Allow-Credentials") == "true"
+
+    await frontend_client.delete(f"/frontend/api/embed/configs/{embed_id}", headers=auth_headers)
+
+
+@pytest.mark.asyncio
+async def test_embed_route_preflight_denies_unconfigured_origin(
+    flows_client: AsyncClient,
+    frontend_client: AsyncClient,
+    embed_test_auth,
+):
+    auth_headers, flow_id, _, _ = embed_test_auth
+    embed_id = await _create_embed(frontend_client, auth_headers, flow_id)
+
+    response = await flows_client.options(
+        f"/flows/api/v1/embed/{embed_id}",
+        headers={
+            "Origin": "https://evil.example",
+            "Access-Control-Request-Method": "POST",
+            "Access-Control-Request-Headers": "authorization,content-type",
+        },
+    )
+    assert response.status_code == 403
 
     await frontend_client.delete(f"/frontend/api/embed/configs/{embed_id}", headers=auth_headers)
 

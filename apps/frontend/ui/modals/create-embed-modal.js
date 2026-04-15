@@ -170,6 +170,7 @@ export class CreateEmbedModal extends PlatformModal {
         this._position = 'bottom-right';
         this._theme = 'dark';
         this._showLauncher = true;
+        this._allowedOriginsText = '';
         this._assistantTitle = '';
         this._interfaceLocale = 'auto';
         this._editConfig = null;
@@ -183,6 +184,7 @@ export class CreateEmbedModal extends PlatformModal {
         this._position = config.position || 'bottom-right';
         this._theme = config.theme || 'dark';
         this._showLauncher = config.show_launcher !== false;
+        this._allowedOriginsText = Array.isArray(config.allowed_origins) ? config.allowed_origins.join('\n') : '';
         this._assistantTitle = config.assistant_title || '';
         this._interfaceLocale = config.interface_locale || 'auto';
         this.requestUpdate();
@@ -339,10 +341,16 @@ export class CreateEmbedModal extends PlatformModal {
         this._loading = true;
         this.requestUpdate();
 
+        const allowedOrigins = this._allowedOriginsText
+            .split('\n')
+            .map((origin) => origin.trim())
+            .filter((origin) => origin.length > 0);
+
         const payload = {
             name: this._name.trim(),
             flow_id: this._flowId.trim(),
             skill_id: skillId,
+            allowed_origins: allowedOrigins,
             position: this._position,
             theme: this._theme,
             show_launcher: this._showLauncher,
@@ -486,6 +494,19 @@ export class CreateEmbedModal extends PlatformModal {
                     </select>
                     <div class="form-hint">${td('embed_create_modal.interface_locale_hint')}</div>
                 </div>
+            </div>
+
+            <div class="form-group">
+                <label class="form-label">${td('embed_create_modal.label_allowed_origins')}</label>
+                <textarea
+                    class="form-textarea"
+                    rows="4"
+                    placeholder=${td('embed_create_modal.placeholder_allowed_origins')}
+                    .value=${this._allowedOriginsText}
+                    @input=${(e) => { this._allowedOriginsText = e.target.value; this.requestUpdate(); }}
+                    ?disabled=${this._loading}
+                ></textarea>
+                <div class="form-hint">${td('embed_create_modal.allowed_origins_hint')}</div>
             </div>
 
             <div class="form-group">

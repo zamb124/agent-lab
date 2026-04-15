@@ -9,6 +9,7 @@ export class PlatformLaraAssistant extends LitElement {
     static properties = {
         flowsBaseUrl: { type: String, attribute: 'flows-base-url' },
         flowId: { type: String, attribute: 'flow-id' },
+        embedId: { type: String, attribute: 'embed-id' },
         skillId: { type: String, attribute: 'skill-id' },
         theme: { type: String, attribute: 'theme' },
         showLauncher: { type: Boolean, attribute: 'show-launcher' },
@@ -31,6 +32,7 @@ export class PlatformLaraAssistant extends LitElement {
         super();
         this.flowsBaseUrl = '';
         this.flowId = 'lara';
+        this.embedId = '';
         this.skillId = '';
         this.theme = 'auto';
         this.showLauncher = true;
@@ -52,6 +54,7 @@ export class PlatformLaraAssistant extends LitElement {
                 .showLauncher=${this.showLauncher}
                 .flowsBaseUrl=${this.flowsBaseUrl}
                 flow-id=${this.flowId || 'lara'}
+                embed-id=${this.embedId || ''}
                 skill-id=${this.skillId || ''}
                 .assistantTitle=${this.assistantTitle || 'Lara'}
                 .locale=${this.locale || 'ru'}

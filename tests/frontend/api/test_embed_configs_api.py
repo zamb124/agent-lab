@@ -473,6 +473,9 @@ async def test_get_embed_code(frontend_client: AsyncClient, test_auth_with_agent
     html_code = data["html_code"]
     assert "platform-lara-assistant" in html_code
     assert embed_id in html_code
+    assert "embed-id" in html_code
+    assert "flow-id" not in html_code
+    assert "skill-id" not in html_code
     assert "/static/core/lib/embed-chat/platform-lara-assistant.js" in html_code
     assert "session-token" in html_code
     assert data["token_endpoint"].endswith(f"/frontend/api/embed/configs/{embed_id}/session-token")
