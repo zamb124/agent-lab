@@ -185,6 +185,19 @@ export class FlowsSidebar extends PlatformElement {
                 this.error(this.i18n.t('flows_sidebar.err_create', { message: error.message }));
             }
         });
+
+        modal.addEventListener('store-flow-installed', async (e) => {
+            const { flow } = e.detail;
+            try {
+                await FlowsStore.loadFlows(this.a2a);
+                this.success(this.i18n.t('flows_sidebar.flow_created', { name: flow.name }));
+                setTimeout(() => {
+                    this._editFlow(flow.flow_id);
+                }, 100);
+            } catch (error) {
+                this.error(this.i18n.t('flows_sidebar.err_create', { message: error.message }));
+            }
+        });
         
         modal.addEventListener('close', () => modal.remove());
     }

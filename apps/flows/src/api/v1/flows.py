@@ -3,11 +3,13 @@ API endpoints для flows.
 """
 
 import asyncio
+import json
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel
+import yaml
 
 from apps.flows.src.container import FlowContainer
 from apps.flows.src.dependencies import ContainerDep
@@ -324,6 +326,15 @@ class ReloadFlowFromBundleResponse(BaseModel):
     message: str
 
 
+class FlowStoreBundleResponse(BaseModel):
+    bundle_id: str
+    flow_id: str
+    name: str
+    description: Optional[str] = None
+    tags: List[str] = []
+    installed: bool
+
+
 class FlowValidateRequest(BaseModel):
     """Запрос на валидацию агента"""
 
@@ -463,6 +474,84 @@ async def list_flows(
         
         result.append(FlowResponse(**response_data))
     return OffsetPage[FlowResponse](items=result, total=total, limit=limit, offset=offset)
+
+
+@router.get("/store/bundles", response_model=List[FlowStoreBundleResponse])
+async def list_store_bundles(container: ContainerDep) -> List[FlowStoreBundleResponse]:
+    """
+    Каталог bundle-агентов для UI Store.
+
+    Возвращает только public=true из registry.yaml, исключая hidden=true в flow.json.
+    """
+    flows_root = Path(__file__).resolve().parents[3]
+    registry_path = flows_root / "registry.yaml"
+    bundles_dir = flows_root / "bundles"
+
+    if not registry_path.exists():
+        raise HTTPException(status_code=500, detail=f"Registry not found: {registry_path}")
+
+    with open(registry_path, "r", encoding="utf-8") as f:
+        registry_data = yaml.safe_load(f) or {}
+
+    registry_flows = registry_data.get("flows")
+    if not isinstance(registry_flows, list):
+        raise HTTPException(status_code=500, detail="Registry field 'flows' must be a list")
+
+    result: list[FlowStoreBundleResponse] = []
+    for entry in registry_flows:
+        if not isinstance(entry, dict):
+            raise HTTPException(status_code=500, detail="Registry flow entry must be an object with id/public fields")
+
+        is_public = entry.get("public", False)
+        if not is_public:
+            continue
+
+        bundle_id = entry.get("id")
+        if not isinstance(bundle_id, str) or not bundle_id:
+            raise HTTPException(status_code=500, detail="Registry flow entry must include non-empty string 'id'")
+
+        flow_path = bundles_dir / bundle_id / "flow.json"
+        if not flow_path.exists():
+            raise HTTPException(status_code=500, detail=f"Bundle flow.json not found for '{bundle_id}'")
+
+        with open(flow_path, "r", encoding="utf-8") as f:
+            raw_flow = json.load(f)
+
+        hidden_value = raw_flow.get("hidden", False)
+        if not isinstance(hidden_value, bool):
+            raise HTTPException(status_code=500, detail=f"Field 'hidden' must be boolean in bundle '{bundle_id}'")
+        if hidden_value:
+            continue
+
+        flow_id = raw_flow.get("flow_id") or raw_flow.get("id")
+        if not isinstance(flow_id, str) or not flow_id:
+            raise HTTPException(status_code=500, detail=f"Bundle '{bundle_id}' must define non-empty flow_id")
+
+        name = raw_flow.get("name")
+        if not isinstance(name, str) or not name:
+            raise HTTPException(status_code=500, detail=f"Bundle '{bundle_id}' must define non-empty name")
+
+        description = raw_flow.get("description")
+        if description is not None and not isinstance(description, str):
+            raise HTTPException(status_code=500, detail=f"Bundle '{bundle_id}' field 'description' must be string")
+
+        tags = raw_flow.get("tags", [])
+        if not isinstance(tags, list) or any(not isinstance(tag, str) for tag in tags):
+            raise HTTPException(status_code=500, detail=f"Bundle '{bundle_id}' field 'tags' must be list[str]")
+
+        installed = await container.flow_repository.get(flow_id) is not None
+        result.append(
+            FlowStoreBundleResponse(
+                bundle_id=bundle_id,
+                flow_id=flow_id,
+                name=name,
+                description=description,
+                tags=tags,
+                installed=installed,
+            )
+        )
+
+    return result
 
 
 async def _validate_tool_nodes(
@@ -654,14 +743,8 @@ async def reload_flow_from_bundle(
     container: ContainerDep,
 ) -> ReloadFlowFromBundleResponse:
     """
-    Перезаписывает flow в БД из каталога ``apps/flows/bundles/<flow_id>/`` (как при company init).
-
-    Имеет смысл для агентов с source=file; иначе в репозитории может не быть bundle.
+    Загружает/перезаписывает flow в БД из каталога ``apps/flows/bundles/<flow_id>/``.
     """
-    existing = await container.flow_repository.get(flow_id)
-    if existing is None:
-        raise HTTPException(status_code=404, detail="Flow not found")
-
     flows_root = Path(__file__).resolve().parents[3]
     bundles_dir = flows_root / "bundles"
     registry_path = flows_root / "registry.yaml"

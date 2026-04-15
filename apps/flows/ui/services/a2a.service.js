@@ -41,6 +41,10 @@ export class A2AService extends BaseService {
         return this.post(`/api/v1/flows/${encodeURIComponent(flowId)}/reload-from-bundle`, {});
     }
 
+    async listStoreBundles() {
+        return this.get('/api/v1/flows/store/bundles');
+    }
+
     async sendMessage(flowId, message, context = {}) {
         return this.post(`/api/v1/flows/${flowId}/chat`, {
             message,

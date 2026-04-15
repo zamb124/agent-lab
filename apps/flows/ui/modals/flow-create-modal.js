@@ -16,6 +16,29 @@ export class FlowCreateModal extends PlatformModal {
     static styles = [
         PlatformModal.styles,
         css`
+            .header-search {
+                width: min(360px, 45vw);
+                height: 36px;
+                border: 1px solid var(--border-subtle);
+                border-radius: var(--radius-md);
+                background: var(--glass-solid-subtle);
+                color: var(--text-primary);
+                padding: 0 var(--space-3);
+                font-size: var(--text-sm);
+                outline: none;
+            }
+
+            .header-search:focus {
+                border-color: var(--accent);
+            }
+
+            .section-title {
+                margin: 0 0 var(--space-2) 0;
+                font-size: var(--text-lg);
+                font-weight: var(--font-semibold);
+                color: var(--text-primary);
+            }
+
             .templates-grid {
                 display: grid;
                 grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
@@ -83,6 +106,93 @@ export class FlowCreateModal extends PlatformModal {
                 font-size: var(--text-sm);
                 color: var(--text-secondary);
                 line-height: var(--leading-relaxed);
+                margin: 0;
+            }
+
+            .store-section {
+                margin-top: var(--space-6);
+            }
+
+            .store-card {
+                display: flex;
+                flex-direction: column;
+                gap: var(--space-3);
+                padding: var(--space-4);
+                background: var(--glass-solid-subtle);
+                border: 2px solid var(--border-subtle);
+                border-radius: var(--radius-xl);
+                transition: all var(--duration-normal) var(--easing-default);
+            }
+
+            .store-card:hover {
+                border-color: var(--glass-border-medium);
+                box-shadow: var(--glass-shadow-medium);
+                transform: translateY(-1px);
+            }
+
+            .store-card-header {
+                display: flex;
+                align-items: center;
+                gap: var(--space-2);
+            }
+
+            .store-badge {
+                margin-left: auto;
+                font-size: var(--text-xs);
+                color: var(--text-secondary);
+                background: var(--glass-tint-medium);
+                padding: 2px var(--space-2);
+                border-radius: var(--radius-sm);
+            }
+
+            .store-name {
+                margin: 0;
+                font-size: var(--text-base);
+                font-weight: var(--font-semibold);
+                color: var(--text-primary);
+            }
+
+            .store-description {
+                margin: 0;
+                font-size: var(--text-sm);
+                color: var(--text-secondary);
+                line-height: var(--leading-relaxed);
+            }
+
+            .store-footer {
+                display: flex;
+                align-items: center;
+                gap: var(--space-2);
+                justify-content: space-between;
+            }
+
+            .store-tags {
+                display: flex;
+                align-items: center;
+                gap: var(--space-1);
+                flex-wrap: wrap;
+            }
+
+            .store-tag {
+                font-size: var(--text-xs);
+                color: var(--text-tertiary);
+                background: var(--glass-tint-medium);
+                padding: 2px var(--space-2);
+                border-radius: var(--radius-sm);
+            }
+
+            .section-divider {
+                margin: var(--space-6) 0 var(--space-4) 0;
+                border: none;
+                border-top: 1px solid var(--border-subtle);
+            }
+
+            .store-empty,
+            .store-loading {
+                padding: var(--space-6) 0;
+                color: var(--text-secondary);
+                font-size: var(--text-sm);
+                text-align: center;
             }
             
             .modal-message {
@@ -96,20 +206,46 @@ export class FlowCreateModal extends PlatformModal {
     static properties = {
         ...PlatformModal.properties,
         creating: { type: Boolean },
+        storeBundles: { type: Array, state: true },
+        storeLoading: { type: Boolean, state: true },
+        installingBundleId: { type: String, state: true },
+        searchQuery: { type: String, state: true },
     };
 
     constructor() {
         super();
-        this.size = 'lg';
+        this.size = 'xl';
         this.title = '';
-        this.subtitle = '';
         this.creating = false;
+        this.storeBundles = [];
+        this.storeLoading = false;
+        this.installingBundleId = '';
+        this.searchQuery = '';
     }
 
     connectedCallback() {
         super.connectedCallback();
         this.title = this.i18n.t('flow_create.title');
-        this.subtitle = this.i18n.t('flow_create.subtitle');
+        this._loadStoreBundles();
+    }
+
+    async _loadStoreBundles() {
+        if (!this.a2a) {
+            throw new Error('[FlowCreateModal] a2a service not available');
+        }
+        this.storeLoading = true;
+        try {
+            const bundles = await this.a2a.listStoreBundles();
+            if (!Array.isArray(bundles)) {
+                throw new Error('Store bundles response must be an array');
+            }
+            this.storeBundles = bundles;
+        } catch (error) {
+            this.error(this.i18n.t('flow_create.store_load_error', { message: error.message }));
+            this.storeBundles = [];
+        } finally {
+            this.storeLoading = false;
+        }
     }
 
     _tagsFromGen(templateId) {
@@ -130,6 +266,64 @@ export class FlowCreateModal extends PlatformModal {
             console.error('[FlowCreateModal] Error selecting template:', error);
             this.error(this.i18n.t('flow_create.err', { message: error.message }));
             this.creating = false;
+        }
+    }
+
+    _normalizedQuery() {
+        return this.searchQuery.trim().toLowerCase();
+    }
+
+    _matchesQuery(values) {
+        const query = this._normalizedQuery();
+        if (!query) {
+            return true;
+        }
+        return values.some((value) => {
+            if (value == null) {
+                return false;
+            }
+            return String(value).toLowerCase().includes(query);
+        });
+    }
+
+    _visibleTemplates() {
+        return TEMPLATE_IDS.filter((template) => {
+            const name = this.i18n.t(`flow_create.templates.${template.id}.name`);
+            const description = this.i18n.t(`flow_create.templates.${template.id}.description`);
+            return this._matchesQuery([template.id, name, description]);
+        });
+    }
+
+    _visibleStoreBundles() {
+        return this.storeBundles.filter((bundle) => this._matchesQuery([
+            bundle.bundle_id,
+            bundle.flow_id,
+            bundle.name,
+            bundle.description,
+            ...bundle.tags,
+        ]));
+    }
+
+    async _onInstall(bundle) {
+        if (this.installingBundleId || bundle.installed) {
+            return;
+        }
+        this.installingBundleId = bundle.bundle_id;
+        try {
+            const reloadResult = await this.a2a.reloadFlowFromBundle(bundle.bundle_id);
+            const installedFlow = await this.a2a.getFlow(reloadResult.flow_id);
+            this.storeBundles = this.storeBundles.map((item) => {
+                if (item.bundle_id === bundle.bundle_id) {
+                    return { ...item, installed: true };
+                }
+                return item;
+            });
+            this.emit('store-flow-installed', { flow: installedFlow, bundle });
+            this.close();
+        } catch (error) {
+            this.error(this.i18n.t('flow_create.err', { message: error.message }));
+        } finally {
+            this.installingBundleId = '';
         }
     }
 
@@ -249,22 +443,32 @@ export class FlowCreateModal extends PlatformModal {
     }
 
     renderHeader() {
+        return this.title;
+    }
+
+    renderHeaderActions() {
         return html`
-            <div style="flex: 1;">
-                <h2 class="modal-title">${this.title}</h2>
-                ${this.subtitle ? html`<div class="modal-subtitle">${this.subtitle}</div>` : ''}
-            </div>
+            <input
+                class="header-search"
+                type="search"
+                .value=${this.searchQuery}
+                placeholder=${this.i18n.t('flow_create.search_placeholder')}
+                @input=${(e) => { this.searchQuery = e.target.value; }}
+            />
         `;
     }
 
     renderBody() {
+        const templates = this._visibleTemplates();
+        const storeBundles = this._visibleStoreBundles();
         return html`
             <div class="modal-message">
                 ${this.i18n.t('flow_create.intro')}
             </div>
-            
+
+            <h3 class="section-title">${this.i18n.t('flow_create.section_templates')}</h3>
             <div class="templates-grid">
-                ${TEMPLATE_IDS.map((template) => html`
+                ${templates.map((template) => html`
                     <div 
                         class="template-card" 
                         style="--template-color: ${template.color}"
@@ -277,6 +481,46 @@ export class FlowCreateModal extends PlatformModal {
                         <div class="template-description">${this.i18n.t(`flow_create.templates.${template.id}.description`)}</div>
                     </div>
                 `)}
+            </div>
+
+            <hr class="section-divider" />
+
+            <div class="store-section">
+                <h3 class="section-title">${this.i18n.t('flow_create.section_store')}</h3>
+                ${this.storeLoading
+                    ? html`<div class="store-loading">${this.i18n.t('flow_create.store_loading')}</div>`
+                    : storeBundles.length === 0
+                        ? html`<div class="store-empty">${this.i18n.t('flow_create.store_empty')}</div>`
+                        : html`
+                            <div class="templates-grid">
+                                ${storeBundles.map((bundle) => html`
+                                    <div class="store-card">
+                                        <div class="store-card-header">
+                                            <platform-icon name="workflow" size="18"></platform-icon>
+                                            <h4 class="store-name">${bundle.name}</h4>
+                                            <span class="store-badge">${bundle.flow_id}</span>
+                                        </div>
+                                        <p class="store-description">${bundle.description ?? ''}</p>
+                                        <div class="store-footer">
+                                            <div class="store-tags">
+                                                ${bundle.tags.map((tag) => html`<span class="store-tag">${tag}</span>`)}
+                                            </div>
+                                            <platform-button
+                                                size="sm"
+                                                ?disabled=${bundle.installed || this.installingBundleId === bundle.bundle_id}
+                                                @click=${() => this._onInstall(bundle)}
+                                            >
+                                                ${bundle.installed
+                                                    ? this.i18n.t('flow_create.installed')
+                                                    : this.installingBundleId === bundle.bundle_id
+                                                        ? this.i18n.t('flow_create.installing')
+                                                        : this.i18n.t('flow_create.install')}
+                                            </platform-button>
+                                        </div>
+                                    </div>
+                                `)}
+                            </div>
+                        `}
             </div>
         `;
     }

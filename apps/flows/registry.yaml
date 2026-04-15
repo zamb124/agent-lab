@@ -18,12 +18,12 @@ flows:
   
   # Внешние агенты
   - id: example_external
-    public: false
+    public: true
     description: "Внешний агент по A2A протоколу"
   
   # Кастомные классы
   - id: example_custom_class
-    public: false
+    public: true
     description: "Кастомный класс агента с llm_node_class параметром"
   
   # CRM агенты
