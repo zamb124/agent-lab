@@ -54,6 +54,37 @@
 - strict: false
 - output_original_name: `Договор_стажировки_{{ intern_sign_name }}.docx`
 - variables: объект из обязательных полей выше
+- Используй только эти ключи аргументов инструмента: `variables`, `output_original_name`, `file_name`, `strict`.
+- Ключ `output_original_name` пиши строго в snake_case, без пробелов.
+
+Пример корректного вызова fill_docx_template:
+{
+  "variables": {
+    "contract_number": "АФ-С-1/2026",
+    "contract_day": "15",
+    "contract_month": "апреля",
+    "contract_year": "2026",
+    "contract_city": "Москва",
+    "intern_full_name": "Иванов Иван Иванович",
+    "internship_position": "Ассистент образовательного направления",
+    "internship_start_date": "01 апреля 2026",
+    "internship_duration_text": "3-х (трех)",
+    "internship_access_resources": "рабочему Инстаграм-аккаунту ART FLASH (artflash_msk), Телеграм-каналу ART FLASH (https://t.me/AFmagazine), базе знаний в системе Платрум, хранилищу файлов на Google Диск",
+    "internship_duties": [
+      "коммуникации между отделами, контроль сроков и трекинг задач, помощь с управлением образовательной платформы"
+    ],
+    "intern_passport_number": "4500 123456",
+    "intern_passport_issued_by": "ГУ МВД России по г. Москве",
+    "intern_passport_issue_date": "01.02.2019",
+    "intern_passport_division_code": "770-009",
+    "intern_email": "intern@example.com",
+    "intern_phone": "+7 999 123-45-67",
+    "intern_sign_name": "Иванов И.И."
+  },
+  "output_original_name": "Договор_стажировки_Иванов И.И..docx",
+  "file_name": "internship_contract_ru.docx",
+  "strict": false
+}
 
 Вызов gdocs_create_document:
 - title: `Договор стажировки — {{ intern_sign_name }}`
