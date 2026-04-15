@@ -42,6 +42,7 @@ from core.tracing import TraceContext, get_tracer
 from core.tracing.context import get_current_trace_context
 from apps.flows.src.variables import VariableResolver
 from core.errors import ToolExecutionError
+from apps.flows.src.tools.base import sanitize_tool_name
 
 from .base_runner import BaseLlmNodeRunner
 from apps.flows.src.models.enums import ReactToolRole
@@ -73,6 +74,19 @@ class LlmNodeRunner(BaseLlmNodeRunner):
     """
 
     MAX_ITERATIONS = 10
+
+    def _resolve_tool_by_call_name(self, call_name: str):
+        """Резолвит tool по имени вызова, включая API-совместимую санитизацию."""
+        exact_tool = next((t for t in self.tools if t.name == call_name), None)
+        if exact_tool:
+            return exact_tool
+
+        sanitized_name = sanitize_tool_name(call_name)
+        sanitized_tool = next((t for t in self.tools if t.name == sanitized_name), None)
+        if sanitized_tool:
+            return sanitized_tool
+
+        return None
 
     def _source_node_id(self) -> str:
         if not self.node_config:
@@ -489,7 +503,7 @@ class LlmNodeRunner(BaseLlmNodeRunner):
                                 tool_name = tc.get("name", "unknown")
                                 tool_args = tc.get("arguments", {})
                                 
-                                tool_obj = next((t for t in self.tools if t.name == tool_name), None)
+                                tool_obj = self._resolve_tool_by_call_name(tool_name)
                                 react_role = (
                                     tool_obj.react_role.value
                                     if tool_obj
@@ -769,12 +783,13 @@ class LlmNodeRunner(BaseLlmNodeRunner):
         tool_args = tc.get("arguments", {})
         tool_call_id = tc.get("id", tool_name)
         
-        tool = next((t for t in self.tools if t.name == tool_name), None)
+        tool = self._resolve_tool_by_call_name(tool_name)
         if not tool:
             raise ToolExecutionError(
                 f"Tool '{tool_name}' not found. Flow must be fully inline with all tools loaded.",
                 error=None
             )
+        tool_name = tool.name
         
         nested_flow_tool = hasattr(tool, "flow_id")
         
