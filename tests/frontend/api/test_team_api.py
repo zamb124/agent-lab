@@ -239,3 +239,165 @@ class TestTeamAPI:
         assert "shared_member" not in member_ids
         assert "user2" in member_ids
 
+
+@pytest.mark.asyncio
+class TestSystemAccessAPI:
+    """Тесты self-access для пользователей компании system."""
+
+    async def _create_system_actor(self, frontend_container):
+        import uuid
+        from core.models.identity_models import Company, User
+        from core.utils.tokens import get_token_service
+
+        user_id = f"system_actor_{uuid.uuid4().hex[:8]}"
+        system_company = await frontend_container.company_repository.get("system")
+        if system_company is None:
+            system_company = Company(
+                company_id="system",
+                name="System",
+                owner_user_id=user_id,
+                members={},
+            )
+        system_company.members[user_id] = ["admin"]
+        await frontend_container.company_repository.set(system_company)
+
+        user = User(
+            user_id=user_id,
+            name="System Actor",
+            companies={"system": ["admin"]},
+            active_company_id="system",
+        )
+        await frontend_container.user_repository.set(user)
+
+        token_service = get_token_service()
+        token = token_service.create_token(user_id=user_id, company_id="system")
+        return user_id, {"Authorization": f"Bearer {token}"}
+
+    async def test_enter_company_as_system_member_success(self, frontend_client: AsyncClient, frontend_container):
+        import uuid
+        from core.models.identity_models import Company
+
+        system_user_id, auth_headers = await self._create_system_actor(frontend_container)
+        company_id = f"target_company_{uuid.uuid4().hex[:8]}"
+        target_company = Company(
+            company_id=company_id,
+            name="Target",
+            owner_user_id="target_owner",
+            members={"target_owner": ["owner"]},
+            subdomain=f"target-{uuid.uuid4().hex[:6]}",
+        )
+        await frontend_container.company_repository.set(target_company)
+
+        response = await frontend_client.post(
+            f"/frontend/api/companies/{company_id}/system-access",
+            headers=auth_headers,
+            json={"role": "admin"},
+        )
+
+        assert response.status_code == 200
+        assert response.json()["success"] is True
+        assert "admin" in response.json()["roles"]
+
+        updated_user = await frontend_container.user_repository.get(system_user_id)
+        assert "admin" in updated_user.companies[company_id]
+        updated_company = await frontend_container.company_repository.get(company_id)
+        assert "admin" in updated_company.members[system_user_id]
+
+    async def test_enter_company_as_system_member_rejects_owner_role(
+        self,
+        frontend_client: AsyncClient,
+        frontend_container,
+    ):
+        import uuid
+        from core.models.identity_models import Company
+
+        _, auth_headers = await self._create_system_actor(frontend_container)
+        company_id = f"target_company_{uuid.uuid4().hex[:8]}"
+        target_company = Company(
+            company_id=company_id,
+            name="Target",
+            owner_user_id="target_owner",
+            members={"target_owner": ["owner"]},
+            subdomain=f"target-{uuid.uuid4().hex[:6]}",
+        )
+        await frontend_container.company_repository.set(target_company)
+
+        response = await frontend_client.post(
+            f"/frontend/api/companies/{company_id}/system-access",
+            headers=auth_headers,
+            json={"role": "owner"},
+        )
+
+        assert response.status_code == 400
+        assert "Недопустимая роль" in response.json()["detail"]
+
+    async def test_enter_company_as_system_member_rejects_non_system_user(
+        self,
+        frontend_client: AsyncClient,
+        auth_headers_company2,
+        frontend_container,
+    ):
+        import uuid
+        from core.models.identity_models import Company
+
+        company_id = f"target_company_{uuid.uuid4().hex[:8]}"
+        target_company = Company(
+            company_id=company_id,
+            name="Target",
+            owner_user_id="target_owner",
+            members={"target_owner": ["owner"]},
+            subdomain=f"target-{uuid.uuid4().hex[:6]}",
+        )
+        await frontend_container.company_repository.set(target_company)
+
+        response = await frontend_client.post(
+            f"/frontend/api/companies/{company_id}/system-access",
+            headers=auth_headers_company2,
+            json={"role": "admin"},
+        )
+
+        assert response.status_code == 403
+        assert "system" in response.json()["detail"].lower()
+
+    async def test_leave_company_switches_active_company_to_system(
+        self,
+        frontend_client: AsyncClient,
+        frontend_container,
+    ):
+        import uuid
+        from core.models.identity_models import Company
+
+        system_user_id, auth_headers = await self._create_system_actor(frontend_container)
+        company_id = f"target_company_{uuid.uuid4().hex[:8]}"
+        target_company = Company(
+            company_id=company_id,
+            name="Target",
+            owner_user_id="target_owner",
+            members={"target_owner": ["owner"], system_user_id: ["admin"]},
+            subdomain=f"target-{uuid.uuid4().hex[:6]}",
+        )
+        await frontend_container.company_repository.set(target_company)
+
+        user = await frontend_container.user_repository.get(system_user_id)
+        user.companies[company_id] = ["admin"]
+        user.active_company_id = company_id
+        await frontend_container.user_repository.set(user)
+
+        response = await frontend_client.delete(
+            f"/frontend/api/companies/{company_id}/system-access",
+            headers=auth_headers,
+        )
+
+        assert response.status_code == 200
+        payload = response.json()
+        assert payload["success"] is True
+        assert payload["switched_to_system"] is True
+        set_cookie = response.headers.get("set-cookie")
+        assert set_cookie is not None
+        assert "auth_token=" in set_cookie
+
+        updated_user = await frontend_container.user_repository.get(system_user_id)
+        assert company_id not in updated_user.companies
+        assert updated_user.active_company_id == "system"
+        updated_company = await frontend_container.company_repository.get(company_id)
+        assert system_user_id not in updated_company.members

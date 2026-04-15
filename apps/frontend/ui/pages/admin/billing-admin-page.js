@@ -6,6 +6,7 @@ import { PlatformElement } from '@platform/lib/platform-element/index.js';
 import { formStyles } from '@platform/lib/styles/shared/form.styles.js';
 import { buttonStyles } from '@platform/lib/styles/shared/button.styles.js';
 import { BaseService } from '@platform/lib/services/BaseService.js';
+import { buildCompanySubdomainUrl } from '@platform/lib/utils/tenant-url.js';
 import '@platform/lib/components/layout/page-header.js';
 import '@platform/lib/components/platform-button.js';
 import '@platform/lib/components/platform-switch.js';
@@ -16,6 +17,7 @@ import '@platform/lib/components/platform-help-hint.js';
 const api = new BaseService('/frontend');
 const USAGE_FACET_DEBOUNCE_MS = 300;
 const BILLING_COMPANY_SUGGEST_DEBOUNCE_MS = 280;
+const SYSTEM_COMPANY_ID = 'system';
 
 function _usageFacetItemIsObject(item) {
     return item !== null && typeof item === 'object' && typeof item.value === 'string';
@@ -949,6 +951,78 @@ export class BillingAdminPage extends PlatformElement {
                 text-align: right;
                 font-variant-numeric: tabular-nums;
             }
+
+            .billing-companies-table .actions-cell {
+                min-width: 180px;
+            }
+
+            .companies-actions {
+                display: flex;
+                gap: var(--space-2);
+                justify-content: flex-end;
+            }
+
+            .system-access-dialog {
+                position: fixed;
+                inset: 0;
+                z-index: var(--z-modal, 5000);
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                background: rgba(10, 12, 20, 0.62);
+            }
+
+            .system-access-card {
+                width: min(460px, calc(100vw - 32px));
+                background: var(--glass-solid-strong);
+                border: 1px solid var(--glass-border-medium);
+                border-radius: var(--radius-xl);
+                box-shadow: var(--glass-shadow-medium), 0 8px 32px rgba(0, 0, 0, 0.2);
+                padding: var(--space-5);
+                display: flex;
+                flex-direction: column;
+                gap: var(--space-3);
+            }
+
+            .system-access-card h3 {
+                margin: 0;
+                font-size: var(--text-lg);
+                font-weight: var(--font-semibold);
+            }
+
+            .system-access-card p {
+                margin: 0;
+                color: var(--text-secondary);
+                font-size: var(--text-sm);
+            }
+
+            .system-access-role-grid {
+                display: grid;
+                gap: var(--space-2);
+            }
+
+            .system-access-role-item {
+                display: flex;
+                align-items: center;
+                gap: var(--space-2);
+                padding: var(--space-2) var(--space-3);
+                border: 1px solid var(--border-default);
+                border-radius: var(--radius-md);
+                cursor: pointer;
+                transition: border-color var(--duration-fast), background var(--duration-fast);
+            }
+
+            .system-access-role-item:has(input:checked) {
+                border-color: var(--accent-primary, var(--border-strong));
+                background: var(--glass-tint-medium);
+            }
+
+            .system-access-card-footer {
+                display: flex;
+                justify-content: flex-end;
+                gap: var(--space-2);
+                margin-top: var(--space-1);
+            }
         `,
     ];
 
@@ -959,6 +1033,13 @@ export class BillingAdminPage extends PlatformElement {
         _companiesOverviewError: { type: String, state: true },
         _companiesOverviewHasMore: { type: Boolean, state: true },
         _companiesOverviewOffset: { type: Number, state: true },
+        _currentUserCompanies: { type: Object, state: true },
+        _currentUserActiveCompanyId: { type: String, state: true },
+        _systemAccessModalOpen: { type: Boolean, state: true },
+        _systemAccessTargetCompanyId: { type: String, state: true },
+        _systemAccessSelectedRole: { type: String, state: true },
+        _systemAccessActionLoading: { type: Boolean, state: true },
+        _systemAccessActionError: { type: String, state: true },
 
         _effectivePrices: { type: Object, state: true },
         _overrideRows: { type: Array, state: true },
@@ -1008,6 +1089,13 @@ export class BillingAdminPage extends PlatformElement {
         this._companiesOverviewError = '';
         this._companiesOverviewHasMore = false;
         this._companiesOverviewOffset = 0;
+        this._currentUserCompanies = {};
+        this._currentUserActiveCompanyId = '';
+        this._systemAccessModalOpen = false;
+        this._systemAccessTargetCompanyId = '';
+        this._systemAccessSelectedRole = 'admin';
+        this._systemAccessActionLoading = false;
+        this._systemAccessActionError = '';
 
         this._effectivePrices = {};
         this._overrideRows = [];
@@ -1078,6 +1166,9 @@ export class BillingAdminPage extends PlatformElement {
         super.connectedCallback();
         document.addEventListener('click', this._usageOnDocClick);
         void this._loadPrices();
+        void this._loadCurrentUserContext().catch((e) => {
+            this._companiesOverviewError = e && typeof e.message === 'string' ? e.message : String(e);
+        });
         void this._fetchBillingCompanySuggestInitial();
         if (this._billingTab === 'companies') {
             void this._loadCompaniesOverview(true);
@@ -1317,6 +1408,109 @@ export class BillingAdminPage extends PlatformElement {
             this._pricesError = e.message;
         } finally {
             this._pricesLoading = false;
+        }
+    }
+
+    async _loadCurrentUserContext() {
+        const userData = await this.auth.get('/api/auth/me');
+        if (!userData || typeof userData !== 'object') {
+            throw new Error(this._t('system_access_user_context_invalid'));
+        }
+        this._currentUserCompanies = userData.companies && typeof userData.companies === 'object'
+            ? userData.companies
+            : {};
+        this._currentUserActiveCompanyId = typeof userData.active_company_id === 'string'
+            ? userData.active_company_id
+            : '';
+    }
+
+    _rolesForCompany(companyId) {
+        const roles = this._currentUserCompanies[companyId];
+        if (!Array.isArray(roles)) {
+            return [];
+        }
+        return roles;
+    }
+
+    _hasMembership(companyId) {
+        return this._rolesForCompany(companyId).length > 0;
+    }
+
+    _canManageSystemAccess() {
+        return this._hasMembership(SYSTEM_COMPANY_ID);
+    }
+
+    _systemAccessRoleLabel(role) {
+        return this._t(`system_access_role_${role}`);
+    }
+
+    _resolveCompanySubdomain(companyId) {
+        const row = this._companiesOverviewItems.find((item) => item.company_id === companyId);
+        if (!row || typeof row.subdomain !== 'string' || row.subdomain.trim() === '') {
+            throw new Error(this._t('system_access_company_subdomain_missing'));
+        }
+        return row.subdomain;
+    }
+
+    _closeSystemAccessModal() {
+        this._systemAccessModalOpen = false;
+        this._systemAccessTargetCompanyId = '';
+        this._systemAccessSelectedRole = 'admin';
+        this._systemAccessActionError = '';
+    }
+
+    _openSystemAccessModal(companyId) {
+        this._systemAccessTargetCompanyId = companyId;
+        this._systemAccessSelectedRole = 'admin';
+        this._systemAccessActionError = '';
+        this._systemAccessModalOpen = true;
+    }
+
+    async _enterCompanyFromModal() {
+        if (!this._systemAccessTargetCompanyId) {
+            this._systemAccessActionError = this._t('system_access_company_required');
+            return;
+        }
+        const targetCompanyId = this._systemAccessTargetCompanyId;
+        this._systemAccessActionLoading = true;
+        this._systemAccessActionError = '';
+        try {
+            await api.post(
+                `/api/companies/${encodeURIComponent(targetCompanyId)}/system-access`,
+                { role: this._systemAccessSelectedRole },
+            );
+            await this._loadCurrentUserContext();
+            this._closeSystemAccessModal();
+            await this.auth.switchCompany(targetCompanyId);
+            const targetSubdomain = this._resolveCompanySubdomain(targetCompanyId);
+            const targetPath = `${window.location.pathname}${window.location.search}${window.location.hash}`;
+            window.location.href = buildCompanySubdomainUrl(targetSubdomain, targetPath);
+        } catch (e) {
+            this._systemAccessActionError = e && typeof e.message === 'string' ? e.message : String(e);
+        } finally {
+            this._systemAccessActionLoading = false;
+        }
+    }
+
+    async _leaveCompany(companyId) {
+        this._systemAccessActionLoading = true;
+        this._systemAccessActionError = '';
+        try {
+            const data = await api.delete(
+                `/api/companies/${encodeURIComponent(companyId)}/system-access`,
+            );
+            await this._loadCurrentUserContext();
+            await this._loadCompaniesOverview(true);
+            this.success(this._t('system_access_leave_success'));
+            if (data?.switched_to_system === true) {
+                const systemSubdomain = this._resolveCompanySubdomain(SYSTEM_COMPANY_ID);
+                const targetPath = `${window.location.pathname}${window.location.search}${window.location.hash}`;
+                window.location.href = buildCompanySubdomainUrl(systemSubdomain, targetPath);
+            }
+        } catch (e) {
+            this.error(e && typeof e.message === 'string' ? e.message : String(e));
+        } finally {
+            this._systemAccessActionLoading = false;
         }
     }
 
@@ -1781,6 +1975,7 @@ export class BillingAdminPage extends PlatformElement {
                   `
                 : ''}
             ${this._billingTab === 'usage' ? this._renderUsageSection() : ''}
+            ${this._renderSystemAccessModal()}
         `;
     }
 
@@ -1823,6 +2018,7 @@ export class BillingAdminPage extends PlatformElement {
                                           <th class="num">${this._t('col_balance')}</th>
                                           <th class="num">${this._t('col_monthly_budget')}</th>
                                           <th class="num">${this._t('col_spent_month')}</th>
+                                          <th class="num">${this._t('col_actions')}</th>
                                       </tr>
                                   </thead>
                                   <tbody>
@@ -1837,6 +2033,35 @@ export class BillingAdminPage extends PlatformElement {
                                                   <td class="num">${r.balance}</td>
                                                   <td class="num">${r.monthly_budget}</td>
                                                   <td class="num">${r.current_month_spent}</td>
+                                                  <td class="num actions-cell">
+                                                      ${this._canManageSystemAccess() && r.company_id !== SYSTEM_COMPANY_ID
+                                                          ? html`
+                                                                <div class="companies-actions">
+                                                                    ${this._hasMembership(r.company_id)
+                                                                        ? html`
+                                                                              <platform-button
+                                                                                  variant="danger"
+                                                                                  size="sm"
+                                                                                  ?disabled=${this._systemAccessActionLoading}
+                                                                                  @click=${() => this._leaveCompany(r.company_id)}
+                                                                              >
+                                                                                  ${this._t('system_access_leave')}
+                                                                              </platform-button>
+                                                                          `
+                                                                        : html`
+                                                                              <platform-button
+                                                                                  variant="secondary"
+                                                                                  size="sm"
+                                                                                  ?disabled=${this._systemAccessActionLoading}
+                                                                                  @click=${() => this._openSystemAccessModal(r.company_id)}
+                                                                              >
+                                                                                  ${this._t('system_access_enter')}
+                                                                              </platform-button>
+                                                                          `}
+                                                                </div>
+                                                            `
+                                                          : html`<span class="muted">—</span>`}
+                                                  </td>
                                               </tr>
                                           `,
                                       )}
@@ -1858,6 +2083,61 @@ export class BillingAdminPage extends PlatformElement {
                               : ''}
                       `
                     : ''}
+            </div>
+        `;
+    }
+
+    _renderSystemAccessModal() {
+        if (!this._systemAccessModalOpen) {
+            return html``;
+        }
+        return html`
+            <div class="system-access-dialog" @click=${() => this._closeSystemAccessModal()}>
+                <div class="system-access-card" @click=${(event) => event.stopPropagation()}>
+                    <h3>${this._t('system_access_modal_title')}</h3>
+                    <p>
+                        ${this._t('system_access_modal_subtitle', {
+                            company_id: this._systemAccessTargetCompanyId,
+                        })}
+                    </p>
+                    <div class="system-access-role-grid">
+                        ${['admin', 'developer', 'viewer'].map(
+                            (role) => html`
+                                <label class="system-access-role-item">
+                                    <input
+                                        type="radio"
+                                        name="system-access-role"
+                                        .value=${role}
+                                        .checked=${this._systemAccessSelectedRole === role}
+                                        @change=${() => {
+                                            this._systemAccessSelectedRole = role;
+                                        }}
+                                    />
+                                    <span>${this._systemAccessRoleLabel(role)}</span>
+                                </label>
+                            `,
+                        )}
+                    </div>
+                    ${this._systemAccessActionError
+                        ? html`<div class="err">${this._systemAccessActionError}</div>`
+                        : ''}
+                    <div class="system-access-card-footer">
+                        <platform-button
+                            variant="ghost"
+                            ?disabled=${this._systemAccessActionLoading}
+                            @click=${() => this._closeSystemAccessModal()}
+                        >
+                            ${this._t('cancel')}
+                        </platform-button>
+                        <platform-button
+                            variant="primary"
+                            ?disabled=${this._systemAccessActionLoading}
+                            @click=${() => this._enterCompanyFromModal()}
+                        >
+                            ${this._t('system_access_enter')}
+                        </platform-button>
+                    </div>
+                </div>
             </div>
         `;
     }

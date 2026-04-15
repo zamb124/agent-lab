@@ -169,11 +169,14 @@ ROUTE_RULES: List[RouteRule] = [
     RouteRule("/api/companies/check-slug", context_type="frontend", auth_required=True),
     RouteRule("/api/companies/me", context_type="frontend", auth_required=True),
     RouteRule("/api/companies", context_type="frontend", auth_required=True),
+    RouteRule("/api/companies/*/system-access", context_type="frontend", auth_required=True),
     RouteRule("/*/api/companies/me", context_type="frontend", auth_required=True),
     RouteRule("/*/api/companies", context_type="frontend", auth_required=True),
+    RouteRule("/*/api/companies/*/system-access", context_type="frontend", auth_required=True),
     RouteRule("/frontend/api/companies/check-slug", context_type="frontend", auth_required=True),
     RouteRule("/frontend/api/companies/me", context_type="frontend", auth_required=True),
     RouteRule("/frontend/api/companies", context_type="frontend", auth_required=True),
+    RouteRule("/frontend/api/companies/*/system-access", context_type="frontend", auth_required=True),
     
     # API фронтенда для управления конфигурациями виджетов
     RouteRule("/frontend/api/embed/configs/*", context_type="api", auth_required=True),
@@ -375,6 +378,7 @@ NO_SUBDOMAIN_ALLOWED_PATHS = [
     "/api/companies/check-slug",
     "/api/companies/me",
     "/api/companies",
+    "/api/companies/*/system-access",
     "/api/auth/me",
     "/api/auth/me/*",
     "/auth/me",
@@ -384,6 +388,7 @@ NO_SUBDOMAIN_ALLOWED_PATHS = [
     "/frontend/api/companies/check-slug",
     "/frontend/api/companies/me",
     "/frontend/api/companies",
+    "/frontend/api/companies/*/system-access",
     "/api/invites/accept",
     "/frontend/api/invites/accept",
     "/*/test",  # E2E тестовые страницы (TESTING mode only)
