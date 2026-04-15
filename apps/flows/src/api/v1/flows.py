@@ -13,7 +13,7 @@ import yaml
 
 from apps.flows.src.container import FlowContainer
 from apps.flows.src.dependencies import ContainerDep
-from apps.flows.src.services.flows_loader import FlowsLoader
+from apps.flows.src.services.flows_loader import FlowsLoader, load_tools_to_db
 from core.logging import get_logger
 from core.pagination import OffsetPage
 from apps.flows.src.models import Edge, FlowConfig, SkillConfig, NodeConfig, FlowType, ExternalAgentStatus, TriggerConfig
@@ -861,6 +861,10 @@ async def reload_flow_from_bundle(
     """
     Загружает/перезаписывает flow в БД из каталога ``apps/flows/bundles/<flow_id>/``.
     """
+    # Для установки bundle в компанию требуются все code-tools из runtime-модулей.
+    # Иначе инлайнинг упадёт на tool_id, которого нет в tool_repository текущей компании.
+    await load_tools_to_db(container.tool_repository)
+
     flows_root = Path(__file__).resolve().parents[3]
     bundles_dir = flows_root / "bundles"
     registry_path = flows_root / "registry.yaml"
