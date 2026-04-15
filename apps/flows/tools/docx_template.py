@@ -29,8 +29,14 @@ _FILL_DOCX_DESCRIPTION = """
 - variables (объект): данные для подстановки. Строки, числа, bool, null, вложенные объекты и массивы;
   даты как строки в ISO; в inline-коде допускаются date/datetime/Decimal (см. DocxTemplater, date_iso).
 - output_original_name: имя результата с расширением .docx (обязательно).
+  Ключ должен быть строго `output_original_name` (snake_case, через `_`, без пробелов).
+  Неверно: `output_original name`, `outputOriginalName`, `output-original-name`.
 - file_name: имя шаблона как в state.files[].name (как у read_file); если не указано — первый файл .docx в state.files.
 - strict: если true — в variables должны быть ровно все переменные верхнего уровня из шаблона, без лишних ключей.
+
+Ожидается JSON-объект аргументов только с ключами:
+`variables`, `output_original_name`, `file_name`, `strict`.
+Передача любых других ключей недопустима.
 
 Успех: success=true, file_id, url, original_name, content_type, file_size, checksum (если есть), is_public.
 Ошибка: success=false, error (текст), при сбое шаблона также code из платформы.
@@ -53,16 +59,35 @@ def _fill_docx_mock(args: dict, state: Any = None) -> dict:
 
 
 class FillDocxTemplateArgs(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(
+        extra="forbid",
+        json_schema_extra={
+            "examples": [
+                {
+                    "variables": {"full_name": "Иванов Иван Иванович"},
+                    "output_original_name": "Договор_стажировки.docx",
+                    "file_name": "internship_contract_ru.docx",
+                    "strict": False,
+                }
+            ]
+        },
+    )
 
     variables: Dict[str, Any] = Field(
         ...,
-        description="Данные для Jinja2 в шаблоне: строки, числа, bool, вложенные объекты и массивы; даты — ISO-строки.",
+        description=(
+            "Данные для Jinja2 в шаблоне: строки, числа, bool, null, вложенные объекты и массивы; "
+            "даты — ISO-строки."
+        ),
     )
     output_original_name: str = Field(
         ...,
         min_length=1,
-        description="Имя итогового файла с расширением .docx.",
+        description=(
+            "Имя итогового файла с расширением .docx. "
+            "Имя ключа аргумента должно быть строго output_original_name "
+            "(snake_case, без пробелов)."
+        ),
     )
     file_name: Optional[str] = Field(
         None,
@@ -88,15 +113,26 @@ async def fill_docx_template(
     strict: bool = False,
     state: Optional[dict] = None,
 ) -> dict:
+    def _normalize_file_name(value: Optional[str]) -> Optional[str]:
+        if value is None:
+            return None
+        normalized = value.strip()
+        if not normalized:
+            return None
+        return normalized.strip("`'\"")
+
     def _pick_file(entries, name):
         if not entries:
             return None
+        normalized_name = _normalize_file_name(name)
+        if not normalized_name:
+            return entries[0]
         if not name:
             return entries[0]
         for f in entries:
-            if f.get("name") == name:
+            if f.get("name") == normalized_name:
                 return f
-        name_lower = name.lower()
+        name_lower = normalized_name.lower()
         for f in entries:
             if name_lower in (f.get("name") or "").lower():
                 return f
@@ -124,8 +160,9 @@ async def fill_docx_template(
         if isinstance(f, dict)
         and (f.get("name") or "").lower().endswith(".docx")
     ]
-    if file_name:
-        finfo = _pick_file(files, file_name)
+    normalized_file_name = _normalize_file_name(file_name)
+    if normalized_file_name:
+        finfo = _pick_file(files, normalized_file_name)
     else:
         finfo = docx_entries[0] if docx_entries else None
 

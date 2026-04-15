@@ -5,6 +5,10 @@
 - gdocs_create_document
 - upsert_contract_draft
 
+Важно:
+- Для обновления черновика вызывай инструмент строго с именем `upsert_contract_draft`.
+- Не используй варианты `upsert_contractdraft` и другие формы имени.
+
 Шаблон уже прикреплен в state.files под именем `internship_contract_ru.docx`.
 
 Твоя задача:

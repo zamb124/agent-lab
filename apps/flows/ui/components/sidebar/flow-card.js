@@ -49,10 +49,12 @@ export class FlowCard extends PlatformElement {
 
             .flow-header {
                 display: flex;
-                align-items: center;
+                align-items: flex-start;
                 gap: var(--space-3);
                 padding: var(--space-3) var(--space-4);
+                padding-right: 120px;
                 cursor: pointer;
+                position: relative;
             }
 
             .flow-avatar {
@@ -121,6 +123,10 @@ export class FlowCard extends PlatformElement {
             .flow-actions {
                 display: none;
                 gap: var(--space-1);
+                position: absolute;
+                top: var(--space-2);
+                right: 30px;
+                z-index: 1;
             }
 
             .flow-card:hover .flow-actions,
@@ -168,10 +174,14 @@ export class FlowCard extends PlatformElement {
                 justify-content: center;
                 color: var(--text-tertiary);
                 transition: transform var(--duration-fast);
+                position: absolute;
+                right: var(--space-2);
+                top: 50%;
+                transform: translateY(-50%);
             }
 
             .expand-icon.expanded {
-                transform: rotate(90deg);
+                transform: translateY(-50%) rotate(90deg);
             }
 
             .flow-details {
