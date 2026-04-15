@@ -384,7 +384,6 @@ export class LlmNodeEditor extends BaseNodeEditor {
 
     static properties = {
         ...BaseNodeEditor.properties,
-        aiLoading: { type: Boolean },
         inlineTools: { type: Object },
         showAddMenu: { type: Boolean },
         loopMode: { type: String },
@@ -402,7 +401,6 @@ export class LlmNodeEditor extends BaseNodeEditor {
     constructor() {
         super();
         this._nodeType = 'llm_node';
-        this.aiLoading = false;
         this.inlineTools = new Map();
         this.showAddMenu = false;
         this.loopMode = 'auto';
@@ -617,33 +615,6 @@ export class LlmNodeEditor extends BaseNodeEditor {
         this._updateConfig('react', reactConfig);
     }
 
-    async _generatePromptAI() {
-        const prompt = this.nodeConfig.prompt || '';
-        if (!prompt.trim()) {
-            console.warn('[LlmNodeEditor] Enter an initial prompt first');
-            return;
-        }
-        
-        this.aiLoading = true;
-        
-        if (this.a2a) {
-            try {
-                const improved = await this.a2a.generatePromptAI(prompt, {
-                    description: this.nodeConfig.description || '',
-                    tools: this.nodeConfig.tools || [],
-                    llm_config: this.nodeConfig.llm || {},
-                    variables: Object.keys(this.flowVariables)
-                });
-                
-                this._updateConfig('prompt', improved);
-            } catch (error) {
-                console.error('[LlmNodeEditor] Prompt generation failed:', error);
-            }
-        }
-        
-        this.aiLoading = false;
-    }
-    
     _onAddTool() {
         console.log('[LlmNodeEditor] _onAddTool called', { nodeConfig: this.nodeConfig });
         const modal = document.createElement('tool-picker-modal');
@@ -949,11 +920,9 @@ export class LlmNodeEditor extends BaseNodeEditor {
                         .variables=${this.flowVariables || {}}
                         label=${this.i18n.t('llm_node.prompt_label')}
                         placeholder=${this.i18n.t('llm_node.prompt_placeholder')}
-                        min-height="150"
-                        .aiLoading=${this.aiLoading}
+                        min-height="220"
                         accept-file-drop
                         @change=${(e) => this._onInputChange('prompt', e.detail.value)}
-                        @ai-improve=${this._generatePromptAI}
                     ></prompt-editor>
                 </div>
                 

@@ -908,6 +908,7 @@
     "attached_files_help_aria": "Help for attached files",
     "attach_file": "Attach file",
     "file_chip_drag_hint": "Drag into the LLM prompt or into Python code (code node)",
+    "download_attached_file": "Download file",
     "remove_attached_file": "Remove file",
     "files_api_missing": "File upload service is not available",
     "attached_files_upload_ok": "Files attached",

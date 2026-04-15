@@ -908,6 +908,7 @@
     "attached_files_help_aria": "Справка по закреплённым файлам",
     "attach_file": "Прикрепить файл",
     "file_chip_drag_hint": "Перетащите в промпт LLM или в код Python (code node)",
+    "download_attached_file": "Скачать файл",
     "remove_attached_file": "Убрать файл",
     "files_api_missing": "Сервис загрузки файлов недоступен",
     "attached_files_upload_ok": "Файлы прикреплены",

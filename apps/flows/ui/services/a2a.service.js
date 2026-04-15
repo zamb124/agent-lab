@@ -129,13 +129,6 @@ export class A2AService extends BaseService {
         return { valid: true, success: true };
     }
 
-    async generatePromptAI(prompt, context = {}) {
-        // TODO: Implement backend /api/v1/prompts/enhance or similar endpoint
-        // For now, just return the original prompt
-        console.warn('[A2AService] generatePromptAI: Backend endpoint not implemented, returning original prompt');
-        return prompt;
-    }
-
     async executeNode(nodeType, nodeConfig, state, flowId, skillId) {
         return this.post('/api/v1/code/execute', {
             node_type: nodeType,

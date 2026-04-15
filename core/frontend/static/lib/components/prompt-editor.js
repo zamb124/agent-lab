@@ -71,22 +71,6 @@ export class PromptEditor extends PlatformElement {
                 color: var(--accent);
             }
             
-            .ai-btn {
-                background: var(--accent-subtle);
-                border-color: var(--accent);
-                color: var(--accent);
-            }
-            
-            .ai-btn:hover {
-                background: var(--accent);
-                color: white;
-            }
-            
-            .ai-btn.loading {
-                opacity: 0.7;
-                cursor: wait;
-            }
-            
             /*
              * Растягиваем .cm-editor на всю минимальную высоту контейнера: иначе клики
              * ниже последней строки попадают в «пустоту» и курсор не ставится (только зона у текста).
@@ -389,9 +373,7 @@ export class PromptEditor extends PlatformElement {
             .icon-btn svg {
                 width: 16px;
                 height: 16px;
-                stroke: currentColor;
-                stroke-width: 2;
-                fill: none;
+                fill: currentColor;
             }
         `
     ];
@@ -403,10 +385,8 @@ export class PromptEditor extends PlatformElement {
         placeholder: { type: String },
         readonly: { type: Boolean },
         showPreview: { type: Boolean, attribute: 'show-preview' },
-        showAiButton: { type: Boolean, attribute: 'show-ai-button' },
         showHint: { type: Boolean, attribute: 'show-hint' },
         minHeight: { type: Number, attribute: 'min-height' },
-        aiLoading: { type: Boolean },
         previewMode: { type: Boolean },
         splitMode: { type: Boolean },
         fullscreenMode: { type: Boolean },
@@ -421,10 +401,8 @@ export class PromptEditor extends PlatformElement {
         this.placeholder = 'Введите промпт...';
         this.readonly = false;
         this.showPreview = true;
-        this.showAiButton = true;
         this.showHint = true;
         this.minHeight = 150;
-        this.aiLoading = false;
         this.previewMode = false;
         this.splitMode = false;
         this.fullscreenMode = false;
@@ -970,11 +948,6 @@ export class PromptEditor extends PlatformElement {
         }
     }
 
-    _onAiImprove() {
-        if (this.aiLoading) return;
-        this.emit('ai-improve', { value: this.value });
-    }
-
     _renderPreview() {
         if (!this.value) {
             return html`<div class="preview-container" style="color: var(--text-tertiary);">Пустой промпт</div>`;
@@ -1122,6 +1095,7 @@ export class PromptEditor extends PlatformElement {
 
     render() {
         const style = `--editor-min-height: ${this.minHeight}px`;
+        const splitMinHeight = Math.max(this.minHeight, 320);
         
         return html`
             <div class="editor-wrapper">
@@ -1157,21 +1131,11 @@ export class PromptEditor extends PlatformElement {
                                 : (this._icons['fullscreen'] ? unsafeHTML(this._icons['fullscreen']) : '⊡')
                             }
                         </button>
-                        ${this.showAiButton ? html`
-                            <button 
-                                type="button" 
-                                class="editor-btn ai-btn ${this.aiLoading ? 'loading' : ''}"
-                                ?disabled=${this.aiLoading}
-                                @click=${this._onAiImprove}
-                            >
-                                ${this.aiLoading ? 'Генерация...' : 'AI улучшить'}
-                            </button>
-                        ` : ''}
                     </div>
                 </div>
                 
                 ${this.splitMode ? html`
-                    <div class="split-container" style="height: ${this.minHeight}px">
+                    <div class="split-container" style="min-height: ${splitMinHeight}px">
                         <div class="split-pane">
                             <div class="split-pane-label">Редактор</div>
                             <div id="codemirror-container"></div>

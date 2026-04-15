@@ -164,16 +164,16 @@ export class BaseNodeEditor extends PlatformElement {
 
             .node-attached-files-block {
                 display: flex;
-                flex-direction: column;
+                flex-direction: row;
+                align-items: flex-start;
                 gap: var(--space-2);
                 margin-top: var(--space-2);
-                align-items: flex-start;
             }
 
             .node-attached-files-block--single {
                 flex-direction: row;
                 flex-wrap: nowrap;
-                align-items: center;
+                align-items: flex-start;
             }
 
             .node-attached-files-block--single .node-file-chips {
@@ -186,8 +186,8 @@ export class BaseNodeEditor extends PlatformElement {
                 display: inline-flex;
                 align-items: center;
                 justify-content: center;
-                width: 36px;
-                height: 36px;
+                width: 32px;
+                height: 32px;
                 padding: 0;
                 color: var(--text-secondary);
                 background: var(--glass-tint-subtle);
@@ -213,15 +213,18 @@ export class BaseNodeEditor extends PlatformElement {
 
             .node-file-chips {
                 display: flex;
-                flex-wrap: wrap;
+                flex-direction: column;
                 gap: var(--space-2);
+                flex: 1 1 auto;
+                min-width: 0;
+                width: 100%;
             }
 
             .node-file-chip {
-                display: inline-flex;
+                display: flex;
                 align-items: center;
                 gap: var(--space-1);
-                max-width: 100%;
+                width: 100%;
                 padding: 4px 8px;
                 border-radius: var(--radius-md);
                 font-size: var(--text-xs);
@@ -280,6 +283,24 @@ export class BaseNodeEditor extends PlatformElement {
 
             .node-file-chip-remove:hover {
                 color: var(--error);
+            }
+
+            .node-file-chip-download {
+                flex-shrink: 0;
+                border: none;
+                background: transparent;
+                color: var(--text-tertiary);
+                cursor: pointer;
+                padding: 0 2px;
+                line-height: 1;
+                font-size: var(--text-base);
+                display: inline-flex;
+                align-items: center;
+                justify-content: center;
+            }
+
+            .node-file-chip-download:hover {
+                color: var(--text-primary);
             }
 
             .node-attach-input-hidden {
@@ -632,6 +653,19 @@ export class BaseNodeEditor extends PlatformElement {
                                               <span class="node-file-chip-name">${f.name || f.path || 'file'}</span>
                                               <button
                                                   type="button"
+                                                  class="node-file-chip-download"
+                                                  @click=${() => this._downloadAttachedFile(f)}
+                                                  aria-label=${this.i18n.t(
+                                                      'base_node_editor.download_attached_file'
+                                                  )}
+                                                  title=${this.i18n.t(
+                                                      'base_node_editor.download_attached_file'
+                                                  )}
+                                              >
+                                                  <platform-icon name="download" size="14"></platform-icon>
+                                              </button>
+                                              <button
+                                                  type="button"
                                                   class="node-file-chip-remove"
                                                   @click=${() => this._removeAttachedFile(i)}
                                                   aria-label=${this.i18n.t(
@@ -695,6 +729,30 @@ export class BaseNodeEditor extends PlatformElement {
         const current = Array.isArray(this.nodeConfig.files) ? [...this.nodeConfig.files] : [];
         current.splice(index, 1);
         this._updateConfig('files', current);
+    }
+
+    _downloadAttachedFile(file) {
+        const fileInfo = file || {};
+        const directPath = typeof fileInfo.path === 'string' ? fileInfo.path.trim() : '';
+        const directUrl = typeof fileInfo.url === 'string' ? fileInfo.url.trim() : '';
+        const fileId = typeof fileInfo.file_id === 'string' ? fileInfo.file_id.trim() : '';
+        let href = directPath || directUrl;
+
+        if (!href && fileId && this.filesApi?.buildDownloadUrl) {
+            href = this.filesApi.buildDownloadUrl(fileId);
+        }
+
+        if (!href) {
+            this.error(this.i18n.t('base_node_editor.files_api_missing'));
+            return;
+        }
+
+        const link = document.createElement('a');
+        link.href = href;
+        link.target = '_blank';
+        link.rel = 'noopener noreferrer';
+        link.download = fileInfo.name || '';
+        link.click();
     }
 
     _onNodeFileDragStart(e, file) {
