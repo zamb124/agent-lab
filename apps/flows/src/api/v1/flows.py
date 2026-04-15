@@ -22,6 +22,19 @@ from apps.flows.src.services.flow_validator import FlowValidator
 logger = get_logger(__name__)
 
 
+def _drop_files_fields(value: Any) -> Any:
+    """Рекурсивно удаляет поле files из payload для семантического сравнения."""
+    if isinstance(value, dict):
+        return {
+            key: _drop_files_fields(item)
+            for key, item in value.items()
+            if key != "files"
+        }
+    if isinstance(value, list):
+        return [_drop_files_fields(item) for item in value]
+    return value
+
+
 def _flow_semantic_payload(flow_cfg: FlowConfig) -> Dict[str, Any]:
     """Детерминированный payload для сравнения текущего flow и bundle."""
     payload = flow_cfg.model_dump(
@@ -34,7 +47,7 @@ def _flow_semantic_payload(flow_cfg: FlowConfig) -> Dict[str, Any]:
             "public_fields",
         },
     )
-    return payload
+    return _drop_files_fields(payload)
 
 
 def _build_bundle_index(flows_root: Path) -> Dict[str, str]:

@@ -4,8 +4,12 @@
   "description": "Собирает данные у пользователя и формирует заполненный договор стажировки в DOCX.",
   "tags": ["documents", "docx", "contract", "internship"],
   "permission": ["admin", "developers"],
-  "entry": "main",
+  "entry": "prepare_prompt_context",
   "nodes": {
+    "prepare_prompt_context": {
+      "type": "code",
+      "code": "import json\n\nREQUIRED_FIELDS = [\n    'contract_number',\n    'contract_day',\n    'contract_month',\n    'contract_year',\n    'contract_city',\n    'intern_full_name',\n    'internship_position',\n    'internship_start_date',\n    'internship_duration_text',\n    'internship_access_resources',\n    'internship_duties',\n    'intern_passport_number',\n    'intern_passport_issued_by',\n    'intern_passport_issue_date',\n    'intern_passport_division_code',\n    'intern_email',\n    'intern_phone',\n    'intern_sign_name',\n]\n\nasync def run(state):\n    variables = state.get('variables')\n    if variables is None:\n        variables = {}\n        state['variables'] = variables\n    if not isinstance(variables, dict):\n        raise ValueError('state.variables должен быть объектом')\n\n    draft = variables.get('contract_draft')\n    if draft is None:\n        draft = {}\n        variables['contract_draft'] = draft\n    if not isinstance(draft, dict):\n        raise ValueError('state.variables.contract_draft должен быть объектом')\n\n    missing = []\n    known = []\n    for field in REQUIRED_FIELDS:\n        value = draft.get(field)\n        if field == 'internship_duties':\n            if isinstance(value, list) and value:\n                known.append(field)\n            else:\n                missing.append(field)\n            continue\n\n        if isinstance(value, str) and value.strip():\n            known.append(field)\n        else:\n            missing.append(field)\n\n    variables['contract_required_fields'] = REQUIRED_FIELDS\n    variables['contract_missing_fields'] = missing\n    variables['contract_missing_count'] = len(missing)\n    variables['contract_known_fields'] = known\n    variables['contract_known_fields_text'] = ', '.join(known) if known else 'нет'\n    variables['contract_missing_fields_text'] = ', '.join(missing) if missing else 'нет'\n    variables['contract_ready'] = len(missing) == 0\n    variables['contract_draft_json'] = json.dumps(draft, ensure_ascii=False, indent=2)\n    return state"
+    },
     "main": {
       "type": "llm_node",
       "node_id": "internship_contract_filler_main",
@@ -20,6 +24,10 @@
     }
   },
   "edges": [
+    {
+      "from": "prepare_prompt_context",
+      "to": "main"
+    },
     {
       "from": "main",
       "to": null
