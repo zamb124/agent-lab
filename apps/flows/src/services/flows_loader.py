@@ -13,14 +13,17 @@ from __future__ import annotations
 import importlib
 import inspect
 import json
+from urllib.parse import urlparse
 from pathlib import Path
 from typing import Any, Dict, List, Type
 
 import yaml
 from pydantic import BaseModel
 
+from apps.flows.config import get_settings
 from apps.flows.src.db import NodeRepository, FlowRepository, ToolRepository
 from core.context import get_context
+from core.files import FileReader, ReadOptions, get_default_file_processor
 from core.logging import get_logger
 from apps.flows.src.models import NodeConfig, FlowConfig, ToolReference
 from apps.flows.src.models.node_config import NodeLLMOverride
@@ -105,6 +108,7 @@ class FlowsLoader:
         self._loaded_nodes: List[str] = []
         self._tools_cache: Dict[str, ToolReference] = {}  # Кеш tools для инлайнинга
         self._nodes_cache: Dict[str, NodeConfig] = {}  # Кеш nodes для инлайнинга
+        self._target_company_id: str | None = None
 
     async def load_all(self) -> tuple[List[str], List[str]]:
         """
@@ -113,6 +117,7 @@ class FlowsLoader:
         Returns:
             Кортеж (список загруженных flow_id, список загруженных node_id)
         """
+        self._target_company_id = "system"
         # Загружаем кеши для инлайнинга
         await self._load_tools_cache()
         await self._load_nodes_cache()
@@ -262,6 +267,7 @@ class FlowsLoader:
 
             # Инлайним промпт из файла
             self._inline_prompt_from_file(raw_node, bundle_dir)
+            raw_node = await self._materialize_node_files(raw_node, bundle_dir, node_id)
 
             # Конвертируем tools в List[ToolReference]
             tools = self._convert_tools(raw_node.get("tools", []))
@@ -297,6 +303,102 @@ class FlowsLoader:
             self._nodes_cache[node_id] = node_config
             self._loaded_nodes.append(node_id)
             logger.info(f"    node: {node_id}")
+
+    def _resolve_target_company_id(self) -> str:
+        context = get_context()
+        if context and context.active_company and context.active_company.company_id:
+            return context.active_company.company_id
+        if self._target_company_id:
+            return self._target_company_id
+        raise ValueError("Не удалось определить company_id для материализации файлов bundle")
+
+    def _map_source_to_local_static(self, source: str) -> Path | None:
+        parsed = urlparse(source)
+        if parsed.scheme not in ("http", "https"):
+            return None
+        host = (parsed.hostname or "").strip().lower()
+        if host not in {"localhost", "127.0.0.1"}:
+            return None
+        path = parsed.path.strip()
+        if not path.startswith("/static/"):
+            return None
+        local_candidate = self.bundles_dir.parent / path.lstrip("/")
+        if local_candidate.is_file():
+            return local_candidate
+        return None
+
+    def _resolve_file_source(
+        self,
+        entry: Dict[str, Any],
+        bundle_dir: Path,
+        node_id: str,
+        index: int,
+    ) -> str | Path:
+        path_value = entry.get("path")
+        if isinstance(path_value, str) and path_value.strip():
+            path_str = path_value.strip()
+            local_from_http = self._map_source_to_local_static(path_str)
+            if local_from_http is not None:
+                return local_from_http
+            if path_str.startswith(("http://", "https://")):
+                return path_str
+            local_path = Path(path_str)
+            if not local_path.is_absolute():
+                local_path = bundle_dir / path_str
+            return local_path
+
+        url_value = entry.get("url")
+        if isinstance(url_value, str) and url_value.strip():
+            url_str = url_value.strip()
+            local_from_http = self._map_source_to_local_static(url_str)
+            if local_from_http is not None:
+                return local_from_http
+            return url_str
+
+        raise ValueError(f"Node '{node_id}': files[{index}] должен содержать path или url")
+
+    async def _materialize_node_files(
+        self,
+        node: Dict[str, Any],
+        bundle_dir: Path,
+        node_id: str,
+    ) -> Dict[str, Any]:
+        files = node.get("files")
+        if not files:
+            return node
+        if not isinstance(files, list):
+            raise ValueError(f"Node '{node_id}': files должен быть списком")
+
+        processor = await get_default_file_processor()
+        reader = FileReader()
+        settings = get_settings()
+        company_id = self._resolve_target_company_id()
+        prefix = f"/{settings.server.name}/api/v1/files/download"
+
+        materialized: list[dict[str, Any]] = []
+        for index, entry in enumerate(files):
+            if not isinstance(entry, dict):
+                raise ValueError(f"Node '{node_id}': files[{index}] должен быть объектом")
+            name = entry.get("name")
+            if not isinstance(name, str) or not name.strip():
+                raise ValueError(f"Node '{node_id}': files[{index}].name должен быть непустой строкой")
+
+            source = self._resolve_file_source(entry, bundle_dir, node_id, index)
+            raw_bytes, resolved_name = await reader._resolve_source(source, name, ReadOptions())
+            original_name = name.strip() if name.strip() else resolved_name
+            item = await processor.persist_uploaded_file_as_state_files_item(
+                data=raw_bytes,
+                original_name=original_name,
+                content_type=entry.get("mime_type"),
+                uploaded_by=None,
+                company_id=company_id,
+                public=False,
+                download_url_prefix=prefix,
+            )
+            materialized.append(item)
+
+        node["files"] = materialized
+        return node
 
     def _convert_tools(self, tools_list: List[Any]) -> List[ToolReference]:
         """Конвертирует список tools в List[ToolReference]."""
@@ -343,6 +445,7 @@ class FlowsLoader:
 
             # Инлайним function -> code
             self._inline_function_to_code(node, node_id)
+            node = await self._materialize_node_files(node, bundle_dir, node_id)
             
             # Устанавливаем name по умолчанию если не указан
             if "name" not in node:
@@ -504,6 +607,7 @@ class FlowsLoader:
 
                     # Инлайним function -> code
                     self._inline_function_to_code(node, f"{skill_id}.{node_id}")
+                    node = await self._materialize_node_files(node, bundle_dir, f"{skill_id}.{node_id}")
                     processed_nodes[node_id] = node
                 
                 skill["nodes"] = processed_nodes
@@ -807,6 +911,7 @@ class FlowsLoader:
         Returns:
             {"flows": count, "tools": count, "nodes": count}
         """
+        self._target_company_id = company_id
         # Загружаем кеши для инлайнинга
         await self._load_tools_cache()
         await self._load_nodes_cache()
@@ -876,6 +981,10 @@ class FlowsLoader:
 
         Использует тот же путь, что и полная загрузка registry: кеш tools/nodes, defaults из registry.
         """
+        context = get_context()
+        if not context or not context.active_company or not context.active_company.company_id:
+            raise ValueError("reload_flow_bundle требует active_company в контексте")
+        self._target_company_id = context.active_company.company_id
         await self._load_tools_cache()
         await self._load_nodes_cache()
 
