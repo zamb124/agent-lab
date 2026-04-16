@@ -12,6 +12,7 @@ from tests.ui.scenario_doc import ScenarioRecorder
 @pytest.mark.scenario(
     service="sync",
     tag="mobile",
+    doc_slug="mobile-sidebar-menu",
     title="Sync: мобильное меню и сайдбар",
     description=(
         "При ширине viewport как на телефоне отображается кнопка «Открыть меню»; "

@@ -128,7 +128,7 @@ def create_service_app(
         docs_url, redoc_url, openapi_url: Пути для документации
         include_auth_middleware: Включать ли AuthMiddleware
         include_crud_routers: Включать ли автоматические CRUD роутеры
-        mount_repo_documentation: Смонтировать Fumadocs из корня репозитория ``documentation-dist/`` на ``/documentation/`` (False для flows со своим ``apps/flows/site``).
+        mount_repo_documentation: Смонтировать статическую документацию (Zensical) из корня репозитория ``documentation-dist/`` на ``/documentation/`` (False для flows со своим ``apps/flows/site``).
         documentation_gateway_prefix: Если задан (например ``frontend``), дублировать документацию на ``/{prefix}/documentation/`` за ingress.
         include_platform_pwa: Маршруты ``/manifest.json``, ``/sw.js``, ``/offline.html``. None: выключено при ``TESTING=true``, иначе включено.
         

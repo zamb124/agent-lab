@@ -13,6 +13,7 @@ from tests.ui.scenario_doc import ScenarioRecorder
 @pytest.mark.scenario(
     service="sync",
     tag="channels",
+    doc_slug="create-topic-channel",
     title="Sync: создание канала в пространстве",
     description=(
         "После создания пространства пользователь создаёт topic-канал через «+» у раздела «Каналы» "
@@ -64,6 +65,7 @@ async def test_user_creates_topic_channel(
 @pytest.mark.scenario(
     service="sync",
     tag="chat",
+    doc_slug="send-message-in-channel",
     title="Sync: отправка сообщения в канал",
     description=(
         "Пользователь открывает канал, вводит текст в поле «Сообщение…» и отправляет его; "

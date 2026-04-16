@@ -27,6 +27,7 @@ from core.context import get_context
 from core.files.checksum import compute_content_checksum_sha256
 from core.files.models import FileMetadata
 from core.files.processors import FileProcessor
+from core.files.types import ext_to_category, ext_to_mime
 from core.files.writer.content_kind import (
     ContentKind,
     SourceContent,
@@ -461,9 +462,11 @@ class FileWriter:
 
 def _mime_for_extension(ext: str) -> str:
     mime, _ = mimetypes.guess_type(f"name{ext}")
-    if not mime:
-        raise FileWriteError(f"Не удалось сопоставить MIME тип расширению {ext!r}")
-    return mime
+    if mime:
+        return mime
+    if ext_to_category(ext) is not None:
+        return ext_to_mime(ext)
+    raise FileWriteError(f"Не удалось сопоставить MIME тип расширению {ext!r}")
 
 
 def _escape_reportlab_text(text: str) -> str:

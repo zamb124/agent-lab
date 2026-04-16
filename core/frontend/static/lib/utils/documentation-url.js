@@ -1,5 +1,5 @@
 /**
- * Ссылки на пользовательскую документацию (Fumadocs, docs/scenarios/...).
+ * Ссылки на пользовательскую документацию (Zensical, docs/scenarios/...).
  * Статика из documentation-dist/ монтируется на /documentation/; у frontend дубль на /frontend/documentation/.
  */
 

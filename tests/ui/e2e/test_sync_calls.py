@@ -13,6 +13,7 @@ from tests.ui.scenario_doc import ScenarioRecorder
 @pytest.mark.scenario(
     service="sync",
     tag="calls",
+    doc_slug="channel-call-overlay",
     title="Sync: старт звонка из шапки канала",
     description=(
         "В topic-канале пользователь нажимает «Звонок в этом канале»; после ответа сервера "
@@ -66,6 +67,7 @@ async def test_user_starts_channel_call_overlay(
 @pytest.mark.scenario(
     service="sync",
     tag="calls",
+    doc_slug="join-invalid-token",
     title="Sync: страница входа по недействительной ссылке",
     description="Публичная страница /sync/join/{token} показывает сообщение об ошибке для несуществующего токена.",
 )
@@ -85,6 +87,7 @@ async def test_call_join_page_shows_error_for_invalid_token(
 @pytest.mark.scenario(
     service="sync",
     tag="calls",
+    doc_slug="call-overlay-chat-sync",
     title="Sync: чат в оверлее звонка синхронизирован с каналом",
     description=(
         "Сообщение из основного чата видно в call-overlay, а сообщение из call-overlay после завершения звонка "
@@ -155,6 +158,7 @@ async def test_call_overlay_channel_chat_syncs_with_main_chat(
 @pytest.mark.scenario(
     service="sync",
     tag="calls",
+    doc_slug="adhoc-call-visible-channel",
     title="Sync: ad-hoc звонок использует обычный видимый канал",
     description=(
         "Кнопка «Создать Sync» создаёт канал встречи с читаемым именем (дата и время), чат в оверлее работает, "

@@ -49,6 +49,7 @@ async def _seed_topic_channel(
 @pytest.mark.scenario(
     service="sync",
     tag="threads",
+    doc_slug="thread-reply-drawer",
     title="Sync: панель тредов после ответа на сообщение",
     description=(
         "Пользователь отвечает на сообщение в основной ленте и открывает панель «Треды»: "
@@ -99,6 +100,7 @@ async def test_user_reply_opens_thread_in_drawer(
 @pytest.mark.scenario(
     service="sync",
     tag="chat",
+    doc_slug="reaction-edit-message",
     title="Sync: реакция и редактирование своего сообщения",
     description=(
         "Сообщение отправляется из UI; реакция ставится через API; после перезагрузки видна метка "
@@ -159,6 +161,7 @@ async def test_user_reacts_and_edits_own_message(
 @pytest.mark.scenario(
     service="sync",
     tag="chat",
+    doc_slug="delete-own-message",
     title="Sync: удаление своего сообщения",
     description="Пользователь удаляет своё сообщение через контекстное меню.",
 )

@@ -19,6 +19,7 @@ from tests.ui.scenario_doc import ScenarioRecorder
 @pytest.mark.scenario(
     service="sync",
     tag="settings",
+    doc_slug="mute-channel-notifications",
     title="Sync: мьют уведомлений в настройках канала",
     description=(
         "Пользователь открывает настройки topic-канала и включает «Не беспокоить»."
@@ -78,6 +79,7 @@ async def test_user_mutes_channel_notifications(
 @pytest.mark.scenario(
     service="sync",
     tag="settings",
+    doc_slug="peer-profile-from-message",
     title="Sync: профиль отправителя из сообщения",
     description=(
         "В канал добавлен участник; его сообщение создаётся через API; владелец открывает профиль "

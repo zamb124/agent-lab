@@ -36,20 +36,19 @@ RUN --mount=type=cache,target=/root/.cache/uv \
         --group sync
 
 # ============================================
-# Stage 3: Docs builder (Fumadocs static export)
+# Stage 3: Docs builder (Zensical static site)
 # ============================================
-FROM node:22-bookworm-slim AS docs-builder
-RUN apt-get update && apt-get install -y --no-install-recommends python3 \
-    && rm -rf /var/lib/apt/lists/*
+FROM python:3.13-slim AS docs-builder
+RUN pip install --no-cache-dir "zensical>=0.0.32"
 WORKDIR /app
+COPY zensical.ru.toml zensical.en.toml ./
 COPY docs ./docs
 COPY scripts/docs_prepare.py ./scripts/
-COPY apps/documentation ./apps/documentation
-RUN python3 scripts/docs_prepare.py
-WORKDIR /app/apps/documentation
-RUN npm ci
-RUN npm run build
-RUN mkdir -p /app/documentation-dist && cp -r out/. /app/documentation-dist/
+RUN python scripts/docs_prepare.py && \
+    zensical build --clean --config-file zensical.ru.toml && \
+    zensical build --clean --config-file zensical.en.toml && \
+    mkdir -p documentation-dist/en && \
+    cp -a build/zensical-en-out/. documentation-dist/en/
 
 # ============================================
 # Stage 4: Base-final - общий образ со всем кодом

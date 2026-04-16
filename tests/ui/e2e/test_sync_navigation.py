@@ -13,6 +13,7 @@ from tests.ui.scenario_doc import ScenarioRecorder
 @pytest.mark.scenario(
     service="sync",
     tag="navigation",
+    doc_slug="channel-from-url-query",
     title="Sync: переход по ссылке с параметром channel",
     description=(
         "После создания канала в UI тест получает id канала через API и открывает "

@@ -1,7 +1,0 @@
-# CRM: хаб настроек
-
-Переход на /crm/settings и проверка отображения settings-hub-page с карточками.
-
-## Шаг 1. Открыт маршрут /crm/settings
-
-![Открыт маршрут /crm/settings](screenshots/001.png)

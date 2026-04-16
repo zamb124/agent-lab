@@ -12,6 +12,7 @@ from tests.ui.scenario_doc import ScenarioRecorder
 @pytest.mark.scenario(
     service="sync",
     tag="spaces",
+    doc_slug="edit-space-name",
     title="Sync: редактирование пространства",
     description=(
         "Пользователь открывает настройки существующего пространства через иконку шестерёнки, "

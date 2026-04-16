@@ -12,6 +12,7 @@ from tests.ui.scenario_doc import ScenarioRecorder
 @pytest.mark.scenario(
     service="sync",
     tag="direct",
+    doc_slug="open-dm-from-members",
     title="Sync: открытие чата с участником компании",
     description=(
         "В разделе «Личные» пользователь находит коллегу по имени и открывает с ним диалог."

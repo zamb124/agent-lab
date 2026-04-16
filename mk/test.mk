@@ -1,4 +1,4 @@
-.PHONY: test test-all test-up test-down test-cov test-cov-all test-cov-report test-browser test-unit test-ui test-ui-components
+.PHONY: test test-all test-up test-down test-cov test-cov-all test-cov-report test-browser test-unit test-ui test-ui-doc test-ui-components
 
 WORKERS ?= 3
 PYTEST_COMMAND_TIMEOUT_SECONDS ?= 600
@@ -32,6 +32,11 @@ test-browser: test-up
 test-ui: test-up
 	@echo "Запуск E2E UI (pytest tests/ui/e2e)..."
 	uv run pytest tests/ui/e2e -v --timeout=180
+
+# E2E UI + статическая документация (README в docs/scenarios из scenario_doc)
+test-ui-doc: test-ui
+	@echo "Сборка documentation-dist после UI-тестов..."
+	@$(MAKE) doc
 
 # Компонентные Lit-тесты (Web Test Runner, без реального бэкенда)
 test-ui-components:

@@ -1,0 +1,36 @@
+[project]
+site_name = "Humanitec"
+site_description = "Platform for AI agents, RAG, CRM, and automation"
+site_url = "https://humanitec.ru/documentation/en/"
+site_author = "Humanitec"
+docs_dir = "build/documentation-en"
+site_dir = "build/zensical-en-out"
+dev_addr = "127.0.0.1:8000"
+use_directory_urls = true
+
+copyright = "Humanitec"
+
+[project.extra]
+alternate = [
+    { name = "English", link = "/documentation/en/", lang = "en" },
+    { name = "Русский", link = "/documentation/", lang = "ru" },
+]
+
+[project.theme]
+variant = "classic"
+language = "en"
+
+[project.markdown_extensions.toc]
+permalink = true
+
+[project.markdown_extensions.admonition]
+
+[project.markdown_extensions.pymdownx.highlight]
+anchor_linenums = true
+
+[project.markdown_extensions.pymdownx.inlinehilite]
+
+[project.markdown_extensions.pymdownx.superfences]
+
+[project.markdown_extensions.pymdownx.tabbed]
+alternate_style = true

@@ -4,7 +4,3 @@
 .git
 documentation-dist
 site
-apps/documentation/node_modules
-apps/documentation/out
-apps/documentation/.next
-apps/documentation/generated

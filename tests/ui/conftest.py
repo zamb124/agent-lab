@@ -17,7 +17,7 @@ from tests.ui.subdomain_setup import ensure_ui_subdomain_mappings
 
 @pytest_asyncio.fixture
 async def scenario(request: pytest.FixtureRequest) -> ScenarioRecorder:
-    """Собирает шаги и скриншоты; пишет `docs/scenarios/<service>/<tag>/<slug>/README.md` (см. `@pytest.mark.scenario`)."""
+    """Собирает шаги и скриншоты; пишет `docs/scenarios/<service>/<tag>/<slug>/README.md` (см. `@pytest.mark.scenario`, опционально `doc_slug`)."""
     rec = ScenarioRecorder.from_pytest_node(request.node)
     yield rec
     rec.finalize()

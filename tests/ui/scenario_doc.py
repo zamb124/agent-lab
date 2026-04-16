@@ -57,7 +57,7 @@ class _StepRecord:
 
 @dataclass
 class ScenarioRecorder:
-    """Накапливает шаги и скриншоты; в finalize пишет README под docs/scenarios/<service>/<tag>/<slug>/."""
+    """Накапливает шаги и скриншоты; в finalize пишет README под docs/scenarios/<service>/<tag>/<slug>/ (slug из doc_slug маркера или из nodeid pytest)."""
 
     title: str
     description: str
@@ -120,7 +120,11 @@ class ScenarioRecorder:
         if not title:
             title = node.name.replace("test_", "").replace("_", " ").strip().title() or node.name
 
-        slug = _slug_from_node(node.nodeid)
+        raw_doc_slug = m.kwargs.get("doc_slug")
+        if raw_doc_slug is not None:
+            slug = _normalize_segment(str(raw_doc_slug), "doc_slug")
+        else:
+            slug = _slug_from_node(node.nodeid)
         out_dir = _DOCS_SCENARIOS / service / tag / slug
 
         return cls(

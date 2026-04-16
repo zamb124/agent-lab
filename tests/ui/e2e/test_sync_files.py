@@ -20,6 +20,7 @@ _MIN_PNG = (
 @pytest.mark.scenario(
     service="sync",
     tag="files",
+    doc_slug="message-with-image",
     title="Sync: отправка сообщения с изображением",
     description=(
         "Пользователь прикрепляет изображение к сообщению; после отправки в ленту попадает блок с картинкой."

@@ -300,11 +300,12 @@ help:
 	@echo "  make logs          - Показать логи всех сервисов"
 	@echo "  make clean         - Удалить все (включая volumes)"
 	@echo ""
-	@echo "Документация (Fumadocs, apps/documentation):"
+	@echo "Документация (Zensical):"
 	@echo "  make doc-docker - Собрать только стадию docs-builder (Docker)"
-	@echo "  make doc        - docs_prepare + npm ci/build + documentation-dist/"
-	@echo "  make doc-serve  - Запустить dev-сервер (http://127.0.0.1:8000)"
+	@echo "  make doc        - docs_prepare + zensical RU/EN build -> documentation-dist/"
+	@echo "  make doc-serve  - docs_prepare + zensical serve (zensical.ru.toml dev_addr)"
 	@echo "  make doc-clean  - Удалить собранную документацию"
+	@echo "  make test-ui-doc - E2E UI (test-ui) затем make doc (обновить documentation-dist)"
 
 include mk/db.mk
 include mk/app.mk
@@ -318,17 +319,19 @@ include mk/migrate.mk
 
 # Короткие алиасы
 doc:
-	@echo "Локальная сборка документации (Fumadocs)..."
+	@echo "Локальная сборка документации (Zensical RU + EN)..."
+	rm -rf documentation-dist build/documentation-ru build/documentation-en build/zensical-en-out
 	uv run python scripts/docs_prepare.py
-	cd apps/documentation && npm ci && npm run build
-	rm -rf documentation-dist
-	mkdir -p documentation-dist
-	cp -r apps/documentation/out/. documentation-dist/
-	@echo "Документация в documentation-dist/ (монтирование /documentation/)"
+	uv run --group docs zensical build --clean --config-file zensical.ru.toml
+	uv run --group docs zensical build --clean --config-file zensical.en.toml
+	mkdir -p documentation-dist/en
+	cp -a build/zensical-en-out/. documentation-dist/en/
+	@echo "Документация: documentation-dist/ и documentation-dist/en/ (монтирование /documentation/)"
 
 doc-serve:
-	@echo "Dev Fumadocs: http://127.0.0.1:3000 (basePath /documentation)"
-	cd apps/documentation && npm install && npm run dev
+	@echo "Предпросмотр RU-сайта: docs_prepare + zensical serve (zensical.ru.toml)"
+	uv run python scripts/docs_prepare.py
+	uv run --group docs zensical serve --config-file zensical.ru.toml
 
 doc-docker:
 	docker build --target docs-builder -t agent-lab-docs .
@@ -336,7 +339,7 @@ doc-docker:
 
 doc-clean:
 	@echo "Очистка артефактов документации..."
-	rm -rf documentation-dist/ site/ apps/documentation/out apps/documentation/.next apps/documentation/generated
+	rm -rf documentation-dist/ build/documentation-ru build/documentation-en build/zensical-en-out site/ .cache
 	@echo "Готово"
 
 # Полные имена (для обратной совместимости)

@@ -11,6 +11,7 @@ from tests.ui.scenario_doc import ScenarioRecorder
 
 @pytest.mark.scenario(
     service="sync",
+    doc_slug="sync-chat-shell",
     title="Sync: загрузка оболочки чата",
     description=(
         "После входа под системным пользователем открывается SPA Sync; "

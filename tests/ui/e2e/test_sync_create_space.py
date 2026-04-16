@@ -12,6 +12,7 @@ from tests.ui.scenario_doc import ScenarioRecorder
 @pytest.mark.scenario(
     service="sync",
     tag="spaces",
+    doc_slug="create-space",
     title="Sync: создание пространства",
     description=(
         "Пользователь открывает Sync, нажимает «+» у раздела «Пространства», "

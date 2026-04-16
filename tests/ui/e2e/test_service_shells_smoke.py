@@ -11,6 +11,7 @@ from tests.ui.scenario_doc import ScenarioRecorder
 
 @pytest.mark.scenario(
     service="flows",
+    doc_slug="flows-shell",
     title="Flows: оболочка example_react",
     description="Проверка отображения flows-app на демо-маршруте после авторизации.",
 )
@@ -29,6 +30,7 @@ async def test_flows_shell_loads(
 
 @pytest.mark.scenario(
     service="rag",
+    doc_slug="rag-shell",
     title="RAG: оболочка сервиса",
     description="Доступ к RAG UI на system.localhost после входа и маппинга субдомена.",
 )
@@ -47,6 +49,7 @@ async def test_rag_shell_loads(
 
 @pytest.mark.scenario(
     service="crm",
+    doc_slug="crm-shell",
     title="CRM: оболочка записной книжки",
     description="Доступ к CRM UI на system.localhost после входа.",
 )
@@ -65,6 +68,7 @@ async def test_crm_shell_loads(
 
 @pytest.mark.scenario(
     service="crm",
+    doc_slug="crm-settings-hub",
     title="CRM: хаб настроек",
     description="Переход на /crm/settings и проверка отображения settings-hub-page с карточками.",
 )
@@ -93,6 +97,7 @@ async def test_crm_settings_hub_loads(
 
 @pytest.mark.scenario(
     service="frontend",
+    doc_slug="frontend-shell",
     title="Frontend: корневая оболочка платформы",
     description="Главная оболочка Humanitec на порту frontend-сервиса.",
 )

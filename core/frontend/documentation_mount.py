@@ -1,4 +1,4 @@
-"""Монтирование статического Fumadocs (documentation-dist/ в корне репозитория) на /documentation/."""
+"""Монтирование статической документации Zensical (documentation-dist/ в корне репозитория) на /documentation/."""
 
 from __future__ import annotations
 
@@ -28,7 +28,7 @@ def mount_documentation_static(
     dist = repo_root / DOCUMENTATION_DIST
     if not dist.is_dir():
         logger.warning(
-            "Каталог %s/ не найден (make doc), URL /documentation недоступен",
+            "Каталог %s/ не найден (make doc: zensical.ru.toml + zensical.en.toml), URL /documentation недоступен",
             DOCUMENTATION_DIST,
         )
         return

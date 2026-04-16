@@ -20,6 +20,7 @@ from tests.ui.scenario_doc import ScenarioRecorder
 @pytest.mark.scenario(
     service="sync",
     tag="chat",
+    doc_slug="mention-from-popup",
     title="Sync: упоминание @ в канале",
     description=(
         "Создаётся канал, второй участник компании добавлен в канал через API. "
@@ -107,6 +108,7 @@ async def test_user_mentions_channel_member_from_popup(
 @pytest.mark.scenario(
     service="sync",
     tag="chat",
+    doc_slug="mention-profile-modal",
     title="Sync: клик по @mention открывает карточку профиля",
     description=(
         "После отправки сообщения с упоминанием клик по подсвеченному имени открывает user-info-modal; "
