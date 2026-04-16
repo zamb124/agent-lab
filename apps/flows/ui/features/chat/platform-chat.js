@@ -833,6 +833,7 @@ export class PlatformChat extends PlatformIsland {
 
                 if (!result.final && (handoffContinue || oauthContinue)) {
                     FlowsStore.setLoading(false);
+                    FlowsStore.setStreamPending(false);
                     FlowsStore.updateMessage(messageId, {
                         inputRequired: this._buildInputRequiredPayload(message, metadata),
                         streaming: false,
