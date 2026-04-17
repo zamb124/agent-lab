@@ -74,29 +74,35 @@ def read_intro(service_name: str, lang: str) -> str | None:
 
 def generate_swagger_ui_embed(openapi_schema: dict, service_name: str) -> str:
     """
-    Генерирует ссылку на OpenAPI схему для Swagger UI.
+    Генерирует ссылки на встроенную документацию сервиса.
     
     Args:
         openapi_schema: OpenAPI схема
         service_name: Имя сервиса
     
     Returns:
-        Markdown строка со ссылкой на интерактивную документацию
+        Markdown строка со ссылками на интерактивную документацию
     """
-    # Сохраняем схему в отдельный файл
-    root = Path(__file__).resolve().parents[1]
-    openapi_dir = root / "build" / "documentation-ru" / "api" / service_name
-    openapi_dir.mkdir(parents=True, exist_ok=True)
+    # Порты сервисов
+    service_ports = {
+        "flows": 8001,
+        "frontend": 8002,
+        "crm": 8003,
+        "rag": 8004,
+        "sync": 8005,
+    }
     
-    openapi_file = openapi_dir / "openapi.json"
-    openapi_file.write_text(json.dumps(openapi_schema, indent=2, ensure_ascii=False), encoding="utf-8")
+    port = service_ports.get(service_name, 8001)
     
     return f"""
 !!! info
     
-    Интерактивная документация доступна через Swagger UI: [openapi.json](openapi.json)
+    Интерактивная документация сервиса:
     
-    Можно открыть в [Swagger Editor](https://editor.swagger.io/) для интерактивного тестирования.
+    - [Swagger UI](https://humanitec.ru:{port}/docs)
+    - [ReDoc](https://humanitec.ru:{port}/redoc)
+    
+    Доступно полное описание всех эндпоинтов с возможностью тестирования.
 """
 
 
@@ -173,11 +179,11 @@ def generate_endpoint_markdown(
     l = LOCALIZATIONS.get(lang, LOCALIZATIONS["en"])
     
     method_badge = {
-        "GET": '<span class="material-icons" style="vertical-align: middle; font-size: 16px;">download</span> GET',
-        "POST": '<span class="material-icons" style="vertical-align: middle; font-size: 16px;">add</span> POST',
-        "PUT": '<span class="material-icons" style="vertical-align: middle; font-size: 16px;">edit</span> PUT',
-        "PATCH": '<span class="material-icons" style="vertical-align: middle; font-size: 16px;">update</span> PATCH',
-        "DELETE": '<span class="material-icons" style="vertical-align: middle; font-size: 16px;">delete</span> DELETE',
+        "GET": "⬇️ GET",
+        "POST": "➕ POST",
+        "PUT": "✏️ PUT",
+        "PATCH": "📝 PATCH",
+        "DELETE": "🗑️ DELETE",
     }.get(method.upper(), f"⚪ {method.upper()}")
     
     summary = operation.get("summary", operation.get("description", ""))
@@ -287,9 +293,6 @@ def generate_service_markdown(
     
     # YAML frontmatter
     md = f"---\ntitle: {json.dumps(title, ensure_ascii=False)}\n---\n\n"
-    
-    # Material Symbols CDN для иконок
-    md += '<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" />\n\n'
     
     # Ручное intro если есть
     if intro_content:

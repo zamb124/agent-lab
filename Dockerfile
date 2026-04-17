@@ -43,7 +43,7 @@ RUN pip install --no-cache-dir "zensical>=0.0.32"
 WORKDIR /app
 COPY zensical.ru.toml zensical.en.toml ./
 COPY docs ./docs
-COPY scripts/docs_prepare.py ./scripts/
+COPY scripts/docs_prepare.py scripts/extract_openapi.py scripts/openapi_to_markdown.py ./scripts/
 RUN python scripts/docs_prepare.py && \
     zensical build --clean --config-file zensical.ru.toml && \
     zensical build --clean --config-file zensical.en.toml && \
