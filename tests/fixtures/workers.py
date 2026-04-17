@@ -6,6 +6,7 @@
 - Фикстуры для TaskIQ worker и RAGWorker
 """
 
+import hashlib
 import os
 import signal
 import socket
@@ -200,7 +201,52 @@ class SessionWorkerManager:
             self.ref_count_path.unlink(missing_ok=True)
         
         return ref_count
-    
+
+    def _build_worker_env(self) -> Dict[str, str]:
+        worker_env: Dict[str, str] = {**os.environ, **self.env}
+        worker_env.pop("PYTEST_XDIST_WORKER", None)
+        worker_env.pop("PYTEST_XDIST_WORKER_COUNT", None)
+        if self.name in ("TaskIQ", "CRMTaskIQ"):
+            worker_env.setdefault("PYTHONUNBUFFERED", "1")
+            worker_env["S3__BUCKETS__TEST-BUCKET__ENDPOINT_URL"] = "http://localhost:19002"
+            worker_env["S3__BUCKETS__TEST_BUCKET__ENDPOINT_URL"] = "http://localhost:19002"
+        return worker_env
+
+    def _worker_env_signature(self) -> str:
+        env = self._build_worker_env()
+        critical_keys = (
+            "TASKS__BROKER_URL",
+            "DATABASE__REDIS_URL",
+            "S3__BUCKETS__TEST-BUCKET__ENDPOINT_URL",
+            "S3__DEFAULT_BUCKET",
+            "DATABASE__FLOWS_URL",
+        )
+        payload = "\n".join(f"{k}={env.get(k, '')}" for k in critical_keys)
+        return hashlib.sha256(payload.encode()).hexdigest()
+
+    def _worker_envsig_path(self) -> Path:
+        return self.pid_path.with_name(self.pid_path.name + ".envsig")
+
+    def _invalidate_stale_worker_pid(self, existing_pid: int) -> None:
+        print(
+            f"⚠️  {self.name} worker PID {existing_pid}: нет .envsig или неверная сигнатура окружения, "
+            "останавливаем (возможен «осиротевший» процесс от старого прогона с тем же Redis)."
+        )
+        try:
+            os.kill(existing_pid, signal.SIGTERM)
+            time.sleep(0.2)
+            try:
+                os.kill(existing_pid, 0)
+                os.kill(existing_pid, signal.SIGKILL)
+            except OSError:
+                pass
+        except OSError:
+            pass
+        self.pid_path.unlink(missing_ok=True)
+        self._worker_envsig_path().unlink(missing_ok=True)
+        self.ref_count_path.unlink(missing_ok=True)
+        self._cleanup_old_processes()
+
     def _check_existing_worker(self) -> bool:
         """
         Проверяет существующий worker.
@@ -212,11 +258,23 @@ class SessionWorkerManager:
             try:
                 existing_pid = int(self.pid_path.read_text().strip())
                 os.kill(existing_pid, 0)  # Проверка что процесс жив
-                return True
             except (OSError, ValueError):
                 # Процесс не существует или PID невалидный
                 self.pid_path.unlink(missing_ok=True)
                 self.ref_count_path.unlink(missing_ok=True)
+                self._worker_envsig_path().unlink(missing_ok=True)
+                return False
+            expected_sig = self._worker_env_signature()
+            sig_path = self._worker_envsig_path()
+            try:
+                on_disk_sig = sig_path.read_text(encoding="utf-8").strip()
+            except OSError:
+                self._invalidate_stale_worker_pid(existing_pid)
+                return False
+            if on_disk_sig != expected_sig:
+                self._invalidate_stale_worker_pid(existing_pid)
+                return False
+            return True
         return False
 
     def _assert_worker_subprocess_alive(
@@ -255,9 +313,7 @@ class SessionWorkerManager:
         worker_log = open(self.log_file, "w", buffering=1, encoding="utf-8", errors="replace")
         worker_err = open(self.err_file, "w", buffering=1, encoding="utf-8", errors="replace")
         
-        worker_env = {**os.environ, **self.env}
-        worker_env.pop("PYTEST_XDIST_WORKER", None)
-        worker_env.pop("PYTEST_XDIST_WORKER_COUNT", None)
+        worker_env = self._build_worker_env()
         worker_process = subprocess.Popen(
             self.command,
             stdout=worker_log,
@@ -271,6 +327,7 @@ class SessionWorkerManager:
         
         # Сохраняем PID
         self.pid_path.write_text(str(worker_process.pid))
+        self._worker_envsig_path().write_text(self._worker_env_signature(), encoding="utf-8")
         print(f"✅ {self.name} worker started (PID: {worker_process.pid})")
         
         return worker_process
@@ -301,6 +358,7 @@ class SessionWorkerManager:
             )
         
         self.pid_path.unlink(missing_ok=True)
+        self._worker_envsig_path().unlink(missing_ok=True)
         print(f"✅ {self.name} worker stopped (PID: {pid})")
     
     def start(self):
@@ -852,6 +910,8 @@ class SessionServerManager:
         ]
         
         full_env = {**os.environ, **self.env, "PYTHONUNBUFFERED": "1"}
+        full_env.pop("PYTEST_XDIST_WORKER", None)
+        full_env.pop("PYTEST_XDIST_WORKER_COUNT", None)
 
         server_process = subprocess.Popen(
             command,

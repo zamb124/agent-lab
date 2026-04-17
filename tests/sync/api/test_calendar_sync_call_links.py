@@ -186,7 +186,9 @@ async def test_calendar_call_link_patch_syncs_channel_members(
         headers=sync_auth_headers,
     )
     assert mem0.status_code == 200
-    ids0 = {row["user_id"] for row in mem0.json()}
+    mem0_payload = mem0.json()
+    assert "items" in mem0_payload
+    ids0 = {row["user_id"] for row in mem0_payload["items"]}
     assert len(ids0) == 1
 
     patch_add = await sync_client.patch(
@@ -200,7 +202,9 @@ async def test_calendar_call_link_patch_syncs_channel_members(
         headers=sync_auth_headers,
     )
     assert mem1.status_code == 200
-    ids1 = {row["user_id"] for row in mem1.json()}
+    mem1_payload = mem1.json()
+    assert "items" in mem1_payload
+    ids1 = {row["user_id"] for row in mem1_payload["items"]}
     assert sync_user2_id in ids1
     assert len(ids1) == 2
 
@@ -215,7 +219,9 @@ async def test_calendar_call_link_patch_syncs_channel_members(
         headers=sync_auth_headers,
     )
     assert mem2.status_code == 200
-    ids2 = {row["user_id"] for row in mem2.json()}
+    mem2_payload = mem2.json()
+    assert "items" in mem2_payload
+    ids2 = {row["user_id"] for row in mem2_payload["items"]}
     assert sync_user2_id not in ids2
     assert len(ids2) == 1
 

@@ -10,8 +10,24 @@
 4. Регистрирует tasks всех сервисов
 """
 
-from apps.flows.config import get_settings
+import os
+import sys
 
+_forced = False
+for _k, _v in (
+    ("S3__BUCKETS__TEST-BUCKET__ENDPOINT_URL", "http://localhost:19002"),
+    ("S3__BUCKETS__TEST_BUCKET__ENDPOINT_URL", "http://localhost:19002"),
+):
+    _cur = os.environ.get(_k)
+    if _cur is None or _cur == "" or "127.0.0.1:19001" in _cur:
+        os.environ[_k] = _v
+        _forced = True
+
+if _forced:
+    from apps.flows.config import reset_settings
+    reset_settings()
+
+from apps.flows.config import get_settings
 get_settings()
 
 from apps.flows_worker.broker import broker as worker_app

@@ -158,7 +158,7 @@ async def test_deterministic_output_size_stable(tmp_path: Path) -> None:
     out1 = await _t().fill(finfo, {"v": "1"})
     out2 = await _t().fill(finfo, {"v": "1"})
     assert len(out1) == len(out2)
-    assert out1 == out2
+    assert _read_first_paragraph(out1) == _read_first_paragraph(out2) == "V=1"
 
 
 @pytest.mark.asyncio

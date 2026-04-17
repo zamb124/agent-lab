@@ -21,10 +21,15 @@ router = APIRouter(tags=["search"])
 
 
 class SearchRequest(BaseModel):
-    """Запрос на поиск"""
+    """Запрос на поиск (опции совпадают с телом RAGRepository.search_namespace)."""
+
     query: str
     limit: int = 5
     filters: Optional[Dict[str, Any]] = None
+    channels: Optional[Dict[str, Any]] = None
+    rrf_k: Optional[int] = None
+    per_channel_top_k: Optional[int] = None
+    rerank: Optional[bool] = None
 
 
 class SearchResponse(BaseModel):
@@ -63,11 +68,22 @@ async def search_in_namespace(
         rag_provider = get_rag_provider(provider, settings=settings) if provider else get_rag_provider(settings=settings)
         provider_name = provider or settings.rag.default_provider
         
+        search_kwargs: Dict[str, Any] = {}
+        if request.channels is not None:
+            search_kwargs["channels"] = request.channels
+        if request.rrf_k is not None:
+            search_kwargs["rrf_k"] = request.rrf_k
+        if request.per_channel_top_k is not None:
+            search_kwargs["per_channel_top_k"] = request.per_channel_top_k
+        if request.rerank is not None:
+            search_kwargs["rerank"] = request.rerank
+
         results = await rag_provider.search(
             namespace_id=namespace_id,
             query=request.query,
             limit=request.limit,
-            filters=request.filters
+            filters=request.filters,
+            **search_kwargs,
         )
         
         logger.info(f"Поиск '{request.query}' в namespace {namespace_id}: найдено {len(results)} результатов")

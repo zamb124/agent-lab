@@ -77,44 +77,20 @@ os.environ.setdefault("LLM__OPENROUTER__API_KEY", "sk-test-key")
 import core.config.base
 core.config.base._settings_instance = None
 
-# Переопределяем TaskIQ broker ДО импорта приложения
-# Это критично! Broker должен быть переопределен до регистрации задач
-from taskiq_redis import RedisStreamBroker, RedisAsyncResultBackend
-from core.tasks.session_lock import session_lock_middleware
-from core.config import get_settings
-import apps.flows_worker.broker as platform_broker_module
-
-# Получаем settings с тестовыми env переменными
-test_settings = get_settings()
-result_backend = RedisAsyncResultBackend(
-    redis_url=test_settings.tasks.broker_url, 
-    result_ex_time=3600
-)
-
-# Создаем broker с тестовыми настройками и queue_name="flows_worker" (как в задачах flows)
-test_broker = RedisStreamBroker(
-    url=test_settings.tasks.broker_url,
-    queue_name="flows_worker"
-).with_result_backend(result_backend).with_middlewares(session_lock_middleware)
-
-print(f"🔧 TEST BROKER CREATED: url={test_settings.tasks.broker_url}, queue_name=default, broker_id={id(test_broker)}")
-
-# Переопределяем broker в модуле ДО импорта задач
-platform_broker_module.broker = test_broker
-
-print(f"✅ Broker overridden in platform_broker_module")
+# Импорт broker до apps.flows.main: create_broker() читает get_settings() с уже выставленным TEST_DATABASE_ENV.
+import apps.flows_worker.broker as platform_broker_module  # noqa: F401
 
 from core.clients.llm import MockLLM, get_global_mock_llm, setup_mock_responses
 from core.context import Context, Company, User
 from apps.flows.main import app as fastapi_app
 
-print(f"📦 Apps imported, checking broker IDs:")
-print(f"   platform_broker_module.broker id: {id(platform_broker_module.broker)}")
-
-# Проверяем что задачи зарегистрированы
 from apps.flows.src.tasks.flow_tasks import process_flow_task
-print(f"   process_flow_task.broker id: {id(process_flow_task.broker)}")
-print(f"   Are they same? {id(test_broker) == id(process_flow_task.broker)}")
+
+if id(process_flow_task.broker) != id(platform_broker_module.broker):
+    raise RuntimeError(
+        "process_flow_task привязан к другому broker, чем apps.flows_worker.broker: "
+        "TaskIQ worker не сможет выполнять kiq из HTTP."
+    )
 
 
 _DB_SETUP_LOCK = "/tmp/platform_test_db_setup.lock"
@@ -609,15 +585,16 @@ def pytest_configure(config):
 @pytest.hookimpl(tryfirst=True)
 def pytest_collection_modifyitems(items: list) -> None:
     """
-    Тесты с маркером real_taskiq используют один глобальный Redis-ключ для
-    передачи mock-ответов LLM в agents subprocess. При параллельном -n X
-    разные gw-workers пишут в один ключ и мешают друг другу, а сессионный
-    flows_service на порту 9001 останавливается досрочно, когда первый gw
-    завершает сессию.
+    Тесты с маркером real_taskiq используют один Redis-ключ mock_llm:responses
+    для передачи ответов LLM в TaskIQ worker и в uvicorn тестовых сервисов.
+    Без группировки разные gw-workers одновременно портят очередь; без сброса
+    PYTEST_XDIST_WORKER у дочернего uvicorn flows читал бы mock_llm:responses:gwN
+    и не видел бы очередь, записанную фикстурой mock_llm_redis.
 
-    Решение: все real_taskiq тесты — в одну xdist_group, чтобы pytest-xdist
-    с --dist=loadgroup запускал их строго на одном gw-worker последовательно.
-    Остальные тесты продолжают распараллеливаться.
+    Решение: все real_taskiq — в xdist_group real_taskiq (последовательно на
+    одном gw при --dist=loadgroup); SessionServerManager убирает
+    PYTEST_XDIST_WORKER из env процессов 9001–9005; MockLLM снимает элемент
+    очереди из Redis одной Lua-транзакцией.
 
     tryfirst=True обязателен: xdist remote.py тоже регистрирует
     pytest_collection_modifyitems и добавляет @gname к nodeid по существующим
@@ -630,6 +607,10 @@ def pytest_collection_modifyitems(items: list) -> None:
                 item.add_marker(pytest.mark.timeout(120, func_only=True))
         elif item.nodeid.startswith("tests/sync/"):
             item.add_marker(pytest.mark.xdist_group("sync_db"))
+        elif item.nodeid.startswith("tests/rag/test_rag_resource") or item.nodeid.startswith(
+            "tests/rag/unit/test_rag_resource"
+        ):
+            item.add_marker(pytest.mark.xdist_group("rag_resource"))
         elif item.nodeid.startswith("tests/ui/"):
             item.add_marker(pytest.mark.xdist_group("ui_e2e"))
 
@@ -764,8 +745,10 @@ async def mock_llm_redis(container, request):
     НЕ использовать с sync_tools!
 
     Для real_taskiq тестов используется базовый ключ (без суффикса xdist worker),
-    т.к. TaskIQ worker subprocess не имеет PYTEST_XDIST_WORKER в env.
-    Все real_taskiq тесты сгруппированы в одну xdist_group, поэтому race невозможен.
+    т.к. TaskIQ worker subprocess и uvicorn тестовых HTTP-сервисов (SessionServerManager)
+    сбрасывают PYTEST_XDIST_WORKER в env и читают тот же ключ, что и эта фикстура.
+    Все real_taskiq тесты в одной xdist_group; параллельный доступ к очереди LLM
+    снимает атомарный Lua-pop в MockLLM._get_redis_response.
 
     Usage:
         async def test_integration(mock_llm_redis):
@@ -1134,16 +1117,14 @@ def inline_tools():
 
 
 @pytest_asyncio.fixture
-async def flows_app():
+async def flows_app(app):
     """
-    FastAPI приложение agents сервиса для интеграционных тестов.
-    
-    Использует:
-    - Реальный agents app
-    - Мок LLM (через TESTING=true)
-    - Тестовую БД (Redis, Postgres)
+    Тот же экземпляр agents-приложения, что и ``app`` (единый lifespan в фикстуре ``app``).
+
+    Раньше ``flows_app`` отдавал приложение без lifespan: HTTP через ``flows_client`` мог
+    выполняться до ``container``/``app``, а TaskIQ и Redis для flows оставались в частично
+    инициализированном состоянии относительно сессии тестов.
     """
-    from apps.flows.main import app
     yield app
 
 

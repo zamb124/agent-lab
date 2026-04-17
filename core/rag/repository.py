@@ -91,7 +91,7 @@ class RAGRepository:
             raise ValueError(
                 "RAGRepository.search_namespace: нужен company_id (аргумент, bind или контекст с active_company)"
             )
-        return None
+        return {COMPANY_ID_HEADER: ctx.active_company.company_id}
 
     def _resolve_namespace_id(
         self,

@@ -13,6 +13,36 @@ URL PostgreSQL для pytest и дочерних процессов (uvicorn, Ta
 
 _POSTGRES_TEST = "postgresql+asyncpg://platform_user:admin@localhost:54322"
 
+# Subprocess (TaskIQ worker и т.д.) не наследует os.environ из conftest целиком: те же ключи,
+# что выставляются в tests/conftest.py через setdefault, должны быть в TEST_DATABASE_ENV.
+_TEST_SERVICE_ENV: dict[str, str] = {
+    "SERVER__DEFAULT_TENANT_ID": "test_tenant",
+    "SERVER__FLOWS_SERVICE_URL": "http://localhost:9001",
+    "SERVER__RAG_SERVICE_URL": "http://localhost:9002",
+    "SERVER__CRM_SERVICE_URL": "http://localhost:9003",
+    "SERVER__FRONTEND_SERVICE_URL": "http://localhost:9004",
+    "SERVER__SYNC_SERVICE_URL": "http://localhost:9005",
+    "S3__ENABLED": "true",
+    "S3__DEFAULT_BUCKET": "test-bucket",
+    "S3__BUCKETS__TEST-BUCKET__ENDPOINT_URL": "http://localhost:19002",
+    "S3__BUCKETS__TEST-BUCKET__ACCESS_KEY_ID": "minioadmin",
+    "S3__BUCKETS__TEST-BUCKET__SECRET_ACCESS_KEY": "minioadmin",
+    "S3__BUCKETS__TEST-BUCKET__REGION_NAME": "us-east-1",
+    "S3__BUCKETS__TEST-BUCKET__PROVIDER": "minio",
+    "S3__BUCKETS__TEST_BUCKET__ENDPOINT_URL": "http://localhost:19002",
+    "S3__BUCKETS__TEST_BUCKET__ACCESS_KEY_ID": "minioadmin",
+    "S3__BUCKETS__TEST_BUCKET__SECRET_ACCESS_KEY": "minioadmin",
+    "S3__BUCKETS__TEST_BUCKET__REGION_NAME": "us-east-1",
+    "S3__BUCKETS__TEST_BUCKET__PROVIDER": "minio",
+    "LLM__OPENROUTER__API_KEY": "sk-test-key",
+    "RAG__ENABLED": "true",
+    "RAG__DEFAULT_PROVIDER": "pgvector",
+    "RAG__PROVIDERS__PGVECTOR__ENABLED": "true",
+    "RAG__EMBEDDING__PROVIDER": "openrouter",
+    "STT__PROVIDER": "mock",
+    "STT__MOCK_TRANSCRIPT_TEXT": "Тестовая транскрипция sync worker",
+}
+
 TEST_DATABASE_ENV: dict[str, str] = {
     "SERVER__PLATFORM_PUBLIC_BASE_URL": "http://testserver",
     "DATABASE__SHARED_URL": f"{_POSTGRES_TEST}/platform_shared",
@@ -27,4 +57,5 @@ TEST_DATABASE_ENV: dict[str, str] = {
     "CALLS__LIVEKIT_URL": "ws://localhost:7890",
     "CALLS__LIVEKIT_API_KEY": "devkey",
     "CALLS__LIVEKIT_API_SECRET": "secret",
+    **_TEST_SERVICE_ENV,
 }

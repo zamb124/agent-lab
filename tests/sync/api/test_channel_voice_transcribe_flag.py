@@ -50,6 +50,7 @@ def _audio_content_block(file_payload: dict[str, Any]) -> dict[str, Any]:
 
 
 @pytest.mark.asyncio
+@pytest.mark.timeout(30)
 async def test_voice_message_without_channel_flag_stays_idle(
     sync_client,
     sync_auth_headers,

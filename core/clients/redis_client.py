@@ -145,6 +145,12 @@ class RedisClient:
             logger.warning(f"RedisClient: ошибка удаления ключей: {e}")
             return 0
 
+    async def eval(self, script: str, numkeys: int, *keys_and_args: Any) -> Any:
+        """Выполняет Lua-скрипт (атомарные read-modify-write на стороне Redis)."""
+        if not await self._ensure_connected():
+            raise RuntimeError("Redis client not connected after retries")
+        return await self._client.eval(script, numkeys, *keys_and_args)
+
     async def ping(self) -> bool:
         """Проверяет соединение с Redis"""
         if not self._client:

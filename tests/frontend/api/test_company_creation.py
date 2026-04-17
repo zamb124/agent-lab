@@ -78,28 +78,33 @@ async def test_company_creation_with_agents_initialization(
     assert mapped_company_id == company_id
     
     print(f"✅ Subdomain mapping: {company_slug} → {company_id}")
-    
-    # Шаг 4: Запускаем инициализацию через agents API с авторизацией
-    # Используем тот же токен что и для создания компании
-    response = await flows_client.post(
-        "/flows/api/v1/company/init",
-        json={
-            "company_id": company_id,
-            "company_name": company_name,
-            "subdomain": company_slug
-        },
-        headers={"Authorization": f"Bearer {auth_token}"}
+
+    import apps.flows_worker.broker as flows_broker_mod
+    from apps.flows.src.tasks.company_init_tasks import init_company_resources
+
+    task_broker = getattr(init_company_resources, "broker", None)
+    mod_broker = flows_broker_mod.broker
+    if task_broker is not mod_broker:
+        raise AssertionError(
+            "init_company_resources должен быть привязан к apps.flows_worker.broker; "
+            f"task_broker_id={id(task_broker) if task_broker is not None else None} "
+            f"mod_broker_id={id(mod_broker)} task_type={type(init_company_resources)}"
+        )
+
+    # Шаг 4: инициализация через тот же broker, что слушает flows TaskIQ worker (ожидание по wait_result).
+    # Frontend при создании компании дергает flows через ServiceClient (отдельный HTTP); здесь проверяем цепочку kiq.
+    init_task = await init_company_resources.kiq(
+        company_id=company_id,
+        company_name=company_name,
+        subdomain=company_slug,
     )
-    
-    assert response.status_code == 200, f"Init failed: {response.text}"
-    
-    init_data = response.json()
-    task_id = init_data["task_id"]
-    
-    print(f"✅ Инициализация запущена: task_id={task_id}")
-    
-    # Шаг 5: Ждем завершения TaskIQ задачи (полный прогон нагружает очередь worker)
-    max_wait = 90
+    init_wr = await init_task.wait_result(timeout=120)
+    assert not init_wr.is_err, init_wr.error
+    assert init_wr.return_value.get("status") == "completed"
+    print(f"✅ Инициализация завершена: {init_wr.return_value}")
+
+    # Шаг 5: при необходимости дождаться консистентности репозитория (короткий поллинг)
+    max_wait = 30
     wait_interval = 1
     
     # Устанавливаем контекст новой компании для проверки
@@ -438,21 +443,31 @@ async def test_company_agents_api_with_context(
     company2_id = response2.json()["company_id"]
     
     print(f"✅ Созданы компании: {company1_id}, {company2_id}")
-    
-    # Инициализируем агенты для обеих компаний
-    await flows_client.post(
-        "/flows/api/v1/company/init",
-        json={"company_id": company1_id, "company_name": company1_name, "subdomain": company1_slug},
-        headers={"Authorization": f"Bearer {auth_token}"}
-    )
-    
-    await flows_client.post(
-        "/flows/api/v1/company/init",
-        json={"company_id": company2_id, "company_name": company2_name, "subdomain": company2_slug},
-        headers={"Authorization": f"Bearer {auth_token}"}
-    )
 
-    from core.utils.tokens import get_token_service
+    import apps.flows_worker.broker as flows_broker_mod
+    from apps.flows.src.tasks.company_init_tasks import init_company_resources
+
+    task_broker = getattr(init_company_resources, "broker", None)
+    mod_broker = flows_broker_mod.broker
+    if task_broker is not mod_broker:
+        raise AssertionError(
+            "init_company_resources должен быть привязан к apps.flows_worker.broker; "
+            f"task_broker_id={id(task_broker) if task_broker is not None else None} "
+            f"mod_broker_id={id(mod_broker)} task_type={type(init_company_resources)}"
+        )
+
+    for cid, cname, cslug in (
+        (company1_id, company1_name, company1_slug),
+        (company2_id, company2_name, company2_slug),
+    ):
+        init_task = await init_company_resources.kiq(
+            company_id=cid,
+            company_name=cname,
+            subdomain=cslug,
+        )
+        init_wr = await init_task.wait_result(timeout=120)
+        assert not init_wr.is_err, init_wr.error
+        assert init_wr.return_value.get("status") == "completed", init_wr.return_value
 
     token_service = get_token_service()
     token_data = token_service.validate_token(auth_token)
@@ -460,7 +475,7 @@ async def test_company_agents_api_with_context(
     token1 = token_service.create_token(user_id, company_id=company1_id)
     token2 = token_service.create_token(user_id, company_id=company2_id)
 
-    deadline = time.monotonic() + 90.0
+    deadline = time.monotonic() + 30.0
     flows_ready = False
     while time.monotonic() < deadline:
         r1 = await flows_client.get(
@@ -484,9 +499,9 @@ async def test_company_agents_api_with_context(
                 flows_ready = True
                 break
         await asyncio.sleep(0.1)
-    
+
     assert flows_ready, (
-        "Агенты не появились в API за 90 с после company/init (ожидание TaskIQ)"
+        "Агенты не появились в API за 30 с после завершения init_company_resources (TaskIQ)"
     )
     
     # Проверка 1: Компания 1 видит своих агентов

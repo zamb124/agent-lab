@@ -50,6 +50,26 @@ def _mock_redis_key() -> str:
 
 _global_mock_registry: Dict[str, "MockLLM"] = {}
 
+# Атомарно: один элемент JSON-массива за вызов (несколько async LLM на одном ключе).
+_MOCK_LLM_REDIS_POP_SCRIPT = """
+local raw = redis.call('GET', KEYS[1])
+if not raw then
+  return nil
+end
+local decoded = cjson.decode(raw)
+if decoded == nil or #decoded == 0 then
+  redis.call('DEL', KEYS[1])
+  return nil
+end
+local head = table.remove(decoded, 1)
+if #decoded == 0 then
+  redis.call('DEL', KEYS[1])
+else
+  redis.call('SET', KEYS[1], cjson.encode(decoded))
+end
+return cjson.encode(head)
+"""
+
 
 class MockLLM:
     """
@@ -109,22 +129,18 @@ class MockLLM:
         """Получает ответ из Redis (межпроцессная очередь)."""
         if not self._redis_client:
             return None
-        
+
+        key = _mock_redis_key()
         try:
-            data = await self._redis_client.get(_mock_redis_key())
-            if data:
-                responses = json.loads(data)
-                if responses:
-                    response = responses.pop(0)
-                    if responses:
-                        await self._redis_client.set(_mock_redis_key(), json.dumps(responses))
-                    else:
-                        await self._redis_client.delete(_mock_redis_key())
-                    logger.info(f"MockLLM: ответ из Redis (осталось {len(responses)})")
-                    return response
+            raw = await self._redis_client.eval(_MOCK_LLM_REDIS_POP_SCRIPT, 1, key)
+            if raw is None:
+                return None
+            response = json.loads(raw)
+            logger.info("MockLLM: ответ из Redis (очередь уменьшена атомарно)")
+            return response
         except Exception as e:
             logger.warning(f"MockLLM: ошибка чтения из Redis: {e}")
-        
+
         return None
 
     def _get_response(self, messages: List[Message]) -> Dict[str, Any]:
@@ -583,8 +599,8 @@ async def setup_mock_responses_redis(
     в отдельном subprocess.
 
     key_override: если задан, используется вместо автоматического ключа.
-    Для real_taskiq тестов передаётся базовый ключ, т.к. worker subprocess
-    не имеет PYTEST_XDIST_WORKER.
+    Для real_taskiq передаётся базовый ключ mock_llm:responses: у TaskIQ worker
+    и uvicorn тестовых сервисов в env нет PYTEST_XDIST_WORKER (см. workers.py).
     """
     key = key_override or _mock_redis_key()
     await redis_client.set(key, json.dumps(response_queue))
