@@ -21,7 +21,7 @@ from apps.sync.realtime.events import event_channel_member_added
 from apps.sync.realtime.publish_events import publish_realtime_events
 from apps.sync.realtime.tasks import handle_command
 from core.config import get_settings
-from core.pagination import OffsetPage
+from core.pagination import OffsetPage, ListResponse
 from core.context import get_context
 
 router = APIRouter()
@@ -159,8 +159,8 @@ async def create_channel(container: ContainerDep, body: ChannelCreate) -> Channe
     return ChannelRead.model_validate(res.return_value["result"])
 
 
-@router.get("/{channel_id}/members", response_model=list[ChannelMemberRead])
-async def list_channel_members(channel_id: str, container: ContainerDep) -> list[ChannelMemberRead]:
+@router.get("/{channel_id}/members", response_model=ListResponse[ChannelMemberRead])
+async def list_channel_members(channel_id: str, container: ContainerDep) -> ListResponse[ChannelMemberRead]:
     """Участники канала (только для состоящих в канале)."""
     context = get_context()
     company_id = context.active_company.company_id
@@ -171,7 +171,7 @@ async def list_channel_members(channel_id: str, container: ContainerDep) -> list
     if not await container.channel_repository.is_member(channel_id, viewer_id, company_id=company_id):
         raise HTTPException(status_code=403, detail="Нет доступа к каналу.")
     rows = await container.channel_repository.list_member_rows(channel_id, company_id=company_id)
-    return [ChannelMemberRead(user_id=uid, role=role) for uid, role in rows]
+    return ListResponse[ChannelMemberRead](items=[ChannelMemberRead(user_id=uid, role=role) for uid, role in rows])
 
 
 @router.post("/{channel_id}/members", status_code=201)

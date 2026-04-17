@@ -14,6 +14,7 @@ from core.models.identity_models import Company, User
 from core.identity.system_bootstrap import SYSTEM_COMPANY_ID
 from apps.frontend.dependencies import ContainerDep
 from core.config import get_settings
+from core.pagination import ListResponse
 
 logger = logging.getLogger(__name__)
 
@@ -215,8 +216,8 @@ async def create_company(
     return response
 
 
-@router.get("/me", response_model=list[dict])
-async def get_my_companies(request: Request, container: ContainerDep):
+@router.get("/me", response_model=ListResponse[dict])
+async def get_my_companies(request: Request, container: ContainerDep) -> ListResponse[dict]:
     """
     Получить список компаний текущего пользователя
     
@@ -242,7 +243,7 @@ async def get_my_companies(request: Request, container: ContainerDep):
                 "is_active": company_id == user.active_company_id
             })
     
-    return companies
+    return ListResponse[dict](items=companies)
 
 
 @router.post("/{company_id}/system-access")

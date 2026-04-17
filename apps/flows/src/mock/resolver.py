@@ -10,6 +10,7 @@ import os
 from typing import Any, Dict, List, Optional, TYPE_CHECKING
 
 from apps.flows.config import get_settings
+from core.config.testing import is_testing as is_testing_env
 from core.logging import get_logger
 
 from .config import MockConfig
@@ -110,7 +111,7 @@ def is_mock_enabled(state_dict: Optional[Dict[str, Any]] = None) -> bool:
         if mock_config and mock_config.get("enabled"):
             return True
     
-    return os.environ.get("TESTING", "").lower() in ("true", "1", "yes")
+    return is_testing_env()
 
 
 def get_mock_for_tool(state: Optional["ExecutionState"], tool_id: str) -> Optional[Any]:

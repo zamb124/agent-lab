@@ -73,10 +73,12 @@ class TestListCredentials:
         )
         assert resp.status_code == 200
         data = resp.json()
-        services = {item["service"] for item in data}
+        assert isinstance(data, dict)
+        items = data["items"]
+        services = {item["service"] for item in items}
         assert svc_a in services
         assert svc_b in services
-        for item in data:
+        for item in items:
             assert "access_token" not in item
             assert "refresh_token" not in item
 

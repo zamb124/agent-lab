@@ -2,6 +2,8 @@
 
 import os
 
+from core.config.testing import is_testing
+
 from fastapi import FastAPI
 
 from apps.scheduler.api.v1 import api_v1_router
@@ -75,7 +77,7 @@ async def _ensure_calendar_schedule(
 
 
 async def on_startup(app: FastAPI, container, settings: SchedulerSettings) -> None:
-    if os.getenv("TESTING") != "true":
+    if not is_testing():
         await ensure_system_company_exists(container)
     config = settings.calendar_sync
     await _ensure_calendar_schedule(

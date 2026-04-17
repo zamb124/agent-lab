@@ -11,6 +11,7 @@ from pydantic import BaseModel
 from typing import Annotated
 
 from core.db.base_repository import BaseRepository
+from core.pagination import ListResponse
 
 logger = logging.getLogger(__name__)
 
@@ -62,7 +63,7 @@ class CRUDRouterGenerator:
     def _add_standard_crud(self, router: APIRouter, RepositoryDep):
         """Добавляет стандартные CRUD эндпоинты"""
         
-        @router.get("", response_model=List[Dict[str, Any]])
+        @router.get("", response_model=ListResponse[Dict[str, Any]])
         async def list_entities(
             repository: RepositoryDep,
             limit: int = Query(100, ge=1, le=1000),
@@ -70,7 +71,7 @@ class CRUDRouterGenerator:
         ):
             """Получить страницу сущностей."""
             entities = await repository.list(limit=limit, offset=offset)
-            return [entity.model_dump() for entity in entities]
+            return ListResponse[Dict[str, Any]](items=[entity.model_dump() for entity in entities])
         
         @router.get("/{entity_id}", response_model=Dict[str, Any])
         async def get_entity(entity_id: str, repository: RepositoryDep):

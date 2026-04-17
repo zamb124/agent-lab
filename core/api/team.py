@@ -12,6 +12,7 @@ from fastapi import APIRouter, HTTPException, Query, Request
 from pydantic import BaseModel, Field
 
 from core.context import get_context
+from core.pagination import ListResponse
 
 router = APIRouter(tags=["team"])
 
@@ -25,8 +26,8 @@ class TeamMemberResponse(BaseModel):
     avatar_url: str | None = None
 
 
-@router.get("/members", response_model=list[TeamMemberResponse])
-async def get_team_members(request: Request) -> list[TeamMemberResponse]:
+@router.get("/members", response_model=ListResponse[TeamMemberResponse])
+async def get_team_members(request: Request) -> ListResponse[TeamMemberResponse]:
     ctx = get_context()
     if not ctx or not ctx.user or not ctx.active_company:
         raise HTTPException(status_code=401, detail="Authentication required")
@@ -53,7 +54,7 @@ async def get_team_members(request: Request) -> list[TeamMemberResponse]:
             avatar_url=member_user.avatar_url,
         ))
 
-    return members
+    return ListResponse[TeamMemberResponse](items=members)
 
 
 class UserSearchResult(BaseModel):
@@ -63,11 +64,11 @@ class UserSearchResult(BaseModel):
     avatar_url: str | None = None
 
 
-@router.get("/search", response_model=list[UserSearchResult])
+@router.get("/search", response_model=ListResponse[UserSearchResult])
 async def search_users(
     request: Request,
     q: str = Query(..., min_length=2, description="Email или имя для поиска"),
-) -> list[UserSearchResult]:
+) -> ListResponse[UserSearchResult]:
     """Поиск пользователей по email или имени (по всем компаниям)."""
     ctx = get_context()
     if not ctx or not ctx.user:
@@ -76,7 +77,7 @@ async def search_users(
     user_repo = request.app.state.container.user_repository
     users = await user_repo.search_by_query(q, limit=20)
 
-    return [
+    return ListResponse[UserSearchResult](items=[
         UserSearchResult(
             user_id=u.user_id,
             name=u.name,
@@ -84,4 +85,4 @@ async def search_users(
             avatar_url=u.avatar_url,
         )
         for u in users
-    ]
+    ])

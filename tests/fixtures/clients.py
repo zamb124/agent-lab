@@ -30,35 +30,85 @@ from httpx import AsyncClient, ASGITransport
 # Он объявлен там как session-scoped фикстура
 
 
-def patch_service_client_rag_asgi(
-    monkeypatch: pytest.MonkeyPatch,
-    rag_app: Any,
-    auth_headers_system: dict[str, str],
-) -> None:
+@pytest.fixture(autouse=True)
+def patch_service_clients_asgi(monkeypatch: pytest.MonkeyPatch) -> None:
     """
-    Направляет ``ServiceClient.post(..., service="rag", ...)`` в ASGI-приложение ``rag_app``.
-
-    Заголовки из вызова (например ``X-Company-Id``) мержатся поверх системной авторизации.
+    Универсальный патч для ServiceClient, направляющий запросы между сервисами
+    через ASGITransport, если соответствующее приложение доступно.
     """
     from core.clients.service_client import ServiceClient
+    from httpx import ASGITransport, AsyncClient
 
-    async def fake_post(self: ServiceClient, service: str, path: str, **kwargs: Any) -> Any:
-        if service != "rag":
-            raise AssertionError(f"ожидался сервис rag, получено {service!r}")
-        transport = ASGITransport(app=rag_app)
-        headers = dict(auth_headers_system)
-        extra = kwargs.get("headers")
-        if extra:
-            headers.update(extra)
+    _apps_cache = {}
+
+    def get_service_app(service: str) -> Any:
+        if service in _apps_cache:
+            return _apps_cache[service]
+        
+        try:
+            if service == "flows":
+                from apps.flows.main import app
+                _apps_cache[service] = app
+            elif service == "rag":
+                from apps.rag.main import app
+                _apps_cache[service] = app
+            elif service == "crm":
+                from apps.crm.main import create_app
+                _apps_cache[service] = create_app()
+            elif service == "frontend":
+                from apps.frontend.main import app
+                _apps_cache[service] = app
+            elif service == "sync":
+                from apps.sync.main import app
+                _apps_cache[service] = app
+            elif service == "office":
+                from apps.office.main import app
+                _apps_cache[service] = app
+            else:
+                return None
+        except ImportError:
+            return None
+        return _apps_cache.get(service)
+
+    original_request = ServiceClient.request
+
+    async def mocked_request(self: ServiceClient, service: str, method: str, path: str, **kwargs: Any) -> Any:
+        app = get_service_app(service)
+        if not app:
+            # Если приложение не найдено (или это внешний сервис), используем оригинальный HTTP-запрос
+            return await original_request(self, service, method, path, **kwargs)
+
+        # Собираем заголовки из контекста (как в оригинальном ServiceClient)
+        include_content_type = "files" not in kwargs
+        headers = self._build_headers(include_content_type=include_content_type)
+        if "headers" in kwargs:
+            headers.update(kwargs.pop("headers"))
+        
+        timeout = kwargs.pop("timeout", 30.0)
         req_kwargs = {k: v for k, v in kwargs.items() if k != "headers"}
-        async with AsyncClient(transport=transport, base_url="http://testserver") as client:
-            response = await client.post(path, headers=headers, **req_kwargs)
-            response.raise_for_status()
+
+        transport = ASGITransport(app=app)
+        # В тестах все роутеры примонтированы с префиксом /{service}/api/v1.
+        # ServiceClient обычно вызывается с путем /api/v1/..., поэтому добавляем префикс если его нет.
+        request_path = path
+        if not path.startswith(f"/{service}/"):
+            request_path = f"/{service}{path}"
+            
+        async with AsyncClient(transport=transport, base_url="http://testserver", timeout=timeout) as client:
+            response = await client.request(method, request_path, headers=headers, **req_kwargs)
+            # Мы не используем response.raise_for_status() здесь, так как оригинальный request 
+            # обрабатывает ошибки самостоятельно (ServiceClientError)
+            if response.is_error:
+                from core.clients.service_client import ServiceClientError
+                raise ServiceClientError(
+                    f"HTTP {response.status_code} при запросе к {service} (ASGI): {response.text}"
+                )
+            
             if response.content:
                 return response.json()
             return None
 
-    monkeypatch.setattr(ServiceClient, "post", fake_post)
+    monkeypatch.setattr(ServiceClient, "request", mocked_request)
 
 
 # ==============================================================================

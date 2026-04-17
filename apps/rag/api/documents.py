@@ -10,6 +10,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from apps.rag_worker.tasks.indexing_tasks import index_rag_document_s3_task
 from core.context import get_context
+from core.pagination import OffsetPage
 from core.files.models import FileResponse
 from core.files.processors import FileProcessor
 from core.logging import get_logger
@@ -28,10 +29,7 @@ logger = get_logger(__name__)
 router = APIRouter(tags=["documents"])
 
 
-class DocumentListResponse(BaseModel):
-    items: List[RAGDocument]
-    namespace_id: str
-    provider: str
+# DocumentListResponse is replaced by OffsetPage[RAGDocument]
 
 
 class DocumentUploadResponse(BaseModel):
@@ -103,13 +101,14 @@ async def ingest_text(
     )
 
 
-@router.get("/namespaces/{namespace_id}/documents", response_model=DocumentListResponse)
+@router.get("/namespaces/{namespace_id}/documents", response_model=OffsetPage[RAGDocument])
 async def list_documents(
     namespace_id: str,
     container: ContainerDep,
+    offset: int = Query(0, ge=0),
     limit: int = Query(100, ge=1, le=1000),
     provider: Optional[str] = Query(None),
-) -> DocumentListResponse:
+) -> OffsetPage[RAGDocument]:
     """Список документов в namespace (completed + in-progress)."""
     settings = get_rag_settings()
     rag_provider = get_rag_provider(provider, settings=settings) if provider else get_rag_provider(settings=settings)
@@ -138,10 +137,14 @@ async def list_documents(
             },
         ))
 
-    return DocumentListResponse(
-        items=all_documents[:limit],
-        namespace_id=namespace_id,
-        provider=provider_name,
+    items = all_documents[:limit]
+
+    from core.pagination import OffsetPage
+    return OffsetPage[RAGDocument](
+        items=items,
+        total=len(items),
+        limit=limit,
+        offset=offset,
     )
 
 

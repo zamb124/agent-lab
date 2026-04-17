@@ -23,10 +23,10 @@ if TYPE_CHECKING:
 
 logger = get_logger(__name__)
 
-
 def is_test_mode() -> bool:
     """Проверяет запущены ли тесты."""
-    return os.environ.get("TESTING", "").lower() in ("true", "1", "yes")
+    from core.config.testing import is_testing
+    return is_testing()
 
 
 class FunctionTool(BaseTool):

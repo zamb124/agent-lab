@@ -9,6 +9,7 @@ import uuid
 from typing import Any, Dict, List, Optional, Union
 
 import tiktoken
+from core.config.testing import is_testing
 from sqlalchemy import and_, delete, func, or_, select, text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
@@ -133,7 +134,7 @@ class PgVectorProvider(BaseRAGProvider):
         )
 
         if (
-            os.environ.get("TESTING") == "true"
+            is_testing()
             or os.environ.get("RAG__EMBEDDING__MOCK") == "true"
             or os.environ.get("PGVECTOR_TEST_MOCK_EMBEDDINGS") == "true"
         ):

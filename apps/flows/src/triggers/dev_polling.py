@@ -16,8 +16,6 @@ from core.logging import get_logger
 
 logger = get_logger(__name__)
 
-TELEGRAM_API_BASE = "https://api.telegram.org"
-
 
 class TelegramPollingBot:
     """Polling для одного Telegram бота."""
@@ -44,7 +42,7 @@ class TelegramPollingBot:
     
     async def delete_webhook(self):
         """Удаляет webhook перед polling."""
-        url = f"{TELEGRAM_API_BASE}/bot{self.bot_token}/deleteWebhook"
+        url = f"{get_settings().telegram.api_base}/bot{self.bot_token}/deleteWebhook"
         try:
             async with get_httpx_client(timeout=10.0, proxy=True) as client:
                 await client.post(url)
@@ -56,7 +54,7 @@ class TelegramPollingBot:
         """Long polling getUpdates."""
         try:
             response = await client.get(
-                f"{TELEGRAM_API_BASE}/bot{self.bot_token}/getUpdates",
+                f"{get_settings().telegram.api_base}/bot{self.bot_token}/getUpdates",
                 params={
                     "offset": self.offset,
                     "timeout": 30,

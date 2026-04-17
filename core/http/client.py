@@ -35,12 +35,12 @@ async def _request_direct_burst(
     attempts: int,
     **kwargs,
 ) -> httpx.Response:
-    m = method.lower()
+    http_method = method.upper()
     last: BaseException | None = None
     for attempt in range(attempts):
         async with get_httpx_client(timeout=timeout, proxy=False) as client:
             try:
-                return await getattr(client, m)(url, **kwargs)
+                return await client.request(http_method, url, **kwargs)
             except _CONNECT_RETRY_EXCEPTIONS as e:
                 last = e
                 logger.warning(
@@ -83,7 +83,7 @@ async def request_public_oauth(
     if _platform_proxy_active():
         try:
             async with get_httpx_client(timeout=timeout, proxy=True) as client:
-                return await getattr(client, method.lower())(url, **kwargs)
+                return await client.request(method.upper(), url, **kwargs)
         except _CONNECT_RETRY_EXCEPTIONS as e:
             logger.warning(
                 "Запрос через прокси к %s не удался (%s), снова прямое подключение",
@@ -167,9 +167,10 @@ class SmartProxyClient:
         Выполняет запрос с автоматическим retry при таймауте прокси.
         Локальные адреса (localhost, 192.168.x.x и т.д.) всегда идут напрямую.
         """
+        http_method = method.upper()
         if not self.use_proxy or self._is_local_url(url):
             async with self._create_client() as client:
-                return await getattr(client, method)(url, **kwargs)
+                return await client.request(http_method, url, **kwargs)
 
         settings = self._get_settings()
 
@@ -179,7 +180,7 @@ class SmartProxyClient:
 
             try:
                 async with self._create_client(proxy_url) as client:
-                    response = await getattr(client, method)(url, **kwargs)
+                    response = await client.request(http_method, url, **kwargs)
                     return response
 
             except (httpx.ConnectTimeout, httpx.ConnectError) as e:

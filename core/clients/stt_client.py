@@ -311,7 +311,7 @@ class STTClientFactory:
                 timeout=config.timeout,
             )
         if provider == "mock":
-            transcript_text = os.getenv("STT__MOCK_TRANSCRIPT_TEXT", "Тестовая транскрипция")
+            transcript_text = settings.stt.mock_transcript_text
             return MockSTTClient(transcript_text=transcript_text)
 
         raise ValueError(f"Неизвестный STT провайдер: {provider}")

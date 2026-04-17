@@ -22,7 +22,8 @@ class TestTeamAPI:
         )
         
         assert response.status_code == 200
-        members = response.json()
+        body = response.json()
+        members = body["items"]
         assert isinstance(members, list)
 
     async def test_get_team_members_unauthorized(self, frontend_client: AsyncClient):
@@ -232,7 +233,7 @@ class TestTeamAPI:
         )
         
         assert response.status_code == 200
-        members = response.json()
+        members = response.json()["items"]
         
         # Не должен видеть shared_member из company1
         member_ids = [m["user_id"] for m in members]

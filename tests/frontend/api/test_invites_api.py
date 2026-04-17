@@ -302,7 +302,7 @@ class TestInvitesAcceptAPI:
             headers=auth_headers,
         )
         assert members_resp.status_code == 200, members_resp.text
-        members = members_resp.json()
+        members = members_resp.json()["items"]
         member_ids = {m["user_id"] for m in members}
         assert owner_data.user_id in member_ids
         assert invitee_id.user_id in member_ids

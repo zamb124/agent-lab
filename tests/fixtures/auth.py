@@ -12,11 +12,16 @@
 4. auth_token_company2_user2 / auth_headers_company2_user2 — company2, member
 """
 
+from contextlib import contextmanager
+
 import pytest
 import pytest_asyncio
 import uuid
-from core.utils.tokens import get_token_service
+
+from core.context import clear_context, set_context
+from core.models.context_models import Context
 from core.models.identity_models import User, Company
+from core.utils.tokens import get_token_service
 
 
 @pytest_asyncio.fixture(scope="session")
@@ -286,4 +291,31 @@ async def auth_headers_company2_user2(auth_token_company2_user2):
             resp2 = await crm_client.get(f"/crm/api/v1/entities/{entity_id}", headers=auth_headers_company2_user2)
     """
     return {"Authorization": f"Bearer {auth_token_company2_user2}"}
+
+
+@contextmanager
+def service_client_asgi_auth_context(auth_headers: dict[str, str]):
+    """
+    Контекст с auth_token для ServiceClient при ASGI-вызовах другого сервиса (например flows → rag).
+    """
+    raw = auth_headers["Authorization"].replace("Bearer ", "").strip()
+    token_data = get_token_service().validate_token(raw)
+    if token_data is None:
+        raise ValueError("Невалидный токен в service_client_asgi_auth_context")
+    company_id = token_data.company_id
+    if not company_id:
+        raise ValueError("В токене нет company_id")
+    set_context(
+        Context(
+            user=User(user_id=token_data.user_id, name="test"),
+            active_company=Company(company_id=company_id, name="test"),
+            channel="test",
+            session_id="test",
+            auth_token=raw,
+        )
+    )
+    try:
+        yield
+    finally:
+        clear_context()
 

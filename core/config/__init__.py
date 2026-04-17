@@ -4,6 +4,7 @@
 
 from core.config.base import BaseSettings, get_settings, set_settings, settings
 from core.config.loader import load_merged_config
+from core.config.testing import is_testing
 from core.config.models import (
     AuthConfig,
     AuthProviderConfig,
@@ -28,6 +29,7 @@ __all__ = [
     "set_settings",
     "settings",
     "load_merged_config",
+    "is_testing",
     "AuthConfig",
     "AuthProviderConfig",
     "DemoAuthConfig",

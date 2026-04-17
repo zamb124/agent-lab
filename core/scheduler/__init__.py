@@ -1,10 +1,11 @@
 """
 Core scheduler module.
 
-Предоставляет TaskiqScheduler и RedisScheduleSource для scheduled tasks.
+Предоставляет модели, репозиторий и сервис для scheduled tasks.
+RedisScheduleSource — через get_schedule_source.
 
-Note: create_scheduler требует taskiq, поэтому импортируйте его напрямую:
-    from core.scheduler.scheduler import create_scheduler
+Note: create_scheduler перенесён в apps/scheduler/dispatch.py
+(зависит от apps/ брокеров, не может жить в core/).
 """
 
 from core.scheduler.models import (

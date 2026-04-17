@@ -32,6 +32,14 @@ class OffsetPage(BaseModel, Generic[T]):
     offset: int
 
 
+class ListResponse(BaseModel, Generic[T]):
+    """Обертка для списков без пагинации (взамен голых List[]).
+
+    Применяется для небольших коллекций, где пагинация пока избыточна.
+    """
+    items: list[T]
+
+
 def encode_cursor(created_at: datetime, entity_id: str) -> str:
     """Кодирует keyset-позицию (created_at, id) в opaque cursor."""
     payload = json.dumps({"ts": created_at.isoformat(), "id": entity_id}, separators=(",", ":"))

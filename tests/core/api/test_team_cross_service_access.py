@@ -81,8 +81,11 @@ async def test_team_members_endpoint_available_in_all_services(
         assert response.status_code == 200, (
             f"{service_name} must expose team members endpoint, got {response.status_code}"
         )
-        members = response.json()
-        assert isinstance(members, list), f"{service_name} must return list"
+        response_data = response.json()
+        assert isinstance(response_data, dict), f"{service_name} must return dict (ListResponse)"
+        assert "items" in response_data, f"{service_name} must have 'items' key"
+        members = response_data["items"]
+        assert isinstance(members, list), f"{service_name}.items must be list"
 
 
 @pytest.mark.asyncio
@@ -110,7 +113,8 @@ async def test_team_members_consistent_across_services(
     for service_name, client, url in clients:
         response = await client.get(url, headers=auth_headers_system)
         assert response.status_code == 200
-        members = response.json()
+        response_data = response.json()
+        members = response_data["items"]
         member_ids = {m["user_id"] for m in members}
         member_sets[service_name] = member_ids
 
@@ -134,7 +138,10 @@ async def test_team_members_response_schema(
         headers=auth_headers_system,
     )
     assert response.status_code == 200
-    members = response.json()
+    response_data = response.json()
+    assert isinstance(response_data, dict)
+    assert "items" in response_data
+    members = response_data["items"]
     assert isinstance(members, list)
 
     for member in members:

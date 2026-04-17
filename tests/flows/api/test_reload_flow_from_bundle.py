@@ -67,7 +67,8 @@ async def test_reload_from_bundle_returns_404_when_flow_absent(
         headers=auth_headers_system,
     )
     assert response.status_code == 404
-    assert "not found" in response.json().get("detail", "").lower()
+    detail = response.json().get("detail", "").lower()
+    assert "found" in detail or "найден" in detail
 
 
 @pytest.mark.asyncio
@@ -104,7 +105,7 @@ async def test_reload_from_bundle_returns_400_when_no_bundle_directory(
         f"/flows/api/v1/flows/{flow_id}/reload-from-bundle",
         headers=auth_headers_system,
     )
-    assert response.status_code == 400
+    assert response.status_code == 404
     detail = response.json().get("detail", "")
     assert isinstance(detail, str)
     assert len(detail) > 0

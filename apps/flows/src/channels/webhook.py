@@ -9,7 +9,7 @@ WebhookChannelHandler - отправка сообщений через HTTP call
 
 from typing import Any, Dict, Optional, Union
 
-import httpx
+from core.http import get_httpx_client
 
 from apps.flows.src.models.enums import ChannelType
 from core.logging import get_logger
@@ -188,7 +188,7 @@ class WebhookChannelHandler(BaseChannelHandler):
         method = config.get("method", "POST").upper()
         timeout = config.get("timeout", 30.0)
         
-        async with httpx.AsyncClient(timeout=timeout) as client:
+        async with get_httpx_client(timeout=timeout) as client:
             if method == "POST":
                 response = await client.post(url, json=payload, headers=headers)
             elif method == "PUT":

@@ -4,6 +4,8 @@ Frontend Service - FastAPI приложение для управления пл
 import logging
 import os
 from pathlib import Path
+
+from core.config.testing import is_testing
 from fastapi import FastAPI, HTTPException
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse, JSONResponse, RedirectResponse, PlainTextResponse, Response
@@ -105,7 +107,7 @@ def _build_llms_txt(base_url: str) -> str:
     )
 
 async def on_startup(app: FastAPI, container, settings: FrontendSettings) -> None:
-    if os.getenv("TESTING") == "true":
+    if is_testing():
         return
     await ensure_system_admin_membership(container)
     await ensure_demo_company_and_user(container)
@@ -122,7 +124,7 @@ async def on_startup(app: FastAPI, container, settings: FrontendSettings) -> Non
 _frontend_settings = get_frontend_settings()
 _frontend_cors_regex = getattr(_frontend_settings, "cors_allow_origin_regex", None)
 _frontend_cors_origins = list(getattr(_frontend_settings, "cors_allow_origins", []))
-if _frontend_cors_regex is None and _frontend_settings.server.debug and os.getenv("TESTING") != "true":
+if _frontend_cors_regex is None and _frontend_settings.server.debug and not is_testing():
     _frontend_cors_regex = _FRONTEND_DEV_CORS_ORIGIN_REGEX
 
 app = create_service_app(

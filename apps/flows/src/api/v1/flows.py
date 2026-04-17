@@ -15,7 +15,7 @@ from apps.flows.src.container import FlowContainer
 from apps.flows.src.dependencies import ContainerDep
 from apps.flows.src.services.flows_loader import FlowsLoader, load_tools_to_db
 from core.logging import get_logger
-from core.pagination import OffsetPage
+from core.pagination import OffsetPage, ListResponse
 from apps.flows.src.models import Edge, FlowConfig, SkillConfig, NodeConfig, FlowType, ExternalAgentStatus, TriggerConfig
 from apps.flows.src.services.flow_validator import FlowValidator
 
@@ -593,8 +593,8 @@ async def list_flows(
     return OffsetPage[FlowResponse](items=result, total=total, limit=limit, offset=offset)
 
 
-@router.get("/store/bundles", response_model=List[FlowStoreBundleResponse])
-async def list_store_bundles(container: ContainerDep) -> List[FlowStoreBundleResponse]:
+@router.get("/store/bundles", response_model=ListResponse[FlowStoreBundleResponse])
+async def list_store_bundles(container: ContainerDep) -> ListResponse[FlowStoreBundleResponse]:
     """
     Каталог bundle-агентов для UI Store.
 
@@ -672,7 +672,7 @@ async def list_store_bundles(container: ContainerDep) -> List[FlowStoreBundleRes
             )
         )
 
-    return result
+    return ListResponse[FlowStoreBundleResponse](items=result)
 
 
 async def _validate_tool_nodes(
@@ -893,6 +893,9 @@ async def reload_flow_from_bundle(
     try:
         loaded_id = await loader.reload_flow_bundle(flow_id)
     except ValueError as e:
+        msg = str(e).lower()
+        if "не найден" in msg or "not found" in msg:
+            raise HTTPException(status_code=404, detail=str(e)) from e
         raise HTTPException(status_code=400, detail=str(e)) from e
 
     return ReloadFlowFromBundleResponse(
@@ -999,13 +1002,13 @@ async def delete_flow(
     return {"status": "deleted", "flow_id": flow_id}
 
 
-@router.get("/{flow_id}/versions", response_model=List[str])
+@router.get("/{flow_id}/versions", response_model=ListResponse[str])
 async def list_versions(
     flow_id: str, container: ContainerDep
-) -> List[str]:
+) -> ListResponse[str]:
     """Список версий flow."""
     versions = await container.flow_repository.list_versions(flow_id)
-    return versions
+    return ListResponse[str](items=versions)
 
 
 @router.get("/{flow_id}/versions/{version}", response_model=FlowResponse)

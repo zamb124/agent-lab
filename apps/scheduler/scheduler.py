@@ -19,7 +19,7 @@ import apps.idle_worker.tasks.llm_models_tasks  # noqa: F401, E402
 import apps.idle_worker.tasks.calendar_sync_tasks  # noqa: F401, E402
 import apps.idle_worker.tasks.span_billing_settlement_tasks  # noqa: F401, E402
 
-from core.scheduler.scheduler import create_scheduler, require_tasks_registered_for_scheduler
+from apps.scheduler.dispatch import create_scheduler, require_tasks_registered_for_scheduler
 
 _FLOWS_SCHEDULER_REQUIRED_TASK_NAMES: tuple[str, ...] = (
     "process_flow_task",

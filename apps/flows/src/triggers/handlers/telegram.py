@@ -22,8 +22,6 @@ from core.logging import get_logger
 
 logger = get_logger(__name__)
 
-TELEGRAM_API_BASE = "https://api.telegram.org"
-
 
 class TelegramTriggerHandler(BaseTriggerHandler):
     """
@@ -92,8 +90,8 @@ class TelegramTriggerHandler(BaseTriggerHandler):
         if config.get("commands"):
             allowed_updates = ["message"]
         
-        # Вызываем setWebhook
-        api_url = f"{TELEGRAM_API_BASE}/bot{bot_token}/setWebhook"
+        from core.config import get_settings
+        api_url = f"{get_settings().telegram.api_base}/bot{bot_token}/setWebhook"
         
         payload = {
             "url": webhook_url,
@@ -163,7 +161,8 @@ class TelegramTriggerHandler(BaseTriggerHandler):
         if bot_token.startswith("@var:"):
             bot_token = await self._resolve_variable(bot_token)
         
-        api_url = f"{TELEGRAM_API_BASE}/bot{bot_token}/deleteWebhook"
+        from core.config import get_settings
+        api_url = f"{get_settings().telegram.api_base}/bot{bot_token}/deleteWebhook"
         
         try:
             async with get_httpx_client(timeout=30.0, proxy=True) as client:

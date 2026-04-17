@@ -8,6 +8,8 @@ Idle worker для фоновых периодических задач.
 import asyncio
 import os
 
+from core.config.testing import is_testing
+
 from taskiq import TaskiqState
 
 from core.logging import get_logger, setup_logging
@@ -72,7 +74,7 @@ async def idle_worker_startup(state: TaskiqState) -> None:
             set_span_repository(container.span_repository)
         logger.info("Idle worker: трейсинг инициализирован")
 
-    if os.environ.get("TESTING") == "true":
+    if is_testing():
         from core.clients.llm.factory import get_llm
         from core.clients.llm.mock import configure_mock_llm_redis
 

@@ -33,6 +33,7 @@ from a2a.types import (
 from a2a.utils.message import get_message_text, new_agent_text_message
 
 from core.config import get_settings
+from core.config.testing import is_testing as _is_testing
 from core.logging import get_logger
 
 if TYPE_CHECKING:
@@ -929,13 +930,9 @@ def get_llm(
     settings = get_settings()
     model = model_name or settings.llm.default_model
 
-    is_testing = (
-        os.environ.get("TESTING", "").lower() == "true"
-        or os.environ.get("PYTEST_CURRENT_TEST") is not None
-        or os.environ.get("_PYTEST_RAISE") is not None
-    )
+    _testing = _is_testing()
 
-    if is_testing and model and not model.startswith("mock-"):
+    if _testing and model and not model.startswith("mock-"):
         logger.warning(f"PYTEST detected: замена {model} на mock-gpt-4")
         model = "mock-gpt-4"
 
@@ -1090,11 +1087,14 @@ def get_llm_for_state(
     Returns:
         MockLLM или реальный LLMClient
     """
-    from apps.flows.src.mock import get_mock_for_llm
-    
-    # Проверяем mock
+    # Проверяем mock конфиг в state (без импорта apps.flows.src.mock)
     if state:
-        mock_responses = get_mock_for_llm(state)
+        mock_config = getattr(state, "mock", None)
+        mock_responses = None
+        if isinstance(mock_config, dict) and mock_config.get("enabled"):
+            llm_responses = mock_config.get("llm")
+            if llm_responses:
+                mock_responses = llm_responses
         if mock_responses:
             mock = MockLLM(model_name=model_name or "mock-gpt-4")
             mock.configure(response_queue=mock_responses)

@@ -23,6 +23,7 @@ from core.models import (
     CalendarProvider,
 )
 from core.utils.domain import get_host_with_port, is_local
+from core.pagination import ListResponse
 
 router = APIRouter(tags=["calendar"])
 
@@ -200,8 +201,8 @@ async def delete_calendar_event(event_id: str, service: CalendarServiceDep) -> d
     return {"success": True}
 
 
-@router.get("/integrations", response_model=list[CalendarIntegrationPublic])
-async def list_calendar_integrations(service: CalendarServiceDep) -> list[CalendarIntegrationPublic]:
+@router.get("/integrations", response_model=ListResponse[CalendarIntegrationPublic])
+async def list_calendar_integrations(service: CalendarServiceDep) -> ListResponse[CalendarIntegrationPublic]:
     ctx = get_context()
     if not ctx or not ctx.user or not ctx.active_company:
         raise HTTPException(status_code=401, detail="Authentication required")
@@ -210,7 +211,7 @@ async def list_calendar_integrations(service: CalendarServiceDep) -> list[Calend
             user_id=ctx.user.user_id,
             company_id=ctx.active_company.company_id,
         )
-        return [_to_public_integration(item) for item in integrations]
+        return ListResponse[CalendarIntegrationPublic](items=[_to_public_integration(item) for item in integrations])
     except Exception as error:
         _raise_http_for_calendar_service_error(error)
 

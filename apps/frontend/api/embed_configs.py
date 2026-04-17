@@ -14,7 +14,7 @@ from core.pagination import OffsetPage
 from core.models.embed_models import EmbedConfig, EmbedStatus, EmbedMapping
 from core.utils.tokens import get_token_service
 from apps.frontend.dependencies import ContainerDep
-from apps.flows.src.models import FlowType
+from core.clients.service_client import ServiceClientError
 
 logger = logging.getLogger(__name__)
 
@@ -114,39 +114,6 @@ def _normalize_interface_locale(value: str) -> str:
     return normalized
 
 
-def _resolve_embed_allowed_origins(agent, request_data: CreateEmbedConfigRequest) -> list[str]:
-    """Возвращает allowlist origins для embed-конфига."""
-    if request_data.allowed_origins:
-        return request_data.allowed_origins
-
-    flow_variable = agent.variables.get("embed_allowed_origins")
-    if flow_variable is None:
-        return []
-
-    variable_value = flow_variable.value if hasattr(flow_variable, "value") else flow_variable
-    if not isinstance(variable_value, list):
-        raise HTTPException(
-            status_code=400,
-            detail="Flow variable embed_allowed_origins должна быть list[str]",
-        )
-
-    resolved: list[str] = []
-    for origin in variable_value:
-        if not isinstance(origin, str):
-            raise HTTPException(
-                status_code=400,
-                detail="Flow variable embed_allowed_origins должна содержать только строки",
-            )
-        normalized_origin = origin.strip()
-        if not normalized_origin:
-            raise HTTPException(
-                status_code=400,
-                detail="Flow variable embed_allowed_origins не должна содержать пустые строки",
-            )
-        resolved.append(normalized_origin)
-    return resolved
-
-
 @router.post("", response_model=EmbedConfigResponse)
 async def create_embed_config(
     request_data: CreateEmbedConfigRequest,
@@ -166,23 +133,23 @@ async def create_embed_config(
     user = request.state.user
     company_id = user.active_company_id
     
-    logger.info(f"🔍 DEBUG create_embed_config: user={user.user_id}, active_company_id={user.active_company_id}")
-    
     if not company_id:
         raise HTTPException(status_code=400, detail="Необходимо выбрать компанию")
     
-    from apps.flows.src.container import get_container as get_flows_container
-
-    flows_container = get_flows_container()
-    agent = await flows_container.flow_repository.get(request_data.flow_id)
-    if not agent:
-        raise HTTPException(status_code=404, detail=f"Агент {request_data.flow_id} не найден")
+    try:
+        agent = await container.service_client.get(
+            "flows", f"/api/v1/flows/{request_data.flow_id}"
+        )
+    except ServiceClientError as e:
+        if "404" in str(e):
+            raise HTTPException(status_code=404, detail=f"Агент {request_data.flow_id} не найден")
+        raise HTTPException(status_code=500, detail=f"Ошибка обращения к flows: {str(e)}")
 
     skill_id = request_data.skill_id
-    if agent.type == FlowType.EXTERNAL:
+    if agent.get("type") == "external":
         skill_id = "default"
     else:
-        skills = agent.skills or {}
+        skills = agent.get("skills", {})
         if skills:
             if skill_id not in skills:
                 raise HTTPException(
@@ -197,7 +164,15 @@ async def create_embed_config(
     
     interface_locale = _normalize_interface_locale(request_data.interface_locale)
 
-    allowed_origins = _resolve_embed_allowed_origins(agent, request_data)
+    allowed_origins: list[str] = []
+    for origin in request_data.allowed_origins:
+        normalized = origin.strip()
+        if not normalized:
+            raise HTTPException(
+                status_code=400,
+                detail="allowed_origins не должна содержать пустые строки",
+            )
+        allowed_origins.append(normalized)
 
     # Создаем конфигурацию
     config = EmbedConfig(

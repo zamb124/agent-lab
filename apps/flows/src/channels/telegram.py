@@ -25,7 +25,8 @@ def get_telegram_api_base(config: Dict[str, Any] = None) -> str:
     """
     if config and config.get("api_base"):
         return config["api_base"]
-    return os.environ.get("TELEGRAM_API_BASE", "https://api.telegram.org")
+    from core.config import get_settings
+    return get_settings().telegram.api_base
 
 
 class TelegramChannelHandler(BaseChannelHandler):

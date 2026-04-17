@@ -111,7 +111,7 @@ def _download_model_weights(model_id: str) -> None:
 
         snapshot_download(
             repo_id=model.hf_model_id,
-            token=cfg.hf_token if cfg.hf_token else os.getenv("HF_TOKEN"),
+            token=cfg.hf_token,
             local_files_only=False,
         )
     except Exception as exc:
@@ -155,7 +155,7 @@ class ChatCompletionsLitAPI(ls.LitAPI):
         infra = settings.provider_litserve.infra
         if device:
             self._device = str(device)
-        self._hf_token = infra.hf_token if infra.hf_token else os.getenv("HF_TOKEN")
+        self._hf_token = infra.hf_token
         try:
             from transformers import AutoModelForCausalLM, AutoTokenizer
         except ImportError as exc:

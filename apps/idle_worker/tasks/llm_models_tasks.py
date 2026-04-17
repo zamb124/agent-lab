@@ -1,7 +1,7 @@
 """TaskIQ задачи синхронизации LLM моделей."""
 
+from core.clients.service_client import ServiceClient
 from apps.idle_worker.broker import broker as idle_broker
-from apps.flows.src.container import get_container
 from core.logging import get_logger
 
 logger = get_logger(__name__)
@@ -14,7 +14,7 @@ async def sync_llm_models_task(
     system_task: str | None = None,
 ) -> dict[str, int]:
     """Синхронизирует модели от всех настроенных LLM провайдеров."""
-    container = get_container()
-    result = await container.llm_models_service.sync_all_providers()
+    service_client = ServiceClient()
+    result = await service_client.post("flows", "/registry/models/sync")
     logger.info("LLM models sync completed: %s", result)
     return result

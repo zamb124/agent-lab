@@ -37,6 +37,12 @@ from tests.fixtures.test_database_env import TEST_DATABASE_ENV
 
 # Устанавливаем переменные окружения ДО импорта приложения
 os.environ["TESTING"] = "true"
+# Для macOS с Apple Silicon добавляем путь к Homebrew бинарникам (ffmpeg и т.д.)
+if sys.platform == "darwin":
+    _brew_path = "/opt/homebrew/bin"
+    if _brew_path not in os.environ.get("PATH", ""):
+        os.environ["PATH"] = f"{_brew_path}:{os.environ.get('PATH', '')}"
+
 for _db_key, _db_val in TEST_DATABASE_ENV.items():
     os.environ.setdefault(_db_key, _db_val)
 os.environ.setdefault("DATABASE__REDIS_URL", "redis://localhost:63792/0")

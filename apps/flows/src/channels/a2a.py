@@ -400,9 +400,8 @@ class A2AChannel(BaseChannel):
         container = get_container()
 
         # Таймаут короче для тестов
-        import os
-        is_testing = os.environ.get("TESTING", "").lower() in ("true", "1", "yes")
-        timeout = 30.0 if is_testing else 300.0
+        from core.config.testing import is_testing
+        timeout = 30.0 if is_testing() else 300.0
 
         subscriber = EventSubscriber(container.redis_client)
         ready_event = asyncio.Event()

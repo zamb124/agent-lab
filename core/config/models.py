@@ -208,6 +208,7 @@ class STTConfig(BaseModel):
     """Конфигурация STT провайдеров."""
 
     provider: str = "cloud_ru"
+    mock_transcript_text: str = "Тестовая транскрипция"
     cloud_ru: CloudRuSTTConfig = Field(default_factory=CloudRuSTTConfig)
 
 
@@ -215,6 +216,7 @@ class TelegramConfig(BaseModel):
     """Конфигурация Telegram ботов"""
 
     enabled: bool = True
+    api_base: str = "https://api.telegram.org"
     bots: Dict[str, str] = Field(default_factory=dict)
 
 

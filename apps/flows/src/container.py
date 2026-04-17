@@ -3,6 +3,7 @@
 from typing import Optional
 
 from core.container import BaseContainer, lazy
+from core.config.testing import is_testing
 from core.logging import get_logger
 
 logger = get_logger(__name__)
@@ -106,10 +107,9 @@ class FlowContainer(BaseContainer):
 
     @lazy
     def schedule_service(self):
-        import os
         from apps.flows.src.services.schedule_service import ScheduleService
         scheduler_service = None
-        if os.environ.get("TESTING") == "true":
+        if is_testing():
             from apps.scheduler.container import get_scheduler_container
 
             scheduler_service = get_scheduler_container().scheduler_service
@@ -292,7 +292,7 @@ def get_container() -> FlowContainer:
             shared_db_url=settings.database.shared_url
         )
         # В тестах по умолчанию без воркера
-        if os.environ.get("TESTING") == "true":
+        if is_testing():
             _container.use_worker = False
         logger.info("FlowContainer создан")
     return _container

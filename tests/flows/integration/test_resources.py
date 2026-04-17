@@ -22,7 +22,8 @@ from apps.flows.src.runtime.nodes import LlmNode, CodeNode
 from apps.flows.src.runtime.flow import Flow
 from apps.flows.src.models import ResourceType, ResourceReference
 from core.state import ExecutionState
-from tests.fixtures.clients import patch_service_client_rag_asgi as _patch_service_client_rag_asgi
+from tests.fixtures.auth import service_client_asgi_auth_context
+
 
 
 def make_state(**kwargs) -> ExecutionState:
@@ -843,7 +844,7 @@ class TestRAGResource:
         """
         RAG resource: добавление документа и поиск.
         """
-        _patch_service_client_rag_asgi(monkeypatch, rag_app, auth_headers_system)
+
 
         rag_resource = {
             "type": "rag",
@@ -899,7 +900,8 @@ async def execute(args, state):
         )
         
         state2 = make_state()
-        result = await search_node.run(state2)
+        with service_client_asgi_auth_context(auth_headers_system):
+            result = await search_node.run(state2)
         
         assert result.found is True
         assert len(result.search_results) > 0
@@ -917,7 +919,7 @@ async def execute(args, state):
         """
         RAG resource доступен в inline tool LlmNode.
         """
-        _patch_service_client_rag_asgi(monkeypatch, rag_app, auth_headers_system)
+
 
         rag_resource = {
             "type": "rag",
@@ -981,7 +983,8 @@ async def execute(args, state):
         )
         
         state = make_state(content="What is the return policy?")
-        result = await llm_node.run(state)
+        with service_client_asgi_auth_context(auth_headers_system):
+            result = await llm_node.run(state)
         
         assert "30 days" in result.answer or result.answer != "No answer found"
 

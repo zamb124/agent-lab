@@ -845,7 +845,7 @@ async def test_embed_code_includes_assistant_title_and_locale(frontend_client: A
 
 
 @pytest.mark.asyncio
-async def test_create_config_uses_flow_embed_allowed_origins(frontend_client: AsyncClient, test_auth_with_agent):
+async def test_create_embed_config_allowed_origins_normalized(frontend_client: AsyncClient, test_auth_with_agent):
     auth_headers, flows_container, company_id = test_auth_with_agent
     import uuid
     from core.context import Context, clear_context, set_context
@@ -868,12 +868,6 @@ async def test_create_config_uses_flow_embed_allowed_origins(frontend_client: As
                 name="Test Embed Origins Flow",
                 entry="main",
                 nodes={"main": {"type": "llm_node", "prompt": "Test", "next": None}},
-                variables={
-                    "embed_allowed_origins": [
-                        "http://localhost:8000",
-                        "https://larashved.ru",
-                    ]
-                },
             )
         )
     finally:
@@ -883,9 +877,12 @@ async def test_create_config_uses_flow_embed_allowed_origins(frontend_client: As
         "/frontend/api/embed/configs",
         headers=auth_headers,
         json={
-            "name": "Flow Origins Widget",
+            "name": "Embed Origins Widget",
             "flow_id": flow_id,
-            "allowed_origins": [],
+            "allowed_origins": [
+                "  http://localhost:8000 ",
+                "https://larashved.ru",
+            ],
         },
     )
     assert response.status_code == 200

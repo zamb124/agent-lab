@@ -7,6 +7,7 @@ HTTPResource - wrapper для http ресурса.
 from typing import Any, Dict, Optional
 
 from core.logging import get_logger
+from core.http import get_httpx_client
 
 logger = get_logger(__name__)
 
@@ -121,16 +122,13 @@ class HTTPResource:
         data: Optional[Dict[str, Any]] = None,
         headers: Optional[Dict[str, str]] = None,
     ) -> Any:
-        """Выполнить HTTP запрос."""
-        import httpx
-        
         url = f"{self.base_url}{path}"
         
         merged_headers = {**self.headers}
         if headers:
             merged_headers.update(headers)
         
-        async with httpx.AsyncClient(timeout=self.timeout) as client:
+        async with get_httpx_client(timeout=self.timeout) as client:
             response = await client.request(
                 method=method,
                 url=url,

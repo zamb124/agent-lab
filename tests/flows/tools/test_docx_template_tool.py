@@ -23,7 +23,7 @@ def test_fill_docx_mock() -> None:
 
 @pytest.mark.asyncio
 async def test_fill_docx_template_no_files(monkeypatch) -> None:
-    monkeypatch.delenv("TESTING", raising=False)
+    monkeypatch.setattr("core.config.testing.is_testing", lambda: False)
     from core.state import ExecutionState
 
     state = ExecutionState.create(
@@ -43,7 +43,7 @@ async def test_fill_docx_template_no_files(monkeypatch) -> None:
 
 @pytest.mark.asyncio
 async def test_fill_docx_template_bad_output_name(tmp_path, monkeypatch) -> None:
-    monkeypatch.delenv("TESTING", raising=False)
+    monkeypatch.setattr("core.config.testing.is_testing", lambda: False)
     from core.state import ExecutionState
 
     p = tmp_path / "t.docx"

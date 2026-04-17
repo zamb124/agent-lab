@@ -27,6 +27,8 @@ from pathlib import Path
 from typing import Type, Callable, List, Optional, Any, Tuple
 from contextlib import asynccontextmanager
 
+from core.config.testing import is_testing
+
 from fastapi import FastAPI, APIRouter, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse, JSONResponse
@@ -213,7 +215,7 @@ def create_service_app(
         
         # В одном процессе pytest поднимается несколько приложений (flows, office, rag, sync);
         # stop_redis_listener обнуляет глобальный клиент и ломает notify_user в чужих тестах.
-        if os.environ.get("TESTING") != "true":
+        if not is_testing():
             await notification_manager.stop_redis_listener()
     
     # Создание приложения
@@ -381,7 +383,7 @@ def create_service_app(
         )
 
     if include_platform_pwa is None:
-        include_platform_pwa = os.getenv("TESTING", "false").lower() != "true"
+        include_platform_pwa = not is_testing()
 
     if include_platform_pwa:
         register_platform_pwa_routes(app, project_root)
@@ -410,7 +412,7 @@ def create_service_app(
         }
     
     # Testing endpoint (ТОЛЬКО в TESTING режиме)
-    if os.getenv("TESTING", "false").lower() == "true":
+    if is_testing():
         @app.get(f"/{service_name}/test", response_class=HTMLResponse)
         async def test_page():
             """

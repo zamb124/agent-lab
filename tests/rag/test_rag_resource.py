@@ -7,7 +7,8 @@ import pytest
 from apps.flows.src.container import FlowContainer
 from apps.flows.src.resources.wrappers.rag_resource import RAGResource
 from core.config import get_settings
-from tests.fixtures.clients import patch_service_client_rag_asgi
+from tests.fixtures.auth import service_client_asgi_auth_context
+
 
 
 @pytest.fixture
@@ -26,7 +27,7 @@ async def test_search_via_rag_asgi_hybrid_channels(
     """
     Поиск идёт в реальный RAG FastAPI через ASGI; эмбеддинги — тестовый контур (PGVECTOR_TEST_MOCK_EMBEDDINGS).
     """
-    patch_service_client_rag_asgi(monkeypatch, rag_app, auth_headers_system)
+
     ns = f"test_rag_res_{uuid.uuid4().hex[:10]}"
     marker = f"uniq_ragres_{uuid.uuid4().hex[:12]}"
     body = f"{marker} Cats are wonderful pets that love to sleep and play."
@@ -47,7 +48,8 @@ async def test_search_via_rag_asgi_hybrid_channels(
     assert stored is not None
     assert stored.metadata["total_chunks"] == 1
 
-    results = await r.search(f"{marker} cats sleep", top_k=3)
+    with service_client_asgi_auth_context(auth_headers_system):
+        results = await r.search(f"{marker} cats sleep", top_k=3)
     assert len(results) == 1
     joined = " ".join(item["content"].lower() for item in results)
     assert marker.lower() in joined

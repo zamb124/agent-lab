@@ -17,6 +17,7 @@ from fastapi import APIRouter, File, Form, HTTPException, Query, Request, Upload
 from fastapi.responses import Response
 
 from core.pagination import OffsetPage
+from core.http import get_httpx_client
 from apps.office.config import OfficeSettings, get_office_settings
 from apps.office.container import OfficeContainer
 from apps.office.dependencies import ContainerDep
@@ -1136,7 +1137,7 @@ async def onlyoffice_callback(
         if meta is None:
             raise HTTPException(status_code=404, detail="Файл не найден")
 
-        async with httpx.AsyncClient(timeout=120.0) as client:
+        async with get_httpx_client(timeout=120.0) as client:
             r = await client.get(url)
             r.raise_for_status()
             new_bytes = r.content

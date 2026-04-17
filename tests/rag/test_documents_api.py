@@ -90,9 +90,9 @@ async def test_list_documents(rag_client, unique_namespace_name, auth_headers_sy
     data = response.json()
     
     assert "items" in data
-    assert "namespace_id" in data
-    assert "provider" in data
+    assert "total" in data
     assert len(data["items"]) > 0
+    assert data["items"][0].get("namespace") == namespace_id
 
 
 @pytest.mark.asyncio

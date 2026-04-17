@@ -9,6 +9,8 @@ Flows worker для задач сервиса flows.
 import asyncio
 import os
 
+from core.config.testing import is_testing
+
 from taskiq import TaskiqState
 
 from core.billing import set_billing_service
@@ -91,7 +93,7 @@ async def _initialize_worker_state(state: TaskiqState, service_name: str) -> Non
             set_span_repository(container.span_repository)
         logger.info("Worker: трейсинг инициализирован")
 
-    if os.environ.get("TESTING") == "true":
+    if is_testing():
         from core.clients.llm.factory import get_llm
         from core.clients.llm.mock import configure_mock_llm_redis
 

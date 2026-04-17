@@ -5,6 +5,8 @@
 import asyncio
 from pathlib import Path
 import os
+
+from core.config.testing import is_testing
 from fastapi import FastAPI, Request, HTTPException
 from fastapi.responses import RedirectResponse, HTMLResponse
 from fastapi.staticfiles import StaticFiles
@@ -65,6 +67,15 @@ async def _build_scheduler_auth_context(container: object, trace_id: str, sessio
 
 async def on_startup(app: FastAPI, container, settings: FlowSettings):
     """Логика при старте сервиса flows."""
+    # Регистрируем handler для resume flow после OAuth (core/api/integrations.py)
+    from apps.flows.src.tasks.flow_tasks import process_flow_task
+    from core.api.integrations import set_flow_resume_handler
+
+    async def _flow_resume_via_taskiq(**kwargs):
+        await process_flow_task.kiq(**kwargs)
+
+    set_flow_resume_handler(_flow_resume_via_taskiq)
+
     from core.files.writer import FileWriter
 
     FileWriter.configure_process_upload(
@@ -112,7 +123,7 @@ async def on_startup(app: FastAPI, container, settings: FlowSettings):
         logger.info(f"Загружено tools: {loaded_tools}")
         
         # В тестах загружаем bundles (flows) в БД синхронно (worker может быть не готов)
-        if os.getenv("TESTING") == "true":
+        if is_testing():
             logger.info("Загрузка flows из bundles синхронно (TESTING=true)...")
             from apps.flows.src.services.flows_loader import load_flows_to_db
             loaded_flow_ids = await load_flows_to_db(
@@ -148,7 +159,7 @@ async def on_startup(app: FastAPI, container, settings: FlowSettings):
         clear_context()
 
     # Синхронизация LLM моделей от провайдера
-    if os.getenv("TESTING") != "true":
+    if not is_testing():
         try:
             scheduler_context = await _build_scheduler_auth_context(
                 container=container,
@@ -166,7 +177,7 @@ async def on_startup(app: FastAPI, container, settings: FlowSettings):
         finally:
             clear_context()
     else:
-        logger.info("Пропускаем синхронизацию LLM моделей (TESTING=true)")
+        logger.info("Пропускаем синхронизацию LLM моделей (TESTING)")
         from core.clients.llm.factory import get_llm
         from core.clients.llm.mock import configure_mock_llm_redis
 
@@ -175,7 +186,7 @@ async def on_startup(app: FastAPI, container, settings: FlowSettings):
         logger.info("MockLLM: очередь ответов из Redis (как в TaskIQ worker)")
 
     # Telegram Dev Polling (только в development)
-    if settings.server.env == "development" and os.getenv("TESTING") != "true":
+    if settings.server.env == "development" and not is_testing():
         from apps.flows.src.triggers.dev_polling import start_dev_polling
         await start_dev_polling()
         logger.info("Telegram dev polling запущен")
@@ -192,7 +203,7 @@ async def on_shutdown(app: FastAPI, container):
         logger.warning(f"Error stopping dev polling: {e}")
     
     # Остановка фоновой синхронизации моделей
-    if os.getenv("TESTING") != "true":
+    if not is_testing():
         try:
             scheduler_context = await _build_scheduler_auth_context(
                 container=container,
@@ -216,7 +227,7 @@ _flow_settings = get_settings()
 _cors_regex = _flow_settings.cors_allow_origin_regex
 if "*" in _flow_settings.cors_allow_origins:
     raise ValueError("flows.cors_allow_origins не может содержать '*' для embed/A2A")
-if _cors_regex is None and _flow_settings.server.debug and os.getenv("TESTING") != "true":
+if _cors_regex is None and _flow_settings.server.debug and not is_testing():
     _cors_regex = _FLOWS_DEV_CORS_ORIGIN_REGEX
 
 app = create_service_app(

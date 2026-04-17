@@ -73,7 +73,8 @@ class TestAgentVersionsList:
         resp = await client.get(f"/flows/api/v1/flows/{flow_id}/versions")
         assert resp.status_code == 200
         
-        versions = resp.json()
+        versions_data = resp.json()
+        versions = versions_data["items"]
         assert isinstance(versions, list), "versions MUST be list"
         assert len(versions) == 1, "New agent MUST have exactly 1 version"
         
@@ -119,7 +120,8 @@ class TestAgentVersionsList:
         resp = await client.get(f"/flows/api/v1/flows/{flow_id}/versions")
         assert resp.status_code == 200
         
-        versions = resp.json()
+        versions_data = resp.json()
+        versions = versions_data["items"]
         assert len(versions) == 3, f"Expected 3 versions, got {len(versions)}"
         
         # Версии отсортированы от новых к старым (DESC)
@@ -134,7 +136,8 @@ class TestAgentVersionsList:
         """GET /api/v1/flows/{id}/versions для несуществующего агента возвращает пустой список."""
         resp = await client.get(f"/flows/api/v1/flows/nonexistent_{unique_id}/versions")
         assert resp.status_code == 200
-        versions = resp.json()
+        versions_data = resp.json()
+        versions = versions_data["items"]
         assert isinstance(versions, list)
         assert len(versions) == 0, "Nonexistent agent MUST return empty versions list"
 
@@ -168,7 +171,7 @@ class TestAgentGetVersion:
         
         # Запоминаем первую версию
         versions_resp = await client.get(f"/flows/api/v1/flows/{flow_id}/versions")
-        first_version = versions_resp.json()[0]
+        first_version = versions_resp.json()["items"][0]
         
         # Обновляем агента
         await client.put(
@@ -253,7 +256,7 @@ class TestAgentGetVersion:
         assert create_resp.status_code == 200, f"Failed to create: {create_resp.text}"
         
         versions_resp = await client.get(f"/flows/api/v1/flows/{flow_id}/versions")
-        versions = versions_resp.json()
+        versions = versions_resp.json()["items"]
         assert len(versions) > 0, "Agent MUST have at least one version"
         first_version = versions[0]
         
@@ -304,7 +307,7 @@ class TestAgentRollback:
         )
         
         versions_resp = await client.get(f"/flows/api/v1/flows/{flow_id}/versions")
-        v1 = versions_resp.json()[0]
+        v1 = versions_resp.json()["items"][0]
         
         # Обновляем (v2)
         await client.put(
@@ -393,16 +396,16 @@ class TestAgentRollback:
             )
         
         versions_before = await client.get(f"/flows/api/v1/flows/{flow_id}/versions")
-        count_before = len(versions_before.json())
+        count_before = len(versions_before.json()["items"])
         assert count_before == 3
         
         # Откатываем к первой версии
-        v1 = versions_before.json()[-1]  # Последняя в списке = самая старая
+        v1 = versions_before.json()["items"][-1]  # Последняя в списке = самая старая
         await client.post(f"/flows/api/v1/flows/{flow_id}/versions/{v1}/rollback")
         
         # Количество версий не должно измениться
         versions_after = await client.get(f"/flows/api/v1/flows/{flow_id}/versions")
-        count_after = len(versions_after.json())
+        count_after = len(versions_after.json()["items"])
         assert count_after == count_before, "Rollback MUST NOT delete versions"
         
         # Cleanup
@@ -431,7 +434,7 @@ class TestA2AVersionQueryParam:
         )
         
         versions_resp = await client.get(f"/flows/api/v1/flows/{flow_id}/versions")
-        v1 = versions_resp.json()[0]
+        v1 = versions_resp.json()["items"][0]
         
         # Обновляем
         await client.put(
@@ -482,7 +485,7 @@ class TestA2AVersionQueryParam:
         )
         
         versions_resp = await client.get(f"/flows/api/v1/flows/{flow_id}/versions")
-        v1 = versions_resp.json()[0]
+        v1 = versions_resp.json()["items"][0]
         
         # Обновляем
         await client.put(
@@ -577,7 +580,7 @@ class TestA2AVersionMetadata:
         )
         
         versions_resp = await client.get(f"/flows/api/v1/flows/{flow_id}/versions")
-        v1 = versions_resp.json()[0]
+        v1 = versions_resp.json()["items"][0]
         
         await client.put(
             f"/flows/api/v1/flows/{flow_id}",
@@ -634,7 +637,7 @@ class TestA2AVersionMetadata:
         )
         
         versions_resp = await client.get(f"/flows/api/v1/flows/{flow_id}/versions")
-        v1 = versions_resp.json()[0]
+        v1 = versions_resp.json()["items"][0]
         
         await client.put(
             f"/flows/api/v1/flows/{flow_id}",
@@ -648,7 +651,7 @@ class TestA2AVersionMetadata:
         )
         
         versions_resp2 = await client.get(f"/flows/api/v1/flows/{flow_id}/versions")
-        v2 = versions_resp2.json()[0]
+        v2 = versions_resp2.json()["items"][0]
         
         mock_llm_with_queue([{"type": "text", "content": "Response"}])
         
@@ -736,7 +739,7 @@ class TestA2AVersionStream:
         )
         
         versions_resp = await client.get(f"/flows/api/v1/flows/{flow_id}/versions")
-        v1 = versions_resp.json()[0]
+        v1 = versions_resp.json()["items"][0]
         
         await client.put(
             f"/flows/api/v1/flows/{flow_id}",

@@ -27,7 +27,7 @@ async def test_read_file_mock_with_state(tmp_path) -> None:
 
 @pytest.mark.asyncio
 async def test_read_file_integration_txt(tmp_path, monkeypatch) -> None:
-    monkeypatch.delenv("TESTING", raising=False)
+    monkeypatch.setattr("core.config.testing.is_testing", lambda: False)
     from core.state import ExecutionState
 
     f = tmp_path / "a.txt"
