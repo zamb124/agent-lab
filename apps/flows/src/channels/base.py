@@ -32,6 +32,7 @@ from a2a.utils.message import get_message_text, new_agent_text_message
 
 from core.auth import permission_checker
 from core.auth.errors import PermissionDeniedA2AError
+from core.billing.exceptions import BillingBalanceBlockedError
 from apps.flows.config import get_settings
 from apps.flows.src.container import get_container
 from core.context import Context, User, clear_context, get_context, set_context
@@ -647,13 +648,21 @@ class BaseChannel(ABC):
                 interrupt_dict = None
             
             status = "input-required" if state.interrupt else "completed"
-            
+
             return {
                 "response": final_response,
                 "interrupt": interrupt_dict,
                 "status": status,
             }
-            
+
+        except BillingBalanceBlockedError as e:
+            logger.error(f"Billing balance blocked: {e}")
+            await emitter.emit_error(str(e))
+            await self._send_push_notification(
+                params.task_id, params.context_id, "failed", str(e)
+            )
+            raise
+
         except Exception as e:
             logger.error(f"Error in process_task: {e}")
             await emitter.emit_error(str(e))

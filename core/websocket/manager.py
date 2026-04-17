@@ -88,7 +88,11 @@ class NotificationManager:
     async def publish(self, user_id: str, notification: dict):
         """Опубликовать уведомление в Redis (для межпроцессной доставки)"""
         if not self._redis_client:
-            raise RuntimeError("Redis client not initialized")
+            logger.warning(
+                f"Redis client не инициализирован, уведомление для user={user_id} не будет доставлено через WebSocket. "
+                f"Тип уведомления: {notification.get('type')}"
+            )
+            return
 
         payload = json.dumps(
             {

@@ -11,6 +11,7 @@ from core.rag.base_provider import validate_metadata_filters
 from core.rag.models import RAGSearchResult
 from core.context import get_context
 from core.rag.factory import get_rag_provider
+from core.billing.exceptions import BillingBalanceBlockedError
 from apps.rag.config import get_rag_settings
 from ..dependencies import ContainerDep
 from .namespace_access import require_registered_rag_namespace
@@ -87,13 +88,15 @@ async def search_in_namespace(
         )
         
         logger.info(f"Поиск '{request.query}' в namespace {namespace_id}: найдено {len(results)} результатов")
-        
+
         return SearchResponse(
             results=results,
             query=request.query,
             namespace_id=namespace_id,
             provider=provider_name
         )
+    except BillingBalanceBlockedError:
+        raise
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
@@ -157,12 +160,14 @@ async def global_search(
         
         total_results = sum(len(r) for r in results.values())
         logger.info(f"Глобальный поиск '{request.query}': найдено {total_results} результатов")
-        
+
         return GlobalSearchResponse(
             results=results,
             query=request.query,
             provider=provider_name
         )
+    except BillingBalanceBlockedError:
+        raise
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:

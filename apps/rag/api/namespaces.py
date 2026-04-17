@@ -15,6 +15,7 @@ from core.rag.models import RAGNamespace
 from core.context import get_context
 from core.models.identity_models import Namespace
 from core.rag.factory import get_rag_provider
+from core.billing.exceptions import BillingBalanceBlockedError
 from apps.rag.config import get_rag_settings
 from ..dependencies import ContainerDep
 
@@ -49,6 +50,8 @@ async def list_namespaces(
         logger.info(f"Получено {len(namespaces)} namespaces для компании {company_id}")
 
         return OffsetPage[Namespace](items=namespaces, total=total, limit=limit, offset=offset)
+    except BillingBalanceBlockedError:
+        raise
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
@@ -94,8 +97,10 @@ async def create_namespace(
         await namespace_repo.set(namespace)
         
         logger.info(f"Создан namespace: {request.name} для компании {company_id}")
-        
+
         return namespace
+    except BillingBalanceBlockedError:
+        raise
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
@@ -137,10 +142,12 @@ async def delete_namespace(
             raise HTTPException(status_code=404, detail="Namespace not found")
         
         await namespace_repo.delete(namespace_id)
-        
+
         logger.info(f"Удален namespace: {namespace_id} для компании {company_id}")
-        
+
         return {"success": True, "name": namespace_id}
+    except BillingBalanceBlockedError:
+        raise
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except HTTPException:
