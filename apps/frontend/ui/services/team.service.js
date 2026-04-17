@@ -8,7 +8,8 @@ export class TeamService extends BaseService {
      * Получить список участников команды
      */
     async getMembers() {
-        return this.get('/api/team/members');
+        const response = await this.get('/api/team/members');
+        return response.items || [];
     }
     
     /**

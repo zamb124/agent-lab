@@ -284,12 +284,13 @@ export class TeamPage extends PlatformElement {
     _renderContent() {
         const td = (key, params) => this.i18n.t(key, params ?? {});
         const { members, loading } = this.state.value;
+        const membersArray = Array.isArray(members) ? members : [];
         
         if (loading) {
             return html`<div class="page-loading"><glass-spinner size="lg"></glass-spinner></div>`;
         }
 
-        if (members.length === 0) {
+        if (membersArray.length === 0) {
             return html`
                 <div class="empty-state">
                     <div class="empty-icon">T</div>
@@ -304,7 +305,7 @@ export class TeamPage extends PlatformElement {
 
         return html`
             <div class="members-grid">
-                ${members.map((member) => this._renderMemberCard(member))}
+                ${membersArray.map((member) => this._renderMemberCard(member))}
             </div>
         `;
     }
