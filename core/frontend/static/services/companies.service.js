@@ -2,7 +2,6 @@
  * Сервис для работы с компаниями
  */
 import { BaseService } from '../lib/services/BaseService.js';
-import { companiesMeItems } from '../lib/utils/companies-me-response.js';
 
 export class CompaniesService extends BaseService {
     /**
@@ -10,8 +9,11 @@ export class CompaniesService extends BaseService {
      * @returns {Promise<Array>}
      */
     async getMyCompanies() {
-        const body = await this.get('/api/companies/me');
-        return companiesMeItems(body);
+        const response = await this.get('/api/companies/me');
+        if (!response || typeof response !== 'object' || !Array.isArray(response.items)) {
+            throw new Error('Некорректный ответ /api/companies/me: ожидался объект с массивом items');
+        }
+        return response.items;
     }
     
     /**

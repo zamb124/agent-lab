@@ -1304,9 +1304,11 @@ async def auth_token(frontend_container):
     
     # Создаем тестовую компанию
     company_id = f"test_company_{uuid.uuid4().hex[:8]}"
+    company_subdomain = f"test-{uuid.uuid4().hex[:8]}"
     company = Company(
         company_id=company_id,
         name="Test Company",
+        subdomain=company_subdomain,
         owner_user_id=user_id,
         members={user_id: ["owner", "admin"]},
     )

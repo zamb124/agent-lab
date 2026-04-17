@@ -12,6 +12,7 @@ from core.utils.tokens import TokenService, get_token_service
 from core.utils.domain import get_cookie_domain, build_url
 from core.models.identity_models import Company, User
 from core.identity.system_bootstrap import SYSTEM_COMPANY_ID
+from core.api.companies import build_my_companies_response
 from apps.frontend.dependencies import ContainerDep
 from core.config import get_settings
 from core.pagination import ListResponse
@@ -229,21 +230,10 @@ async def get_my_companies(request: Request, container: ContainerDep) -> ListRes
         Список компаний с их данными
     """
     user = _require_authenticated_user(request)
-    company_repo = container.company_repository
-    
-    companies = []
-    for company_id in user.companies.keys():
-        company = await company_repo.get(company_id)
-        if company:
-            companies.append({
-                "company_id": company.company_id,
-                "name": company.name,
-                "subdomain": company.subdomain,
-                "role": user.companies[company_id],
-                "is_active": company_id == user.active_company_id
-            })
-    
-    return ListResponse[dict](items=companies)
+    return await build_my_companies_response(
+        user=user,
+        company_repository=container.company_repository,
+    )
 
 
 @router.post("/{company_id}/system-access")
