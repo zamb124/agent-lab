@@ -94,7 +94,15 @@ export class PlatformUser extends PlatformElement {
     connectedCallback() {
         super.connectedCallback();
         this._loadUser();
-        window.addEventListener(AppEvents.AUTH_CHANGE, () => this._loadUser());
+        window.addEventListener(AppEvents.AUTH_CHANGE, () => {
+            if (this.auth?.isAuthenticated) {
+                this._loadUser();
+            } else {
+                this.user = null;
+                this.companies = [];
+                this.serviceAttrs = null;
+            }
+        });
         document.addEventListener('click', this._boundDocumentClick);
         window.addEventListener('storage', this._boundCompanySwitchStorage);
         window.addEventListener('focus', this._boundWindowFocus);
@@ -432,6 +440,9 @@ export class PlatformUser extends PlatformElement {
     }
 
     async _checkCompanyAlignment() {
+        if (!this.auth?.isAuthenticated) {
+            return;
+        }
         if (typeof Date.now === 'function' && Date.now() < this._companyAlignmentSkipUntil) {
             return;
         }

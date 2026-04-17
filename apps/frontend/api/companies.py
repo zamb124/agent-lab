@@ -181,6 +181,51 @@ async def create_company(
         )
         # НЕ падаем - компания уже создана
     
+    # Создать пространство и канал в sync для новой компании
+    try:
+        service_client = container.service_client
+        
+        # Создаем пространство с названием компании
+        space_response = await service_client.post(
+            "sync",
+            "/sync/api/v1/spaces/",
+            json={
+                "name": name,
+                "description": f"Пространство компании {name}"
+            },
+            headers={
+                "X-Company-Id": company_id,
+                "X-User-Id": user.user_id
+            }
+        )
+        space_id = space_response["id"]
+        logger.info(f"✅ Создано пространство {space_id} для компании {company_id}")
+        
+        # Создаем канал с названием компании в этом пространстве
+        channel_response = await service_client.post(
+            "sync",
+            "/sync/api/v1/channels/",
+            json={
+                "space_id": space_id,
+                "type": "topic",
+                "name": name,
+                "is_private": False
+            },
+            headers={
+                "X-Company-Id": company_id,
+                "X-User-Id": user.user_id
+            }
+        )
+        channel_id = channel_response["id"]
+        logger.info(f"✅ Создан канал {channel_id} в пространстве {space_id} для компании {company_id}")
+        
+    except Exception as e:
+        logger.error(
+            f"Не удалось создать пространство/канал в sync для {company_id}: {e}",
+            exc_info=True
+        )
+        # НЕ падаем - компания уже создана
+    
     redirect_url = build_url(
         request.headers.get("host", ""),
         "/dashboard",
