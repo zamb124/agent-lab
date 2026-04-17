@@ -35,7 +35,7 @@ export class AuthService extends BaseService {
     async _doValidateToken() {
         console.log('🔍 validateToken: проверяем авторизацию через /api/auth/me');
         try {
-            const userData = await this.get('/api/auth/me');
+            const userData = await this.get('/api/auth/me', {}, { skipAuthEvent: true });
             
             console.log('✅ Пользователь авторизован:', userData);
             this.user = {

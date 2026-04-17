@@ -132,9 +132,9 @@ app = create_service_app(
     settings_class=FrontendSettings,
     get_container=get_frontend_container,
     on_startup=on_startup,
+    routers=[companies_router],
     pages_routers=[
         auth_router,
-        companies_router,
         embed_configs_router,
         invites_router,
         team_router,

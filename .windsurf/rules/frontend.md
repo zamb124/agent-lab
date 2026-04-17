@@ -1,0 +1,1050 @@
+---
+trigger: model_decision
+description: "Фронтенд frontend javascript frontend arch LIT html css style Zustand"
+globs:
+---
+# Frontend Architecture Rules
+
+## КРИТИЧЕСКИЕ ПРАВИЛА DRY/OOP
+
+### ЗАПРЕЩЕНО:
+
+1. **Импортировать `ServiceRegistry` в компонентах** — используй `this.services`, `this.auth`, `this.a2a`, `this.syncApi`, `this.syncWs`, `this.notify` (регистрация сервисов — только в `*App.js` через `this.services.register` после `registerCore`)
+2. **Дублировать методы** — если метод есть в базовом классе, используй его
+3. **Создавать fallback'и** — если ошибка, бросай исключение
+4. **Импортировать `LitElement` напрямую** — наследуйся от `PlatformElement` или `GlassModal`
+5. **Дублировать стили** — используй shared стили из `@platform/lib/styles/shared/`
+
+### Иерархия классов (СТРОГО):
+
+```
+LitElement (Lit)
+    └── PlatformElement (сервисы, notify, emit, use)
+            ├── Обычные компоненты
+            ├── PlatformApp (корневой компонент)
+            └── GlassModal (модальные окна; тот же класс экспортируется как `PlatformModal` из `glass-modal.js`)
+                    └── GlassFormModal (формы в модалках)
+                    └── PlatformLightModal (`glass-light-modal.js`) — light DOM (Drawflow и т.п.)
+                    └── FileTextPreviewModal (`file-text-preview-modal.js`) — превью текста из файла: `GET {apiBaseUrl}/files/{file_id}/preview`, i18n `platform.file_preview_modal.*` (третий аргумент `I18nNs.PLATFORM`), события `file-text-preview-confirm` / `file-text-preview-cancel`
+```
+
+**Все компоненты — от `PlatformElement`; модальные окна — от `GlassModal` / `PlatformModal` или `PlatformFormModal`, либо `PlatformLightModal` когда нужен light DOM.** Drawer и контекстное меню (не полноценное модальное окно) остаются на `PlatformElement` со shared-стилями.
+
+**Import map (SPA):** минимум `lit`, `@platform/lib/`, `@platform/services/`; сервисные специфичные записи (например `@livekit/client` в Sync, дополнительные `lit/directives/*` по факту импортов) добавляются точечно в `apps/<service>/ui/index.html`. Viewport `content` — как в `core/frontend/viewport.py`.
+
+**Общий блок import map (crm / rag / sync / office и отдельные shell вроде `call-join.html`):** `lit`, `lit/decorators.js`, `lit/directives/class-map.js`, `lit/directives/repeat.js`, `lit/directives/unsafe-html.js`, `lit/directives/when.js`, `lit/directives/guard.js` → `guard.min.js` в `core/frontend/static/assets/js/lit/directives/`, `@platform/lib/`, `@platform/lib/embed-chat/` → `core/frontend/static/lib/embed-chat/` (если используется Lara / embed-чат), `@platform/services/`; у Sync дополнительно `@livekit/client`. Flows: добавить префикс `lit/` при необходимости поддерева; frontend — точечные директивы (например `unsafe-svg`) по импортам. Ранний `app-loader` в `<head>` (как в `apps/frontend/ui/index.html` и `apps/flows/ui/index.html`) желателен для единого старта; crm/rag/sync подключают тот же модуль через `import '/static/core/lib/components/app-loader.js'`.
+
+**Регрессия канона:** локально **`make check-ui-canon`** ([`scripts/check_ui_canon.sh`](../../scripts/check_ui_canon.sh)) — нет `extends LitElement`, нет импортов `from '/static/core/lib/...'` в `apps/**/*.js`, нет `ServiceRegistry` в `apps/**/*.js`.
+
+**Новый SPA или новый HTML-shell:** одна строка `viewport` как в [`core/frontend/viewport.py`](../../core/frontend/viewport.py); минимальный import map (см. выше) + точечные ключи под реальные импорты; ранний `app-loader`; корневой `*App extends PlatformApp` с `this.services.register` / `registerCore` в `initServices`, без импорта `ServiceRegistry` в компонентах.
+
+## Embed-чат и AI UI-блоки
+
+- **Пакет:** `core/frontend/static/lib/embed-chat/` — автономный слой без импортов из `apps/*`: `streamEmbedA2A`, `<platform-embed-chat>`, **`<platform-embed-chat-drawer>`** (FAB + панель, `LitElement`; кнопки шапки — **`platform-icon`**; иконка FAB = встроенная копия **`core/frontend/static/assets/icons/ai.svg`**; FAB **не рендерится**, пока панель открыта; при закрытии панели **`<platform-embed-chat>`** остаётся в DOM (**`panel--collapsed`**: `visibility` / `opacity` / `pointer-events`, **`inert`**), история и **`contextId`** не сбрасываются; сброс — кнопка **«новый чат»** или перезагрузка страницы; панель с отступами от краёв, **`border-radius: 25px`**; расширение (**`panel--maximized`**): viewport **≥768px** — поля **24px** от краёв (крупное окно, без нативного Fullscreen API); **max-width: 767px** — как раньше на весь экран + **`requestFullscreen`** на **`.panel`** при поддержке; выход — повторный клик, **Esc** или закрытие панели; **`fullscreenchange`** и **`_panelNativeFullscreen`** только для нативного FS; строки **`panel_fullscreen`** / **`panel_exit_fullscreen`**, **`fab_aria_open_unread`** в **`embed-chat-default-labels.js`**; при закрытой панели после завершения ответа на сообщение пользователя — **`humanitec-embed-chat-assistant-reply-completed`** (bubbles, composed) с **`<platform-embed-chat>`**, на FAB бейдж (**`fabUnreadCount`**, до **9+** на значке, точное число в **`aria-label`**); атрибут **`theme`**: `light` | `dark` | **`auto`** — при `auto` тема как у приложения: **`document.documentElement[data-theme]`** + событие **`theme-change`**; **`resolveEmbedChatTheme`** в **`embed-chat-theme.js`**), единый **`--embed-radius: 25px`** в чате и блоках тулов, `embed-chat-default-labels.js`, `reduceEmbedStreamEvent`, `tool-result-blocks.js`, реестр блоков.
+- **Import map:** префикс `"@platform/lib/embed-chat/"` → `/static/core/lib/embed-chat/` (как в `apps/crm/ui/index.html`); в коде приложений импорт только через `@platform/lib/embed-chat/...`, не через голый `/static/core/lib/...`.
+- **Переключение drawer с хоста:** `window.dispatchEvent(new CustomEvent('humanitec-embed-chat-toggle', { bubbles: true }))` (имя переопределяется атрибутом **`toggle-event-name`** на drawer).
+- **Параметры URL** (drawer при **`connectedCallback`** и **`popstate`**): **`embed-chat-url-params.js`** — **`embed_theme`** | **`embed-theme`**, **`embed_lang`** | **`embed_locale`** (`ru`|`en`|`auto`), **`embed_width`** | **`embed-panel-width`** (число → `px` или CSS), **`embed_max_height`** | **`embed-panel-max-height`**, **`embed_locale_control`**=`1`|`0` (переключатель языка в композере), **`embed_assistant_name`** | **`embed-assistant-name`** | **`embed_chat_title`** | **`embed-chat-title`** (имя в шапке панели, до 120 символов; внешняя встраивка без правки HTML), **`embed_skill`** | **`embed-skill`** | **`embed_skill_id`** | **`embed-skill-id`** (id skill для A2A **`metadata.skill`**, например **`crm`** у flow **`lara`**; валидные id: буква в начале, далее буквы/цифры/`_`/`-`, до 64 символов). Задают **`--embed-panel-width`** / **`--embed-panel-max-height`** на элементе drawer. Атрибут **`skill-id`** на drawer задаёт skill по умолчанию; при наличии параметра URL skill из query перезаписывает.
+- **Markdown ответов ассистента:** **`embed-chat-markdown.js`** — перед парсингом экранирование HTML (как у заметок CRM), затем **`globalThis.marked.parse`** (`gfm`, `breaks`) и **`unsafeHTML`** в пузыре (класс **`embed-msg-md`**). Без скрипта **`marked`** на странице — только экранированный текст с `<br>`. Хост с drawer обязан подключать **`/static/core/assets/js/marked.min.js`** до виджета (см. **`apps/crm/ui/index.html`**).
+- **Ссылки на скачивание файлов flows:** **`embed-flows-url-rewrite.js`** — после Markdown во всех **`href`/`src`** и в блоках **`file_card`** (`url`, **`preview_url`**) пути вида **`/flows/api/v1/files/download/{id}`**, **`/api/v1/files/download/{id}`**, **`sandbox:/flows/...`** (и абсолютные URL с тем же путём) приводятся к **`{flowsBaseUrl}/api/v1/files/download/{id}`** ( **`flowsBaseUrl`** без хвостового слэша, как у A2A). Виджет не зависит от origin страницы-хоста.
+- **Композер:** **`embed-chat-input`** — одна широкая капсула с встроенными «+», полем ввода, опционально select **`ru`/`en`/`auto`**, микрофоном и круглой отправкой; внизу **`ai_disclaimer`**. Тексты: **`embedChatLabelsForLang(interfaceLocale)`** внутри **`<platform-embed-chat>`**; свойство **`labels`** на drawer — **только переопределения**, не полный словарь.
+- **Конфиг виджета:** `flowsBaseUrl`, `flow-id`, **`skill-id`** (обязателен для flow с навыками по сервисам, напр. **`lara`** + **`crm`** в CRM), `locale`, **`theme`**, **`show-locale-control`**, `getAuthToken`, опционально **`getExtraMetadataVariables`** (async → объект, мёрж в **`metadata.variables`** после языковых ключей), `use-credentials` (см. CRM **`flowsEmbedShouldSendCredentials`**), `labels` (overrides), `actionHandlers` для `embed-block-action`. **`embed-theme`**, **`interface-locale`**, **`show-locale-control`**, **`hide-header`** на **`<platform-embed-chat>`**; drawer прокидывает **`getExtraMetadataVariables`** и **`skill-id`** в чат. Для event-first сценариев embed автоматически диспатчит `CustomEvent('lara:event')` и `CustomEvent('lara:<type>')` из `tool_result.ui_events`.
+- **Auth при встраивании (в т.ч. сторонний сайт):** виджет ходит в **flows** только через **`fetch`** на **`flowsBaseUrl`**. **Тот же site**, что и flows (часто один **hostname**, другой порт) — можно **`use-credentials`** и сессионная **cookie**, без обязательного Bearer (см. **`flowsEmbedShouldSendCredentials`** в **`apps/crm/ui/utils/crm-lara-flows-base.js`**). **Другой origin** (настоящий чужой домен) — cookie платформы к flows не отправляются; нужен **`getAuthToken`** / meta **`humanitec-flows-bearer-token`** (**`Authorization: Bearer`**), либо **серверный прокси** A2A у хоста страницы. Во всех cross-origin случаях на flows должны быть явные **CORS origins** (не `*` с credentials). Отдельного «токена виджета» в core нет — используется обычный **JWT сессии/API**, выданный вашим backend для пользователя/контекста (или прокси без токена в браузере).
+- **Drawer (шапка панели):** одна строка — заголовок (**`assistant-title`** / URL или **`L.title`**), «новый чат», **полноэкран**, закрытие; вложенный **`platform-embed-chat`** с **`hide-header`**; сброс диалога — **`startNewChat()`** на элементе чата.
+- **Контракт блоков из тулов:** описан в JSDoc `tool-result-blocks.js` (массив блоков, поле `blocks`, или `files` → `file_card`). Неизвестный `type` → компонент fallback в реестре. Для UI-интеграций actions не обязательны: tool может вернуть `ui_events` в `tool_result`, embed сам пробросит события наружу.
+- **Встроенные UI-блоки** (Lit, `embed-builtin-blocks.js` → `embed-block-renderer`): **`card`** — `title`, `subtitle`, `description`, `icon` (короткая строка слева), `url` (заголовок-ссылка); **`table`** — `title` (подпись над таблицей; в рендерере маппится в свойство `caption`, чтобы не конфликтовать с нативным `HTMLElement.title`), `columns` (`{ key, label }` или строка), `rows`; **`actions`** — `buttons[]` с `action_id`, `label`, `payload` → событие **`embed-block-action`** (на `<platform-embed-chat>` — **`actionHandlers[action_id]`**); **`file_card`**, **`text`**. Тема и скругление — CSS-переменные **`--embed-chat-*`**, **`--embed-radius`**.
+- **Доменные блоки:** регистрирует только хост (`registerEmbedBlockType`); в core-пакете — нейтральные типы.
+- **CORS на flows:** при `fetch` с `credentials: include` или кастомными заголовками браузер делает preflight; **`Access-Control-Allow-Origin: *` с `Access-Control-Allow-Credentials: true` недопустимы**. В **`apps/flows`**: `cors_allow_origins` (явный список) и опционально **`cors_allow_origin_regex`** в настройках flows; при **`server.debug`** и не-`TESTING` подставляется dev-regex для **`localhost` / `127.0.0.1`** и **`*.lvh.me`** с любым портом. В проде задать origins партнёров в конфиге. **`CORSMiddleware` подключается последним в `create_service_app`**, чтобы preflight не упирался в `AuthMiddleware` без заголовков CORS. Между портами одного hostname при **`credentials: include`** и SameSite=Lax cookie сессии обычно уходит на flows (CRM: **`flowsEmbedShouldSendCredentials`**). Если flows на **другом домене** — **`Authorization`** (meta **`humanitec-flows-bearer-token`** в CRM util) или **прокси** A2A через origin приложения / общий ingress.
+
+---
+
+## Viewport (мобильные)
+
+Одна строка для всех SPA: `meta name="viewport"` с фиксированным масштабом (`maximum-scale=1`, `minimum-scale=1`, `user-scalable=no`) и `viewport-fit=cover`. Каноническое значение — `PLATFORM_MOBILE_VIEWPORT_CONTENT` в `core/frontend/viewport.py`; статические `apps/*/ui/index.html` дублируют тот же `content` (без генерации из Python). HTML, собираемый в Python (`flows` chat embed, registry schema), подставляет константу из `core.frontend.viewport`.
+
+## PWA
+
+Единый Web App Manifest, Service Worker и offline-страница: каталог **`core/frontend/pwa/`** (`manifest.json`, `sw.js`, `offline.html`). В **`sw.js`** запросы к **`/api/auth/*`** и **`/*/api/auth/*`** (проверка по **`pathname.includes('/api/auth/')`**) идут в сеть через **`fetch` без Cache Storage — ответы сессии не кэшируются. Опционально для Android TWA: **`assetlinks.json`** (шаблон **`assetlinks.json.example`**) — тогда **`GET /.well-known/assetlinks.json`**. Маршруты подключает **`create_service_app`** через **`core/app/pwa_routes.py`** (`register_platform_pwa_routes`). Параметр фабрики **`include_platform_pwa`**: по умолчанию **`None`** — при **`TESTING=true`** PWA-маршруты не регистрируются, иначе регистрируются. Клиент: **`core/frontend/static/services/pwa.service.js`**: `register('/sw.js', { scope: '/', updateViaCache: 'none' })`; при смене **`server.deployment_version`** в ответе **`GET {baseUrl}/health`** относительно **`localStorage.humanitec_deployment_version`** — `unregister` всех SW, очистка **`caches`**, перезагрузка. В **`sw.js`** пути **`/health`** и **`*/health`** не кладутся в Cache Storage; ответ **`GET /sw.js`** с **`Cache-Control: no-store`**. На релизе поднимать **`deployment_version`** в конфиге (см. **`conf.json`** / env). В каждом SPA-shell: **`<link rel="manifest" href="/manifest.json">`**. В standalone PWA запрещён zoom (pinch/gesture/keyboard): guard ставится централизованно в **`core/frontend/static/lib/platform-element/index.js`** для всех приложений на `PlatformElement`, обязательный `meta viewport` — канонический `PLATFORM_MOBILE_VIEWPORT_CONTENT`. Push API остаётся на префиксе сервиса: **`/{service}/api/push/*`** (см. `getBaseUrl()`).
+
+## Internationalization (i18n)
+
+- **HTTP:** на каждом сервисе **`GET /api/i18n/{locale}`** (`ru` | `en`) — см. **`core/app/i18n_routes.py`**, данные из **`core/i18n/translations/<locale>/*.json`**.
+- **Стартовая локаль:** без **`localStorage.locale`** / cookie **`language`** — **`defaultLocaleFromNavigator()`** в **`i18n.service.js`** (`ru`, если основной тег языка **`ru`**, иначе **`en`**). Все SPA на **`PlatformApp`** + **`registerCore`** используют один синглтон; iOS/Android WebView отдаёт язык ОС через **`navigator.languages`** / **`navigator.language`**. После **`i18n.init()`** cookie **`language`** синхронизируется с API; **`core/middleware/auth/context_factory._detect_language`**: cookie, **`Accept-Language`**; если **`ru`/`en`** не подошли — **`Language.EN`**.
+- **Сервис:** синглтон **`i18n`** регистрируется в **`ServiceRegistry`** при загрузке модуля **`core/frontend/static/lib/services/ServiceRegistry.js`** (один объект с **`registerCore`**, чтобы **`PlatformElement`** и ранний **`app-loader`** в shell до **`initServices`** могли вызывать **`this.i18n`**). Загрузка бандла и **`i18n.init()`** — в **`registerCore`** вместе с остальными сервисами. В компонентах — **`this.i18n`** (не импортировать модуль сервиса в `apps/**` ради одной строки, если достаточно геттера базового класса).
+- **Строки:** `this.i18n.t('ключ.вложенный', { param: '…' })` — ключ в **текущем дефолтном namespace** (после `registerCore`: **`i18nDefaultNamespaceForBaseUrl(getBaseUrl())`**, сегмент URL = имя `*.json`; пустой `getBaseUrl` = не менять стартовый **`landing`**). Дополнительные бандлы (не slug сервиса): **`import { I18nNs } from '@platform/services/i18n/i18n.service.js'`** и **`this.i18n.t('…', {}, I18nNs.BILLING)`** / **`I18nNs.LANDING`** / **`I18nNs.PLATFORM`** / **`I18nNs.FRONTEND_PRODUCTS`** — см. **`i18n-default-namespace.js`**. Вне компонента: **`t`**, **`i18n`**. Низкоуровнево: **`i18n.setDefaultNamespace`**, **`i18n.getDefaultNamespace`**. **`PlatformElement`** в **`connectedCallback`** подписывается на **`i18n.subscribe`** и делает **`requestUpdate`** при смене локали; компоненты на голом **`LitElement`** (без базового класса) — вручную **`i18n.subscribe`**. Ориентир непереведённого UI: **`scripts/report_ui_cyrillic.sh`** (кириллица в строках `apps/**/ui/**/*.js`). Фильтр «не комментарий // / JSDoc *»: **`uv run python scripts/report_ui_i18n_gaps.py`** (`--app <crm|flows|…>` или **`--summary`**).
+- **Новые ключи:** правки **парно** в **`core/i18n/translations/ru/`** и **`en/`** для того же namespace; проверка: **`make check-i18n`** ([`scripts/check_i18n.sh`](../../scripts/check_i18n.sh)).
+
+**Админка биллинга (frontend SPA):** страница **`billing-admin-page.js`** — три вкладки: **Компании** (таблица из **`GET /frontend/api/platform-billing/companies-billing-overview`**, только **`system`**), **Прайс и правила** (выбор компании, каталог, settlement, override), **Usage**. Ключи i18n — **`platform_billing_page.*`** в **`frontend.json`**.
+
+**Иконки приложения (PWA и магазины):** тот же знак, что на главной — **`core/frontend/static/assets/service_logos/frontend_logo.svg`**, фон **`#1a1a2e`** (как **`background_color`** в manifest). Готовые PNG: **`core/frontend/static/pwa/icons/`**; пересборка: **`uv run python scripts/generate_humanitec_pwa_icons.py`** (зависимость **`skia-python`**, группа **`dev`**); iOS App Store asset: **`mobile/ios/App/App/Assets.xcassets/AppIcon.appiconset/AppIcon-512@2x.png`**. Подробности: **`mobile/docs/IOS_CAPACITOR.md`**.
+
+**Магазины приложений (Android TWA / iOS):** артефакты сборки и конфиги — каталог **`mobile/`** (`mobile/README.md`; `mobile/docs/WATERFALL.md`; `mobile/docs/IOS_CAPACITOR.md`, `mobile/android/README.md`; чеклист заполнения в Apple — **`mobile/docs/APPLE_MANUAL.md`**). Витрина App Store — вручную в App Store Connect, без автозагрузки из репозитория. Веб-приложение не дублируется: оболочки грузят production URL. Переходы по ссылкам на тот же продукт в Capacitor / standalone PWA: не **`window.open(..., '_blank')`** для внутренних маршрутов — **`openUrlSameWindowOrTab`** из **`core/frontend/static/lib/utils/native-app-shell.js`**. Ранний перехват кликов по **`<a href>`** (тот же origin или тенанты `*.humanitec.ru` / `*.humanetic.ru` / `*.agents-lab.ru` и dev-хосты): **`installNativeAppShellLinkCapture`** вызывается из **`viewport-app-vh.js`** (импорт с **`app-loader`**); нативность проверяется **на клике**, не при регистрации; для iOS/Android дополнительно **`webkit.messageHandlers.bridge`** / **`androidBridge`** (`native-app-shell.js`, как в `@capacitor/core`); глобальная подмена **`window.open`** на **`assignInNativeShell`** для внутренних URL на нативном Capacitor — **`installNativeAppShellWindowOpenPatch`**. На iOS дополнительно нативный swizzle `WKUIDelegate.createWebViewWith` — **`mobile/ios/App/App/HumanitecWebViewNewWindowFix.swift`** (иначе Capacitor открывает Safari). Детали: `mobile/docs/IOS_CAPACITOR.md`.
+
+## Deep links (Universal Links / App Links)
+
+- **Префиксы путей** — один список: **`core/frontend/static/lib/utils/platform-deeplink-paths.js`** (`DEEPLINK_PATH_PREFIXES`). Новый сервис: одна строка здесь + согласованные **`paths`** в **`core/frontend/pwa/apple-app-site-association`** и описание intent / `pathPrefix` для Android (см. **`mobile/android/README.md`**).
+- **Холодное открытие из ОС:** **`core/frontend/static/lib/utils/platform-deeplink-init.js`** подключается из **`app-loader.js`**. На нативной платформе — **`@capacitor/app`** → **`App.addListener('appUrlOpen', …)`** → **`assignInNativeShell`**; допустимость URL — **`isInternalProductNavigationUrl`** из **`native-app-shell.js`** (те же правила хостов, без дублирения).
+- **Import map:** в каждом SPA-shell (`apps/*/ui/index.html`, **`apps/sync/ui/call-join.html`**) заданы **`@capacitor/app`**, **`@capacitor/core`**, **`@capacitor/splash-screen`**, **`@capacitor/push-notifications`** → статические копии в **`core/frontend/static/assets/js/vendor/@capacitor/`** (обновлять при смене версии плагинов в **`mobile/package.json`**); в **`web-test-runner.config.mjs`** — те же алиасы для компонентных тестов.
+- **Capacitor iOS, полная навигация между документами:** **`assignInNativeShell`** — **`SplashScreen.show({ autoHide: false })`** затем **`location.assign`**; ранний **`SplashScreen.hide`** — **`viewport-app-vh.js`** после **`DOMContentLoaded`** и кадра отрисовки. Конфиг **`plugins.SplashScreen`** в **`mobile/capacitor.config.json`**. Текущий Android в репозитории — **TWA**, не Capacitor; плагин нативно только на iOS Capacitor.
+- **iOS:** **`mobile/ios/App/App/App.entitlements`** — Associated Domains; зависимости **`@capacitor/app`**, **`@capacitor/splash-screen`**, **`@capacitor/push-notifications`** в **`mobile/package.json`**, после смены — **`npx cap sync ios`**; capability **Push Notifications** в Xcode для APNs (см. **`mobile/docs/IOS_CAPACITOR.md`**).
+- **Сервер:** **`GET /.well-known/apple-app-site-association`** регистрируется **`register_platform_pwa_routes`**, если файл лежит в **`core/frontend/pwa/`** (рядом с assetlinks). Не отдавать этот путь редиректом на SPA (см. **`infrastructure.mdc`**).
+
+### Субдомены и deep links
+
+Universal Links привязаны к **хосту**. Публичные ссылки, которые должны стабильно открывать приложение с одной AASA на apex (без дублирования **`applinks:*.humanitec.ru`** и отдельного файла на каждом поддомене), размещайте на **`https://humanitec.ru/...`** (например инвайты **`/join?...`**). Работа в кабинете тенанта после входа — обычная навигация внутри WebView. Детали: **`invites.mdc`**.
+
+## Архитектура
+
+```
+core/frontend/static/
+├── lib/
+│   ├── base/PlatformApp.js      # Базовый класс приложений
+│   ├── platform-element/        # Базовый класс компонентов
+│   ├── components/glass-modal.js # Базовый класс модалок (extends PlatformElement)
+│   ├── store/BaseStore.js       # Обёртка над Zustand
+│   ├── services/                # ServiceRegistry, BaseService
+│   └── styles/shared/           # Переиспользуемые стили
+└── services/                    # Core сервисы (auth, theme, notify)
+
+**Версия деплоя в сайдбаре:** `platform-deployment-version` (`lib/components/platform-deployment-version.js`) запрашивает `GET {base-url}/health`, читает `deployment_version` из ответа (поле выставляет бэкенд из `SERVER__DEPLOYMENT_VERSION`). Атрибут `base-url` как у `getBaseUrl()` (`/frontend`, `/flows`, …). В футере под блоком пользователя — атрибут `footer` (узкая строка по центру, не в одном ряду с `platform-user`).
+
+**Адрес компании на shell (localhost / lvh.me / прод-домены):** `core/frontend/static/lib/utils/tenant-url.js` — `getCompanyTenantHostContext()`, `buildCompanySubdomainUrl(subdomain, path)`, `formatCompanySubdomainLabel(subdomain)`. Превью и переход после выбора компании не хардкодят `humanitec.ru`; на `*.lvh.me` показывается `slug.lvh.me:порт` (как `core.utils.subdomain.build_subdomain_url`).
+
+**Пропуск выбора компании:** если у пользователя несколько компаний, но в профиле задана **`active_company_id`** и она входит в `user.companies`, после OAuth редирект сразу на **`/dashboard`** тенанта ([`apps/frontend/api/auth.py`](../../apps/frontend/api/auth.py)). Страница **`/select-company`**: при `?action=create` автопереход не выполняется; иначе при нескольких компаниях и флаге **`is_active`** в ответе **`GET /api/companies/me`** — сразу переход на tenant dashboard ([`select-company-page.js`](../../apps/frontend/ui/pages/select-company-page.js)).
+
+**Контракт `GET /api/companies/me`:** во всех сервисах ответ должен иметь форму **`ListResponse`** с полем **`items`** (не голый массив). Единая реализация сборки списка компаний находится в **`core/api/companies.py`**; frontend-роутер **`apps/frontend/api/companies.py`** использует ту же core-функцию для `GET /me`, чтобы не дублировать логику и семантику ошибок.
+
+**Меню пользователя (`platform-user.js`):** пункт «Документация» открывает раздел сценариев для **текущего сервиса**: `core/frontend/static/lib/utils/documentation-url.js` — `buildScenarioDocumentationUrl()` (база `/documentation/` или `/frontend/documentation/` если pathname начинается с `/frontend/`). Сегменты совпадают с `docs/scenarios/<service>/[<tag>/]`: источник — `README.md` (перед сборкой Zensical генерируется `index.md` через `scripts/docs_prepare.py`). Опционально на элементе: **`documentation-tag="spaces"`** — открыть `.../scenarios/<service>/spaces/`. Статика Zensical в **`documentation-dist/`**, монтирование в **`create_service_app`** (`mount_repo_documentation`); у frontend **`documentation_gateway_prefix="frontend"`**. У **flows** `mount_repo_documentation=False`, локальный сайт — `apps/flows/site`.
+
+**Последний сервис и Console:** `core/frontend/static/lib/utils/last-visited-service.js` — ключ **`localStorage`** `platform:last_service`, допустимые значения `flows` | `crm` | `rag` | `sync` | `frontend`. Запись при открытии приложения (`PlatformApp._recordLastVisitedServiceFromApp` по `getBaseUrl()`, у `FrontendApp` не на лендинге и публичных путях), при переходе из меню **Apps** (включая карточку **Console** в той же сетке; переход на **`/dashboard`** на сервисе frontend). Редирект с **`/dashboard`** на последний «не-console» сервис (`flows`/`crm`/`rag`/`sync`) — **`replaceLocationToLastVisitedNonFrontendService()`** в **`FrontendApp`**. Лендинг **`/`** не редиректится. На разных портах localhost у каждого origin свой `localStorage`.
+
+**Панель уведомлений:** `platform-notification-manager` — список открывается `position: fixed` с координатами от кнопки (`getBoundingClientRect`), ширина панели **`min(400px, 80vw)`** (на узком экране остаётся запас слева/справа). `z-index: var(--z-notification-panel, 30000)`, чтобы не уходить под соседний `platform-island` (flex + порядок DOM). Клик вне компонента закрывает панель. Toast (`glass-toast`): хост **`width: min(80vw, 400px); left: auto`**, иначе в Safari блок с `position: fixed` без ширины растягивается на весь вьюпорт.
+
+**Контекстная подсказка «?»:** `platform-help-hint` (`core/frontend/static/lib/components/platform-help-hint.js`) — компактная кнопка «?» со всплывающим текстом при наведении и при фокусе. Текст подсказки — свойство **`text`** (в Lit: `.text=${'…'}`); подпись для доступности кнопки — атрибут **`label`** (по умолчанию «Справка»). **Пузырёк монтируется в `document.body`** (`position: fixed`, координаты от `getBoundingClientRect` кнопки), **`z-index` через `nextModalLayerZIndex()`** — всегда поверх сайдбара shell и контента, без ограничения stacking context предков. Регистрация: side-effect `import '@platform/lib/components/platform-help-hint.js'` в `index.js` приложения, где тег используется. Для пояснения неочевидных переключателей и полей **нужно брать этот компонент**, а не свои кнопки «?» и отдельные стили тултипов.
+
+**Стек z-index для модалок и полноэкранных слоёв:** `core/frontend/static/lib/utils/modal-z-stack.js` — `nextModalLayerZIndex()` даёт монотонно растущее значение выше `--z-notification-panel` / `--z-modal` и т.д. При **каждом** открытии модалки выставлять на хосте `--platform-modal-layer-z` (делают `GlassModal`, `PlatformLightModal`, `auth-modal`, `company-modal`). Полноэкранные оверлеи вне этого набора (например `call-overlay`, `call-incoming` в Sync) при монтировании тоже вызывают `nextModalLayerZIndex()` и ту же CSS-переменную. В flows полноэкранный режим `json-field-editor` и `code-editor` (`apps/flows/ui/components/editors/`): если найден ближайший предок с классом `modal-content`, `modal-content-wrapper` или `floating-panel-body` — класс `fullscreen-embedded`, хост в DOM, `position: absolute; inset: 0` внутри контейнера (**без** `overflow: hidden` на предке — иначе залипала прокрутка `floating-panel-body`). Иначе — перенос в `document.body`, `position: fixed`, `--platform-modal-layer-z`, флаг `_fsPortalReparent`. У `json-field-editor` атрибут **`bounded`** — ограничение высоты и внутренний скролл CodeMirror (например Output Schema в `llm-node-editor`). `FlowEditorPage.updated` снимает застрявший класс `editor-fullscreen-embed-clip` с `.floating-panel-body` для старых сессий. `BaseNodeEditor`: expanded `panel-layout` — `align-items: flex-start`. У `.floating-panel-body` в `island.styles.js` с колонкой flex у панели нужны **`min-height: 0`**, **`flex: 1`**, **`overflow-y: auto`** — иначе тело не сжимается и скролл не появляется. Токен `--z-notification-panel` в `tokens.css`.
+
+**Сохранение в модалке:** основное действие submit — **иконка `save`** в шапке (`.header-buttons`), **слева** от кнопки полноэкранного режима: `renderSaveHeaderButton()` / `_renderHeaderSaveIcon` в `glass-modal.js`; у `PlatformFormModal` по умолчанию; футер — **отмена** (или пусто). Модалки со своим `render()` без `super` — порядок иконок в шапке вручную. У `GlassModal`: **`hideHeaderClose`** — без кнопки закрытия в шапке (закрытие через scrim/Esc); **`headerSavePrimary`** — класс `.header-save-btn--primary` (токены `--crm-button-primary-*` с fallback на `--platform-btn-primary-*`).
+
+**GlassModal (`glass-modal.js`):** не импортирует общий `modal.styles.js` (там `:host` ломает разметку). Хост при `open`: `position: fixed; inset: 0` и **перенос в `document.body`** (`willUpdate` + `getUpdateComplete`), иначе предки с `backdrop-filter` ломают fixed и модалка встаёт в поток. Оверлей — `.modal-overlay` + `.modal-scrim` (затемнение и blur). Панель `.modal`: **`display: flex; flex-direction: column; overflow: hidden; max-height: …`**, шапка **`.modal-header`** и футер **`.modal-actions`** не участвуют в прокрутке, скролл только у **`.modal-content`** (`flex: 1 1 auto; min-height: 0; overflow-y: auto`). У **`.modal`** задаются **`--modal-content-inset`** и **`--modal-content-radius`**: тело **`.modal-content`** с отступами от краёв панели и **`border-radius`**, чтобы блоки внутри визуально обрезались по дуге; футер сдвинут теми же боковыми inset. Для **`.graph-modal-body`** margin и radius у контента сбрасываются (полный край). Полноэкран: размеры через `min(…vw, 100vw - отступ)` / `min(…vh, 100dvh - отступ)`. Панель `.modal`: `position: absolute; left: 50%; top: 50%` и `transform: translate(-50%, -50%)`; **вход** затемнения и панели — `@keyframes` + `animation` с `both` (как `modalShellStyles` у drawer), а не только `transition` на `[open]` (после портала браузер часто не рисует «до»). Класс `.panel-enter-active` до `animationend`, затем устойчивое состояние без повторного запуска анимации после перетаскивания. По размерам (fullscreen) — `transition` на width/height/max-*. Восстановление портала после закрытия — `requestAnimationFrame` (оверлей без `transition` на исчезновение). Переопределяя `getUpdateComplete()`, вызывай `await super.getUpdateComplete()`. После портала в `body` при **светлом** `html`/`body` срабатывает `:host-context([data-theme="light"])` — панель становится белой; при необходимости тёмной панели при светлом документе на хосте задать **`data-theme="dark"`** (блок `:host([data-theme="dark"])` в `glass-modal.js`). Заголовок шапки — свойство **`heading`**, не **`title`** (иначе нативный tooltip на кастомном элементе). Контент — **`slot="content"`**, футер — **`slot="actions"`**. **Форма заявки на лендинге** (`/`): своя модалка в **`apps/frontend/ui/components/landing/landing-cta.js`** (fixed overlay, тёмный glass в стиле лендинга, `platform-icon`), **без** `GlassModal`.
+
+apps/{service}/ui/
+├── app/{Service}App.js          # extends PlatformApp
+├── store/{service}.store.js     # Zustand Store
+├── pages/                       # Страницы
+├── components/                  # Компоненты
+├── modals/                      # Модальные окна (extends GlassModal)
+└── services/                    # API сервисы
+```
+
+**Документы (`apps/office/ui`):** канон как у RAG/Sync — **`PlatformApp`**, бандл **`documents.json`**, палитра через `--documents-*` токены в `tokens.css`. См. **`office.mdc`**.
+
+**Сервис frontend (shell):** сайдбар [`apps/frontend/ui/components/frontend-sidebar.js`](../../apps/frontend/ui/components/frontend-sidebar.js) на `<platform-service-sidebar>`; блок «Быстрые действия» на dashboard использует `<platform-icon>` и токены `--text-primary` / `--accent` для контраста. Каталог flows для UI (модалка создания embed) — `FlowsCatalogService` в `apps/frontend/ui/services/flows-catalog.service.js`, регистрация `this.services.register('flowsCatalog', ...)` в `FrontendApp`; HTTP `GET /flows/api/v1/flows/` (тот же origin, `super('')` у `BaseService`).
+
+**FrontendApp: URL и `ui.currentView`:** в `FrontendStore` включён `persist`. Канонические пути консоли задаются в `apps/frontend/ui/store/frontend.store.js` (`CONSOLE_VIEW_TO_PATH`, экспорт `getConsoleViewForPath`). `setCurrentView(view)` делает `history.pushState` на соответствующий путь (кроме `settings`, если pathname уже `/settings` или `/settings/...`). Синхронизация из адресной строки и кнопки «Назад»: `_syncCurrentViewFromPathname()` вызывает `setCurrentView(..., { skipUrlSync: true })`; слушатель `popstate` в `FrontendApp`. Чтобы заход по `/dashboard` не показывал последний сохранённый таб, `_syncCurrentViewFromPathname` выполняется в `connectedCallback` до первого рендера. Новый пункт меню shell → `case` в `_renderContent`, путь в `_isKnownRoute`, пара `view`/`path` в `CONSOLE_VIEW_TO_PATH` / `getConsoleViewForPath` и при необходимости `RouteRule` в `route_config.py`.
+
+**Заявки с лендинга (frontend):** `POST /frontend/api/leads` сохраняет в shared БД таблицу `storage` ключ `company:system:request:{uuid}` (значение — JSON полей). `GET /frontend/api/lead-requests` отдаёт список; доступ только если активная компания в контексте — `system`. В сайдбаре пункт «Заявки» (`view` `lead-requests`, путь `/lead-requests`) показывается только при `auth.user.company_id === 'system'`. Реализация: `apps/frontend/api/leads.py`, страница `apps/frontend/ui/pages/leads-requests-page.js`.
+
+**Публичные продуктовые страницы (сервис frontend):** лендинг `/` и страницы продуктов `/products/<slug>` (например `agents`, `rag`, `crm`, `sync`) — Lit-компоненты в `apps/frontend/ui/pages/products/`, импорт side-effect в `apps/frontend/ui/index.js`, регистрация в `FrontendApp` (`_isKnownRoute`, ветка `render()` для путей `/products/...`; доступ без авторизации через `checkAuth`). В `core/middleware/auth/route_config.py` для UI задано `RouteRule("/products/*", auth_required=False, ...)`.
+
+**`landing-header`:** горизонтальная навигация в шапке и скрытие бургера с **`min-width: 1100px`**; на более узкой ширине (планшет в портрете) — бургер, переключатель языка и кнопка Login остаются в одной строке. Файл: `apps/frontend/ui/components/landing/landing-header.js`.
+
+**Публичные юридические страницы (frontend):** `"/policy"` и `"/terms"` — всегда без авторизации (`RouteRule(..., auth_required=False, context_type="anonymous")` + маршруты в `FrontendApp._isKnownRoute`/`checkAuth`). Язык: **`?lang=ru`** / **`?lang=en`** фиксирует редакцию; **без query** — та же логика, что и у **`defaultLocaleFromNavigator()`** (ru vs en). Переключатели EN/RU на странице выставляют query явно. При формировании ссылок из footer сохранять **`lang`**, если он задан. Данные реквизитов брать через публичный API `GET /api/public/legal`, а не хардкодить в компонентах.
+
+**Статика (vendor, same-origin):** Fira Sans / Fira Sans Condensed — `assets/fonts/fira-sans.css`, `fira-sans-condensed.css` и каталоги `assets/fonts/fira-sans/files/`, `fira-sans-condensed/files/` (лендинг `apps/frontend/ui/index.html`). Скриншоты лендинга/продуктов: исходники в `apps/frontend/ui/assets/images/land/*.png` (полное разрешение), в вёрстке — только `land/optimized/` (уменьшение длинной стороны `sips -Z 1200`, для тяжёлых кадров при необходимости `-Z 1000`); URL задаётся через `apps/frontend/ui/utils/land-product-images.js`. LiveKit SDK — `assets/js/livekit/` (`@livekit/client` в Sync). Mermaid — `assets/js/mermaid/mermaid.min.js` (HTML схем flow в `apps/flows/src/api/registry.py`).
+
+**Документация Zensical в UI:** после `make doc` каталог `documentation-dist/` монтируется на `/documentation/` и `/frontend/documentation/` (`core/frontend/documentation_mount.py`); редиректы 307 без завершающего слеша. Путь `/scenarios/sync/` соответствует статике из `docs/scenarios/sync/` (обзор сервиса). Публичный доступ в `route_config`.
+
+**404 / 500 в SPA:** неизвестные пути браузера (без правила в `route_config`) обрабатываются **SPA fallback** в `AuthMiddleware`: для GET с `Sec-Fetch-Dest: document` или `Accept: text/html` создаётся анонимный контекст и запрос доходит до `serve_spa` → `index.html`. Префиксы API/сервисов (`/api/`, `/flows/`, …) в fallback не попадают — ответ 404 JSON. Общая glass-страница: `core/frontend/static/lib/components/platform-shell-page.js` (`kind="not-found"` | `server-error`). `PlatformApp` рендерит её при `_routeNotFound` / `_fatalShell`; список допустимых путей приложения задаётся в наследнике (`FrontendApp._isKnownRoute` + `_preAuthCheck`). Рендеры `*App`, переопределяющие `render()`, в начале вызывают `renderPlatformAppShell(this)` из `@platform/lib/base/PlatformApp.js` (не `this._renderShellPages()` — избегаем конфликта с полями Lit на экземпляре).
+
+---
+
+## Компоненты: Иерархия Классов
+
+| Тип | Базовый класс | Доступ к сервисам |
+|-----|---------------|-------------------|
+| Компонент | `PlatformElement` | this.a2a, this.notify, this.auth, this.theme |
+| Приложение | `PlatformApp` | this.a2a, this.notify, this.auth, this.theme |
+| Модальное окно | `GlassModal` | this.a2a, this.notify, this.auth, this.theme |
+| Форма-модалка | `GlassFormModal` | this.a2a, this.notify, this.auth, this.theme |
+
+**Все классы получают сервисы через наследование от `PlatformElement`!**
+
+---
+
+## Доступ к Сервисам (DRY)
+
+**В ЛЮБОМ компоненте или модалке через геттеры:**
+
+```javascript
+class MyComponent extends PlatformElement {
+    async _loadData() {
+        // this.a2a - A2AService
+        const items = await this.a2a.get('/api/items');
+    }
+    
+    _showSuccess() {
+        // this.notify - NotifyService
+        this.notify.success('Сохранено');
+        // или короткий метод
+        this.success('Сохранено');
+    }
+    
+    _handleError(error) {
+        // Короткие методы notify
+        this.error(`Ошибка: ${error.message}`);
+    }
+}
+
+class MyModal extends GlassModal {
+    async _loadData() {
+        // Модалки тоже имеют доступ к сервисам!
+        const data = await this.a2a.get('/api/data');
+    }
+    
+    _onSave() {
+        this.success('Сохранено');
+        this.close();
+    }
+}
+```
+
+**Доступные геттеры (наследуются от PlatformElement):**
+- `this.services` — ServiceRegistry
+- `this.auth` — AuthService
+- `this.a2a` — A2AService
+- `this.theme` — ThemeService
+- `this.notify` — NotifyService
+- `this.icon` — IconService
+- `this.companies` — CompaniesService
+- `this.syncApi` / `this.syncWs` — после регистрации в Sync (`syncApi`, `syncWs`), иначе `null`
+- `this.crmApi` / `this.ragApi` — после регистрации в CRM / RAG, иначе `null`
+
+## IconService и `platform-icon`
+
+- Реализация: `core/frontend/static/services/icon.service.js` — словарь **`ICON_MAP`**: логическое имя иконки → базовое имя файла в `core/frontend/static/assets/icons/{name}.svg`.
+- **Типы файлов (цветные SVG):** каталог **`core/frontend/static/assets/icons/files_icons/`** — не через `ICON_MAP`; API **`IconService.loadFileIcon`**, **`loadFileIconForOfficeDocumentType`**, **`resolveFileIconKey(filename, mimeType)`** (экспорт из `icon.service.js` / `@platform/services/`), список имён **`FILE_ICON_BASE_NAMES`**. Вложения и строки «файл по имени/MIME» везде: **`<platform-icon file-icon name="${resolveFileIconKey(...)}">`**; монохромного глифа «файл» в корне **`assets/icons/`** нет (не добавлять `file.svg` обратно). Подробности: **`office.mdc`**. Дополнительно: **`IconService.load(name)`** при имени из алиасов файлов, которого **нет** в **`ICON_MAP`**, сам вызывает **`loadFileIcon`** (например **`word`**, **`pdf`**); имена вроде **`javascript`**, **`mail`**, **`js`** остаются UI-иконками из корня **`assets/icons/`**.
+- Новое имя без дублирования SVG: добавить ключ в `ICON_MAP` (например `'llm_node': 'agent'` — то же изображение, другое имя для UI).
+- Для продуктовых экранов (включая CRM/Figma-экраны) запрещены emoji/символьные псевдоиконки (`✓`, `✕`, `🌐` и т.п.) в шаблонах: только `<platform-icon name="...">` + имя из `ICON_MAP`; если иконки нет — сначала добавить SVG в `assets/icons`, потом ключ в `ICON_MAP`.
+- Компонент: `core/frontend/static/lib/components/platform-icon.js` — без **`file-icon`**: **`name`** в `ICON_MAP` или файловый алиас без конфликта с `ICON_MAP` (тогда `IconService.load` подтянет **`files_icons`**). С **`file-icon`**: **`name`** — алиас/basename из **`files_icons`** (см. `IconService.loadFileIcon`). Для монохромных SVG на корневом **`<svg>`** не задавать **`fill: none` через CSS**: **`fill` наследуется**, иначе дочерние **`circle`** с **`fill="currentColor"`** (например **`list`**) теряют заливку и рисуются как кольца вместе с **`stroke-width`**.
+- Для визуального выбора иконки в формах использовать core-компонент `platform-icon-picker` (`core/frontend/static/lib/components/platform-icon-picker.js`, side-effect import `@platform/lib/components/platform-icon-picker.js`), а не `input + datalist` с ручным вводом.
+- Редактор flows (`apps/flows/ui/`): узел типа **`llm_node`** везде использует **`name="llm_node"`** (сайдбар типов, канва, `llm-node-editor`), не `agent`.
+- Рабочее место оператора: маршрут **`/flows/operator`** (тот же `index.html`, `FlowsApp` рендерит **`operator-workbench-page`**), API **`/flows/api/v1/operator/...`** через **`A2AService`**; заголовки UI — i18n **`operator.*`**, **`flows_sidebar.footer_operator_tasks`** (без подстроки «HITL» в пользовательских строках). Embed / **`embed-stream-handler.js`**: нефинальный **`input-required`** с **`platform_handoff_continue`** — чат остаётся в режиме стрима до **`completed`**.
+- Трейсинг (`apps/flows/ui/modals/tracing-modal.js`): иконки span — `<platform-icon>`, не эмодзи. Соответствие `operation_name` → `name` согласовано с канвасом (`flow-canvas` `NODE_TYPE_ICON_NAMES` / `TRACE_NODE_TYPE_ICONS` в модалке): `flow.*` → workflow, `node.{type}.*` → иконка типа ноды (неизвестный тип → box), `llm_node.*` / `agent.*` → llm_node, `react.iteration*` → refresh, `llm.*` → bot, `tool.*` → tool, `interrupt.*` → breakpoint, `request.*` → globe, `prompt.build.*` → chat, иначе terminal.
+
+## Date/Time Picker (`platform-date-picker`)
+
+- Общий компонент даты/времени: `core/frontend/static/lib/components/platform-date-picker.js` (side-effect import `@platform/lib/components/platform-date-picker.js`).
+- Режимы:
+  - `mode="date" | "datetime" | "time"`
+  - `selection="single" | "range"`
+  - `value-format="iso" | "date"` (по умолчанию `iso`)
+- Встраивание в готовые контейнеры:
+  - `embedded` — убирает собственный бордер/фон триггера (чтобы не было «контейнер в контейнере»)
+  - `hide-trigger-icon` — скрывает правую иконку в триггере (если иконка уже есть во внешнем контейнере)
+- `value`:
+  - `single`: `string | Date | null`
+  - `range`: `{ start: string|Date|null, end: string|Date|null }`
+- События: `input` и `change` (bubble + composed), текущее значение читается через `e.target.value`.
+- Для API сервисов по умолчанию использовать `value-format="iso"`; формат ISO:
+  - date: `YYYY-MM-DD`
+  - datetime: `YYYY-MM-DDTHH:mm`
+  - time: `HH:mm`
+- Нативные `input[type="date"]`, `input[type="time"]`, `input[type="datetime-local"]` в приложениях платформы не использовать — только `platform-date-picker`.
+
+## Platform Calendar (`platform-calendar-modal`)
+
+- Единая календарная модалка платформы: `core/frontend/static/lib/components/platform-calendar-modal.js`.
+- Вход в календарь из меню пользователя реализуется в `core/frontend/static/lib/components/platform-user.js` через динамический импорт `platform-calendar-modal` и `showModal()`.
+- Компонент календаря живёт только в `core`, сервисные `apps/*/ui/` не создают свои базовые календарные модалки.
+- Все SPA получают API календаря через `ServiceRegistry.registerCore()` (`calendarApi`), без импорта `ServiceRegistry` напрямую в компонентах.
+- Все SPA получают единый файловый API через `ServiceRegistry.registerCore()` (`filesApi`).
+- Для загрузки/чтения файлов в UI использовать `files.service.js`; не дублировать upload-методы в сервисах фич (`calendar.service.js`, etc).
+- Канонические endpoint'ы файлов для любого сервиса: `/{service}/api/v1/files/`, `/{service}/api/v1/files/{file_id}`, `/{service}/api/v1/files/download/{file_id}`.
+- Для выбора даты/времени внутри календаря использовать `platform-date-picker`, не нативные поля даты.
+- API календаря: `/{service}/api/calendar/*` (единый core router), запросы в UI через `calendar.service.js`.
+- Для интеграции `yandex` в payload `/api/calendar/integrations/connect` обязательны `username` (логин Яндекса) и `access_token` (app password для CalDAV); `default_calendar_id` хранит имя календаря в CalDAV URL.
+
+## Switch (`platform-switch`)
+
+- Общий компонент переключателя: `core/frontend/static/lib/components/platform-switch.js` (side-effect import `@platform/lib/components/platform-switch.js`).
+- Для boolean-полей в формах и тулбарах использовать `platform-switch` вместо нативных `input[type="checkbox"]` в продуктовых экранах.
+- API компонента:
+  - `checked` (`boolean`)
+  - `disabled` (`boolean`)
+  - `size="md|sm"`
+  - `label` (`string`, опционально)
+  - событие `change` с `detail.value: boolean`
+
+## Typed Field (`platform-field`)
+
+- Универсальный компонент для ввода и отображения типизированных значений: `core/frontend/static/lib/components/fields/platform-field.js` (side-effect import `@platform/lib/components/fields/platform-field.js`).
+- Для атрибутов CRM-сущностей и любых типизированных данных (`string`, `text`, `number`, `integer`, `boolean`, `date`, `datetime`, `enum`, `array`, `object`) использовать `platform-field`, а не голые `<input>`.
+- Подробная документация, API и строгие правила: **`data-types.mdc`**.
+- API компонента:
+  - `type` (`string`) — тип данных
+  - `value` (`any`) — типизированное значение
+  - `mode` (`view` | `edit`)
+  - `label`, `placeholder`, `disabled`, `config`
+  - событие `change` с `detail.value`
+
+## Tooltip / Help Hint (`platform-help-hint`)
+
+- Единый платформенный tooltip-компонент: `core/frontend/static/lib/components/platform-help-hint.js` (side-effect import `@platform/lib/components/platform-help-hint.js`).
+- Для контекстной справки возле форм и настроек использовать `platform-help-hint`, а не самодельные `?` кнопки и локальные всплывашки.
+- API компонента:
+  - `text` — основной текст подсказки (обязателен)
+  - `label` — aria-label для кнопки подсказки
+  - `strategy` — устаревшее, игнорируется; пузырь всегда в `body` + `nextModalLayerZIndex()`
+- Поведение:
+  - открытие по hover/focus
+  - закрытие по mouseleave/focusout/Escape
+  - пузырь в `document.body`, `position: fixed`, z-index из modal-layer (поверх сайдбара и overflow)
+
+**Короткие методы notify:**
+- `this.success(message)` — зелёное уведомление
+- `this.error(message)` — красное уведомление
+- `this.warning(message)` — жёлтое уведомление
+- `this.info(message)` — синее уведомление
+
+Отображение: `PlatformApp` слушает `AppEvents.TOAST_SHOW` и монтирует `glass-toast` в `document.body` (отдельный слушатель в приложениях не нужен). Размеры тоста — см. абзац про панель уведомлений (`min(80vw, 400px)`).
+
+Копирование в буфер на HTTP (не localhost): `navigator.clipboard.writeText` часто падает — использовать `copyTextToClipboard` из `@platform/lib/utils/clipboard.js` (fallback через `textarea` + `execCommand`).
+
+**Другие методы:**
+- `this.emit(name, detail)` — диспатч CustomEvent
+- `this.use(selector)` — подписка на Store
+
+---
+
+## ЗАПРЕЩЕНО: Импорт ServiceRegistry в компонентах
+
+```javascript
+// ЗАПРЕЩЕНО — нарушение DRY
+import { ServiceRegistry } from '@platform/lib/services/ServiceRegistry.js';
+
+class MyComponent extends PlatformElement {
+    async _load() {
+        const a2a = ServiceRegistry.get('a2a');  // НЕТ!
+        await a2a.get('/api/items');
+    }
+}
+
+// ПРАВИЛЬНО — через наследование
+class MyComponent extends PlatformElement {
+    async _load() {
+        await this.a2a.get('/api/items');  // ДА!
+    }
+}
+```
+
+**Исключение:** `ServiceRegistry` импортируется ТОЛЬКО в `PlatformApp.initServices()`.
+
+**Standalone HTML в apps без полного `*App`:** ранний `registerCore` через **`PlatformServices`** из **`core/frontend/static/lib/services/platform-services-bootstrap.js`** — в `apps/**/*.js` не должно быть подстроки **`ServiceRegistry`** (требование **`make check-ui-canon`**).
+
+---
+
+## Store: Единая Доменная Структура
+
+**Store ВСЕГДА организован по доменам на первом уровне:**
+
+```javascript
+import { BaseStore } from '@platform/lib/store/BaseStore.js';
+
+const baseStore = new BaseStore('myapp', {
+    entities: {
+        list: [],
+        currentId: null,
+        loading: false,
+    },
+    ui: {
+        currentView: 'list',
+        sidebarOpen: true,
+    },
+}, { devtools: true, persist: true });
+
+export const MyAppStore = {
+    get state() { return baseStore.state; },
+    subscribe(cb) { return baseStore.subscribe(cb); },
+    
+    setEntities(list) {
+        baseStore.setState((s) => ({
+            entities: { ...s.entities, list, loading: false }
+        }));
+    },
+};
+```
+
+У `BaseStore` для persist доступны `partialize` и опционально `persistMerge(persistedState, currentState)` (кастомное слияние, например миграция полей в `ui`). Именованный экспорт `deepMerge` из `BaseStore.js` можно использовать внутри `persistMerge`.
+
+Devtools: **`BaseStore`** подключает middleware только если есть **`window.__REDUX_DEVTOOLS_EXTENSION__`** и хост **`localhost` / `127.0.0.1` / `*.lvh.me`** (`enabled` в **`devtools()`**), чтобы на прод-доменах расширение не ломало консоль. В **`core/frontend/static/assets/js/zustand-bundle.js`** обработчик сообщений Redux DevTools (подписка `connection.subscribe`) защищён от некорректных кадров: `try/catch`, проверка `action` после `JSON.parse`, тип **`DISPATCH.payload`**, ветка **`IMPORT_STATE`** без `nextLiftedState` / `computedStates`.
+
+---
+
+## Подписка на Store в Компонентах
+
+```javascript
+export class MyList extends PlatformElement {
+    constructor() {
+        super();
+        this.state = this.use(s => ({
+            items: s.entities.list,
+            currentId: s.entities.currentId,
+        }));
+    }
+
+    render() {
+        const { items, currentId } = this.state.value;
+        return html`...`;
+    }
+}
+```
+
+---
+
+## Модальные Окна
+
+**Создание через createElement + showModal():**
+
+```javascript
+_openModal(itemId) {
+    const modal = document.createElement('my-edit-modal');
+    modal.itemId = itemId;
+    document.body.appendChild(modal);
+    modal.showModal();  // Открыть модалку
+    modal.addEventListener('close', () => modal.remove());
+}
+```
+
+**Модалка наследуется от GlassModal:**
+
+```javascript
+import { html, css } from 'lit';
+import { PlatformModal } from '@platform/lib/components/glass-modal.js';
+
+export class MyEditModal extends PlatformModal {
+    static styles = [
+        PlatformModal.styles,
+        css`...`
+    ];
+
+    async _onSave() {
+        try {
+            await this.a2a.post('/api/items', this.data);
+            this.success('Сохранено');
+            this.emit('saved', { data: this.data });
+            this.close();
+        } catch (error) {
+            this.error(`Ошибка: ${error.message}`);
+        }
+    }
+}
+
+customElements.define('my-edit-modal', MyEditModal);
+```
+
+---
+
+## BaseService: API Сервисы
+
+```javascript
+import { BaseService } from '@platform/lib/services/BaseService.js';
+
+export class MyApiService extends BaseService {
+    async getItems() {
+        return this.get('/api/items');
+    }
+    
+    async createItem(data) {
+        return this.post('/api/items', data);
+    }
+
+    async exportItems(params) {
+        return this.getBlob('/api/items/export', params);
+    }
+}
+```
+
+**Методы:** `get(path, params)`, `post(path, data, options)`, `put(path, data, options)`, `patch(path, data, options)`, `delete(path, options)`, `getBlob(path, params)` (возвращает `Blob`), `postStream(url, data, onEvent, { signal })`. `_fetch` после `response.ok`: статусы `204`/`205` и пустое тело ответа дают `{}` без `JSON.parse`, иначе `Content-Type: application/json` с пустым телом ломает клиент (`Unexpected end of JSON input`). **Cross-service:** для вызовов к API другого сервиса — отдельный экземпляр `new BaseService('/other-service/api/v1')` как приватное поле.
+
+---
+
+## Стили: Shared Стили (DRY)
+
+```javascript
+import { PlatformElement } from '@platform/lib/platform-element/index.js';
+import { formStyles } from '@platform/lib/styles/shared/form.styles.js';
+import { buttonStyles } from '@platform/lib/styles/shared/button.styles.js';
+
+export class MyForm extends PlatformElement {
+    static styles = [
+        PlatformElement.styles,
+        formStyles,
+        buttonStyles,
+    ];
+}
+```
+
+**Доступные стили:**
+- `form.styles.js` — input, select, textarea, form-group
+- `button.styles.js` — platform-button, варианты (primary, danger)
+- `modal.styles.js` — модальные окна
+- `glass.styles.js` — glass morphism эффекты
+- `typography.styles.js` — текстовые стили
+- `animations.styles.js` — анимации
+- `sidebar.styles.js` — sidebar, nav-item, section (collapsed/mobile aware)
+
+---
+
+## Высота вьюпорта (iOS Safari, мобильные браузеры)
+
+Глобально в `core/frontend/static/assets/css/reset.css`: `--app-vh` / `--app-vw` (fallback `100vh`/`100vw`, при поддержке — `100dvh`/`100dvw`). Для полноэкранных layout’ов и `min-height` страниц использовать **`var(--app-vh, 100vh)`**, не сырой `100vh`.
+
+**Инициализация `visualViewport` (все SPA):** модуль `core/frontend/static/lib/utils/viewport-app-vh.js` подключается из `app-loader.js` и при `max-width: 767px` выставляет на `document.documentElement` инлайн **`--app-vh`**, **`--app-vw`**, **`--vv-offset-top`** по `visualViewport`, слушает **`resize`**, **`scroll`** и смену `matchMedia`; при признаке «клавиатура» (`innerHeight - vv.height` > порога) на **`html`** — **`data-keyboard-visual="1"`** (у **`message-composer`** убирается лишний нижний safe-padding). Если **`window.scrollY`** не ноль — **`window.scrollTo(0, 0)`** (iOS после фокуса в поле). При ширине больше брейкпоинта инлайн и атрибут снимаются.
+
+**Документ не скроллится в Lit-SPA:** в **`apps/crm|sync|rag|flows/ui/index.html`** у **`body`** класс **`platform-shell`**; в **`reset.css`** для **`html:has(body.platform-shell)`** и **`body.platform-shell`** — **`height: 100%`**, **`overflow: hidden`**, **`overscroll-behavior: none`**, у **`html`** дополнительно **`scroll-behavior: auto`** (у корневого **`html`** иначе задано **`scroll-behavior: smooth`**, и **`window.scrollTo(0,0)`** из **`viewport-app-vh.js`** визуально «тянет» экран). На **`max-width: 767px`** у **`html`/`body.platform-shell`** высота **`var(--app-vh)`** (совпадает с видимой областью, иначе на iOS при клавиатуре лишняя высота layout viewport даёт зазор и «улёт» нижней панели). Лендинг **`frontend`** без этого класса — страница может скроллиться как раньше.
+
+**Safe area (notch, home indicator, PWA):** в `core/frontend/static/assets/css/tokens.css` на `:root` заданы **`--platform-safe-top|right|bottom|left`** (`env(safe-area-inset-*, 0px)`). При `viewport-fit=cover` контент не должен упираться в системные полосы: **`page-header`** (мобилка) — обёртка **`header-wrap`**, **`position: sticky`**, отступ сверху и фон; **`platform-island`** — в `island.styles.js` на узкой ширине **`padding-bottom: max(..., var(--platform-safe-bottom))`** для обычных padding; у **`padding="none"`** на мобилке **без** лишнего нижнего inset (чтобы не дублировать safe-area с **`message-composer`** и не давать зазор над клавиатурой в Sync); опционально **`safe-bottom`** — только **`padding-bottom: var(--platform-safe-bottom)`** (CRM мобилка: **`?safe-bottom=${_isMobile}`**). У **`.island-content`** — **`overscroll-behavior: contain`**. **`glass-modal`**: на узкой ширине у **fullscreen** у **`.modal-overlay`** padding **0**, insets на **`.modal-header` / `.modal-content` / `.modal-actions`**. Лендинг и выбор компании: safe-area в **`landing-header`**, **`select-company-page`**. У **`html`** в **`reset.css`** задан **`background: var(--bg-gradient)`** под WKWebView. Мобильный drawer **`platform-sidebar`** в `sidebar.styles.js`: **`min-height: var(--app-vh)`**, **`env(safe-area-inset-*)`** на панели.
+
+**Capacitor iOS:** в **`capacitor.config.json`** для встроенного WKWebView **`ios.contentInset`: `"never"`** — insets только из CSS (`env(safe-area-inset-*)`), без двойного смещения от **`automatic`** (белые полосы / странные отступы при клавиатуре).
+
+**Сессия в WKWebView:** куки **`auth_token`** и **`session_id`** после OAuth должны иметь **`Max-Age`** (в коде — **`max_age=TokenService.SESSION_EXPIRES`**, как у JWT сессии). Куки **без** срока ведут себя как session-cookies: при выгрузке приложения из памяти iOS часто их сбрасывает — создаётся впечатление, что «после закрытия приложения слетела авторизация». См. **`core/api/auth.py`** (callback), перевыпуск **`auth_token`** в **`apps/frontend/api/`** (companies, invites, `switch-company`).
+
+**Sync Chat (`apps/sync/ui/app/sync-app.js`):** на узком экране у `:host` **`overflow-x: hidden`**, **`overflow-y: hidden`** (кроме режима звонка). Контент чата: **`platform-island`** с **`padding="none"`**, **`content-no-scroll`** (у **`.island-content`** **`overflow: hidden`** — иначе iOS при фокусе в поле ввода прокручивает весь слот вверх), без **`safe-bottom`**, шапка — **`chat-view`** с **`env(safe-area-inset-top)`** на мобилке, нижняя зона — **`message-composer`** с **`max(..., env(safe-area-inset-bottom))`** и учётом **`data-keyboard-visual`**. Лента **`message-list`**: у **`.list`** **`scroll-behavior: auto`** (не **`smooth`** — иначе программный скролл вниз не догоняет новые сообщения), **`ResizeObserver`** + повтор после **`updateComplete`** для прилипания к низу.
+
+---
+
+## Layout: Platform Sidebar (shell сервисов)
+
+**Канон для боковой колонки SPA:** [`platform-service-sidebar`](../../core/frontend/static/lib/components/layout/platform-service-sidebar.js) — единая оболочка: прокидывает слоты внутрь [`platform-sidebar`](../../core/frontend/static/lib/components/layout/platform-sidebar.js), отражает на хосте атрибуты **`collapsed`** и **`mobile-open`** (для стилей приложения вида `platform-service-sidebar[collapsed] .nav-label`), пробрасывает события **`collapse-change`** / **`mobile-change`**, методы **`toggleMobile()`** / **`closeMobile()`** для вызова из `*App` (бургер). Сервисный компонент (`*-sidebar` в `apps/*/ui`) рендерит один `<platform-service-sidebar>` и наполнение слотов; не дублировать отдельный `<platform-sidebar>` в приложениях.
+
+**Персистенция desktop-`collapsed` (все SPA):** [`shell-sidebar-preference.js`](../../core/frontend/static/lib/utils/shell-sidebar-preference.js) — ключ **`platform:shell-sidebar-collapsed`** в `localStorage`, значения **`true`** / **`false`** (строки); при невалидном значении в хранилище — исключение. Чтение при создании: в конструкторе **`PlatformServiceSidebar`** и в конструкторе каждого сервисного `*-sidebar` через **`readShellSidebarCollapsed()`**, чтобы родительский `?collapsed=${...}` не затирал состояние на первом кадре. Запись при переключении — только в **`PlatformServiceSidebar._onCollapseChange`** (**`writeShellSidebarCollapsed`**). Состояние **`mobile-open`** не сохраняется.
+
+**`platform-sidebar`** (внутренний): кнопка свернуть/развернуть (chevron, `aria-expanded`, i18n `shell.sidebar.collapse` / `shell.sidebar.expand`) — при **развёрнутом** сайдбаре в одной строке с логотипом (`margin-left: auto` у `.sidebar-logo > .collapse-btn`); при **collapsed** — отдельная строка **`.sidebar-collapse-row`** между логотипом и `header`/nav, чтобы шеврон не был под иконкой сервиса. Слоты `logo` / `header` / default / `footer`, mobile overlay. Клик по логотипу не переключает collapsed.
+
+```javascript
+import { sidebarStyles, sidebarNavItemStyles } from '@platform/lib/styles/shared/sidebar.styles.js';
+import '@platform/lib/components/layout/platform-service-sidebar.js';
+import '@platform/lib/components/layout/sidebar-section.js';
+import '@platform/lib/components/layout/sidebar-nav-item.js';
+```
+
+### PlatformServiceSidebar / PlatformSidebar (пропы оболочки)
+
+| Property | Type | Default | Description |
+|----------|------|---------|-------------|
+| `collapsed` | Boolean | из `readShellSidebarCollapsed()` | Свернутый режим (только иконки); начальное значение синхронизировать с утилитой в обёртке сервиса |
+| `mobile-open` | Boolean | false | Открыт на мобильном |
+| `logo-src` | String | '' | Путь к логотипу |
+| `logo-text` | String | '' | Текст логотипа |
+| `width` | String | '280px' | Ширина развернутого |
+| `collapsed-width` | String | '72px' | Ширина свернутого |
+
+### Slots (на `platform-service-sidebar`, те же имена у внутреннего `platform-sidebar`)
+
+| Slot | Description |
+|------|-------------|
+| `logo` | Опционально: дочерний узел со `slot="logo"`; иначе используются `logo-src` / `logo-text` (пустой проброс слота ломал бы картинку) |
+| `header` | Контент после лого (actions, selectors) |
+| *(default)* | Основной контент (nav items, sections) |
+| `footer` | Footer (user, links) |
+
+### Использование
+
+```javascript
+class MySidebar extends PlatformElement {
+    static properties = {
+        collapsed: { type: Boolean, reflect: true },
+        mobileOpen: { type: Boolean, reflect: true, attribute: 'mobile-open' },
+    };
+
+    _shell() {
+        return this.renderRoot?.querySelector('platform-service-sidebar');
+    }
+
+    closeMobile() {
+        this._shell()?.closeMobile();
+    }
+
+    render() {
+        return html`
+            <platform-service-sidebar
+                logo-src="/static/logo.svg"
+                logo-text="My App"
+                ?collapsed=${this.collapsed}
+                ?mobile-open=${this.mobileOpen}
+                @collapse-change=${(e) => {
+                    this.collapsed = e.detail.collapsed;
+                }}
+                @mobile-change=${(e) => {
+                    this.mobileOpen = e.detail.open;
+                }}
+            >
+                <div slot="header">…</div>
+
+                <sidebar-section title="Main" icon="folder">
+                    <button class="nav-item active">Dashboard</button>
+                    <button class="nav-item">Settings</button>
+                </sidebar-section>
+
+                <div slot="footer">
+                    <platform-user block></platform-user>
+                </div>
+            </platform-service-sidebar>
+        `;
+    }
+}
+```
+
+### Collapsed Mode
+
+Элементы скрываемые в collapsed режиме:
+- `.sidebar-text`, `.sidebar-section-title`
+- `::slotted([data-hide-collapsed])`
+
+В **`slot="footer"`** у `platform-user` нужен атрибут **`block`**: иначе `:host` остаётся `inline-block` без `width: 100%`, и карточка профиля визуально шире колонки — её обрезает **`overflow-x: hidden`** у `.sidebar-content` в `sidebar.styles.js`.
+
+`<platform-user>` внутри свёрнутого `platform-sidebar` сам переходит в компактный вид (`:host-context(platform-sidebar[collapsed])`): скрываются имя/email и chevron; кнопка без «таблетки» (прозрачный фон, без рамки и тени), остаётся только круглый аватар 40×40 по центру. Выпадающее меню в этом режиме в `position: fixed` с координатами через `--user-menu-fixed-*` (иначе `overflow-x` у `.sidebar-content` обрезает меню по ширине колонки).
+
+Слот **`user-toolbar`**: дочерние элементы с `slot="user-toolbar"` рендерятся в общей «таблетке» `.user-bar` между блоком профиля (аватар + имя + бейдж языка, кнопка меню) и отдельной кнопкой с chevron; клики по слоту не открывают меню пользователя (не вложены в `button.user-button`). В свёрнутом `platform-sidebar` содержимое слота скрыто.
+
+```html
+<!-- Этот элемент скроется в collapsed mode -->
+<div data-hide-collapsed>Скрыть при сворачивании</div>
+```
+
+### Mobile Mode
+
+- Автоматически активируется при ширине < 768px
+- Sidebar становится overlay с backdrop
+- Закрывается по Escape или клику на backdrop
+
+### Mobile Header: Бургер-меню с заголовком
+
+Для унификации мобильных хедеров используй `<page-header>`:
+
+```javascript
+import '@platform/lib/components/layout/page-header.js';
+
+render() {
+    return html`
+        <page-header 
+            title="Заголовок" 
+            subtitle="Подзаголовок"
+        >
+            <button slot="actions" class="btn btn-primary">Действие</button>
+        </page-header>
+    `;
+}
+```
+
+**`page-header` автоматически:**
+- Показывает бургер-меню на мобильных (< 768px)
+- Скрывает бургер когда sidebar открыт
+- Размещает заголовок рядом с бургером в одну строку
+
+**Для компонентов с кастомным хедером** (чат, CRM) - добавляй бургер вручную:
+
+```javascript
+// В стилях
+.menu-btn { display: none; }
+@media (max-width: 767px) {
+    .menu-btn { display: flex; /* стили кнопки */ }
+}
+
+// В render
+<button class="menu-btn" @click=${this._openSidebar}>
+    <platform-icon name="menu" size="20"></platform-icon>
+</button>
+
+// Метод
+_openSidebar() {
+    window.dispatchEvent(new CustomEvent('platform-sidebar-open'));
+}
+```
+
+### Навигация и UX-ожидания
+
+- Пункты основного меню сервиса не должны вести на «пустой» экран без сценария. Допустимы только два режима:
+  - полноценный рабочий или mock/read-only сценарий с реальными экранами и состояниями;
+  - disabled-пункт с явным статусом «Скоро» без ложного перехода.
+- Для мобильных и десктопных empty-state текст не должен ссылаться на конкретное расположение («слева», «справа»), если layout меняется по брейкпоинтам.
+
+---
+
+## Импорты: Алиасы
+
+**Используй `@platform/` алиасы:**
+
+```javascript
+// Core библиотека
+import { PlatformElement } from '@platform/lib/platform-element/index.js';
+import { PlatformApp } from '@platform/lib/base/PlatformApp.js';
+import { PlatformModal } from '@platform/lib/components/glass-modal.js';
+import { BaseStore } from '@platform/lib/store/BaseStore.js';
+import { BaseService } from '@platform/lib/services/BaseService.js';
+
+// Layout (shell колонки — platform-service-sidebar)
+import '@platform/lib/components/layout/platform-service-sidebar.js';
+import '@platform/lib/components/layout/sidebar-section.js';
+
+// Стили
+import { formStyles } from '@platform/lib/styles/shared/form.styles.js';
+import { sidebarStyles } from '@platform/lib/styles/shared/sidebar.styles.js';
+```
+
+---
+
+## Fail-Fast: Без Fallback'ов
+
+```javascript
+// ПРАВИЛЬНО — явная ошибка
+async loadItem(id) {
+    if (!id) throw new Error('Item ID is required');
+    
+    const item = await this.a2a.get(`/api/items/${id}`);
+    if (!item) throw new Error(`Item not found: ${id}`);
+    
+    return item;
+}
+
+// ЗАПРЕЩЕНО — fallback скрывает ошибки
+async loadItem(id) {
+    const item = await this.a2a.get(`/api/items/${id}`);
+    return item || {};  // НЕТ!
+}
+```
+
+---
+
+## Локальный UI State
+
+**Для UI элементов (не бизнес-данные):**
+
+```javascript
+constructor() {
+    super();
+    this._dropdownOpen = false;
+    this._isHovered = false;
+}
+
+_toggleDropdown() {
+    this._dropdownOpen = !this._dropdownOpen;
+    this.requestUpdate();
+}
+```
+
+---
+
+## Правила (СТРОГО)
+
+1. **Наследование:** Все компоненты от `PlatformElement`, модалки от `GlassModal`
+2. **Сервисы:** Только через `this.a2a`, `this.notify` — НЕ импортировать ServiceRegistry
+3. **Store:** Доменная структура, подписка через `this.use()`
+4. **Стили:** Использовать shared стили, НЕ дублировать CSS
+5. **Ошибки:** Fail-fast, бросать исключения, НЕ делать fallback
+6. **Модалки:** Создавать через `createElement` + `showModal()`
+7. **Импорты:** Только `@platform/` алиасы
+8. **DRY:** Не дублировать методы, использовать наследование
+9. **`registerCore` не дублировать:** `PlatformApp.initServices()` уже вызывает `registerCore(this.getBaseUrl())`. В наследнике после `super.initServices()` — только `this.services.register(...)` для доменных сервисов
+10. **`checkAuth` обязателен:** каждый `*App` обязан вызывать `this.auth.validateToken()` в `checkAuth()` и возвращать `!!ok`. Исключение: публичные страницы frontend (лендинг, `/join`, `/products/*`)
+11. **`<app-loader>` в DOM:** каждый `index.html` обязан иметь `<app-loader id="app-loader" fullscreen>` перед root-компонентом, CSS для `app-loader:not(:defined)` (фон + текст сервиса) и скрипт `customElements.whenDefined('*-app').then(...)` для fade-удаления
+12. **BaseService — без обхода:** прямой `fetch` в `*-api.service.js` запрещён. Для JSON — `this.get/post/put/patch/delete`. Для blob — `this.getBlob(path, params)`. Для FormData — `this.post(path, formData)`. Для cross-service вызовов — отдельный экземпляр `BaseService('/other-service/api/v1')`
+13. **Инлайновые SVG:** допустимы только для специализированных кастомных иконок без Material-аналога (корона, граф, canvas элементы). Все стандартные иконки — через `<platform-icon>`
+
+---
+
+## CSS DESIGN SYSTEM - Apple Liquid Glass 2025
+
+### КРИТИЧЕСКИЕ ПРАВИЛА
+
+1. **ОБЕ ТЕМЫ ОБЯЗАТЕЛЬНЫ** - поддержка темной (по умолчанию) и светлой темы через `[data-theme="light"]`
+2. **ТОЛЬКО CSS Variables** - запрещен хардкод цветов, размеров, отступов
+3. **СТРОГОЕ НАСЛЕДОВАНИЕ** - компоненты ОБЯЗАНЫ наследовать `static styles` от родителя
+4. **RESPONSIVE ОБЯЗАТЕЛЕН** - все компоненты должны поддерживать Mobile/Tablet/Desktop
+
+---
+
+### CSS Variables - ТОЛЬКО из tokens.css
+
+**ЗАПРЕЩЕНО хардкодить значения:**
+
+```javascript
+// ЗАПРЕЩЕНО
+css`
+    background: rgba(40, 40, 64, 0.92);  // НЕТ!
+    color: #9333ea;  // НЕТ!
+    padding: 16px;  // НЕТ!
+    font-size: 14px;  // НЕТ!
+`
+
+// ПРАВИЛЬНО - только CSS Variables
+css`
+    background: var(--glass-solid-strong);
+    color: var(--accent-tertiary);
+    padding: var(--space-4);
+    font-size: var(--text-sm);
+`
+```
+
+**Сервисные семантические токены:** допускается слой переменных в `tokens.css` с префиксом сервиса (например `--crm-*`) для сложных экранов. Правило: компоненты используют только семантические токены/базовые токены, а сами значения (`rgba`, градиенты, тени) задаются централизованно в `tokens.css`, не в `apps/<service>/ui/*.js`.
+
+**Доступные переменные (core/frontend/static/assets/css/tokens.css):**
+
+| Категория | Примеры переменных |
+|-----------|-------------------|
+| Glass фоны | `--glass-solid-subtle`, `--glass-solid-medium`, `--glass-solid-strong` |
+| Glass tint | `--glass-tint-subtle`, `--glass-tint-medium`, `--glass-tint-strong` |
+| Glass borders | `--glass-border-subtle`, `--glass-border-medium`, `--glass-border-strong` |
+| Glass shadows | `--glass-shadow-subtle`, `--glass-shadow-medium`, `--glass-shadow-strong` |
+| Text | `--text-primary`, `--text-secondary`, `--text-tertiary`, `--text-disabled` |
+| Accent | `--accent`, `--accent-hover`, `--accent-subtle`, `--accent-secondary`, `--accent-tertiary` |
+| Borders | `--border-subtle`, `--border-default`, `--border-strong` |
+| Status | `--error`, `--warning`, `--success`, `--info` |
+| Spacing | `--space-1` (4px) ... `--space-16` (64px) |
+| Typography | `--text-xs` ... `--text-3xl`, `--font-normal` ... `--font-bold` |
+| Radius | `--radius-sm` (8px) ... `--radius-full` |
+| Duration | `--duration-fast`, `--duration-normal`, `--duration-slow` |
+| Z-index | `--z-dropdown`, `--z-modal`, `--z-toast`, `--z-tooltip` |
+
+---
+
+### Responsive Breakpoints (Mobile-First)
+
+**Breakpoints:**
+- Mobile: < 768px (базовые стили)
+- Tablet: >= 768px
+- Desktop: >= 1024px  
+- Wide: >= 1440px
+
+```javascript
+static styles = css`
+    /* Mobile - базовые стили */
+    .container {
+        padding: var(--space-3);
+        flex-direction: column;
+    }
+    
+    /* Tablet */
+    @media (min-width: 768px) {
+        .container {
+            padding: var(--space-4);
+            flex-direction: row;
+        }
+    }
+    
+    /* Desktop */
+    @media (min-width: 1024px) {
+        .container {
+            padding: var(--space-6);
+            max-width: 1200px;
+        }
+    }
+`;
+```
+
+---
+
+### Строгое Наследование Стилей
+
+**Иерархия (ОБЯЗАТЕЛЬНО соблюдать):**
+
+```
+tokens.css (CSS Variables)
+    ↓
+shared/*.styles.js (переиспользуемые стили)
+    ↓
+PlatformElement.styles (baseStyles + glassStyles)
+    ↓
+GlassModal.styles (без `modal.styles.js` — только внутренние стили glass-modal)
+    ↓
+GlassFormModal.styles (+ formStyles)
+    ↓
+Сервисные компоненты (минимум переопределений)
+```
+
+**Правило наследования:**
+
+```javascript
+// ПРАВИЛЬНО - наследуем ВСЕ стили родителя
+class MyModal extends GlassModal {
+    static styles = [
+        GlassModal.styles,  // ОБЯЗАТЕЛЬНО первым!
+        css`/* только уникальные стили */`
+    ];
+}
+
+// ЗАПРЕЩЕНО - потеря родительских стилей
+class MyModal extends GlassModal {
+    static styles = css`...`;  // НЕТ! Потеряны стили GlassModal
+}
+```
+
+---
+
+### Shared Стили - Не Дублировать
+
+**Используй готовые стили:**
+
+```javascript
+import { modalStyles } from '@platform/lib/styles/shared/modal.styles.js';
+import { formStyles } from '@platform/lib/styles/shared/form.styles.js';
+import { buttonStyles } from '@platform/lib/styles/shared/button.styles.js';
+import { glassStyles } from '@platform/lib/styles/shared/glass.styles.js';
+
+class MyComponent extends PlatformElement {
+    static styles = [
+        PlatformElement.styles,
+        formStyles,      // готовые .form-group, .form-input, .form-label
+        buttonStyles,    // готовые .btn, .btn-primary, .btn-secondary
+    ];
+}
+```
+
+**ЗАПРЕЩЕНО переопределять базовые классы:**
+
+```javascript
+// ЗАПРЕЩЕНО - дублирование button.styles.js
+css`
+    .btn {
+        padding: var(--space-2) var(--space-4);  // НЕТ!
+        border-radius: var(--radius-md);
+    }
+    .btn-primary {
+        background: var(--accent);  // НЕТ!
+    }
+`
+
+// ПРАВИЛЬНО - использовать shared
+import { buttonStyles } from '@platform/lib/styles/shared/button.styles.js';
+static styles = [ParentClass.styles, buttonStyles];
+```
+
+---
+
+### Модальные окна - Структура
+
+**Обязательные CSS классы модалок:**
+
+```javascript
+// Наследуй от GlassModal - получишь все классы автоматически
+class MyModal extends GlassModal {
+    static styles = [GlassModal.styles, css`/* свои стили */`];
+    
+    // Используй готовую разметку:
+    // .modal-overlay - затемнение фона
+    // .modal - контейнер модалки
+    // .modal-header - заголовок с кнопками
+    // .modal-content - основное содержимое
+    // .modal-actions - футер с кнопками
+}
+```
+
+---
+
+### Запрещенные Практики
+
+| Запрещено | Правильно |
+|-----------|-----------|
+| `color: #ffffff` | `color: var(--text-primary)` |
+| `background: rgba(...)` | `background: var(--glass-solid-medium)` |
+| `padding: 16px` | `padding: var(--space-4)` |
+| `font-size: 14px` | `font-size: var(--text-sm)` |
+| `border-radius: 12px` | `border-radius: var(--radius-md)` |
+| `transition: 0.2s` | `transition: var(--duration-fast)` |
+| `z-index: 1000` | `z-index: var(--z-modal)` |
+| Дублировать стили светлой темы | Использовать `:host-context([data-theme="light"])` в Lit компонентах |
+| `static styles = css\`...\`` | `static styles = [Parent.styles, css\`...\`]` |
+
+---
+
+### Поддержка Светлой Темы
+
+**В shared стилях и компонентах используй `:host-context([data-theme="light"])`:**
+
+```javascript
+static styles = css`
+    /* Базовые стили (темная тема) */
+    .container {
+        background: var(--glass-solid-medium);
+        color: var(--text-primary);
+    }
+
+    /* Светлая тема */
+    :host-context([data-theme="light"]) .container {
+        background: rgba(255, 255, 255, 0.9);
+        border-color: rgba(15, 23, 42, 0.1);
+    }
+`;
+```
+
+**CSS Variables автоматически переключаются через `tokens.css`:**
+
+```css
+/* Темная тема (по умолчанию) */
+:root {
+    --text-primary: rgba(255, 255, 255, 0.95);
+    --glass-solid-medium: rgba(35, 35, 55, 0.85);
+}
+
+/* Светлая тема */
+[data-theme="light"] {
+    --text-primary: rgba(15, 23, 42, 0.95);
+    --glass-solid-medium: rgba(255, 255, 255, 0.9);
+}
+```
+
+---
+
+### Checklist для PR
+
+- [ ] Нет хардкода цветов - только CSS Variables
+- [ ] Нет хардкода размеров - только --space-*, --text-*, --radius-*
+- [ ] static styles наследует от родителя
+- [ ] Responsive стили для Mobile/Tablet/Desktop
+- [ ] Светлая тема поддерживается через `:host-context([data-theme="light"])`
+- [ ] Используются shared стили где возможно
+- [ ] Нет дублирования .btn, .form-input и т.д.
+
+---
+
+## UI Kit и Design System
+
+### Файлы дизайн-системы
+
+| Файл | Назначение |
+|------|-----------|
+| `core/frontend/static/assets/css/tokens.css` | **Дизайн-токены** — CSS custom properties: палитра, glass, типографика, пространство, радиусы, анимации, платформенные кнопочные токены (`--platform-btn-*`), CRM/Sync семантические токены |
+| `core/frontend/static/assets/kit.css` | **UI Kit** — утилитарные CSS-классы (`.kit-btn-*`, `.kit-input`, `.kit-card`, `.kit-chip-*`, `.kit-calendar-*`, `.kit-summary-*`), подключается после `tokens.css`, справочная реализация из Figma |
+| `core/frontend/static/lib/styles/shared/button.styles.js` | **Shared Button Styles** — Lit `css` (`.btn-primary`, `.btn-secondary`, `.btn-accent`, `.btn-danger`, `.btn-ghost`), единственный источник кнопочных стилей для компонентов |
+| `core/frontend/static/lib/components/platform-button.js` | **`<platform-button>`** — веб-компонент с `variant`: `primary` (violet), `accent` (orange), `secondary`, `danger`, `ghost` |
+
+### Палитра
+
+| Роль | Цвет | Переменная |
+|------|------|-----------|
+| Primary (accent) | `#99A6F9` (violet) | `--accent`, `--platform-btn-primary-bg` |
+| Accent Secondary | `#FF885C` (orange) | `--accent-secondary`, `--platform-btn-accent-bg` |
+| Gradient | violet → orange | `--accent-gradient` |
+| Success | `#10b981` (emerald) | `--success` (только для состояний, НЕ для акцента) |
+
+### Кнопки — геометрия (из Figma)
+
+```css
+--btn-radius: 22px;       /* pill */
+--btn-padding: 8px 24px;
+--btn-font-size: 16px;
+--btn-line-height: 20px;
+--btn-font-weight: 400;
+```
+
+### Шрифт
+
+`--font-sans: 'Onest', 'Inter', 'SF Pro Display', ...;` — Onest первым, как в Figma.
+
+### Правила
+
+1. **Кнопки**: только через `buttonStyles` (`import { buttonStyles } from '@platform/lib/styles/shared/button.styles.js'`) или `<platform-button>`. Дублирование `.btn-primary` / `.btn-secondary` в компонентах — **запрещено**.
+2. **Hardcoded цвета**: запрещены. Все цвета — из `tokens.css` (`var(--accent)`, `var(--text-primary)` и т.д.). Устаревший зелёный `#10b981` как accent — **запрещён** (допустим только как `--success`).
+3. **CRM-токены**: `--crm-button-primary-bg` ссылается на `--platform-btn-primary-bg`. CRM НЕ переопределяет `--accent` в `:host` — платформенные токены уже violet.
+4. **Иконки**: только Material Icons через `<platform-icon>` или `IconService`. Инлайновые SVG в template literals — **запрещены** (исключение: специализированные иконки без аналога в Material, напр. call overlay).
+5. **Fill-based SVG**: Material Icons используют `fill`, не `stroke`. `platform-icon.js` применяет `fill: currentColor` по умолчанию.

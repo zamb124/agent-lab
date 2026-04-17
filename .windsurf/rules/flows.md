@@ -1,0 +1,444 @@
+---
+trigger: model_decision
+description: "Сервис flows: архитектура, ноды, триггеры, ресурсы"
+globs:
+---
+# Flows — архитектура сервиса
+
+## Принципы
+
+1. **DB-First** - всё в БД, код только исполняет
+2. **Stream-First** - все события через Redis Pub/Sub
+3. **Zero-Guess** - нет fallback значений, ошибка = exception
+
+## UI: i18n (flows)
+
+- Тексты интерфейса редактора и embed — только через **`this.i18n.t('группа.ключ')`** при дефолтном namespace **`flows`** (URL `/flows`, см. `i18nDefaultNamespaceForBaseUrl`).
+- Файлы переводов: **`core/i18n/translations/ru/flows.json`** и **`en/flows.json`** — ключи **парно**, проверка **`make check-i18n`**.
+- Соглашение по ключам: **`snake_case`**, верхний уровень = зона экрана или фичи (`editor`, `llm_node`, `state_modal`, `skills_tabs`, `variables_panel`, `node_modal`, …). Общие слова вне flows (Отмена, Сохранить, …) — **`this.i18n.t('cancel', {}, 'common')`** и т.п. из **`common.json`**.
+- Хардкод кириллицы в **`apps/flows/ui/**/*.js`** — ориентир для выноса в JSON; то же правило сканирования: **`uv run python scripts/report_ui_i18n_gaps.py --app flows`**. Полный список без фильтра комментариев: **`scripts/report_ui_cyrillic.sh`**.
+- Сообщения **`console.*` и технические комментарии** в коде — на **английском** (без ключей i18n), чтобы не раздувать бандл и не дублировать переводы для отладки.
+
+## UI: `/flows/operator` и футер `flows-sidebar`
+
+- **Доступ**: пункт **«Задачи поддержки»** и страница **`/flows/operator`** только при ролях **`admin`** или **`owner`** в JWT (текущая компания); иначе экран отказа (**`flows_app.operator_denied_*`**) и ссылка на **`/flows/example_react`**. Утилита **`canManageOperatorWorkbench`** в **`apps/flows/ui/utils/operator-workbench-access.js`**; обновление после смены компании — слушатель **`AppEvents.AUTH_CHANGE`** в **`FlowsApp`** и **`flows-sidebar`**.
+- **`operator-workbench-page`**: разметка **`.body`**: в DOM сначала **`.detail`**, затем **`.kanban`**, **`flex-direction: row-reverse`** — канбан визуально слева, панель справа, рост **`flex-basis`** панели идёт **справа налево** (от правого края). При выбранной задаче канбан ~**1/3** ширины, панель ~**2/3**; на узком экране при выборе **`column-reverse`** (канбан сверху). Шапка панели — заголовок и **«Закрыть»**; в общей шапке страницы рядом с **Back to flows** — кнопка смены темы (**`ThemeService.toggle`**, иконка sun/moon, слушатель **`AppEvents.THEME_CHANGE`**). Карточка канбана: человекочитаемо **`flow_display_name` [`skill_display_name`]** (из **`FlowConfig`**), строкой ниже серым **`flow_id` / `skill_id`**, затем **`handoff_title`** и превью **`handoff_message_preview`** из **`interrupt_snapshot`** задачи (**`OperatorTaskOut`** в **`GET .../operator/tasks`**). Real-time канбан: WebSocket **`/flows/ws/notifications`** (те же cookie, что и у колокольчика), сообщения типа **`flows_operator_tasks_updated`** → перезагрузка списка задач; **`flows-sidebar`**: **`platform-notification-manager`** в **`platform-user`** slot **`user-toolbar`** (единый WS на экранах с сайдбаром).
+- **`/flows/operator`**: в **`FlowsApp`** только **`operator-workbench-page`** (без **`flows-sidebar`**). Ссылка в редактор: слева в шапке на **`/flows/example_react`**. Блок **«Очереди операторов»**: **`GET/POST /flows/api/v1/operator/queues`** через **`A2AService.listOperatorQueues` / `createOperatorQueue`** — slug очереди должен совпадать с **`assignee_queue`** в **`hitl_operator_task`** и **`operator_queue_slug`** у **`hitl_node`**. **`GET/POST .../queues`** — только **`admin`/`owner`**. **`PATCH .../queues/{id}`**, **`POST/DELETE .../members`** — участник очереди **или** **`admin`/`owner`** (админ может добавить себя в очередь без участников, в т.ч. демо **`example_hitl`**). В ответе **`GET .../queues`** — **`i_am_member`**; на **`operator-workbench-page`**: **«Стать оператором»** при **`i_am_member: false`** (**`addOperatorQueueMember`**), **«Покинуть очередь»** при **`true`** (**`removeOperatorQueueMember`** → **`DELETE .../members/{user_id}`**). Редактор **`hitl-node-editor`**: список очередей с поиском (**`listOperatorQueues`**); компактный блок handoff (режим + fallback заголовок/текст, сетка 1/3 + 2/3); **`input_mapping`**: **`assignee_queue`**, **`task_title`**, **`user_facing_message`**, **`question`** — приоритет над полями конфига (**`HitlNode._run_impl`**). В UI поля UUID очереди нет; в JSON/API **`operator_queue_id`** по-прежнему может встречаться для совместимости.
+- Футер сайдбара (**`flows-sidebar`**): сетка **2 колонки** — **задачи оператора** (ссылка на `/flows/operator`, только admin/owner), **сессии**, **MCP**, **переменные**; без Docs.
+
+## UI: `code-editor` (Code / Schema) и parameters_schema
+
+- Режим **`code-schema-mode`**: если редактор **не** во внутреннем полноэкране и родитель не в широком режиме (`parent-layout-wide`), в шапке вкладки «Код» вместо длинного ряда кнопок — одна **`more-vert`**, в дропдауне: язык, шаблоны (второй уровень со списком), Docs, копирование, полноэкран. Во внутреннем полноэкране или при **`parent-layout-wide`** (полноэкран модалки / развёрнутая панель) — однострочная шапка.
+- **`code-node-editor`**: схема параметров для LLM редактируется только на вкладке **«Схема»** (**`parameters_schema`**). Отдельного UI для **`args_schema`** нет; при сохранении инлайн-tool из **`tool-editor-modal`** в конфиг уходит **`args_schema: {}`**, источник правды — **`parameters_schema`**. В старых JSON нод могут остаться оба поля — рантайм по-прежнему **`resolve_tool_parameters_schema`**.
+
+## UI: редактор LLM у llm_node (`llm-config-editor`)
+
+- Блок в стиле «острова» (как `loop-config`): две строки — модель + температура; max tokens + провайдер; раскрываемый **Advanced** (top_p, top_k, frequency_penalty, presence_penalty, seed, reasoning_effort) и мини **JSON** для `extra_request_body`.
+- Схема: `NodeLLMOverride` в `apps/flows/src/models/node_config.py` (строгая модель, произвольные ключи запроса только внутри `extra_request_body`).
+- Рантайм: `split_llm_override_for_client` / `stream_kwargs_from_override` в `apps/flows/src/runtime/llm_override_params.py`; `get_llm` / `get_llm_for_state` принимают `max_tokens` ноды; `LLMClient.stream` добавляет `seed`, `reasoning_effort` и мержит `extra_body` **последним** в JSON тела POST `/chat/completions` (перекрывает поля из контролов и базового body).
+
+## Канва Drawflow: чипы tools у llm_node
+
+- Под карточкой `llm_node` — круглые чипы с **`platform-icon`**; тон (**фон + обводка + цвет иконки**) задаётся **`--tool-chip-accent`** из `getLlmToolChipAccentHex` — те же `#RRGGBB`, что **`_getNodeColor`** на канве, ссылка на инструмент строкой (без inline) — `#64748b`. Объект с **`code`** (в т.ч. системный `ask_user` как inline в массиве `tools`) — как **`code`**, без отдельной иконки/цвета по `tool_id`. Подсказка с именем — **`title`**. Клик по редактируемому чипу открывает **`inline-tool-modal`** через **`openInlineToolModal`**; разметка — `apps/flows/ui/utils/llm-tool-chips.js`.
+- После сохранения из модалки канва эмитит **`node-updated`** с тем же контрактом, что `property-panel`; **`flow-editor-page`** вешает `@node-updated` на **`flow-canvas`**, чтобы обновить store и канву.
+
+## UI: drop graph `code` с палитры
+
+- **`flow-canvas/events.js`**: для `type === 'code'` без `isResource` эмитится **`code-node-drop`** (не вызывается `_addNode` сразу).
+- **`flow-canvas._addNode`**: любая нода с палитры или дубликат из контекстного меню получает **`allowNodeIdRenameOnce: true`** в **`nodeConfigs`** — в панели свойств поле **`node_id`** один раз редактируемо (см. **`base-node-editor`**, **`updateNodeId`** снимает флаг). Импорт графа из снимка **`_addNode` не использует**.
+- **`flow-editor-page`**: по событию открывается тот же **`tool-picker-modal`**, что у **`llm_node`** («Add tools»): каталог **`GET /api/v1/tools/all`**, с атрибутом **`code-node-placement`** — в списке только **`item_type !== 'flow'`**, выбор карточки ведёт себя как **один** tool (без мультивыбора). **Save** (иконка в шапке): при выбранном tool — **`GET /api/v1/tools/{id}`**, на канву **`_addNode`** + **`_onNodeUpdated`** с полями из каталога (`code`, `args_schema`, …); без выбора или **0** в **`tools-selected`** — пустая code-нода. **Cancel / закрытие без Save** — только пустая нода. После создания: **`FlowsStore.selectNode(nodeId)`**, чтобы сразу открыть панель.
+
+## Каналы и выполнение графа
+
+Запрос пользователя в `BaseChannel.process_task` (A2A и остальные каналы) всегда идёт через `runtime_flow.run` / `Flow._execute_loop`: ноды выполняются по `edges`, состояние меняется в этом цикле. Отдельного пути «только runner на entry-`llm_node`» нет; дублирующих путей исполнения в канале не держим.
+
+### Переменные из JWT / `Context` (после `metadata.variables`)
+
+После мержа `metadata.variables` из A2A в `runtime_flow.variables` подмешиваются **идентификационные** поля из **`flow_variables_from_request_context`** (`apps/flows/src/channels/request_context_variables.py`): `user_id`, `user_name`, `user_email` (первый из `user.emails`), `user_first_name`, `user_last_name`, `company_id`, `company_name`, `active_namespace`, `user_language`, а также **`interface_language_code`** / **`interface_language_name`** по `Context.language` — чтобы совпадали с локалью UI. Этот слой идёт **последним** и перекрывает одноимённые ключи из тела запроса (нельзя подделать пользователя из клиента). В промптах — `{user_name}`, `{?user_email}`, … см. VariableResolver. JWT в шаблоны не попадает.
+
+### Нода: поле `files`
+
+У любой ноды в конфиге может быть **`files`**: список объектов в том же смысле, что элементы **`state.files`** (обязательны непустые строки **`name`** и **`path`**; опционально `mime_type`, `size`, `file_id`). При **первом** создании `ExecutionState` для сессии (`BaseChannel.process_task`, ветка нового state) вложения из **всех** нод эффективного графа собираются через **`collect_flow_node_files`** и кладутся в **`state.files`**, затем к ним дописываются файлы из запроса (`params.files_data`). При resume повторной подмеси нет. Эндпоинт **`GET /flows/api/v1/code/editor-state`** заполняет `state.files` так же для preview. **`POST /flows/api/v1/code/execute`** при теле с **`flow_id`** (и опционально **`skill_id`**) перед выполнением подтягивает из БД тот же flow: **`state.files`** = файлы графа + уникальные записи из тела запроса; **`state.variables`** = merge резолвнутых переменных flow с переданным `state.variables`; **`flow_config_version`** из конфига flow. Валидация: **`FlowValidator._validate_node_files`**. UI: закрепление файлов в модалке ноды; у **`llm_node`** сигнатура **`[FILE]…[/FILE]`** в промпт перетаскиванием чипа на редактор (**`prompt-editor`** с **`accept-file-drop`**). У **`code` ноды** (язык Python) перенос чипа в **`code-editor`** с **`accept-node-file-drop`** вставляет фрагмент **`get_files` + `reader.read`** (тот же смысл, что tool **`read_file`**); drag payload: кастомный MIME **`application/x-humanitec-flows-node-file+json`** + `text/plain` для промпта.
+
+## Трейсы (UI)
+
+API `traces` (`task`, `session`, `trace_id`): дерево в `apps/flows/src/api/v1/traces.py` строится с сортировкой по `start_time` по возрастанию на каждом уровне — порядок siblings в UI совпадает с хронологией выполнения. `get_spans_by_task` в репозитории отдаёт spans по `start_time` asc.
+
+### Breakpoint в редакторе и `previewExecutionState`
+
+При срабатывании breakpoint в стриме приходит `metadata.state_snapshot` (dump `ExecutionState`). `flow-editor-page` пишет его в `FlowsStore.editor.previewExecutionState` через `setPreviewExecutionStateFromBreakpoint`, чтобы панель ноды показывала реальный runtime state, а не только шаблон из `getEditorState`. После успешного завершения прогона или при ошибке выполнения вызывается `refreshPreviewExecutionState`, чтобы вернуть шаблонный preview.
+
+## NodeType
+
+| Тип | Класс | Описание |
+|-----|-------|----------|
+| llm_node | LlmNode | LLM + tools, ReAct паттерн |
+| code | CodeNode | Inline Python код |
+| flow | FlowNode | Вызов skill (flow_id + skill_id) |
+| remote_flow | RemoteFlowNode | A2A протокол |
+| external_api | ExternalAPINode | HTTP запросы |
+| mcp | MCPNode | MCP tools |
+| channel | ChannelNode | Отправка сообщений (Telegram, Webhook) |
+
+В `nodes[*].type` допускаются **только** значения из таблицы. Строк **`tool`** / **`function`** как типа ноды графа **нет**; при необходимости одноразово прогоняется миграция данных (`scripts/migrate_flows_contract.py`).
+
+## Evaluation (`flow.evaluation`)
+
+У шагов тест-кейса поля **`input.type`** и **`check.type`**: `text` | **`inline_code`** | `node` (и для check ещё `string`). Значение **`function`** в JSON — легаси: при чтении из БД **`FlowRepository`** вызывает **`normalize_flow_config_dict`** (как и скрипт **`scripts/migrate_flows_contract.py`**). Текст проверки без `def`/`async def` и с одной цепочкой идентификаторов через `.` трактуется как путь к checker → **`check.type`** становится **`string`**; иначе **`inline_code`**.
+
+## Inline Python (`apps/flows/src/eval`)
+
+Полные правила sandbox, whitelist namespace, паттерны создания тулов — **`eval.mdc`**.
+
+- **Импорты — whitelist**: разрешённые корни модулей в **`core/inline_python_eval_policy.py`** (`ALLOWED_IMPORT_ROOTS`); **`apps.*`** и **`core.*`** запрещены. Проверка при компиляции (AST в **`apps/flows/src/eval/compiler.py`**) и в **`__import__`** (**`apps/flows/src/eval/import_policy.py`**, `safe_inline_import`).
+- **Builtins — whitelist**: **`ALLOWED_BUILTINS`** в том же модуле; нет **`open`**, **`eval`**, **`exec`**; **`__import__`** заменён на безопасный.
+- В namespace **нет** **`get_container`**, **`get_settings`**, **`pathlib.Path`**, **`read_path_bytes`** / **`read_path_base64`**. Файлы: **`get_files(state)`**, **`find_file(files, name)`**, **`await reader.read(...)`** — **`source`** как запись вложения, путь или bytes; именованные параметры без отдельного объекта опций (импорт из `core` в inline-коде недоступен).
+- **`BaseTool`**: в **`PythonNamespaceBuilder`** задаётся **`base_tool_class`** снаружи (**`PythonCodeRunner`** из **`FlowContainer.get_code_runner`**, **`CodeResourceProvider`** через **`get_container().base_tool_class`**); **`namespace.py`** не импортирует контейнер.
+- Объекты из **`resources`** попадают в namespace по ключу — провайдеры должны отдавать только безопасные обёртки, не сырые репозитории/DI.
+
+## Элементы `llm_node.tools[]`
+
+- Строка `tool_id` после инлайна в БД/рантайме — полный dict.
+- Dict с полем **`type`** из NodeType (`code`, `flow`, `llm_node`, …) задаёт исполнение через `ToolRegistry.materialize` → `CodeTool` или `NodeAsToolWrapper`.
+- Inline-код: непустой **`code`** (для ветки code обычно `type: "code"`).
+- **`react_role`**: `standard` | `reason` | `exit` — роль в ReAct (не путать с `type` ноды и не путать с wire-форматом OpenAI `function` в сообщениях).
+
+## Bundles (`apps/flows/bundles/<id>/flow.json`)
+
+Запись в БД из bundle задаёт `FlowConfig.source == "file"`. Перезагрузка одного агента в namespace компании без полного `company/init`: `POST /flows/api/v1/flows/{flow_id}/reload-from-bundle` — вызывает `FlowsLoader.reload_flow_bundle(flow_id)` (тот же путь, что при загрузке registry). В UI редактора flow кнопка переинициализации из bundle — в шапке (`editor-header`), активна при `source=file`.
+
+При загрузке в БД `FlowsLoader` инлайнит:
+- `prompt: "prompts/foo.md"` — текст промпта из файла;
+- `output_schema_file: "schemas/bar.json"` — подставляет JSON Schema в `output_schema` (поле `output_schema_file` удаляется). Путь относительно каталога bundle.
+
+У ноды `llm` в JSON — это `llm_override` (не `llm_config`).
+
+### Примеры HITL в bundles
+
+- Демо-очередь оператора со slug **`example_hitl`**: создаётся при **`init_company_resources`** и при старте с **`TESTING=true`** после **`load_flows_to_db`** — **`ensure_example_hitl_queue`** в **`apps/flows/src/services/operator_demo_queue.py`**.
+- **`example_react`**: skills **`hitl_operator_react`** (LLM + тулы **`hitl_operator_task`**, **`ask_user`**, **`calculator`**, нода **`example_hitl_tool_agent`**, промпт **`prompts/hitl_tool.md`**) и **`hitl_operator_node`** (ветка **`hitl_prepare`** → **`hitl_pause`** типа **`hitl_node`**).
+- **`example_graph`**: нода **`hitl_queue_demo`** (**`hitl_node`**, slug **`example_hitl`**), маршрут **`route == 'operator'`** из **`classifier`** (ключевые слова: оператор, operator, hitl, human, живой человек); то же учтено в skills **`fast_track`** и **`orders_only`**.
+
+## FlowConfig
+
+    {
+        "flow_id": "my_flow",
+        "name": "My flow",
+        "entry": "main",
+        "nodes": {...},
+        "edges": [...],
+        "skills": {...},
+        "variables": {...},
+        "triggers": {...}
+    }
+
+## Triggers (точки входа)
+
+Триггеры — внешние источники запуска flow. Хранятся в FlowConfig.
+
+### TriggerType
+
+| Тип | Описание |
+|-----|----------|
+| telegram | Webhook от Telegram Bot API |
+| webhook | HTTP POST запрос |
+| cron | Расписание через TaskIQ |
+
+### TriggerConfig
+
+    "triggers": {
+        "telegram_bot": {
+            "trigger_id": "telegram_bot",
+            "type": "telegram",
+            "config": {
+                "bot_token": "@var:telegram_token",
+                "secret_token": "webhook_secret"
+            },
+            "input_mapping": {
+                "content": "@trigger:message.text",
+                "variables.chat_id": "@trigger:message.chat.id"
+            },
+            "output_actions": [...]
+        }
+    }
+
+### input_mapping для триггеров
+
+- @trigger:path - данные из payload триггера (JSONPath)
+- @const:value - константа
+
+### output_actions
+
+Действия после завершения выполнения flow:
+
+    "output_actions": [
+        {
+            "channel": "telegram",
+            "action": "send_message",
+            "mapping": {
+                "recipient": "@state:variables.chat_id",
+                "text": "@state:response"
+            },
+            "config": {"bot_token": "@var:token"},
+            "condition": "@state:success"
+        }
+    ]
+
+### Webhook URL
+
+Telegram: `/flows/api/v1/triggers/telegram/{flow_id}/{trigger_id}`
+Webhook: `/flows/api/v1/triggers/webhook/{flow_id}/{trigger_id}`
+
+## Nodes
+
+### LlmNode
+
+    {
+        "type": "llm_node",
+        "prompt": "You are helpful assistant.",
+        "tools": [
+            {"tool_id": "calc", "type": "code", "code": "..."},
+            {"tool_id": "skill", "type": "flow", "flow_id": "x", "skill_id": "y"}
+        ]
+    }
+
+Tools выполняются ПАРАЛЛЕЛЬНО через asyncio.gather.
+
+### CodeNode
+
+    {
+        "type": "code",
+        "input_mapping": {"value": "@state:input_value"},
+        "output_mapping": {"result": "output_field"},
+        "code": "def execute(args, state):\n    return {'result': args['value'] * 2}"
+    }
+
+Последняя функция = entry point.
+
+### FlowNode
+
+    {
+        "type": "flow",
+        "flow_id": "helper_flow",
+        "skill_id": "translate"
+    }
+
+Flow может вызывать СВОИ skills как tools.
+
+### ChannelNode
+
+Отправка сообщений во внешние каналы:
+
+    {
+        "type": "channel",
+        "channel": "telegram",
+        "action": "send_message",
+        "channel_config": {
+            "bot_token": "@var:telegram_token",
+            "api_base": "https://api.telegram.org"
+        },
+        "input_mapping": {
+            "recipient": "@state:variables.chat_id",
+            "text": "@state:response"
+        }
+    }
+
+#### ChannelType
+
+| Тип | Действия |
+|-----|----------|
+| telegram | send_message, send_photo, send_document, reply |
+| webhook | send_message, send_payload, send_notification |
+
+#### Как tool в LlmNode
+
+    "tools": [{
+        "tool_id": "notify_telegram",
+        "type": "channel",
+        "channel": "telegram",
+        "action": "send_message",
+        "channel_config": {"bot_token": "..."},
+        "args_schema": {
+            "chat_id": {"type": "string"},
+            "message": {"type": "string"}
+        },
+        "input_mapping": {
+            "recipient": "@state:chat_id",
+            "text": "@state:message"
+        }
+    }]
+
+## Edges
+
+    [
+        {"from_node": "start", "to_node": "process"},
+        {"from_node": "process", "to_node": "end", "condition": "state.success"},
+        {"from_node": "end", "to_node": null}
+    ]
+
+to_node: null = конец графа.
+
+## Skills
+
+    "skills": {
+        "math_skill": {
+            "name": "Math",
+            "entry": "calc",
+            "nodes": {
+                "calc": {"type": "code", "code": "..."}
+            },
+            "edges": [{"from_node": "calc", "to_node": null}]
+        }
+    }
+
+## Параллельное выполнение
+
+1. Ноды одного уровня графа - параллельно
+2. Tools в LlmNode - параллельно (asyncio.gather)
+
+State merge: messages extend, tool_results merge, остальное last wins.
+
+## Маппинги
+
+input_mapping:
+- @state:field - из state
+- @const:value - константа
+
+output_mapping:
+- result: field - result → state.field
+
+## @var strict-контракт
+
+Для `@var` используется единый strict-резолвер из `core/variables`.
+
+- Поддерживаются только форматы:
+  - `@var:key`
+  - `@var:nested.path`
+- Единый API резолва:
+  - `resolve_ref(...)` — полная ссылка
+  - `resolve_text(...)` — подстановка в строке
+  - `resolve_deep(...)` — рекурсивный резолв в `dict/list`
+- Любая неразрешимая ссылка `@var` (ключ/путь отсутствует) вызывает исключение `VariableResolutionError`.
+- Никаких fallback-поведений:
+  - нельзя возвращать `None` вместо ошибки для `@var`
+  - нельзя оставлять `@var:...` в итоговом значении
+  - нельзя auto-create пустых переменных
+  - нельзя неявно подставлять дефолты при ошибке резолва
+
+## Resources
+
+Ресурсы = переиспользуемые компоненты (RAG, S3, LLM, Cache, HTTP, Code модули).
+
+### Типы ресурсов
+
+| Тип | Класс | Назначение |
+|-----|-------|------------|
+| code | CodeModule | Python модуль с функциями/классами |
+| rag | RAGResource | Семантический поиск и `add_document`; в **`RAGResourceConfig`**: **`search_options`** (channels, rrf_k, rerank и т.д.), опционально **`index_profile_config`** (нарезка/парсинг для `add_document`, см. **`rag.mdc`**) |
+| files | FilesResource | S3/MinIO файловое хранилище |
+| cache | CacheResource | Redis кэш |
+| llm | LLMResource | Вызов LLM моделей |
+| prompt | PromptResource | Jinja2 шаблоны |
+| http | HTTPResource | HTTP клиент с базовым URL |
+| secret | str | Секрет из variables |
+
+### Конфигурация ресурсов
+
+На уровне FlowConfig (доступны всем нодам):
+
+    "resources": {
+        "kb": {"type": "rag", "config": {"namespace": "faq"}},
+        "storage": {"type": "files", "config": {"bucket": "docs"}}
+    }
+
+На уровне ноды (переопределяют ресурсы flow):
+
+    "nodes": {
+        "search": {
+            "type": "code",
+            "resources": {
+                "api": {"type": "http", "config": {"base_url": "https://api.example.com"}}
+            },
+            "code": "..."
+        }
+    }
+
+### Использование в CodeNode
+
+Ресурсы доступны как переменные в inline коде:
+
+    async def execute(args, state):
+        # RAG поиск
+        results = await kb.search("вопрос", top_k=5)
+        
+        # Файлы
+        await storage.write("file.txt", "content")
+        content = await storage.read("file.txt")
+        
+        # Cache
+        await cache.set("key", {"data": 123})
+        value = await cache.get("key")
+        
+        # HTTP
+        data = await api.get("/users")
+        
+        # LLM
+        response = await llm.complete("Translate: hello")
+        
+        # Code module
+        result = utils.calculate(10)
+
+### Использование в LlmNode tools
+
+Ресурсы ноды доступны inline tools:
+
+    {
+        "type": "llm_node",
+        "resources": {"kb": {"type": "rag", "config": {...}}},
+        "tools": [{
+            "tool_id": "search",
+            "type": "code",
+            "code": "async def execute(args, state):\n    return await kb.search(args['query'])"
+        }]
+    }
+
+### Иерархия ресурсов
+
+Flow (конфиг) → Skill → Node (каждый уровень переопределяет предыдущий)
+
+### Shared ресурсы из БД
+
+Ссылка на ресурс из таблицы resources:
+
+    "resources": {
+        "kb": {"resource_id": "shared_faq_rag"}
+    }
+
+С переопределением конфига:
+
+    "resources": {
+        "kb": {"resource_id": "shared_rag", "override_config": {"namespace": "my_ns"}}
+    }
+
+## REST: state для редактора и Execute (TestPanel)
+
+- `GET /api/v1/code/editor-state?flow_id=...&skill_id=default` — стартовый `ExecutionState` как при запуске через `FlowFactory.get_flow` и `create_initial_state`: резолвнутые variables, `flow_config`, формат `session_id`. UI подставляет в TestPanel через `FlowsStore.previewExecutionState`. Требуется аутентифицированный пользователь в контексте (401 без user).
+- `GET /api/v1/tasks/state?session_id=...` (или `context_id` + `flow_id`) — сохранённый state сессии для просмотра и внешних сценариев. В TestPanel редактора ноды state вводится только вручную в JSON (без выбора сессии из списка).
+
+## Файлы
+
+- apps/flows/src/runtime/nodes.py - все ноды (включая ChannelNode)
+- apps/flows/src/runtime/flow.py - класс `Flow`, обход графа
+- apps/flows/src/runtime/runners/llm_runner.py - LlmNode
+- apps/flows/src/models/flow_config.py - FlowConfig
+- apps/flows/src/models/trigger_config.py - TriggerConfig
+- apps/flows/src/models/channel_config.py - ChannelConfig, OutputAction
+- apps/flows/src/triggers/handlers/ - обработчики триггеров (telegram.py, webhook.py)
+- apps/flows/src/triggers/executor.py - TriggerExecutor
+- apps/flows/src/triggers/registry.py - TriggerRegistry
+- apps/flows/src/channels/telegram.py - TelegramChannelHandler
+- apps/flows/src/channels/webhook.py - WebhookChannelHandler
+- apps/flows/src/channels/registry.py - ChannelRegistry
+- apps/flows/src/resources/resolver.py - ResourceResolver
+- apps/flows/src/resources/wrappers/*.py - resource wrappers
+- apps/flows/src/resources/providers/*.py - resource providers

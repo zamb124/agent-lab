@@ -168,17 +168,17 @@ ROUTE_RULES: List[RouteRule] = [
 
     # Управление компаниями (пользователь авторизован, но ещё не выбрал компанию)
     RouteRule("/select-company", context_type="frontend", auth_required=True),
-    RouteRule("/api/companies/check-slug", context_type="frontend", auth_required=True),
-    RouteRule("/api/companies/me", context_type="frontend", auth_required=True),
-    RouteRule("/api/companies", context_type="frontend", auth_required=True),
-    RouteRule("/api/companies/*/system-access", context_type="frontend", auth_required=True),
-    RouteRule("/*/api/companies/me", context_type="frontend", auth_required=True),
-    RouteRule("/*/api/companies", context_type="frontend", auth_required=True),
-    RouteRule("/*/api/companies/*/system-access", context_type="frontend", auth_required=True),
-    RouteRule("/frontend/api/companies/check-slug", context_type="frontend", auth_required=True),
-    RouteRule("/frontend/api/companies/me", context_type="frontend", auth_required=True),
-    RouteRule("/frontend/api/companies", context_type="frontend", auth_required=True),
-    RouteRule("/frontend/api/companies/*/system-access", context_type="frontend", auth_required=True),
+    RouteRule("/api/companies/check-slug", context_type="api", auth_required=True),
+    RouteRule("/api/companies/me", context_type="api", auth_required=True),
+    RouteRule("/api/companies", context_type="api", auth_required=True),
+    RouteRule("/api/companies/*/system-access", context_type="api", auth_required=True),
+    RouteRule("/*/api/companies/me", context_type="api", auth_required=True),
+    RouteRule("/*/api/companies", context_type="api", auth_required=True),
+    RouteRule("/*/api/companies/*/system-access", context_type="api", auth_required=True),
+    RouteRule("/frontend/api/companies/check-slug", context_type="api", auth_required=True),
+    RouteRule("/frontend/api/companies/me", context_type="api", auth_required=True),
+    RouteRule("/frontend/api/companies", context_type="api", auth_required=True),
+    RouteRule("/frontend/api/companies/*/system-access", context_type="api", auth_required=True),
     
     # API фронтенда для управления конфигурациями виджетов
     RouteRule("/frontend/api/embed/configs/*", context_type="api", auth_required=True),

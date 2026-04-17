@@ -1,0 +1,122 @@
+---
+trigger: model_decision
+description: "Миграции БД: раздельные Alembic-деревья по сервисам"
+globs:
+---
+
+# Миграции БД
+
+## Переименования схемы без пошаговых ALTER
+
+В средах, где данные БД можно сбросить (локальная разработка, чистые стенды), **достаточно удалить базу и заново выполнить `upgrade head`**: актуальная схема задаётся baseline и последующими ревизиями. Отдельные миграции вида `RENAME COLUMN` для переименования полей **не обязательны**, если команда договорилась о пересоздании БД.
+
+## Архитектура
+
+Каждый сервис имеет **собственную PostgreSQL-базу** и **собственное Alembic-дерево**:
+
+| Сервис  | БД                | Дерево миграций       | Переменная окружения        |
+|---------|-------------------|-----------------------|-----------------------------|
+| shared  | platform_shared   | migrations/shared/    | DATABASE__SHARED_URL        |
+| flows   | platform_agents   | migrations/flows/     | DATABASE__FLOWS_URL        |
+| crm     | platform_crm      | migrations/crm/       | DATABASE__CRM_URL           |
+| sync    | platform_sync     | migrations/sync/      | DATABASE__SYNC_URL          |
+| rag     | platform_rag      | migrations/rag/       | DATABASE__RAG_URL           |
+| office  | platform_office   | migrations/office/    | DATABASE__OFFICE_URL        |
+| tracing | platform_tracing  | migrations/tracing/   | DATABASE__TRACING_URL       |
+
+**Таблицы по БД (важно для baseline и JOIN):**
+
+- **platform_agents**: KV-таблицы flows/nodes/tools/… плюс **`storage`** (префиксы `llm_model:`, embed, файлы) и **`mcp_servers`** — не путать с `storage` в `platform_shared`.
+- **platform_crm**: реляционные CRM-таблицы плюс **`vector_documents`** (pgvector) для `JOIN crm_entities` при семантическом поиске; журнал **`crm_knowledge_imports`** (импорт базы знаний, метаданные и id для отката); дубли по смыслу с RAG не смешиваются: RAG-документы живут в **platform_rag**, сущности CRM — в **platform_crm**.
+- **platform_rag**: `document_processing_status`, `vector_documents` для пайплайна RAG.
+- **platform_office**: `office_document_bindings` — привязки файлов Office к `company_id` и namespace (BFF).
+- **platform_tracing**: только **`spans`** (OpenTelemetry + журнал по сущности); не shared. См. **`tracing.mdc`**.
+
+У каждого дерева Alembic — **своя** физическая БД и своя строка `alembic_version`. Указывать один и тот же `…/platform_db` во всех `database.*_url` нельзя: после миграции `shared` в БД окажется ревизия `shared_0001`, а при `upgrade` для `flows` Alembic не найдёт эту ревизию в `migrations/flows/`. Локальный Postgres: `docker-compose-dev.yaml` монтирует `migrations/postgres/init.sql`, `POSTGRES_DB=platform_shared`, остальные БД создаёт init-скрипт. Физические БД **не** создаёт Alembic; при деплое после `postgres up` выполняется идемпотентный **`migrations/postgres/bootstrap_idempotent.sql`** (на случай, если первый init кластера не создал сервисные БД). Опционально тот же смысл можно выполнить из Python: **`core.db.postgres_service_databases.ensure_postgres_service_databases_async`** (не вызывается из `scripts.db_migrate`).
+
+Если в `init.sql` позже добавили новую БД, а том Postgres dev **уже существовал**, entrypoint-initdb **не** выполнится снова — будет `database "…" does not exist`. Локально: **`make dev-bootstrap-postgres`** (прогоняет `bootstrap_idempotent.sql` в контейнере `agentlab_postgres_dev`) или вручную `psql` с тем же файлом.
+
+## PostgreSQL и pgvector
+
+Расширение в SQL называется **`vector`** (пакет pgvector в каталоге PostgreSQL), не `pgvector`. В миграциях: `CREATE EXTENSION IF NOT EXISTS vector`.
+
+Нужен сервер с установленным pgvector: образ **`pgvector/pgvector:pg17`** (`docker-compose-dev.yaml`, `docker-compose-prod.yaml`, `docker-compose-test.yaml`) или сборка Postgres с пакетом pgvector на хосте. Обычный `postgres:17` без pgvector миграции shared/crm/rag не пройдут. В `init.sql` расширение `vector` подключается к `platform_shared`, `platform_crm`, `platform_rag` (см. `services.json` → `postgres.vector_extensions`).
+
+**asyncpg + `op.execute`:** миграции идут через SQLAlchemy async + asyncpg. В одном вызове `op.execute(...)` допустима **ровно одна** SQL-команда (один prepared statement). Несколько выражений через `;` в одной строке даёт `cannot insert multiple commands into a prepared statement` — делить на отдельные `op.execute`.
+
+## Структура папки migrations/
+
+```
+migrations/
+├── services.json       # манифест: сервисы, модули моделей, ключи database.*, список БД Postgres
+├── postgres/
+│   ├── init.sql                    # CREATE DATABASE + vector (entrypoint-initdb.d при новом томе)
+│   └── bootstrap_idempotent.sql    # то же по смыслу, идемпотентно; деплой на уже живом кластере
+├── shared/
+│   ├── alembic.ini
+│   ├── env.py
+│   └── versions/
+├── flows/
+├── crm/
+├── sync/
+├── rag/
+├── office/
+├── tracing/
+└── _legacy_removed/
+```
+
+## Манифест `migrations/services.json`
+
+- `services[]`: `name`, `models_module`, `database_url_key` (поле `DatabaseConfig`: `shared_url`, `flows_url`, …); опционально **`"optional": true`** — сервис не регистрируется и модели не импортируются, пока в конфиге пустой `database.<database_url_key>`.
+- Регистрация в `core.db.migration_manifest.register_migration_services()`; bootstrap: `bootstrap_migration_registry()`.
+- При добавлении сервиса: правка `services.json`, дерево `migrations/<name>/`, при необходимости строк в `postgres/init.sql` и переменных в корневом `conf.json` (`database.*`).
+
+## env.py каждого дерева
+
+- Импортирует **только** модели своей БД
+- Использует `include_object` для фильтрации таблиц по имени (`MANAGED_TABLES`)
+- URL берёт из `sqlalchemy.url` в alembic.ini (передаётся runner'ом) или из settings
+
+## Единая точка входа
+
+Все команды — через **`python -m scripts.db_migrate`** (после `uv run` локально):
+
+1. `bootstrap_migration_registry()` — реестр и импорт моделей по `services.json`.
+2. Подкоманды `upgrade`, `revision`, `downgrade`, `current`, `history`, `heads` (argparse в том же модуле).
+
+Примеры:
+
+```bash
+uv run python -m scripts.db_migrate upgrade
+uv run python -m scripts.db_migrate upgrade --service shared
+uv run python -m scripts.db_migrate revision -m "описание" --service flows --autogenerate
+uv run python -m scripts.db_migrate revision -m "описание" --service crm --empty
+uv run python -m scripts.db_migrate downgrade --service sync
+uv run python -m scripts.db_migrate current --service rag
+```
+
+`make migrate` и остальные цели из `mk/migrate.mk` — тонкие обёртки над этим же модулем (для `migrate-new` / `migrate-empty` и т.д. нужны переменные `m=` и при необходимости `s=` — сервис).
+
+Прямой вызов `alembic -c migrations/<svc>/alembic.ini …` допустим, но для единообразия предпочтителен `scripts.db_migrate`.
+
+## Автоматический запуск
+
+`core.db.migrations.run_migrations_async()` итерируется по реестру и применяет `upgrade head` к каждой БД. Перед вызовом: **`core.db.migration_manifest.bootstrap_migration_registry()`**.
+
+Init-контейнер в `docker-compose-prod.yaml`:
+
+```yaml
+command: ["python", "-m", "scripts.db_migrate", "upgrade"]
+```
+
+## Ключевые файлы
+
+- `migrations/services.json` — манифест миграций и списка БД Postgres
+- `migrations/postgres/init.sql` — первичное создание БД в Docker (см. `docker-compose`)
+- `core/db/migration_manifest.py` — загрузка манифеста, регистрация, bootstrap
+- `scripts/db_migrate.py` — точка входа и argparse для Alembic
+- `migrations/<svc>/env.py`, `versions/`
+- `core/db/postgres_service_databases.py` — опционально: создание сервисных БД и `vector` по `services.json` (не в пути `db_migrate`)
+- `core/db/migrations.py` — `run_migrations_async()`, и т.д.
+- `core/db/service_registry.py`
+- `core/db/models/platform.py`, `core/db/models/rag.py`

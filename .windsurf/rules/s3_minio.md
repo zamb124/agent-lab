@@ -1,0 +1,509 @@
+---
+trigger: model_decision
+description: "Правила работы с S3 и MinIO"
+globs:
+---
+# S3 и MinIO
+
+## Архитектура
+
+### Окружения
+
+| Окружение | Провайдер | Endpoint | Bucket | Порты |
+|-----------|-----------|----------|--------|-------|
+| **Dev** | MinIO | `http://localhost:19001` | `test-bucket` | 19001 (API), 19011 (Console) |
+| **Test** | MinIO | `http://minio-test:9000` | `test-bucket` | 9002 (API), 9003 (Console) |
+| **Prod** | VK Cloud | `https://hb.ru-msk.vkcloud-storage.ru` | `vkbucket` | - |
+
+### MinIO в Docker Compose
+
+**Dev окружение** (`docker-compose-dev.yaml`):
+```yaml
+minio:
+  image: minio/minio:latest
+  container_name: platform-minio-dev
+  ports:
+    - "9000:9000"  # API
+    - "9001:9001"  # Console
+  volumes:
+    - minio_dev_data:/data  # Персистентный
+  environment:
+    - MINIO_ROOT_USER=minioadmin
+    - MINIO_ROOT_PASSWORD=minioadmin
+  command: server /data --console-address ":9001"
+```
+
+**Test окружение** (`docker-compose-test.yaml`):
+```yaml
+minio-test:
+  image: minio/minio:latest
+  container_name: platform-minio-test
+  ports:
+    - "9002:9000"  # API
+    - "9003:9001"  # Console
+  # БЕЗ volume - ephemeral для тестов
+  environment:
+    - MINIO_ROOT_USER=minioadmin
+    - MINIO_ROOT_PASSWORD=minioadmin
+  command: server /data --console-address ":9001"
+```
+
+## Конфигурация
+
+### conf.json
+
+```json
+{
+  "s3": {
+    "enabled": true,
+    "default_bucket": "vkbucket",
+    "buckets": {
+      "test-bucket": {
+        "provider": "minio",
+        "access_key_id": "minioadmin",
+        "secret_access_key": "minioadmin",
+        "region_name": "us-east-1",
+        "endpoint_url": "http://localhost:19001",
+        "enabled": true
+      },
+      "vkbucket": {
+        "provider": "vkcloud",
+        "access_key_id": "...",
+        "secret_access_key": "...",
+        "region_name": "ru-msk",
+        "endpoint_url": "https://hb.ru-msk.vkcloud-storage.ru",
+        "enabled": true
+      }
+    }
+  }
+}
+```
+
+### conf.local.json (для локальной разработки)
+
+```json
+{
+  "s3": {
+    "default_bucket": "test-bucket"
+  }
+}
+```
+
+### Переменные окружения
+
+```bash
+# Переключить на MinIO
+export S3__DEFAULT_BUCKET=test-bucket
+
+# Переопределить endpoint
+export S3__BUCKETS__TEST_BUCKET__ENDPOINT_URL=http://localhost:9000
+
+# Для test окружения (внутри контейнера)
+export S3__BUCKETS__TEST_BUCKET__ENDPOINT_URL=http://minio-test:9000
+```
+
+### HTTP(S)_PROXY и локальный MinIO
+
+Если в окружении заданы `HTTP_PROXY` / `HTTPS_PROXY`, **botocore** по умолчанию шлёт запросы через прокси. Тогда обращение к `http://127.0.0.1:19001` может уйти на внешний прокси; ответ часто выглядит как **`InvalidAccessKeyId`** (не тот сервер). В `core/files/s3_client.py` для `provider: minio` и для endpoint на `localhost` / `127.0.0.1` в `Config` передаётся `proxies={}`, чтобы не использовать env-прокси для этого клиента.
+
+### NoSuchBucket на MinIO
+
+У MinIO bucket **не появляется сам** при первом `PutObject` (в отличие от сценариев, где bucket создают вручную в консоли). Имя bucket задаётся в конфиге (`bucket_name` / ключ в `s3.buckets`). Для `provider: minio` клиент в `S3Client` делает `HeadBucket` и при отсутствии — `CreateBucket` с **тем же** именем из конфига (без хардкода в коде). Для облачных провайдеров (Selectel, AWS) bucket по-прежнему создаётся администратором вне приложения.
+
+### RequestTimeTooSkewed (локальный MinIO)
+
+Подпись SigV4 использует время **процесса Python** (хост: `uv run scripts/run.py …`). MinIO сверяет с **своим** временем в контейнере. Ошибка не специфична для sync: тот же клиент и у rag/crm — отличие часто в том, что **облачный S3** (VK, Yandex) держит время по NTP, а **MinIO в Docker Desktop** иногда «уезжает» относительно macOS после сна VM.
+
+**Сравнить UTC на хосте и в MinIO** (имя контейнера — `docker ps`, в dev часто `agentlab_minio_dev`):
+
+```bash
+date -u
+docker exec agentlab_minio_dev date -u
+```
+
+Если расхождение большое: перезапуск **Docker Desktop** или `docker restart <minio_container>`, затем снова сравнить. Повторяющаяся проблема — обновить Docker Desktop / проверить энергосбережение Mac.
+
+#### Политика: чтобы проблема не всплывала (dev / test / prod)
+
+**В коде приложения отключить проверку времени для S3 SigV4 нельзя** — это ограничение протокола. Решение всегда в **синхронизации часов** на стороне клиента (процесс Python) и сервера (MinIO или облачный S3).
+
+| Окружение | Что сделать |
+|-----------|-------------|
+| **Prod** | На ВМ/нодах Kubernetes включить **NTP** (chrony / systemd-timesyncd / то, что даёт облако). У managed S3 (VK, Yandex, AWS) время на стороне сервиса уже выверено — чаще ломается только клиент (CI, бэкенд на своей ВМ): там тоже обязателен NTP. |
+| **Test / CI** | Раннеры GitHub/GitLab и т.п. обычно с синхронизированным временем. **Self-hosted** runner или контейнер с тестами: поставить NTP в образе/на хосте. MinIO в `docker-compose-test`: после старта контейнеров сравнить `date -u` на хосте CI и `docker exec … date -u`. |
+| **Dev** | Mac/Windows: автоматическая дата и время. MinIO в Docker Desktop: при дрейфе VM — перезапуск Docker или контейнера MinIO (см. команды выше). |
+
+**Итог:** на проде и в нормальном CI проблема почти не встречается, если **везде включён NTP**. На локальном dev с Docker Desktop единственный «плавающий» участок — **VM Docker vs хост**; от этого спасает перезапуск Docker/MinIO и обновление Docker Desktop, а не настройка репозитория.
+
+**Что сделано в репозитории (не «магия», а удобство):** цель `make dev-minio-restart` — перезапустить только сервис `minio` в `docker-compose-dev.yaml` (контейнер `agentlab_minio_dev`). Одной правкой `docker-compose` расхождение **хост ↔ контейнер** не убрать: это не баг YAML. **Тесты** (`docker-compose-test`, контейнер `tests_runner`) и MinIO живут в одной Docker-сети и делят одно время VM — там skew между «хостом ноутбука» и MinIO не возникает. **Прод**: NTP на серверах, не фича приложения.
+
+**Автоподстройка SigV4:** при создании S3-клиента (`S3ClientFactory.create_client`) вызывается `core/files/s3_sigv4_clock.py`: по HTTP `Date` с `endpoint_url` (сначала `GET …/minio/health/live`, затем `HEAD /`) вычисляется сдвиг и подменяется `botocore.compat.get_current_datetime` на время процесса. Снимает типичный `RequestTimeTooSkewed` dev (Mac ↔ MinIO). Если endpoint недоступен при старте клиента — подстройки нет, остаётся NTP и `make dev-minio-restart`. Один сдвиг на процесс — не смешивать в одном процессе два endpoint с принципиально разным временем без перезапуска.
+
+## Использование в коде
+
+### Создание клиента
+
+В **`FileRecord.s3_bucket`** хранится **реальное имя bucket** в S3 (поле **`bucket_name`** из конфига или ключ в **`buckets`**, если `bucket_name` пуст). **`create_client_for_bucket()`** принимает только **ключ** из **`settings.s3.buckets`**. Для скачивания/удаления по записи файла: **`S3ClientFactory.resolve_bucket_config_key(meta.s3_bucket)`** → **`create_client_for_bucket(cfg_key)`**, в **`download_bytes` / `delete_file`** передавать **`bucket=meta.s3_bucket`** (физическое имя).
+
+```python
+from core.files.s3_client import S3ClientFactory
+
+# Для конкретного bucket
+client = S3ClientFactory.create_client_for_bucket('test-bucket')
+
+# Для default bucket (из settings)
+client = S3ClientFactory.create_default_client()
+
+# Через функцию-хелпер
+from core.files.s3_client import get_default_s3_client
+
+client = await get_default_s3_client()
+```
+
+### Основные операции
+
+```python
+# Загрузка bytes
+await client.upload_bytes(
+    data=b"Hello MinIO!",
+    key="test/hello.txt",
+    content_type="text/plain",
+    metadata={"source": "test"}
+)
+
+# Загрузка файла с диска
+await client.upload_file(
+    file_path=Path("local_file.txt"),
+    key="test/uploaded.txt"
+)
+
+# Скачивание bytes
+data = await client.download_bytes("test/hello.txt")
+
+# Скачивание на диск
+await client.download_file(
+    key="test/hello.txt",
+    file_path=Path("downloaded.txt")
+)
+
+# Проверка существования
+exists = await client.object_exists("test/hello.txt")
+
+# Получение метаданных
+metadata = await client.get_object_metadata("test/hello.txt")
+
+# Список объектов
+objects = await client.list_objects(prefix="test/")
+
+# Копирование
+await client.copy_object(
+    source_key="test/source.txt",
+    dest_key="test/dest.txt"
+)
+
+# Удаление
+await client.delete_object("test/hello.txt")
+
+# Presigned URL
+url = await client.generate_presigned_url(
+    key="test/hello.txt",
+    expiration=3600
+)
+
+# Закрытие клиента
+await client.close()
+```
+
+### Контекстный менеджер
+
+```python
+async with S3ClientFactory.create_client_for_bucket('test-bucket') as client:
+    await client.upload_bytes(b"data", "key.txt")
+    # Автоматический close при выходе
+```
+
+## Тестирование
+
+### Фикстура minio_bucket
+
+```python
+@pytest.mark.asyncio
+async def test_s3_upload(minio_bucket):
+    """Фикстура предоставляет готовый S3Client с автосозданным bucket"""
+    client = minio_bucket
+    
+    await client.upload_bytes(b"test data", "test.txt")
+    data = await client.download_bytes("test.txt")
+    
+    assert data == b"test data"
+    # Cleanup автоматический
+```
+
+### Определение bucket в тестах
+
+```python
+import os
+
+def get_test_bucket_name():
+    """Получить имя bucket в зависимости от окружения"""
+    if os.getenv("TESTING") == "true":
+        return "test-bucket"
+    return "test-bucket"
+```
+
+### Пропуск тестов при недоступности S3
+
+```python
+def skip_if_s3_disabled():
+    """Проверка доступности S3"""
+    bucket_name = get_test_bucket_name()
+    try:
+        S3ClientFactory.create_client_for_bucket(bucket_name)
+    except ValueError as e:
+        if "S3 отключен" in str(e):
+            pytest.skip(f"S3 отключен или bucket {bucket_name} не настроен")
+        raise
+```
+
+### Запуск тестов
+
+```bash
+# Автоматически поднимает MinIO
+make test
+
+# Или через docker-compose напрямую
+docker-compose -f docker-compose-test.yaml up --build tests_runner
+```
+
+## MinIO Console
+
+### Доступ
+
+**Dev:**
+- URL: http://localhost:9001
+- Username: `minioadmin`
+- Password: `minioadmin`
+
+**Test:**
+- URL: http://localhost:9003
+- Username: `minioadmin`
+- Password: `minioadmin`
+
+### Возможности Console
+
+- Просмотр buckets и объектов
+- Загрузка/скачивание файлов
+- Управление правами доступа
+- Просмотр метрик и логов
+- Настройка lifecycle policies
+
+## Команды
+
+### Запуск
+
+```bash
+# Dev окружение с MinIO
+make dev-up
+
+# Test окружение (автоматически в тестах)
+make test
+```
+
+### Проверка статуса
+
+```bash
+# Проверить что MinIO запущен
+docker ps | grep minio
+
+# Логи MinIO
+docker logs platform-minio-dev
+docker logs platform-minio-test
+
+# Healthcheck
+docker inspect platform-minio-dev | grep Health
+```
+
+### Создание bucket вручную
+
+**Через Console:**
+1. Откройте http://localhost:9001
+2. Buckets → Create Bucket
+3. Введите имя `test-bucket`
+
+**Через CLI:**
+```bash
+# Настроить alias
+docker exec agentlab_minio_dev mc alias set local http://localhost:9000 minioadmin minioadmin
+
+# Создать bucket
+docker exec platform-minio-dev mc mb local/test-bucket
+
+# Список buckets
+docker exec platform-minio-dev mc ls local
+```
+
+### Очистка
+
+```bash
+# Остановить MinIO
+make dev-down
+
+# Полная очистка (включая данные)
+make dev-clean
+```
+
+## Troubleshooting
+
+### MinIO не стартует
+
+```bash
+# Проверить логи
+docker logs platform-minio-dev
+
+# Проверить порты
+lsof -i :9000
+lsof -i :9001
+
+# Перезапустить
+docker restart platform-minio-dev
+```
+
+### Bucket не создается автоматически
+
+Фикстура `minio_bucket` создает bucket автоматически. Если не работает:
+
+```python
+# Проверить что MinIO доступен
+import aioboto3
+
+session = aioboto3.Session()
+async with session.client(
+    "s3",
+    endpoint_url="http://localhost:19001",
+    aws_access_key_id="minioadmin",
+    aws_secret_access_key="minioadmin",
+) as s3:
+    try:
+        await s3.head_bucket(Bucket="test-bucket")
+    except:
+        await s3.create_bucket(Bucket="test-bucket")
+```
+
+### Тесты не видят MinIO
+
+Проверьте:
+1. MinIO запущен: `docker ps | grep minio`
+2. Healthcheck прошел: `docker inspect platform-minio-test | grep Health`
+3. Конфигурация правильная в `conf.json`
+4. Endpoint правильный (для контейнеров: `http://minio-test:9000`)
+
+### Ошибки подключения
+
+```python
+# Внутри контейнера используй имя сервиса
+endpoint_url = "http://minio-test:9000"  # ✅
+
+# Снаружи используй localhost
+endpoint_url = "http://localhost:19001"   # dev MinIO
+
+# НЕ используй 127.0.0.1 внутри контейнера
+endpoint_url = "http://127.0.0.1:9000"   # ❌
+```
+
+## Единый паттерн работы с файлами
+
+### Что является файловым хранилищем (этот раздел)
+
+Произвольные файлы (изображения, документы, вложения сообщений, аватары) — загрузка,
+скачивание, метаданные. Используется `FileRecord` в shared DB + generic file router.
+
+### Что НЕ является нарушением
+
+**RAG-конвейер** (`apps/rag/`, `core/rag/`) — это обработка документов для векторного поиска:
+асинхронная очередь, chunking, embedding, хранение в `vector_documents`. RAG работает со своим S3
+напрямую — это намеренная архитектура, не нарушение.
+
+**CRM-вложения** (`apps/crm/api/attachments.py`) — вложения к сущностям CRM идут в RAG
+(чтобы стать поисковыми документами). Они не хранятся через generic file router.
+
+**CRM summary artifacts** (`DailySummaryArtifactService`, `apps/crm/services/daily_summary_artifact_service.py`) — JSON-снимки сводок в дефолтном bucket (рядом с Redis-кэшем):
+
+- день: `crm/daily_summary/v1/{company_id}/{namespace_or_all}/{YYYY-MM-DD}.json`
+- период: `crm/period_summary/v1/{company_id}/{namespace_or_all}/{date_from}_{date_to}.json`
+
+Запись только через этот сервис; произвольные S3-клиенты в `apps/crm` для этих путей не дублировать.
+
+### Запрещённые паттерны
+
+- `file_record.direct_s3_url` — свойство удалено, прямые S3 URL запрещены в ответах
+- `s3_client.get_public_url()` — запрещён в API-обработчиках (разрешён только в RAG internals)
+- Сервис-специфичные аналоги `FileRead`/`FileUploadResponse` — используйте `FileResponse` из `core.files`
+- Регистрировать файловый роутер вручную — он добавляется через `create_service_app`
+
+## Единый доступ к файлам через API
+
+### Запрет прямых S3 URL
+
+API никогда не должен возвращать клиенту прямой S3/MinIO URL вида `http://127.0.0.1:19001/...`.
+Такой URL не работает у конечного пользователя (другой хост/порт, не same-origin).
+
+**Правило:** загрузка файла → сохранение в `FileRecord` → возврат same-origin URL через download-роутер.
+
+### Архитектура файлового роутера
+
+`core/files/api.py` предоставляет `build_file_api_router(get_file_repo, service_api_prefix)`.
+Роутер автоматически подключается в `create_service_app` для всех сервисов, независимо от `api_version`.
+Для сервисов с `api_version=None` (например, frontend) используется канонический префикс `/{svc}/api/v1/files/*`.
+Никакого кода на уровне сервиса не нужно.
+
+Результирующие эндпоинты (после стриппинга префикса сервиса ingress'ом):
+
+| Метод | Путь | Описание |
+|-------|------|----------|
+| `POST` | `/{svc}/api/v1/files/` | Загрузка файла |
+| `GET` | `/{svc}/api/v1/files/download/{file_id}` | Стриминг файла |
+| `GET` | `/{svc}/api/v1/files/{file_id}` | Метаданные файла |
+
+Если S3 выключен, upload endpoint остаётся доступным и возвращает `503` (не `404`).
+
+### Логика доступа в хендлере
+
+- `is_public=True` — файл отдаётся без проверки авторизации (аватары, публичные вложения).
+- `is_public=False` — хендлер сверяет `FileRecord.company_id` с `context.active_company.company_id`;
+  несовпадение → 403.
+
+Маршрут регистрируется в `route_config.py` с `auth_required=False` — middleware не блокирует запросы,
+проверку для приватных файлов делает сам хендлер.
+
+### Загрузка файла
+
+Файлы загружаются через `POST /{svc}/api/v1/files/`. Сервис не пишет никакого кода —
+всё реализовано в `core/files/api.py`. `FileRecord` создаётся с `company_id`,
+`download_url` и `checksum` автоматически.
+
+### `FileRecord.download_url`
+
+Поле `FileRecord.download_url: Optional[str]` — same-origin URL, устанавливается сервисом при загрузке.
+Свойство `FileRecord.url` возвращает `download_url` если задан, иначе фолбек
+`/api/v1/files/download/{file_id}` (сервис flows, для обратной совместимости).
+
+### `SyncFile.storage_url`
+
+Поле `storage_url` в таблице `sync_files` — nullable. Новые загрузки файлов идут только через
+`FileRecord` (shared DB); `SyncFile`-строки больше не создаются. Таблица сохранена для
+исторических FK-ссылок.
+
+## Best Practices
+
+1. **Используй MinIO для dev/test**, внешний S3 для prod
+2. **Всегда закрывай клиент** после использования (`await client.close()`)
+3. **Используй контекстный менеджер** для автоматического cleanup
+4. **Не мокай S3Client** - используй реальный MinIO в тестах
+5. **Используй фикстуру `minio_bucket`** вместо создания клиента вручную
+6. **Проверяй доступность S3** через `skip_if_s3_disabled()` в тестах
+7. **Используй уникальные ключи** в тестах для избежания конфликтов
+8. **Очищай тестовые данные** после тестов
+
+## Документация
+
+Подробная документация: [docs/minio-setup.md](../../docs/minio-setup.md)

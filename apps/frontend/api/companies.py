@@ -12,14 +12,14 @@ from core.utils.tokens import TokenService, get_token_service
 from core.utils.domain import get_cookie_domain, build_url
 from core.models.identity_models import Company, User
 from core.identity.system_bootstrap import SYSTEM_COMPANY_ID
-from core.api.companies import build_my_companies_response
 from apps.frontend.dependencies import ContainerDep
 from core.config import get_settings
 from core.pagination import ListResponse
+from core.api.companies import build_my_companies_response
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(prefix="/companies", tags=["companies"])
+router = APIRouter(prefix="/api/companies", tags=["companies"])
 
 
 class CheckSlugRequest(BaseModel):
@@ -229,7 +229,14 @@ async def get_my_companies(request: Request, container: ContainerDep) -> ListRes
     Returns:
         Список компаний с их данными
     """
-    user = _require_authenticated_user(request)
+    token_data = getattr(request.state, "token_data", None)
+    if token_data is None:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+    
+    user = await container.user_repository.get(token_data.user_id)
+    if user is None:
+        raise HTTPException(status_code=404, detail="User not found")
+    
     return await build_my_companies_response(
         user=user,
         company_repository=container.company_repository,

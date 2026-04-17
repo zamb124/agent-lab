@@ -165,7 +165,7 @@ export class BaseService {
             if (response.status === 404 && Object.prototype.hasOwnProperty.call(options, 'notFoundReturns')) {
                 return options.notFoundReturns;
             }
-            if (response.status === 401) {
+            if (response.status === 401 && !options.skipAuthEvent) {
                 window.dispatchEvent(new CustomEvent(AppEvents.AUTH_UNAUTHORIZED, { bubbles: true }));
             }
             const errorData = await response.json().catch(() => null);

@@ -1,0 +1,76 @@
+---
+trigger: model_decision
+description: "Система уведомлений уведомления notification notifications"
+globs:
+---
+# Система нотификаций (канон)
+
+## Единый поток
+
+`Service/Worker/Task -> notify_user(...) -> Redis (platform:notifications) -> WS /{service}/ws/notifications -> platform-notification-manager -> toast + badge`
+
+Исключение **операторские задачи flows**: **`publish_operator_tasks_refresh`** ([`apps/flows/src/services/operator_tasks_broadcast.py`](../../apps/flows/src/services/operator_tasks_broadcast.py)) публикует в тот же Redis-канал через **`RedisClient.publish`** контейнера (работает и в **TaskIQ worker**, где singleton **`notification_manager._redis_client`** не инициализирован). Тип **`flows_operator_tasks_updated`**: в **`platform-notification-manager`** без toast и без записи в колокольчик — только событие **`platform-notification-received`** на `window` и отдельное WS-подключение на **`operator-workbench-page`** для перезагрузки канбана.
+
+## Backend: как отправлять
+
+Только через `core.websocket.publisher.notify_user`.
+
+```python
+from core.websocket.publisher import Notification, NotificationType, notify_user
+
+await notify_user(
+    user_id="user_123",
+    notification=Notification(
+        type=NotificationType.SYSTEM,
+        title="Готово",
+        message="Операция завершена",
+        service="crm",
+        priority="normal",
+        action_url="/crm/tasks/task_1",
+        data={"task_id": "task_1"},
+    ),
+)
+```
+
+Разрешено вызывать из service/worker/TaskIQ/endpoint.  
+Хранить уведомления в БД нельзя: канал только real-time.
+
+## Офлайн: Web Push и APNs
+
+Если у пользователя **нет** активного WebSocket к `/{service}/ws/notifications`, `notify_user` дополнительно вызывает [`deliver_offline_push`](../../core/push/delivery.py):
+
+- Подписки с `endpoint`, начинающимся с **`https://`**, и `transport: web_vapid` (см. [`SubscribeRequest`](../../core/push/schemas.py)) уходят в **VAPID** ([`WebPushService`](../../core/push/service.py)).
+- Подписки с `endpoint` вида **`apns:<hex>`** (регистрация из нативного iOS через Capacitor) уходят в **APNs** ([`ApnsPushService`](../../core/push/apns_service.py)), если [`resolve_apns_credentials`](../../core/push/apns_credentials.py) собрал полный набор: обязателен **`push.apns_bundle_id`**, остальное — из **`push.apns_*`** или из **`auth.providers.apple`** (тот же `.p8`, что для Sign in with Apple, если у ключа в Apple Developer включён APNs).
+
+Инициализация: [`create_service_app` lifespan](../../core/app/factory.py) — `init_web_push_service` при `push.enabled`; `init_apns_push_service` при успешном `resolve_apns_credentials`. Тот же APNs-init в **sync worker** ([`apps/sync/realtime/broker.py`](../../apps/sync/realtime/broker.py)).
+
+API: `POST .../api/push/subscribe` с **`transport`**: `web_vapid` | `ios_apns`. Клиент: [`PWAService.ensurePushRegistration`](../../core/frontend/static/services/pwa.service.js) после авторизации из [`PlatformApp`](../../core/frontend/static/lib/base/PlatformApp.js).
+
+Service Worker ([`core/frontend/pwa/sw.js`](../../core/frontend/pwa/sw.js)) шлёт `postMessage` с типом `humanitec-web-push` и вызывает `showNotification`. В Chrome при **активной вкладке** системный баннер часто не показывается; [`PWAService`](../../core/frontend/static/services/pwa.service.js) по этому сообщению диспатчит `AppEvents.TOAST_SHOW` (glass-toast), чтобы пуш был виден в открытом приложении.
+
+## Frontend: как показывать
+
+- Локальные UI-тосты: `this.success/error/warning/info` или `this.notify.*` (через `PlatformElement`).
+- Кросс-сервисные нотификации: через `<platform-notification-manager></platform-notification-manager>`.
+- Не рендерить `glass-toast` вручную в приложениях.
+
+## События в браузере
+
+Актуальные события от менеджера:
+
+- `notification-received` — `CustomEvent` на самом компоненте
+- `platform-notification-received` — `CustomEvent` на `window`
+
+`platform-notification` и `platform-ws-connected/disconnected` не использовать.
+
+## Z-index (обязательно)
+
+- Toast должен быть выше открытых модалок.
+- При создании `glass-toast` использовать динамический слой: `nextModalLayerZIndex()` из `core/frontend/static/lib/utils/modal-z-stack.js`.
+- Фиксированный `--z-toast` без динамического подъема для runtime-показа запрещен.
+
+## Запрещено
+
+- Хардкод WS URL и портов.
+- Локальные самописные toast-механизмы в `apps/*/ui`.
+- Broadcast уведомлений всем пользователям.

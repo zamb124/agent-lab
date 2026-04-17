@@ -1,0 +1,479 @@
+---
+trigger: model_decision
+description: "Правила работы с TaskIQ"
+globs: ["**/tasks/**", "**/broker.py", "**/worker.py"]
+---
+# Правила работы с TaskIQ
+
+## Обзор архитектуры
+
+TaskIQ - единая система очередей задач для всей платформы. Использует Redis как брокер.
+
+## Единый cron/control-plane (platform scheduler)
+
+- Платформенный API расписаний находится в `apps/scheduler` (`/scheduler/api/v1/schedules*`).
+- Метаданные расписаний хранятся в shared БД (`scheduler_tasks`) с обязательным `company_id`.
+- Company isolation обязательна: любые операции create/list/pause/resume/cancel/run-now выполняются только в рамках текущей компании.
+- Кросс-сервисный доступ из кода только через `core/clients/scheduler_client.py`, не через прямой `httpx`.
+- Для recurring задач в сервисах использовать scheduler API вместо локальных `while True` циклов в `main.py`, если это cron/interval сценарий.
+
+**Компоненты:**
+- **RedisStreamBroker** - брокер сообщений (Redis Streams с consumer groups)
+- **RedisAsyncResultBackend** - хранение результатов
+- **ListRedisScheduleSource** - отложенные/cron задачи
+- **SessionLockMiddleware** - FIFO выполнение в рамках одной сессии
+- **TaskiqScheduler** - планировщик отложенных задач
+
+**Преимущества Redis:**
+- Блокирующая очередь - каждый воркер получает свою задачу (XREADGROUP)
+- Consumer groups для надежной доставки
+- FIFO per session через distributed lock
+
+## Структура
+
+```
+core/tasks/
+├── __init__.py          # Экспорт middleware и инфраструктуры lock
+├── broker.py            # RedisStreamBroker + ListRedisScheduleSource + TaskiqScheduler
+├── session_lock.py      # SessionLockMiddleware для FIFO per session
+└── ...
+
+apps/flows_worker/broker.py   # flows worker broker (queue "flows_worker")
+apps/idle_worker/broker.py    # idle worker broker (queue "idle")
+apps/rag_worker/broker.py     # rag worker broker (queue "rag")
+apps/sync/realtime/broker.py  # sync worker broker (queue "sync")
+apps/crm_worker/broker.py     # crm worker broker (queue "crm")
+
+apps/flows/src/tasks/
+├── __init__.py
+├── flow_tasks.py        # process_flow_task
+├── tool_tasks.py        # execute_tool
+├── eval_task.py         # execute_inline_code
+├── push_notification_tasks.py
+├── scheduled_tasks.py
+└── ...
+
+apps/flows/tools/
+└── scheduling.py        # @tool: schedule_cron_task, schedule_one_time_task, list_scheduled_tasks, ...
+
+apps/frontend/tasks/
+├── __init__.py
+└── notification_tasks.py
+```
+
+Задачи flows регистрируются на `broker` из `apps/flows_worker/broker.py` (очередь `flows_worker`), фабрика брокера — `core/tasks/broker.py`.
+
+При старте `flows_worker` в `_initialize_worker_state` вызывается `set_billing_service(container.billing_service)` (как у `crm_worker`): без этого `invoke_llm` и другие задачи с `get_billing_service()` падают в процессе воркера.
+
+## Брокер и Scheduler
+
+Брокер и scheduler живут в `core/tasks/broker.py`:
+
+```python
+from apps.flows_worker.broker import broker
+
+@broker.task(queue_name="flows_worker")
+async def my_task() -> None:
+    return None
+```
+
+**КРИТИЧНО**: Все компоненты используют `settings.database.redis_url`.
+
+## Процесс `taskiq scheduler` (platform)
+
+- Файл [`apps/scheduler/scheduler.py`](apps/scheduler/scheduler.py): **сначала** side-effect импорты модулей с `@broker.task`, затем вызов **`require_tasks_registered_for_scheduler`** ([`core/scheduler/scheduler.py`](core/scheduler/scheduler.py)), затем **`create_scheduler`**.
+- Если задача не зарегистрирована на нужном брокере (забыт импорт модуля или неверное имя в кортежах), процесс **падает при старте** с `RuntimeError` и списком отсутствующих `task_name`.
+- Новая задача, которая может оказаться в Redis-расписании: добавить импорт модуля в `apps/scheduler/scheduler.py` и имя в **`_FLOWS_SCHEDULER_REQUIRED_TASK_NAMES`** или **`_IDLE_SCHEDULER_REQUIRED_TASK_NAMES`** (для `execute_inline_code` в Redis используется ключ вида `apps.flows.src.tasks.eval_task:execute_inline_code`).
+- **`QueueAwareTaskiqScheduler`** (`core/scheduler/scheduler.py`): при срабатывании записи из Redis вызывает `AsyncKicker` на **брокере целевой очереди** (`idle`, `flows_worker`, …), а не только на `flows_broker`. Иначе у `RedisStreamBroker.kick` при пустом/отсутствующем `labels['queue_name']` срабатывает fallback на stream `flows_worker`, и `flows_worker` получает сообщения с именами idle-задач без зарегистрированного handler (warning «task is not found»).
+
+**SchedulerService** (`core/scheduler/service.py`) для `AsyncKicker` получает брокер через **`broker_for_queue(queue_name)`**, задаётся в [`apps/scheduler/container.py`](apps/scheduler/container.py) (`scheduler_broker_for_queue`): очередь **`idle`** → `apps.idle_worker.broker`, **`flows_worker`** → `apps.flows_worker.broker`, и т.д. Иначе постановка в Redis для задач, зарегистрированных только на `idle`, некорректна.
+
+## FIFO per Session
+
+SessionLockMiddleware обеспечивает последовательное выполнение задач одной сессии:
+
+```
+[Task 1: session_A] → lock(session_A) → execute → unlock(session_A)
+[Task 2: session_A] → lock busy → requeue → wait → lock(session_A) → execute
+[Task 3: session_B] → lock(session_B) → execute (параллельно с session_A)
+```
+
+**Алгоритм:**
+1. Перед выполнением - `SETNX session_lock:{session_id}` (атомарный lock)
+2. Если lock занят - задача возвращается в очередь с задержкой 100ms
+3. После выполнения - `DEL session_lock:{session_id}`
+4. TTL lock = 5 минут (защита от зависших воркеров)
+
+## Создание задачи
+
+<good_example>
+from apps.flows_worker.broker import broker
+
+@broker.task(retry_on_error=True, max_retries=3)
+async def my_task(param1: str, param2: int) -> str:
+    """
+    Описание задачи.
+    
+    Args:
+        param1: Описание параметра
+        param2: Описание параметра
+        
+    Returns:
+        Результат выполнения
+    """
+    # Логика задачи
+    return "result"
+</good_example>
+
+<bad_example>
+# НЕ создавай свой брокер
+from taskiq_redis import RedisStreamBroker
+my_broker = RedisStreamBroker(url="...")  # НЕТ!
+
+# НЕ используй InMemoryBroker в продакшене
+from taskiq import InMemoryBroker
+broker = InMemoryBroker()  # НЕТ!
+</bad_example>
+
+## Вызов задачи
+
+### Асинхронный вызов (fire-and-forget)
+
+```python
+task = await my_task.kiq(param1="value", param2=42)
+# task.task_id - ID задачи
+```
+
+### Синхронный вызов с ожиданием результата
+
+```python
+task = await my_task.kiq(param1="value", param2=42)
+result = await task.wait_result(timeout=30)
+
+if result.is_err:
+    raise result.error
+    
+return result.return_value
+```
+
+## Основные задачи
+
+### process_flow_task
+
+Главная задача для выполнения flow. Делегирует выполнение в `BaseChannel.process_task()`.
+
+```python
+from apps.flows.src.tasks.flow_tasks import process_flow_task
+
+# В проде context_data обязателен (см. тело process_flow_task — Context из middleware).
+task = await process_flow_task.kiq(
+    flow_id="example_react",
+    session_id="example_react:ctx-456",
+    user_id="user-789",
+    content="Привет",
+    skill_id="default",
+    channel="a2a",
+    task_id="task-123",
+    context_id="ctx-456",
+    is_resume=False,
+    files=[],
+    context_data={...},
+)
+```
+
+**Внутри process_flow_task:**
+1. Получает канал через `get_channel(channel, flow_id)`
+2. Подготавливает `PreparedTaskParams`
+3. Вызывает `channel.process_task(params)`
+4. Внутри `process_task`:
+   - Создаёт `Emitter` для публикации событий
+   - Загружает `Flow` через `FlowFactory`
+   - Запускает `await flow.run(state)`
+   - Публикует `emit_complete()` или `emit_interrupt()`
+   - Сохраняет state через `StateRepository`
+
+### execute_tool
+
+Выполнение tool в изолированном окружении.
+
+```python
+from apps.flows.src.tasks.tool_tasks import execute_tool
+
+result = await execute_tool.kiq(
+    tool_config={
+        "name": "calculator",
+        "description": "Вычисляет выражения",
+        "code": "def execute(args, state): return eval(args['expr'])"
+    },
+    args={"expr": "2+2"},
+    state_dict=state.model_dump(exclude_none=False),
+    context_data=context.to_dict(),
+)
+
+# result содержит:
+# {
+#     "tool_id": "calculator",
+#     "result": 4,
+#     "nested_states": {...}
+# }
+```
+
+**Используется в LlmNodeRunner** для параллельного выполнения tools.
+
+### execute_inline_code
+
+Выполнение inline кода через SafeEval.
+
+```python
+from apps.flows.src.tasks.eval_task import execute_inline_code
+
+result = await execute_inline_code.kiq(
+    code="def run(state): return state.get('x', 0) * 2",
+    state_dict={"x": 5}
+)
+
+# result = 10
+```
+
+### send_task_update (Push Notifications)
+
+Отправка push notification о статусе задачи.
+
+```python
+from apps.idle_worker.tasks.push_notification_tasks import send_task_update
+
+await send_task_update.kiq(
+    task_id="task-123",
+    context_id="ctx-456",
+    event={
+        "kind": "task-status-update",
+        "taskId": "task-123",
+        "status": {"state": "completed"}
+    }
+)
+```
+
+**Используется для:**
+- Отправки уведомлений о завершении задачи
+- Уведомлений об interrupt (input-required)
+- Уведомлений об ошибках
+
+## Интеграция с Channels
+
+### A2AChannel.on_message_send()
+
+Метод `on_message_send` создаёт TaskIQ задачу и ждёт результата:
+
+```python
+# В A2AChannel
+subscriber = EventSubscriber(redis_client)
+
+# Запускаем worker
+await process_flow_task.kiq(
+    flow_id=flow_id,
+    task_id=task_id,
+    context_id=context_id,
+    content=content,
+    ...
+)
+
+# Собираем события
+events = []
+async for event in subscriber.subscribe(task_id):
+    events.append(event)
+    if event.kind == "task-status-update":
+        if event.status.state in ["completed", "failed", "canceled"]:
+            break
+
+# Формируем Task из событий
+task = _build_task_from_events(events, task_id, context_id)
+return task
+```
+
+### Streaming через Emitter
+
+Worker публикует события через `Emitter`:
+
+```python
+# В BaseChannel.process_task()
+emitter = Emitter(redis_client, state)
+flow = await flow_factory.get_flow(flow_id)
+
+try:
+    result_state = await flow.run(state)
+    if result_state.interrupt:
+        await emitter.emit_interrupt(result_state.interrupt)
+    else:
+        await emitter.emit_complete(result_state.response)
+except Exception as e:
+    await emitter.emit_error(str(e))
+```
+
+## Запуск воркера
+
+### Локально
+
+```bash
+make taskiq           # Обычный режим
+make taskiq-reload    # С hot reload
+```
+
+### Docker
+
+```bash
+docker compose -f docker-compose-prod.yaml up -d flows_worker
+docker compose -f docker-compose-prod.yaml logs -f flows_worker
+docker compose -f docker-compose-prod.yaml restart flows_worker
+```
+
+### Конфигурация Docker
+
+```yaml
+# docker-compose.yml
+redis:
+  image: redis:7-alpine
+  ports:
+    - "8099:6379"
+  healthcheck:
+    test: ["CMD", "redis-cli", "ping"]
+
+flows_worker:
+  build:
+    context: .
+    dockerfile: Dockerfile
+    target: worker
+  depends_on:
+    redis:
+      condition: service_healthy
+  command: taskiq worker apps.flows_worker.worker:worker_app --workers 1
+```
+
+### Масштабирование
+
+Redis с consumer groups позволяет безопасно масштабировать воркеры:
+
+```bash
+# Запуск нескольких воркеров
+docker-compose up --scale flows_worker=4
+
+# Каждый воркер получает свою задачу благодаря XREADGROUP
+# FIFO per session гарантируется SessionLockMiddleware
+```
+
+## Retry и обработка ошибок
+
+```python
+@broker.task(
+    retry_on_error=True,   # Повторять при ошибке
+    max_retries=3,         # Максимум попыток
+)
+async def reliable_task(data: str) -> str:
+    # При ошибке задача будет повторена до 3 раз
+    return await process(data)
+```
+
+## Тестирование
+
+### Запуск тестов (с Redis)
+
+```bash
+make test  # Автоматически поднимает postgres (pgvector), redis
+```
+
+### Инициализация брокера в тестах
+
+```python
+# tests/conftest.py
+@pytest.fixture(scope="session")
+async def taskiq_broker(event_loop):
+    """Инициализация TaskIQ брокера для тестов"""
+    from apps.flows_worker.broker import broker
+    
+    await broker.startup()
+    yield broker
+    await broker.shutdown()
+```
+
+### Использование в тестах
+
+```python
+@pytest.mark.asyncio
+async def test_process_flow_task(taskiq_broker, test_context):
+    from apps.flows.src.tasks.flow_tasks import process_flow_task
+    
+    task = await process_flow_task.kiq(
+        flow_id="test_flow",
+        session_id="test_session",
+        # ...
+    )
+    
+    result = await task.wait_result(timeout=30)
+    assert not result.is_err
+```
+
+## КРИТИЧНЫЕ ПРАВИЛА
+
+1. **ВСЕГДА** используй broker из модуля соответствующего воркера (`apps.<name>_worker.broker` или `apps.sync.realtime.broker`)
+2. **НИКОГДА** не создавай свой брокер
+3. **ВСЕГДА** используй `.kiq()` для создания задач
+4. **НИКОГДА** не используй InMemoryBroker в продакшене
+5. **ВСЕГДА** инициализируй брокер в тестах через фикстуру
+6. **ВСЕГДА** используй `retry_on_error=True` для критичных задач
+7. **ПОМНИ** что задачи с session_id выполняются последовательно (FIFO)
+
+## Планирование и напоминания (scheduler + тулы)
+
+Инфраструктура: **Redis schedule source** + **TaskiqScheduler** (`core/tasks/broker.py`, `core/scheduler/`). Запланированные срабатывания для flows выполняет задача **`execute_scheduled_task`** (`apps/flows/src/tasks/scheduled_tasks.py`, очередь broker **`flows_worker`**), а не прямой вызов `process_flow_task.schedule_by_time` — расписание создаёт **`ScheduleService`** (`apps/flows/src/services/schedule_service.py`) через `execute_scheduled_task.kicker().schedule_by_time` / `schedule_by_cron` / `schedule_by_interval`.
+
+### Тулы расписания для `llm_node`
+
+Файл: `apps/flows/tools/scheduling.py`. Имена тулов: `schedule_cron_task`, `schedule_interval_task`, `schedule_one_time_task`, `list_scheduled_tasks`, `cancel_scheduled_task`. Внутри вызывается `ScheduleService` контейнера flows.
+
+Требования: в `state` передан **`session_id`** в формате `flow_id:context_id`, иначе `ValueError`.
+
+Дополнительно тулы дописывают в state список **`scheduled_tasks`** (см. `scheduling.py`).
+
+### Запуск Scheduler
+
+**Локально:**
+```bash
+make taskiq-scheduler
+```
+
+**Docker:**
+```bash
+docker-compose up -d taskiq-scheduler
+```
+
+**КРИТИЧНО**: Scheduler должен работать для выполнения отложенных задач!
+
+## Календарный автосинк (platform scheduler)
+
+- Платформенная периодическая задача календаря: `calendar_sync_tick` (`apps/idle_worker/tasks/calendar_sync_tasks.py`).
+- Регистрация cron выполняется в `apps/scheduler/main.py` на старте scheduler через `SchedulerService`:
+  - company scope: `system`
+  - cron по умолчанию: `*/1 * * * *`
+  - idempotency: если есть `pending` запись для `calendar_sync_tick`, дубль не создаётся; если есть `paused`, задача резюмируется.
+- Task module `calendar_sync_tasks` обязан быть импортирован в `apps/idle_worker/worker.py` и в scheduler entrypoint (`apps/scheduler/scheduler.py`), иначе задача не будет обнаружена TaskIQ.
+- Окно синхронизации и лимиты берутся из `settings.calendar_sync` (`core/config/models.py`):
+  - `lookback_days`, `lookahead_months`
+  - `batch_size`, `max_integrations_per_tick`, `max_parallel_integrations`
+  - `notification_dedup_ttl_seconds`
+- Нотификации новых событий отправляются через `core.websocket.publisher.notify_user` и дедуплицируются по ключу `calendar:notify:{company_id}:{user_id}:{provider}:{event_id}` в `shared_storage`.
+
+## Конфигурация
+
+Redis URL настраивается в `conf.json`:
+
+```json
+{
+  "database": {
+    "redis_url": "redis://redis:6379"
+  }
+}
+```
+
+Или через переменную окружения:
+```bash
+export DATABASE__REDIS_URL="redis://localhost:8099"
+```
