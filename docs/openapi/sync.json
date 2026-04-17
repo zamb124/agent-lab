@@ -1,0 +1,4158 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Sync Public API",
+    "description": "Инженерный чат с Git-интеграцией",
+    "version": "1.0.0",
+    "x-service": "sync"
+  },
+  "paths": {},
+  "components": {
+    "schemas": {
+      "AudioAttachmentContent": {
+        "properties": {
+          "file_id": {
+            "type": "string",
+            "title": "File Id",
+            "description": "Идентификатор файла в системе."
+          },
+          "filename": {
+            "type": "string",
+            "title": "Filename",
+            "description": "Оригинальное имя файла."
+          },
+          "mime_type": {
+            "type": "string",
+            "title": "Mime Type",
+            "description": "MIME-тип аудиофайла."
+          },
+          "size": {
+            "type": "integer",
+            "title": "Size",
+            "description": "Размер аудио в байтах."
+          },
+          "duration_ms": {
+            "type": "integer",
+            "title": "Duration Ms",
+            "description": "Длительность аудио в миллисекундах."
+          },
+          "waveform": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "integer"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Waveform",
+            "description": "Опциональные значения амплитуды для визуализации волны."
+          },
+          "transcription_status": {
+            "$ref": "#/components/schemas/AudioTranscriptionStatus",
+            "description": "Текущий статус расшифровки аудио.",
+            "default": "idle"
+          },
+          "transcription_text": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Transcription Text",
+            "description": "Результат распознавания речи."
+          },
+          "transcription_error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Transcription Error",
+            "description": "Текст ошибки расшифровки."
+          },
+          "source_speech_to_chat": {
+            "type": "boolean",
+            "title": "Source Speech To Chat",
+            "description": "Сегмент с серверного speech-to-chat; авто-STT канала на сообщение не ставится.",
+            "default": false
+          }
+        },
+        "type": "object",
+        "required": [
+          "file_id",
+          "filename",
+          "mime_type",
+          "size",
+          "duration_ms"
+        ],
+        "title": "AudioAttachmentContent",
+        "description": "Канонический payload аудио-вложения для сообщений сервисов."
+      },
+      "AudioTranscriptionStatus": {
+        "type": "string",
+        "enum": [
+          "idle",
+          "processing",
+          "done",
+          "failed"
+        ],
+        "title": "AudioTranscriptionStatus",
+        "description": "Канонический статус транскрипции аудио."
+      },
+      "Body_auth_callback_post_sync_api_auth_callback__provider_name__post": {
+        "properties": {
+          "code": {
+            "type": "string",
+            "title": "Code"
+          },
+          "state": {
+            "type": "string",
+            "title": "State"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          },
+          "user": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "User"
+          }
+        },
+        "type": "object",
+        "required": [
+          "code",
+          "state"
+        ],
+        "title": "Body_auth_callback_post_sync_api_auth_callback__provider_name__post"
+      },
+      "Body_upload_file_sync_api_v1_files__post": {
+        "properties": {
+          "file": {
+            "type": "string",
+            "format": "binary",
+            "title": "File"
+          }
+        },
+        "type": "object",
+        "required": [
+          "file"
+        ],
+        "title": "Body_upload_file_sync_api_v1_files__post"
+      },
+      "CalendarAttendee": {
+        "properties": {
+          "attendee_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Attendee Id"
+          },
+          "email": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Email"
+          },
+          "display_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Display Name"
+          },
+          "response_status": {
+            "type": "string",
+            "title": "Response Status",
+            "default": "needsAction"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "CalendarAttendee"
+      },
+      "CalendarConnectIntegrationRequest": {
+        "properties": {
+          "provider": {
+            "$ref": "#/components/schemas/CalendarProvider"
+          },
+          "username": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Username"
+          },
+          "access_token": {
+            "type": "string",
+            "title": "Access Token"
+          },
+          "refresh_token": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Refresh Token"
+          },
+          "expires_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expires At"
+          },
+          "scope": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Scope"
+          },
+          "token_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Token Type"
+          },
+          "default_calendar_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Default Calendar Id"
+          },
+          "sync_enabled": {
+            "type": "boolean",
+            "title": "Sync Enabled",
+            "default": true
+          },
+          "sync_inbound_enabled": {
+            "type": "boolean",
+            "title": "Sync Inbound Enabled",
+            "default": true
+          },
+          "sync_outbound_enabled": {
+            "type": "boolean",
+            "title": "Sync Outbound Enabled",
+            "default": true
+          },
+          "notifications_enabled": {
+            "type": "boolean",
+            "title": "Notifications Enabled",
+            "default": true
+          }
+        },
+        "type": "object",
+        "required": [
+          "provider",
+          "access_token"
+        ],
+        "title": "CalendarConnectIntegrationRequest"
+      },
+      "CalendarEvent": {
+        "properties": {
+          "event_id": {
+            "type": "string",
+            "title": "Event Id"
+          },
+          "source": {
+            "$ref": "#/components/schemas/CalendarEventSource"
+          },
+          "source_id": {
+            "type": "string",
+            "title": "Source Id"
+          },
+          "company_id": {
+            "type": "string",
+            "title": "Company Id"
+          },
+          "namespace": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Namespace"
+          },
+          "kind": {
+            "type": "string",
+            "title": "Kind"
+          },
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "location": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Location"
+          },
+          "status": {
+            "$ref": "#/components/schemas/CalendarEventStatus",
+            "default": "confirmed"
+          },
+          "timezone": {
+            "type": "string",
+            "title": "Timezone"
+          },
+          "all_day": {
+            "type": "boolean",
+            "title": "All Day",
+            "default": false
+          },
+          "start_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Start At"
+          },
+          "end_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "End At"
+          },
+          "attendees": {
+            "items": {
+              "$ref": "#/components/schemas/CalendarAttendee"
+            },
+            "type": "array",
+            "title": "Attendees"
+          },
+          "recurrence_rule": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Recurrence Rule"
+          },
+          "recurrence_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Recurrence Id"
+          },
+          "series_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Series Id"
+          },
+          "deep_link": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Deep Link"
+          },
+          "external_refs": {
+            "items": {
+              "$ref": "#/components/schemas/CalendarExternalRef"
+            },
+            "type": "array",
+            "title": "External Refs"
+          },
+          "metadata": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "type": "object",
+            "title": "Metadata"
+          },
+          "created_by_user_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Created By User Id"
+          },
+          "updated_by_user_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Updated By User Id"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Updated At"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "event_id",
+          "source",
+          "source_id",
+          "company_id",
+          "kind",
+          "title",
+          "timezone",
+          "start_at",
+          "end_at",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "CalendarEvent"
+      },
+      "CalendarEventSource": {
+        "type": "string",
+        "enum": [
+          "platform",
+          "crm",
+          "sync",
+          "flows",
+          "google",
+          "yandex"
+        ],
+        "title": "CalendarEventSource"
+      },
+      "CalendarEventStatus": {
+        "type": "string",
+        "enum": [
+          "confirmed",
+          "tentative",
+          "cancelled"
+        ],
+        "title": "CalendarEventStatus"
+      },
+      "CalendarExternalRef": {
+        "properties": {
+          "provider": {
+            "$ref": "#/components/schemas/CalendarProvider"
+          },
+          "calendar_id": {
+            "type": "string",
+            "title": "Calendar Id"
+          },
+          "external_event_id": {
+            "type": "string",
+            "title": "External Event Id"
+          },
+          "etag": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Etag"
+          },
+          "last_synced_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Synced At"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "provider",
+          "calendar_id",
+          "external_event_id"
+        ],
+        "title": "CalendarExternalRef"
+      },
+      "CalendarIntegrationPublic": {
+        "properties": {
+          "integration_id": {
+            "type": "string",
+            "title": "Integration Id"
+          },
+          "company_id": {
+            "type": "string",
+            "title": "Company Id"
+          },
+          "user_id": {
+            "type": "string",
+            "title": "User Id"
+          },
+          "provider": {
+            "$ref": "#/components/schemas/CalendarProvider"
+          },
+          "settings": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Settings"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Updated At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "integration_id",
+          "company_id",
+          "user_id",
+          "provider",
+          "settings",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "CalendarIntegrationPublic"
+      },
+      "CalendarListRequest": {
+        "properties": {
+          "start_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Start At"
+          },
+          "end_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "End At"
+          },
+          "include_sources": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/CalendarEventSource"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Include Sources"
+          },
+          "limit": {
+            "type": "integer",
+            "maximum": 5000.0,
+            "minimum": 1.0,
+            "title": "Limit",
+            "default": 1000
+          }
+        },
+        "type": "object",
+        "required": [
+          "start_at",
+          "end_at"
+        ],
+        "title": "CalendarListRequest"
+      },
+      "CalendarListResponse": {
+        "properties": {
+          "events": {
+            "items": {
+              "$ref": "#/components/schemas/CalendarEvent"
+            },
+            "type": "array",
+            "title": "Events"
+          },
+          "integrations": {
+            "items": {
+              "$ref": "#/components/schemas/CalendarIntegrationPublic"
+            },
+            "type": "array",
+            "title": "Integrations"
+          }
+        },
+        "type": "object",
+        "required": [
+          "events",
+          "integrations"
+        ],
+        "title": "CalendarListResponse"
+      },
+      "CalendarProvider": {
+        "type": "string",
+        "enum": [
+          "platform",
+          "google",
+          "yandex"
+        ],
+        "title": "CalendarProvider"
+      },
+      "CalendarSyncRequest": {
+        "properties": {
+          "provider": {
+            "$ref": "#/components/schemas/CalendarProvider"
+          },
+          "start_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Start At"
+          },
+          "end_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "End At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "provider",
+          "start_at",
+          "end_at"
+        ],
+        "title": "CalendarSyncRequest"
+      },
+      "CalendarUpsertRequest": {
+        "properties": {
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "kind": {
+            "type": "string",
+            "title": "Kind",
+            "default": "event"
+          },
+          "source": {
+            "$ref": "#/components/schemas/CalendarEventSource",
+            "default": "platform"
+          },
+          "source_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Id"
+          },
+          "namespace": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Namespace"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "location": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Location"
+          },
+          "status": {
+            "$ref": "#/components/schemas/CalendarEventStatus",
+            "default": "confirmed"
+          },
+          "timezone": {
+            "type": "string",
+            "title": "Timezone",
+            "default": "UTC"
+          },
+          "all_day": {
+            "type": "boolean",
+            "title": "All Day",
+            "default": false
+          },
+          "start_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Start At"
+          },
+          "end_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "End At"
+          },
+          "attendees": {
+            "items": {
+              "$ref": "#/components/schemas/CalendarAttendee"
+            },
+            "type": "array",
+            "title": "Attendees"
+          },
+          "recurrence_rule": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Recurrence Rule"
+          },
+          "recurrence_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Recurrence Id"
+          },
+          "series_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Series Id"
+          },
+          "deep_link": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Deep Link"
+          },
+          "metadata": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "type": "object",
+            "title": "Metadata"
+          }
+        },
+        "type": "object",
+        "required": [
+          "title",
+          "start_at",
+          "end_at"
+        ],
+        "title": "CalendarUpsertRequest"
+      },
+      "CallBoundaryContent": {
+        "properties": {
+          "call_id": {
+            "type": "string",
+            "title": "Call Id",
+            "description": "Идентификатор звонка."
+          },
+          "phase": {
+            "type": "string",
+            "enum": [
+              "started",
+              "ended"
+            ],
+            "title": "Phase",
+            "description": "Фаза сессии."
+          }
+        },
+        "type": "object",
+        "required": [
+          "call_id",
+          "phase"
+        ],
+        "title": "CallBoundaryContent",
+        "description": "Маркер начала или окончания звонка в ленте канала."
+      },
+      "CallLinkCreate": {
+        "properties": {
+          "channel_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Channel Id",
+            "description": "Канал существующего чата. Не указывать вместе с calendar_event_id."
+          },
+          "call_type": {
+            "type": "string",
+            "const": "video",
+            "title": "Call Type",
+            "default": "video"
+          },
+          "ttl_hours": {
+            "type": "integer",
+            "maximum": 168.0,
+            "minimum": 1.0,
+            "title": "Ttl Hours",
+            "default": 24
+          },
+          "call_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Call Id",
+            "description": "Текущий звонок: та же LiveKit-комната, что у участников чата."
+          },
+          "calendar_event_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Calendar Event Id",
+            "description": "ID события platform calendar: создаётся канал calendar_meeting и ссылка."
+          },
+          "scheduled_title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Scheduled Title"
+          },
+          "scheduled_start_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Scheduled Start At"
+          },
+          "scheduled_end_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Scheduled End At"
+          },
+          "calendar_member_user_ids": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Calendar Member User Ids",
+            "description": "Участники канала встречи (platform user_id), без создателя."
+          }
+        },
+        "type": "object",
+        "title": "CallLinkCreate"
+      },
+      "CallLinkInfo": {
+        "properties": {
+          "link_token": {
+            "type": "string",
+            "title": "Link Token"
+          },
+          "channel_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Channel Name"
+          },
+          "creator_display_name": {
+            "type": "string",
+            "title": "Creator Display Name"
+          },
+          "creator_avatar_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Creator Avatar Url",
+            "description": "URL аватара создателя ссылки (если задан в профиле)."
+          },
+          "call_type": {
+            "type": "string",
+            "const": "video",
+            "title": "Call Type"
+          },
+          "expires_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Expires At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "link_token",
+          "channel_name",
+          "creator_display_name",
+          "call_type",
+          "expires_at"
+        ],
+        "title": "CallLinkInfo",
+        "description": "Публичная информация о ссылке (без auth)."
+      },
+      "CallLinkPatch": {
+        "properties": {
+          "scheduled_title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Scheduled Title"
+          },
+          "scheduled_start_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Scheduled Start At"
+          },
+          "scheduled_end_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Scheduled End At"
+          },
+          "calendar_member_user_ids": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Calendar Member User Ids",
+            "description": "Полная синхронизация участников канала встречи (кроме создателя ссылки)."
+          }
+        },
+        "type": "object",
+        "title": "CallLinkPatch"
+      },
+      "CallLinkRead": {
+        "properties": {
+          "link_token": {
+            "type": "string",
+            "title": "Link Token"
+          },
+          "channel_id": {
+            "type": "string",
+            "title": "Channel Id"
+          },
+          "call_type": {
+            "type": "string",
+            "const": "video",
+            "title": "Call Type"
+          },
+          "expires_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Expires At"
+          },
+          "join_url": {
+            "type": "string",
+            "title": "Join Url"
+          },
+          "title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title"
+          },
+          "scheduled_start_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Scheduled Start At"
+          },
+          "scheduled_end_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Scheduled End At"
+          },
+          "calendar_event_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Calendar Event Id"
+          }
+        },
+        "type": "object",
+        "required": [
+          "link_token",
+          "channel_id",
+          "call_type",
+          "expires_at",
+          "join_url"
+        ],
+        "title": "CallLinkRead"
+      },
+      "CallParticipantRead": {
+        "properties": {
+          "user_id": {
+            "type": "string",
+            "title": "User Id"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "invited",
+              "joined",
+              "declined",
+              "left"
+            ],
+            "title": "Status"
+          },
+          "joined_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Joined At"
+          },
+          "left_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Left At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "user_id",
+          "status"
+        ],
+        "title": "CallParticipantRead"
+      },
+      "CallRead": {
+        "properties": {
+          "call_id": {
+            "type": "string",
+            "title": "Call Id"
+          },
+          "channel_id": {
+            "type": "string",
+            "title": "Channel Id"
+          },
+          "mode": {
+            "type": "string",
+            "enum": [
+              "p2p",
+              "sfu"
+            ],
+            "title": "Mode"
+          },
+          "call_type": {
+            "type": "string",
+            "const": "video",
+            "title": "Call Type"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "ringing",
+              "active",
+              "ended"
+            ],
+            "title": "Status"
+          },
+          "livekit_room_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Livekit Room Name"
+          },
+          "started_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Started At"
+          },
+          "ended_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ended At"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "created_by_user_id": {
+            "type": "string",
+            "title": "Created By User Id"
+          },
+          "participants": {
+            "items": {
+              "$ref": "#/components/schemas/CallParticipantRead"
+            },
+            "type": "array",
+            "title": "Participants",
+            "default": []
+          }
+        },
+        "type": "object",
+        "required": [
+          "call_id",
+          "channel_id",
+          "mode",
+          "call_type",
+          "status",
+          "created_at",
+          "created_by_user_id"
+        ],
+        "title": "CallRead"
+      },
+      "CallRecordingRead": {
+        "properties": {
+          "recording_id": {
+            "type": "string",
+            "title": "Recording Id"
+          },
+          "call_id": {
+            "type": "string",
+            "title": "Call Id"
+          },
+          "channel_id": {
+            "type": "string",
+            "title": "Channel Id"
+          },
+          "space_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Space Id"
+          },
+          "started_by_user_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Started By User Id"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "requested",
+              "recording",
+              "uploaded",
+              "failed"
+            ],
+            "title": "Status"
+          },
+          "provider_job_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Provider Job Id"
+          },
+          "raw_file_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Raw File Id"
+          },
+          "raw_file_storage_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Raw File Storage Url"
+          },
+          "raw_file_download_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Raw File Download Url"
+          },
+          "started_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Started At"
+          },
+          "ended_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ended At"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          }
+        },
+        "type": "object",
+        "required": [
+          "recording_id",
+          "call_id",
+          "channel_id",
+          "status",
+          "created_at"
+        ],
+        "title": "CallRecordingRead"
+      },
+      "CallScheduledLinkRead": {
+        "properties": {
+          "link_token": {
+            "type": "string",
+            "title": "Link Token"
+          },
+          "channel_id": {
+            "type": "string",
+            "title": "Channel Id"
+          },
+          "title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title"
+          },
+          "scheduled_start_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Scheduled Start At"
+          },
+          "scheduled_end_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Scheduled End At"
+          },
+          "calendar_event_id": {
+            "type": "string",
+            "title": "Calendar Event Id"
+          },
+          "join_url": {
+            "type": "string",
+            "title": "Join Url"
+          },
+          "expires_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Expires At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "link_token",
+          "channel_id",
+          "title",
+          "scheduled_start_at",
+          "scheduled_end_at",
+          "calendar_event_id",
+          "join_url",
+          "expires_at"
+        ],
+        "title": "CallScheduledLinkRead"
+      },
+      "CallTranscriptContent": {
+        "properties": {
+          "call_id": {
+            "type": "string",
+            "title": "Call Id",
+            "description": "Идентификатор звонка."
+          },
+          "entries": {
+            "items": {
+              "$ref": "#/components/schemas/CallTranscriptEntry"
+            },
+            "type": "array",
+            "title": "Entries",
+            "description": "Реплики в хронологическом порядке."
+          }
+        },
+        "type": "object",
+        "required": [
+          "call_id",
+          "entries"
+        ],
+        "title": "CallTranscriptContent",
+        "description": "Структурированный транскрипт звонка с данными об участниках и таймингами."
+      },
+      "CallTranscriptEntry": {
+        "properties": {
+          "user_id": {
+            "type": "string",
+            "title": "User Id",
+            "description": "Идентификатор участника (user_id или guest:...)."
+          },
+          "display_name": {
+            "type": "string",
+            "title": "Display Name",
+            "description": "Отображаемое имя участника."
+          },
+          "avatar_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Avatar Url",
+            "description": "URL аватара участника."
+          },
+          "is_guest": {
+            "type": "boolean",
+            "title": "Is Guest",
+            "description": "Гостевой участник (без профиля).",
+            "default": false
+          },
+          "timestamp": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Timestamp",
+            "description": "Время реплики."
+          },
+          "text": {
+            "type": "string",
+            "title": "Text",
+            "description": "Текст реплики."
+          }
+        },
+        "type": "object",
+        "required": [
+          "user_id",
+          "display_name",
+          "timestamp",
+          "text"
+        ],
+        "title": "CallTranscriptEntry",
+        "description": "Одна реплика в транскрипте звонка."
+      },
+      "ChannelCreate": {
+        "properties": {
+          "space_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Space Id",
+            "description": "Пространство, если канал привязан к Space."
+          },
+          "type": {
+            "$ref": "#/components/schemas/ChannelType",
+            "description": "Тип создаваемого канала."
+          },
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name",
+            "description": "Имя канала (для topic обязательно)."
+          },
+          "is_private": {
+            "type": "boolean",
+            "title": "Is Private",
+            "description": "Создавать приватный канал.",
+            "default": false
+          },
+          "member_ids": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Member Ids",
+            "description": "Начальный список участников (актуально для direct/group)."
+          },
+          "transcribe_voice_messages": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Transcribe Voice Messages",
+            "description": "Если задано — перекрывает значение с пространства; иначе при space_id — как у space, без space — false."
+          },
+          "speech_to_chat_enabled": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Speech To Chat Enabled",
+            "description": "Если задано — перекрывает значение с пространства; иначе при space_id — как у space, без space — false."
+          }
+        },
+        "type": "object",
+        "required": [
+          "type"
+        ],
+        "title": "ChannelCreate",
+        "description": "Параметры для создания канала/чата."
+      },
+      "ChannelMemberAdd": {
+        "properties": {
+          "user_id": {
+            "type": "string",
+            "title": "User Id",
+            "description": "Идентификатор пользователя."
+          },
+          "role": {
+            "type": "string",
+            "title": "Role",
+            "description": "Роль участника (по умолчанию member).",
+            "default": "member"
+          }
+        },
+        "type": "object",
+        "required": [
+          "user_id"
+        ],
+        "title": "ChannelMemberAdd",
+        "description": "Добавление участника в канал."
+      },
+      "ChannelMemberRead": {
+        "properties": {
+          "user_id": {
+            "type": "string",
+            "title": "User Id",
+            "description": "Идентификатор пользователя."
+          },
+          "role": {
+            "type": "string",
+            "title": "Role",
+            "description": "Роль пользователя в канале (owner/admin/member/viewer)."
+          }
+        },
+        "type": "object",
+        "required": [
+          "user_id",
+          "role"
+        ],
+        "title": "ChannelMemberRead",
+        "description": "Участник канала."
+      },
+      "ChannelNotificationSettingsUpdate": {
+        "properties": {
+          "notifications_muted": {
+            "type": "boolean",
+            "title": "Notifications Muted",
+            "description": "Не отправлять платформенные уведомления о новых сообщениях в этом канале."
+          }
+        },
+        "type": "object",
+        "required": [
+          "notifications_muted"
+        ],
+        "title": "ChannelNotificationSettingsUpdate",
+        "description": "Настройки уведомлений текущего пользователя в канале."
+      },
+      "ChannelRead": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id",
+            "description": "Идентификатор канала."
+          },
+          "space_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Space Id",
+            "description": "Пространство, в котором живёт канал (для topic/group)."
+          },
+          "type": {
+            "$ref": "#/components/schemas/ChannelType"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name",
+            "description": "Имя канала (для topic обязательно)."
+          },
+          "is_private": {
+            "type": "boolean",
+            "title": "Is Private",
+            "description": "Флаг приватности канала (доступ только по приглашению)."
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At",
+            "description": "Время создания канала."
+          },
+          "created_by_user_id": {
+            "type": "string",
+            "title": "Created By User Id",
+            "description": "Создатель канала."
+          },
+          "pinned_message_ids": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Pinned Message Ids",
+            "description": "Упорядоченный список закреплённых сообщений (message_id)."
+          },
+          "peer": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/UserBrief"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Собеседник в direct (участник, отличный от текущего пользователя)."
+          },
+          "avatar_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Avatar Url",
+            "description": "URL аватара канала (topic/group)."
+          },
+          "unread_count": {
+            "type": "integer",
+            "title": "Unread Count",
+            "description": "Число непрочитанных сообщений в основной ленте (не треды).",
+            "default": 0
+          },
+          "mention_unread_count": {
+            "type": "integer",
+            "title": "Mention Unread Count",
+            "description": "Непрочитанные сообщения основной ленты, где текущего пользователя упомянули.",
+            "default": 0
+          },
+          "last_message_preview": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Message Preview",
+            "description": "Краткий текст последнего сообщения основной ленты."
+          },
+          "last_message_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Message At",
+            "description": "Время последнего сообщения основной ленты."
+          },
+          "peer_last_read_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Peer Last Read At",
+            "description": "Время, до которого собеседник прочитал основную ленту (только для direct)."
+          },
+          "notifications_muted": {
+            "type": "boolean",
+            "title": "Notifications Muted",
+            "description": "Уведомления о новых сообщениях отключены для текущего пользователя в этом канале.",
+            "default": false
+          },
+          "transcribe_voice_messages": {
+            "type": "boolean",
+            "title": "Transcribe Voice Messages",
+            "description": "Автоматически ставить в очередь STT для входящих голосовых сообщений.",
+            "default": false
+          },
+          "speech_to_chat_enabled": {
+            "type": "boolean",
+            "title": "Speech To Chat Enabled",
+            "description": "Речь участников звонка в ленту (серверный LiveKit egress по микрофону).",
+            "default": false
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "type",
+          "is_private",
+          "created_at",
+          "created_by_user_id"
+        ],
+        "title": "ChannelRead",
+        "description": "Канал или чат (единая сущность)."
+      },
+      "ChannelType": {
+        "type": "string",
+        "enum": [
+          "direct",
+          "group",
+          "topic",
+          "calendar_meeting"
+        ],
+        "title": "ChannelType",
+        "description": "Тип канала."
+      },
+      "ChannelUpdate": {
+        "properties": {
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name",
+            "description": "Новое имя канала."
+          },
+          "is_private": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Is Private",
+            "description": "Новый флаг приватности."
+          },
+          "avatar_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Avatar Url",
+            "description": "URL аватара или null для сброса."
+          },
+          "transcribe_voice_messages": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Transcribe Voice Messages",
+            "description": "Авто-транскрипция голосовых сообщений в канале."
+          },
+          "speech_to_chat_enabled": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Speech To Chat Enabled",
+            "description": "Речь звонка в ленту через LiveKit egress."
+          }
+        },
+        "type": "object",
+        "title": "ChannelUpdate",
+        "description": "Обновление настроек канала."
+      },
+      "CodeBlockContent": {
+        "properties": {
+          "language": {
+            "type": "string",
+            "title": "Language",
+            "description": "Язык программирования."
+          },
+          "source": {
+            "type": "string",
+            "title": "Source",
+            "description": "Исходный код."
+          },
+          "git_ref_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Git Ref Id",
+            "description": "Опциональная ссылка на Git-ресурс, с которым связан код."
+          }
+        },
+        "type": "object",
+        "required": [
+          "language",
+          "source"
+        ],
+        "title": "CodeBlockContent",
+        "description": "Блок исходного кода."
+      },
+      "CompanyMemberRead": {
+        "properties": {
+          "user_id": {
+            "type": "string",
+            "title": "User Id",
+            "description": "Идентификатор пользователя."
+          },
+          "name": {
+            "type": "string",
+            "title": "Name",
+            "description": "Отображаемое имя."
+          },
+          "roles": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Roles",
+            "description": "Роли в компании."
+          },
+          "avatar_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Avatar Url",
+            "description": "URL аватара."
+          },
+          "is_online": {
+            "type": "boolean",
+            "title": "Is Online",
+            "description": "Активное подключение /sync/ws в Redis."
+          },
+          "last_seen_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Seen At",
+            "description": "ISO-время последнего отключения WS (если офлайн и ключ есть в Redis)."
+          }
+        },
+        "type": "object",
+        "required": [
+          "user_id",
+          "name",
+          "roles",
+          "is_online"
+        ],
+        "title": "CompanyMemberRead",
+        "description": "Краткие данные участника активной компании."
+      },
+      "CredentialInfo": {
+        "properties": {
+          "provider": {
+            "type": "string",
+            "title": "Provider"
+          },
+          "service": {
+            "type": "string",
+            "title": "Service"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "provider",
+          "service",
+          "created_at"
+        ],
+        "title": "CredentialInfo",
+        "description": "Публичная проекция credential для UI (без токенов)."
+      },
+      "CustomToolResponseContent": {
+        "properties": {
+          "tool_name": {
+            "type": "string",
+            "title": "Tool Name",
+            "description": "Имя инструмента, сформировавшего ответ."
+          },
+          "response_data": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Response Data",
+            "description": "Произвольные данные ответа инструмента."
+          }
+        },
+        "type": "object",
+        "required": [
+          "tool_name",
+          "response_data"
+        ],
+        "title": "CustomToolResponseContent",
+        "description": "Ответ внешнего инструмента или AI-агента."
+      },
+      "DemoLoginRequest": {
+        "properties": {
+          "email": {
+            "type": "string",
+            "title": "Email"
+          },
+          "password": {
+            "type": "string",
+            "title": "Password"
+          }
+        },
+        "type": "object",
+        "required": [
+          "email",
+          "password"
+        ],
+        "title": "DemoLoginRequest"
+      },
+      "FileAttachmentContent": {
+        "properties": {
+          "file_id": {
+            "type": "string",
+            "title": "File Id",
+            "description": "Идентификатор файла в системе."
+          },
+          "filename": {
+            "type": "string",
+            "title": "Filename",
+            "description": "Оригинальное имя файла."
+          },
+          "mime_type": {
+            "type": "string",
+            "title": "Mime Type",
+            "description": "MIME-тип файла."
+          },
+          "size": {
+            "type": "integer",
+            "title": "Size",
+            "description": "Размер файла в байтах."
+          }
+        },
+        "type": "object",
+        "required": [
+          "file_id",
+          "filename",
+          "mime_type",
+          "size"
+        ],
+        "title": "FileAttachmentContent",
+        "description": "Вложение файла — фото/видео (file/image) или документ (file/document)."
+      },
+      "FileReadPreviewResponse": {
+        "properties": {
+          "text": {
+            "type": "string",
+            "title": "Text",
+            "description": "Извлечённый текст (может быть усечён для UI)"
+          },
+          "truncated": {
+            "type": "boolean",
+            "title": "Truncated",
+            "description": "Усечён ли текст по лимиту превью"
+          },
+          "page_count": {
+            "type": "integer",
+            "title": "Page Count",
+            "description": "Число страниц после чтения",
+            "default": 0
+          },
+          "detected_kind": {
+            "type": "string",
+            "title": "Detected Kind",
+            "description": "Тип файла по FileReader"
+          },
+          "mime_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Mime Type",
+            "description": "MIME после распознавания"
+          },
+          "warnings": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Warnings",
+            "description": "Предупреждения парсера"
+          },
+          "preview_note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Preview Note",
+            "description": "Пояснение для пользователя (например для изображений)"
+          }
+        },
+        "type": "object",
+        "required": [
+          "text",
+          "truncated",
+          "detected_kind"
+        ],
+        "title": "FileReadPreviewResponse",
+        "description": "Текстовое превью содержимого файла (извлечение без vision для изображений)."
+      },
+      "FileResponse": {
+        "properties": {
+          "file_id": {
+            "type": "string",
+            "title": "File Id"
+          },
+          "original_name": {
+            "type": "string",
+            "title": "Original Name"
+          },
+          "content_type": {
+            "type": "string",
+            "title": "Content Type"
+          },
+          "file_size": {
+            "type": "integer",
+            "title": "File Size"
+          },
+          "url": {
+            "type": "string",
+            "title": "Url"
+          },
+          "checksum": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Checksum"
+          },
+          "is_public": {
+            "type": "boolean",
+            "title": "Is Public"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "file_id",
+          "original_name",
+          "content_type",
+          "file_size",
+          "url",
+          "is_public",
+          "created_at"
+        ],
+        "title": "FileResponse",
+        "description": "Публичное представление файла для API-ответов.\n\nНе содержит внутренних полей (s3_key, s3_bucket, s3_endpoint).\nИспользуется как return-тип всех file-эндпоинтов во всех сервисах."
+      },
+      "ForwardedFromChannel": {
+        "properties": {
+          "channel_id": {
+            "type": "string",
+            "title": "Channel Id",
+            "description": "Идентификатор канала-источника."
+          },
+          "channel_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Channel Name",
+            "description": "Имя канала на момент пересылки (если было в БД)."
+          }
+        },
+        "type": "object",
+        "required": [
+          "channel_id"
+        ],
+        "title": "ForwardedFromChannel",
+        "description": "Источник пересланного сообщения (другой канал)."
+      },
+      "GitProvider": {
+        "type": "string",
+        "enum": [
+          "gitlab",
+          "github",
+          "gitea",
+          "bitbucket"
+        ],
+        "title": "GitProvider",
+        "description": "Поддерживаемые Git-провайдеры."
+      },
+      "GitReferenceContent": {
+        "properties": {
+          "git_ref_id": {
+            "type": "string",
+            "title": "Git Ref Id",
+            "description": "Идентификатор GitResourceRef."
+          }
+        },
+        "type": "object",
+        "required": [
+          "git_ref_id"
+        ],
+        "title": "GitReferenceContent",
+        "description": "Блок, ссылающийся на абстрактный Git-ресурс."
+      },
+      "GitResourceKind": {
+        "type": "string",
+        "enum": [
+          "repo",
+          "merge_request",
+          "pull_request",
+          "commit",
+          "file_diff",
+          "file"
+        ],
+        "title": "GitResourceKind",
+        "description": "Тип Git-ресурса."
+      },
+      "GitResourceRefCreate": {
+        "properties": {
+          "provider": {
+            "$ref": "#/components/schemas/GitProvider",
+            "description": "Провайдер Git."
+          },
+          "kind": {
+            "$ref": "#/components/schemas/GitResourceKind"
+          },
+          "project_key": {
+            "type": "string",
+            "title": "Project Key",
+            "description": "Ключ/путь проекта в провайдере."
+          },
+          "external_id": {
+            "type": "string",
+            "title": "External Id",
+            "description": "Идентификатор ресурса у провайдера."
+          },
+          "url": {
+            "type": "string",
+            "title": "Url",
+            "description": "Канонический URL ресурса."
+          },
+          "extra": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Extra",
+            "description": "Дополнительные метаданные ресурса."
+          }
+        },
+        "type": "object",
+        "required": [
+          "provider",
+          "kind",
+          "project_key",
+          "external_id",
+          "url"
+        ],
+        "title": "GitResourceRefCreate",
+        "description": "Данные для создания/обновления Git-ресурса."
+      },
+      "GitResourceRefRead": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id",
+            "description": "Внутренний идентификатор Git-ресурса."
+          },
+          "provider": {
+            "$ref": "#/components/schemas/GitProvider",
+            "description": "Провайдер Git."
+          },
+          "kind": {
+            "$ref": "#/components/schemas/GitResourceKind"
+          },
+          "project_key": {
+            "type": "string",
+            "title": "Project Key",
+            "description": "Ключ/путь проекта в провайдере."
+          },
+          "external_id": {
+            "type": "string",
+            "title": "External Id",
+            "description": "Идентификатор ресурса у провайдера."
+          },
+          "url": {
+            "type": "string",
+            "title": "Url",
+            "description": "Канонический URL ресурса."
+          },
+          "extra": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Extra",
+            "description": "Дополнительные метаданные ресурса."
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "provider",
+          "kind",
+          "project_key",
+          "external_id",
+          "url"
+        ],
+        "title": "GitResourceRefRead",
+        "description": "Нормализованный Git-ресурс, возвращаемый из API."
+      },
+      "GuestJoinRequest": {
+        "properties": {
+          "guest_name": {
+            "type": "string",
+            "maxLength": 64,
+            "minLength": 1,
+            "title": "Guest Name"
+          }
+        },
+        "type": "object",
+        "required": [
+          "guest_name"
+        ],
+        "title": "GuestJoinRequest"
+      },
+      "HTTPValidationError": {
+        "properties": {
+          "detail": {
+            "items": {
+              "$ref": "#/components/schemas/ValidationError"
+            },
+            "type": "array",
+            "title": "Detail"
+          }
+        },
+        "type": "object",
+        "title": "HTTPValidationError"
+      },
+      "JoinResponse": {
+        "properties": {
+          "call_id": {
+            "type": "string",
+            "title": "Call Id"
+          },
+          "call_type": {
+            "type": "string",
+            "const": "video",
+            "title": "Call Type"
+          },
+          "livekit_token": {
+            "type": "string",
+            "title": "Livekit Token"
+          },
+          "livekit_url": {
+            "type": "string",
+            "title": "Livekit Url"
+          },
+          "identity": {
+            "type": "string",
+            "title": "Identity"
+          },
+          "meeting_admin_user_id": {
+            "type": "string",
+            "title": "Meeting Admin User Id"
+          },
+          "mode": {
+            "type": "string",
+            "enum": [
+              "p2p",
+              "sfu"
+            ],
+            "title": "Mode"
+          },
+          "participant_names": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "type": "object",
+            "title": "Participant Names",
+            "description": "LiveKit identity -> отображаемое имя (для гостя без карты участников компании)."
+          }
+        },
+        "type": "object",
+        "required": [
+          "call_id",
+          "call_type",
+          "livekit_token",
+          "livekit_url",
+          "identity",
+          "meeting_admin_user_id",
+          "mode"
+        ],
+        "title": "JoinResponse",
+        "description": "Ответ при входе в звонок (registered или guest)."
+      },
+      "ListResponse_CalendarIntegrationPublic_": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/CalendarIntegrationPublic"
+            },
+            "type": "array",
+            "title": "Items"
+          }
+        },
+        "type": "object",
+        "required": [
+          "items"
+        ],
+        "title": "ListResponse[CalendarIntegrationPublic]"
+      },
+      "ListResponse_ChannelMemberRead_": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/ChannelMemberRead"
+            },
+            "type": "array",
+            "title": "Items"
+          }
+        },
+        "type": "object",
+        "required": [
+          "items"
+        ],
+        "title": "ListResponse[ChannelMemberRead]"
+      },
+      "ListResponse_CredentialInfo_": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/CredentialInfo"
+            },
+            "type": "array",
+            "title": "Items"
+          }
+        },
+        "type": "object",
+        "required": [
+          "items"
+        ],
+        "title": "ListResponse[CredentialInfo]"
+      },
+      "ListResponse_TeamMemberResponse_": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/TeamMemberResponse"
+            },
+            "type": "array",
+            "title": "Items"
+          }
+        },
+        "type": "object",
+        "required": [
+          "items"
+        ],
+        "title": "ListResponse[TeamMemberResponse]"
+      },
+      "ListResponse_UserSearchResult_": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/UserSearchResult"
+            },
+            "type": "array",
+            "title": "Items"
+          }
+        },
+        "type": "object",
+        "required": [
+          "items"
+        ],
+        "title": "ListResponse[UserSearchResult]"
+      },
+      "ListResponse_dict_": {
+        "properties": {
+          "items": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "type": "array",
+            "title": "Items"
+          }
+        },
+        "type": "object",
+        "required": [
+          "items"
+        ],
+        "title": "ListResponse[dict]"
+      },
+      "MessageContentModel-Input": {
+        "properties": {
+          "type": {
+            "$ref": "#/components/schemas/MessageContentType",
+            "description": "Тип блока контента."
+          },
+          "data": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TextPlainContent"
+              },
+              {
+                "$ref": "#/components/schemas/CodeBlockContent"
+              },
+              {
+                "$ref": "#/components/schemas/FileAttachmentContent"
+              },
+              {
+                "$ref": "#/components/schemas/AudioAttachmentContent"
+              },
+              {
+                "$ref": "#/components/schemas/VideoAttachmentContent"
+              },
+              {
+                "$ref": "#/components/schemas/CallBoundaryContent"
+              },
+              {
+                "$ref": "#/components/schemas/CallTranscriptContent"
+              },
+              {
+                "$ref": "#/components/schemas/MockImageContent"
+              },
+              {
+                "$ref": "#/components/schemas/GitReferenceContent"
+              },
+              {
+                "$ref": "#/components/schemas/CustomToolResponseContent"
+              }
+            ],
+            "title": "Data",
+            "description": "Данные блока контента."
+          },
+          "order": {
+            "type": "integer",
+            "title": "Order",
+            "description": "Позиция блока в сообщении."
+          }
+        },
+        "type": "object",
+        "required": [
+          "type",
+          "data",
+          "order"
+        ],
+        "title": "MessageContentModel",
+        "description": "Полиморфный блок контента сообщения."
+      },
+      "MessageContentModel-Output": {
+        "properties": {
+          "type": {
+            "$ref": "#/components/schemas/MessageContentType",
+            "description": "Тип блока контента."
+          },
+          "data": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TextPlainContent"
+              },
+              {
+                "$ref": "#/components/schemas/CodeBlockContent"
+              },
+              {
+                "$ref": "#/components/schemas/FileAttachmentContent"
+              },
+              {
+                "$ref": "#/components/schemas/AudioAttachmentContent"
+              },
+              {
+                "$ref": "#/components/schemas/VideoAttachmentContent"
+              },
+              {
+                "$ref": "#/components/schemas/CallBoundaryContent"
+              },
+              {
+                "$ref": "#/components/schemas/CallTranscriptContent"
+              },
+              {
+                "$ref": "#/components/schemas/MockImageContent"
+              },
+              {
+                "$ref": "#/components/schemas/GitReferenceContent"
+              },
+              {
+                "$ref": "#/components/schemas/CustomToolResponseContent"
+              }
+            ],
+            "title": "Data",
+            "description": "Данные блока контента."
+          },
+          "order": {
+            "type": "integer",
+            "title": "Order",
+            "description": "Позиция блока в сообщении."
+          }
+        },
+        "type": "object",
+        "required": [
+          "type",
+          "data",
+          "order"
+        ],
+        "title": "MessageContentModel",
+        "description": "Полиморфный блок контента сообщения."
+      },
+      "MessageContentType": {
+        "type": "string",
+        "enum": [
+          "text/plain",
+          "code/block",
+          "mock/image",
+          "file/image",
+          "file/document",
+          "file/audio",
+          "file/video",
+          "call/boundary",
+          "call/transcript",
+          "git/reference",
+          "custom_tool_response"
+        ],
+        "title": "MessageContentType",
+        "description": "Тип блока контента сообщения."
+      },
+      "MessageCreate": {
+        "properties": {
+          "thread_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Thread Id",
+            "description": "Тред, в который отправляется сообщение (если новое корневое -- null)."
+          },
+          "parent_message_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Parent Message Id",
+            "description": "Сообщение, на которое отправляется ответ."
+          },
+          "contents": {
+            "items": {
+              "$ref": "#/components/schemas/MessageContentModel-Input"
+            },
+            "type": "array",
+            "title": "Contents",
+            "description": "Блоки контента нового сообщения."
+          },
+          "mentioned_user_ids": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Mentioned User Ids",
+            "description": "Упоминания участников канала; сервер записывает в data первого text/plain."
+          },
+          "call_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Call Id",
+            "description": "Связать сообщение с активным/завершённым звонком (голос, чат оверлея, запись)."
+          }
+        },
+        "type": "object",
+        "required": [
+          "contents"
+        ],
+        "title": "MessageCreate",
+        "description": "Тело запроса для создания сообщения."
+      },
+      "MessageEdit": {
+        "properties": {
+          "contents": {
+            "items": {
+              "$ref": "#/components/schemas/MessageContentModel-Input"
+            },
+            "type": "array",
+            "title": "Contents",
+            "description": "Новый набор блоков контента."
+          }
+        },
+        "type": "object",
+        "required": [
+          "contents"
+        ],
+        "title": "MessageEdit",
+        "description": "Тело редактирования сообщения."
+      },
+      "MessageForwardBody": {
+        "properties": {
+          "to_channel_id": {
+            "type": "string",
+            "title": "To Channel Id",
+            "description": "Целевой канал."
+          },
+          "thread_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Thread Id",
+            "description": "Опционально тред в целевом канале."
+          }
+        },
+        "type": "object",
+        "required": [
+          "to_channel_id"
+        ],
+        "title": "MessageForwardBody"
+      },
+      "MessagePinBody": {
+        "properties": {
+          "message_id": {
+            "type": "string",
+            "title": "Message Id",
+            "description": "Сообщение для закрепа."
+          },
+          "action": {
+            "type": "string",
+            "enum": [
+              "add",
+              "remove"
+            ],
+            "title": "Action",
+            "description": "Добавить или снять закреп."
+          }
+        },
+        "type": "object",
+        "required": [
+          "message_id",
+          "action"
+        ],
+        "title": "MessagePinBody"
+      },
+      "MessageReactBody": {
+        "properties": {
+          "emoji": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Emoji",
+            "description": "Эмодзи или null чтобы снять."
+          }
+        },
+        "type": "object",
+        "title": "MessageReactBody"
+      },
+      "MessageRead": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id",
+            "description": "Идентификатор сообщения."
+          },
+          "channel_id": {
+            "type": "string",
+            "title": "Channel Id",
+            "description": "Канал, в котором находится сообщение."
+          },
+          "thread_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Thread Id",
+            "description": "Тред, к которому относится сообщение (если есть)."
+          },
+          "parent_message_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Parent Message Id",
+            "description": "Сообщение, на которое дан ответ (если есть)."
+          },
+          "sender": {
+            "$ref": "#/components/schemas/UserBrief",
+            "description": "Отправитель сообщения."
+          },
+          "status": {
+            "$ref": "#/components/schemas/MessageStatus"
+          },
+          "sent_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Sent At",
+            "description": "Время отправки сообщения."
+          },
+          "edited_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Edited At",
+            "description": "Время последнего редактирования сообщения."
+          },
+          "contents": {
+            "items": {
+              "$ref": "#/components/schemas/MessageContentModel-Output"
+            },
+            "type": "array",
+            "title": "Contents",
+            "description": "Список блоков контента сообщения."
+          },
+          "reactions": {
+            "items": {
+              "$ref": "#/components/schemas/ReactionEntry"
+            },
+            "type": "array",
+            "title": "Reactions",
+            "description": "Реакции пользователей."
+          },
+          "forwarded_from": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ForwardedFromChannel"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Если сообщение переслано из другого канала."
+          },
+          "mentioned_user_ids": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Mentioned User Ids",
+            "description": "Дублирует mentions из первого блока text/plain для клиента."
+          },
+          "call_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Call Id",
+            "description": "Привязка к сессии звонка (агрегация транскрипции по митингу)."
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "channel_id",
+          "sender",
+          "status",
+          "sent_at",
+          "contents"
+        ],
+        "title": "MessageRead",
+        "description": "Сообщение, возвращаемое из API."
+      },
+      "MessageStatus": {
+        "type": "string",
+        "enum": [
+          "sent",
+          "delivered",
+          "read",
+          "failed"
+        ],
+        "title": "MessageStatus",
+        "description": "Статус доставки сообщения."
+      },
+      "MockImageContent": {
+        "properties": {
+          "file_id": {
+            "type": "string",
+            "title": "File Id",
+            "description": "Идентификатор файла в системе."
+          },
+          "alt_text": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Alt Text",
+            "description": "Альтернативный текст для изображения."
+          }
+        },
+        "type": "object",
+        "required": [
+          "file_id"
+        ],
+        "title": "MockImageContent",
+        "description": "Блок изображения/макета."
+      },
+      "OffsetPage_CallScheduledLinkRead_": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/CallScheduledLinkRead"
+            },
+            "type": "array",
+            "title": "Items"
+          },
+          "total": {
+            "type": "integer",
+            "title": "Total"
+          },
+          "limit": {
+            "type": "integer",
+            "title": "Limit"
+          },
+          "offset": {
+            "type": "integer",
+            "title": "Offset"
+          }
+        },
+        "type": "object",
+        "required": [
+          "items",
+          "total",
+          "limit",
+          "offset"
+        ],
+        "title": "OffsetPage[CallScheduledLinkRead]"
+      },
+      "OffsetPage_ChannelRead_": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/ChannelRead"
+            },
+            "type": "array",
+            "title": "Items"
+          },
+          "total": {
+            "type": "integer",
+            "title": "Total"
+          },
+          "limit": {
+            "type": "integer",
+            "title": "Limit"
+          },
+          "offset": {
+            "type": "integer",
+            "title": "Offset"
+          }
+        },
+        "type": "object",
+        "required": [
+          "items",
+          "total",
+          "limit",
+          "offset"
+        ],
+        "title": "OffsetPage[ChannelRead]"
+      },
+      "OffsetPage_CompanyMemberRead_": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/CompanyMemberRead"
+            },
+            "type": "array",
+            "title": "Items"
+          },
+          "total": {
+            "type": "integer",
+            "title": "Total"
+          },
+          "limit": {
+            "type": "integer",
+            "title": "Limit"
+          },
+          "offset": {
+            "type": "integer",
+            "title": "Offset"
+          }
+        },
+        "type": "object",
+        "required": [
+          "items",
+          "total",
+          "limit",
+          "offset"
+        ],
+        "title": "OffsetPage[CompanyMemberRead]"
+      },
+      "OffsetPage_SpaceRead_": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/SpaceRead"
+            },
+            "type": "array",
+            "title": "Items"
+          },
+          "total": {
+            "type": "integer",
+            "title": "Total"
+          },
+          "limit": {
+            "type": "integer",
+            "title": "Limit"
+          },
+          "offset": {
+            "type": "integer",
+            "title": "Offset"
+          }
+        },
+        "type": "object",
+        "required": [
+          "items",
+          "total",
+          "limit",
+          "offset"
+        ],
+        "title": "OffsetPage[SpaceRead]"
+      },
+      "OffsetPage_ThreadRow_": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/ThreadRow"
+            },
+            "type": "array",
+            "title": "Items"
+          },
+          "total": {
+            "type": "integer",
+            "title": "Total"
+          },
+          "limit": {
+            "type": "integer",
+            "title": "Limit"
+          },
+          "offset": {
+            "type": "integer",
+            "title": "Offset"
+          }
+        },
+        "type": "object",
+        "required": [
+          "items",
+          "total",
+          "limit",
+          "offset"
+        ],
+        "title": "OffsetPage[ThreadRow]"
+      },
+      "PaginationResponse_MessageRead_": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/MessageRead"
+            },
+            "type": "array",
+            "title": "Items",
+            "description": "Элементы текущей страницы."
+          },
+          "next_cursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Cursor",
+            "description": "Курсор для следующей страницы, если есть."
+          },
+          "prev_cursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Prev Cursor",
+            "description": "Курсор для предыдущей страницы, если есть."
+          }
+        },
+        "type": "object",
+        "required": [
+          "items"
+        ],
+        "title": "PaginationResponse[MessageRead]"
+      },
+      "ReactionEntry": {
+        "properties": {
+          "user_id": {
+            "type": "string",
+            "title": "User Id",
+            "description": "Кто поставил."
+          },
+          "emoji": {
+            "type": "string",
+            "title": "Emoji",
+            "description": "Символ эмодзи."
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At",
+            "description": "Время установки."
+          }
+        },
+        "type": "object",
+        "required": [
+          "user_id",
+          "emoji",
+          "created_at"
+        ],
+        "title": "ReactionEntry",
+        "description": "Одна реакция на сообщение (хранится в JSON на строке сообщения)."
+      },
+      "SpaceCreate": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "Name",
+            "description": "Человекочитаемое имя пространства."
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description",
+            "description": "Описание пространства."
+          },
+          "transcribe_voice_messages": {
+            "type": "boolean",
+            "title": "Transcribe Voice Messages",
+            "description": "Дефолт авто-STT для новых каналов в этом пространстве.",
+            "default": false
+          },
+          "speech_to_chat_enabled": {
+            "type": "boolean",
+            "title": "Speech To Chat Enabled",
+            "description": "Дефолт «речь в ленту» для новых каналов в этом пространстве.",
+            "default": false
+          }
+        },
+        "type": "object",
+        "required": [
+          "name"
+        ],
+        "title": "SpaceCreate",
+        "description": "Параметры для создания пространства."
+      },
+      "SpaceRead": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id",
+            "description": "Идентификатор пространства."
+          },
+          "name": {
+            "type": "string",
+            "title": "Name",
+            "description": "Человекочитаемое имя пространства."
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description",
+            "description": "Описание пространства."
+          },
+          "avatar_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Avatar Url",
+            "description": "URL аватара (изображение)."
+          },
+          "namespace": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Namespace",
+            "description": "Общий namespace для CRM/RAG."
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At",
+            "description": "Время создания пространства."
+          },
+          "created_by_user_id": {
+            "type": "string",
+            "title": "Created By User Id",
+            "description": "Создатель пространства."
+          },
+          "transcribe_voice_messages": {
+            "type": "boolean",
+            "title": "Transcribe Voice Messages",
+            "description": "Значение по умолчанию для новых каналов: авто-STT голосовых.",
+            "default": false
+          },
+          "speech_to_chat_enabled": {
+            "type": "boolean",
+            "title": "Speech To Chat Enabled",
+            "description": "Значение по умолчанию для новых каналов: речь звонка в ленту (LiveKit egress).",
+            "default": false
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "created_at",
+          "created_by_user_id"
+        ],
+        "title": "SpaceRead",
+        "description": "Пространство, объединяющее каналы и чаты."
+      },
+      "SpaceUpdate": {
+        "properties": {
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name",
+            "description": "Новое имя пространства."
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description",
+            "description": "Новое описание пространства."
+          },
+          "avatar_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Avatar Url",
+            "description": "URL аватара или null для сброса."
+          },
+          "namespace": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Namespace",
+            "description": "Общий namespace CRM/RAG или null для сброса."
+          },
+          "transcribe_voice_messages": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Transcribe Voice Messages",
+            "description": "Дефолт для новых каналов в space; существующие каналы не меняются."
+          },
+          "speech_to_chat_enabled": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Speech To Chat Enabled",
+            "description": "Дефолт «речь в ленту» для новых каналов; существующие каналы не меняются."
+          }
+        },
+        "type": "object",
+        "title": "SpaceUpdate",
+        "description": "Обновление параметров пространства."
+      },
+      "SubscribeRequest": {
+        "properties": {
+          "transport": {
+            "type": "string",
+            "enum": [
+              "web_vapid",
+              "ios_apns"
+            ],
+            "title": "Transport",
+            "default": "web_vapid"
+          },
+          "endpoint": {
+            "type": "string",
+            "title": "Endpoint",
+            "default": ""
+          },
+          "keys": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "type": "object",
+            "title": "Keys"
+          },
+          "platform": {
+            "type": "string",
+            "title": "Platform",
+            "default": "unknown"
+          }
+        },
+        "type": "object",
+        "title": "SubscribeRequest",
+        "description": "Тело POST /api/push/subscribe."
+      },
+      "SwitchCompanyRequest": {
+        "properties": {
+          "company_id": {
+            "type": "string",
+            "title": "Company Id"
+          }
+        },
+        "type": "object",
+        "required": [
+          "company_id"
+        ],
+        "title": "SwitchCompanyRequest",
+        "description": "Переключение активной компании пользователя"
+      },
+      "TeamMemberResponse": {
+        "properties": {
+          "user_id": {
+            "type": "string",
+            "title": "User Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "email": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Email"
+          },
+          "roles": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Roles"
+          },
+          "joined_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Joined At"
+          },
+          "avatar_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Avatar Url"
+          }
+        },
+        "type": "object",
+        "required": [
+          "user_id",
+          "name"
+        ],
+        "title": "TeamMemberResponse"
+      },
+      "TestPushRequest": {
+        "properties": {
+          "title": {
+            "type": "string",
+            "title": "Title",
+            "default": "Тестовое уведомление"
+          },
+          "message": {
+            "type": "string",
+            "title": "Message",
+            "default": "Это тестовое push-уведомление от Humanitec"
+          }
+        },
+        "type": "object",
+        "title": "TestPushRequest"
+      },
+      "TextPlainContent": {
+        "properties": {
+          "body": {
+            "type": "string",
+            "maxLength": 4096,
+            "title": "Body",
+            "description": "Текст сообщения в формате совместимом с Markdown."
+          },
+          "mentions": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Mentions",
+            "description": "Идентификаторы упомянутых участников канала (user_id)."
+          }
+        },
+        "type": "object",
+        "required": [
+          "body"
+        ],
+        "title": "TextPlainContent",
+        "description": "Текстовый блок с поддержкой Markdown."
+      },
+      "ThreadCreate": {
+        "properties": {
+          "root_message_id": {
+            "type": "string",
+            "title": "Root Message Id",
+            "description": "Корневое сообщение для треда."
+          },
+          "title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title",
+            "description": "Опциональный заголовок треда."
+          }
+        },
+        "type": "object",
+        "required": [
+          "root_message_id"
+        ],
+        "title": "ThreadCreate",
+        "description": "Создание треда от корневого сообщения."
+      },
+      "ThreadRead": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id",
+            "description": "Идентификатор треда."
+          },
+          "channel_id": {
+            "type": "string",
+            "title": "Channel Id",
+            "description": "Канал, в котором находится тред."
+          },
+          "root_message_id": {
+            "type": "string",
+            "title": "Root Message Id",
+            "description": "Корневое сообщение треда."
+          },
+          "title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title",
+            "description": "Опциональный заголовок треда."
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At",
+            "description": "Время создания треда."
+          },
+          "created_by": {
+            "$ref": "#/components/schemas/UserBrief",
+            "description": "Пользователь, создавший тред."
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "channel_id",
+          "root_message_id",
+          "created_at",
+          "created_by"
+        ],
+        "title": "ThreadRead",
+        "description": "Полная информация о треде."
+      },
+      "ThreadRow": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id",
+            "description": "Идентификатор треда."
+          },
+          "channel_id": {
+            "type": "string",
+            "title": "Channel Id",
+            "description": "Канал, в котором находится тред."
+          },
+          "root_message_id": {
+            "type": "string",
+            "title": "Root Message Id",
+            "description": "Корневое сообщение треда."
+          },
+          "title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title",
+            "description": "Опциональный заголовок треда."
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At",
+            "description": "Время создания треда."
+          },
+          "created_by_user_id": {
+            "type": "string",
+            "title": "Created By User Id",
+            "description": "Создатель треда."
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "channel_id",
+          "root_message_id",
+          "created_at",
+          "created_by_user_id"
+        ],
+        "title": "ThreadRow",
+        "description": "Строка треда в базе данных."
+      },
+      "TurnCredentials": {
+        "properties": {
+          "username": {
+            "type": "string",
+            "title": "Username"
+          },
+          "credential": {
+            "type": "string",
+            "title": "Credential"
+          },
+          "ttl": {
+            "type": "integer",
+            "title": "Ttl"
+          },
+          "uris": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Uris"
+          }
+        },
+        "type": "object",
+        "required": [
+          "username",
+          "credential",
+          "ttl",
+          "uris"
+        ],
+        "title": "TurnCredentials",
+        "description": "Временные TURN credentials для клиента (coturn REST API)."
+      },
+      "UserBrief": {
+        "properties": {
+          "user_id": {
+            "type": "string",
+            "title": "User Id",
+            "description": "Идентификатор пользователя."
+          },
+          "display_name": {
+            "type": "string",
+            "title": "Display Name",
+            "description": "Отображаемое имя."
+          },
+          "avatar_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Avatar Url",
+            "description": "URL аватара пользователя."
+          }
+        },
+        "type": "object",
+        "required": [
+          "user_id",
+          "display_name"
+        ],
+        "title": "UserBrief",
+        "description": "Краткая информация о пользователе (общая для всей платформы)."
+      },
+      "UserSearchResult": {
+        "properties": {
+          "user_id": {
+            "type": "string",
+            "title": "User Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "email": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Email"
+          },
+          "avatar_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Avatar Url"
+          }
+        },
+        "type": "object",
+        "required": [
+          "user_id",
+          "name"
+        ],
+        "title": "UserSearchResult"
+      },
+      "UserUpdate": {
+        "properties": {
+          "name": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 200
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "first_name": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 100
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "First Name"
+          },
+          "last_name": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 100
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Name"
+          },
+          "emails": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Emails"
+          },
+          "phones": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Phones"
+          },
+          "messengers": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "type": "string"
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Messengers"
+          },
+          "avatar_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Avatar Url"
+          },
+          "bio": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 4000
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Bio"
+          },
+          "ui_preferences": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ui Preferences"
+          }
+        },
+        "type": "object",
+        "title": "UserUpdate",
+        "description": "Обновление данных пользователя"
+      },
+      "ValidationError": {
+        "properties": {
+          "loc": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            },
+            "type": "array",
+            "title": "Location"
+          },
+          "msg": {
+            "type": "string",
+            "title": "Message"
+          },
+          "type": {
+            "type": "string",
+            "title": "Error Type"
+          }
+        },
+        "type": "object",
+        "required": [
+          "loc",
+          "msg",
+          "type"
+        ],
+        "title": "ValidationError"
+      },
+      "VapidPublicKeyResponse": {
+        "properties": {
+          "publicKey": {
+            "type": "string",
+            "title": "Publickey"
+          }
+        },
+        "type": "object",
+        "required": [
+          "publicKey"
+        ],
+        "title": "VapidPublicKeyResponse"
+      },
+      "VideoAttachmentContent": {
+        "properties": {
+          "file_id": {
+            "type": "string",
+            "title": "File Id",
+            "description": "Идентификатор файла в системе."
+          },
+          "filename": {
+            "type": "string",
+            "title": "Filename",
+            "description": "Оригинальное имя файла."
+          },
+          "mime_type": {
+            "type": "string",
+            "title": "Mime Type",
+            "description": "MIME-тип, например video/mp4."
+          },
+          "size": {
+            "type": "integer",
+            "title": "Size",
+            "description": "Размер файла в байтах."
+          },
+          "duration_ms": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Duration Ms",
+            "description": "Длительность в миллисекундах, если известна."
+          },
+          "transcription_status": {
+            "$ref": "#/components/schemas/AudioTranscriptionStatus",
+            "description": "Статус расшифровки аудиодорожки.",
+            "default": "idle"
+          },
+          "transcription_text": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Transcription Text",
+            "description": "Результат распознавания речи."
+          },
+          "transcription_error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Transcription Error",
+            "description": "Текст ошибки расшифровки."
+          }
+        },
+        "type": "object",
+        "required": [
+          "file_id",
+          "filename",
+          "mime_type",
+          "size"
+        ],
+        "title": "VideoAttachmentContent",
+        "description": "Видеовложение в сообщении (запись звонка и т.п.)."
+      }
+    }
+  }
+}

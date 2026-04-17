@@ -1,0 +1,2054 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Rag Public API",
+    "description": "RAG Service - управление документами и семантический поиск",
+    "version": "1.0.0",
+    "x-service": "rag"
+  },
+  "paths": {},
+  "components": {
+    "schemas": {
+      "Body_auth_callback_post_rag_api_auth_callback__provider_name__post": {
+        "properties": {
+          "code": {
+            "type": "string",
+            "title": "Code"
+          },
+          "state": {
+            "type": "string",
+            "title": "State"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          },
+          "user": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "User"
+          }
+        },
+        "type": "object",
+        "required": [
+          "code",
+          "state"
+        ],
+        "title": "Body_auth_callback_post_rag_api_auth_callback__provider_name__post"
+      },
+      "Body_upload_document_rag_api_v1_namespaces__namespace_id__documents_post": {
+        "properties": {
+          "file": {
+            "type": "string",
+            "format": "binary",
+            "title": "File"
+          },
+          "metadata": {
+            "type": "string",
+            "title": "Metadata",
+            "default": "{}"
+          }
+        },
+        "type": "object",
+        "required": [
+          "file"
+        ],
+        "title": "Body_upload_document_rag_api_v1_namespaces__namespace_id__documents_post"
+      },
+      "Body_upload_file_rag_api_v1_files__post": {
+        "properties": {
+          "file": {
+            "type": "string",
+            "format": "binary",
+            "title": "File"
+          }
+        },
+        "type": "object",
+        "required": [
+          "file"
+        ],
+        "title": "Body_upload_file_rag_api_v1_files__post"
+      },
+      "CalendarAttendee": {
+        "properties": {
+          "attendee_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Attendee Id"
+          },
+          "email": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Email"
+          },
+          "display_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Display Name"
+          },
+          "response_status": {
+            "type": "string",
+            "title": "Response Status",
+            "default": "needsAction"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "CalendarAttendee"
+      },
+      "CalendarConnectIntegrationRequest": {
+        "properties": {
+          "provider": {
+            "$ref": "#/components/schemas/CalendarProvider"
+          },
+          "username": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Username"
+          },
+          "access_token": {
+            "type": "string",
+            "title": "Access Token"
+          },
+          "refresh_token": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Refresh Token"
+          },
+          "expires_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expires At"
+          },
+          "scope": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Scope"
+          },
+          "token_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Token Type"
+          },
+          "default_calendar_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Default Calendar Id"
+          },
+          "sync_enabled": {
+            "type": "boolean",
+            "title": "Sync Enabled",
+            "default": true
+          },
+          "sync_inbound_enabled": {
+            "type": "boolean",
+            "title": "Sync Inbound Enabled",
+            "default": true
+          },
+          "sync_outbound_enabled": {
+            "type": "boolean",
+            "title": "Sync Outbound Enabled",
+            "default": true
+          },
+          "notifications_enabled": {
+            "type": "boolean",
+            "title": "Notifications Enabled",
+            "default": true
+          }
+        },
+        "type": "object",
+        "required": [
+          "provider",
+          "access_token"
+        ],
+        "title": "CalendarConnectIntegrationRequest"
+      },
+      "CalendarEvent": {
+        "properties": {
+          "event_id": {
+            "type": "string",
+            "title": "Event Id"
+          },
+          "source": {
+            "$ref": "#/components/schemas/CalendarEventSource"
+          },
+          "source_id": {
+            "type": "string",
+            "title": "Source Id"
+          },
+          "company_id": {
+            "type": "string",
+            "title": "Company Id"
+          },
+          "namespace": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Namespace"
+          },
+          "kind": {
+            "type": "string",
+            "title": "Kind"
+          },
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "location": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Location"
+          },
+          "status": {
+            "$ref": "#/components/schemas/CalendarEventStatus",
+            "default": "confirmed"
+          },
+          "timezone": {
+            "type": "string",
+            "title": "Timezone"
+          },
+          "all_day": {
+            "type": "boolean",
+            "title": "All Day",
+            "default": false
+          },
+          "start_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Start At"
+          },
+          "end_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "End At"
+          },
+          "attendees": {
+            "items": {
+              "$ref": "#/components/schemas/CalendarAttendee"
+            },
+            "type": "array",
+            "title": "Attendees"
+          },
+          "recurrence_rule": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Recurrence Rule"
+          },
+          "recurrence_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Recurrence Id"
+          },
+          "series_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Series Id"
+          },
+          "deep_link": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Deep Link"
+          },
+          "external_refs": {
+            "items": {
+              "$ref": "#/components/schemas/CalendarExternalRef"
+            },
+            "type": "array",
+            "title": "External Refs"
+          },
+          "metadata": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "type": "object",
+            "title": "Metadata"
+          },
+          "created_by_user_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Created By User Id"
+          },
+          "updated_by_user_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Updated By User Id"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Updated At"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "event_id",
+          "source",
+          "source_id",
+          "company_id",
+          "kind",
+          "title",
+          "timezone",
+          "start_at",
+          "end_at",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "CalendarEvent"
+      },
+      "CalendarEventSource": {
+        "type": "string",
+        "enum": [
+          "platform",
+          "crm",
+          "sync",
+          "flows",
+          "google",
+          "yandex"
+        ],
+        "title": "CalendarEventSource"
+      },
+      "CalendarEventStatus": {
+        "type": "string",
+        "enum": [
+          "confirmed",
+          "tentative",
+          "cancelled"
+        ],
+        "title": "CalendarEventStatus"
+      },
+      "CalendarExternalRef": {
+        "properties": {
+          "provider": {
+            "$ref": "#/components/schemas/CalendarProvider"
+          },
+          "calendar_id": {
+            "type": "string",
+            "title": "Calendar Id"
+          },
+          "external_event_id": {
+            "type": "string",
+            "title": "External Event Id"
+          },
+          "etag": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Etag"
+          },
+          "last_synced_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Synced At"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "provider",
+          "calendar_id",
+          "external_event_id"
+        ],
+        "title": "CalendarExternalRef"
+      },
+      "CalendarIntegrationPublic": {
+        "properties": {
+          "integration_id": {
+            "type": "string",
+            "title": "Integration Id"
+          },
+          "company_id": {
+            "type": "string",
+            "title": "Company Id"
+          },
+          "user_id": {
+            "type": "string",
+            "title": "User Id"
+          },
+          "provider": {
+            "$ref": "#/components/schemas/CalendarProvider"
+          },
+          "settings": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Settings"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Updated At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "integration_id",
+          "company_id",
+          "user_id",
+          "provider",
+          "settings",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "CalendarIntegrationPublic"
+      },
+      "CalendarListRequest": {
+        "properties": {
+          "start_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Start At"
+          },
+          "end_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "End At"
+          },
+          "include_sources": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/CalendarEventSource"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Include Sources"
+          },
+          "limit": {
+            "type": "integer",
+            "maximum": 5000.0,
+            "minimum": 1.0,
+            "title": "Limit",
+            "default": 1000
+          }
+        },
+        "type": "object",
+        "required": [
+          "start_at",
+          "end_at"
+        ],
+        "title": "CalendarListRequest"
+      },
+      "CalendarListResponse": {
+        "properties": {
+          "events": {
+            "items": {
+              "$ref": "#/components/schemas/CalendarEvent"
+            },
+            "type": "array",
+            "title": "Events"
+          },
+          "integrations": {
+            "items": {
+              "$ref": "#/components/schemas/CalendarIntegrationPublic"
+            },
+            "type": "array",
+            "title": "Integrations"
+          }
+        },
+        "type": "object",
+        "required": [
+          "events",
+          "integrations"
+        ],
+        "title": "CalendarListResponse"
+      },
+      "CalendarProvider": {
+        "type": "string",
+        "enum": [
+          "platform",
+          "google",
+          "yandex"
+        ],
+        "title": "CalendarProvider"
+      },
+      "CalendarSyncRequest": {
+        "properties": {
+          "provider": {
+            "$ref": "#/components/schemas/CalendarProvider"
+          },
+          "start_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Start At"
+          },
+          "end_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "End At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "provider",
+          "start_at",
+          "end_at"
+        ],
+        "title": "CalendarSyncRequest"
+      },
+      "CalendarUpsertRequest": {
+        "properties": {
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "kind": {
+            "type": "string",
+            "title": "Kind",
+            "default": "event"
+          },
+          "source": {
+            "$ref": "#/components/schemas/CalendarEventSource",
+            "default": "platform"
+          },
+          "source_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Id"
+          },
+          "namespace": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Namespace"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "location": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Location"
+          },
+          "status": {
+            "$ref": "#/components/schemas/CalendarEventStatus",
+            "default": "confirmed"
+          },
+          "timezone": {
+            "type": "string",
+            "title": "Timezone",
+            "default": "UTC"
+          },
+          "all_day": {
+            "type": "boolean",
+            "title": "All Day",
+            "default": false
+          },
+          "start_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Start At"
+          },
+          "end_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "End At"
+          },
+          "attendees": {
+            "items": {
+              "$ref": "#/components/schemas/CalendarAttendee"
+            },
+            "type": "array",
+            "title": "Attendees"
+          },
+          "recurrence_rule": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Recurrence Rule"
+          },
+          "recurrence_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Recurrence Id"
+          },
+          "series_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Series Id"
+          },
+          "deep_link": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Deep Link"
+          },
+          "metadata": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "type": "object",
+            "title": "Metadata"
+          }
+        },
+        "type": "object",
+        "required": [
+          "title",
+          "start_at",
+          "end_at"
+        ],
+        "title": "CalendarUpsertRequest"
+      },
+      "CredentialInfo": {
+        "properties": {
+          "provider": {
+            "type": "string",
+            "title": "Provider"
+          },
+          "service": {
+            "type": "string",
+            "title": "Service"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "provider",
+          "service",
+          "created_at"
+        ],
+        "title": "CredentialInfo",
+        "description": "Публичная проекция credential для UI (без токенов)."
+      },
+      "DemoLoginRequest": {
+        "properties": {
+          "email": {
+            "type": "string",
+            "title": "Email"
+          },
+          "password": {
+            "type": "string",
+            "title": "Password"
+          }
+        },
+        "type": "object",
+        "required": [
+          "email",
+          "password"
+        ],
+        "title": "DemoLoginRequest"
+      },
+      "DocumentUploadResponse": {
+        "properties": {
+          "document_id": {
+            "type": "string",
+            "title": "Document Id"
+          },
+          "task_id": {
+            "type": "string",
+            "title": "Task Id"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "file": {
+            "$ref": "#/components/schemas/FileResponse"
+          }
+        },
+        "type": "object",
+        "required": [
+          "document_id",
+          "task_id",
+          "status",
+          "file"
+        ],
+        "title": "DocumentUploadResponse"
+      },
+      "FileReadPreviewResponse": {
+        "properties": {
+          "text": {
+            "type": "string",
+            "title": "Text",
+            "description": "Извлечённый текст (может быть усечён для UI)"
+          },
+          "truncated": {
+            "type": "boolean",
+            "title": "Truncated",
+            "description": "Усечён ли текст по лимиту превью"
+          },
+          "page_count": {
+            "type": "integer",
+            "title": "Page Count",
+            "description": "Число страниц после чтения",
+            "default": 0
+          },
+          "detected_kind": {
+            "type": "string",
+            "title": "Detected Kind",
+            "description": "Тип файла по FileReader"
+          },
+          "mime_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Mime Type",
+            "description": "MIME после распознавания"
+          },
+          "warnings": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Warnings",
+            "description": "Предупреждения парсера"
+          },
+          "preview_note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Preview Note",
+            "description": "Пояснение для пользователя (например для изображений)"
+          }
+        },
+        "type": "object",
+        "required": [
+          "text",
+          "truncated",
+          "detected_kind"
+        ],
+        "title": "FileReadPreviewResponse",
+        "description": "Текстовое превью содержимого файла (извлечение без vision для изображений)."
+      },
+      "FileResponse": {
+        "properties": {
+          "file_id": {
+            "type": "string",
+            "title": "File Id"
+          },
+          "original_name": {
+            "type": "string",
+            "title": "Original Name"
+          },
+          "content_type": {
+            "type": "string",
+            "title": "Content Type"
+          },
+          "file_size": {
+            "type": "integer",
+            "title": "File Size"
+          },
+          "url": {
+            "type": "string",
+            "title": "Url"
+          },
+          "checksum": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Checksum"
+          },
+          "is_public": {
+            "type": "boolean",
+            "title": "Is Public"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "file_id",
+          "original_name",
+          "content_type",
+          "file_size",
+          "url",
+          "is_public",
+          "created_at"
+        ],
+        "title": "FileResponse",
+        "description": "Публичное представление файла для API-ответов.\n\nНе содержит внутренних полей (s3_key, s3_bucket, s3_endpoint).\nИспользуется как return-тип всех file-эндпоинтов во всех сервисах."
+      },
+      "GlobalSearchRequest": {
+        "properties": {
+          "query": {
+            "type": "string",
+            "title": "Query"
+          },
+          "namespace_ids": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Namespace Ids"
+          },
+          "limit": {
+            "type": "integer",
+            "title": "Limit",
+            "default": 5
+          }
+        },
+        "type": "object",
+        "required": [
+          "query",
+          "namespace_ids"
+        ],
+        "title": "GlobalSearchRequest",
+        "description": "Запрос на глобальный поиск"
+      },
+      "GlobalSearchResponse": {
+        "properties": {
+          "results": {
+            "additionalProperties": {
+              "items": {
+                "$ref": "#/components/schemas/RAGSearchResult"
+              },
+              "type": "array"
+            },
+            "type": "object",
+            "title": "Results"
+          },
+          "query": {
+            "type": "string",
+            "title": "Query"
+          },
+          "provider": {
+            "type": "string",
+            "title": "Provider"
+          }
+        },
+        "type": "object",
+        "required": [
+          "results",
+          "query",
+          "provider"
+        ],
+        "title": "GlobalSearchResponse",
+        "description": "Ответ с результатами глобального поиска"
+      },
+      "HTTPValidationError": {
+        "properties": {
+          "detail": {
+            "items": {
+              "$ref": "#/components/schemas/ValidationError"
+            },
+            "type": "array",
+            "title": "Detail"
+          }
+        },
+        "type": "object",
+        "title": "HTTPValidationError"
+      },
+      "IngestTextRequest": {
+        "properties": {
+          "text": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Text"
+          },
+          "document_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Document Name"
+          },
+          "metadata": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Metadata"
+          },
+          "document_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Document Id"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "text"
+        ],
+        "title": "IngestTextRequest"
+      },
+      "IngestTextResponse": {
+        "properties": {
+          "document_id": {
+            "type": "string",
+            "title": "Document Id"
+          },
+          "document_name": {
+            "type": "string",
+            "title": "Document Name"
+          },
+          "namespace_id": {
+            "type": "string",
+            "title": "Namespace Id"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "provider": {
+            "type": "string",
+            "title": "Provider"
+          }
+        },
+        "type": "object",
+        "required": [
+          "document_id",
+          "document_name",
+          "namespace_id",
+          "status",
+          "provider"
+        ],
+        "title": "IngestTextResponse"
+      },
+      "ListResponse_CalendarIntegrationPublic_": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/CalendarIntegrationPublic"
+            },
+            "type": "array",
+            "title": "Items"
+          }
+        },
+        "type": "object",
+        "required": [
+          "items"
+        ],
+        "title": "ListResponse[CalendarIntegrationPublic]"
+      },
+      "ListResponse_CredentialInfo_": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/CredentialInfo"
+            },
+            "type": "array",
+            "title": "Items"
+          }
+        },
+        "type": "object",
+        "required": [
+          "items"
+        ],
+        "title": "ListResponse[CredentialInfo]"
+      },
+      "ListResponse_TeamMemberResponse_": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/TeamMemberResponse"
+            },
+            "type": "array",
+            "title": "Items"
+          }
+        },
+        "type": "object",
+        "required": [
+          "items"
+        ],
+        "title": "ListResponse[TeamMemberResponse]"
+      },
+      "ListResponse_UserSearchResult_": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/UserSearchResult"
+            },
+            "type": "array",
+            "title": "Items"
+          }
+        },
+        "type": "object",
+        "required": [
+          "items"
+        ],
+        "title": "ListResponse[UserSearchResult]"
+      },
+      "ListResponse_dict_": {
+        "properties": {
+          "items": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "type": "array",
+            "title": "Items"
+          }
+        },
+        "type": "object",
+        "required": [
+          "items"
+        ],
+        "title": "ListResponse[dict]"
+      },
+      "Namespace": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "Название",
+            "description": "Имя namespace (например 'default', 'sales')"
+          },
+          "company_id": {
+            "type": "string",
+            "title": "ID компании",
+            "description": "ID компании-владельца"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Описание",
+            "description": "Описание namespace"
+          },
+          "is_default": {
+            "type": "boolean",
+            "title": "По умолчанию",
+            "description": "Является ли namespace дефолтным для компании",
+            "default": false
+          },
+          "crm_settings": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/NamespaceCRMSettings"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Настройки CRM",
+            "description": "Опционально: UI заметок и значения по умолчанию"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Создан",
+            "description": "Время создания namespace"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Обновлен",
+            "description": "Время последнего обновления namespace"
+          }
+        },
+        "type": "object",
+        "required": [
+          "name",
+          "company_id"
+        ],
+        "title": "Namespace",
+        "description": "Namespace (изолированная область данных).\nИспользуется всеми сервисами для организации данных внутри компании.",
+        "storage_prefix": "namespace"
+      },
+      "NamespaceCRMSettings": {
+        "properties": {
+          "show_note_voice_ui": {
+            "type": "boolean",
+            "title": "Показывать выбор голоса",
+            "default": true
+          },
+          "default_note_voice": {
+            "type": "string",
+            "enum": [
+              "self",
+              "none",
+              "last"
+            ],
+            "title": "Голос по умолчанию для новой заметки",
+            "default": "self"
+          },
+          "default_context_entity_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Якорь контекста по умолчанию"
+          }
+        },
+        "type": "object",
+        "title": "NamespaceCRMSettings",
+        "description": "Настройки CRM для namespace (заметки: голос, контекст)."
+      },
+      "NamespaceCreateRequest": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          }
+        },
+        "type": "object",
+        "required": [
+          "name"
+        ],
+        "title": "NamespaceCreateRequest",
+        "description": "Запрос на создание namespace"
+      },
+      "OffsetPage_Namespace_": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/Namespace"
+            },
+            "type": "array",
+            "title": "Items"
+          },
+          "total": {
+            "type": "integer",
+            "title": "Total"
+          },
+          "limit": {
+            "type": "integer",
+            "title": "Limit"
+          },
+          "offset": {
+            "type": "integer",
+            "title": "Offset"
+          }
+        },
+        "type": "object",
+        "required": [
+          "items",
+          "total",
+          "limit",
+          "offset"
+        ],
+        "title": "OffsetPage[Namespace]"
+      },
+      "OffsetPage_RAGDocument_": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/RAGDocument"
+            },
+            "type": "array",
+            "title": "Items"
+          },
+          "total": {
+            "type": "integer",
+            "title": "Total"
+          },
+          "limit": {
+            "type": "integer",
+            "title": "Limit"
+          },
+          "offset": {
+            "type": "integer",
+            "title": "Offset"
+          }
+        },
+        "type": "object",
+        "required": [
+          "items",
+          "total",
+          "limit",
+          "offset"
+        ],
+        "title": "OffsetPage[RAGDocument]"
+      },
+      "ProviderInfo": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "enabled": {
+            "type": "boolean",
+            "title": "Enabled"
+          },
+          "is_default": {
+            "type": "boolean",
+            "title": "Is Default"
+          },
+          "type": {
+            "type": "string",
+            "title": "Type"
+          }
+        },
+        "type": "object",
+        "required": [
+          "name",
+          "enabled",
+          "is_default",
+          "type"
+        ],
+        "title": "ProviderInfo",
+        "description": "Информация о RAG провайдере"
+      },
+      "ProviderListResponse": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/ProviderInfo"
+            },
+            "type": "array",
+            "title": "Items"
+          },
+          "current_provider": {
+            "type": "string",
+            "title": "Current Provider"
+          }
+        },
+        "type": "object",
+        "required": [
+          "items",
+          "current_provider"
+        ],
+        "title": "ProviderListResponse",
+        "description": "Ответ со списком провайдеров"
+      },
+      "ProviderSwitchRequest": {
+        "properties": {
+          "provider_name": {
+            "type": "string",
+            "title": "Provider Name"
+          }
+        },
+        "type": "object",
+        "required": [
+          "provider_name"
+        ],
+        "title": "ProviderSwitchRequest",
+        "description": "Запрос на переключение провайдера"
+      },
+      "RAGDocument": {
+        "properties": {
+          "document_id": {
+            "type": "string",
+            "title": "Document Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "namespace": {
+            "type": "string",
+            "title": "Namespace"
+          },
+          "content": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Content"
+          },
+          "metadata": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Metadata",
+            "default": {}
+          },
+          "status": {
+            "type": "string",
+            "title": "Status",
+            "default": "processing"
+          },
+          "created_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Created At"
+          },
+          "chunks_count": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Chunks Count"
+          },
+          "indexing_runs": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Indexing Runs"
+          },
+          "reindex_count": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reindex Count"
+          },
+          "split": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Split"
+          }
+        },
+        "type": "object",
+        "required": [
+          "document_id",
+          "name",
+          "namespace"
+        ],
+        "title": "RAGDocument",
+        "description": "Универсальная модель документа для RAG"
+      },
+      "RAGSearchResult": {
+        "properties": {
+          "content": {
+            "type": "string",
+            "title": "Content"
+          },
+          "score": {
+            "type": "number",
+            "title": "Score"
+          },
+          "document_id": {
+            "type": "string",
+            "title": "Document Id"
+          },
+          "document_name": {
+            "type": "string",
+            "title": "Document Name"
+          },
+          "metadata": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Metadata",
+            "default": {}
+          },
+          "namespace": {
+            "type": "string",
+            "title": "Namespace"
+          },
+          "chunk_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Chunk Id"
+          },
+          "provenance": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Provenance",
+            "default": {}
+          }
+        },
+        "type": "object",
+        "required": [
+          "content",
+          "score",
+          "document_id",
+          "document_name",
+          "namespace"
+        ],
+        "title": "RAGSearchResult",
+        "description": "Универсальная модель результата поиска"
+      },
+      "SearchRequest": {
+        "properties": {
+          "query": {
+            "type": "string",
+            "title": "Query"
+          },
+          "limit": {
+            "type": "integer",
+            "title": "Limit",
+            "default": 5
+          },
+          "filters": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Filters"
+          },
+          "channels": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Channels"
+          },
+          "rrf_k": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rrf K"
+          },
+          "per_channel_top_k": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Per Channel Top K"
+          },
+          "rerank": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rerank"
+          }
+        },
+        "type": "object",
+        "required": [
+          "query"
+        ],
+        "title": "SearchRequest",
+        "description": "Запрос на поиск (опции совпадают с телом RAGRepository.search_namespace)."
+      },
+      "SearchResponse": {
+        "properties": {
+          "results": {
+            "items": {
+              "$ref": "#/components/schemas/RAGSearchResult"
+            },
+            "type": "array",
+            "title": "Results"
+          },
+          "query": {
+            "type": "string",
+            "title": "Query"
+          },
+          "namespace_id": {
+            "type": "string",
+            "title": "Namespace Id"
+          },
+          "provider": {
+            "type": "string",
+            "title": "Provider"
+          }
+        },
+        "type": "object",
+        "required": [
+          "results",
+          "query",
+          "namespace_id",
+          "provider"
+        ],
+        "title": "SearchResponse",
+        "description": "Ответ с результатами поиска"
+      },
+      "SubscribeRequest": {
+        "properties": {
+          "transport": {
+            "type": "string",
+            "enum": [
+              "web_vapid",
+              "ios_apns"
+            ],
+            "title": "Transport",
+            "default": "web_vapid"
+          },
+          "endpoint": {
+            "type": "string",
+            "title": "Endpoint",
+            "default": ""
+          },
+          "keys": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "type": "object",
+            "title": "Keys"
+          },
+          "platform": {
+            "type": "string",
+            "title": "Platform",
+            "default": "unknown"
+          }
+        },
+        "type": "object",
+        "title": "SubscribeRequest",
+        "description": "Тело POST /api/push/subscribe."
+      },
+      "SwitchCompanyRequest": {
+        "properties": {
+          "company_id": {
+            "type": "string",
+            "title": "Company Id"
+          }
+        },
+        "type": "object",
+        "required": [
+          "company_id"
+        ],
+        "title": "SwitchCompanyRequest",
+        "description": "Переключение активной компании пользователя"
+      },
+      "TeamMemberResponse": {
+        "properties": {
+          "user_id": {
+            "type": "string",
+            "title": "User Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "email": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Email"
+          },
+          "roles": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Roles"
+          },
+          "joined_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Joined At"
+          },
+          "avatar_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Avatar Url"
+          }
+        },
+        "type": "object",
+        "required": [
+          "user_id",
+          "name"
+        ],
+        "title": "TeamMemberResponse"
+      },
+      "TestPushRequest": {
+        "properties": {
+          "title": {
+            "type": "string",
+            "title": "Title",
+            "default": "Тестовое уведомление"
+          },
+          "message": {
+            "type": "string",
+            "title": "Message",
+            "default": "Это тестовое push-уведомление от Humanitec"
+          }
+        },
+        "type": "object",
+        "title": "TestPushRequest"
+      },
+      "UserSearchResult": {
+        "properties": {
+          "user_id": {
+            "type": "string",
+            "title": "User Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "email": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Email"
+          },
+          "avatar_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Avatar Url"
+          }
+        },
+        "type": "object",
+        "required": [
+          "user_id",
+          "name"
+        ],
+        "title": "UserSearchResult"
+      },
+      "UserUpdate": {
+        "properties": {
+          "name": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 200
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "first_name": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 100
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "First Name"
+          },
+          "last_name": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 100
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Name"
+          },
+          "emails": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Emails"
+          },
+          "phones": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Phones"
+          },
+          "messengers": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "type": "string"
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Messengers"
+          },
+          "avatar_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Avatar Url"
+          },
+          "bio": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 4000
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Bio"
+          },
+          "ui_preferences": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ui Preferences"
+          }
+        },
+        "type": "object",
+        "title": "UserUpdate",
+        "description": "Обновление данных пользователя"
+      },
+      "ValidationError": {
+        "properties": {
+          "loc": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            },
+            "type": "array",
+            "title": "Location"
+          },
+          "msg": {
+            "type": "string",
+            "title": "Message"
+          },
+          "type": {
+            "type": "string",
+            "title": "Error Type"
+          }
+        },
+        "type": "object",
+        "required": [
+          "loc",
+          "msg",
+          "type"
+        ],
+        "title": "ValidationError"
+      },
+      "VapidPublicKeyResponse": {
+        "properties": {
+          "publicKey": {
+            "type": "string",
+            "title": "Publickey"
+          }
+        },
+        "type": "object",
+        "required": [
+          "publicKey"
+        ],
+        "title": "VapidPublicKeyResponse"
+      }
+    }
+  }
+}

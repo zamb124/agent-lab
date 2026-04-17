@@ -1,0 +1,5814 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Crm Public API",
+    "description": "API для управления CRM: сущности, заметки, задачи, связи",
+    "version": "1.0.0",
+    "x-service": "crm"
+  },
+  "paths": {},
+  "components": {
+    "schemas": {
+      "AIAnalysisDraftPatchRequest": {
+        "properties": {
+          "expected_version": {
+            "type": "integer",
+            "title": "Expected Version"
+          },
+          "remove_entity_draft_ids": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Remove Entity Draft Ids"
+          },
+          "remove_relationship_draft_ids": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Remove Relationship Draft Ids"
+          },
+          "patch_entities": {
+            "items": {
+              "$ref": "#/components/schemas/DraftEntityPatch"
+            },
+            "type": "array",
+            "title": "Patch Entities"
+          },
+          "patch_relationships": {
+            "items": {
+              "$ref": "#/components/schemas/DraftRelationshipPatch"
+            },
+            "type": "array",
+            "title": "Patch Relationships"
+          }
+        },
+        "type": "object",
+        "required": [
+          "expected_version"
+        ],
+        "title": "AIAnalysisDraftPatchRequest"
+      },
+      "AIAnalysisDraftStored": {
+        "properties": {
+          "draft_version": {
+            "type": "integer",
+            "title": "Draft Version"
+          },
+          "updated_at": {
+            "type": "string",
+            "title": "Updated At"
+          },
+          "note": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AIExtractedEntity"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "entities": {
+            "items": {
+              "$ref": "#/components/schemas/AIExtractedEntity"
+            },
+            "type": "array",
+            "title": "Entities"
+          },
+          "relationships": {
+            "items": {
+              "$ref": "#/components/schemas/AIAnalysisRelationshipDraft"
+            },
+            "type": "array",
+            "title": "Relationships"
+          },
+          "known_entity_id_map": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "type": "object",
+            "title": "Known Entity Id Map",
+            "description": "draft_entity_id → real entity_id для known entities (member, company); не отображаются в UI"
+          }
+        },
+        "type": "object",
+        "required": [
+          "draft_version",
+          "updated_at"
+        ],
+        "title": "AIAnalysisDraftStored",
+        "description": "Снимок черновика analyze в attributes заметки (каноническая схема)."
+      },
+      "AIAnalysisRelationshipDraft": {
+        "properties": {
+          "draft_relationship_id": {
+            "type": "string",
+            "title": "Draft Relationship Id"
+          },
+          "source_draft_entity_id": {
+            "type": "string",
+            "title": "Source Draft Entity Id"
+          },
+          "target_draft_entity_id": {
+            "type": "string",
+            "title": "Target Draft Entity Id"
+          },
+          "relationship_type": {
+            "type": "string",
+            "title": "Relationship Type"
+          },
+          "weight": {
+            "type": "number",
+            "title": "Weight",
+            "default": 1.0
+          },
+          "attributes": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Attributes"
+          }
+        },
+        "type": "object",
+        "required": [
+          "draft_relationship_id",
+          "source_draft_entity_id",
+          "target_draft_entity_id",
+          "relationship_type"
+        ],
+        "title": "AIAnalysisRelationshipDraft",
+        "description": "Связь в ответе POST /analyze и в ai_analysis_draft.\nКонцы связи только через draft_entity_id строк сущностей черновика."
+      },
+      "AIExtractedEntity": {
+        "properties": {
+          "draft_entity_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Draft Entity Id",
+            "description": "Стабильный id строки черновика; выставляет только CRM после analyze"
+          },
+          "entity_type": {
+            "type": "string",
+            "title": "Entity Type"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "entity_subtype": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Entity Subtype"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "attributes": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Attributes"
+          },
+          "note_date": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Note Date"
+          },
+          "confidence": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Confidence"
+          },
+          "due_date": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Due Date"
+          },
+          "priority": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Priority"
+          },
+          "assignees": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Assignees"
+          },
+          "dedup_action": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "create",
+                  "merge"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Dedup Action"
+          },
+          "dedup_existing_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Dedup Existing Id"
+          },
+          "dedup_existing_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Dedup Existing Name"
+          },
+          "dedup_confidence": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Dedup Confidence"
+          }
+        },
+        "additionalProperties": true,
+        "type": "object",
+        "required": [
+          "entity_type",
+          "name"
+        ],
+        "title": "AIExtractedEntity",
+        "description": "Entity извлеченная AI (без БД полей)"
+      },
+      "AccessGrantResponse": {
+        "properties": {
+          "grant_id": {
+            "type": "string",
+            "title": "Grant Id"
+          },
+          "company_id": {
+            "type": "string",
+            "title": "Company Id"
+          },
+          "created_by": {
+            "type": "string",
+            "title": "Created By"
+          },
+          "resource_type": {
+            "type": "string",
+            "title": "Resource Type"
+          },
+          "resource_id": {
+            "type": "string",
+            "title": "Resource Id"
+          },
+          "grant_type": {
+            "type": "string",
+            "title": "Grant Type"
+          },
+          "target_user_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Target User Id"
+          },
+          "target_company_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Target Company Id"
+          },
+          "role": {
+            "type": "string",
+            "title": "Role"
+          },
+          "expires_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expires At"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "grant_id",
+          "company_id",
+          "created_by",
+          "resource_type",
+          "resource_id",
+          "grant_type",
+          "role",
+          "created_at"
+        ],
+        "title": "AccessGrantResponse",
+        "description": "Ответ с информацией о гранте"
+      },
+      "AccessRequestCreate": {
+        "properties": {
+          "resource_type": {
+            "$ref": "#/components/schemas/ResourceType",
+            "title": "Тип ресурса",
+            "description": "Тип ресурса (note или entity)"
+          },
+          "resource_id": {
+            "type": "string",
+            "title": "ID ресурса",
+            "description": "ID заметки или сущности"
+          },
+          "message": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 1000
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Сообщение",
+            "description": "Сообщение владельцу ресурса"
+          },
+          "include_dependencies": {
+            "type": "boolean",
+            "title": "Включить зависимости",
+            "description": "Копировать с relationships",
+            "default": false
+          },
+          "max_depth": {
+            "type": "integer",
+            "maximum": 5.0,
+            "minimum": 1.0,
+            "title": "Глубина копирования",
+            "description": "Максимальная глубина для relationships",
+            "default": 1
+          }
+        },
+        "type": "object",
+        "required": [
+          "resource_type",
+          "resource_id"
+        ],
+        "title": "AccessRequestCreate",
+        "description": "Создание запроса на доступ"
+      },
+      "AccessRequestResponse": {
+        "properties": {
+          "request_id": {
+            "type": "string",
+            "title": "ID запроса"
+          },
+          "company_id": {
+            "type": "string",
+            "title": "ID компании"
+          },
+          "requester_id": {
+            "type": "string",
+            "title": "ID запрашивающего"
+          },
+          "owner_id": {
+            "type": "string",
+            "title": "ID владельца"
+          },
+          "resource_type": {
+            "type": "string",
+            "title": "Тип ресурса"
+          },
+          "resource_id": {
+            "type": "string",
+            "title": "ID ресурса"
+          },
+          "message": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Сообщение"
+          },
+          "status": {
+            "type": "string",
+            "title": "Статус"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Дата создания"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Дата обновления"
+          },
+          "requester_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Имя запрашивающего"
+          },
+          "resource_title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Название ресурса"
+          }
+        },
+        "type": "object",
+        "required": [
+          "request_id",
+          "company_id",
+          "requester_id",
+          "owner_id",
+          "resource_type",
+          "resource_id",
+          "status",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "AccessRequestResponse",
+        "description": "Ответ с данными запроса на доступ"
+      },
+      "AccessRequestStatus": {
+        "type": "string",
+        "enum": [
+          "pending",
+          "approved",
+          "rejected"
+        ],
+        "title": "AccessRequestStatus",
+        "description": "Статус запроса на доступ"
+      },
+      "AccessRequestUpdate": {
+        "properties": {
+          "status": {
+            "$ref": "#/components/schemas/AccessRequestStatus",
+            "title": "Новый статус"
+          }
+        },
+        "type": "object",
+        "required": [
+          "status"
+        ],
+        "title": "AccessRequestUpdate",
+        "description": "Обновление статуса запроса"
+      },
+      "AddNamespaceIdsRequest": {
+        "properties": {
+          "namespace_ids": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Namespace Ids"
+          }
+        },
+        "type": "object",
+        "required": [
+          "namespace_ids"
+        ],
+        "title": "AddNamespaceIdsRequest",
+        "description": "Атомарное добавление namespace_ids к entity type."
+      },
+      "Body_auth_callback_post_crm_api_auth_callback__provider_name__post": {
+        "properties": {
+          "code": {
+            "type": "string",
+            "title": "Code"
+          },
+          "state": {
+            "type": "string",
+            "title": "State"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          },
+          "user": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "User"
+          }
+        },
+        "type": "object",
+        "required": [
+          "code",
+          "state"
+        ],
+        "title": "Body_auth_callback_post_crm_api_auth_callback__provider_name__post"
+      },
+      "Body_upload_attachment_crm_api_v1_entities__entity_id__attachments_post": {
+        "properties": {
+          "file": {
+            "type": "string",
+            "format": "binary",
+            "title": "File"
+          }
+        },
+        "type": "object",
+        "required": [
+          "file"
+        ],
+        "title": "Body_upload_attachment_crm_api_v1_entities__entity_id__attachments_post"
+      },
+      "Body_upload_file_crm_api_v1_files__post": {
+        "properties": {
+          "file": {
+            "type": "string",
+            "format": "binary",
+            "title": "File"
+          }
+        },
+        "type": "object",
+        "required": [
+          "file"
+        ],
+        "title": "Body_upload_file_crm_api_v1_files__post"
+      },
+      "Body_voice_input_crm_api_v1_entities_voice_input_post": {
+        "properties": {
+          "file": {
+            "type": "string",
+            "format": "binary",
+            "title": "File"
+          }
+        },
+        "type": "object",
+        "required": [
+          "file"
+        ],
+        "title": "Body_voice_input_crm_api_v1_entities_voice_input_post"
+      },
+      "BulkCardsRequest": {
+        "properties": {
+          "entity_ids": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Entity Ids"
+          }
+        },
+        "type": "object",
+        "required": [
+          "entity_ids"
+        ],
+        "title": "BulkCardsRequest",
+        "description": "Batch загрузка карточек по списку entity_id."
+      },
+      "BulkCreateRequest": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/EntityCreate"
+            },
+            "type": "array",
+            "title": "Items"
+          }
+        },
+        "type": "object",
+        "required": [
+          "items"
+        ],
+        "title": "BulkCreateRequest",
+        "description": "Batch создание сущностей (до 200)."
+      },
+      "BulkCreateResponse": {
+        "properties": {
+          "created": {
+            "items": {
+              "$ref": "#/components/schemas/EntityResponse"
+            },
+            "type": "array",
+            "title": "Created"
+          },
+          "errors": {
+            "items": {
+              "$ref": "#/components/schemas/BulkErrorItem"
+            },
+            "type": "array",
+            "title": "Errors"
+          }
+        },
+        "type": "object",
+        "required": [
+          "created",
+          "errors"
+        ],
+        "title": "BulkCreateResponse"
+      },
+      "BulkDeleteRequest": {
+        "properties": {
+          "entity_ids": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Entity Ids"
+          }
+        },
+        "type": "object",
+        "required": [
+          "entity_ids"
+        ],
+        "title": "BulkDeleteRequest"
+      },
+      "BulkDeleteResponse": {
+        "properties": {
+          "deleted": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Deleted"
+          },
+          "errors": {
+            "items": {
+              "$ref": "#/components/schemas/BulkErrorItem"
+            },
+            "type": "array",
+            "title": "Errors"
+          }
+        },
+        "type": "object",
+        "required": [
+          "deleted",
+          "errors"
+        ],
+        "title": "BulkDeleteResponse"
+      },
+      "BulkErrorItem": {
+        "properties": {
+          "index": {
+            "type": "integer",
+            "title": "Index"
+          },
+          "entity_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Entity Id"
+          },
+          "error": {
+            "type": "string",
+            "title": "Error"
+          }
+        },
+        "type": "object",
+        "required": [
+          "index",
+          "error"
+        ],
+        "title": "BulkErrorItem"
+      },
+      "BulkUpdateItem": {
+        "properties": {
+          "entity_id": {
+            "type": "string",
+            "title": "Entity Id"
+          },
+          "updates": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Updates"
+          }
+        },
+        "type": "object",
+        "required": [
+          "entity_id",
+          "updates"
+        ],
+        "title": "BulkUpdateItem"
+      },
+      "BulkUpdateRequest": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/BulkUpdateItem"
+            },
+            "type": "array",
+            "title": "Items"
+          }
+        },
+        "type": "object",
+        "required": [
+          "items"
+        ],
+        "title": "BulkUpdateRequest"
+      },
+      "BulkUpdateResponse": {
+        "properties": {
+          "updated": {
+            "items": {
+              "$ref": "#/components/schemas/EntityResponse"
+            },
+            "type": "array",
+            "title": "Updated"
+          },
+          "errors": {
+            "items": {
+              "$ref": "#/components/schemas/BulkErrorItem"
+            },
+            "type": "array",
+            "title": "Errors"
+          }
+        },
+        "type": "object",
+        "required": [
+          "updated",
+          "errors"
+        ],
+        "title": "BulkUpdateResponse"
+      },
+      "CalendarAttendee": {
+        "properties": {
+          "attendee_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Attendee Id"
+          },
+          "email": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Email"
+          },
+          "display_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Display Name"
+          },
+          "response_status": {
+            "type": "string",
+            "title": "Response Status",
+            "default": "needsAction"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "CalendarAttendee"
+      },
+      "CalendarConnectIntegrationRequest": {
+        "properties": {
+          "provider": {
+            "$ref": "#/components/schemas/CalendarProvider"
+          },
+          "username": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Username"
+          },
+          "access_token": {
+            "type": "string",
+            "title": "Access Token"
+          },
+          "refresh_token": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Refresh Token"
+          },
+          "expires_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expires At"
+          },
+          "scope": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Scope"
+          },
+          "token_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Token Type"
+          },
+          "default_calendar_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Default Calendar Id"
+          },
+          "sync_enabled": {
+            "type": "boolean",
+            "title": "Sync Enabled",
+            "default": true
+          },
+          "sync_inbound_enabled": {
+            "type": "boolean",
+            "title": "Sync Inbound Enabled",
+            "default": true
+          },
+          "sync_outbound_enabled": {
+            "type": "boolean",
+            "title": "Sync Outbound Enabled",
+            "default": true
+          },
+          "notifications_enabled": {
+            "type": "boolean",
+            "title": "Notifications Enabled",
+            "default": true
+          }
+        },
+        "type": "object",
+        "required": [
+          "provider",
+          "access_token"
+        ],
+        "title": "CalendarConnectIntegrationRequest"
+      },
+      "CalendarEvent": {
+        "properties": {
+          "event_id": {
+            "type": "string",
+            "title": "Event Id"
+          },
+          "source": {
+            "$ref": "#/components/schemas/CalendarEventSource"
+          },
+          "source_id": {
+            "type": "string",
+            "title": "Source Id"
+          },
+          "company_id": {
+            "type": "string",
+            "title": "Company Id"
+          },
+          "namespace": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Namespace"
+          },
+          "kind": {
+            "type": "string",
+            "title": "Kind"
+          },
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "location": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Location"
+          },
+          "status": {
+            "$ref": "#/components/schemas/CalendarEventStatus",
+            "default": "confirmed"
+          },
+          "timezone": {
+            "type": "string",
+            "title": "Timezone"
+          },
+          "all_day": {
+            "type": "boolean",
+            "title": "All Day",
+            "default": false
+          },
+          "start_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Start At"
+          },
+          "end_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "End At"
+          },
+          "attendees": {
+            "items": {
+              "$ref": "#/components/schemas/CalendarAttendee"
+            },
+            "type": "array",
+            "title": "Attendees"
+          },
+          "recurrence_rule": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Recurrence Rule"
+          },
+          "recurrence_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Recurrence Id"
+          },
+          "series_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Series Id"
+          },
+          "deep_link": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Deep Link"
+          },
+          "external_refs": {
+            "items": {
+              "$ref": "#/components/schemas/CalendarExternalRef"
+            },
+            "type": "array",
+            "title": "External Refs"
+          },
+          "metadata": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "type": "object",
+            "title": "Metadata"
+          },
+          "created_by_user_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Created By User Id"
+          },
+          "updated_by_user_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Updated By User Id"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Updated At"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "event_id",
+          "source",
+          "source_id",
+          "company_id",
+          "kind",
+          "title",
+          "timezone",
+          "start_at",
+          "end_at",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "CalendarEvent"
+      },
+      "CalendarEventSource": {
+        "type": "string",
+        "enum": [
+          "platform",
+          "crm",
+          "sync",
+          "flows",
+          "google",
+          "yandex"
+        ],
+        "title": "CalendarEventSource"
+      },
+      "CalendarEventStatus": {
+        "type": "string",
+        "enum": [
+          "confirmed",
+          "tentative",
+          "cancelled"
+        ],
+        "title": "CalendarEventStatus"
+      },
+      "CalendarExternalRef": {
+        "properties": {
+          "provider": {
+            "$ref": "#/components/schemas/CalendarProvider"
+          },
+          "calendar_id": {
+            "type": "string",
+            "title": "Calendar Id"
+          },
+          "external_event_id": {
+            "type": "string",
+            "title": "External Event Id"
+          },
+          "etag": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Etag"
+          },
+          "last_synced_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Synced At"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "provider",
+          "calendar_id",
+          "external_event_id"
+        ],
+        "title": "CalendarExternalRef"
+      },
+      "CalendarIntegrationPublic": {
+        "properties": {
+          "integration_id": {
+            "type": "string",
+            "title": "Integration Id"
+          },
+          "company_id": {
+            "type": "string",
+            "title": "Company Id"
+          },
+          "user_id": {
+            "type": "string",
+            "title": "User Id"
+          },
+          "provider": {
+            "$ref": "#/components/schemas/CalendarProvider"
+          },
+          "settings": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Settings"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Updated At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "integration_id",
+          "company_id",
+          "user_id",
+          "provider",
+          "settings",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "CalendarIntegrationPublic"
+      },
+      "CalendarListRequest": {
+        "properties": {
+          "start_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Start At"
+          },
+          "end_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "End At"
+          },
+          "include_sources": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/CalendarEventSource"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Include Sources"
+          },
+          "limit": {
+            "type": "integer",
+            "maximum": 5000.0,
+            "minimum": 1.0,
+            "title": "Limit",
+            "default": 1000
+          }
+        },
+        "type": "object",
+        "required": [
+          "start_at",
+          "end_at"
+        ],
+        "title": "CalendarListRequest"
+      },
+      "CalendarListResponse": {
+        "properties": {
+          "events": {
+            "items": {
+              "$ref": "#/components/schemas/CalendarEvent"
+            },
+            "type": "array",
+            "title": "Events"
+          },
+          "integrations": {
+            "items": {
+              "$ref": "#/components/schemas/CalendarIntegrationPublic"
+            },
+            "type": "array",
+            "title": "Integrations"
+          }
+        },
+        "type": "object",
+        "required": [
+          "events",
+          "integrations"
+        ],
+        "title": "CalendarListResponse"
+      },
+      "CalendarProvider": {
+        "type": "string",
+        "enum": [
+          "platform",
+          "google",
+          "yandex"
+        ],
+        "title": "CalendarProvider"
+      },
+      "CalendarSyncRequest": {
+        "properties": {
+          "provider": {
+            "$ref": "#/components/schemas/CalendarProvider"
+          },
+          "start_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Start At"
+          },
+          "end_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "End At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "provider",
+          "start_at",
+          "end_at"
+        ],
+        "title": "CalendarSyncRequest"
+      },
+      "CalendarUpsertRequest": {
+        "properties": {
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "kind": {
+            "type": "string",
+            "title": "Kind",
+            "default": "event"
+          },
+          "source": {
+            "$ref": "#/components/schemas/CalendarEventSource",
+            "default": "platform"
+          },
+          "source_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Id"
+          },
+          "namespace": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Namespace"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "location": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Location"
+          },
+          "status": {
+            "$ref": "#/components/schemas/CalendarEventStatus",
+            "default": "confirmed"
+          },
+          "timezone": {
+            "type": "string",
+            "title": "Timezone",
+            "default": "UTC"
+          },
+          "all_day": {
+            "type": "boolean",
+            "title": "All Day",
+            "default": false
+          },
+          "start_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Start At"
+          },
+          "end_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "End At"
+          },
+          "attendees": {
+            "items": {
+              "$ref": "#/components/schemas/CalendarAttendee"
+            },
+            "type": "array",
+            "title": "Attendees"
+          },
+          "recurrence_rule": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Recurrence Rule"
+          },
+          "recurrence_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Recurrence Id"
+          },
+          "series_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Series Id"
+          },
+          "deep_link": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Deep Link"
+          },
+          "metadata": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "type": "object",
+            "title": "Metadata"
+          }
+        },
+        "type": "object",
+        "required": [
+          "title",
+          "start_at",
+          "end_at"
+        ],
+        "title": "CalendarUpsertRequest"
+      },
+      "CredentialInfo": {
+        "properties": {
+          "provider": {
+            "type": "string",
+            "title": "Provider"
+          },
+          "service": {
+            "type": "string",
+            "title": "Service"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "provider",
+          "service",
+          "created_at"
+        ],
+        "title": "CredentialInfo",
+        "description": "Публичная проекция credential для UI (без токенов)."
+      },
+      "CursorPage_EntityResponse_": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/EntityResponse"
+            },
+            "type": "array",
+            "title": "Items"
+          },
+          "next_cursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Cursor"
+          },
+          "has_more": {
+            "type": "boolean",
+            "title": "Has More"
+          }
+        },
+        "type": "object",
+        "required": [
+          "items",
+          "has_more"
+        ],
+        "title": "CursorPage[EntityResponse]"
+      },
+      "CursorPage_RelationshipResponse_": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/RelationshipResponse"
+            },
+            "type": "array",
+            "title": "Items"
+          },
+          "next_cursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Cursor"
+          },
+          "has_more": {
+            "type": "boolean",
+            "title": "Has More"
+          }
+        },
+        "type": "object",
+        "required": [
+          "items",
+          "has_more"
+        ],
+        "title": "CursorPage[RelationshipResponse]"
+      },
+      "DemoLoginRequest": {
+        "properties": {
+          "email": {
+            "type": "string",
+            "title": "Email"
+          },
+          "password": {
+            "type": "string",
+            "title": "Password"
+          }
+        },
+        "type": "object",
+        "required": [
+          "email",
+          "password"
+        ],
+        "title": "DemoLoginRequest"
+      },
+      "DraftEntityPatch": {
+        "properties": {
+          "draft_entity_id": {
+            "type": "string",
+            "title": "Draft Entity Id"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "attributes": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Attributes"
+          },
+          "entity_subtype": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Entity Subtype"
+          },
+          "note_date": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Note Date"
+          },
+          "due_date": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Due Date"
+          },
+          "priority": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Priority"
+          },
+          "assignees": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Assignees"
+          }
+        },
+        "type": "object",
+        "required": [
+          "draft_entity_id"
+        ],
+        "title": "DraftEntityPatch"
+      },
+      "DraftRelationshipPatch": {
+        "properties": {
+          "draft_relationship_id": {
+            "type": "string",
+            "title": "Draft Relationship Id"
+          },
+          "weight": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Weight"
+          },
+          "attributes": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Attributes"
+          }
+        },
+        "type": "object",
+        "required": [
+          "draft_relationship_id"
+        ],
+        "title": "DraftRelationshipPatch"
+      },
+      "EntityCreate": {
+        "properties": {
+          "entity_type": {
+            "type": "string",
+            "title": "Entity Type"
+          },
+          "entity_subtype": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Entity Subtype"
+          },
+          "namespace": {
+            "type": "string",
+            "title": "Namespace",
+            "description": "Namespace для изоляции",
+            "default": "default"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "attributes": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Attributes"
+          },
+          "tags": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tags"
+          },
+          "user_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "User Id"
+          },
+          "voice_entity_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Voice Entity Id",
+            "description": "Сущность-голос (обычно contact); null в JSON — без голоса при переданном поле"
+          },
+          "context_entity_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Context Entity Id",
+            "description": "Якорь контекста; null — без привязки"
+          },
+          "note_date": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Note Date"
+          },
+          "due_date": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Due Date"
+          },
+          "priority": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Priority"
+          },
+          "assignees": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Assignees"
+          }
+        },
+        "type": "object",
+        "required": [
+          "entity_type",
+          "name"
+        ],
+        "title": "EntityCreate",
+        "description": "Создание entity"
+      },
+      "EntityMergeRequest": {
+        "properties": {
+          "survivor_entity_id": {
+            "type": "string",
+            "title": "Survivor Entity Id"
+          },
+          "source_entity_id": {
+            "type": "string",
+            "title": "Source Entity Id"
+          },
+          "scalar_choices": {
+            "additionalProperties": {
+              "type": "string",
+              "enum": [
+                "survivor",
+                "source"
+              ]
+            },
+            "type": "object",
+            "title": "Scalar Choices",
+            "description": "Для каждого конфликтного скаляра: survivor | source"
+          },
+          "attribute_choices": {
+            "additionalProperties": {
+              "type": "string",
+              "enum": [
+                "survivor",
+                "source"
+              ]
+            },
+            "type": "object",
+            "title": "Attribute Choices",
+            "description": "Для каждого конфликтного ключа attributes"
+          }
+        },
+        "type": "object",
+        "required": [
+          "survivor_entity_id",
+          "source_entity_id"
+        ],
+        "title": "EntityMergeRequest",
+        "description": "Слияние source в survivor: survivor сохраняет entity_id и entity_type, source удаляется."
+      },
+      "EntityMergeResponse": {
+        "properties": {
+          "entity": {
+            "$ref": "#/components/schemas/EntityResponse"
+          },
+          "merged_from_entity_id": {
+            "type": "string",
+            "title": "Merged From Entity Id"
+          }
+        },
+        "type": "object",
+        "required": [
+          "entity",
+          "merged_from_entity_id"
+        ],
+        "title": "EntityMergeResponse",
+        "description": "Результат слияния: актуальная survivor-сущность и id удалённой."
+      },
+      "EntityResponse": {
+        "properties": {
+          "entity_id": {
+            "type": "string",
+            "title": "Entity Id"
+          },
+          "company_id": {
+            "type": "string",
+            "title": "Company Id"
+          },
+          "namespace": {
+            "type": "string",
+            "title": "Namespace"
+          },
+          "entity_type": {
+            "type": "string",
+            "title": "Entity Type"
+          },
+          "entity_subtype": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Entity Subtype"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "attributes": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Attributes"
+          },
+          "tags": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Tags"
+          },
+          "attachment_ids": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Attachment Ids"
+          },
+          "note_date": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Note Date"
+          },
+          "due_date": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Due Date"
+          },
+          "priority": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Priority"
+          },
+          "assignees": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Assignees"
+          },
+          "user_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "User Id"
+          },
+          "source_entity_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Entity Id"
+          },
+          "source_company_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Company Id"
+          },
+          "external_relationships": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "type": "array",
+            "title": "External Relationships",
+            "default": []
+          },
+          "relevance": {
+            "type": "number",
+            "title": "Relevance"
+          },
+          "access_level": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Access Level"
+          },
+          "score": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Score"
+          },
+          "match_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Match Type"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Updated At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "entity_id",
+          "company_id",
+          "namespace",
+          "entity_type",
+          "entity_subtype",
+          "name",
+          "description",
+          "status",
+          "attributes",
+          "tags",
+          "attachment_ids",
+          "note_date",
+          "due_date",
+          "priority",
+          "assignees",
+          "user_id",
+          "source_entity_id",
+          "source_company_id",
+          "relevance",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "EntityResponse",
+        "description": "Response с entity"
+      },
+      "EntitySearchFilterNode": {
+        "properties": {
+          "$and": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/EntitySearchFilterNode"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "$And"
+          },
+          "$or": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/EntitySearchFilterNode"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "$Or"
+          },
+          "field": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Field"
+          },
+          "op": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Op"
+          },
+          "value": {
+            "anyOf": [
+              {},
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Value"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "EntitySearchFilterNode",
+        "description": "DSL-узел фильтра поиска сущностей."
+      },
+      "EntitySearchQueryRequest": {
+        "properties": {
+          "query": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Query"
+          },
+          "search_mode": {
+            "type": "string",
+            "enum": [
+              "text",
+              "semantic",
+              "hybrid"
+            ],
+            "title": "Search Mode",
+            "default": "hybrid"
+          },
+          "entity_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Entity Type"
+          },
+          "entity_subtype": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Entity Subtype"
+          },
+          "namespace": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Namespace"
+          },
+          "filters": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/EntitySearchFilterNode"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "cursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cursor"
+          },
+          "limit": {
+            "type": "integer",
+            "maximum": 1000.0,
+            "minimum": 1.0,
+            "title": "Limit",
+            "default": 100
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "EntitySearchQueryRequest",
+        "description": "POST-контракт поиска/листинга сущностей через DSL-фильтры."
+      },
+      "EntityTimelineBoundsResponse": {
+        "properties": {
+          "min_created_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Min Created At"
+          },
+          "max_created_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Max Created At"
+          },
+          "total_entities": {
+            "type": "integer",
+            "title": "Total Entities"
+          }
+        },
+        "type": "object",
+        "required": [
+          "min_created_at",
+          "max_created_at",
+          "total_entities"
+        ],
+        "title": "EntityTimelineBoundsResponse",
+        "description": "Границы timeline по created_at."
+      },
+      "EntityTypeCreate": {
+        "properties": {
+          "type_id": {
+            "type": "string",
+            "title": "Type Id"
+          },
+          "parent_type_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Parent Type Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "prompt": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Prompt"
+          },
+          "required_fields": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Required Fields"
+          },
+          "optional_fields": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Optional Fields"
+          },
+          "icon": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Icon"
+          },
+          "color": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Color"
+          },
+          "is_event": {
+            "type": "boolean",
+            "title": "Is Event",
+            "default": false
+          },
+          "check_duplicates": {
+            "type": "boolean",
+            "title": "Check Duplicates",
+            "default": true
+          },
+          "namespace_ids": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Namespace Ids"
+          },
+          "is_context_anchor": {
+            "type": "boolean",
+            "title": "Is Context Anchor",
+            "default": false
+          },
+          "is_voice_target": {
+            "type": "boolean",
+            "title": "Is Voice Target",
+            "default": false
+          }
+        },
+        "type": "object",
+        "required": [
+          "type_id",
+          "name"
+        ],
+        "title": "EntityTypeCreate",
+        "description": "Создание типа сущности"
+      },
+      "EntityTypeResponse": {
+        "properties": {
+          "type_id": {
+            "type": "string",
+            "title": "Type Id"
+          },
+          "company_id": {
+            "type": "string",
+            "title": "Company Id"
+          },
+          "parent_type_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Parent Type Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "prompt": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Prompt"
+          },
+          "required_fields": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Required Fields"
+          },
+          "optional_fields": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Optional Fields"
+          },
+          "public_fields": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Public Fields"
+          },
+          "icon": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Icon"
+          },
+          "color": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Color"
+          },
+          "is_system": {
+            "type": "boolean",
+            "title": "Is System"
+          },
+          "is_event": {
+            "type": "boolean",
+            "title": "Is Event"
+          },
+          "check_duplicates": {
+            "type": "boolean",
+            "title": "Check Duplicates"
+          },
+          "weight_coefficient": {
+            "type": "number",
+            "title": "Weight Coefficient"
+          },
+          "namespace_ids": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Namespace Ids"
+          },
+          "is_context_anchor": {
+            "type": "boolean",
+            "title": "Is Context Anchor"
+          },
+          "is_voice_target": {
+            "type": "boolean",
+            "title": "Is Voice Target"
+          },
+          "extractable": {
+            "type": "boolean",
+            "title": "Extractable"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "type_id",
+          "company_id",
+          "parent_type_id",
+          "name",
+          "description",
+          "prompt",
+          "required_fields",
+          "optional_fields",
+          "public_fields",
+          "icon",
+          "color",
+          "is_system",
+          "is_event",
+          "check_duplicates",
+          "weight_coefficient",
+          "namespace_ids",
+          "is_context_anchor",
+          "is_voice_target",
+          "extractable",
+          "created_at"
+        ],
+        "title": "EntityTypeResponse",
+        "description": "Response с типом сущности"
+      },
+      "EntityTypeUpdate": {
+        "properties": {
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "parent_type_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Parent Type Id"
+          },
+          "prompt": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Prompt"
+          },
+          "required_fields": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Required Fields"
+          },
+          "optional_fields": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Optional Fields"
+          },
+          "icon": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Icon"
+          },
+          "color": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Color"
+          },
+          "namespace_ids": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Namespace Ids"
+          },
+          "is_context_anchor": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Is Context Anchor"
+          },
+          "is_voice_target": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Is Voice Target"
+          }
+        },
+        "type": "object",
+        "title": "EntityTypeUpdate",
+        "description": "Обновление типа сущности"
+      },
+      "EntityUpdate": {
+        "properties": {
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "status": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Status"
+          },
+          "attributes": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Attributes"
+          },
+          "tags": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tags"
+          },
+          "voice_entity_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Voice Entity Id"
+          },
+          "context_entity_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Context Entity Id"
+          },
+          "note_date": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Note Date"
+          },
+          "due_date": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Due Date"
+          },
+          "priority": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Priority"
+          },
+          "assignees": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Assignees"
+          }
+        },
+        "type": "object",
+        "title": "EntityUpdate",
+        "description": "Обновление entity"
+      },
+      "FileReadPreviewResponse": {
+        "properties": {
+          "text": {
+            "type": "string",
+            "title": "Text",
+            "description": "Извлечённый текст (может быть усечён для UI)"
+          },
+          "truncated": {
+            "type": "boolean",
+            "title": "Truncated",
+            "description": "Усечён ли текст по лимиту превью"
+          },
+          "page_count": {
+            "type": "integer",
+            "title": "Page Count",
+            "description": "Число страниц после чтения",
+            "default": 0
+          },
+          "detected_kind": {
+            "type": "string",
+            "title": "Detected Kind",
+            "description": "Тип файла по FileReader"
+          },
+          "mime_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Mime Type",
+            "description": "MIME после распознавания"
+          },
+          "warnings": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Warnings",
+            "description": "Предупреждения парсера"
+          },
+          "preview_note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Preview Note",
+            "description": "Пояснение для пользователя (например для изображений)"
+          }
+        },
+        "type": "object",
+        "required": [
+          "text",
+          "truncated",
+          "detected_kind"
+        ],
+        "title": "FileReadPreviewResponse",
+        "description": "Текстовое превью содержимого файла (извлечение без vision для изображений)."
+      },
+      "FileResponse": {
+        "properties": {
+          "file_id": {
+            "type": "string",
+            "title": "File Id"
+          },
+          "original_name": {
+            "type": "string",
+            "title": "Original Name"
+          },
+          "content_type": {
+            "type": "string",
+            "title": "Content Type"
+          },
+          "file_size": {
+            "type": "integer",
+            "title": "File Size"
+          },
+          "url": {
+            "type": "string",
+            "title": "Url"
+          },
+          "checksum": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Checksum"
+          },
+          "is_public": {
+            "type": "boolean",
+            "title": "Is Public"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "file_id",
+          "original_name",
+          "content_type",
+          "file_size",
+          "url",
+          "is_public",
+          "created_at"
+        ],
+        "title": "FileResponse",
+        "description": "Публичное представление файла для API-ответов.\n\nНе содержит внутренних полей (s3_key, s3_bucket, s3_endpoint).\nИспользуется как return-тип всех file-эндпоинтов во всех сервисах."
+      },
+      "GrantToCompanyRequest": {
+        "properties": {
+          "company_id": {
+            "type": "string",
+            "title": "Company Id"
+          },
+          "role": {
+            "type": "string",
+            "pattern": "^(viewer|editor|admin)$",
+            "title": "Role",
+            "default": "viewer"
+          },
+          "expires_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expires At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "company_id"
+        ],
+        "title": "GrantToCompanyRequest",
+        "description": "Запрос на шаринг целой компании"
+      },
+      "GrantToUserRequest": {
+        "properties": {
+          "user_id": {
+            "type": "string",
+            "title": "User Id"
+          },
+          "role": {
+            "type": "string",
+            "pattern": "^(viewer|editor|admin)$",
+            "title": "Role",
+            "default": "viewer"
+          },
+          "expires_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expires At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "user_id"
+        ],
+        "title": "GrantToUserRequest",
+        "description": "Запрос на шаринг конкретному user"
+      },
+      "GraphEdge": {
+        "properties": {
+          "edge_id": {
+            "type": "string",
+            "title": "Edge Id",
+            "description": "ID relationship"
+          },
+          "source_id": {
+            "type": "string",
+            "title": "Source Id",
+            "description": "ID источника"
+          },
+          "target_id": {
+            "type": "string",
+            "title": "Target Id",
+            "description": "ID цели"
+          },
+          "relationship_type": {
+            "type": "string",
+            "title": "Relationship Type",
+            "description": "Тип связи"
+          },
+          "weight": {
+            "type": "number",
+            "title": "Weight",
+            "description": "Вес ребра"
+          },
+          "is_directed": {
+            "type": "boolean",
+            "title": "Is Directed",
+            "description": "Направленное ли ребро"
+          },
+          "attributes": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Attributes",
+            "description": "Дополнительные атрибуты связи"
+          }
+        },
+        "type": "object",
+        "required": [
+          "edge_id",
+          "source_id",
+          "target_id",
+          "relationship_type",
+          "weight",
+          "is_directed"
+        ],
+        "title": "GraphEdge",
+        "description": "Ребро в графе связей.\n\nПредставляет relationship между двумя entities."
+      },
+      "GraphNode": {
+        "properties": {
+          "entity_id": {
+            "type": "string",
+            "title": "Entity Id",
+            "description": "ID entity"
+          },
+          "entity_type": {
+            "type": "string",
+            "title": "Entity Type",
+            "description": "Тип entity или 'hidden' если нет доступа"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name",
+            "description": "Название entity или 'Hidden'"
+          },
+          "level": {
+            "type": "integer",
+            "title": "Level",
+            "description": "Глубина от корневого узла (0 для root)"
+          },
+          "access": {
+            "type": "boolean",
+            "title": "Access",
+            "description": "Есть ли полный доступ к entity"
+          },
+          "created_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Created At",
+            "description": "Время создания entity (ISO8601)"
+          },
+          "attributes": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Attributes",
+            "description": "Атрибуты entity (только если access=True)"
+          }
+        },
+        "type": "object",
+        "required": [
+          "entity_id",
+          "entity_type",
+          "name",
+          "level",
+          "access"
+        ],
+        "title": "GraphNode",
+        "description": "Узел в графе связей.\n\nПредставляет entity с информацией о доступе и глубине в графе."
+      },
+      "HTTPValidationError": {
+        "properties": {
+          "detail": {
+            "items": {
+              "$ref": "#/components/schemas/ValidationError"
+            },
+            "type": "array",
+            "title": "Detail"
+          }
+        },
+        "type": "object",
+        "title": "HTTPValidationError"
+      },
+      "InfluenceGraphResponse": {
+        "properties": {
+          "root_entity_id": {
+            "type": "string",
+            "title": "Root Entity Id",
+            "description": "ID корневой entity"
+          },
+          "max_depth": {
+            "type": "integer",
+            "title": "Max Depth",
+            "description": "Максимальная глубина обхода"
+          },
+          "nodes": {
+            "items": {
+              "$ref": "#/components/schemas/GraphNode"
+            },
+            "type": "array",
+            "title": "Nodes",
+            "description": "Узлы графа"
+          },
+          "edges": {
+            "items": {
+              "$ref": "#/components/schemas/GraphEdge"
+            },
+            "type": "array",
+            "title": "Edges",
+            "description": "Ребра графа"
+          },
+          "total_nodes": {
+            "type": "integer",
+            "title": "Total Nodes",
+            "description": "Общее количество узлов"
+          },
+          "filtered_count": {
+            "type": "integer",
+            "title": "Filtered Count",
+            "description": "Количество скрытых узлов из-за прав"
+          }
+        },
+        "type": "object",
+        "required": [
+          "root_entity_id",
+          "max_depth",
+          "nodes",
+          "edges",
+          "total_nodes",
+          "filtered_count"
+        ],
+        "title": "InfluenceGraphResponse",
+        "description": "Граф влияния от корневой entity.\n\nСодержит все узлы и ребра в пределах max_depth."
+      },
+      "KnowledgeImportCreatedEntityItem": {
+        "properties": {
+          "entity_id": {
+            "type": "string",
+            "title": "Entity Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "entity_type": {
+            "type": "string",
+            "title": "Entity Type"
+          },
+          "entity_subtype": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Entity Subtype"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status"
+          }
+        },
+        "type": "object",
+        "required": [
+          "entity_id",
+          "name",
+          "entity_type",
+          "status"
+        ],
+        "title": "KnowledgeImportCreatedEntityItem"
+      },
+      "LaraWorkspaceSummaryResponse": {
+        "properties": {
+          "namespace": {
+            "type": "string",
+            "title": "Namespace"
+          },
+          "knowledge_imports_awaiting_review": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Knowledge Imports Awaiting Review",
+            "description": "Импорты completed/failed/cancelled без review_completed_at"
+          },
+          "knowledge_imports_in_progress": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Knowledge Imports In Progress",
+            "description": "Импорты в статусах pending или running"
+          },
+          "notes_with_analysis_draft_not_applied": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Notes With Analysis Draft Not Applied",
+            "description": "Заметки с ai_analysis_draft и без ai_analysis_applied_at"
+          }
+        },
+        "type": "object",
+        "required": [
+          "namespace",
+          "knowledge_imports_awaiting_review",
+          "knowledge_imports_in_progress",
+          "notes_with_analysis_draft_not_applied"
+        ],
+        "title": "LaraWorkspaceSummaryResponse",
+        "description": "Сводка для Lara: импорты и черновики AI-анализа заметок в namespace."
+      },
+      "ListResponse_CalendarIntegrationPublic_": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/CalendarIntegrationPublic"
+            },
+            "type": "array",
+            "title": "Items"
+          }
+        },
+        "type": "object",
+        "required": [
+          "items"
+        ],
+        "title": "ListResponse[CalendarIntegrationPublic]"
+      },
+      "ListResponse_CredentialInfo_": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/CredentialInfo"
+            },
+            "type": "array",
+            "title": "Items"
+          }
+        },
+        "type": "object",
+        "required": [
+          "items"
+        ],
+        "title": "ListResponse[CredentialInfo]"
+      },
+      "ListResponse_TeamMemberResponse_": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/TeamMemberResponse"
+            },
+            "type": "array",
+            "title": "Items"
+          }
+        },
+        "type": "object",
+        "required": [
+          "items"
+        ],
+        "title": "ListResponse[TeamMemberResponse]"
+      },
+      "ListResponse_UserSearchResult_": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/UserSearchResult"
+            },
+            "type": "array",
+            "title": "Items"
+          }
+        },
+        "type": "object",
+        "required": [
+          "items"
+        ],
+        "title": "ListResponse[UserSearchResult]"
+      },
+      "ListResponse_dict_": {
+        "properties": {
+          "items": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "type": "array",
+            "title": "Items"
+          }
+        },
+        "type": "object",
+        "required": [
+          "items"
+        ],
+        "title": "ListResponse[dict]"
+      },
+      "NamespaceCRMSettings": {
+        "properties": {
+          "show_note_voice_ui": {
+            "type": "boolean",
+            "title": "Показывать выбор голоса",
+            "default": true
+          },
+          "default_note_voice": {
+            "type": "string",
+            "enum": [
+              "self",
+              "none",
+              "last"
+            ],
+            "title": "Голос по умолчанию для новой заметки",
+            "default": "self"
+          },
+          "default_context_entity_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Якорь контекста по умолчанию"
+          }
+        },
+        "type": "object",
+        "title": "NamespaceCRMSettings",
+        "description": "Настройки CRM для namespace (заметки: голос, контекст)."
+      },
+      "NamespaceCreateRequest": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "Name",
+            "description": "Имя namespace"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description",
+            "description": "Описание namespace"
+          },
+          "template_id": {
+            "type": "string",
+            "title": "Template Id",
+            "description": "ID шаблона: sales | development | hr"
+          }
+        },
+        "type": "object",
+        "required": [
+          "name",
+          "template_id"
+        ],
+        "title": "NamespaceCreateRequest",
+        "description": "Создание namespace из шаблона."
+      },
+      "NamespaceEditabilityResponse": {
+        "properties": {
+          "namespace": {
+            "type": "string",
+            "title": "Namespace"
+          },
+          "has_entities": {
+            "type": "boolean",
+            "title": "Has Entities"
+          },
+          "entity_count": {
+            "type": "integer",
+            "title": "Entity Count"
+          },
+          "used_type_ids": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Used Type Ids"
+          },
+          "current_allowed_type_ids": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Current Allowed Type Ids"
+          },
+          "can_update_allowed_types": {
+            "type": "boolean",
+            "title": "Can Update Allowed Types"
+          },
+          "can_add_types": {
+            "type": "boolean",
+            "title": "Can Add Types"
+          },
+          "locked_type_ids": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Locked Type Ids"
+          },
+          "removable_type_ids": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Removable Type Ids"
+          },
+          "lock_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Lock Reason"
+          }
+        },
+        "type": "object",
+        "required": [
+          "namespace",
+          "has_entities",
+          "entity_count",
+          "used_type_ids",
+          "current_allowed_type_ids",
+          "can_update_allowed_types",
+          "can_add_types",
+          "locked_type_ids",
+          "removable_type_ids"
+        ],
+        "title": "NamespaceEditabilityResponse",
+        "description": "Ограничения редактирования namespace."
+      },
+      "NamespaceResponse": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "company_id": {
+            "type": "string",
+            "title": "Company Id"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "is_default": {
+            "type": "boolean",
+            "title": "Is Default",
+            "default": false
+          },
+          "crm_settings": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/NamespaceCRMSettings"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "type": "object",
+        "required": [
+          "name",
+          "company_id"
+        ],
+        "title": "NamespaceResponse",
+        "description": "Данные namespace."
+      },
+      "NamespaceTemplateCreateRequest": {
+        "properties": {
+          "template_id": {
+            "type": "string",
+            "title": "Template Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "icon": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Icon"
+          }
+        },
+        "type": "object",
+        "required": [
+          "template_id",
+          "name"
+        ],
+        "title": "NamespaceTemplateCreateRequest"
+      },
+      "NamespaceTemplateDetailsResponse": {
+        "properties": {
+          "template_id": {
+            "type": "string",
+            "title": "Template Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "icon": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Icon"
+          },
+          "is_system": {
+            "type": "boolean",
+            "title": "Is System"
+          },
+          "types": {
+            "items": {
+              "$ref": "#/components/schemas/NamespaceTemplateTypeResponse"
+            },
+            "type": "array",
+            "title": "Types"
+          },
+          "entity_type_ids": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Entity Type Ids"
+          }
+        },
+        "type": "object",
+        "required": [
+          "template_id",
+          "name",
+          "is_system",
+          "types",
+          "entity_type_ids"
+        ],
+        "title": "NamespaceTemplateDetailsResponse"
+      },
+      "NamespaceTemplateResponse": {
+        "properties": {
+          "template_id": {
+            "type": "string",
+            "title": "Template Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "icon": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Icon"
+          },
+          "is_system": {
+            "type": "boolean",
+            "title": "Is System",
+            "default": false
+          },
+          "entity_type_ids": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Entity Type Ids"
+          }
+        },
+        "type": "object",
+        "required": [
+          "template_id",
+          "name",
+          "entity_type_ids"
+        ],
+        "title": "NamespaceTemplateResponse",
+        "description": "Шаблон namespace."
+      },
+      "NamespaceTemplateSchemaEnumSet": {
+        "properties": {
+          "enum_set_id": {
+            "type": "string",
+            "title": "Enum Set Id"
+          },
+          "label": {
+            "type": "string",
+            "title": "Label"
+          },
+          "values": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Values"
+          }
+        },
+        "type": "object",
+        "required": [
+          "enum_set_id",
+          "label",
+          "values"
+        ],
+        "title": "NamespaceTemplateSchemaEnumSet"
+      },
+      "NamespaceTemplateSchemaFieldType": {
+        "properties": {
+          "type_id": {
+            "type": "string",
+            "title": "Type Id"
+          },
+          "label": {
+            "type": "string",
+            "title": "Label"
+          },
+          "supports_enum_values": {
+            "type": "boolean",
+            "title": "Supports Enum Values",
+            "default": false
+          },
+          "supports_enum_set": {
+            "type": "boolean",
+            "title": "Supports Enum Set",
+            "default": false
+          }
+        },
+        "type": "object",
+        "required": [
+          "type_id",
+          "label"
+        ],
+        "title": "NamespaceTemplateSchemaFieldType"
+      },
+      "NamespaceTemplateSchemaOperator": {
+        "properties": {
+          "operator_id": {
+            "type": "string",
+            "title": "Operator Id"
+          },
+          "label": {
+            "type": "string",
+            "title": "Label"
+          }
+        },
+        "type": "object",
+        "required": [
+          "operator_id",
+          "label"
+        ],
+        "title": "NamespaceTemplateSchemaOperator"
+      },
+      "NamespaceTemplateSchemaOptionsResponse": {
+        "properties": {
+          "field_types": {
+            "items": {
+              "$ref": "#/components/schemas/NamespaceTemplateSchemaFieldType"
+            },
+            "type": "array",
+            "title": "Field Types"
+          },
+          "enum_sets": {
+            "items": {
+              "$ref": "#/components/schemas/NamespaceTemplateSchemaEnumSet"
+            },
+            "type": "array",
+            "title": "Enum Sets"
+          },
+          "operators": {
+            "items": {
+              "$ref": "#/components/schemas/NamespaceTemplateSchemaOperator"
+            },
+            "type": "array",
+            "title": "Operators"
+          },
+          "defaults": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Defaults"
+          },
+          "validation_limits": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "type": "object",
+            "title": "Validation Limits"
+          }
+        },
+        "type": "object",
+        "required": [
+          "field_types",
+          "enum_sets",
+          "operators"
+        ],
+        "title": "NamespaceTemplateSchemaOptionsResponse"
+      },
+      "NamespaceTemplateTypeResponse": {
+        "properties": {
+          "type_id": {
+            "type": "string",
+            "title": "Type Id"
+          },
+          "parent_type_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Parent Type Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "prompt": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Prompt"
+          },
+          "required_fields": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Required Fields"
+          },
+          "optional_fields": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Optional Fields"
+          },
+          "icon": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Icon"
+          },
+          "color": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Color"
+          },
+          "is_event": {
+            "type": "boolean",
+            "title": "Is Event"
+          },
+          "check_duplicates": {
+            "type": "boolean",
+            "title": "Check Duplicates"
+          },
+          "weight_coefficient": {
+            "type": "number",
+            "title": "Weight Coefficient"
+          },
+          "namespace_ids": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Namespace Ids"
+          },
+          "is_context_anchor": {
+            "type": "boolean",
+            "title": "Is Context Anchor"
+          },
+          "is_voice_target": {
+            "type": "boolean",
+            "title": "Is Voice Target"
+          }
+        },
+        "type": "object",
+        "required": [
+          "type_id",
+          "name",
+          "required_fields",
+          "optional_fields",
+          "is_event",
+          "check_duplicates",
+          "weight_coefficient",
+          "namespace_ids",
+          "is_context_anchor",
+          "is_voice_target"
+        ],
+        "title": "NamespaceTemplateTypeResponse"
+      },
+      "NamespaceTemplateTypeUpsertRequest": {
+        "properties": {
+          "type_id": {
+            "type": "string",
+            "title": "Type Id"
+          },
+          "parent_type_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Parent Type Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "prompt": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Prompt"
+          },
+          "required_fields": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Required Fields"
+          },
+          "optional_fields": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Optional Fields"
+          },
+          "icon": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Icon"
+          },
+          "color": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Color"
+          },
+          "is_event": {
+            "type": "boolean",
+            "title": "Is Event",
+            "default": false
+          },
+          "check_duplicates": {
+            "type": "boolean",
+            "title": "Check Duplicates",
+            "default": true
+          },
+          "weight_coefficient": {
+            "type": "number",
+            "title": "Weight Coefficient",
+            "default": 1.0
+          },
+          "namespace_ids": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Namespace Ids"
+          },
+          "is_context_anchor": {
+            "type": "boolean",
+            "title": "Is Context Anchor",
+            "default": false
+          },
+          "is_voice_target": {
+            "type": "boolean",
+            "title": "Is Voice Target",
+            "default": false
+          }
+        },
+        "type": "object",
+        "required": [
+          "type_id",
+          "name"
+        ],
+        "title": "NamespaceTemplateTypeUpsertRequest"
+      },
+      "NamespaceTemplateUpdateRequest": {
+        "properties": {
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "icon": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Icon"
+          }
+        },
+        "type": "object",
+        "title": "NamespaceTemplateUpdateRequest"
+      },
+      "NamespaceUpdateRequest": {
+        "properties": {
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "allowed_type_ids": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Allowed Type Ids"
+          },
+          "crm_settings": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/NamespaceCRMSettings"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "type": "object",
+        "title": "NamespaceUpdateRequest",
+        "description": "Обновление существующего namespace."
+      },
+      "OffsetPage_AccessGrantResponse_": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/AccessGrantResponse"
+            },
+            "type": "array",
+            "title": "Items"
+          },
+          "total": {
+            "type": "integer",
+            "title": "Total"
+          },
+          "limit": {
+            "type": "integer",
+            "title": "Limit"
+          },
+          "offset": {
+            "type": "integer",
+            "title": "Offset"
+          }
+        },
+        "type": "object",
+        "required": [
+          "items",
+          "total",
+          "limit",
+          "offset"
+        ],
+        "title": "OffsetPage[AccessGrantResponse]"
+      },
+      "OffsetPage_AccessRequestResponse_": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/AccessRequestResponse"
+            },
+            "type": "array",
+            "title": "Items"
+          },
+          "total": {
+            "type": "integer",
+            "title": "Total"
+          },
+          "limit": {
+            "type": "integer",
+            "title": "Limit"
+          },
+          "offset": {
+            "type": "integer",
+            "title": "Offset"
+          }
+        },
+        "type": "object",
+        "required": [
+          "items",
+          "total",
+          "limit",
+          "offset"
+        ],
+        "title": "OffsetPage[AccessRequestResponse]"
+      },
+      "OffsetPage_EntityTypeResponse_": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/EntityTypeResponse"
+            },
+            "type": "array",
+            "title": "Items"
+          },
+          "total": {
+            "type": "integer",
+            "title": "Total"
+          },
+          "limit": {
+            "type": "integer",
+            "title": "Limit"
+          },
+          "offset": {
+            "type": "integer",
+            "title": "Offset"
+          }
+        },
+        "type": "object",
+        "required": [
+          "items",
+          "total",
+          "limit",
+          "offset"
+        ],
+        "title": "OffsetPage[EntityTypeResponse]"
+      },
+      "OffsetPage_NamespaceResponse_": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/NamespaceResponse"
+            },
+            "type": "array",
+            "title": "Items"
+          },
+          "total": {
+            "type": "integer",
+            "title": "Total"
+          },
+          "limit": {
+            "type": "integer",
+            "title": "Limit"
+          },
+          "offset": {
+            "type": "integer",
+            "title": "Offset"
+          }
+        },
+        "type": "object",
+        "required": [
+          "items",
+          "total",
+          "limit",
+          "offset"
+        ],
+        "title": "OffsetPage[NamespaceResponse]"
+      },
+      "OffsetPage_NamespaceTemplateResponse_": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/NamespaceTemplateResponse"
+            },
+            "type": "array",
+            "title": "Items"
+          },
+          "total": {
+            "type": "integer",
+            "title": "Total"
+          },
+          "limit": {
+            "type": "integer",
+            "title": "Limit"
+          },
+          "offset": {
+            "type": "integer",
+            "title": "Offset"
+          }
+        },
+        "type": "object",
+        "required": [
+          "items",
+          "total",
+          "limit",
+          "offset"
+        ],
+        "title": "OffsetPage[NamespaceTemplateResponse]"
+      },
+      "OffsetPage_RelationshipTypeResponse_": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/RelationshipTypeResponse"
+            },
+            "type": "array",
+            "title": "Items"
+          },
+          "total": {
+            "type": "integer",
+            "title": "Total"
+          },
+          "limit": {
+            "type": "integer",
+            "title": "Limit"
+          },
+          "offset": {
+            "type": "integer",
+            "title": "Offset"
+          }
+        },
+        "type": "object",
+        "required": [
+          "items",
+          "total",
+          "limit",
+          "offset"
+        ],
+        "title": "OffsetPage[RelationshipTypeResponse]"
+      },
+      "OffsetPage_TaskResponse_": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/TaskResponse"
+            },
+            "type": "array",
+            "title": "Items"
+          },
+          "total": {
+            "type": "integer",
+            "title": "Total"
+          },
+          "limit": {
+            "type": "integer",
+            "title": "Limit"
+          },
+          "offset": {
+            "type": "integer",
+            "title": "Offset"
+          }
+        },
+        "type": "object",
+        "required": [
+          "items",
+          "total",
+          "limit",
+          "offset"
+        ],
+        "title": "OffsetPage[TaskResponse]"
+      },
+      "OverviewGraphRequest": {
+        "properties": {
+          "entity_ids": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Entity Ids",
+            "description": "Список seed entity ID"
+          },
+          "max_depth": {
+            "type": "integer",
+            "maximum": 5.0,
+            "minimum": 1.0,
+            "title": "Max Depth",
+            "default": 3
+          },
+          "relationship_types": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Relationship Types",
+            "description": "Comma-separated типы связей"
+          },
+          "created_at_from": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Created At From"
+          },
+          "created_at_to": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Created At To"
+          },
+          "namespace": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Namespace",
+            "description": "Namespace для проверки лимита сущностей в БД"
+          }
+        },
+        "type": "object",
+        "required": [
+          "entity_ids"
+        ],
+        "title": "OverviewGraphRequest"
+      },
+      "RelatedEntitiesResponse": {
+        "properties": {
+          "entity_id": {
+            "type": "string",
+            "title": "Entity Id",
+            "description": "ID центральной entity"
+          },
+          "incoming": {
+            "items": {
+              "$ref": "#/components/schemas/GraphNode"
+            },
+            "type": "array",
+            "title": "Incoming",
+            "description": "Entities которые ссылаются на текущую"
+          },
+          "outgoing": {
+            "items": {
+              "$ref": "#/components/schemas/GraphNode"
+            },
+            "type": "array",
+            "title": "Outgoing",
+            "description": "Entities на которые ссылается текущая"
+          },
+          "undirected": {
+            "items": {
+              "$ref": "#/components/schemas/GraphNode"
+            },
+            "type": "array",
+            "title": "Undirected",
+            "description": "Симметричные связи (is_directed=False)"
+          }
+        },
+        "type": "object",
+        "required": [
+          "entity_id",
+          "incoming",
+          "outgoing",
+          "undirected"
+        ],
+        "title": "RelatedEntitiesResponse",
+        "description": "Прямо связанные entities (1 уровень).\n\nРазделяет по направлению: incoming, outgoing, undirected."
+      },
+      "RelationshipCreate": {
+        "properties": {
+          "source_entity_id": {
+            "type": "string",
+            "title": "Source Entity Id"
+          },
+          "target_entity_id": {
+            "type": "string",
+            "title": "Target Entity Id"
+          },
+          "relationship_type": {
+            "type": "string",
+            "title": "Relationship Type"
+          },
+          "namespace": {
+            "type": "string",
+            "title": "Namespace",
+            "description": "Namespace для изоляции",
+            "default": "default"
+          },
+          "weight": {
+            "type": "number",
+            "title": "Weight",
+            "default": 1.0
+          },
+          "attributes": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Attributes"
+          }
+        },
+        "type": "object",
+        "required": [
+          "source_entity_id",
+          "target_entity_id",
+          "relationship_type"
+        ],
+        "title": "RelationshipCreate",
+        "description": "Создание связи"
+      },
+      "RelationshipResponse": {
+        "properties": {
+          "relationship_id": {
+            "type": "string",
+            "title": "Relationship Id"
+          },
+          "company_id": {
+            "type": "string",
+            "title": "Company Id"
+          },
+          "namespace": {
+            "type": "string",
+            "title": "Namespace"
+          },
+          "source_entity_id": {
+            "type": "string",
+            "title": "Source Entity Id"
+          },
+          "target_entity_id": {
+            "type": "string",
+            "title": "Target Entity Id"
+          },
+          "relationship_type": {
+            "type": "string",
+            "title": "Relationship Type"
+          },
+          "weight": {
+            "type": "number",
+            "title": "Weight"
+          },
+          "attributes": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Attributes"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Updated At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "relationship_id",
+          "company_id",
+          "namespace",
+          "source_entity_id",
+          "target_entity_id",
+          "relationship_type",
+          "weight",
+          "attributes",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "RelationshipResponse",
+        "description": "Response со связью"
+      },
+      "RelationshipTypeCreate": {
+        "properties": {
+          "type_id": {
+            "type": "string",
+            "title": "Type Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "prompt": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Prompt"
+          },
+          "is_directed": {
+            "type": "boolean",
+            "title": "Is Directed",
+            "default": true
+          },
+          "inverse_type_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Inverse Type Id"
+          },
+          "icon": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Icon"
+          },
+          "color": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Color"
+          },
+          "weight_default": {
+            "type": "number",
+            "title": "Weight Default",
+            "default": 1.0
+          }
+        },
+        "type": "object",
+        "required": [
+          "type_id",
+          "name"
+        ],
+        "title": "RelationshipTypeCreate",
+        "description": "Создание типа связи"
+      },
+      "RelationshipTypeResponse": {
+        "properties": {
+          "type_id": {
+            "type": "string",
+            "title": "Type Id"
+          },
+          "company_id": {
+            "type": "string",
+            "title": "Company Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "prompt": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Prompt"
+          },
+          "is_directed": {
+            "type": "boolean",
+            "title": "Is Directed"
+          },
+          "inverse_type_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Inverse Type Id"
+          },
+          "icon": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Icon"
+          },
+          "color": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Color"
+          },
+          "is_system": {
+            "type": "boolean",
+            "title": "Is System"
+          },
+          "weight_default": {
+            "type": "number",
+            "title": "Weight Default"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "type_id",
+          "company_id",
+          "name",
+          "description",
+          "prompt",
+          "is_directed",
+          "inverse_type_id",
+          "icon",
+          "color",
+          "is_system",
+          "weight_default",
+          "created_at"
+        ],
+        "title": "RelationshipTypeResponse",
+        "description": "Response с типом связи"
+      },
+      "ResourceType": {
+        "type": "string",
+        "enum": [
+          "note",
+          "entity"
+        ],
+        "title": "ResourceType",
+        "description": "Тип ресурса для запроса доступа"
+      },
+      "SearchMentionsRequest": {
+        "properties": {
+          "text": {
+            "type": "string",
+            "title": "Text",
+            "description": "Текст для поиска упоминаний"
+          },
+          "namespace": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Namespace",
+            "description": "Namespace для ограничения поиска"
+          }
+        },
+        "type": "object",
+        "required": [
+          "text"
+        ],
+        "title": "SearchMentionsRequest",
+        "description": "Запрос на поиск упоминаний в тексте"
+      },
+      "ShortestPathResponse": {
+        "properties": {
+          "from_entity_id": {
+            "type": "string",
+            "title": "From Entity Id",
+            "description": "Начальная entity"
+          },
+          "to_entity_id": {
+            "type": "string",
+            "title": "To Entity Id",
+            "description": "Конечная entity"
+          },
+          "path": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Path",
+            "description": "Список entity_id в пути"
+          },
+          "edges": {
+            "items": {
+              "$ref": "#/components/schemas/GraphEdge"
+            },
+            "type": "array",
+            "title": "Edges",
+            "description": "Ребра вдоль пути"
+          },
+          "total_distance": {
+            "type": "number",
+            "title": "Total Distance",
+            "description": "Сумма весов вдоль пути"
+          },
+          "exists": {
+            "type": "boolean",
+            "title": "Exists",
+            "description": "Существует ли путь"
+          },
+          "undirected_path": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Undirected Path",
+            "description": "Путь без учета направления ребер"
+          },
+          "undirected_edges": {
+            "items": {
+              "$ref": "#/components/schemas/GraphEdge"
+            },
+            "type": "array",
+            "title": "Undirected Edges",
+            "description": "Ребра пути без учета направления"
+          },
+          "undirected_total_distance": {
+            "type": "number",
+            "title": "Undirected Total Distance",
+            "description": "Сумма весов пути без учета направления"
+          },
+          "undirected_exists": {
+            "type": "boolean",
+            "title": "Undirected Exists",
+            "description": "Существует ли путь без учета направления"
+          }
+        },
+        "type": "object",
+        "required": [
+          "from_entity_id",
+          "to_entity_id",
+          "path",
+          "edges",
+          "total_distance",
+          "exists",
+          "undirected_path",
+          "undirected_edges",
+          "undirected_total_distance",
+          "undirected_exists"
+        ],
+        "title": "ShortestPathResponse",
+        "description": "Кратчайший путь между двумя entities.\n\nИспользует weighted алгоритм Dijkstra."
+      },
+      "StartDailySummaryRequest": {
+        "properties": {
+          "namespace": {
+            "type": "string",
+            "title": "Namespace",
+            "description": "Пространство назначения"
+          },
+          "date_str": {
+            "type": "string",
+            "title": "Date Str",
+            "description": "Дата в формате YYYY-MM-DD"
+          },
+          "reason": {
+            "type": "string",
+            "title": "Reason",
+            "default": "manual"
+          }
+        },
+        "type": "object",
+        "required": [
+          "namespace",
+          "date_str"
+        ],
+        "title": "StartDailySummaryRequest",
+        "description": "Запуск пересчёта дневной сводки через /tasks/daily-summary."
+      },
+      "StartKnowledgeImportRequest": {
+        "properties": {
+          "namespace": {
+            "type": "string",
+            "title": "Namespace",
+            "description": "Пространство назначения"
+          },
+          "mode": {
+            "type": "string",
+            "enum": [
+              "notes_only",
+              "graph"
+            ],
+            "title": "Mode"
+          },
+          "source_file_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source File Id"
+          },
+          "source_file_ids": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source File Ids"
+          },
+          "source_text": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Text"
+          },
+          "extract_entity_types": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Extract Entity Types"
+          },
+          "split_by_headings": {
+            "type": "boolean",
+            "title": "Split By Headings",
+            "default": false
+          },
+          "chunk_max_chars": {
+            "type": "integer",
+            "maximum": 500000.0,
+            "minimum": 2000.0,
+            "title": "Chunk Max Chars",
+            "default": 50000
+          }
+        },
+        "type": "object",
+        "required": [
+          "namespace",
+          "mode"
+        ],
+        "title": "StartKnowledgeImportRequest",
+        "description": "Запуск импорта знаний через /tasks/knowledge-import."
+      },
+      "StartNoteAnalyzeRequest": {
+        "properties": {
+          "note_id": {
+            "type": "string",
+            "title": "Note Id"
+          },
+          "mode": {
+            "type": "string",
+            "enum": [
+              "analyze",
+              "apply",
+              "process"
+            ],
+            "title": "Mode",
+            "default": "analyze"
+          },
+          "include_attachments": {
+            "type": "boolean",
+            "title": "Include Attachments",
+            "default": true
+          },
+          "attachment_chars_limit_per_file": {
+            "type": "integer",
+            "minimum": 5000.0,
+            "title": "Attachment Chars Limit Per File",
+            "default": 40000
+          },
+          "check_duplicates": {
+            "type": "boolean",
+            "title": "Check Duplicates",
+            "default": true
+          },
+          "extract_entity_types": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Extract Entity Types"
+          },
+          "extract_relationship_types": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Extract Relationship Types"
+          },
+          "mentioned_entity_ids": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Mentioned Entity Ids"
+          }
+        },
+        "type": "object",
+        "required": [
+          "note_id"
+        ],
+        "title": "StartNoteAnalyzeRequest",
+        "description": "Запуск анализа заметки через /tasks/note-analyze."
+      },
+      "StartPeriodSummaryRequest": {
+        "properties": {
+          "namespace": {
+            "type": "string",
+            "title": "Namespace",
+            "description": "Пространство назначения"
+          },
+          "date_from": {
+            "type": "string",
+            "title": "Date From",
+            "description": "Начало периода YYYY-MM-DD"
+          },
+          "date_to": {
+            "type": "string",
+            "title": "Date To",
+            "description": "Конец периода YYYY-MM-DD"
+          },
+          "reason": {
+            "type": "string",
+            "title": "Reason",
+            "default": "manual"
+          }
+        },
+        "type": "object",
+        "required": [
+          "namespace",
+          "date_from",
+          "date_to"
+        ],
+        "title": "StartPeriodSummaryRequest",
+        "description": "Запуск пересчёта сводки за период через /tasks/period-summary."
+      },
+      "StructuredKnowledgeImportRequest": {
+        "properties": {
+          "namespace": {
+            "type": "string",
+            "title": "Namespace"
+          },
+          "entities": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "type": "array",
+            "title": "Entities"
+          },
+          "relationships": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "type": "array",
+            "title": "Relationships"
+          }
+        },
+        "type": "object",
+        "required": [
+          "namespace"
+        ],
+        "title": "StructuredKnowledgeImportRequest",
+        "description": "Запрос структурированного импорта (массовое создание без LLM)."
+      },
+      "SubscribeRequest": {
+        "properties": {
+          "transport": {
+            "type": "string",
+            "enum": [
+              "web_vapid",
+              "ios_apns"
+            ],
+            "title": "Transport",
+            "default": "web_vapid"
+          },
+          "endpoint": {
+            "type": "string",
+            "title": "Endpoint",
+            "default": ""
+          },
+          "keys": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "type": "object",
+            "title": "Keys"
+          },
+          "platform": {
+            "type": "string",
+            "title": "Platform",
+            "default": "unknown"
+          }
+        },
+        "type": "object",
+        "title": "SubscribeRequest",
+        "description": "Тело POST /api/push/subscribe."
+      },
+      "SwitchCompanyRequest": {
+        "properties": {
+          "company_id": {
+            "type": "string",
+            "title": "Company Id"
+          }
+        },
+        "type": "object",
+        "required": [
+          "company_id"
+        ],
+        "title": "SwitchCompanyRequest",
+        "description": "Переключение активной компании пользователя"
+      },
+      "TaskCreatedEntitiesResponse": {
+        "properties": {
+          "task_id": {
+            "type": "string",
+            "title": "Task Id"
+          },
+          "namespace": {
+            "type": "string",
+            "title": "Namespace"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "review_completed_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Review Completed At"
+          },
+          "relationships_created_count": {
+            "type": "integer",
+            "title": "Relationships Created Count",
+            "default": 0
+          },
+          "entities": {
+            "items": {
+              "$ref": "#/components/schemas/KnowledgeImportCreatedEntityItem"
+            },
+            "type": "array",
+            "title": "Entities"
+          },
+          "missing_entity_ids": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Missing Entity Ids"
+          }
+        },
+        "type": "object",
+        "required": [
+          "task_id",
+          "namespace",
+          "status"
+        ],
+        "title": "TaskCreatedEntitiesResponse",
+        "description": "Список сущностей созданных задачей knowledge_import."
+      },
+      "TaskResponse": {
+        "properties": {
+          "task_id": {
+            "type": "string",
+            "title": "Task Id"
+          },
+          "task_type": {
+            "type": "string",
+            "title": "Task Type"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "stage": {
+            "type": "string",
+            "title": "Stage"
+          },
+          "progress_pct": {
+            "type": "integer",
+            "title": "Progress Pct",
+            "default": 0
+          },
+          "error_message": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error Message"
+          },
+          "data": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Data"
+          },
+          "taskiq_task_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Taskiq Task Id"
+          },
+          "cancel_requested": {
+            "type": "boolean",
+            "title": "Cancel Requested",
+            "default": false
+          },
+          "company_id": {
+            "type": "string",
+            "title": "Company Id"
+          },
+          "namespace": {
+            "type": "string",
+            "title": "Namespace"
+          },
+          "user_id": {
+            "type": "string",
+            "title": "User Id"
+          },
+          "started_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Started At"
+          },
+          "completed_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Completed At"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Updated At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "task_id",
+          "task_type",
+          "status",
+          "stage",
+          "company_id",
+          "namespace",
+          "user_id",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "TaskResponse",
+        "description": "Ответ с данными задачи из crm_tasks."
+      },
+      "TeamMemberResponse": {
+        "properties": {
+          "user_id": {
+            "type": "string",
+            "title": "User Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "email": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Email"
+          },
+          "roles": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Roles"
+          },
+          "joined_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Joined At"
+          },
+          "avatar_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Avatar Url"
+          }
+        },
+        "type": "object",
+        "required": [
+          "user_id",
+          "name"
+        ],
+        "title": "TeamMemberResponse"
+      },
+      "TestPushRequest": {
+        "properties": {
+          "title": {
+            "type": "string",
+            "title": "Title",
+            "default": "Тестовое уведомление"
+          },
+          "message": {
+            "type": "string",
+            "title": "Message",
+            "default": "Это тестовое push-уведомление от Humanitec"
+          }
+        },
+        "type": "object",
+        "title": "TestPushRequest"
+      },
+      "UpdatePublicFieldsRequest": {
+        "properties": {
+          "public_fields": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Public Fields"
+          }
+        },
+        "type": "object",
+        "required": [
+          "public_fields"
+        ],
+        "title": "UpdatePublicFieldsRequest",
+        "description": "Запрос на обновление публичных полей"
+      },
+      "UserSearchResult": {
+        "properties": {
+          "user_id": {
+            "type": "string",
+            "title": "User Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "email": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Email"
+          },
+          "avatar_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Avatar Url"
+          }
+        },
+        "type": "object",
+        "required": [
+          "user_id",
+          "name"
+        ],
+        "title": "UserSearchResult"
+      },
+      "UserUpdate": {
+        "properties": {
+          "name": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 200
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "first_name": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 100
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "First Name"
+          },
+          "last_name": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 100
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Name"
+          },
+          "emails": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Emails"
+          },
+          "phones": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Phones"
+          },
+          "messengers": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "type": "string"
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Messengers"
+          },
+          "avatar_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Avatar Url"
+          },
+          "bio": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 4000
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Bio"
+          },
+          "ui_preferences": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ui Preferences"
+          }
+        },
+        "type": "object",
+        "title": "UserUpdate",
+        "description": "Обновление данных пользователя"
+      },
+      "ValidationError": {
+        "properties": {
+          "loc": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            },
+            "type": "array",
+            "title": "Location"
+          },
+          "msg": {
+            "type": "string",
+            "title": "Message"
+          },
+          "type": {
+            "type": "string",
+            "title": "Error Type"
+          }
+        },
+        "type": "object",
+        "required": [
+          "loc",
+          "msg",
+          "type"
+        ],
+        "title": "ValidationError"
+      },
+      "VapidPublicKeyResponse": {
+        "properties": {
+          "publicKey": {
+            "type": "string",
+            "title": "Publickey"
+          }
+        },
+        "type": "object",
+        "required": [
+          "publicKey"
+        ],
+        "title": "VapidPublicKeyResponse"
+      }
+    }
+  }
+}

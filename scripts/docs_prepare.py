@@ -430,6 +430,20 @@ def _prepare_en_build_tree(docs_dir: Path, en_dir: Path) -> None:
     _build_en_scenarios_from_readme_en(docs_dir / SCENARIOS_ROOT, en_dir / SCENARIOS_ROOT)
 
 
+def _generate_api_docs(ru_dir: Path, en_dir: Path) -> None:
+    """Генерирует документацию API из OpenAPI схем."""
+    from scripts.openapi_to_markdown import main as generate_markdown
+    
+    logger = __import__("logging").getLogger(__name__)
+    logger.info("Генерация документации API из OpenAPI схем...")
+    
+    try:
+        generate_markdown()
+        logger.info("✅ Документация API сгенерирована")
+    except Exception as e:
+        logger.warning(f"⚠️ Не удалось сгенерировать документацию API: {e}")
+
+
 def main() -> None:
     root = _repo_root()
     docs_dir = root / "docs"
@@ -443,6 +457,9 @@ def main() -> None:
     en_path = root / EN_BUILD
     _prepare_ru_build_tree(docs_dir, ru_path)
     _prepare_en_build_tree(docs_dir, en_path)
+    
+    # Генерация документации API
+    _generate_api_docs(ru_path, en_path)
 
 
 if __name__ == "__main__":

@@ -1,0 +1,3639 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Frontend Public API",
+    "description": "Управление платформой: авторизация, компании, биллинг",
+    "version": "1.0.0",
+    "x-service": "frontend"
+  },
+  "paths": {
+    "/frontend/api/companies/check-slug": {
+      "post": {
+        "tags": [
+          "public",
+          "companies",
+          "public",
+          "companies"
+        ],
+        "summary": "Check Slug",
+        "description": "Проверка доступности slug для субдомена\n\nArgs:\n    request: Запрос с slug\n    container: DI контейнер\n\nReturns:\n    Информация о доступности slug",
+        "operationId": "check_slug_frontend_api_companies_check_slug_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CheckSlugRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CheckSlugResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/frontend/api/companies": {
+      "post": {
+        "tags": [
+          "public",
+          "companies",
+          "public",
+          "companies"
+        ],
+        "summary": "Create Company",
+        "description": "Создание новой компании\n\nArgs:\n    request_data: Данные компании\n    request: FastAPI request\n    container: DI контейнер\n\nReturns:\n    Информация о созданной компании и URL для редиректа",
+        "operationId": "create_company_frontend_api_companies_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateCompanyRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CreateCompanyResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/frontend/api/companies/me": {
+      "get": {
+        "tags": [
+          "public",
+          "companies",
+          "public",
+          "companies"
+        ],
+        "summary": "Get My Companies",
+        "description": "Получить список компаний текущего пользователя\n\nArgs:\n    request: FastAPI request\n    container: DI контейнер\n\nReturns:\n    Список компаний с их данными",
+        "operationId": "get_my_companies_frontend_api_companies_me_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ListResponse_dict_"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/frontend/api/companies/{company_id}/system-access": {
+      "post": {
+        "tags": [
+          "public",
+          "companies",
+          "public",
+          "companies"
+        ],
+        "summary": "Enter Company As System Member",
+        "operationId": "enter_company_as_system_member_frontend_api_companies__company_id__system_access_post",
+        "parameters": [
+          {
+            "name": "company_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Company Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SystemAccessRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Enter Company As System Member Frontend Api Companies  Company Id  System Access Post"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "public",
+          "companies",
+          "public",
+          "companies"
+        ],
+        "summary": "Leave Company As System Member",
+        "operationId": "leave_company_as_system_member_frontend_api_companies__company_id__system_access_delete",
+        "parameters": [
+          {
+            "name": "company_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Company Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "AcceptInviteRequest": {
+        "properties": {
+          "short_code": {
+            "type": "string",
+            "title": "Short Code"
+          }
+        },
+        "type": "object",
+        "required": [
+          "short_code"
+        ],
+        "title": "AcceptInviteRequest"
+      },
+      "ApiKey": {
+        "properties": {
+          "key_id": {
+            "type": "string",
+            "title": "Key Id",
+            "description": "ID ключа"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name",
+            "description": "Название ключа"
+          },
+          "key_prefix": {
+            "type": "string",
+            "title": "Key Prefix",
+            "description": "Префикс ключа (первые 8 символов)"
+          },
+          "scopes": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Scopes",
+            "description": "Разрешения ключа"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "last_used": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Used",
+            "description": "Время последнего использования"
+          },
+          "company_id": {
+            "type": "string",
+            "title": "Company Id",
+            "description": "ID компании"
+          },
+          "created_by": {
+            "type": "string",
+            "title": "Created By",
+            "description": "ID пользователя, создавшего ключ"
+          }
+        },
+        "type": "object",
+        "required": [
+          "key_id",
+          "name",
+          "key_prefix",
+          "scopes",
+          "company_id",
+          "created_by"
+        ],
+        "title": "ApiKey",
+        "description": "API ключ компании"
+      },
+      "ApiKeyCreate": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "Name",
+            "description": "Название ключа"
+          },
+          "scopes": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Scopes",
+            "description": "Разрешения"
+          }
+        },
+        "type": "object",
+        "required": [
+          "name",
+          "scopes"
+        ],
+        "title": "ApiKeyCreate",
+        "description": "Запрос на создание API ключа"
+      },
+      "ApiKeyCreated": {
+        "properties": {
+          "key_id": {
+            "type": "string",
+            "title": "Key Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "secret": {
+            "type": "string",
+            "title": "Secret"
+          },
+          "scopes": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Scopes"
+          },
+          "message": {
+            "type": "string",
+            "title": "Message",
+            "default": "Сохраните секрет - он больше не будет показан"
+          }
+        },
+        "type": "object",
+        "required": [
+          "key_id",
+          "name",
+          "secret",
+          "scopes"
+        ],
+        "title": "ApiKeyCreated",
+        "description": "Ответ при создании ключа (показываем секрет ОДИН раз)"
+      },
+      "ApiKeyUpdate": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "Name",
+            "description": "Новое название ключа"
+          }
+        },
+        "type": "object",
+        "required": [
+          "name"
+        ],
+        "title": "ApiKeyUpdate",
+        "description": "Запрос на обновление API ключа"
+      },
+      "BillingSubscription": {
+        "properties": {
+          "plan": {
+            "type": "string",
+            "title": "Plan"
+          },
+          "balance": {
+            "type": "number",
+            "title": "Balance"
+          },
+          "monthly_budget": {
+            "type": "number",
+            "title": "Monthly Budget"
+          },
+          "current_month_spent": {
+            "type": "number",
+            "title": "Current Month Spent"
+          },
+          "billing_period_start": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Billing Period Start"
+          }
+        },
+        "type": "object",
+        "required": [
+          "plan",
+          "balance",
+          "monthly_budget",
+          "current_month_spent",
+          "billing_period_start"
+        ],
+        "title": "BillingSubscription",
+        "description": "Информация о подписке"
+      },
+      "BillingUsage": {
+        "properties": {
+          "total_cost": {
+            "type": "number",
+            "title": "Total Cost"
+          },
+          "total_calls": {
+            "type": "integer",
+            "title": "Total Calls"
+          },
+          "by_resource": {
+            "additionalProperties": {
+              "additionalProperties": {
+                "type": "number"
+              },
+              "type": "object"
+            },
+            "type": "object",
+            "title": "By Resource"
+          },
+          "by_user": {
+            "additionalProperties": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "type": "object",
+            "title": "By User"
+          }
+        },
+        "type": "object",
+        "required": [
+          "total_cost",
+          "total_calls",
+          "by_resource",
+          "by_user"
+        ],
+        "title": "BillingUsage",
+        "description": "Статистика использования"
+      },
+      "Body_auth_callback_post_auth_callback__provider_name__post": {
+        "properties": {
+          "code": {
+            "type": "string",
+            "title": "Code"
+          },
+          "state": {
+            "type": "string",
+            "title": "State"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          },
+          "user": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "User"
+          }
+        },
+        "type": "object",
+        "required": [
+          "code",
+          "state"
+        ],
+        "title": "Body_auth_callback_post_auth_callback__provider_name__post"
+      },
+      "Body_auth_callback_post_frontend_api_auth_callback__provider_name__post": {
+        "properties": {
+          "code": {
+            "type": "string",
+            "title": "Code"
+          },
+          "state": {
+            "type": "string",
+            "title": "State"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          },
+          "user": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "User"
+          }
+        },
+        "type": "object",
+        "required": [
+          "code",
+          "state"
+        ],
+        "title": "Body_auth_callback_post_frontend_api_auth_callback__provider_name__post"
+      },
+      "Body_payment_webhook_frontend_api_v1_payments_webhook__provider_name__post": {
+        "properties": {
+          "notification_type": {
+            "type": "string",
+            "title": "Notification Type",
+            "default": ""
+          },
+          "operation_id": {
+            "type": "string",
+            "title": "Operation Id",
+            "default": ""
+          },
+          "amount": {
+            "type": "string",
+            "title": "Amount",
+            "default": ""
+          },
+          "currency": {
+            "type": "string",
+            "title": "Currency",
+            "default": ""
+          },
+          "datetime": {
+            "type": "string",
+            "title": "Datetime",
+            "default": ""
+          },
+          "sender": {
+            "type": "string",
+            "title": "Sender",
+            "default": ""
+          },
+          "codepro": {
+            "type": "string",
+            "title": "Codepro",
+            "default": ""
+          },
+          "sha1_hash": {
+            "type": "string",
+            "title": "Sha1 Hash",
+            "default": ""
+          },
+          "label": {
+            "type": "string",
+            "title": "Label",
+            "default": ""
+          },
+          "test_notification": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Test Notification"
+          }
+        },
+        "type": "object",
+        "title": "Body_payment_webhook_frontend_api_v1_payments_webhook__provider_name__post"
+      },
+      "Body_upload_file_frontend_api_v1_files__post": {
+        "properties": {
+          "file": {
+            "type": "string",
+            "format": "binary",
+            "title": "File"
+          }
+        },
+        "type": "object",
+        "required": [
+          "file"
+        ],
+        "title": "Body_upload_file_frontend_api_v1_files__post"
+      },
+      "CalendarAttendee": {
+        "properties": {
+          "attendee_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Attendee Id"
+          },
+          "email": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Email"
+          },
+          "display_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Display Name"
+          },
+          "response_status": {
+            "type": "string",
+            "title": "Response Status",
+            "default": "needsAction"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "CalendarAttendee"
+      },
+      "CalendarConnectIntegrationRequest": {
+        "properties": {
+          "provider": {
+            "$ref": "#/components/schemas/CalendarProvider"
+          },
+          "username": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Username"
+          },
+          "access_token": {
+            "type": "string",
+            "title": "Access Token"
+          },
+          "refresh_token": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Refresh Token"
+          },
+          "expires_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expires At"
+          },
+          "scope": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Scope"
+          },
+          "token_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Token Type"
+          },
+          "default_calendar_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Default Calendar Id"
+          },
+          "sync_enabled": {
+            "type": "boolean",
+            "title": "Sync Enabled",
+            "default": true
+          },
+          "sync_inbound_enabled": {
+            "type": "boolean",
+            "title": "Sync Inbound Enabled",
+            "default": true
+          },
+          "sync_outbound_enabled": {
+            "type": "boolean",
+            "title": "Sync Outbound Enabled",
+            "default": true
+          },
+          "notifications_enabled": {
+            "type": "boolean",
+            "title": "Notifications Enabled",
+            "default": true
+          }
+        },
+        "type": "object",
+        "required": [
+          "provider",
+          "access_token"
+        ],
+        "title": "CalendarConnectIntegrationRequest"
+      },
+      "CalendarEvent": {
+        "properties": {
+          "event_id": {
+            "type": "string",
+            "title": "Event Id"
+          },
+          "source": {
+            "$ref": "#/components/schemas/CalendarEventSource"
+          },
+          "source_id": {
+            "type": "string",
+            "title": "Source Id"
+          },
+          "company_id": {
+            "type": "string",
+            "title": "Company Id"
+          },
+          "namespace": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Namespace"
+          },
+          "kind": {
+            "type": "string",
+            "title": "Kind"
+          },
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "location": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Location"
+          },
+          "status": {
+            "$ref": "#/components/schemas/CalendarEventStatus",
+            "default": "confirmed"
+          },
+          "timezone": {
+            "type": "string",
+            "title": "Timezone"
+          },
+          "all_day": {
+            "type": "boolean",
+            "title": "All Day",
+            "default": false
+          },
+          "start_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Start At"
+          },
+          "end_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "End At"
+          },
+          "attendees": {
+            "items": {
+              "$ref": "#/components/schemas/CalendarAttendee"
+            },
+            "type": "array",
+            "title": "Attendees"
+          },
+          "recurrence_rule": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Recurrence Rule"
+          },
+          "recurrence_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Recurrence Id"
+          },
+          "series_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Series Id"
+          },
+          "deep_link": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Deep Link"
+          },
+          "external_refs": {
+            "items": {
+              "$ref": "#/components/schemas/CalendarExternalRef"
+            },
+            "type": "array",
+            "title": "External Refs"
+          },
+          "metadata": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "type": "object",
+            "title": "Metadata"
+          },
+          "created_by_user_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Created By User Id"
+          },
+          "updated_by_user_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Updated By User Id"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Updated At"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "event_id",
+          "source",
+          "source_id",
+          "company_id",
+          "kind",
+          "title",
+          "timezone",
+          "start_at",
+          "end_at",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "CalendarEvent"
+      },
+      "CalendarEventSource": {
+        "type": "string",
+        "enum": [
+          "platform",
+          "crm",
+          "sync",
+          "flows",
+          "google",
+          "yandex"
+        ],
+        "title": "CalendarEventSource"
+      },
+      "CalendarEventStatus": {
+        "type": "string",
+        "enum": [
+          "confirmed",
+          "tentative",
+          "cancelled"
+        ],
+        "title": "CalendarEventStatus"
+      },
+      "CalendarExternalRef": {
+        "properties": {
+          "provider": {
+            "$ref": "#/components/schemas/CalendarProvider"
+          },
+          "calendar_id": {
+            "type": "string",
+            "title": "Calendar Id"
+          },
+          "external_event_id": {
+            "type": "string",
+            "title": "External Event Id"
+          },
+          "etag": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Etag"
+          },
+          "last_synced_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Synced At"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "provider",
+          "calendar_id",
+          "external_event_id"
+        ],
+        "title": "CalendarExternalRef"
+      },
+      "CalendarIntegrationPublic": {
+        "properties": {
+          "integration_id": {
+            "type": "string",
+            "title": "Integration Id"
+          },
+          "company_id": {
+            "type": "string",
+            "title": "Company Id"
+          },
+          "user_id": {
+            "type": "string",
+            "title": "User Id"
+          },
+          "provider": {
+            "$ref": "#/components/schemas/CalendarProvider"
+          },
+          "settings": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Settings"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Updated At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "integration_id",
+          "company_id",
+          "user_id",
+          "provider",
+          "settings",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "CalendarIntegrationPublic"
+      },
+      "CalendarListRequest": {
+        "properties": {
+          "start_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Start At"
+          },
+          "end_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "End At"
+          },
+          "include_sources": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/CalendarEventSource"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Include Sources"
+          },
+          "limit": {
+            "type": "integer",
+            "maximum": 5000.0,
+            "minimum": 1.0,
+            "title": "Limit",
+            "default": 1000
+          }
+        },
+        "type": "object",
+        "required": [
+          "start_at",
+          "end_at"
+        ],
+        "title": "CalendarListRequest"
+      },
+      "CalendarListResponse": {
+        "properties": {
+          "events": {
+            "items": {
+              "$ref": "#/components/schemas/CalendarEvent"
+            },
+            "type": "array",
+            "title": "Events"
+          },
+          "integrations": {
+            "items": {
+              "$ref": "#/components/schemas/CalendarIntegrationPublic"
+            },
+            "type": "array",
+            "title": "Integrations"
+          }
+        },
+        "type": "object",
+        "required": [
+          "events",
+          "integrations"
+        ],
+        "title": "CalendarListResponse"
+      },
+      "CalendarProvider": {
+        "type": "string",
+        "enum": [
+          "platform",
+          "google",
+          "yandex"
+        ],
+        "title": "CalendarProvider"
+      },
+      "CalendarSyncRequest": {
+        "properties": {
+          "provider": {
+            "$ref": "#/components/schemas/CalendarProvider"
+          },
+          "start_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Start At"
+          },
+          "end_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "End At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "provider",
+          "start_at",
+          "end_at"
+        ],
+        "title": "CalendarSyncRequest"
+      },
+      "CalendarUpsertRequest": {
+        "properties": {
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "kind": {
+            "type": "string",
+            "title": "Kind",
+            "default": "event"
+          },
+          "source": {
+            "$ref": "#/components/schemas/CalendarEventSource",
+            "default": "platform"
+          },
+          "source_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Id"
+          },
+          "namespace": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Namespace"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "location": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Location"
+          },
+          "status": {
+            "$ref": "#/components/schemas/CalendarEventStatus",
+            "default": "confirmed"
+          },
+          "timezone": {
+            "type": "string",
+            "title": "Timezone",
+            "default": "UTC"
+          },
+          "all_day": {
+            "type": "boolean",
+            "title": "All Day",
+            "default": false
+          },
+          "start_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Start At"
+          },
+          "end_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "End At"
+          },
+          "attendees": {
+            "items": {
+              "$ref": "#/components/schemas/CalendarAttendee"
+            },
+            "type": "array",
+            "title": "Attendees"
+          },
+          "recurrence_rule": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Recurrence Rule"
+          },
+          "recurrence_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Recurrence Id"
+          },
+          "series_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Series Id"
+          },
+          "deep_link": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Deep Link"
+          },
+          "metadata": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "type": "object",
+            "title": "Metadata"
+          }
+        },
+        "type": "object",
+        "required": [
+          "title",
+          "start_at",
+          "end_at"
+        ],
+        "title": "CalendarUpsertRequest"
+      },
+      "ChangePlanRequest": {
+        "properties": {
+          "plan": {
+            "type": "string",
+            "title": "Plan",
+            "description": "Новый тарифный план"
+          }
+        },
+        "type": "object",
+        "required": [
+          "plan"
+        ],
+        "title": "ChangePlanRequest",
+        "description": "Запрос на смену тарифа"
+      },
+      "CheckSlugRequest": {
+        "properties": {
+          "slug": {
+            "type": "string",
+            "title": "Slug"
+          }
+        },
+        "type": "object",
+        "required": [
+          "slug"
+        ],
+        "title": "CheckSlugRequest"
+      },
+      "CheckSlugResponse": {
+        "properties": {
+          "available": {
+            "type": "boolean",
+            "title": "Available"
+          },
+          "slug": {
+            "type": "string",
+            "title": "Slug"
+          }
+        },
+        "type": "object",
+        "required": [
+          "available",
+          "slug"
+        ],
+        "title": "CheckSlugResponse"
+      },
+      "CompanySettingsUpdate": {
+        "properties": {
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name",
+            "description": "Название компании"
+          },
+          "monthly_budget": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Monthly Budget",
+            "description": "Месячный лимит"
+          },
+          "metadata": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Metadata",
+            "description": "Дополнительные данные"
+          },
+          "rag_embedding": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/RagEmbeddingOverrideUpdate"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Переопределение embedding модели RAG для компании"
+          }
+        },
+        "type": "object",
+        "title": "CompanySettingsUpdate",
+        "description": "Обновление настроек компании"
+      },
+      "CreateCompanyRequest": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "slug": {
+            "type": "string",
+            "title": "Slug"
+          }
+        },
+        "type": "object",
+        "required": [
+          "name",
+          "slug"
+        ],
+        "title": "CreateCompanyRequest"
+      },
+      "CreateCompanyResponse": {
+        "properties": {
+          "company_id": {
+            "type": "string",
+            "title": "Company Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "subdomain": {
+            "type": "string",
+            "title": "Subdomain"
+          },
+          "redirect_url": {
+            "type": "string",
+            "title": "Redirect Url"
+          }
+        },
+        "type": "object",
+        "required": [
+          "company_id",
+          "name",
+          "subdomain",
+          "redirect_url"
+        ],
+        "title": "CreateCompanyResponse"
+      },
+      "CreateEmbedConfigRequest": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "Name",
+            "description": "Название виджета"
+          },
+          "flow_id": {
+            "type": "string",
+            "title": "Flow Id",
+            "description": "ID агента"
+          },
+          "skill_id": {
+            "type": "string",
+            "title": "Skill Id",
+            "description": "Skill flow (LOCAL); для EXTERNAL не используется",
+            "default": "default"
+          },
+          "allowed_origins": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Allowed Origins",
+            "description": "Разрешенные домены"
+          },
+          "theme": {
+            "type": "string",
+            "title": "Theme",
+            "description": "Тема оформления",
+            "default": "dark"
+          },
+          "position": {
+            "type": "string",
+            "title": "Position",
+            "description": "Позиция на странице",
+            "default": "bottom-right"
+          },
+          "show_launcher": {
+            "type": "boolean",
+            "title": "Show Launcher",
+            "description": "Показывать встроенную кнопку запуска",
+            "default": true
+          },
+          "show_reasoning": {
+            "type": "boolean",
+            "title": "Show Reasoning",
+            "description": "Показывать reasoning",
+            "default": false
+          },
+          "show_tool_calls": {
+            "type": "boolean",
+            "title": "Show Tool Calls",
+            "description": "Показывать tool calls",
+            "default": false
+          },
+          "primary_color": {
+            "type": "string",
+            "title": "Primary Color",
+            "description": "Основной цвет",
+            "default": "#6366f1"
+          },
+          "greeting_message": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Greeting Message",
+            "description": "Приветственное сообщение"
+          },
+          "assistant_title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Assistant Title",
+            "description": "Имя ассистента в шапке"
+          },
+          "interface_locale": {
+            "type": "string",
+            "title": "Interface Locale",
+            "description": "Язык интерфейса embed-чата (auto, ru, en)",
+            "default": "auto"
+          },
+          "placeholder": {
+            "type": "string",
+            "title": "Placeholder",
+            "description": "Placeholder",
+            "default": "Введите сообщение..."
+          },
+          "branding": {
+            "type": "boolean",
+            "title": "Branding",
+            "description": "Показывать брендинг",
+            "default": true
+          }
+        },
+        "type": "object",
+        "required": [
+          "name",
+          "flow_id"
+        ],
+        "title": "CreateEmbedConfigRequest",
+        "description": "Запрос на создание конфигурации виджета"
+      },
+      "CreatePaymentRequest": {
+        "properties": {
+          "amount": {
+            "type": "number",
+            "maximum": 1000000.0,
+            "minimum": 100.0,
+            "title": "Amount",
+            "description": "Сумма пополнения (мин. 100₽, макс. 1,000,000₽)"
+          },
+          "provider": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Provider",
+            "description": "Платежный провайдер (если None - используется дефолтный)"
+          }
+        },
+        "type": "object",
+        "required": [
+          "amount"
+        ],
+        "title": "CreatePaymentRequest",
+        "description": "Запрос на создание платежа"
+      },
+      "CredentialInfo": {
+        "properties": {
+          "provider": {
+            "type": "string",
+            "title": "Provider"
+          },
+          "service": {
+            "type": "string",
+            "title": "Service"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "provider",
+          "service",
+          "created_at"
+        ],
+        "title": "CredentialInfo",
+        "description": "Публичная проекция credential для UI (без токенов)."
+      },
+      "CursorPage_dict_": {
+        "properties": {
+          "items": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "type": "array",
+            "title": "Items"
+          },
+          "next_cursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Cursor"
+          },
+          "has_more": {
+            "type": "boolean",
+            "title": "Has More"
+          }
+        },
+        "type": "object",
+        "required": [
+          "items",
+          "has_more"
+        ],
+        "title": "CursorPage[dict]"
+      },
+      "DemoLoginRequest": {
+        "properties": {
+          "email": {
+            "type": "string",
+            "title": "Email"
+          },
+          "password": {
+            "type": "string",
+            "title": "Password"
+          }
+        },
+        "type": "object",
+        "required": [
+          "email",
+          "password"
+        ],
+        "title": "DemoLoginRequest"
+      },
+      "EmbedCodeResponse": {
+        "properties": {
+          "html_code": {
+            "type": "string",
+            "title": "Html Code"
+          },
+          "script_url": {
+            "type": "string",
+            "title": "Script Url"
+          },
+          "embed_id": {
+            "type": "string",
+            "title": "Embed Id"
+          },
+          "token_endpoint": {
+            "type": "string",
+            "title": "Token Endpoint"
+          }
+        },
+        "type": "object",
+        "required": [
+          "html_code",
+          "script_url",
+          "embed_id",
+          "token_endpoint"
+        ],
+        "title": "EmbedCodeResponse",
+        "description": "Код для встраивания виджета"
+      },
+      "EmbedConfigResponse": {
+        "properties": {
+          "embed_id": {
+            "type": "string",
+            "title": "Embed Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "flow_id": {
+            "type": "string",
+            "title": "Flow Id"
+          },
+          "skill_id": {
+            "type": "string",
+            "title": "Skill Id"
+          },
+          "allowed_origins": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Allowed Origins"
+          },
+          "status": {
+            "$ref": "#/components/schemas/EmbedStatus"
+          },
+          "theme": {
+            "type": "string",
+            "title": "Theme"
+          },
+          "position": {
+            "type": "string",
+            "title": "Position"
+          },
+          "show_launcher": {
+            "type": "boolean",
+            "title": "Show Launcher"
+          },
+          "show_reasoning": {
+            "type": "boolean",
+            "title": "Show Reasoning"
+          },
+          "show_tool_calls": {
+            "type": "boolean",
+            "title": "Show Tool Calls"
+          },
+          "primary_color": {
+            "type": "string",
+            "title": "Primary Color"
+          },
+          "greeting_message": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Greeting Message"
+          },
+          "assistant_title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Assistant Title"
+          },
+          "interface_locale": {
+            "type": "string",
+            "title": "Interface Locale"
+          },
+          "placeholder": {
+            "type": "string",
+            "title": "Placeholder"
+          },
+          "branding": {
+            "type": "boolean",
+            "title": "Branding"
+          },
+          "usage_count": {
+            "type": "integer",
+            "title": "Usage Count"
+          },
+          "last_used_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Used At"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "created_by": {
+            "type": "string",
+            "title": "Created By"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Updated At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "embed_id",
+          "name",
+          "flow_id",
+          "skill_id",
+          "allowed_origins",
+          "status",
+          "theme",
+          "position",
+          "show_launcher",
+          "show_reasoning",
+          "show_tool_calls",
+          "primary_color",
+          "greeting_message",
+          "assistant_title",
+          "interface_locale",
+          "placeholder",
+          "branding",
+          "usage_count",
+          "last_used_at",
+          "created_at",
+          "created_by",
+          "updated_at"
+        ],
+        "title": "EmbedConfigResponse",
+        "description": "Ответ с конфигурацией виджета"
+      },
+      "EmbedSessionTokenRequest": {
+        "properties": {
+          "origin": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Origin",
+            "description": "Origin внешнего сайта"
+          },
+          "expires_in_seconds": {
+            "type": "integer",
+            "maximum": 900.0,
+            "minimum": 60.0,
+            "title": "Expires In Seconds",
+            "description": "TTL токена в секундах",
+            "default": 300
+          }
+        },
+        "type": "object",
+        "title": "EmbedSessionTokenRequest"
+      },
+      "EmbedSessionTokenResponse": {
+        "properties": {
+          "token": {
+            "type": "string",
+            "title": "Token"
+          },
+          "token_type": {
+            "type": "string",
+            "title": "Token Type"
+          },
+          "expires_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Expires At"
+          },
+          "flow_id": {
+            "type": "string",
+            "title": "Flow Id"
+          },
+          "skill_id": {
+            "type": "string",
+            "title": "Skill Id"
+          }
+        },
+        "type": "object",
+        "required": [
+          "token",
+          "token_type",
+          "expires_at",
+          "flow_id",
+          "skill_id"
+        ],
+        "title": "EmbedSessionTokenResponse"
+      },
+      "EmbedStatus": {
+        "type": "string",
+        "enum": [
+          "active",
+          "disabled"
+        ],
+        "title": "EmbedStatus",
+        "description": "Статус встраиваемого виджета"
+      },
+      "FileReadPreviewResponse": {
+        "properties": {
+          "text": {
+            "type": "string",
+            "title": "Text",
+            "description": "Извлечённый текст (может быть усечён для UI)"
+          },
+          "truncated": {
+            "type": "boolean",
+            "title": "Truncated",
+            "description": "Усечён ли текст по лимиту превью"
+          },
+          "page_count": {
+            "type": "integer",
+            "title": "Page Count",
+            "description": "Число страниц после чтения",
+            "default": 0
+          },
+          "detected_kind": {
+            "type": "string",
+            "title": "Detected Kind",
+            "description": "Тип файла по FileReader"
+          },
+          "mime_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Mime Type",
+            "description": "MIME после распознавания"
+          },
+          "warnings": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Warnings",
+            "description": "Предупреждения парсера"
+          },
+          "preview_note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Preview Note",
+            "description": "Пояснение для пользователя (например для изображений)"
+          }
+        },
+        "type": "object",
+        "required": [
+          "text",
+          "truncated",
+          "detected_kind"
+        ],
+        "title": "FileReadPreviewResponse",
+        "description": "Текстовое превью содержимого файла (извлечение без vision для изображений)."
+      },
+      "FileResponse": {
+        "properties": {
+          "file_id": {
+            "type": "string",
+            "title": "File Id"
+          },
+          "original_name": {
+            "type": "string",
+            "title": "Original Name"
+          },
+          "content_type": {
+            "type": "string",
+            "title": "Content Type"
+          },
+          "file_size": {
+            "type": "integer",
+            "title": "File Size"
+          },
+          "url": {
+            "type": "string",
+            "title": "Url"
+          },
+          "checksum": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Checksum"
+          },
+          "is_public": {
+            "type": "boolean",
+            "title": "Is Public"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "file_id",
+          "original_name",
+          "content_type",
+          "file_size",
+          "url",
+          "is_public",
+          "created_at"
+        ],
+        "title": "FileResponse",
+        "description": "Публичное представление файла для API-ответов.\n\nНе содержит внутренних полей (s3_key, s3_bucket, s3_endpoint).\nИспользуется как return-тип всех file-эндпоинтов во всех сервисах."
+      },
+      "GenerateInviteRequest": {
+        "properties": {
+          "role": {
+            "type": "string",
+            "title": "Role",
+            "default": "developer"
+          }
+        },
+        "type": "object",
+        "title": "GenerateInviteRequest"
+      },
+      "GenerateInviteResponse": {
+        "properties": {
+          "invite_url": {
+            "type": "string",
+            "title": "Invite Url"
+          },
+          "role": {
+            "type": "string",
+            "title": "Role"
+          },
+          "expires_in_seconds": {
+            "type": "integer",
+            "title": "Expires In Seconds"
+          }
+        },
+        "type": "object",
+        "required": [
+          "invite_url",
+          "role",
+          "expires_in_seconds"
+        ],
+        "title": "GenerateInviteResponse"
+      },
+      "HTTPValidationError": {
+        "properties": {
+          "detail": {
+            "items": {
+              "$ref": "#/components/schemas/ValidationError"
+            },
+            "type": "array",
+            "title": "Detail"
+          }
+        },
+        "type": "object",
+        "title": "HTTPValidationError"
+      },
+      "LeadCreateBody": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "email": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Email"
+          },
+          "phone": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Phone"
+          },
+          "company": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Company"
+          },
+          "comment": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Comment"
+          }
+        },
+        "type": "object",
+        "required": [
+          "name"
+        ],
+        "title": "LeadCreateBody"
+      },
+      "ListResponse_CalendarIntegrationPublic_": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/CalendarIntegrationPublic"
+            },
+            "type": "array",
+            "title": "Items"
+          }
+        },
+        "type": "object",
+        "required": [
+          "items"
+        ],
+        "title": "ListResponse[CalendarIntegrationPublic]"
+      },
+      "ListResponse_CredentialInfo_": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/CredentialInfo"
+            },
+            "type": "array",
+            "title": "Items"
+          }
+        },
+        "type": "object",
+        "required": [
+          "items"
+        ],
+        "title": "ListResponse[CredentialInfo]"
+      },
+      "ListResponse_TeamMemberResponse_": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/TeamMemberResponse"
+            },
+            "type": "array",
+            "title": "Items"
+          }
+        },
+        "type": "object",
+        "required": [
+          "items"
+        ],
+        "title": "ListResponse[TeamMemberResponse]"
+      },
+      "ListResponse_UserSearchResult_": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/UserSearchResult"
+            },
+            "type": "array",
+            "title": "Items"
+          }
+        },
+        "type": "object",
+        "required": [
+          "items"
+        ],
+        "title": "ListResponse[UserSearchResult]"
+      },
+      "ListResponse_dict_": {
+        "properties": {
+          "items": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "type": "array",
+            "title": "Items"
+          }
+        },
+        "type": "object",
+        "required": [
+          "items"
+        ],
+        "title": "ListResponse[dict]"
+      },
+      "OffsetPage_ApiKey_": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/ApiKey"
+            },
+            "type": "array",
+            "title": "Items"
+          },
+          "total": {
+            "type": "integer",
+            "title": "Total"
+          },
+          "limit": {
+            "type": "integer",
+            "title": "Limit"
+          },
+          "offset": {
+            "type": "integer",
+            "title": "Offset"
+          }
+        },
+        "type": "object",
+        "required": [
+          "items",
+          "total",
+          "limit",
+          "offset"
+        ],
+        "title": "OffsetPage[ApiKey]"
+      },
+      "OffsetPage_EmbedConfigResponse_": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/EmbedConfigResponse"
+            },
+            "type": "array",
+            "title": "Items"
+          },
+          "total": {
+            "type": "integer",
+            "title": "Total"
+          },
+          "limit": {
+            "type": "integer",
+            "title": "Limit"
+          },
+          "offset": {
+            "type": "integer",
+            "title": "Offset"
+          }
+        },
+        "type": "object",
+        "required": [
+          "items",
+          "total",
+          "limit",
+          "offset"
+        ],
+        "title": "OffsetPage[EmbedConfigResponse]"
+      },
+      "OffsetPage_PlatformScheduledTask_": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/PlatformScheduledTask"
+            },
+            "type": "array",
+            "title": "Items"
+          },
+          "total": {
+            "type": "integer",
+            "title": "Total"
+          },
+          "limit": {
+            "type": "integer",
+            "title": "Limit"
+          },
+          "offset": {
+            "type": "integer",
+            "title": "Offset"
+          }
+        },
+        "type": "object",
+        "required": [
+          "items",
+          "total",
+          "limit",
+          "offset"
+        ],
+        "title": "OffsetPage[PlatformScheduledTask]"
+      },
+      "OffsetPage_ServiceStatus_": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/ServiceStatus"
+            },
+            "type": "array",
+            "title": "Items"
+          },
+          "total": {
+            "type": "integer",
+            "title": "Total"
+          },
+          "limit": {
+            "type": "integer",
+            "title": "Limit"
+          },
+          "offset": {
+            "type": "integer",
+            "title": "Offset"
+          }
+        },
+        "type": "object",
+        "required": [
+          "items",
+          "total",
+          "limit",
+          "offset"
+        ],
+        "title": "OffsetPage[ServiceStatus]"
+      },
+      "PlatformBillingCompaniesOverviewResponse": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/PlatformBillingCompanyOverviewItem"
+            },
+            "type": "array",
+            "title": "Items"
+          },
+          "has_more": {
+            "type": "boolean",
+            "title": "Has More"
+          }
+        },
+        "type": "object",
+        "required": [
+          "items",
+          "has_more"
+        ],
+        "title": "PlatformBillingCompaniesOverviewResponse",
+        "description": "Страница списка компаний с полями биллинга."
+      },
+      "PlatformBillingCompanyOverviewItem": {
+        "properties": {
+          "company_id": {
+            "type": "string",
+            "title": "Company Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "subdomain": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Subdomain"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "tariff_plan": {
+            "type": "string",
+            "title": "Tariff Plan"
+          },
+          "balance": {
+            "type": "number",
+            "title": "Balance"
+          },
+          "monthly_budget": {
+            "type": "number",
+            "title": "Monthly Budget"
+          },
+          "current_month_spent": {
+            "type": "number",
+            "title": "Current Month Spent"
+          }
+        },
+        "type": "object",
+        "required": [
+          "company_id",
+          "name",
+          "status",
+          "tariff_plan",
+          "balance",
+          "monthly_budget",
+          "current_month_spent"
+        ],
+        "title": "PlatformBillingCompanyOverviewItem",
+        "description": "Строка сводки по компании для таблицы админки биллинга."
+      },
+      "PlatformBillingCompanyPricesResponse": {
+        "properties": {
+          "company_id": {
+            "type": "string",
+            "title": "Company Id"
+          },
+          "effective": {
+            "additionalProperties": {
+              "additionalProperties": {
+                "type": "number"
+              },
+              "type": "object"
+            },
+            "type": "object",
+            "title": "Effective"
+          },
+          "storage_override": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "additionalProperties": {
+                    "type": "number"
+                  },
+                  "type": "object"
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Storage Override"
+          }
+        },
+        "type": "object",
+        "required": [
+          "company_id",
+          "effective"
+        ],
+        "title": "PlatformBillingCompanyPricesResponse",
+        "description": "Эффективный прайс для компании (global merge + override компании)."
+      },
+      "PlatformBillingCompanyResolveResponse": {
+        "properties": {
+          "company_id": {
+            "type": "string",
+            "title": "Company Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "subdomain": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Subdomain"
+          }
+        },
+        "type": "object",
+        "required": [
+          "company_id",
+          "name"
+        ],
+        "title": "PlatformBillingCompanyResolveResponse",
+        "description": "Разрешение ввода (company_id или subdomain/slug) в company_id для админки биллинга."
+      },
+      "PlatformBillingPricesResponse": {
+        "properties": {
+          "effective": {
+            "additionalProperties": {
+              "additionalProperties": {
+                "type": "number"
+              },
+              "type": "object"
+            },
+            "type": "object",
+            "title": "Effective"
+          },
+          "storage_override": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "additionalProperties": {
+                    "type": "number"
+                  },
+                  "type": "object"
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Storage Override"
+          }
+        },
+        "type": "object",
+        "required": [
+          "effective"
+        ],
+        "title": "PlatformBillingPricesResponse",
+        "description": "Эффективный прайс (конфиг + override) и сырой override из shared storage."
+      },
+      "PlatformBillingSettlementRulesResponse": {
+        "properties": {
+          "document": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Document"
+          }
+        },
+        "type": "object",
+        "required": [
+          "document"
+        ],
+        "title": "PlatformBillingSettlementRulesResponse",
+        "description": "Документ правил span settlement (JSON)."
+      },
+      "PlatformBillingUsageReportResponse": {
+        "properties": {
+          "items": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "type": "array",
+            "title": "Items"
+          }
+        },
+        "type": "object",
+        "required": [
+          "items"
+        ],
+        "title": "PlatformBillingUsageReportResponse",
+        "description": "Строки usage из shared БД для админки."
+      },
+      "PlatformRedisScheduleSnapshot": {
+        "properties": {
+          "schedule_task_id": {
+            "type": "string",
+            "title": "Schedule Task Id"
+          },
+          "company_id": {
+            "type": "string",
+            "title": "Company Id"
+          },
+          "schedule_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Schedule Id"
+          },
+          "exists_in_redis": {
+            "type": "boolean",
+            "title": "Exists In Redis"
+          },
+          "status": {
+            "$ref": "#/components/schemas/ScheduledTaskStatus"
+          },
+          "task_name": {
+            "type": "string",
+            "title": "Task Name"
+          },
+          "cron": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cron"
+          },
+          "interval_seconds": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Interval Seconds"
+          },
+          "run_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Run At"
+          },
+          "taskiq_task_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Taskiq Task Id"
+          },
+          "kwargs": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Kwargs"
+          },
+          "labels": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Labels"
+          },
+          "missing_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Missing Reason"
+          }
+        },
+        "additionalProperties": true,
+        "type": "object",
+        "required": [
+          "schedule_task_id",
+          "company_id",
+          "exists_in_redis",
+          "status",
+          "task_name"
+        ],
+        "title": "PlatformRedisScheduleSnapshot",
+        "description": "Снимок расписания из Redis schedule source."
+      },
+      "PlatformScheduleCreateRequest": {
+        "properties": {
+          "target_service": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Target Service",
+            "description": "Сервис-назначение task"
+          },
+          "task_name": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Task Name",
+            "description": "Полное имя taskiq task"
+          },
+          "queue_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Queue Name",
+            "description": "Очередь broker (если нужна)"
+          },
+          "schedule_type": {
+            "$ref": "#/components/schemas/PlatformScheduleType",
+            "description": "Тип расписания"
+          },
+          "cron": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cron",
+            "description": "Cron expression"
+          },
+          "interval_seconds": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 1.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Interval Seconds",
+            "description": "Интервал в секундах"
+          },
+          "run_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Run At",
+            "description": "Время запуска для one-time"
+          },
+          "timezone": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Timezone",
+            "default": "UTC"
+          },
+          "payload": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Payload",
+            "description": "kwargs для задачи"
+          }
+        },
+        "additionalProperties": true,
+        "type": "object",
+        "required": [
+          "target_service",
+          "task_name",
+          "schedule_type"
+        ],
+        "title": "PlatformScheduleCreateRequest",
+        "description": "Запрос на создание расписания."
+      },
+      "PlatformScheduleType": {
+        "type": "string",
+        "enum": [
+          "cron",
+          "interval",
+          "one_time"
+        ],
+        "title": "PlatformScheduleType",
+        "description": "Тип расписания в платформенном API."
+      },
+      "PlatformScheduledTask": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "company_id": {
+            "type": "string",
+            "title": "Company Id"
+          },
+          "schedule_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Schedule Id"
+          },
+          "target_service": {
+            "type": "string",
+            "title": "Target Service"
+          },
+          "task_name": {
+            "type": "string",
+            "title": "Task Name"
+          },
+          "queue_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Queue Name"
+          },
+          "schedule_type": {
+            "$ref": "#/components/schemas/PlatformScheduleType"
+          },
+          "cron": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cron"
+          },
+          "interval_seconds": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Interval Seconds"
+          },
+          "run_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Run At"
+          },
+          "timezone": {
+            "type": "string",
+            "title": "Timezone",
+            "default": "UTC"
+          },
+          "payload": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Payload"
+          },
+          "status": {
+            "$ref": "#/components/schemas/ScheduledTaskStatus",
+            "default": "pending"
+          },
+          "created_by_user_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Created By User Id"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Updated At"
+          },
+          "last_run_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Run At"
+          },
+          "next_run_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Run At"
+          },
+          "error_message": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error Message"
+          }
+        },
+        "additionalProperties": true,
+        "type": "object",
+        "required": [
+          "id",
+          "company_id",
+          "target_service",
+          "task_name",
+          "schedule_type"
+        ],
+        "title": "PlatformScheduledTask",
+        "description": "Сущность расписания платформенного scheduler."
+      },
+      "PlatformTracingFacetItem": {
+        "properties": {
+          "value": {
+            "type": "string",
+            "title": "Value"
+          },
+          "label": {
+            "type": "string",
+            "title": "Label"
+          }
+        },
+        "type": "object",
+        "required": [
+          "value",
+          "label"
+        ],
+        "title": "PlatformTracingFacetItem",
+        "description": "Одна подсказка с id для фильтра и человекочитаемой подписью."
+      },
+      "PlatformTracingFacetItemsResponse": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/PlatformTracingFacetItem"
+            },
+            "type": "array",
+            "title": "Items"
+          }
+        },
+        "type": "object",
+        "required": [
+          "items"
+        ],
+        "title": "PlatformTracingFacetItemsResponse",
+        "description": "Подсказки company/user: value = id, label = имя + короткий id."
+      },
+      "PlatformTracingFacetsResponse": {
+        "properties": {
+          "items": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Items"
+          }
+        },
+        "type": "object",
+        "required": [
+          "items"
+        ],
+        "title": "PlatformTracingFacetsResponse",
+        "description": "Подсказки для автокомплита (distinct значения)."
+      },
+      "RagEmbeddingOverrideUpdate": {
+        "properties": {
+          "enabled": {
+            "type": "boolean",
+            "title": "Enabled",
+            "description": "Включить company override",
+            "default": false
+          },
+          "provider": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "openrouter",
+                  "provider_litserve"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Provider",
+            "description": "Провайдер эмбеддингов"
+          },
+          "model": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model",
+            "description": "ID embedding модели"
+          }
+        },
+        "type": "object",
+        "title": "RagEmbeddingOverrideUpdate",
+        "description": "Переопределение embedding runtime для RAG на уровне компании."
+      },
+      "ScheduledTaskStatus": {
+        "type": "string",
+        "enum": [
+          "pending",
+          "paused",
+          "executed",
+          "cancelled",
+          "failed"
+        ],
+        "title": "ScheduledTaskStatus",
+        "description": "Статус scheduled task."
+      },
+      "ServiceStatus": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "url": {
+            "type": "string",
+            "title": "Url"
+          },
+          "response_time": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Response Time"
+          }
+        },
+        "type": "object",
+        "required": [
+          "name",
+          "status",
+          "url"
+        ],
+        "title": "ServiceStatus",
+        "description": "Статус микросервиса"
+      },
+      "SubscribeRequest": {
+        "properties": {
+          "transport": {
+            "type": "string",
+            "enum": [
+              "web_vapid",
+              "ios_apns"
+            ],
+            "title": "Transport",
+            "default": "web_vapid"
+          },
+          "endpoint": {
+            "type": "string",
+            "title": "Endpoint",
+            "default": ""
+          },
+          "keys": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "type": "object",
+            "title": "Keys"
+          },
+          "platform": {
+            "type": "string",
+            "title": "Platform",
+            "default": "unknown"
+          }
+        },
+        "type": "object",
+        "title": "SubscribeRequest",
+        "description": "Тело POST /api/push/subscribe."
+      },
+      "SwitchCompanyRequest": {
+        "properties": {
+          "company_id": {
+            "type": "string",
+            "title": "Company Id"
+          }
+        },
+        "type": "object",
+        "required": [
+          "company_id"
+        ],
+        "title": "SwitchCompanyRequest",
+        "description": "Переключение активной компании пользователя"
+      },
+      "SystemAccessRequest": {
+        "properties": {
+          "role": {
+            "type": "string",
+            "title": "Role"
+          }
+        },
+        "type": "object",
+        "required": [
+          "role"
+        ],
+        "title": "SystemAccessRequest"
+      },
+      "TeamMemberResponse": {
+        "properties": {
+          "user_id": {
+            "type": "string",
+            "title": "User Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "email": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Email"
+          },
+          "roles": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Roles"
+          },
+          "joined_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Joined At"
+          },
+          "avatar_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Avatar Url"
+          }
+        },
+        "type": "object",
+        "required": [
+          "user_id",
+          "name"
+        ],
+        "title": "TeamMemberResponse"
+      },
+      "TeamMemberUpdate": {
+        "properties": {
+          "roles": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Roles",
+            "description": "Новые роли"
+          }
+        },
+        "type": "object",
+        "required": [
+          "roles"
+        ],
+        "title": "TeamMemberUpdate",
+        "description": "Обновление участника"
+      },
+      "TestPushRequest": {
+        "properties": {
+          "title": {
+            "type": "string",
+            "title": "Title",
+            "default": "Тестовое уведомление"
+          },
+          "message": {
+            "type": "string",
+            "title": "Message",
+            "default": "Это тестовое push-уведомление от Humanitec"
+          }
+        },
+        "type": "object",
+        "title": "TestPushRequest"
+      },
+      "UpdateEmbedConfigRequest": {
+        "properties": {
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "flow_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Flow Id"
+          },
+          "skill_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Skill Id"
+          },
+          "allowed_origins": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Allowed Origins"
+          },
+          "status": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/EmbedStatus"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "theme": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Theme"
+          },
+          "position": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Position"
+          },
+          "show_launcher": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Show Launcher"
+          },
+          "show_reasoning": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Show Reasoning"
+          },
+          "show_tool_calls": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Show Tool Calls"
+          },
+          "primary_color": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Primary Color"
+          },
+          "greeting_message": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Greeting Message"
+          },
+          "assistant_title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Assistant Title"
+          },
+          "interface_locale": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Interface Locale"
+          },
+          "placeholder": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Placeholder"
+          },
+          "branding": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Branding"
+          }
+        },
+        "type": "object",
+        "title": "UpdateEmbedConfigRequest",
+        "description": "Запрос на обновление конфигурации виджета"
+      },
+      "UserSearchResult": {
+        "properties": {
+          "user_id": {
+            "type": "string",
+            "title": "User Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "email": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Email"
+          },
+          "avatar_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Avatar Url"
+          }
+        },
+        "type": "object",
+        "required": [
+          "user_id",
+          "name"
+        ],
+        "title": "UserSearchResult"
+      },
+      "UserUpdate": {
+        "properties": {
+          "name": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 200
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "first_name": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 100
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "First Name"
+          },
+          "last_name": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 100
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Name"
+          },
+          "emails": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Emails"
+          },
+          "phones": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Phones"
+          },
+          "messengers": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "type": "string"
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Messengers"
+          },
+          "avatar_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Avatar Url"
+          },
+          "bio": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 4000
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Bio"
+          },
+          "ui_preferences": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ui Preferences"
+          }
+        },
+        "type": "object",
+        "title": "UserUpdate",
+        "description": "Обновление данных пользователя"
+      },
+      "ValidationError": {
+        "properties": {
+          "loc": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            },
+            "type": "array",
+            "title": "Location"
+          },
+          "msg": {
+            "type": "string",
+            "title": "Message"
+          },
+          "type": {
+            "type": "string",
+            "title": "Error Type"
+          }
+        },
+        "type": "object",
+        "required": [
+          "loc",
+          "msg",
+          "type"
+        ],
+        "title": "ValidationError"
+      },
+      "VapidPublicKeyResponse": {
+        "properties": {
+          "publicKey": {
+            "type": "string",
+            "title": "Publickey"
+          }
+        },
+        "type": "object",
+        "required": [
+          "publicKey"
+        ],
+        "title": "VapidPublicKeyResponse"
+      }
+    }
+  },
+  "tags": [
+    {
+      "name": "companies",
+      "description": "Public API endpoints for companies"
+    }
+  ]
+}

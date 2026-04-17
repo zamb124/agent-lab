@@ -51,7 +51,7 @@ def _get_user_groups(request: Request) -> list[str]:
     
     return getattr(user, "grps", []) or getattr(user, "groups", []) or []
 
-router = APIRouter(tags=["a2a"])
+router = APIRouter(tags=["public", "a2a"])
 
 
 # Supported A2A methods

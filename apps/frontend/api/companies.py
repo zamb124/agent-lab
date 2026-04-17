@@ -19,7 +19,7 @@ from core.api.companies import build_my_companies_response
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(prefix="/api/companies", tags=["companies"])
+router = APIRouter(prefix="/api/companies", tags=["public", "companies"])
 
 
 class CheckSlugRequest(BaseModel):
