@@ -9,7 +9,11 @@ export class CompaniesService extends BaseService {
      * @returns {Promise<Array>}
      */
     async getMyCompanies() {
-        return this.get('/api/companies/me');
+        const body = await this.get('/api/companies/me');
+        if (!body || typeof body !== 'object' || !Array.isArray(body.items)) {
+            throw new Error('Некорректный ответ /api/companies/me: ожидался объект с массивом items');
+        }
+        return body.items;
     }
     
     /**

@@ -80,6 +80,7 @@ SKIP_PATHS = [
     "/apple-touch-icon.png",
     "/apple-touch-icon-precomposed.png",
     "/health",
+    "/frontend/health",
     "/flows/health",
     "/crm/health",
     "/debug/*",
@@ -138,6 +139,7 @@ ROUTE_RULES: List[RouteRule] = [
     RouteRule("/api/public/legal", auth_required=False, context_type="anonymous"),
     RouteRule("/frontend/api/public/legal", auth_required=False, context_type="anonymous"),
     RouteRule("/api/health", auth_required=False, context_type="anonymous"),
+    RouteRule("/frontend/health", auth_required=False, context_type="anonymous"),
     RouteRule("/api/platform/file-types", auth_required=False, context_type="anonymous"),
     
     # Документация

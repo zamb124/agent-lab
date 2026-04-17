@@ -37,6 +37,14 @@ def test_prefixed_auth_providers_matches() -> None:
     assert rule.auth_required is True
 
 
+def test_frontend_health_is_public_anonymous() -> None:
+    matcher = RouteMatcher()
+    rule = matcher.match("/frontend/health")
+    assert rule is not None
+    assert rule.auth_required is False
+    assert rule.context_type == "anonymous"
+
+
 def test_sync_api_requires_auth() -> None:
     matcher = RouteMatcher()
     rule = matcher.match("/sync/api/v1/spaces/")

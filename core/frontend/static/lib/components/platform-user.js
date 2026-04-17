@@ -196,10 +196,11 @@ export class PlatformUser extends PlatformElement {
     }
 
     async _loadCompanies() {
-        const companyItems = await this.auth.get('/api/companies/me');
-        if (!Array.isArray(companyItems)) {
-            throw new Error('Некорректный ответ /api/companies/me: ожидался массив компаний');
+        const body = await this.auth.get('/api/companies/me');
+        if (!body || typeof body !== 'object' || !Array.isArray(body.items)) {
+            throw new Error('Некорректный ответ /api/companies/me: ожидался объект с массивом items');
         }
+        const companyItems = body.items;
 
         this.companies = companyItems.map((company) => ({
             company_id: company.company_id,
