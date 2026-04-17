@@ -15,6 +15,7 @@ import { PlatformElement } from '../platform-element/index.js';
 import { openUrlSameWindowOrTab } from '../utils/native-app-shell.js';
 import { AppEvents } from '../utils/types.js';
 import { buildScenarioDocumentationUrl } from '../utils/documentation-url.js';
+import { companiesMeItems } from '../utils/companies-me-response.js';
 import { buildCompanySubdomainUrl } from '../utils/tenant-url.js';
 import { createAvatarRetry } from '../utils/avatar-retry.js';
 import { buildServiceEntryUrl, setLastVisitedService } from '../utils/last-visited-service.js';
@@ -197,10 +198,7 @@ export class PlatformUser extends PlatformElement {
 
     async _loadCompanies() {
         const body = await this.auth.get('/api/companies/me');
-        if (!body || typeof body !== 'object' || !Array.isArray(body.items)) {
-            throw new Error('Некорректный ответ /api/companies/me: ожидался объект с массивом items');
-        }
-        const companyItems = body.items;
+        const companyItems = companiesMeItems(body);
 
         this.companies = companyItems.map((company) => ({
             company_id: company.company_id,
