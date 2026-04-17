@@ -81,3 +81,22 @@ def test_no_legacy_auth_routes() -> None:
             assert rule.context_type not in ("anonymous",) or path in ("/auth",), (
                 f"Legacy Sync path {path!r} matched unexpectedly: {rule}"
             )
+
+
+def test_main_page_is_public_anonymous() -> None:
+    """Главная страница / должна быть публичной без авторизации и компании."""
+    matcher = RouteMatcher()
+    rule = matcher.match("/")
+    assert rule is not None
+    assert rule.context_type == "anonymous"
+    assert rule.auth_required is False
+
+
+def test_products_pages_are_public_anonymous() -> None:
+    """Страницы продуктов должны быть публичными без авторизации."""
+    matcher = RouteMatcher()
+    for path in ("/products/agents", "/products/rag", "/products/crm", "/products/sync"):
+        rule = matcher.match(path)
+        assert rule is not None, f"no rule for {path}"
+        assert rule.context_type == "anonymous", f"{path}: expected anonymous"
+        assert rule.auth_required is False, f"{path}: expected auth_required=False"

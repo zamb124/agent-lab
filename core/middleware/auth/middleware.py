@@ -26,6 +26,7 @@ from .route_config import (
 from .company_resolver import CompanyResolver
 from .context_factory import ContextFactory
 from .platform_handlers import get_platform_handler
+from core.utils.domain import extract_subdomain
 
 logger = logging.getLogger(__name__)
 
@@ -147,7 +148,12 @@ class AuthMiddleware(BaseHTTPMiddleware):
         
         # Анонимный контекст (но пробуем загрузить пользователя если токен есть)
         if rule.context_type == "anonymous":
-            company = await company_resolver.resolve(request, context_type="anonymous")
+            # Для anonymous контекста компания НЕ требуется (публичные страницы)
+            # Извлекаем компанию только если есть субдомен (для публичных страниц компании)
+            company = None
+            host = request.headers.get("host", "")
+            if extract_subdomain(host):
+                company = await company_resolver.resolve(request, context_type="anonymous")
             token_data, auth_token = await self._extract_token(request, container)
             user = await self._get_user(container, token_data) if token_data else None
             return await context_factory.create(

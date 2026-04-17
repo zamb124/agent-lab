@@ -19,7 +19,7 @@ from core.pagination import ListResponse
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(prefix="/api/companies", tags=["companies"])
+router = APIRouter(prefix="/companies", tags=["companies"])
 
 
 class CheckSlugRequest(BaseModel):
