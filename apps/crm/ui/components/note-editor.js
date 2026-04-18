@@ -6,6 +6,7 @@ import '../modals/entity-modal.js';
 import '../modals/share-modal.js';
 import '../modals/ai-analysis-modal.js';
 import './note-content.js';
+import './note-delete-modal.js';
 import '../modals/note-graph-modal.js';
 
 export class NoteEditor extends PlatformElement {
@@ -142,10 +143,15 @@ export class NoteEditor extends PlatformElement {
         this._taskPct = 0;
         this._taskStatus = null;
         this._handleTaskWsNotification = null;
+        this._handleMobileNoteAction = null;
     }
 
     connectedCallback() {
         super.connectedCallback();
+        // Транслируем текущее состояние редактирования на crm-app
+        window.dispatchEvent(new CustomEvent('crm-note-editing-changed', {
+            detail: { editing: this._editing },
+        }));
         const syncAnalyzingNoteId = () => {
             const aid = CRMStore.state.ai.analyzingNoteId;
             const next = typeof aid === 'string' && aid.trim().length > 0 ? aid.trim() : null;
@@ -157,6 +163,24 @@ export class NoteEditor extends PlatformElement {
         this._crmStoreUnsub = CRMStore.subscribe(() => {
             syncAnalyzingNoteId();
         });
+
+        // Слушаем мобильные команды через window (события не проходят через Shadow DOM boundary иначе)
+        this._handleMobileNoteAction = (event) => {
+            const { action, file } = event.detail || {};
+            if (action === 'share') this._handleShareNote();
+            else if (action === 'delete') this._handleDeleteNote();
+            else if (action === 'edit') this._handleEditNote();
+            else if (action === 'cancel') this._handleCancelEdit();
+            else if (action === 'save') {
+                const nc = this.renderRoot?.querySelector('note-content');
+                if (nc && typeof nc._emitSaveNote === 'function') nc._emitSaveNote();
+            }
+            else if (action === 'upload-attachment' && file instanceof File) {
+                this._handleUploadAttachment({ detail: { file } });
+            }
+        };
+        window.addEventListener('crm-mobile-note-action', this._handleMobileNoteAction);
+
         this._handleTaskWsNotification = (event) => {
             const n = event.detail;
             if (!n || n.service !== 'crm' || n.type !== 'crm_task_updated') {
@@ -209,6 +233,12 @@ export class NoteEditor extends PlatformElement {
         this._crmStoreUnsub = null;
         window.removeEventListener('platform-notification-received', this._handleTaskWsNotification);
         this._handleTaskWsNotification = null;
+        window.removeEventListener('crm-mobile-note-action', this._handleMobileNoteAction);
+        this._handleMobileNoteAction = null;
+        // Сбрасываем состояние редактирования при отключении
+        window.dispatchEvent(new CustomEvent('crm-note-editing-changed', {
+            detail: { editing: false },
+        }));
         if (this._activeTaskId) {
             CRMStore.setState((s) => ({
                 ai: { ...s.ai, analyzing: false, analyzingNoteId: null }
@@ -223,6 +253,16 @@ export class NoteEditor extends PlatformElement {
         await this._loadRelationshipTypes();
         await this._loadRelatedEntities();
         await this._restoreActiveAnalyzeTask();
+    }
+
+    updated(changedProperties) {
+        super.updated?.(changedProperties);
+        // Транслируем изменение режима редактирования в crm-app
+        if (changedProperties.has('_editing')) {
+            window.dispatchEvent(new CustomEvent('crm-note-editing-changed', {
+                detail: { editing: this._editing },
+            }));
+        }
     }
 
     async _restoreActiveAnalyzeTask() {
@@ -484,6 +524,32 @@ export class NoteEditor extends PlatformElement {
     }
 
     async _handleDeleteNote() {
+        if (!this.note || typeof this.note !== 'object') {
+            return;
+        }
+        // Показываем модальку подтверждения для всех путей (мобайл + десктоп)
+        if (!this.draftMode && typeof this.note.entity_id === 'string') {
+            let relatedEntities = [];
+            try {
+                const response = await this.crmApi.getExclusiveRelatedEntities(this.note.entity_id);
+                relatedEntities = response?.entities || [];
+            } catch (error) {
+                console.error('Failed to fetch exclusive related entities:', error);
+            }
+
+            const modal = document.createElement('note-delete-modal');
+            document.body.appendChild(modal);
+            const confirmed = await modal.confirm({
+                title: this.i18n.t('note_delete_modal_title', {}, 'crm'),
+                message: this.i18n.t('note_delete_modal_message', {}, 'crm'),
+                confirmText: this.i18n.t('note_delete_modal_confirm', {}, 'crm'),
+                cancelText: this.i18n.t('note_delete_modal_cancel', {}, 'crm'),
+                relatedEntities,
+                entityTypes: this._entityTypes,
+            });
+            modal.remove();
+            if (!confirmed) return;
+        }
         await this._deleteNote();
     }
 

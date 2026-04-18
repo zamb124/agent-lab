@@ -146,7 +146,7 @@ export class NotePage extends PlatformElement {
     async firstUpdated() {
         super.firstUpdated?.();
         await this._syncFromStore();
-        
+
         // Получаем ссылку на хлебные крошки
         this._breadcrumbs = this.shadowRoot?.querySelector('platform-breadcrumbs');
     }

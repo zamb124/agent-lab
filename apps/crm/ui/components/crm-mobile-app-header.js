@@ -17,6 +17,7 @@ export class CrmMobileAppHeader extends PlatformElement {
         actionTitle: { type: String },
         assistantIcon: { type: String, attribute: 'assistant-icon' },
         assistantTitle: { type: String },
+        noteActions: { type: Array },
     };
 
     static styles = [
@@ -45,7 +46,7 @@ export class CrmMobileAppHeader extends PlatformElement {
                 align-items: center;
                 justify-content: center;
                 border-radius: var(--radius-md);
-                background: transparent;
+                background: var(--glass-tint-subtle);
                 border: 1px solid var(--crm-stroke);
                 color: var(--text-primary);
                 cursor: pointer;
@@ -55,7 +56,7 @@ export class CrmMobileAppHeader extends PlatformElement {
 
             .menu-btn:hover,
             .icon-btn:hover {
-                background: var(--crm-surface);
+                background: var(--glass-tint-medium);
             }
 
             .title {
@@ -140,6 +141,16 @@ export class CrmMobileAppHeader extends PlatformElement {
             .action-btn:hover {
                 background: var(--crm-daily-notes-cta-hover);
             }
+
+            .icon-btn.danger {
+                color: var(--color-danger);
+                border-color: var(--color-danger);
+            }
+
+            .icon-btn.danger:hover {
+                background: var(--color-danger);
+                color: white;
+            }
         `,
     ];
 
@@ -155,6 +166,7 @@ export class CrmMobileAppHeader extends PlatformElement {
         this.actionTitle = '';
         this.assistantIcon = '';
         this.assistantTitle = '';
+        this.noteActions = [];
     }
 
     updated(changed) {
@@ -248,6 +260,21 @@ export class CrmMobileAppHeader extends PlatformElement {
                     >
                         <platform-icon name=${this.actionIcon} size="18"></platform-icon>
                     </button>
+                ` : ''}
+
+                ${this.noteActions && this.noteActions.length > 0 ? html`
+                    ${this.noteActions.map(action => html`
+                        <button
+                            class="icon-btn ${action.danger ? 'danger' : ''}"
+                            type="button"
+                            title=${action.title || ''}
+                            @click=${() => {
+                                this.dispatchEvent(new CustomEvent(action.event, { bubbles: true, composed: true }));
+                            }}
+                        >
+                            <platform-icon name=${action.icon} size="16"></platform-icon>
+                        </button>
+                    `)}
                 ` : ''}
             </div>
         `;

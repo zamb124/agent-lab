@@ -44,6 +44,7 @@ export class CRMApp extends PlatformApp {
         _showAiModal: { state: true },
         _mobileSearchOpen: { state: true },
         _mobileSearchInputValue: { state: true },
+        _noteEditing: { state: true },
     };
     
     connectedCallback() {
@@ -160,8 +161,10 @@ export class CRMApp extends PlatformApp {
         this._showAiModal = false;
         this._mobileSearchOpen = false;
         this._mobileSearchInputValue = '';
+        this._noteEditing = false;
         this._resizeObserver = null;
         this._searchDebounce = null;
+        this._noteEditingListener = null;
         /** @type {{ key: string, at: number, data: object } | null} */
         this._laraSummaryCache = null;
     }
@@ -324,10 +327,17 @@ export class CRMApp extends PlatformApp {
             this._isMobile = state.ui.isMobile;
             if (this._currentView !== state.ui.currentView) {
                 this._mobileSearchOpen = false;
+                this._noteEditing = false;
             }
             this._currentView = state.ui.currentView;
             this._currentNoteId = state.ui.currentNoteId;
         });
+
+        // Слушаем состояние редактирования заметки через window
+        this._noteEditingListener = (e) => {
+            this._noteEditing = e.detail?.editing === true;
+        };
+        window.addEventListener('crm-note-editing-changed', this._noteEditingListener);
 
         this._checkMobile();
         this._setupResizeObserver();
@@ -370,6 +380,10 @@ export class CRMApp extends PlatformApp {
         super.disconnectedCallback?.();
         this._unsubscribe?.();
         this._resizeObserver?.disconnect();
+        if (this._noteEditingListener) {
+            window.removeEventListener('crm-note-editing-changed', this._noteEditingListener);
+            this._noteEditingListener = null;
+        }
     }
 
     async checkAuth() {
@@ -475,10 +489,57 @@ export class CRMApp extends PlatformApp {
         window.dispatchEvent(new CustomEvent('humanitec-embed-chat-toggle', { bubbles: true }));
     }
 
-    _dispatchPageEvent(eventName) {
+    _onNoteShare() {
+        window.dispatchEvent(new CustomEvent('crm-mobile-note-action', {
+            detail: { action: 'share' },
+        }));
+    }
+
+    _onNoteDelete() {
+        window.dispatchEvent(new CustomEvent('crm-mobile-note-action', {
+            detail: { action: 'delete' },
+        }));
+    }
+
+    _onNoteEdit() {
+        window.dispatchEvent(new CustomEvent('crm-mobile-note-action', {
+            detail: { action: 'edit' },
+        }));
+    }
+
+    _onNoteSave() {
+        window.dispatchEvent(new CustomEvent('crm-mobile-note-action', {
+            detail: { action: 'save' },
+        }));
+    }
+
+    _onNoteCancel() {
+        window.dispatchEvent(new CustomEvent('crm-mobile-note-action', {
+            detail: { action: 'cancel' },
+        }));
+    }
+
+    _onNoteFiles() {
+        const input = document.createElement('input');
+        input.type = 'file';
+        input.style.display = 'none';
+        input.onchange = () => {
+            if (input.files && input.files.length > 0) {
+                const file = input.files[0];
+                window.dispatchEvent(new CustomEvent('crm-mobile-note-action', {
+                    detail: { action: 'upload-attachment', file },
+                }));
+            }
+            document.body.removeChild(input);
+        };
+        document.body.appendChild(input);
+        input.click();
+    }
+
+    _dispatchPageEvent(eventName, detail) {
         const island = this.renderRoot?.querySelector('platform-island');
         if (island) {
-            island.dispatchEvent(new CustomEvent(eventName, { bubbles: true, composed: true }));
+            island.dispatchEvent(new CustomEvent(eventName, { bubbles: true, composed: true, detail }));
         }
     }
 
@@ -682,6 +743,17 @@ export class CRMApp extends PlatformApp {
                             .extraTitle=${viewCfg.extraTitle || ''}
                             .actionIcon=${viewCfg.actionIcon || ''}
                             .actionTitle=${viewCfg.actionTitle || ''}
+                            .noteActions=${this._currentView === 'note' ? (
+                                this._noteEditing ? [
+                                    { icon: 'check', title: this.i18n.t('save', {}, 'common'), event: 'header-note-save' },
+                                    { icon: 'close', title: this.i18n.t('cancel', {}, 'common'), event: 'header-note-cancel' },
+                                ] : [
+                                    { icon: 'paperclip', title: this.i18n.t('note_content.attach_add_title', {}, 'crm'), event: 'header-note-files' },
+                                    { icon: 'share', title: this.i18n.t('note_content.share', {}, 'crm'), event: 'header-note-share' },
+                                    { icon: 'delete', title: this.i18n.t('delete', {}, 'common'), event: 'header-note-delete', danger: true },
+                                    { icon: 'edit', title: this.i18n.t('edit', {}, 'common'), event: 'header-note-edit' },
+                                ]
+                            ) : []}
                             @header-menu=${this._openSidebar}
                             @header-toggle-search=${this._toggleMobileSearch}
                             @header-search-input=${this._onHeaderSearchInput}
@@ -689,6 +761,12 @@ export class CRMApp extends PlatformApp {
                             @header-assistant=${this._onMobileAssistant}
                             @header-extra=${this._onMobileExtra}
                             @header-action=${this._onMobileAction}
+                            @header-note-share=${this._onNoteShare}
+                            @header-note-delete=${this._onNoteDelete}
+                            @header-note-edit=${this._onNoteEdit}
+                            @header-note-save=${this._onNoteSave}
+                            @header-note-cancel=${this._onNoteCancel}
+                            @header-note-files=${this._onNoteFiles}
                         ></crm-mobile-app-header>
                     </div>
                 ` : ''}

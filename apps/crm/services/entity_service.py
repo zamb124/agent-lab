@@ -1193,34 +1193,62 @@ class EntityService:
         self,
         note_entity_id: str,
     ) -> List[str]:
+        """
+        Возвращает все сущности, созданные этой заметкой, которые не имеют связей с ДРУГИМИ заметками.
+        
+        Логика:
+        1. Строим граф связей заметки
+        2. Для каждой сущности проверяем: есть ли связи с ДРУГИМИ заметками (entity_type == "note" и entity_id != note_entity_id)
+        3. Если нет таких связей - сущность подлежит удалению
+        
+        Это защищает от удаления сущностей, которые связаны с другими заметками.
+        """
         relationships_by_entity = await self._build_entity_component_relationships(note_entity_id)
         component_order = list(relationships_by_entity.keys())
-        entities_to_delete: set[str] = {note_entity_id}
 
-        changed = True
-        while changed:
-            changed = False
-            for entity_id in component_order:
-                if entity_id in entities_to_delete:
-                    continue
+        logger.info(f"[_collect_exclusive_related_entities_for_note] note_id={note_entity_id}, component_order={component_order}")
 
-                relationships = relationships_by_entity.get(entity_id, [])
-                has_surviving_relationship = False
-                for relationship in relationships:
-                    related_entity_id = self._get_related_entity_id(relationship, entity_id)
-                    if related_entity_id not in entities_to_delete:
-                        has_surviving_relationship = True
-                        break
+        # Получаем source_entity_id и entity_type для всех сущностей в компоненте
+        entities = await self._entity_repo.get_by_ids(component_order)
+        source_entity_id_map = {e.entity_id: e.source_entity_id for e in entities}
+        entity_type_map = {e.entity_id: e.entity_type for e in entities}
 
-                if not has_surviving_relationship:
-                    entities_to_delete.add(entity_id)
-                    changed = True
+        logger.info(f"[_collect_exclusive_related_entities_for_note] source_entity_id_map: {source_entity_id_map}")
+        logger.info(f"[_collect_exclusive_related_entities_for_note] entity_type_map: {entity_type_map}")
 
-        return [
-            entity_id
-            for entity_id in component_order
-            if entity_id in entities_to_delete and entity_id != note_entity_id
-        ]
+        exclusive_entity_ids = []
+
+        for entity_id in component_order:
+            if entity_id == note_entity_id:
+                continue
+
+            # Сущность должна быть создана этой заметкой
+            if source_entity_id_map.get(entity_id) != note_entity_id:
+                logger.info(f"[_collect_exclusive_related_entities_for_note] Entity {entity_id} not created by this note (source={source_entity_id_map.get(entity_id)})")
+                continue
+
+            # Проверяем связи с ДРУГИМИ заметками
+            relationships = relationships_by_entity.get(entity_id, [])
+            has_other_note_connection = False
+            other_note_connections = []
+            
+            for relationship in relationships:
+                related_entity_id = self._get_related_entity_id(relationship, entity_id)
+                related_type = entity_type_map.get(related_entity_id)
+                
+                # Если связанная сущность - заметка и это НЕ текущая заметка
+                if related_type == "note" and related_entity_id != note_entity_id:
+                    has_other_note_connection = True
+                    other_note_connections.append(f"{related_entity_id} (type=note)")
+
+            if not has_other_note_connection:
+                exclusive_entity_ids.append(entity_id)
+                logger.info(f"[_collect_exclusive_related_entities_for_note] Entity {entity_id} can be deleted (no connections to other notes)")
+            else:
+                logger.info(f"[_collect_exclusive_related_entities_for_note] Entity {entity_id} has connections to other notes: {other_note_connections}")
+
+        logger.info(f"[_collect_exclusive_related_entities_for_note] final exclusive_entity_ids: {exclusive_entity_ids}")
+        return exclusive_entity_ids
 
     async def get_exclusive_related_entities_for_note(
         self,
@@ -1304,7 +1332,7 @@ class EntityService:
 
         Для note: удаляет саму заметку и эксклюзивно связанные сущности.
         Эксклюзивная сущность - та, у которой после удаления note не остается связей
-        с сущностями вне удаляемого подграфа.
+        с сущностями вне удаляемого подграфа и которая была создана этой заметкой.
         """
         entity = await self._entity_repo.get(entity_id)
         if not entity:
@@ -1763,6 +1791,7 @@ class EntityService:
         ent: AIExtractedEntity,
         namespace: str,
         merge_target_locks: Dict[str, asyncio.Lock],
+        source_entity_id: Optional[str] = None,
     ) -> Tuple[str, str, Literal["created", "updated"]]:
         """Одна строка черновика: create или merge в БД и RAG (без ретраев)."""
         did = ent.draft_entity_id
@@ -1801,7 +1830,7 @@ class EntityService:
                 )
             return (did, existing_id, "updated")
         if ent.dedup_action in (None, "create"):
-            created = await self._create_entity_from_draft_row(ent, namespace)
+            created = await self._create_entity_from_draft_row(ent, namespace, source_entity_id)
             return (did, created.entity_id, "created")
         raise ValueError(
             f"Неизвестный dedup_action={ent.dedup_action!r} (draft_entity_id={did})"
@@ -1811,6 +1840,7 @@ class EntityService:
         self,
         entities: List[AIExtractedEntity],
         namespace: str,
+        source_entity_id: Optional[str] = None,
     ) -> Tuple[Dict[str, str], List[str], List[str]]:
         """
         Параллельный проход по списку; неуспешные строки повторяются до ANALYSIS_DRAFT_APPLY_MAX_ROUNDS.
@@ -1828,7 +1858,7 @@ class EntityService:
             results = await asyncio.gather(
                 *[
                     self._persist_analysis_draft_entity_row(
-                        ent, namespace, merge_target_locks
+                        ent, namespace, merge_target_locks, source_entity_id
                     )
                     for ent in pending
                 ],
@@ -1935,6 +1965,7 @@ class EntityService:
             await self._apply_analysis_draft_entity_rows_with_retries(
                 draft.entities,
                 namespace,
+                source_entity_id=note_id,
             )
         )
         id_map.update(id_fragment)
@@ -2027,6 +2058,7 @@ class EntityService:
         self,
         ent: AIExtractedEntity,
         namespace: str,
+        source_entity_id: Optional[str] = None,
     ) -> CRMEntity:
         raw = ent.model_dump()
         storage_type, storage_subtype = await self._resolve_storage_type_for_note_family(
@@ -2049,6 +2081,7 @@ class EntityService:
             due_date=self._parse_optional_date_iso(raw.get("due_date")),
             priority=raw.get("priority"),
             assignees=raw.get("assignees") or [],
+            source_entity_id=source_entity_id,
         )
 
     @staticmethod

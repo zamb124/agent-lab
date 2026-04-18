@@ -777,7 +777,7 @@ async def get_exclusive_related_entities(
     ctx = get_context()
     user_id = ctx.user.user_id if ctx and ctx.user else None
     company_id = ctx.active_company.company_id if ctx and ctx.active_company else None
-    if not await container.access_control_service.can_delete_entity(entity, user_id, company_id):
+    if not await container.access_control_service.can_write_entity(entity, user_id, company_id):
         raise HTTPException(status_code=403, detail="Access denied")
     
     exclusive_entities = await container.entity_service.get_exclusive_related_entities_for_note(entity_id)

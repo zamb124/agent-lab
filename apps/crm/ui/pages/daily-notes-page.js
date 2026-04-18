@@ -1065,7 +1065,7 @@ export class DailyNotesPage extends PlatformElement {
             }
             const tasks = await crmApi.listTasks(namespace, 50, 'note_analyze');
             const activeTasks = (tasks.items || []).filter((task) => task.status === 'running' || task.status === 'pending');
-            console.log('[DailyNotesPage] _loadActiveAnalysisTasks:', { namespace, totalTasks: tasks.items?.length, activeTasks: activeTasks.length, activeTaskIds: activeTasks.map(t => t.note_id) });
+            console.log('[DailyNotesPage] _loadActiveAnalysisTasks:', { namespace, totalTasks: tasks.items?.length, activeTasks: activeTasks.length, activeTaskIds: activeTasks.map(t => t.data?.note_id), activeTasksDetails: activeTasks });
             const tasksChanged = JSON.stringify(activeTasks) !== JSON.stringify(this._activeAnalysisTasks);
             if (tasksChanged) {
                 this._activeAnalysisTasks = activeTasks;
@@ -1296,7 +1296,8 @@ export class DailyNotesPage extends PlatformElement {
             return true;
         }
         // Проверяем кешированные активные задачи (для автоматического анализа)
-        const hasRunningTask = this._activeAnalysisTasks.some((task) => task.note_id === id.trim() && (task.status === 'running' || task.status === 'pending'));
+        const hasRunningTask = this._activeAnalysisTasks.some((task) => task.data?.note_id === id.trim() && (task.status === 'running' || task.status === 'pending'));
+        console.log('[DailyNotesPage] _isNoteAiAnalyzing:', { noteId: id.trim(), analyzingNoteId: this._analyzingNoteId, activeTasksCount: this._activeAnalysisTasks.length, activeTaskIds: this._activeAnalysisTasks.map(t => t.data?.note_id), hasRunningTask });
         return hasRunningTask;
     }
 

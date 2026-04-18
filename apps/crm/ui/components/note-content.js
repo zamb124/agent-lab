@@ -66,6 +66,7 @@ export class NoteContent extends PlatformElement {
         _mentionLoading: { state: true },
         _mentionCoords: { state: true },
         _loading: { state: true },
+        _isMobile: { state: true },
     };
 
     static styles = [
@@ -1493,6 +1494,7 @@ export class NoteContent extends PlatformElement {
                 }
 
                 .note-header {
+                    display: flex;
                     flex-direction: column;
                     align-items: stretch;
                     gap: 12px;
@@ -1673,10 +1675,15 @@ export class NoteContent extends PlatformElement {
         this._onDocSelectionChange = null;
         this._editableNeedsInit = false;
         this._loading = false;
+        this._isMobile = CRMStore.state.ui.isMobile;
+        this._storeUnsub = null;
     }
 
     connectedCallback() {
         super.connectedCallback();
+        this._storeUnsub = CRMStore.subscribe((state) => {
+            this._isMobile = state.ui.isMobile;
+        });
         this._onDocPointerDown = (e) => {
             const path = e.composedPath();
             if (path.includes(this)) {
@@ -1702,6 +1709,7 @@ export class NoteContent extends PlatformElement {
     }
 
     disconnectedCallback() {
+        this._storeUnsub?.();
         document.removeEventListener('pointerdown', this._onDocPointerDown, true);
         if (this._voiceSearchTimer) {
             window.clearTimeout(this._voiceSearchTimer);
@@ -2315,32 +2323,8 @@ export class NoteContent extends PlatformElement {
         this.emit('share-note', { noteId: this.note.entity_id });
     }
 
-    async _emitDeleteNote() {
-        let relatedEntities = [];
-        try {
-            const response = await crmApi.getExclusiveRelatedEntities(this.note.entity_id);
-            relatedEntities = response.entities || [];
-        } catch (error) {
-            console.error('Failed to fetch exclusive related entities:', error);
-        }
-
-        const modal = document.createElement('note-delete-modal');
-        document.body.appendChild(modal);
-
-        const confirmed = await modal.confirm({
-            title: this.i18n.t('note_delete_modal_title', {}, 'crm'),
-            message: this.i18n.t('note_delete_modal_message', {}, 'crm'),
-            confirmText: this.i18n.t('note_delete_modal_confirm', {}, 'crm'),
-            cancelText: this.i18n.t('note_delete_modal_cancel', {}, 'crm'),
-            relatedEntities,
-            entityTypes: this.entityTypes,
-        });
-
-        modal.remove();
-
-        if (confirmed) {
-            this.emit('delete-note', { noteId: this.note.entity_id });
-        }
+    _emitDeleteNote() {
+        this.emit('delete-note', { noteId: this.note.entity_id });
     }
 
     _emitEditNote() {
@@ -3350,6 +3334,7 @@ export class NoteContent extends PlatformElement {
                                 ` : ''}
                             </div>
                         `}
+                        ${!this._isMobile ? html`
                         <div class="note-actions">
                         <input
                             id="note-attachment-input"
@@ -3357,6 +3342,15 @@ export class NoteContent extends PlatformElement {
                             style="display: none;"
                             @change=${this._onAttachmentFileSelected}
                         />
+                        <button
+                            class="round-btn attach-header-btn"
+                            type="button"
+                            title=${this.i18n.t('note_content.attach_add_title', {}, 'crm')}
+                            ?disabled=${this.processingAttachment}
+                            @click=${this._openFilePicker}
+                        >
+                            <platform-icon name="paperclip" size="20"></platform-icon>
+                        </button>
                         <button
                             class="round-btn"
                             type="button"
@@ -3396,6 +3390,7 @@ export class NoteContent extends PlatformElement {
                             <button class="edit-btn" type="button" @click=${this._emitEditNote}>${this.i18n.t('edit', {}, 'common')}</button>
                         `}
                     </div>
+                    ` : ''}
                     </div>
                     ${this.editable ? html`
                         <div class="note-text-input-wrap">
