@@ -2,10 +2,11 @@
 HTTP клиент с поддержкой прокси и автоматической ротацией при ошибках.
 
 Использование:
-    async with get_httpx_client(proxy=True) as client:
+    async with get_httpx_client(strategy=ProxyStrategy.direct_first) as client:
         response = await client.post("https://api.example.com", json={...})
 """
 
+from enum import Enum
 from typing import Optional
 
 import httpx
@@ -18,6 +19,14 @@ _CONNECT_RETRY_EXCEPTIONS = (httpx.ConnectError, httpx.ConnectTimeout)
 
 PUBLIC_OAUTH_DIRECT_ATTEMPTS_BEFORE_PROXY = 3
 PUBLIC_OAUTH_DIRECT_ATTEMPTS_AFTER_PROXY = 2
+
+
+class ProxyStrategy(Enum):
+    """Стратегия использования прокси для HTTP запросов."""
+    DIRECT_FIRST = "direct_first"  # Сначала прямое подключение, затем прокси
+    PROXY_FIRST = "proxy_first"    # Сначала прокси, затем прямое подключение
+    DIRECT_ONLY = "direct_only"    # Только прямое подключение
+    PROXY_ONLY = "proxy_only"      # Только через прокси
 
 
 def _platform_proxy_active() -> bool:
@@ -100,6 +109,116 @@ async def request_public_oauth(
     )
 
 
+async def request_with_strategy(
+    method: str,
+    url: str,
+    *,
+    strategy: ProxyStrategy = ProxyStrategy.DIRECT_FIRST,
+    proxy_attempts: int = 3,
+    direct_attempts: int = 2,
+    timeout: float = 30.0,
+    **kwargs,
+) -> httpx.Response:
+    """
+    Программируемый HTTP клиент с настраиваемой стратегией прокси.
+
+    Args:
+        method: HTTP метод (GET, POST и т.д.)
+        url: URL для запроса
+        strategy: Стратегия использования прокси
+        proxy_attempts: Количество попыток через прокси (для proxy_first)
+        direct_attempts: Количество попыток прямого подключения (для direct_first)
+        timeout: Таймаут запросов
+        **kwargs: Дополнительные параметры для httpx
+
+    Returns:
+        httpx.Response
+
+    Raises:
+        httpx.ConnectError: Если все попытки подключения не удались
+    """
+    if strategy == ProxyStrategy.DIRECT_ONLY:
+        return await _request_direct_burst(
+            method,
+            url,
+            timeout=timeout,
+            attempts=direct_attempts,
+            **kwargs,
+        )
+
+    if strategy == ProxyStrategy.PROXY_ONLY:
+        if not _platform_proxy_active():
+            raise httpx.ConnectError("Proxy requested but not configured")
+        async with get_httpx_client(
+            timeout=timeout,
+            strategy=ProxyStrategy.PROXY_ONLY,
+            proxy_attempts=proxy_attempts,
+            **kwargs,
+        ) as client:
+            return await client.request(method.upper(), url, **kwargs)
+
+    if strategy == ProxyStrategy.DIRECT_FIRST:
+        try:
+            return await _request_direct_burst(
+                method,
+                url,
+                timeout=timeout,
+                attempts=direct_attempts,
+                **kwargs,
+            )
+        except _CONNECT_RETRY_EXCEPTIONS:
+            pass
+
+        if _platform_proxy_active():
+            try:
+                async with get_httpx_client(
+                    timeout=timeout,
+                    strategy=ProxyStrategy.PROXY_ONLY,
+                    proxy_attempts=proxy_attempts,
+                    **kwargs,
+                ) as client:
+                    return await client.request(method.upper(), url, **kwargs)
+            except _CONNECT_RETRY_EXCEPTIONS:
+                logger.warning(
+                    "Запрос через прокси к %s не удался, повторное прямое подключение",
+                    url,
+                )
+
+        return await _request_direct_burst(
+            method,
+            url,
+            timeout=timeout,
+            attempts=1,
+            **kwargs,
+        )
+
+    if strategy == ProxyStrategy.PROXY_FIRST:
+        if _platform_proxy_active():
+            try:
+                async with get_httpx_client(
+                    timeout=timeout,
+                    strategy=ProxyStrategy.PROXY_ONLY,
+                    proxy_attempts=proxy_attempts,
+                    **kwargs,
+                ) as client:
+                    return await client.request(method.upper(), url, **kwargs)
+            except _CONNECT_RETRY_EXCEPTIONS:
+                logger.warning(
+                    "Запрос через прокси к %s не удался, переключение на прямое подключение",
+                    url,
+                )
+
+        return await _request_direct_burst(
+            method,
+            url,
+            timeout=timeout,
+            attempts=direct_attempts,
+            **kwargs,
+        )
+
+    raise ValueError(f"Unknown strategy: {strategy}")
+
+
 class SmartProxyClient:
     """
     HTTP клиент с автоматической ротацией прокси при таймаутах.
@@ -140,11 +259,14 @@ class SmartProxyClient:
             # (иначе OpenRouter/embeddings при медленном TLS падают с ConnectTimeout).
             connect_timeout = float(self.timeout)
 
+        # Убираем proxy из kwargs если он там есть, чтобы избежать конфликта
+        kwargs = {k: v for k, v in self.kwargs.items() if k != 'proxy'}
+
         return httpx.AsyncClient(
             timeout=httpx.Timeout(self.timeout, connect=connect_timeout),
             proxy=proxy_url,
             trust_env=False,
-            **self.kwargs,
+            **kwargs,
         )
 
     def _is_local_url(self, url: str) -> bool:
@@ -277,16 +399,29 @@ class _StreamContextManager:
             await self._client.aclose()
 
 
-def get_httpx_client(timeout: float = 30.0, proxy: bool = False, **kwargs) -> SmartProxyClient:
+def get_httpx_client(
+    timeout: float = 30.0,
+    strategy: ProxyStrategy = ProxyStrategy.DIRECT_FIRST,
+    proxy_attempts: int = 3,
+    direct_attempts: int = 2,
+    **kwargs,
+) -> SmartProxyClient:
     """
-    Создает HTTP клиент с умной ротацией прокси.
+    Создает HTTP клиент с настраиваемой стратегией прокси.
 
     Args:
         timeout: Таймаут запросов
-        proxy: Использовать прокси с автоматической ротацией при ошибках
+        strategy: Стратегия использования прокси (direct_first, proxy_first, direct_only, proxy_only)
+        proxy_attempts: Количество попыток через прокси (для proxy_first)
+        direct_attempts: Количество попыток прямого подключения (для direct_first)
         **kwargs: Дополнительные параметры для httpx.AsyncClient
 
     Returns:
-        SmartProxyClient с автоматическим retry
+        SmartProxyClient с настроенной стратегией
     """
-    return SmartProxyClient(timeout=timeout, use_proxy=proxy, **kwargs)
+    use_proxy = strategy in (ProxyStrategy.PROXY_FIRST, ProxyStrategy.PROXY_ONLY)
+    client = SmartProxyClient(timeout=timeout, use_proxy=use_proxy, **kwargs)
+    client._strategy = strategy
+    client._proxy_attempts = proxy_attempts
+    client._direct_attempts = direct_attempts
+    return client

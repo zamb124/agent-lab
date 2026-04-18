@@ -1,190 +1,256 @@
 /**
  * Router - Универсальный роутер для SPA
- * 
- * Предоставляет:
- * - Простой роутинг на базе window.location.pathname
- * - Динамический импорт страниц
- * - History API integration
- * - Поддержка query parameters
+ * Декларативная конфигурация маршрутов с параметрами
+ * Интеграция с Store для синхронизации URL и состояния
+ * Генерация хлебных крошек на основе конфигурации
  */
 import { html } from 'lit';
 
-export class Router {
-    /**
-     * @param {Object} appElement - Корневой элемент приложения (extends PlatformApp)
-     * @param {Object} routes - Map путей к динамическим импортам
-     * @example
-     * new Router(this, {
-     *     '/': () => import('./pages/HomePage.js'),
-     *     '/dashboard': () => import('./pages/DashboardPage.js')
-     * })
-     */
-    constructor(appElement, routes) {
-        this.appElement = appElement;
-        this.routes = routes;
-        this.currentPath = window.location.pathname;
-        this.currentPage = null;
+export class RouteConfig {
+    constructor(config) {
+        this.path = config.path;
+        this.key = config.key;
+        this.title = config.title;
+        this.parent = config.parent;
+        this.itemTitle = config.itemTitle || null;
+        this.component = config.component || null;
+        this.onEnter = config.onEnter || null;
+        this.onLeave = config.onLeave || null;
         
-        // Bind методов для event listeners
+        this.paramNames = this._extractParamNames(this.path);
+        this.pattern = this._buildPattern(this.path);
+    }
+    
+    _extractParamNames(path) {
+        const matches = path.match(/:([a-zA-Z_][a-zA-Z0-9_]*)/g);
+        return matches ? matches.map(m => m.slice(1)) : [];
+    }
+    
+    _buildPattern(path) {
+        const pattern = path.replace(/:([a-zA-Z_][a-zA-Z0-9_]*)/g, '([^/]+)');
+        return new RegExp(`^${pattern}$`);
+    }
+    
+    match(pathSegment) {
+        const match = pathSegment.match(this.pattern);
+        if (!match) return null;
+        
+        const params = {};
+        this.paramNames.forEach((name, index) => {
+            params[name] = match[index + 1];
+        });
+        
+        return { params };
+    }
+    
+    buildPath(params = {}) {
+        let path = this.path;
+        this.paramNames.forEach(name => {
+            path = path.replace(`:${name}`, params[name] || '');
+        });
+        return path;
+    }
+}
+
+export class Router {
+    constructor(appElement, options = {}) {
+        this.appElement = appElement;
+        this.baseUrl = options.baseUrl || '';
+        this.store = options.store || null;
+        
+        this.routeConfigs = new Map();
+        this.currentRoute = null;
+        this.currentParams = {};
+        
         this._onPopState = this._onPopState.bind(this);
         this._onNavigate = this._onNavigate.bind(this);
+        this._subscribers = [];
     }
 
-    /**
-     * Запустить роутер
-     */
     start() {
-        // Слушаем изменения истории браузера
         window.addEventListener('popstate', this._onPopState);
-        
-        // Слушаем кастомное событие навигации
         window.addEventListener('navigate', this._onNavigate);
-        
-        // Загружаем текущую страницу
-        this._loadPage(this.currentPath);
+        this.initFromUrl();
     }
 
-    /**
-     * Остановить роутер
-     */
     stop() {
         window.removeEventListener('popstate', this._onPopState);
         window.removeEventListener('navigate', this._onNavigate);
     }
-
-    /**
-     * Навигация на новый путь
-     * @param {string} path - Путь для навигации
-     */
-    navigate(path) {
-        if (path === this.currentPath) return;
-        
-        // Добавляем в историю
-        window.history.pushState({}, '', path);
-        this.currentPath = path;
-        
-        // Загружаем новую страницу
-        this._loadPage(path);
+    
+    registerRoute(config) {
+        const route = new RouteConfig(config);
+        this.routeConfigs.set(route.key, route);
+        return route;
+    }
+    
+    registerRoutes(configs) {
+        return configs.map(config => this.registerRoute(config));
+    }
+    
+    getRoute(key) {
+        return this.routeConfigs.get(key);
+    }
+    
+    subscribe(callback) {
+        this._subscribers.push(callback);
+        return () => {
+            const index = this._subscribers.indexOf(callback);
+            if (index !== -1) {
+                this._subscribers.splice(index, 1);
+            }
+        };
+    }
+    
+    _notifySubscribers() {
+        this._subscribers.forEach(callback => callback());
     }
 
-    /**
-     * Обработчик popstate (кнопки назад/вперед в браузере)
-     * @private
-     */
-    _onPopState(event) {
-        this.currentPath = window.location.pathname;
-        this._loadPage(this.currentPath);
-    }
-
-    /**
-     * Обработчик кастомного события navigate
-     * @private
-     */
-    _onNavigate(event) {
-        const { path } = event.detail;
-        this.navigate(path);
-    }
-
-    /**
-     * Загрузить страницу для указанного пути
-     * @private
-     */
-    async _loadPage(path) {
-        // Находим подходящий роут
-        const loader = this.routes[path] || this.routes['/'] || null;
-        
-        if (!loader) {
-            console.error(`[Router] No route found for path: ${path}`);
-            this.currentPage = null;
-            this.appElement.requestUpdate();
+    navigateByRoute(routeKey, params = {}, options = {}) {
+        const route = this.routeConfigs.get(routeKey);
+        if (!route) {
+            console.error(`[Router] Unknown route: ${routeKey}`);
             return;
         }
-
-        try {
-            // Динамически импортируем модуль страницы
-            await loader();
-            
-            // После импорта компонент зарегистрирован в customElements
-            // Запрашиваем обновление app элемента для ре-рендера
-            this.appElement.requestUpdate();
-            
-        } catch (error) {
-            console.error(`[Router] Failed to load page for path: ${path}`, error);
-            this.currentPage = null;
-            this.appElement.requestUpdate();
-        }
-    }
-
-    /**
-     * Получить текущий путь
-     * @returns {string}
-     */
-    getCurrentPath() {
-        return this.currentPath;
-    }
-
-    /**
-     * Получить query параметры
-     * @returns {URLSearchParams}
-     */
-    getQueryParams() {
-        return new URLSearchParams(window.location.search);
-    }
-
-    /**
-     * Render метод для использования в PlatformApp
-     * Рендерит компонент страницы на основе текущего пути
-     * @returns {TemplateResult}
-     */
-    render() {
-        const path = this.currentPath;
         
-        let tagName;
-        switch (path) {
-            case '/':
-                tagName = 'landing-page';
-                break;
-            case '/dashboard':
-                tagName = 'dashboard-page';
-                break;
-            case '/select-company':
-                tagName = 'select-company-page';
-                break;
-            case '/team':
-                tagName = 'team-page';
-                break;
-            case '/api-keys':
-                tagName = 'api-keys-page';
-                break;
-            case '/billing':
-                tagName = 'billing-page';
-                break;
-            case '/embed-configs':
-                tagName = 'embed-configs-page';
-                break;
-            case '/settings':
-            case '/settings/company':
-            case '/settings/security':
-                tagName = 'settings-page';
-                break;
-            default:
-                tagName = 'landing-page';
+        const path = route.buildPath(params);
+        const fullPath = `${this.baseUrl}/${path}`;
+        
+        if (this.currentRoute && this.currentRoute.onLeave) {
+            this.currentRoute.onLeave(this.currentParams);
         }
-
-        if (!customElements.get(tagName)) {
-            return html`<div>Loading page...</div>`;
+        
+        if (!options.skipUrl) {
+            history.pushState({}, '', fullPath);
         }
+        
+        this.currentRoute = route;
+        this.currentParams = params;
+        
+        if (this.store && this.store.syncRoute) {
+            this.store.syncRoute(routeKey, params);
+        }
+        
+        if (route.onEnter) {
+            route.onEnter(params);
+        }
+        
+        this._notifySubscribers();
+        this.appElement.requestUpdate();
+    }
 
-        const element = document.createElement(tagName);
-        return element;
+    _onPopState(event) {
+        this.initFromUrl();
+    }
+
+    _onNavigate(event) {
+        const { routeKey, params } = event.detail;
+        this.navigateByRoute(routeKey, params);
+    }
+    
+    parseCurrentUrl() {
+        const pathname = window.location.pathname;
+        const relativePath = pathname.startsWith(this.baseUrl)
+            ? pathname.slice(this.baseUrl.length)
+            : pathname;
+        
+        const path = relativePath.startsWith('/') ? relativePath.slice(1) : relativePath;
+        const segments = path.split('/').filter(Boolean);
+        
+        if (segments.length === 0) {
+            return { route: null, params: {} };
+        }
+        
+        // Проверяем полный путь, а не только первый сегмент
+        for (const route of this.routeConfigs.values()) {
+            const match = route.match(path);
+            if (match) {
+                return { route, params: match.params };
+            }
+        }
+        
+        return { route: null, params: {} };
+    }
+    
+    initFromUrl() {
+        const { route, params } = this.parseCurrentUrl();
+        
+        if (!route) {
+            const defaultRoute = this.routeConfigs.values().next().value;
+            if (defaultRoute) {
+                this.navigateByRoute(defaultRoute.key, {}, { skipUrl: false });
+            }
+            return;
+        }
+        
+        this.currentRoute = route;
+        this.currentParams = params;
+        
+        if (this.store && this.store.syncRoute) {
+            this.store.syncRoute(route.key, params);
+        }
+        
+        if (route.onEnter) {
+            route.onEnter(params);
+        }
+    }
+    
+    buildBreadcrumbs() {
+        if (!this.currentRoute) return [];
+        
+        const breadcrumbs = [];
+        const visited = new Set();
+        
+        let current = this.currentRoute;
+        const chain = [];
+        
+        while (current && !visited.has(current.key)) {
+            visited.add(current.key);
+            chain.unshift(current);
+            current = current.parent ? this.routeConfigs.get(current.parent) : null;
+        }
+        
+        for (const route of chain) {
+            const isLast = route === this.currentRoute;
+            const hasItemId = this.currentParams.itemId && route.itemTitle;
+            
+            breadcrumbs.push({
+                key: route.key,
+                label: typeof route.title === 'function'
+                    ? route.title(this.currentParams)
+                    : route.title,
+                routeKey: route.key,
+                itemId: hasItemId ? this.currentParams.itemId : null,
+                clickable: !isLast || !hasItemId,
+            });
+            
+            if (hasItemId && isLast) {
+                breadcrumbs.push({
+                    key: `${route.key}-item`,
+                    label: route.itemTitle(this.currentParams),
+                    routeKey: route.key,
+                    itemId: this.currentParams.itemId,
+                    clickable: false,
+                });
+            }
+        }
+        
+        return breadcrumbs;
+    }
+
+    render() {
+        if (this.currentRoute && this.currentRoute.component) {
+            const element = document.createElement(this.currentRoute.component);
+            Object.assign(element, this.currentParams);
+            return element;
+        }
+        
+        return html`<div>Unknown route</div>`;
     }
 }
 
-/**
- * Хелпер для программной навигации из любого места
- * @param {string} path - Путь для навигации
- */
-export function navigateTo(path) {
-    window.dispatchEvent(new CustomEvent('navigate', { detail: { path } }));
+export function navigateTo(routeKey, params = {}) {
+    window.dispatchEvent(new CustomEvent('navigate', {
+        detail: { routeKey, params }
+    }));
 }
-

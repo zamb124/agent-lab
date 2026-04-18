@@ -145,10 +145,11 @@ export class PlatformApp extends PlatformElement {
     }
 
     /**
-     * Роутинг. Переопределяется в наследниках.
+     * Настройка Router. Переопределяется в наследниках.
+     * @returns {Object|null} Конфигурация Router { routes: [...], baseUrl, store }
      */
-    setupRoutes() {
-        return {};
+    setupRouter() {
+        return null;
     }
 
     /**
@@ -268,11 +269,20 @@ export class PlatformApp extends PlatformElement {
                 }
             }
 
-            const routes = this.setupRoutes();
-            if (Object.keys(routes).length > 0) {
+            const routerConfig = this.setupRouter();
+            if (routerConfig) {
                 const { Router } = await import('../router/Router.js');
-                this.router = new Router(this, routes);
+                this.router = new Router(this, {
+                    baseUrl: this.getBaseUrl(),
+                    store: this.setupStore() || null,
+                });
+                
+                if (routerConfig.routes) {
+                    this.router.registerRoutes(routerConfig.routes);
+                }
+                
                 this.router.start();
+                window.__PLATFORM_ROUTER__ = this.router;
             }
         } catch (err) {
             console.error('[PlatformApp] Ошибка инициализации:', err);

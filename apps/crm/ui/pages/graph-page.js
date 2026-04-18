@@ -3,6 +3,7 @@ import { PlatformElement } from '@platform/lib/platform-element/index.js';
 import { buttonStyles } from '@platform/lib/styles/shared/button.styles.js';
 import { resolveObjectName } from '@platform/lib/utils/entity-ref.js';
 import { CRMStore } from '../store/crm.store.js';
+import '@platform/lib/components/platform-breadcrumbs.js';
 import '../modals/entity-modal.js';
 import '../modals/entity-merge-modal.js';
 import '../components/graph-canvas.js';
@@ -2106,6 +2107,7 @@ export class GraphPage extends PlatformElement {
         ];
         return html`
             <div class="canvas-layout">
+                <platform-breadcrumbs></platform-breadcrumbs>
                 <section class="canvas-stage" @click=${this._onCanvasStageClick}>
                     <graph-canvas
                         .graphNodes=${visibleGraph.nodes}

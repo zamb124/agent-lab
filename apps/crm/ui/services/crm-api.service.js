@@ -114,6 +114,13 @@ export class CRMAPIService extends BaseService {
         }
         return this.delete(`/entities/${entityId}`);
     }
+
+    async getExclusiveRelatedEntities(entityId) {
+        if (!entityId) {
+            throw new Error('Entity ID is required');
+        }
+        return this.get(`/entities/${entityId}/exclusive-related`);
+    }
     
     async bulkUpdateEntities(items) {
         return this.put('/entities/bulk', { items });
@@ -789,3 +796,4 @@ export class CRMAPIService extends BaseService {
     }
 }
 
+export const crmApi = new CRMAPIService();

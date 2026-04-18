@@ -2,6 +2,7 @@ import { html, css } from 'lit';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
 import { CRMStore } from '../store/crm.store.js';
 import '@platform/lib/components/platform-icon.js';
+import '@platform/lib/components/platform-breadcrumbs.js';
 
 const PALETTE = [
     '#007aff', '#5856d6', '#34c759', '#ff9500', '#ff3b30',
@@ -34,8 +35,6 @@ export class RelationshipTypesPage extends PlatformElement {
             .hero { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); flex-wrap: wrap; }
             .hero-title { display: flex; align-items: center; gap: var(--space-2); color: var(--text-primary); font-size: var(--text-lg); font-weight: 700; }
             .hero-subtitle { color: var(--text-secondary); font-size: var(--text-sm); }
-            .back-btn { display: inline-flex; align-items: center; gap: var(--space-2); background: none; border: none; color: var(--text-secondary); font-size: var(--text-sm); cursor: pointer; padding: 0; }
-            .back-btn:hover { color: var(--text-primary); }
             .type-grid { display: grid; gap: var(--space-3); grid-template-columns: repeat(auto-fit, minmax(min(100%, 280px), 1fr)); }
             .type-card {
                 border: 1px solid var(--crm-stroke); border-radius: var(--radius-lg);
@@ -230,16 +229,9 @@ export class RelationshipTypesPage extends PlatformElement {
         return html`
             <div class="container">
                 <div class="section">
-                    <button class="back-btn" @click=${() => CRMStore.setCurrentView('settings')}>
-                        <platform-icon name="arrow-left" size="14"></platform-icon>
-                        ${this.i18n.t('relationship_types_page.back')}
-                    </button>
+                    <platform-breadcrumbs></platform-breadcrumbs>
                     <div class="hero">
                         <div>
-                            <div class="hero-title">
-                                <platform-icon name="link" size="18"></platform-icon>
-                                ${this.i18n.t('relationship_types_page.hero_title')}
-                            </div>
                             <div class="hero-subtitle">${this.i18n.t('relationship_types_page.hero_subtitle')}</div>
                         </div>
                         ${!this._showCreateForm ? html`

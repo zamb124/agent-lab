@@ -759,3 +759,26 @@ async def get_entity_relationships(
         }
         for r in relationships
     ]}
+
+
+@router.get("/{entity_id}/exclusive-related")
+async def get_exclusive_related_entities(
+    entity_id: str,
+    container: ContainerDep,
+):
+    """Получить список сущностей, которые будут удалены каскадно при удалении заметки"""
+    entity = await container.entity_service.get_entity(entity_id)
+    if not entity:
+        raise HTTPException(status_code=404, detail="Entity not found")
+    
+    if entity.entity_type != "note":
+        raise HTTPException(status_code=400, detail="Only notes have exclusive related entities")
+    
+    ctx = get_context()
+    user_id = ctx.user.user_id if ctx and ctx.user else None
+    company_id = ctx.active_company.company_id if ctx and ctx.active_company else None
+    if not await container.access_control_service.can_delete_entity(entity, user_id, company_id):
+        raise HTTPException(status_code=403, detail="Access denied")
+    
+    exclusive_entities = await container.entity_service.get_exclusive_related_entities_for_note(entity_id)
+    return {"entities": exclusive_entities}

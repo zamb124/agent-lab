@@ -54,18 +54,28 @@ class LLMModelsService:
             "Authorization": f"Bearer {cfg.api_key}",
         }
 
-        async with get_httpx_client(timeout=30.0, proxy=True) as client:
-            response = await client.get(url, headers=headers)
-            response.raise_for_status()
-            data = response.json()
-            # BotHub возвращает список моделей с полем "name" или "id"
-            models = []
-            for item in data if isinstance(data, list) else data.get("data", []):
-                model_id = item.get("name") or item.get("id")
-                if model_id:
-                    models.append(model_id)
-            logger.info(f"BotHub: получено {len(models)} моделей")
-            return models
+        # Используем программируемый API с стратегией direct_first
+        from core.http.client import request_with_strategy, ProxyStrategy
+
+        response = await request_with_strategy(
+            "GET",
+            url,
+            headers=headers,
+            timeout=30.0,
+            strategy=ProxyStrategy.DIRECT_FIRST,
+            direct_attempts=3,
+            proxy_attempts=3,
+        )
+        response.raise_for_status()
+        data = response.json()
+        # BotHub возвращает список моделей с полем "name" или "id"
+        models = []
+        for item in data if isinstance(data, list) else data.get("data", []):
+            model_id = item.get("name") or item.get("id")
+            if model_id:
+                models.append(model_id)
+        logger.info(f"BotHub: получено {len(models)} моделей")
+        return models
 
     async def _fetch_openrouter_models(self) -> List[str]:
         """Запрос моделей от OpenRouter API."""
@@ -82,13 +92,23 @@ class LLMModelsService:
             "X-Title": cfg.site_name,
         }
 
-        async with get_httpx_client(timeout=30.0, proxy=True) as client:
-            response = await client.get(url, headers=headers)
-            response.raise_for_status()
-            data = response.json()
-            models = [item["id"] for item in data.get("data", [])]
-            logger.info(f"OpenRouter: получено {len(models)} моделей")
-            return models
+        # Используем программируемый API с стратегией direct_first
+        from core.http.client import request_with_strategy, ProxyStrategy
+
+        response = await request_with_strategy(
+            "GET",
+            url,
+            headers=headers,
+            timeout=30.0,
+            strategy=ProxyStrategy.DIRECT_FIRST,
+            direct_attempts=3,
+            proxy_attempts=3,
+        )
+        response.raise_for_status()
+        data = response.json()
+        models = [item["id"] for item in data.get("data", [])]
+        logger.info(f"OpenRouter: получено {len(models)} моделей")
+        return models
 
     async def _fetch_openai_models(self) -> List[str]:
         """Запрос моделей от OpenAI API."""
@@ -102,13 +122,23 @@ class LLMModelsService:
         url = f"{base_url}/models"
         headers = {"Authorization": f"Bearer {cfg.api_key}"}
 
-        async with get_httpx_client(timeout=30.0, proxy=True) as client:
-            response = await client.get(url, headers=headers)
-            response.raise_for_status()
-            data = response.json()
-            models = [item["id"] for item in data.get("data", [])]
-            logger.info(f"OpenAI: получено {len(models)} моделей")
-            return models
+        # Используем программируемый API с стратегией direct_first
+        from core.http.client import request_with_strategy, ProxyStrategy
+
+        response = await request_with_strategy(
+            "GET",
+            url,
+            headers=headers,
+            timeout=30.0,
+            strategy=ProxyStrategy.DIRECT_FIRST,
+            direct_attempts=3,
+            proxy_attempts=3,
+        )
+        response.raise_for_status()
+        data = response.json()
+        models = [item["id"] for item in data.get("data", [])]
+        logger.info(f"OpenAI: получено {len(models)} моделей")
+        return models
 
     async def _fetch_provider_litserve_models(self) -> List[str]:
         """Запрос моделей от provider_litserve OpenAI-совместимого API."""

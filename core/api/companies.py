@@ -37,7 +37,7 @@ async def build_my_companies_response(
     return ListResponse[dict](items=items)
 
 
-@router.get("/companies/me", response_model=ListResponse[dict])
+@router.get("/me", response_model=ListResponse[dict])
 async def get_my_companies(request: Request) -> ListResponse[dict]:
     """Возвращает компании текущего пользователя с subdomain и ролями."""
     token_data = getattr(request.state, "token_data", None)

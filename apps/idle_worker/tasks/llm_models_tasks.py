@@ -1,10 +1,43 @@
 """TaskIQ задачи синхронизации LLM моделей."""
 
-from core.clients.service_client import ServiceClient
+from apps.flows.src.container import get_container
 from apps.idle_worker.broker import broker as idle_broker
+from core.context import Context, set_context
+from core.identity.system_bootstrap import (
+    SYSTEM_ADMIN_EMAIL,
+    ensure_system_admin_membership,
+)
 from core.logging import get_logger
+from core.models.identity_models import Company, User
+from core.utils.tokens import get_token_service
 
 logger = get_logger(__name__)
+
+
+async def _build_scheduler_auth_context(container, trace_id: str, session_id: str) -> Context:
+    """Создаёт системный контекст для фоновых задач с авторизацией."""
+    company, user = await ensure_system_admin_membership(container)
+    if user is None:
+        raise ValueError(
+            f"Нет пользователя с email {SYSTEM_ADMIN_EMAIL}: контекст для фоновых задач не собрать"
+        )
+    roles = user.companies.get(company.company_id, [])
+    auth_token = get_token_service().create_token(
+        user_id=user.user_id,
+        company_id=company.company_id,
+        roles=roles,
+    )
+    return Context(
+        user=User(user_id=user.user_id, name=user.name or user.user_id, groups=user.groups),
+        host="system",
+        session_id=session_id,
+        channel="system",
+        language="ru",
+        active_company=Company(company_id=company.company_id, name=company.name, subdomain=company.subdomain),
+        user_companies=[],
+        trace_id=trace_id,
+        auth_token=auth_token,
+    )
 
 
 @idle_broker.task(task_name="sync_llm_models_task", queue_name="idle")
@@ -14,7 +47,21 @@ async def sync_llm_models_task(
     system_task: str | None = None,
 ) -> dict[str, int]:
     """Синхронизирует модели от всех настроенных LLM провайдеров."""
-    service_client = ServiceClient()
-    result = await service_client.post("flows", "/registry/models/sync")
-    logger.info("LLM models sync completed: %s", result)
-    return result
+    container = get_container()
+    
+    # Создаём системный контекст для доступа к сервису
+    scheduler_context = await _build_scheduler_auth_context(
+        container=container,
+        trace_id=f"scheduler:sync_llm_models:{scheduler_task_id}",
+        session_id=f"sync_llm_models:{scheduler_task_id}",
+    )
+    set_context(scheduler_context)
+    
+    try:
+        result = await container.llm_models_service.sync_all_providers()
+        total_synced = sum(result.values())
+        logger.info("LLM models sync completed: %s total=%s", result, total_synced)
+        return {"providers": result, "total": total_synced}
+    finally:
+        from core.context import clear_context
+        clear_context()

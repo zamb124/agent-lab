@@ -10,6 +10,7 @@ import '@platform/lib/components/platform-switch.js';
 import '@platform/lib/components/glass-modal.js';
 import '@platform/lib/components/platform-button.js';
 import '@platform/lib/components/file-text-preview-modal.js';
+import '@platform/lib/components/platform-breadcrumbs.js';
 import '../modals/ai-analysis-modal.js';
 
 const MAX_INLINE_TEXT = 100000;
@@ -73,18 +74,6 @@ export class NamespaceTasksPage extends PlatformElement {
             }
             .hero { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); flex-wrap: wrap; }
             .hero-title { display: flex; align-items: center; gap: var(--space-2); color: var(--text-primary); font-size: var(--text-lg); font-weight: 700; }
-            .back-btn {
-                display: inline-flex;
-                align-items: center;
-                gap: var(--space-2);
-                background: none;
-                border: none;
-                color: var(--text-secondary);
-                font-size: var(--text-sm);
-                cursor: pointer;
-                padding: 0;
-            }
-            .back-btn:hover { color: var(--text-primary); }
             .save-btn {
                 display: inline-flex;
                 align-items: center;
@@ -1191,10 +1180,7 @@ export class NamespaceTasksPage extends PlatformElement {
         return html`
             <div class="container">
                 <div class="section">
-                    <button class="back-btn" type="button" @click=${() => CRMStore.setCurrentView('spaces')}>
-                        <platform-icon name="arrow-left" size="14"></platform-icon>
-                        ${this.i18n.t('task_tracker.back_spaces')}
-                    </button>
+                    <platform-breadcrumbs></platform-breadcrumbs>
                     <div class="hero">
                         <div class="hero-title">
                             <platform-icon name="tasks" size="18"></platform-icon>

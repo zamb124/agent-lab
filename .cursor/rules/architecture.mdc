@@ -154,3 +154,15 @@ trace_id = context.trace_id
 Репозитории берут `company_id` из контекста автоматически.
 Межсервисный доступ к данным: приоритет репозитория при общей БД; `ServiceClient` — для намеренного HTTP API (`repository_inter_service.mdc`).
 `ServiceClient` передаёт `X-Trace-Id`, `Authorization`, `X-Company-Id`, `X-User-Id` из контекста.
+
+## Хлебные крошки (Breadcrumbs)
+
+**ОБЯЗАТЕЛЬНЫЙ core-компонент на всех страницах всех сервисов.**
+
+- Компонент: `platform-breadcrumbs` в `core/frontend/static/lib/components/platform-breadcrumbs.js`
+- Использует только `window.__PLATFORM_ROUTER__` (глобальная ссылка на Router)
+- Автоматически строит цепочку навигации на основе конфигурации Router (`buildBreadcrumbs()`)
+- Импорт: `import '@platform/lib/components/platform-breadcrumbs.js'`
+- Использование: `<platform-breadcrumbs></platform-breadcrumbs>` в начале контента страницы
+- Router инициализируется в `PlatformApp.connectedCallback()` через `setupRouter()`, устанавливает `window.__PLATFORM_ROUTER__`
+- Хлебные крошки работают только там, где инициализирован Router (сервисы с `setupRouter()`)

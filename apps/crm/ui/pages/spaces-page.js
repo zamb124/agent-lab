@@ -6,6 +6,7 @@ import '../components/namespace-grants-panel.js';
 import '@platform/lib/components/platform-icon.js';
 import '@platform/lib/components/platform-help-hint.js';
 import '@platform/lib/components/platform-switch.js';
+import '@platform/lib/components/platform-breadcrumbs.js';
 
 export class SpacesPage extends PlatformElement {
     static properties = {
@@ -77,8 +78,6 @@ export class SpacesPage extends PlatformElement {
             .chip { border: 1px solid var(--crm-stroke); border-radius: var(--radius-full); padding: 2px var(--space-2); color: var(--text-secondary); background: var(--crm-surface-elevated); font-size: var(--text-xs); }
             .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace; font-size: var(--text-xs); }
             .menu-btn { width: 32px; height: 32px; display: none; align-items: center; justify-content: center; border-radius: var(--radius-md); background: var(--crm-surface-muted); border: 1px solid var(--crm-stroke); color: var(--text-primary); cursor: pointer; }
-            .back-btn { display: inline-flex; align-items: center; gap: var(--space-2); background: none; border: none; color: var(--text-secondary); font-size: var(--text-sm); cursor: pointer; padding: 0; transition: color var(--duration-fast); }
-            .back-btn:hover { color: var(--text-primary); }
             .schema-empty { color: var(--text-tertiary); font-size: var(--text-sm); }
             .namespace-selector { display: flex; gap: var(--space-2); flex-wrap: wrap; }
             .namespace-pill { display: inline-flex; align-items: center; gap: var(--space-2); border: 1px solid var(--crm-stroke); border-radius: var(--radius-full); background: var(--crm-surface-elevated); color: var(--text-primary); padding: 4px var(--space-2); font-size: var(--text-xs); cursor: pointer; }
@@ -441,19 +440,9 @@ export class SpacesPage extends PlatformElement {
         return html`
             <div class="container">
                 <div class="section">
-                    <button class="back-btn" @click=${() => CRMStore.setCurrentView('settings')}>
-                        <platform-icon name="arrow-left" size="14"></platform-icon>
-                        ${this.i18n.t('spaces_page.sidebar_title')}
-                    </button>
+                    <platform-breadcrumbs></platform-breadcrumbs>
                     <div class="hero">
                         <div>
-                            <div class="hero-title">
-                                <button class="menu-btn" @click=${this._openSidebar} title=${this.i18n.t('settings_hub.open_menu')}>
-                                    <platform-icon name="menu" size="18"></platform-icon>
-                                </button>
-                                <platform-icon name="folder" size="18"></platform-icon>
-                                ${this.i18n.t('spaces_page.hero_title')}
-                            </div>
                             <div class="hero-subtitle">${this.i18n.t('spaces_page.hero_subtitle')}</div>
                         </div>
                         <button type="button" class="save-btn soft-btn" @click=${this._openNamespaceImports}>

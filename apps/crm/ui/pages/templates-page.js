@@ -10,6 +10,7 @@ import '@platform/lib/components/platform-icon.js';
 import '@platform/lib/components/platform-icon-picker.js';
 import '@platform/lib/components/platform-switch.js';
 import '@platform/lib/components/platform-help-hint.js';
+import '@platform/lib/components/platform-breadcrumbs.js';
 
 function getDefaultTypeDraft() {
     return {
@@ -268,8 +269,6 @@ export class TemplatesPage extends PlatformElement {
             .namespace-pill:disabled { opacity: 0.5; cursor: not-allowed; }
             .icon-input-wrap { display: grid; grid-template-columns: 40px minmax(0, 1fr); gap: var(--space-2); align-items: center; }
             .icon-preview { width: 36px; height: 36px; border-radius: var(--radius-md); border: 1px solid var(--crm-stroke); background: var(--crm-surface-elevated); display: flex; align-items: center; justify-content: center; color: var(--text-secondary); }
-            .back-btn { display: inline-flex; align-items: center; gap: var(--space-2); background: none; border: none; color: var(--text-secondary); font-size: var(--text-sm); cursor: pointer; padding: 0; transition: color var(--duration-fast); }
-            .back-btn:hover { color: var(--text-primary); }
             details { border: 1px solid var(--crm-stroke); border-radius: var(--radius-md); background: var(--crm-surface-muted); padding: var(--space-3); }
             details > summary { cursor: pointer; color: var(--text-primary); font-size: var(--text-sm); font-weight: 600; margin-bottom: var(--space-2); }
             @media (max-width: 980px) { .split { grid-template-columns: 1fr; } .schema-builder-grid { grid-template-columns: 1fr; } }
@@ -540,19 +539,9 @@ export class TemplatesPage extends PlatformElement {
         return html`
             <div class="container">
                 <div class="section">
-                    <button class="back-btn" @click=${() => CRMStore.setCurrentView('settings')}>
-                        <platform-icon name="arrow-left" size="14"></platform-icon>
-                        ${t('page.back_settings')}
-                    </button>
+                    <platform-breadcrumbs></platform-breadcrumbs>
                     <div class="hero">
                         <div>
-                            <div class="hero-title">
-                                <button class="menu-btn" @click=${this._openSidebar} title=${t('page.open_menu')}>
-                                    <platform-icon name="menu" size="18"></platform-icon>
-                                </button>
-                                <platform-icon name="settings" size="18"></platform-icon>
-                                ${t('page.hero_title')}
-                            </div>
                             <div class="hero-subtitle">${t('page.hero_subtitle')}</div>
                         </div>
                     </div>

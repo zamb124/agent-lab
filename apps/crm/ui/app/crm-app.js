@@ -16,6 +16,7 @@ import '../pages/templates-page.js';
 import '../pages/spaces-page.js';
 import '../pages/namespace-tasks-page.js';
 import '../pages/relationship-types-page.js';
+import '../pages/note-page.js';
 import '../modals/entity-modal.js';
 import '../modals/note-view-modal.js';
 import '../modals/ai-analysis-modal.js';
@@ -38,11 +39,17 @@ export class CRMApp extends PlatformApp {
         ...PlatformApp.properties,
         _isMobile: { state: true },
         _currentView: { state: true },
+        _currentNoteId: { state: true },
         _showNamespaceModal: { state: true },
         _showAiModal: { state: true },
         _mobileSearchOpen: { state: true },
         _mobileSearchInputValue: { state: true },
     };
+    
+    connectedCallback() {
+        super.connectedCallback();
+        this.setAttribute('data-platform-app', '');
+    }
 
     static styles = [
         PlatformApp.styles,
@@ -148,6 +155,7 @@ export class CRMApp extends PlatformApp {
         super();
         this._isMobile = false;
         this._currentView = 'notes';
+        this._currentNoteId = null;
         this._showNamespaceModal = false;
         this._showAiModal = false;
         this._mobileSearchOpen = false;
@@ -213,13 +221,104 @@ export class CRMApp extends PlatformApp {
     getBaseUrl() {
         return '/crm';
     }
+    
+    setupRouter() {
+        return {
+            routes: [
+                {
+                    key: 'note',
+                    path: 'notes/:itemId',
+                    title: (params) => {
+                        const note = CRMStore.state.entities.notes.find(n => n.entity_id === params.itemId);
+                        return note?.name || 'Заметка';
+                    },
+                    parent: 'notes',
+                    component: 'note-page',
+                    onEnter: (params) => {
+                        if (params.itemId) {
+                            CRMStore.setCurrentNoteId(params.itemId, { skipUrl: true });
+                        }
+                    },
+                },
+                {
+                    key: 'notes',
+                    path: 'notes',
+                    title: () => this.i18n.t('app_shell.views.notes.title', {}, 'crm'),
+                    parent: null,
+                    component: 'daily-notes-page',
+                },
+                {
+                    key: 'entities',
+                    path: 'entities',
+                    title: () => this.i18n.t('app_shell.views.entities.title', {}, 'crm'),
+                    parent: null,
+                    component: 'entities-page',
+                    itemTitle: (params) => {
+                        const entity = CRMStore.state.entities.currentEntity;
+                        return entity?.name || this.i18n.t('entities_page.untitled', {}, 'crm');
+                    },
+                    onEnter: (params) => {
+                        if (params.itemId) {
+                            CRMStore.setCurrentEntity(params.itemId, { skipUrl: true });
+                        }
+                    },
+                },
+                {
+                    key: 'graph',
+                    path: 'graph',
+                    title: () => this.i18n.t('app_shell.views.graph.title', {}, 'crm'),
+                    parent: null,
+                    component: 'graph-page',
+                },
+                {
+                    key: 'tasks',
+                    path: 'tasks',
+                    title: () => this.i18n.t('app_shell.views.tasks.title', {}, 'crm'),
+                    parent: null,
+                    component: 'tasks-page',
+                },
+                {
+                    key: 'settings',
+                    path: 'settings',
+                    title: () => this.i18n.t('app_shell.views.settings.title', {}, 'crm'),
+                    parent: null,
+                    component: 'settings-hub-page',
+                },
+                {
+                    key: 'templates',
+                    path: 'templates',
+                    title: () => this.i18n.t('app_shell.views.templates.title', {}, 'crm'),
+                    parent: 'settings',
+                    component: 'templates-page',
+                },
+                {
+                    key: 'spaces',
+                    path: 'spaces',
+                    title: () => this.i18n.t('app_shell.views.spaces.title', {}, 'crm'),
+                    parent: 'settings',
+                    component: 'spaces-page',
+                },
+                {
+                    key: 'namespace_imports',
+                    path: 'namespace_imports',
+                    title: () => this.i18n.t('app_shell.views.namespace_imports.title', {}, 'crm'),
+                    parent: 'settings',
+                    component: 'namespace-tasks-page',
+                },
+                {
+                    key: 'relationship_types',
+                    path: 'relationship_types',
+                    title: () => this.i18n.t('app_shell.views.relationship_types.title', {}, 'crm'),
+                    parent: 'settings',
+                    component: 'relationship-types-page',
+                },
+            ],
+        };
+    }
 
     async initServices() {
         await super.initServices();
         this.services.register('crmApi', new CRMAPIService('/crm/api/v1'));
-
-        CRMStore.initFromUrl();
-        CRMStore.setupPopstateListener();
 
         this._unsubscribe = CRMStore.subscribe((state) => {
             this._isMobile = state.ui.isMobile;
@@ -227,6 +326,7 @@ export class CRMApp extends PlatformApp {
                 this._mobileSearchOpen = false;
             }
             this._currentView = state.ui.currentView;
+            this._currentNoteId = state.ui.currentNoteId;
         });
 
         this._checkMobile();
@@ -383,23 +483,8 @@ export class CRMApp extends PlatformApp {
     }
 
     _createNote() {
-        const focusDate = CRMStore.getDailyNotesFocusDate();
-        const draftNote = {
-            entity_id: `draft-${Date.now()}`,
-            entity_type: 'note',
-            entity_subtype: null,
-            name: '',
-            description: '',
-            note_date: focusDate,
-            attributes: {},
-        };
-        const modal = document.createElement('note-view-modal');
-        modal.note = draftNote;
-        modal.startInEditMode = true;
-        modal.draftMode = true;
-        document.body.appendChild(modal);
-        modal.showModal();
-        modal.addEventListener('close', () => modal.remove());
+        CRMStore.setCurrentNoteId('new');
+        CRMStore.setCurrentView('note');
     }
 
     _createEntity() {
@@ -412,6 +497,10 @@ export class CRMApp extends PlatformApp {
     _renderContent() {
         if (this._currentView === 'notes') {
             return html`<daily-notes-page @analysis-ready=${this._openAiModal}></daily-notes-page>`;
+        }
+
+        if (this._currentView === 'note') {
+            return html`<note-page></note-page>`;
         }
 
         if (this._currentView === 'entities') {

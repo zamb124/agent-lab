@@ -14,6 +14,7 @@ import '@platform/lib/components/platform-icon.js';
 import '@platform/lib/components/platform-date-picker.js';
 import '@platform/lib/components/fields/platform-field.js';
 import '@platform/lib/components/glass-spinner.js';
+import '@platform/lib/components/platform-breadcrumbs.js';
 
 const MERGE_DRAG_MIME = 'application/x-crm-entity-merge';
 
@@ -1680,10 +1681,9 @@ export class EntitiesPage extends PlatformElement {
 
             ${listActive ? html`
                 <div class="page-toolbar">
-                    ${!this._isMobile ? html`<div class="section-label">${this.i18n.t('entities.title')}</div>` : ''}
+                    <platform-breadcrumbs></platform-breadcrumbs>
                     <div class="top-row">
                         <div class="title">
-                            ${this.i18n.t('entities.title')}
                             <span class="entities-count">(${this._entities.length})</span>
                         </div>
                         <label class="search-box">

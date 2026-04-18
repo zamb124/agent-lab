@@ -589,6 +589,12 @@
         "add_attribute_filter": "Add condition",
         "reset": "Reset filters"
     },
+    "note_delete_modal_title": "Delete note",
+    "note_delete_modal_message": "Are you sure you want to delete this note?",
+    "note_delete_modal_confirm": "Delete",
+    "note_delete_modal_cancel": "Cancel",
+    "note_delete_modal_related_entities": "Related entities that will be deleted:",
+    "note_delete_modal_no_related_entities": "No related entities",
     "entity_card": {
         "requester_fallback": "User",
         "related_entities": "Related entities",
@@ -857,6 +863,12 @@
         "err_summary_refresh": "Failed to refresh summary",
         "analyze_already_running": "Note analysis is already in progress",
         "err_save_note": "Failed to save note"
+    },
+    "note_page": {
+        "loading": "Loading note...",
+        "not_found": "Note not found",
+        "back_to_notes": "Back to notes",
+        "untitled": "Untitled"
     },
     "ai_analysis_modal": {
         "loading_1": "Checking text...",

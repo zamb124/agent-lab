@@ -1216,7 +1216,7 @@ export class AIAnalysisModal extends PlatformModal {
         }
         const row = this._suggestions.find((s) => s?.draft_entity_id === draftEntityId && s.entity_type);
         if (!row || typeof row.name !== 'string' || row.name.trim().length === 0) {
-            throw new Error(`No label for draft_entity_id=${draftEntityId}`);
+            return draftEntityId;
         }
         return row.name.trim();
     }

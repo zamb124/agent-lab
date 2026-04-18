@@ -125,6 +125,18 @@ core/frontend/static/
 
 **Сохранение в модалке:** основное действие submit — **иконка `save`** в шапке (`.header-buttons`), **слева** от кнопки полноэкранного режима: `renderSaveHeaderButton()` / `_renderHeaderSaveIcon` в `glass-modal.js`; у `PlatformFormModal` по умолчанию; футер — **отмена** (или пусто). Модалки со своим `render()` без `super` — порядок иконок в шапке вручную. У `GlassModal`: **`hideHeaderClose`** — без кнопки закрытия в шапке (закрытие через scrim/Esc); **`headerSavePrimary`** — класс `.header-save-btn--primary` (токены `--crm-button-primary-*` с fallback на `--platform-btn-primary-*`).
 
+## Хлебные крошки (Breadcrumbs)
+
+**ОБЯЗАТЕЛЬНЫЙ core-компонент на всех страницах всех сервисов.**
+
+- Компонент: `platform-breadcrumbs` в `core/frontend/static/lib/components/platform-breadcrumbs.js`
+- Использует только `window.__PLATFORM_ROUTER__` (глобальная ссылка на Router)
+- Автоматически строит цепочку навигации на основе конфигурации Router (`buildBreadcrumbs()`)
+- Импорт: `import '@platform/lib/components/platform-breadcrumbs.js'`
+- Использование: `<platform-breadcrumbs></platform-breadcrumbs>` в начале контента страницы
+- Router инициализируется в `PlatformApp.connectedCallback()` через `setupRouter()`, устанавливает `window.__PLATFORM_ROUTER__`
+- Хлебные крошки работают только там, где инициализирован Router (сервисы с `setupRouter()`)
+
 **GlassModal (`glass-modal.js`):** не импортирует общий `modal.styles.js` (там `:host` ломает разметку). Хост при `open`: `position: fixed; inset: 0` и **перенос в `document.body`** (`willUpdate` + `getUpdateComplete`), иначе предки с `backdrop-filter` ломают fixed и модалка встаёт в поток. Оверлей — `.modal-overlay` + `.modal-scrim` (затемнение и blur). Панель `.modal`: **`display: flex; flex-direction: column; overflow: hidden; max-height: …`**, шапка **`.modal-header`** и футер **`.modal-actions`** не участвуют в прокрутке, скролл только у **`.modal-content`** (`flex: 1 1 auto; min-height: 0; overflow-y: auto`). У **`.modal`** задаются **`--modal-content-inset`** и **`--modal-content-radius`**: тело **`.modal-content`** с отступами от краёв панели и **`border-radius`**, чтобы блоки внутри визуально обрезались по дуге; футер сдвинут теми же боковыми inset. Для **`.graph-modal-body`** margin и radius у контента сбрасываются (полный край). Полноэкран: размеры через `min(…vw, 100vw - отступ)` / `min(…vh, 100dvh - отступ)`. Панель `.modal`: `position: absolute; left: 50%; top: 50%` и `transform: translate(-50%, -50%)`; **вход** затемнения и панели — `@keyframes` + `animation` с `both` (как `modalShellStyles` у drawer), а не только `transition` на `[open]` (после портала браузер часто не рисует «до»). Класс `.panel-enter-active` до `animationend`, затем устойчивое состояние без повторного запуска анимации после перетаскивания. По размерам (fullscreen) — `transition` на width/height/max-*. Восстановление портала после закрытия — `requestAnimationFrame` (оверлей без `transition` на исчезновение). Переопределяя `getUpdateComplete()`, вызывай `await super.getUpdateComplete()`. После портала в `body` при **светлом** `html`/`body` срабатывает `:host-context([data-theme="light"])` — панель становится белой; при необходимости тёмной панели при светлом документе на хосте задать **`data-theme="dark"`** (блок `:host([data-theme="dark"])` в `glass-modal.js`). Заголовок шапки — свойство **`heading`**, не **`title`** (иначе нативный tooltip на кастомном элементе). Контент — **`slot="content"`**, футер — **`slot="actions"`**. **Форма заявки на лендинге** (`/`): своя модалка в **`apps/frontend/ui/components/landing/landing-cta.js`** (fixed overlay, тёмный glass в стиле лендинга, `platform-icon`), **без** `GlassModal`.
 
 apps/{service}/ui/

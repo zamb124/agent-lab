@@ -589,6 +589,12 @@
         "add_attribute_filter": "Добавить условие",
         "reset": "Сбросить фильтры"
     },
+    "note_delete_modal_title": "Удалить заметку",
+    "note_delete_modal_message": "Вы уверены, что хотите удалить эту заметку?",
+    "note_delete_modal_confirm": "Удалить",
+    "note_delete_modal_cancel": "Отмена",
+    "note_delete_modal_related_entities": "Связанные сущности, которые будут удалены:",
+    "note_delete_modal_no_related_entities": "Нет связанных сущностей",
     "entity_card": {
         "requester_fallback": "Пользователь",
         "related_entities": "Связанные сущности",
@@ -857,6 +863,12 @@
         "err_summary_refresh": "Ошибка обновления сводки",
         "analyze_already_running": "Анализ заметки уже выполняется",
         "err_save_note": "Ошибка сохранения заметки"
+    },
+    "note_page": {
+        "loading": "Загрузка заметки...",
+        "not_found": "Заметка не найдена",
+        "back_to_notes": "Назад к заметкам",
+        "untitled": "Без названия"
     },
     "ai_analysis_modal": {
         "loading_1": "Проверяю текст...",

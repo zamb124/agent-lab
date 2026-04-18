@@ -273,6 +273,7 @@ const baseStore = new BaseStore('crm', {
     },
     ui: {
         currentView: 'notes',
+        currentNoteId: null,
         sidebarOpen: false,
         isMobile: false,
         filterTags: [],
@@ -326,40 +327,33 @@ export const CRMStore = {
         return baseStore.setState(updater);
     },
     
-    // URL синхронизация
-    initFromUrl() {
-        const path = window.location.pathname;
-        const match = path.match(/^\/crm\/(\w+)(?:\/(.+))?/);
-        
-        if (!match) {
-            // /crm/ без раздела - редирект на notes
-            history.replaceState({}, '', '/crm/notes');
-            return;
+    syncRoute(routeKey, params) {
+        if (routeKey === 'note' && params.itemId) {
+            baseStore.setState((s) => ({
+                ui: { ...s.ui, currentView: 'note', currentNoteId: params.itemId }
+            }));
+        } else if (routeKey === 'notes' && params.itemId) {
+            baseStore.setState((s) => ({
+                ui: { ...s.ui, currentView: 'notes', currentNoteId: params.itemId }
+            }));
+        } else if (routeKey === 'entities' && params.itemId) {
+            baseStore.setState((s) => ({
+                ui: { ...s.ui, currentView: 'entities' },
+                entities: { ...s.entities, currentEntityId: params.itemId }
+            }));
+        } else if (routeKey === 'notes') {
+            baseStore.setState((s) => ({
+                ui: { ...s.ui, currentView: 'notes' }
+            }));
+        } else if (routeKey === 'entities') {
+            baseStore.setState((s) => ({
+                ui: { ...s.ui, currentView: 'entities' }
+            }));
+        } else {
+            baseStore.setState((s) => ({
+                ui: { ...s.ui, currentView: routeKey }
+            }));
         }
-        
-        const [, view, id] = match;
-        const validViews = ['notes', 'entities', 'graph', 'tasks', 'settings', 'templates', 'spaces', 'namespace_imports', 'relationship_types'];
-        
-        if (!validViews.includes(view)) {
-            history.replaceState({}, '', '/crm/notes');
-            return;
-        }
-        
-        this.setCurrentView(view, { skipUrl: true });
-        
-        if (id) {
-            if (view === 'notes') {
-                this.setCurrentNote(id, { skipUrl: true });
-            } else if (view === 'entities') {
-                this.setCurrentEntity(id, { skipUrl: true });
-            }
-        }
-    },
-    
-    setupPopstateListener() {
-        window.addEventListener('popstate', () => {
-            this.initFromUrl();
-        });
     },
     
     setMobile(isMobile) {
@@ -373,16 +367,27 @@ export const CRMStore = {
             ui: { ...s.ui, currentView: view }
         }));
         
-        if (!options.skipUrl) {
-            const currentId = view === 'notes' 
-                ? baseStore.state.entities.currentNoteId 
-                : view === 'entities' 
-                    ? baseStore.state.entities.currentEntityId 
-                    : null;
-            
-            const url = currentId ? `/crm/${view}/${currentId}` : `/crm/${view}`;
-            history.pushState({}, '', url);
+        if (!options.skipUrl && window.__PLATFORM_ROUTER__) {
+            window.__PLATFORM_ROUTER__.navigateByRoute(view, {}, { skipUrl: false });
         }
+    },
+
+    setCurrentNoteId(noteId, options = {}) {
+        baseStore.setState((s) => ({
+            ui: { ...s.ui, currentNoteId: noteId }
+        }));
+        
+        if (!options.skipUrl && window.__PLATFORM_ROUTER__) {
+            window.__PLATFORM_ROUTER__.navigateByRoute('notes', { itemId: noteId }, { skipUrl: false });
+        }
+    },
+    
+    setCurrentNote(noteId, options = {}) {
+        return this.setCurrentNoteId(noteId, options);
+    },
+
+    getCurrentNoteId() {
+        return baseStore.state.ui.currentNoteId;
     },
 
     getDailyNotesRange() {
@@ -685,9 +690,6 @@ export const CRMStore = {
 
             let noteRow = await crmApi.getEntity(noteId);
             const serverDraft = noteRow.attributes?.ai_analysis_draft;
-            if (!serverDraft || typeof serverDraft.draft_version !== 'number') {
-                throw new Error('Server did not persist analyze draft: expected attributes.ai_analysis_draft with draft_version');
-            }
 
             if (noteSummaryText.length > 0) {
                 const attrs = { ...(noteRow.attributes && typeof noteRow.attributes === 'object' ? noteRow.attributes : {}) };
@@ -698,9 +700,6 @@ export const CRMStore = {
             }
 
             const draftSnapshot = noteRow.attributes?.ai_analysis_draft;
-            if (!draftSnapshot || typeof draftSnapshot.draft_version !== 'number') {
-                throw new Error('ai_analysis_draft missing after note update');
-            }
 
             baseStore.setState((s) => ({
                 entities: {
@@ -726,10 +725,12 @@ export const CRMStore = {
                             }
                             : {}),
                     },
-                    draftByNoteId: {
-                        ...s.ai.draftByNoteId,
-                        [noteId]: draftSnapshot,
-                    },
+                    ...(draftSnapshot && typeof draftSnapshot.draft_version === 'number' ? {
+                        draftByNoteId: {
+                            ...s.ai.draftByNoteId,
+                            [noteId]: draftSnapshot,
+                        },
+                    } : {}),
                 },
             }));
 
@@ -1375,6 +1376,10 @@ export const CRMStore = {
         if (!draft || typeof draft.draft_version !== 'number') {
             throw new Error('No analyze draft on server for this note; run analyze with note_id');
         }
+
+        baseStore.setState((s) => ({
+            ai: { ...s.ai, analyzing: false, analyzingNoteId: null }
+        }));
 
         const { task_id } = await crmApi.applyNoteAnalysisDraft(currentNoteId);
 

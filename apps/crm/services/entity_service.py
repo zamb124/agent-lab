@@ -1222,6 +1222,28 @@ class EntityService:
             if entity_id in entities_to_delete and entity_id != note_entity_id
         ]
 
+    async def get_exclusive_related_entities_for_note(
+        self,
+        note_entity_id: str,
+    ) -> List[Dict[str, Any]]:
+        """Возвращает список сущностей, которые будут удалены каскадно вместе с заметкой."""
+        exclusive_entity_ids = await self._collect_exclusive_related_entities_for_note(note_entity_id)
+        if not exclusive_entity_ids:
+            return []
+
+        entities = await self._entity_repo.get_by_ids(exclusive_entity_ids)
+        return [
+            {
+                "entity_id": entity.entity_id,
+                "name": entity.name,
+                "entity_type": entity.entity_type,
+                "entity_subtype": entity.entity_subtype,
+                "namespace": entity.namespace,
+                "description": entity.description,
+            }
+            for entity in entities
+        ]
+
     async def _delete_entity_with_saga(
         self,
         entity_id: str,

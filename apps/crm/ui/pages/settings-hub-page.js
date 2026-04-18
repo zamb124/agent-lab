@@ -2,6 +2,7 @@ import { html, css } from 'lit';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
 import { CRMStore } from '../store/crm.store.js';
 import '@platform/lib/components/platform-icon.js';
+import '@platform/lib/components/platform-breadcrumbs.js';
 
 export class SettingsHubPage extends PlatformElement {
     static styles = [
@@ -111,12 +112,9 @@ export class SettingsHubPage extends PlatformElement {
         return html`
             <div class="container">
                 <div class="section">
+                    <platform-breadcrumbs></platform-breadcrumbs>
                     <div class="hero">
                         <div>
-                            <div class="hero-title">
-                                <platform-icon name="settings" size="18"></platform-icon>
-                                ${this.i18n.t('settings_hub.hero_title')}
-                            </div>
                             <div class="hero-subtitle">${this.i18n.t('settings_hub.hero_subtitle')}</div>
                         </div>
                     </div>

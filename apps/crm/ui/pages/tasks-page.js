@@ -6,6 +6,7 @@ import { CRMStore } from '../store/crm.store.js';
 import '../modals/entity-modal.js';
 import '@platform/lib/components/platform-icon.js';
 import '@platform/lib/components/glass-spinner.js';
+import '@platform/lib/components/platform-breadcrumbs.js';
 
 const TASK_DND_MIME = 'application/x-crm-task-id';
 
@@ -959,9 +960,8 @@ export class TasksPage extends PlatformElement {
 
         return html`
             <div class="page-toolbar">
-                <div class="section-label">${this.i18n.t('tasks.title')}</div>
+                <platform-breadcrumbs></platform-breadcrumbs>
                 <div class="top-row">
-                    <div class="title">${this.i18n.t('tasks.title')}</div>
                     <label class="search-box">
                         <platform-icon name="search" size="14"></platform-icon>
                         <input

@@ -2,11 +2,14 @@ import { html, css } from 'lit';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
 import { formStyles } from '@platform/lib/styles/shared/form.styles.js';
 import { unsafeHTML } from 'lit/directives/unsafe-html.js';
+import './entity-card.js';
+import './note-delete-modal.js';
 import '@platform/lib/components/platform-icon.js';
 import '@platform/lib/components/platform-date-picker.js';
 import { CRMStore } from '../store/crm.store.js';
 import { resolveFileIconKey } from '@platform/services/icon.service.js';
 import { getUserMediaCompat, hasGetUserMediaApi, pickVoiceMimeType } from '@platform/lib/utils/voice-recording.js';
+import { crmApi } from '../services/crm-api.service.js';
 
 function getLocalIsoDate() {
     const now = new Date();
@@ -37,6 +40,7 @@ export class NoteContent extends PlatformElement {
         draftMode: { type: Boolean },
         processingAttachment: { type: Boolean },
         processingRelationship: { type: Boolean },
+        showTitle: { type: Boolean },
         _draftTitle: { state: true },
         _draftText: { state: true },
         _draftSubtype: { state: true },
@@ -61,6 +65,7 @@ export class NoteContent extends PlatformElement {
         _mentionSelectedIdx: { state: true },
         _mentionLoading: { state: true },
         _mentionCoords: { state: true },
+        _loading: { state: true },
     };
 
     static styles = [
@@ -72,6 +77,13 @@ export class NoteContent extends PlatformElement {
                 width: 100%;
                 height: 100%;
                 min-height: 0;
+            }
+
+            .note-loading {
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                height: 100%;
             }
 
             .layout {
@@ -101,18 +113,33 @@ export class NoteContent extends PlatformElement {
             }
 
             .note-header {
-                display: flex;
-                align-items: flex-start;
-                justify-content: space-between;
-                gap: 24px;
+                display: grid;
+                grid-template-columns: 1fr auto;
+                grid-template-rows: auto auto;
+                gap: 16px 24px;
+                align-items: start;
             }
 
             .note-title-wrap {
                 display: flex;
                 flex-direction: column;
                 gap: 2px;
+            }
+
+            .note-actions {
+                grid-column: 2;
+                grid-row: 1;
+            }
+
+            .note-edit-meta-row {
+                grid-column: 1 / -1;
+                grid-row: 2;
+                width: 100%;
                 min-width: 0;
-                flex: 1;
+                display: grid;
+                grid-template-columns: 140px 160px 1fr 1fr;
+                gap: 8px 12px;
+                align-items: start;
             }
 
             .note-title {
@@ -162,25 +189,72 @@ export class NoteContent extends PlatformElement {
 
             .note-edit-meta-group {
                 display: block;
-                padding: 8px 12px;
-                margin-top: 8px;
-                border-radius: var(--radius-md);
-                background: var(--glass-tint-subtle);
-                border: 1px solid var(--border-subtle);
-            }
-
-            .note-edit-meta-row {
-                display: grid;
-                grid-template-columns: minmax(0, 1fr) minmax(104px, 128px) minmax(0, 1fr) minmax(0, 1fr);
-                gap: 8px 10px;
-                align-items: start;
             }
 
             .note-meta-cell {
-                min-width: 0;
                 display: flex;
                 flex-direction: column;
                 gap: 2px;
+            }
+
+            .voice-control {
+                display: flex;
+                align-items: center;
+                gap: 8px;
+                width: 100%;
+                position: relative;
+                min-width: 0;
+            }
+
+            .voice-control-display {
+                flex: 1;
+                min-width: 0;
+                display: flex;
+                align-items: center;
+                gap: 6px;
+                padding: 10px 14px;
+                background: var(--glass-tint-subtle);
+                border: 1px solid var(--border-subtle);
+                border-radius: var(--radius-lg);
+                cursor: pointer;
+            }
+
+            .voice-control-display:hover {
+                border-color: var(--border-strong);
+            }
+
+            .voice-control-label {
+                font-size: 12px;
+                color: var(--text-secondary);
+            }
+
+            .voice-control-value {
+                font-size: 14px;
+                color: var(--text-primary);
+                overflow: hidden;
+                text-overflow: ellipsis;
+                white-space: nowrap;
+            }
+
+            .voice-control-clear {
+                flex-shrink: 0;
+                width: 44px;
+                height: 44px;
+                border: 1px solid var(--border-subtle);
+                border-radius: var(--radius-lg);
+                display: inline-flex;
+                align-items: center;
+                justify-content: center;
+                cursor: pointer;
+                background: var(--glass-tint-medium);
+                color: var(--text-tertiary);
+                transition: background var(--duration-fast), border-color var(--duration-fast), color var(--duration-fast);
+            }
+
+            .voice-control-clear:hover {
+                border-color: var(--border-strong);
+                background: var(--glass-tint-strong);
+                color: var(--text-primary);
             }
 
             .note-field-label {
@@ -203,35 +277,23 @@ export class NoteContent extends PlatformElement {
             }
 
             .note-edit-meta-group .form-select {
-                min-height: 30px;
-                padding: 4px 8px;
-                font-size: 12px;
-                line-height: 16px;
-                border-radius: 8px;
+                border-radius: var(--radius-lg);
+                width: 100%;
             }
 
             .note-edit-meta-group .note-date-picker {
                 min-width: 0;
                 --platform-date-picker-labeled-bg: var(--glass-tint-subtle);
                 --platform-date-picker-labeled-border: var(--border-subtle);
-                --platform-date-picker-labeled-height: 30px;
-                --platform-date-picker-labeled-padding: 0 8px;
-                --platform-date-picker-label-size: 10px;
-                --platform-date-picker-value-size: 12px;
+                --platform-date-picker-labeled-border-radius: var(--radius-lg);
             }
 
             .note-edit-meta-group .entity-search-input {
-                padding: 5px 8px;
-                font-size: 12px;
-                line-height: 16px;
-                min-height: 30px;
-                border-radius: 8px;
+                border-radius: var(--radius-lg);
             }
 
             .note-edit-meta-group .entity-search-clear {
-                width: 30px;
-                height: 30px;
-                border-radius: 8px;
+                border-radius: var(--radius-lg);
             }
 
             .note-edit-meta-group .entity-search-panel {
@@ -247,13 +309,14 @@ export class NoteContent extends PlatformElement {
 
             @media (max-width: 1100px) {
                 .note-edit-meta-row {
-                    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+                    flex-wrap: wrap;
                 }
             }
 
             @media (max-width: 560px) {
                 .note-edit-meta-row {
-                    grid-template-columns: 1fr;
+                    flex-direction: column;
+                    align-items: stretch;
                 }
             }
 
@@ -267,14 +330,19 @@ export class NoteContent extends PlatformElement {
 
             .entity-search-wrap {
                 position: relative;
-                width: 100%;
                 min-width: 0;
+                width: 100%;
             }
 
             .entity-search-input-row {
                 display: flex;
                 align-items: stretch;
                 gap: 8px;
+                border-radius: 0;
+            }
+
+            .entity-search-input-row > * {
+                border-radius: var(--radius-lg);
             }
 
             .entity-search-input {
@@ -286,7 +354,7 @@ export class NoteContent extends PlatformElement {
                 color: var(--text-primary);
                 background: var(--glass-tint-subtle);
                 border: 1px solid var(--border-subtle);
-                border-radius: var(--radius-md);
+                border-radius: var(--radius-lg);
                 outline: none;
                 box-shadow: none;
                 -webkit-backdrop-filter: none;
@@ -313,7 +381,7 @@ export class NoteContent extends PlatformElement {
                 width: 44px;
                 height: 44px;
                 border: 1px solid var(--border-subtle);
-                border-radius: var(--radius-md);
+                border-radius: var(--radius-lg);
                 padding: 0;
                 display: inline-flex;
                 align-items: center;
@@ -1301,8 +1369,9 @@ export class NoteContent extends PlatformElement {
                 line-height: 20px;
                 font-weight: 600;
                 color: var(--text-primary);
-                overflow-wrap: anywhere;
-                word-break: break-word;
+                white-space: nowrap;
+                overflow: hidden;
+                text-overflow: ellipsis;
             }
 
             .relationship-subtitle {
@@ -1310,15 +1379,17 @@ export class NoteContent extends PlatformElement {
                 font-size: 12px;
                 line-height: 16px;
                 color: var(--text-secondary);
-                overflow-wrap: anywhere;
-                word-break: break-word;
+                white-space: nowrap;
+                overflow: hidden;
+                text-overflow: ellipsis;
             }
 
             .relationship-entities {
                 display: inline-flex;
                 align-items: center;
                 gap: 6px;
-                flex-wrap: wrap;
+                flex-wrap: nowrap;
+                overflow: hidden;
             }
 
             .relationship-entity-btn {
@@ -1331,6 +1402,10 @@ export class NoteContent extends PlatformElement {
                 line-height: 16px;
                 cursor: pointer;
                 transition: background var(--duration-fast);
+                white-space: nowrap;
+                overflow: hidden;
+                text-overflow: ellipsis;
+                max-width: 150px;
             }
 
             .relationship-entity-btn:hover:not(:disabled) {
@@ -1410,6 +1485,11 @@ export class NoteContent extends PlatformElement {
 
                 .note-main {
                     gap: 16px;
+                    padding: 0 var(--space-4);
+                }
+
+                .sidebar {
+                    padding: 0 var(--space-4);
                 }
 
                 .note-header {
@@ -1592,6 +1672,7 @@ export class NoteContent extends PlatformElement {
         this._mentionDebounceTimer = 0;
         this._onDocSelectionChange = null;
         this._editableNeedsInit = false;
+        this._loading = false;
     }
 
     connectedCallback() {
@@ -1847,6 +1928,14 @@ export class NoteContent extends PlatformElement {
     }
 
     willUpdate(changedProperties) {
+        if (changedProperties.has('note')) {
+            this._loading = true;
+            setTimeout(() => {
+                this._loading = false;
+                this.requestUpdate();
+            }, 100);
+        }
+
         if (changedProperties.has('note') || changedProperties.has('editable')) {
             const noteName = this.note && typeof this.note.name === 'string' ? this.note.name : '';
             const noteDescription = this.note && typeof this.note.description === 'string' ? this.note.description : '';
@@ -2226,8 +2315,32 @@ export class NoteContent extends PlatformElement {
         this.emit('share-note', { noteId: this.note.entity_id });
     }
 
-    _emitDeleteNote() {
-        this.emit('delete-note', { noteId: this.note.entity_id });
+    async _emitDeleteNote() {
+        let relatedEntities = [];
+        try {
+            const response = await crmApi.getExclusiveRelatedEntities(this.note.entity_id);
+            relatedEntities = response.entities || [];
+        } catch (error) {
+            console.error('Failed to fetch exclusive related entities:', error);
+        }
+
+        const modal = document.createElement('note-delete-modal');
+        document.body.appendChild(modal);
+
+        const confirmed = await modal.confirm({
+            title: this.i18n.t('note_delete_modal_title', {}, 'crm'),
+            message: this.i18n.t('note_delete_modal_message', {}, 'crm'),
+            confirmText: this.i18n.t('note_delete_modal_confirm', {}, 'crm'),
+            cancelText: this.i18n.t('note_delete_modal_cancel', {}, 'crm'),
+            relatedEntities,
+            entityTypes: this.entityTypes,
+        });
+
+        modal.remove();
+
+        if (confirmed) {
+            this.emit('delete-note', { noteId: this.note.entity_id });
+        }
     }
 
     _emitEditNote() {
@@ -2442,6 +2555,55 @@ export class NoteContent extends PlatformElement {
         `;
     }
 
+    _renderVoiceControl() {
+        const hasId = (typeof this._draftManualVoiceId === 'string' && this._draftManualVoiceId.trim().length > 0);
+        const inputValue = this._voicePickInputValue();
+
+        if (this._draftVoiceMode === 'manual' && hasId) {
+            return html`
+                <div class="voice-control">
+                    <div class="voice-control-display" @click=${this._onVoiceDisplayClick}>
+                        <span class="voice-control-label">${this.i18n.t('note_content.voice_manual')}</span>
+                        <span class="voice-control-value">${inputValue}</span>
+                    </div>
+                    <button
+                        type="button"
+                        class="voice-control-clear"
+                        @click=${this._clearVoicePick}
+                    >
+                        <platform-icon name="close" size="16"></platform-icon>
+                    </button>
+                </div>
+            `;
+        }
+
+        if (this._draftVoiceMode === 'manual' && !hasId) {
+            return this._renderVoiceEntityPick();
+        }
+
+        return html`
+            <select
+                class="form-select"
+                .value=${this._draftVoiceMode}
+                @change=${this._onVoiceModeChange}
+            >
+                <option value="default">${this.i18n.t('note_content.voice_default')}</option>
+                <option value="self">${this.i18n.t('note_content.voice_self')}</option>
+                <option value="none">${this.i18n.t('note_content.voice_none')}</option>
+                <option value="manual">${this.i18n.t('note_content.voice_manual')}</option>
+            </select>
+        `;
+    }
+
+    _onVoiceDisplayClick() {
+        this._draftManualVoiceId = '';
+        this._voiceLookupLabel = '';
+        this._voiceSearchQuery = '';
+        this._voiceSearchOpen = false;
+        this._voiceSearchResults = [];
+        this.requestUpdate();
+    }
+
     _renderCtxEntityPick() {
         const hasId = (typeof this._draftContextEntityId === 'string' && this._draftContextEntityId.trim().length > 0);
         const inputValue = this._ctxPickInputValue();
@@ -2583,7 +2745,7 @@ export class NoteContent extends PlatformElement {
         return text;
     }
 
-    _initEditableContent(keepFocus) {
+    _initEditableContent(keepFocus = false) {
         const div = this.renderRoot.querySelector('.note-text-input');
         if (!div) {
             return;
@@ -2604,51 +2766,44 @@ export class NoteContent extends PlatformElement {
 
     // --- mention detection через InputEvent.data (надёжно в любом браузере/Shadow DOM) ---
 
-    _initEditableContent() {
-        const div = this.renderRoot.querySelector('.note-text-input');
-        if (!div) {
-            return;
-        }
-        div.innerHTML = this._descriptionToEditableHtml(this._draftText);
-        div.focus();
-        const range = document.createRange();
-        const sel = window.getSelection();
-        if (sel) {
-            range.selectNodeContents(div);
-            range.collapse(false);
-            sel.removeAllRanges();
-            sel.addRange(range);
-        }
-    }
-
     _onTextPaste(event) {
-        event.preventDefault();
         const text = event.clipboardData?.getData('text/plain') ?? '';
         if (!text) {
             return;
         }
-        const selection = this.renderRoot.ownerDocument.getSelection();
-        if (!selection || selection.rangeCount === 0) {
+
+        const div = event.currentTarget;
+        if (!div) {
             return;
         }
-        const range = selection.getRangeAt(0);
-        range.deleteContents();
+
+        div.focus();
+
+        const selection = window.getSelection();
+        if (!selection || selection.rangeCount === 0) {
+            const range = document.createRange();
+            range.selectNodeContents(div);
+            range.collapse(false);
+            selection.removeAllRanges();
+            selection.addRange(range);
+        }
+
         const lines = text.split('\n');
-        const fragment = this.renderRoot.ownerDocument.createDocumentFragment();
+        let inserted = false;
+
         lines.forEach((line, i) => {
             if (i > 0) {
-                fragment.appendChild(this.renderRoot.ownerDocument.createElement('br'));
+                document.execCommand('insertText', false, '\n');
             }
             if (line.length > 0) {
-                fragment.appendChild(this.renderRoot.ownerDocument.createTextNode(line));
+                document.execCommand('insertText', false, line);
+                inserted = true;
             }
         });
-        range.insertNode(fragment);
-        range.collapse(false);
-        selection.removeAllRanges();
-        selection.addRange(range);
-        const div = event.currentTarget;
-        this._draftText = this._serializeEditableContent(div);
+
+        if (inserted) {
+            this._draftText = this._serializeEditableContent(div);
+        }
     }
 
     _onTextInput(event) {
@@ -3090,6 +3245,14 @@ export class NoteContent extends PlatformElement {
             throw new Error('note is required');
         }
 
+        if (this._loading) {
+            return html`
+                <div class="note-loading">
+                    <glass-spinner size="lg"></glass-spinner>
+                </div>
+            `;
+        }
+
         const noteText = this.editable ? this._draftText : this._getText(this.note.description, this.i18n.t('note_content.no_description'));
         const noteTitle = this.editable ? this._draftTitle : this._getText(this.note.name, this.i18n.t('note_content.note_title_fallback'));
         const noteDate = this._formatNoteDate(this.note.note_date || this.note.updated_at || this.note.created_at);
@@ -3113,188 +3276,126 @@ export class NoteContent extends PlatformElement {
                 <section class="note-main ${this.editable ? 'is-editing' : ''}">
                     <div class="note-header">
                         <div class="note-title-wrap">
-                            ${this.editable ? html`
-                                <input
-                                    class="note-title-input"
-                                    type="text"
-                                    .value=${noteTitle}
-                                    @input=${this._onTitleInput}
-                                    placeholder=${this.i18n.t('note_content.title_placeholder')}
-                                />
-                                <div class="note-edit-meta-group">
-                                    <div class="note-edit-meta-row">
-                                        <div class="note-meta-cell">
-                                            <label class="note-field-label">${this.i18n.t('note_content.no_subtype')}</label>
-                                            <select
-                                                class="form-select note-subtype-select"
-                                                .value=${this._draftSubtype}
-                                                @change=${this._onSubtypeChange}
-                                            >
-                                                <option value="">${this.i18n.t('note_content.no_subtype')}</option>
-                                                ${noteSubtypeOptions.map((item) => html`
-                                                    <option value=${item.type_id}>${this._getText(item.name, item.type_id)}</option>
-                                                `)}
-                                            </select>
-                                        </div>
-                                        <div class="note-meta-cell">
-                                            <label class="note-field-label">${this.i18n.t('notes.date')}</label>
-                                            <platform-date-picker
-                                                class="note-date-picker"
-                                                mode="date"
-                                                value-format="iso"
-                                                .value=${this._draftNoteDate}
-                                                @change=${this._onNoteDateChange}
-                                            ></platform-date-picker>
-                                        </div>
-                                        <div class="note-meta-cell">
-                                            <label class="note-field-label">${this.i18n.t('note_content.note_voice')}</label>
-                                            <select
-                                                class="form-select"
-                                                .value=${this._draftVoiceMode}
-                                                @change=${this._onVoiceModeChange}
-                                            >
-                                                <option value="default">${this.i18n.t('note_content.voice_default')}</option>
-                                                <option value="self">${this.i18n.t('note_content.voice_self')}</option>
-                                                <option value="none">${this.i18n.t('note_content.voice_none')}</option>
-                                                <option value="manual">${this.i18n.t('note_content.voice_manual')}</option>
-                                            </select>
-                                            ${this._draftVoiceMode === 'manual' ? this._renderVoiceEntityPick() : ''}
-                                        </div>
-                                        <div class="note-meta-cell">
-                                            <label class="note-field-label">${this.i18n.t('note_content.context_anchor')}</label>
-                                            ${this._renderCtxEntityPick()}
-                                        </div>
-                                    </div>
-                                </div>
-                            ` : html`
-                                <h2 class="note-title">${noteTitle}</h2>
-                                <div class="note-view-meta-bar">
-                                    <span class="note-view-meta-item">
-                                        <platform-icon name="tag" size="12"></platform-icon>
-                                        <span class="note-view-meta-value">${viewSubtypeDisplay}</span>
-                                    </span>
-                                    ${noteDate ? html`
-                                        <span class="note-view-meta-item" title=${this.i18n.t('notes.date')}>
-                                            <platform-icon name="calendar" size="12"></platform-icon>
-                                            <span class="note-view-meta-value">${noteDate}</span>
-                                        </span>
-                                    ` : ''}
-                                    ${viewVoiceDisplay ? html`
-                                        <span class="note-view-meta-item" title=${this.i18n.t('note_content.note_voice')}>
-                                            <platform-icon name="user" size="12"></platform-icon>
-                                            <span class="note-view-meta-value note-view-meta-ellipsis">${viewVoiceDisplay}</span>
-                                        </span>
-                                    ` : ''}
-                                    ${viewContextDisplay ? html`
-                                        <span class="note-view-meta-item" title=${this.i18n.t('note_content.context_anchor')}>
-                                            <platform-icon name="target" size="12"></platform-icon>
-                                            <span class="note-view-meta-value note-view-meta-ellipsis">${viewContextDisplay}</span>
-                                        </span>
-                                    ` : ''}
-                                </div>
-                            `}
+                            ${this.showTitle !== false ? html`
+                                ${this.editable ? html`
+                                    <input
+                                        class="note-title-input"
+                                        type="text"
+                                        .value=${noteTitle}
+                                        @input=${this._onTitleInput}
+                                        placeholder=${this.i18n.t('note_content.title_placeholder')}
+                                    />
+                                ` : html`
+                                    <h2 class="note-title">${noteTitle}</h2>
+                                `}
+                            ` : ''}
                         </div>
-                        <div class="note-actions">
-                            <div class="attach-dropdown">
-                                <button
-                                    class="round-btn attach-header-btn"
-                                    type="button"
-                                    title=${this.i18n.t('note_content.attach_add_title')}
-                                    aria-label=${this.i18n.t('note_content.attach_aria', { count: String(attachments.length) })}
-                                    ?disabled=${this.processingAttachment}
-                                    @click=${this._openFilePicker}
-                                >
-                                    <platform-icon name="paperclip" size="20"></platform-icon>
-                                    <span class="attach-count-badge" aria-hidden="true">${attachments.length}</span>
-                                </button>
-                                <div class="attach-dropdown-panel" role="tooltip" @click=${(e) => e.stopPropagation()}>
-                                    ${attachments.length === 0 ? html`
-                                        <div class="attach-dropdown-empty">${this.i18n.t('note_content.no_attachments')}</div>
-                                    ` : attachments.map((attachment) => {
-                                        const attachSummary = this._getAttachmentSummary(attachment);
-                                        return html`
-                                        <div class="attach-dropdown-row">
-                                            <platform-icon
-                                                file-icon
-                                                name=${resolveFileIconKey(
-                                                    this._getAttachmentName(attachment),
-                                                    typeof attachment?.content_type === 'string' ? attachment.content_type : '',
-                                                )}
-                                                size="14"
-                                            ></platform-icon>
-                                            <span class="attach-dropdown-name" title=${this._getAttachmentName(attachment)}>
-                                                ${this._getAttachmentName(attachment)}
-                                            </span>
-                                            <button
-                                                class="attach-dropdown-download"
-                                                type="button"
-                                                title=${this.i18n.t('note_content.download_file')}
-                                                @click=${() => this._downloadAttachment(attachment)}
-                                            >
-                                                <platform-icon name="save" size="16"></platform-icon>
-                                            </button>
-                                            <button
-                                                class="attach-dropdown-remove"
-                                                type="button"
-                                                title=${this.i18n.t('note_content.remove_file')}
-                                                ?disabled=${this.processingAttachment}
-                                                @click=${() => this._emitDeleteAttachment(attachment)}
-                                            >
-                                                <platform-icon name="close" size="16"></platform-icon>
-                                            </button>
-                                            ${attachSummary ? html`
-                                                <div class="attach-summary-inline">${attachSummary}</div>
-                                            ` : ''}
-                                        </div>
-                                    `;}
-                                    )}
+                        ${this.editable ? html`
+                            <div class="note-edit-meta-row">
+                                <div class="note-meta-cell">
+                                    <label class="note-field-label">${this.i18n.t('note_content.no_subtype')}</label>
+                                    <select
+                                        class="form-select"
+                                        .value=${this._draftSubtype}
+                                        @change=${this._onSubtypeChange}
+                                    >
+                                        <option value="">${this.i18n.t('note_content.no_subtype')}</option>
+                                        ${noteSubtypeOptions.map((item) => html`
+                                            <option value=${item.type_id}>${this._getText(item.name, item.type_id)}</option>
+                                        `)}
+                                    </select>
+                                </div>
+                                <div class="note-meta-cell">
+                                    <label class="note-field-label">${this.i18n.t('notes.date')}</label>
+                                    <platform-date-picker
+                                        class="note-date-picker"
+                                        mode="date"
+                                        value-format="iso"
+                                        .value=${this._draftNoteDate}
+                                        @change=${this._onNoteDateChange}
+                                    ></platform-date-picker>
+                                </div>
+                                <div class="note-meta-cell">
+                                    <label class="note-field-label">${this.i18n.t('note_content.note_voice')}</label>
+                                    ${this._renderVoiceControl()}
+                                </div>
+                                <div class="note-meta-cell">
+                                    <label class="note-field-label">${this.i18n.t('note_content.context_anchor')}</label>
+                                    ${this._renderCtxEntityPick()}
                                 </div>
                             </div>
-                            <input
-                                id="note-attachment-input"
-                                type="file"
-                                style="display: none;"
-                                @change=${this._onAttachmentFileSelected}
-                            />
+                        ` : html`
+                            <div class="note-view-meta-bar">
+                                <span class="note-view-meta-item">
+                                    <platform-icon name="tag" size="12"></platform-icon>
+                                    <span class="note-view-meta-value">${viewSubtypeDisplay}</span>
+                                </span>
+                                ${noteDate ? html`
+                                    <span class="note-view-meta-item" title=${this.i18n.t('notes.date')}>
+                                        <platform-icon name="calendar" size="12"></platform-icon>
+                                        <span class="note-view-meta-value">${noteDate}</span>
+                                    </span>
+                                ` : ''}
+                                ${viewVoiceDisplay ? html`
+                                    <span class="note-view-meta-item" title=${this.i18n.t('note_content.note_voice')}>
+                                        <platform-icon name="user" size="12"></platform-icon>
+                                        <span class="note-view-meta-value note-view-meta-ellipsis">${viewVoiceDisplay}</span>
+                                    </span>
+                                ` : ''}
+                                ${viewContextDisplay ? html`
+                                    <span class="note-view-meta-item" title=${this.i18n.t('note_content.context_anchor')}>
+                                        <platform-icon name="target" size="12"></platform-icon>
+                                        <span class="note-view-meta-value note-view-meta-ellipsis">${viewContextDisplay}</span>
+                                    </span>
+                                ` : ''}
+                            </div>
+                        `}
+                        <div class="note-actions">
+                        <input
+                            id="note-attachment-input"
+                            type="file"
+                            style="display: none;"
+                            @change=${this._onAttachmentFileSelected}
+                        />
+                        <button
+                            class="round-btn"
+                            type="button"
+                            title=${this.i18n.t('note_content.share')}
+                            ?disabled=${this.draftMode}
+                            @click=${this._emitShareNote}
+                        >
+                            <platform-icon name="share" size="20"></platform-icon>
+                        </button>
+                        <button
+                            class="round-btn danger"
+                            type="button"
+                            title=${this.i18n.t('delete', {}, 'common')}
+                            ?disabled=${this.deletingNote || this.draftMode}
+                            @click=${this._emitDeleteNote}
+                        >
+                            <platform-icon name="delete" size="20"></platform-icon>
+                        </button>
+                        ${this.editable ? html`
                             <button
-                                class="round-btn"
+                                class="cancel-btn"
                                 type="button"
-                                title=${this.i18n.t('note_content.share')}
-                                ?disabled=${this.draftMode}
-                                @click=${this._emitShareNote}
+                                ?disabled=${this.savingNote}
+                                @click=${this._emitCancelEdit}
                             >
-                                <platform-icon name="share" size="20"></platform-icon>
+                                ${this.i18n.t('cancel', {}, 'common')}
                             </button>
                             <button
-                                class="round-btn danger"
+                                class="edit-btn"
                                 type="button"
-                                title=${this.i18n.t('delete', {}, 'common')}
-                                ?disabled=${this.deletingNote || this.draftMode}
-                                @click=${this._emitDeleteNote}
+                                ?disabled=${this.savingNote}
+                                @click=${this._emitSaveNote}
                             >
-                                <platform-icon name="delete" size="20"></platform-icon>
+                                ${this.savingNote ? this.i18n.t('note_content.saving') : this.i18n.t('save', {}, 'common')}
                             </button>
-                            ${this.editable ? html`
-                                <button
-                                    class="cancel-btn"
-                                    type="button"
-                                    ?disabled=${this.savingNote}
-                                    @click=${this._emitCancelEdit}
-                                >
-                                    ${this.i18n.t('cancel', {}, 'common')}
-                                </button>
-                                <button
-                                    class="edit-btn"
-                                    type="button"
-                                    ?disabled=${this.savingNote}
-                                    @click=${this._emitSaveNote}
-                                >
-                                    ${this.savingNote ? this.i18n.t('note_content.saving') : this.i18n.t('save', {}, 'common')}
-                                </button>
-                            ` : html`
-                                <button class="edit-btn" type="button" @click=${this._emitEditNote}>${this.i18n.t('edit', {}, 'common')}</button>
-                            `}
-                        </div>
+                        ` : html`
+                            <button class="edit-btn" type="button" @click=${this._emitEditNote}>${this.i18n.t('edit', {}, 'common')}</button>
+                        `}
+                    </div>
                     </div>
                     ${this.editable ? html`
                         <div class="note-text-input-wrap">

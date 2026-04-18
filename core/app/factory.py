@@ -340,10 +340,13 @@ def create_service_app(
     logger.info(f"Подключение core team роутера ({team_prefix}/*)")
     app.include_router(core_team_router, prefix=team_prefix, tags=["team"])
 
-    if service_name != "frontend":
+    # Core companies роутер (автоматически для всех сервисов)
+    if service_name == "frontend":
+        companies_prefix = "/frontend/api/companies"
+    else:
         companies_prefix = f"/{public_segment}/api/companies"
-        logger.info(f"Подключение core companies роутера ({companies_prefix}/*)")
-        app.include_router(core_companies_router, prefix=companies_prefix, tags=["companies"])
+    logger.info(f"Подключение core companies роутер ({companies_prefix}/*)")
+    app.include_router(core_companies_router, prefix=companies_prefix, tags=["companies"])
     
     # Push notifications роутер (автоматически для всех сервисов)
     push_prefix = f"/{public_segment}"

@@ -5,8 +5,8 @@ import { getUserMediaCompat, hasGetUserMediaApi, pickVoiceMimeType } from '@plat
 import '@platform/lib/components/platform-icon.js';
 import '@platform/lib/components/platform-date-picker.js';
 import '@platform/lib/components/glass-spinner.js';
+import '@platform/lib/components/platform-breadcrumbs.js';
 import '../modals/entity-modal.js';
-import '../modals/note-view-modal.js';
 import '../modals/ai-analysis-modal.js';
 
 export class DailyNotesPage extends PlatformElement {
@@ -473,6 +473,10 @@ export class DailyNotesPage extends PlatformElement {
             }
 
             .analyze-btn.analyzing {
+                border-color: rgba(139, 92, 246, 0.5);
+                background: rgba(139, 92, 246, 0.14);
+                color: #8b5cf6;
+                box-shadow: 0 0 8px rgba(139, 92, 246, 0.25);
                 animation: analyze-btn-busy 1.2s ease-in-out infinite;
                 cursor: wait;
                 pointer-events: none;
@@ -953,20 +957,26 @@ export class DailyNotesPage extends PlatformElement {
     constructor() {
         super();
         this._notes = [];
-        this._query = '';
-        const initialRange = CRMStore.getDailyNotesRange();
-        this._dateFrom = initialRange.from;
-        this._dateTo = initialRange.to;
+        this._notesLeavingIds = [];
+        this._dateFrom = null;
+        this._dateTo = null;
         this._currentNamespace = null;
+        this._namespaceProbeValid = false;
+        this._query = '';
+        this._searchResults = [];
+        this._debounceTimer = null;
         this._noteEntitiesByNoteId = {};
-        this._currentUser = null;
-        this._summaryText = '';
+        this._analyzingNoteId = null;
+        this._isMobile = false;
+        this._activeAnalysisTasks = [];
         this._summaryEntities = [];
         this._summaryGeneratedAt = '';
         this._loadingSummary = false;
         this._summaryRevalidating = false;
         this._isMobile = false;
         this._summaryOpen = false;
+        this._currentUser = null;
+        this._summaryText = '';
         this._notesLeavingIds = [];
         this._namespaceHasAnyEntity = false;
         this._namespaceProbeValid = false;
@@ -1001,7 +1011,8 @@ export class DailyNotesPage extends PlatformElement {
             this._isMobile = state.ui.isMobile;
             const aid = state.ai.analyzingNoteId;
             const nextAnalyzingId = typeof aid === 'string' && aid.trim().length > 0 ? aid.trim() : null;
-            if (nextAnalyzingId !== this._analyzingNoteId) {
+            const analyzingIdChanged = nextAnalyzingId !== this._analyzingNoteId;
+            if (analyzingIdChanged) {
                 this._analyzingNoteId = nextAnalyzingId;
             }
             const previousNamespace = this._normalizeNamespaceName(this._getCurrentNamespaceName());
@@ -1014,6 +1025,15 @@ export class DailyNotesPage extends PlatformElement {
                 this._loadDailySummary();
             } else {
                 this._syncNotesLeavingWithStore(state);
+                const storeNotes = Array.isArray(state.entities.notes) ? state.entities.notes : [];
+                const storeNotesMap = new Map(storeNotes.map((n) => [n.entity_id, n]));
+                this._notes = this._notes.map((note) => {
+                    const storeNote = storeNotesMap.get(note.entity_id);
+                    return storeNote || note;
+                });
+            }
+            if (analyzingIdChanged) {
+                this.requestUpdate();
             }
             this._loadVisibleNoteEntities();
         });
@@ -1021,6 +1041,8 @@ export class DailyNotesPage extends PlatformElement {
         this._reloadNotesForSelectedDate();
         this._loadDailySummary();
         this._loadCurrentUser();
+        this._loadActiveAnalysisTasks();
+        this._tasksRefreshInterval = setInterval(() => this._loadActiveAnalysisTasks(), 5000);
     }
 
     disconnectedCallback() {
@@ -1028,6 +1050,30 @@ export class DailyNotesPage extends PlatformElement {
         this._unsubscribe?.();
         window.removeEventListener('platform-notification-received', this._onPlatformNotification);
         window.removeEventListener('crm-mobile-search', this._onMobileSearch);
+        if (this._tasksRefreshInterval) {
+            clearInterval(this._tasksRefreshInterval);
+            this._tasksRefreshInterval = null;
+        }
+    }
+
+    async _loadActiveAnalysisTasks() {
+        try {
+            const crmApi = this.services.get('crmApi');
+            const namespace = this._getCurrentNamespaceName();
+            if (!namespace) {
+                return;
+            }
+            const tasks = await crmApi.listTasks(namespace, 50, 'note_analyze');
+            const activeTasks = (tasks.items || []).filter((task) => task.status === 'running' || task.status === 'pending');
+            console.log('[DailyNotesPage] _loadActiveAnalysisTasks:', { namespace, totalTasks: tasks.items?.length, activeTasks: activeTasks.length, activeTaskIds: activeTasks.map(t => t.note_id) });
+            const tasksChanged = JSON.stringify(activeTasks) !== JSON.stringify(this._activeAnalysisTasks);
+            if (tasksChanged) {
+                this._activeAnalysisTasks = activeTasks;
+                this.requestUpdate();
+            }
+        } catch (error) {
+            console.error('[DailyNotesPage] Error loading active analysis tasks:', error);
+        }
     }
 
     _onMobileSearch(event) {
@@ -1245,7 +1291,13 @@ export class DailyNotesPage extends PlatformElement {
         if (typeof id !== 'string' || id.trim().length === 0) {
             return false;
         }
-        return this._analyzingNoteId === id.trim();
+        // Проверяем analyzingNoteId из store (для анализа, запущенного с фронтенда)
+        if (this._analyzingNoteId === id.trim()) {
+            return true;
+        }
+        // Проверяем кешированные активные задачи (для автоматического анализа)
+        const hasRunningTask = this._activeAnalysisTasks.some((task) => task.note_id === id.trim() && (task.status === 'running' || task.status === 'pending'));
+        return hasRunningTask;
     }
 
     _onSearchInput(event) {
@@ -1559,7 +1611,7 @@ export class DailyNotesPage extends PlatformElement {
         }
         const attrs = note.attributes;
         if (!attrs || typeof attrs !== 'object') {
-            return true;
+            return false;
         }
         if (attrs.ai_analysis_applied_at) {
             return false;
@@ -1567,7 +1619,7 @@ export class DailyNotesPage extends PlatformElement {
         if (attrs.ai_analysis_draft && typeof attrs.ai_analysis_draft === 'object') {
             return false;
         }
-        return true;
+        return false;
     }
 
     _openNoteAnalysisDraftModal(note) {
@@ -1825,18 +1877,10 @@ export class DailyNotesPage extends PlatformElement {
         if (typeof note.entity_id !== 'string' || note.entity_id.trim().length === 0) {
             throw new Error('Note entity_id is required');
         }
-        const modal = document.createElement('note-view-modal');
-        modal.note = note;
-        modal.startInEditMode = options.editable === true;
-        modal.draftMode = options.draftMode === true;
-        document.body.appendChild(modal);
-        modal.showModal();
-        modal.addEventListener('close', () => modal.remove());
-        modal.addEventListener('note-created', async () => {
-            await this._reloadNotesForSelectedDate();
-            await this._loadVisibleNoteEntities();
-            await this._loadDailySummary();
-        });
+        CRMStore.setCurrentNoteId(note.entity_id);
+        if (window.__PLATFORM_ROUTER__) {
+            window.__PLATFORM_ROUTER__.navigateByRoute('note', { itemId: note.entity_id }, { skipUrl: false });
+        }
     }
 
     _summaryPanelTitle() {
@@ -1918,7 +1962,7 @@ export class DailyNotesPage extends PlatformElement {
         const summaryTags = this._summaryEntities;
 
         return html`
-            <div class="section-label">${this.i18n.t('daily_notes_page.section_title')}</div>
+            <platform-breadcrumbs></platform-breadcrumbs>
             <div class="top-row">
                 <div class="title">
                     ${this.i18n.t('daily_notes_page.section_title')}
@@ -2066,7 +2110,7 @@ export class DailyNotesPage extends PlatformElement {
                                             <div class="note-footer-right">
                                                 <span class="published-at">${this.i18n.t('daily_notes_page.published_at', { time: this._formatTime(this._getTextValue(note.updated_at, this._getTextValue(note.created_at, new Date().toISOString()))) })}</span>
                                                 <button
-                                                    class="analyze-btn ${this._isNoteAiAnalyzing(note) ? 'analyzing' : ''} ${this._hasNoteAnalysisDraft(note) ? 'has-draft' : this._hasNoteAnalysisApplied(note) ? 'has-applied' : this._noteNeedsAiProcessing(note) ? 'needs-ai' : ''}"
+                                                    class="analyze-btn ${this._isNoteAiAnalyzing(note) ? 'analyzing' : (this._hasNoteAnalysisDraft(note) ? 'has-draft' : (this._hasNoteAnalysisApplied(note) ? 'has-applied' : ''))}"
                                                     type="button"
                                                     ?disabled=${this._isNoteAiAnalyzing(note)}
                                                     @click=${(event) => { event.stopPropagation(); this._onAnalyzeNote(note); }}
