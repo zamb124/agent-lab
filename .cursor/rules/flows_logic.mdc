@@ -1,6 +1,6 @@
 ---
 description: "Runtime flows: ноды, tools, skills, FlowInterrupt, InterruptManager"
-alwaysApply: true
+alwaysApply: false
 ---
 # Flows — краткий справочник
 

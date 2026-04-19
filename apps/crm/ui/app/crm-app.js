@@ -1,56 +1,217 @@
 /**
- * CRM App - Главное приложение CRM
- * Desktop: sidebar + main content
- * Mobile: slide-out sidebar + compact header (menu + title + action) + content
+ * CRMApp — корневой компонент сервиса CRM на event-driven канон.
+ *
+ * Маршрутизация — через core router.effect. CRM-сервис отдаёт SPA на путях
+ * `/crm`, `/crm/<route>`, поэтому router-effect собирается с `baseUrl: '/crm'`.
  */
+
 import { html, css } from 'lit';
-import { PlatformApp, renderPlatformAppShell } from '@platform/lib/base/PlatformApp.js';
-import { CRMAPIService } from '../services/crm-api.service.js';
-import { CRMStore } from '../store/crm.store.js';
+import { PlatformApp } from '@platform/lib/base/PlatformApp.js';
+import { createRouterEffect } from '@platform/lib/events/effects/router.effect.js';
+
+import {
+    namespacesResource,
+    namespaceUpdateOp,
+    namespaceEditabilityOp,
+    namespaceCreateForm,
+    namespaceEditForm,
+} from '../events/resources/namespaces.resource.js';
+import {
+    templatesResource,
+    templateUpdateOp,
+    templateSchemaOptionsOp,
+    templateTypeUpsertOp,
+    templateTypeDeleteOp,
+} from '../events/resources/templates.resource.js';
+import {
+    entityTypesResource,
+    entityTypeUpdateOp,
+    entityTypePublicFieldsOp,
+} from '../events/resources/entity-types.resource.js';
+import { relationshipTypesResource } from '../events/resources/relationship-types.resource.js';
+import {
+    entitiesResource,
+    entityCardOp,
+    entityUpdateOp,
+    entitiesListResource,
+    entityMergeOp,
+    entityBulkDeleteOp,
+    entityBulkUpdateOp,
+    entityAggregateOp,
+    entitySearchOp,
+    entitiesLookupOp,
+    entityCreateForm,
+    entityEditForm,
+} from '../events/resources/entities.resource.js';
+import {
+    notesListResource,
+    noteAnalysisDraftSaveOp,
+    noteAnalyzeStartOp,
+    noteVoiceInputOp,
+    noteSearchOp,
+    entityCardsBulkOp,
+} from '../events/resources/notes.resource.js';
+import {
+    dailySummaryOp,
+    periodSummaryOp,
+} from '../events/resources/summaries.resource.js';
+import {
+    relationshipsResource,
+    relationshipsListResource,
+    relationshipShortestPathOp,
+} from '../events/resources/relationships.resource.js';
+import {
+    tasksResource,
+    taskCreatedEntitiesOp,
+    taskKnowledgeImportStartOp,
+    taskDailySummaryStartOp,
+    taskPeriodSummaryStartOp,
+    taskReviewCompleteOp,
+    taskCancelOp,
+    taskRollbackOp,
+    taskRetryOp,
+} from '../events/resources/tasks.resource.js';
+import {
+    entityGrantsListOp,
+    entityGrantCreateOp,
+    namespaceGrantsListOp,
+    namespaceGrantCreateOp,
+    grantRevokeOp,
+} from '../events/resources/grants.resource.js';
+import { accessRequestsResource, accessRequestUpdateOp } from '../events/resources/access-requests.resource.js';
+import { teamSearchFacets } from '../events/resources/team-search.resource.js';
+import {
+    overviewGraphOp,
+    influenceGraphOp,
+    relatedEntitiesOp,
+    entityRelationshipsOp,
+    shortestPathOp,
+    timelineBoundsOp,
+} from '../events/resources/graph.resource.js';
+import { laraSummaryOp } from '../events/resources/workspace.resource.js';
+import {
+    attachmentsListOp,
+    attachmentUploadOp,
+    attachmentDeleteOp,
+} from '../events/resources/attachments.resource.js';
+import { fileUploadOp } from '../events/resources/files.resource.js';
+
+import '../components/crm-sidebar.js';
+import '../components/crm-mobile-app-header.js';
+import '@platform/lib/embed-chat/platform-lara-assistant.js';
+import '../pages/settings-hub-page.js';
 import '../pages/daily-notes-page.js';
 import '../pages/entities-page.js';
 import '../pages/graph-page.js';
 import '../pages/tasks-page.js';
-import '../pages/settings-hub-page.js';
 import '../pages/templates-page.js';
-import '../pages/spaces-page.js';
 import '../pages/namespace-tasks-page.js';
 import '../pages/relationship-types-page.js';
 import '../pages/note-page.js';
+import '../pages/entity-detail-page.js';
+import '../pages/access-requests-page.js';
+import '../pages/spaces-page.js';
+import '../pages/space-detail-page.js';
+
+import '../modals/namespace-modal.js';
 import '../modals/entity-modal.js';
-import '../modals/note-view-modal.js';
-import '../modals/ai-analysis-modal.js';
 import '../modals/share-modal.js';
 import '../modals/access-request-modal.js';
-import '../modals/namespace-modal.js';
-import '../components/crm-sidebar.js';
-import '../components/crm-mobile-app-header.js';
-import '@platform/lib/embed-chat/platform-lara-assistant.js';
-import {
-    flowsEmbedShouldSendCredentials,
-    resolveCrmLaraFlowsBaseUrl,
-    resolveFlowsEmbedAuthHeaders,
-} from '../utils/crm-lara-flows-base.js';
-import '@platform/lib/components/platform-icon.js';
+import '../modals/ai-analysis-modal.js';
+import '../modals/entity-merge-modal.js';
+import '../modals/note-graph-modal.js';
+import '../modals/entity-delete-modal.js';
+import '../modals/knowledge-import-modal.js';
+
 import '@platform/lib/components/layout/platform-island.js';
 
+const CRM_ROUTES = [
+    { key: 'notes',               path: '' },
+    { key: 'settings',            path: 'settings' },
+    { key: 'notes',               path: 'notes' },
+    { key: 'note',                path: 'notes/:itemId',     parent: 'notes' },
+    { key: 'entities',            path: 'entities' },
+    { key: 'entity',              path: 'entities/:itemId',   parent: 'entities' },
+    { key: 'graph',               path: 'graph' },
+    { key: 'tasks',               path: 'tasks' },
+    { key: 'access_requests',     path: 'access-requests' },
+    { key: 'spaces',              path: 'spaces',             parent: 'settings' },
+    { key: 'space',               path: 'spaces/:itemId',     parent: 'spaces' },
+    { key: 'templates',           path: 'templates',          parent: 'settings' },
+    { key: 'namespace_imports',   path: 'namespace_imports',  parent: 'settings' },
+    { key: 'relationship_types',  path: 'relationship_types', parent: 'settings' },
+];
+
 export class CRMApp extends PlatformApp {
-    static properties = {
-        ...PlatformApp.properties,
-        _isMobile: { state: true },
-        _currentView: { state: true },
-        _currentNoteId: { state: true },
-        _showNamespaceModal: { state: true },
-        _showAiModal: { state: true },
-        _mobileSearchOpen: { state: true },
-        _mobileSearchInputValue: { state: true },
-        _noteEditing: { state: true },
-    };
-    
-    connectedCallback() {
-        super.connectedCallback();
-        this.setAttribute('data-platform-app', '');
-    }
+    static defaultI18nNamespace = 'crm';
+
+    static factories = [
+        namespacesResource,
+        namespaceUpdateOp,
+        namespaceEditabilityOp,
+        namespaceCreateForm,
+        namespaceEditForm,
+        templatesResource,
+        templateUpdateOp,
+        templateSchemaOptionsOp,
+        templateTypeUpsertOp,
+        templateTypeDeleteOp,
+        entityTypesResource,
+        entityTypeUpdateOp,
+        entityTypePublicFieldsOp,
+        relationshipTypesResource,
+        entitiesResource,
+        entityCardOp,
+        entityUpdateOp,
+        entitiesListResource,
+        entityMergeOp,
+        entityBulkDeleteOp,
+        entityBulkUpdateOp,
+        entityAggregateOp,
+        entitySearchOp,
+        entitiesLookupOp,
+        entityCreateForm,
+        entityEditForm,
+        notesListResource,
+        noteAnalysisDraftSaveOp,
+        noteAnalyzeStartOp,
+        noteVoiceInputOp,
+        noteSearchOp,
+        entityCardsBulkOp,
+        dailySummaryOp,
+        periodSummaryOp,
+        relationshipsResource,
+        relationshipsListResource,
+        relationshipShortestPathOp,
+        tasksResource,
+        taskCreatedEntitiesOp,
+        taskKnowledgeImportStartOp,
+        taskDailySummaryStartOp,
+        taskPeriodSummaryStartOp,
+        taskReviewCompleteOp,
+        taskCancelOp,
+        taskRollbackOp,
+        taskRetryOp,
+        entityGrantsListOp,
+        entityGrantCreateOp,
+        namespaceGrantsListOp,
+        namespaceGrantCreateOp,
+        grantRevokeOp,
+        accessRequestsResource,
+        accessRequestUpdateOp,
+        teamSearchFacets,
+        overviewGraphOp,
+        influenceGraphOp,
+        relatedEntitiesOp,
+        entityRelationshipsOp,
+        shortestPathOp,
+        timelineBoundsOp,
+        laraSummaryOp,
+        attachmentsListOp,
+        attachmentUploadOp,
+        attachmentDeleteOp,
+        fileUploadOp,
+    ];
 
     static styles = [
         PlatformApp.styles,
@@ -63,14 +224,11 @@ export class CRMApp extends PlatformApp {
                 overflow: hidden;
                 background: var(--bg-gradient);
             }
-
             .sidebar {
                 height: var(--app-vh, 100vh);
                 flex-shrink: 0;
-                overflow: visible;
                 background: transparent;
             }
-
             .main {
                 flex: 1;
                 min-width: 0;
@@ -80,728 +238,60 @@ export class CRMApp extends PlatformApp {
                 padding: var(--space-4);
                 overflow: hidden;
             }
-
             platform-island {
                 flex: 1;
                 min-height: 0;
                 min-width: 0;
             }
-
-            .mobile-shell-header-wrap {
-                display: none;
-            }
-
-            .placeholder-view {
-                display: flex;
-                flex-direction: column;
-                align-items: center;
-                justify-content: center;
-                width: 100%;
-                height: 100%;
-                text-align: center;
-                color: var(--text-secondary);
-            }
-
-            .placeholder-view .placeholder-icon {
-                width: 80px;
-                height: 80px;
-                display: flex;
-                align-items: center;
-                justify-content: center;
-                background: var(--crm-surface-muted);
-                border: 1px solid var(--crm-stroke);
-                border-radius: var(--radius-xl);
-                margin-bottom: var(--space-4);
-                color: var(--text-tertiary);
-            }
-
-            .placeholder-view h2 {
-                margin: 0 0 var(--space-2) 0;
-                font-size: var(--text-xl);
-                font-weight: 600;
-                color: var(--text-primary);
-            }
-
-            .placeholder-view p {
-                margin: 0;
-                font-size: var(--text-base);
-                color: var(--text-tertiary);
-            }
-
             @media (max-width: 767px) {
-                .main {
-                    padding: 0;
-                }
-
-                .sidebar {
-                    position: absolute;
-                    width: 0;
-                    height: 0;
-                    overflow: visible;
-                }
-
-                .mobile-shell-header-wrap {
-                    display: block;
-                    flex-shrink: 0;
-                }
-
-                platform-island {
-                    min-height: 0;
-                }
+                .main { padding: 0; }
+                .sidebar { position: absolute; width: 0; height: 0; overflow: visible; }
             }
-        `
+        `,
     ];
 
-    constructor() {
-        super();
-        this._isMobile = false;
-        this._currentView = 'notes';
-        this._currentNoteId = null;
-        this._showNamespaceModal = false;
-        this._showAiModal = false;
-        this._mobileSearchOpen = false;
-        this._mobileSearchInputValue = '';
-        this._noteEditing = false;
-        this._resizeObserver = null;
-        this._searchDebounce = null;
-        this._noteEditingListener = null;
-        /** @type {{ key: string, at: number, data: object } | null} */
-        this._laraSummaryCache = null;
+    getBaseUrl() { return '/crm'; }
+
+    getRoutes() { return []; }
+
+    getServiceEffects() {
+        return [
+            createRouterEffect({ baseUrl: '/crm', routes: CRM_ROUTES }),
+        ];
     }
 
-    _laraEmbedGetAuthToken = async () => {
-        const headers = await resolveFlowsEmbedAuthHeaders();
-        const ns = CRMStore._getCurrentNamespaceName();
-        if (ns && ns !== 'default') {
-            headers['X-Platform-Namespace'] = ns;
+    renderRoute(routeKey, params) {
+        let content;
+        switch (routeKey) {
+            case 'settings':            content = html`<crm-settings-hub-page></crm-settings-hub-page>`; break;
+            case 'notes':               content = html`<crm-daily-notes-page></crm-daily-notes-page>`; break;
+            case 'note':                content = html`<crm-note-page .noteId=${params.itemId}></crm-note-page>`; break;
+            case 'entities':            content = html`<crm-entities-page></crm-entities-page>`; break;
+            case 'entity':              content = html`<crm-entity-detail-page .itemId=${params.itemId}></crm-entity-detail-page>`; break;
+            case 'graph':               content = html`<crm-graph-page></crm-graph-page>`; break;
+            case 'tasks':               content = html`<crm-tasks-page></crm-tasks-page>`; break;
+            case 'access_requests':     content = html`<crm-access-requests-page></crm-access-requests-page>`; break;
+            case 'spaces':              content = html`<crm-spaces-page></crm-spaces-page>`; break;
+            case 'space':               content = html`<crm-space-detail-page .itemId=${params.itemId}></crm-space-detail-page>`; break;
+            case 'templates':           content = html`<crm-templates-page></crm-templates-page>`; break;
+            case 'namespace_imports':   content = html`<crm-namespace-tasks-page></crm-namespace-tasks-page>`; break;
+            case 'relationship_types':  content = html`<crm-relationship-types-page></crm-relationship-types-page>`; break;
+            default:                    content = html`<crm-daily-notes-page></crm-daily-notes-page>`; break;
         }
-        return headers;
-    };
-
-    _laraSummaryFlattenForVariables(data) {
-        if (!data || typeof data !== 'object') {
-            return {};
-        }
-        const json = JSON.stringify(data);
-        return {
-            crm_lara_summary: data,
-            crm_lara_summary_json: json,
-            crm_knowledge_imports_awaiting_review: data.knowledge_imports_awaiting_review,
-            crm_knowledge_imports_in_progress: data.knowledge_imports_in_progress,
-            crm_notes_analysis_draft_not_applied: data.notes_with_analysis_draft_not_applied,
-        };
-    }
-
-    _laraEmbedExtraMetadataVariables = async () => {
-        const crmApi = this.services?.get('crmApi');
-        if (!crmApi || typeof crmApi.getLaraWorkspaceSummary !== 'function') {
-            return {};
-        }
-        const ns = CRMStore._getCurrentNamespaceName();
-        const now = Date.now();
-        const ttlMs = 45000;
-        if (
-            this._laraSummaryCache &&
-            this._laraSummaryCache.key === ns &&
-            now - this._laraSummaryCache.at < ttlMs
-        ) {
-            return this._laraSummaryFlattenForVariables(this._laraSummaryCache.data);
-        }
-        try {
-            const data = await crmApi.getLaraWorkspaceSummary(ns);
-            this._laraSummaryCache = { key: ns, at: now, data };
-            return this._laraSummaryFlattenForVariables(data);
-        } catch (err) {
-            console.warn('getLaraWorkspaceSummary failed', err);
-            return {};
-        }
-    };
-
-    setupStore() {
-        return CRMStore;
-    }
-
-    getBaseUrl() {
-        return '/crm';
-    }
-    
-    setupRouter() {
-        return {
-            routes: [
-                {
-                    key: 'note',
-                    path: 'notes/:itemId',
-                    title: (params) => {
-                        const note = CRMStore.state.entities.notes.find(n => n.entity_id === params.itemId);
-                        return note?.name || 'Заметка';
-                    },
-                    parent: 'notes',
-                    component: 'note-page',
-                    onEnter: (params) => {
-                        if (params.itemId) {
-                            CRMStore.setCurrentNoteId(params.itemId, { skipUrl: true });
-                        }
-                    },
-                },
-                {
-                    key: 'notes',
-                    path: 'notes',
-                    title: () => this.i18n.t('app_shell.views.notes.title', {}, 'crm'),
-                    parent: null,
-                    component: 'daily-notes-page',
-                },
-                {
-                    key: 'entities',
-                    path: 'entities',
-                    title: () => this.i18n.t('app_shell.views.entities.title', {}, 'crm'),
-                    parent: null,
-                    component: 'entities-page',
-                    itemTitle: (params) => {
-                        const entity = CRMStore.state.entities.currentEntity;
-                        return entity?.name || this.i18n.t('entities_page.untitled', {}, 'crm');
-                    },
-                    onEnter: (params) => {
-                        if (params.itemId) {
-                            CRMStore.setCurrentEntity(params.itemId, { skipUrl: true });
-                        }
-                    },
-                },
-                {
-                    key: 'graph',
-                    path: 'graph',
-                    title: () => this.i18n.t('app_shell.views.graph.title', {}, 'crm'),
-                    parent: null,
-                    component: 'graph-page',
-                },
-                {
-                    key: 'tasks',
-                    path: 'tasks',
-                    title: () => this.i18n.t('app_shell.views.tasks.title', {}, 'crm'),
-                    parent: null,
-                    component: 'tasks-page',
-                },
-                {
-                    key: 'settings',
-                    path: 'settings',
-                    title: () => this.i18n.t('app_shell.views.settings.title', {}, 'crm'),
-                    parent: null,
-                    component: 'settings-hub-page',
-                },
-                {
-                    key: 'templates',
-                    path: 'templates',
-                    title: () => this.i18n.t('app_shell.views.templates.title', {}, 'crm'),
-                    parent: 'settings',
-                    component: 'templates-page',
-                },
-                {
-                    key: 'spaces',
-                    path: 'spaces',
-                    title: () => this.i18n.t('app_shell.views.spaces.title', {}, 'crm'),
-                    parent: 'settings',
-                    component: 'spaces-page',
-                },
-                {
-                    key: 'namespace_imports',
-                    path: 'namespace_imports',
-                    title: () => this.i18n.t('app_shell.views.namespace_imports.title', {}, 'crm'),
-                    parent: 'settings',
-                    component: 'namespace-tasks-page',
-                },
-                {
-                    key: 'relationship_types',
-                    path: 'relationship_types',
-                    title: () => this.i18n.t('app_shell.views.relationship_types.title', {}, 'crm'),
-                    parent: 'settings',
-                    component: 'relationship-types-page',
-                },
-            ],
-        };
-    }
-
-    async initServices() {
-        await super.initServices();
-        this.services.register('crmApi', new CRMAPIService('/crm/api/v1'));
-
-        this._unsubscribe = CRMStore.subscribe((state) => {
-            this._isMobile = state.ui.isMobile;
-            if (this._currentView !== state.ui.currentView) {
-                this._mobileSearchOpen = false;
-                this._noteEditing = false;
-            }
-            this._currentView = state.ui.currentView;
-            this._currentNoteId = state.ui.currentNoteId;
-        });
-
-        // Слушаем состояние редактирования заметки через window
-        this._noteEditingListener = (e) => {
-            this._noteEditing = e.detail?.editing === true;
-        };
-        window.addEventListener('crm-note-editing-changed', this._noteEditingListener);
-
-        this._checkMobile();
-        this._setupResizeObserver();
-    }
-
-    async firstUpdated() {
-        await super.firstUpdated();
-
-        const crmApi = this.services.get('crmApi');
-        await CRMStore.loadNamespaces(crmApi);
-        const currentNamespace = CRMStore.state.namespaces.current;
-        const namespaceName = typeof currentNamespace === 'string'
-            ? currentNamespace
-            : (currentNamespace && typeof currentNamespace.name === 'string' ? currentNamespace.name : null);
-        const { from, to } = CRMStore.getDailyNotesRange();
-        await Promise.all([
-            CRMStore.loadNotes(crmApi, {
-                dateFrom: from,
-                dateTo: to,
-                limit: 300,
-            }),
-            CRMStore.loadEntityTypes(crmApi, namespaceName),
-            CRMStore.loadRelationshipTypes(crmApi),
-        ]);
-    }
-
-    _checkMobile() {
-        const isMobile = window.innerWidth < 768;
-        CRMStore.setMobile(isMobile);
-    }
-
-    _setupResizeObserver() {
-        this._resizeObserver = new ResizeObserver(() => {
-            this._checkMobile();
-        });
-        this._resizeObserver.observe(document.body);
-    }
-
-    disconnectedCallback() {
-        super.disconnectedCallback?.();
-        this._unsubscribe?.();
-        this._resizeObserver?.disconnect();
-        if (this._noteEditingListener) {
-            window.removeEventListener('crm-note-editing-changed', this._noteEditingListener);
-            this._noteEditingListener = null;
-        }
-    }
-
-    async checkAuth() {
-        const ok = await this.auth.validateToken();
-        return !!ok;
-    }
-
-    _openSidebar() {
-        window.dispatchEvent(new CustomEvent('platform-sidebar-open', {
-            bubbles: true,
-            composed: true,
-        }));
-    }
-
-    _hydrateMobileSearchInputFromView() {
-        if (this._currentView === 'entities') {
-            this._mobileSearchInputValue = CRMStore.state.entities.filters.search || '';
-            return;
-        }
-        if (this._currentView === 'notes') {
-            this._mobileSearchInputValue = CRMStore.state.ui.notesPageSearchQuery || '';
-            return;
-        }
-        if (this._currentView === 'tasks') {
-            this._mobileSearchInputValue = CRMStore.state.ui.tasksListSearchQuery || '';
-        }
-    }
-
-    _toggleMobileSearch() {
-        if (this._mobileSearchOpen) {
-            this._closeMobileSearch();
-            return;
-        }
-        this._hydrateMobileSearchInputFromView();
-        this._mobileSearchOpen = true;
-    }
-
-    _closeMobileSearch() {
-        if (!this._mobileSearchOpen) {
-            return;
-        }
-        this._mobileSearchOpen = false;
-        this._dispatchSearchQuery('');
-        this._mobileSearchInputValue = '';
-    }
-
-    _onHeaderSearchInput(event) {
-        const raw = event.detail?.value;
-        const query = typeof raw === 'string' ? raw : '';
-        this._mobileSearchInputValue = query;
-        if (this._searchDebounce) {
-            clearTimeout(this._searchDebounce);
-        }
-        this._searchDebounce = setTimeout(() => {
-            this._searchDebounce = null;
-            this._dispatchSearchQuery(query);
-        }, 300);
-    }
-
-    _dispatchSearchQuery(query) {
-        if (this._currentView === 'entities') {
-            CRMStore.setEntityFilters({ search: query });
-            const crmApi = this.services.get('crmApi');
-            CRMStore.loadEntities(crmApi);
-        }
-        if (this._currentView === 'notes') {
-            CRMStore.setNotesPageSearchQuery(query);
-            window.dispatchEvent(new CustomEvent('crm-mobile-search', {
-                detail: { query },
-                bubbles: true,
-                composed: true,
-            }));
-        }
-        if (this._currentView === 'tasks') {
-            CRMStore.setTasksListSearchQuery(query);
-            window.dispatchEvent(new CustomEvent('crm-mobile-search', {
-                detail: { query },
-                bubbles: true,
-                composed: true,
-            }));
-        }
-    }
-
-    _onMobileAction() {
-        if (this._currentView === 'notes') {
-            this._createNote();
-        } else if (this._currentView === 'entities') {
-            this._createEntity();
-        } else if (this._currentView === 'tasks') {
-            this._dispatchPageEvent('tasks-create');
-        }
-    }
-
-    _onMobileExtra() {
-        if (this._currentView === 'entities') {
-            this._dispatchPageEvent('entities-toggle-filters');
-        } else if (this._currentView === 'tasks') {
-            this._dispatchPageEvent('tasks-refresh');
-        }
-    }
-
-    _onMobileAssistant() {
-        window.dispatchEvent(new CustomEvent('humanitec-embed-chat-toggle', { bubbles: true }));
-    }
-
-    _onNoteShare() {
-        window.dispatchEvent(new CustomEvent('crm-mobile-note-action', {
-            detail: { action: 'share' },
-        }));
-    }
-
-    _onNoteDelete() {
-        window.dispatchEvent(new CustomEvent('crm-mobile-note-action', {
-            detail: { action: 'delete' },
-        }));
-    }
-
-    _onNoteEdit() {
-        window.dispatchEvent(new CustomEvent('crm-mobile-note-action', {
-            detail: { action: 'edit' },
-        }));
-    }
-
-    _onNoteSave() {
-        window.dispatchEvent(new CustomEvent('crm-mobile-note-action', {
-            detail: { action: 'save' },
-        }));
-    }
-
-    _onNoteCancel() {
-        window.dispatchEvent(new CustomEvent('crm-mobile-note-action', {
-            detail: { action: 'cancel' },
-        }));
-    }
-
-    _onNoteFiles() {
-        const input = document.createElement('input');
-        input.type = 'file';
-        input.style.display = 'none';
-        input.onchange = () => {
-            if (input.files && input.files.length > 0) {
-                const file = input.files[0];
-                window.dispatchEvent(new CustomEvent('crm-mobile-note-action', {
-                    detail: { action: 'upload-attachment', file },
-                }));
-            }
-            document.body.removeChild(input);
-        };
-        document.body.appendChild(input);
-        input.click();
-    }
-
-    _dispatchPageEvent(eventName, detail) {
-        const island = this.renderRoot?.querySelector('platform-island');
-        if (island) {
-            island.dispatchEvent(new CustomEvent(eventName, { bubbles: true, composed: true, detail }));
-        }
-    }
-
-    _createNote() {
-        CRMStore.setCurrentNoteId('new');
-        CRMStore.setCurrentView('note');
-    }
-
-    _createEntity() {
-        const modal = document.createElement('entity-modal');
-        document.body.appendChild(modal);
-        modal.showModal();
-        modal.addEventListener('close', () => modal.remove());
-    }
-
-    _renderContent() {
-        if (this._currentView === 'notes') {
-            return html`<daily-notes-page @analysis-ready=${this._openAiModal}></daily-notes-page>`;
-        }
-
-        if (this._currentView === 'note') {
-            return html`<note-page></note-page>`;
-        }
-
-        if (this._currentView === 'entities') {
-            return html`<entities-page></entities-page>`;
-        }
-
-        if (this._currentView === 'graph') {
-            return html`<graph-page></graph-page>`;
-        }
-
-        if (this._currentView === 'tasks') {
-            return html`<tasks-page></tasks-page>`;
-        }
-
-        if (this._currentView === 'settings') {
-            return html`<settings-hub-page></settings-hub-page>`;
-        }
-
-        if (this._currentView === 'templates') {
-            return html`<templates-page></templates-page>`;
-        }
-
-        if (this._currentView === 'spaces') {
-            return html`<spaces-page></spaces-page>`;
-        }
-
-        if (this._currentView === 'namespace_imports') {
-            return html`<namespace-tasks-page></namespace-tasks-page>`;
-        }
-
-        if (this._currentView === 'relationship_types') {
-            return html`<relationship-types-page></relationship-types-page>`;
-        }
-
-        return this._renderPlaceholder(this._currentView);
-    }
-
-    _getViewConfig() {
-        const v = (id) => this.i18n.t(`app_shell.views.${id}`);
-        return {
-            notes: {
-                title: v('notes.title'),
-                actionIcon: 'plus',
-                actionTitle: v('notes.action_title'),
-                searchable: true,
-            },
-            entities: {
-                title: v('entities.title'),
-                actionIcon: 'plus',
-                actionTitle: v('entities.action_title'),
-                extraIcon: 'adjustment',
-                extraTitle: v('entities.extra_title'),
-                searchable: true,
-            },
-            graph: { title: v('graph.title'), actionIcon: null },
-            tasks: {
-                title: v('tasks.title'),
-                actionIcon: 'plus',
-                actionTitle: v('tasks.action_title'),
-                extraIcon: 'refresh',
-                extraTitle: v('tasks.extra_title'),
-                searchable: true,
-            },
-            calendar: { title: v('calendar.title'), actionIcon: null },
-            settings: { title: v('settings.title'), actionIcon: null },
-            templates: { title: v('templates.title'), actionIcon: null },
-            spaces: { title: v('spaces.title'), actionIcon: null },
-            namespace_imports: { title: v('namespace_imports.title'), actionIcon: null },
-        };
-    }
-
-    _renderPlaceholder(view) {
-        const cfg = this._getViewConfig()[view];
-        const viewName = cfg?.title || view;
-        const icons = {
-            graph: 'network',
-            tasks: 'checklist',
-            templates: 'settings',
-            spaces: 'folder',
-            namespace_imports: 'database',
-        };
-
         return html`
-            <div class="placeholder-view">
-                <div class="placeholder-icon">
-                    <platform-icon name="${icons[view] || 'folder'}" size="48"></platform-icon>
-                </div>
-                <h2>${viewName}</h2>
-                <p>${this.i18n.t('app_shell.under_development')}</p>
-            </div>
-        `;
-    }
-
-    _openNamespaceModal() {
-        this._showNamespaceModal = true;
-    }
-
-    _closeNamespaceModal() {
-        this._showNamespaceModal = false;
-    }
-
-    _openAiModal() {
-        this._showAiModal = true;
-    }
-
-    _closeAiModal() {
-        this._showAiModal = false;
-        CRMStore.clearKnowledgeImportReview();
-    }
-
-    async _onNamespaceChanged() {
-        const crmApi = this.services.get('crmApi');
-        const currentNamespace = CRMStore.state.namespaces.current;
-        const namespaceName = typeof currentNamespace === 'string'
-            ? currentNamespace
-            : (currentNamespace && typeof currentNamespace.name === 'string' ? currentNamespace.name : null);
-        const { from, to } = CRMStore.getDailyNotesRange();
-        await CRMStore.loadEntityTypes(crmApi, namespaceName);
-        await CRMStore.loadEntities(crmApi);
-        await CRMStore.loadNotes(crmApi, {
-            dateFrom: from,
-            dateTo: to,
-            limit: 300,
-        });
-    }
-
-    async _onNamespaceSaved() {
-        this._showNamespaceModal = false;
-        const crmApi = this.services.get('crmApi');
-        await CRMStore.loadNamespaces(crmApi);
-        const currentNamespace = CRMStore.state.namespaces.current;
-        const namespaceName = typeof currentNamespace === 'string'
-            ? currentNamespace
-            : (currentNamespace && typeof currentNamespace.name === 'string' ? currentNamespace.name : null);
-        const { from, to } = CRMStore.getDailyNotesRange();
-        await CRMStore.loadEntityTypes(crmApi, namespaceName);
-        await CRMStore.loadEntities(crmApi);
-        await CRMStore.loadNotes(crmApi, {
-            dateFrom: from,
-            dateTo: to,
-            limit: 300,
-        });
-    }
-
-    render() {
-        const shell = renderPlatformAppShell(this);
-        if (shell !== null) {
-            return shell;
-        }
-
-        if (!this._servicesInitialized || !this._authChecked) {
-            return html`<app-loader></app-loader>`;
-        }
-
-        if (!this.services.isInitialized || !this.services.has('i18n')) {
-            return html`<app-loader></app-loader>`;
-        }
-
-        const viewCfg = this._getViewConfig()[this._currentView] || { title: this._currentView, actionIcon: null };
-
-        return html`
-            <div class="sidebar">
-                <crm-sidebar
-                    @open-namespace-modal=${this._openNamespaceModal}
-                    @namespace-changed=${this._onNamespaceChanged}
-                ></crm-sidebar>
-            </div>
+            <div class="sidebar"><crm-sidebar></crm-sidebar></div>
             <div class="main">
-                ${this._isMobile ? html`
-                    <div class="mobile-shell-header-wrap">
-                        <crm-mobile-app-header
-                            .headerTitle=${viewCfg.title}
-                            ?searchable=${!!viewCfg.searchable}
-                            ?searchOpen=${this._mobileSearchOpen}
-                            .searchValue=${this._mobileSearchInputValue}
-                            assistant-icon="ai"
-                            .assistantTitle=${this.i18n.t('app_shell.embed_chat_toggle')}
-                            .extraIcon=${viewCfg.extraIcon || ''}
-                            .extraTitle=${viewCfg.extraTitle || ''}
-                            .actionIcon=${viewCfg.actionIcon || ''}
-                            .actionTitle=${viewCfg.actionTitle || ''}
-                            .noteActions=${this._currentView === 'note' ? (
-                                this._noteEditing ? [
-                                    { icon: 'check', title: this.i18n.t('save', {}, 'common'), event: 'header-note-save' },
-                                    { icon: 'close', title: this.i18n.t('cancel', {}, 'common'), event: 'header-note-cancel' },
-                                ] : [
-                                    { icon: 'paperclip', title: this.i18n.t('note_content.attach_add_title', {}, 'crm'), event: 'header-note-files' },
-                                    { icon: 'share', title: this.i18n.t('note_content.share', {}, 'crm'), event: 'header-note-share' },
-                                    { icon: 'delete', title: this.i18n.t('delete', {}, 'common'), event: 'header-note-delete', danger: true },
-                                    { icon: 'edit', title: this.i18n.t('edit', {}, 'common'), event: 'header-note-edit' },
-                                ]
-                            ) : []}
-                            @header-menu=${this._openSidebar}
-                            @header-toggle-search=${this._toggleMobileSearch}
-                            @header-search-input=${this._onHeaderSearchInput}
-                            @header-search-close=${this._closeMobileSearch}
-                            @header-assistant=${this._onMobileAssistant}
-                            @header-extra=${this._onMobileExtra}
-                            @header-action=${this._onMobileAction}
-                            @header-note-share=${this._onNoteShare}
-                            @header-note-delete=${this._onNoteDelete}
-                            @header-note-edit=${this._onNoteEdit}
-                            @header-note-save=${this._onNoteSave}
-                            @header-note-cancel=${this._onNoteCancel}
-                            @header-note-files=${this._onNoteFiles}
-                        ></crm-mobile-app-header>
-                    </div>
-                ` : ''}
-                <platform-island padding=${this._isMobile ? 'none' : 'md'} ?safe-bottom=${this._isMobile}>
-                    ${this._renderContent()}
-                </platform-island>
+                <crm-mobile-app-header></crm-mobile-app-header>
+                <platform-island>${content}</platform-island>
             </div>
-
-            ${this._showNamespaceModal ? html`
-                <namespace-modal
-                    .open=${true}
-                    @modal-closed=${this._closeNamespaceModal}
-                    @saved=${this._onNamespaceSaved}
-                ></namespace-modal>
-            ` : ''}
-
-            ${this._showAiModal ? html`
-                <ai-analysis-modal
-                    .open=${true}
-                    @modal-closed=${this._closeAiModal}
-                    @saved=${this._closeAiModal}
-                ></ai-analysis-modal>
-            ` : ''}
-
             <platform-lara-assistant
-                .assistantTitle=${this.i18n.t('app_shell.embed_assistant_name')}
-                .flowsBaseUrl=${resolveCrmLaraFlowsBaseUrl()}
+                toggle-event-name="crm-lara-open"
+                event-namespace="assistant"
                 flow-id="lara"
                 skill-id="crm"
-                event-namespace="assistant"
-                toggle-event-name="humanitec-embed-chat-toggle"
-                ?use-credentials=${flowsEmbedShouldSendCredentials(resolveCrmLaraFlowsBaseUrl())}
-                .getAuthToken=${this._laraEmbedGetAuthToken}
-                .getExtraMetadataVariables=${this._laraEmbedExtraMetadataVariables}
-                .locale=${this.services.get('i18n').getCurrentLocale()}
+                .flowsBaseUrl=${'/flows'}
+                ?use-credentials=${true}
+                .assistantTitle=${'Lara'}
             ></platform-lara-assistant>
         `;
     }

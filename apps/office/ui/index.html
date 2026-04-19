@@ -24,7 +24,6 @@
             "lit/directives/when.js": "/static/core/assets/js/lit/directives/when.min.js",
             "lit/directives/guard.js": "/static/core/assets/js/lit/directives/guard.min.js",
             "@platform/lib/": "/static/core/lib/",
-            "@platform/services/": "/static/core/services/",
             "@capacitor/app": "/static/core/assets/js/vendor/@capacitor/app/index.js",
             "@capacitor/core": "/static/core/assets/js/vendor/@capacitor/core/index.js",
             "@capacitor/splash-screen": "/static/core/assets/js/vendor/@capacitor/splash-screen/index.js",
@@ -47,15 +46,8 @@
             --platform-btn-primary-shadow-hover: var(--documents-btn-shadow-hover);
         }
     </style>
-
-    <script type="module">
-        import '/static/core/lib/components/app-loader.js';
-    </script>
-
-    <style>
-        office-app:not(:defined) { opacity: 0; }
-
-        app-loader:not(:defined) {
+<style>
+office-app:not(:defined) {
             position: fixed;
             inset: 0;
             display: flex;
@@ -67,23 +59,13 @@
             font-family: 'SF Pro Display', -apple-system, BlinkMacSystemFont, sans-serif;
         }
 
-        app-loader:not(:defined)::after {
+        office-app:not(:defined)::after {
             content: 'Documents';
         }
-    </style>
+</style>
 </head>
 <body class="platform-shell">
-    <app-loader id="app-loader" fullscreen></app-loader>
     <office-app></office-app>
     <script type="module" src="/documents/ui/static/index.js"></script>
-    <script>
-        customElements.whenDefined('office-app').then(() => {
-            const loader = document.getElementById('app-loader');
-            if (loader) {
-                loader.classList.add('hidden');
-                setTimeout(() => loader.remove(), 400);
-            }
-        });
-    </script>
 </body>
 </html>

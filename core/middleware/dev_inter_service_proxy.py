@@ -14,12 +14,14 @@ OnlyOffice: префиксы /web-apps, /common, /cache, /fonts, /sdkjs, /downlo
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import re
 from typing import FrozenSet
 from urllib.parse import urlparse
 
 import httpx
+import websockets
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
 from starlette.responses import Response
@@ -211,3 +213,150 @@ class DevInterServiceProxyMiddleware(BaseHTTPMiddleware):
             path=path,
             upstream_host=upstream_host,
         )
+
+
+_WS_HOP_BY_HOP: FrozenSet[str] = frozenset(
+    {
+        "host",
+        "connection",
+        "upgrade",
+        "sec-websocket-key",
+        "sec-websocket-version",
+        "sec-websocket-extensions",
+        "sec-websocket-accept",
+        "sec-websocket-protocol",
+    }
+)
+
+
+class DevInterServiceWsProxyMiddleware:
+    """Pure ASGI middleware: проксирует WebSocket-апгрейды первого сегмента
+    пути на upstream-сервис в development/test. Для HTTP пропускает дальше.
+
+    Параллельно с `DevInterServiceProxyMiddleware` (он только HTTP).
+    Без неё WS-апгрейды на чужой сервис из браузера получают 403/404,
+    т.к. handler смонтирован только в целевом процессе.
+    """
+
+    def __init__(self, app, *, service_name: str) -> None:
+        self.app = app
+        self._service_name = service_name
+
+    async def __call__(self, scope, receive, send):
+        if scope.get("type") != "websocket":
+            return await self.app(scope, receive, send)
+
+        settings = get_settings()
+        if settings.server.env not in ("development", "test"):
+            return await self.app(scope, receive, send)
+
+        host = ""
+        for k, v in scope.get("headers") or []:
+            if k.decode("latin-1").lower() == "host":
+                host = v.decode("latin-1")
+                break
+        if not is_local(host):
+            return await self.app(scope, receive, send)
+
+        path = scope.get("path") or ""
+        parts = [p for p in path.split("/") if p]
+        if not parts:
+            return await self.app(scope, receive, send)
+
+        target = parts[0]
+        if target not in _SERVICE_PREFIXES:
+            return await self.app(scope, receive, send)
+        if _is_local_target_for_process(target, self._service_name):
+            return await self.app(scope, receive, send)
+
+        url_key = _PREFIX_TO_SERVICE_URL_KEY.get(target, target)
+        base = settings.server.get_service_url(url_key).rstrip("/")
+        parsed = urlparse(base)
+        if not parsed.netloc:
+            raise RuntimeError(f"Некорректный URL сервиса {url_key} (path {target}): {base!r}")
+
+        ws_scheme = "wss" if parsed.scheme == "https" else "ws"
+        query = scope.get("query_string", b"").decode("latin-1")
+        upstream_url = f"{ws_scheme}://{parsed.netloc}{path}"
+        if query:
+            upstream_url = f"{upstream_url}?{query}"
+
+        forward_headers: list[tuple[str, str]] = []
+        for raw_k, raw_v in scope.get("headers") or []:
+            lk = raw_k.decode("latin-1").lower()
+            if lk in _WS_HOP_BY_HOP:
+                continue
+            forward_headers.append((raw_k.decode("latin-1"), raw_v.decode("latin-1")))
+
+        subprotocols = scope.get("subprotocols") or []
+
+        try:
+            upstream = await websockets.connect(
+                upstream_url,
+                additional_headers=forward_headers,
+                subprotocols=subprotocols if subprotocols else None,
+                open_timeout=10,
+                ping_interval=None,
+                max_size=None,
+            )
+        except Exception as exc:
+            logger.warning("dev WS proxy: upstream connect failed %s: %s", upstream_url, exc)
+            await send({"type": "websocket.close", "code": 1011})
+            return
+
+        accept_msg: dict = {"type": "websocket.accept"}
+        if upstream.subprotocol:
+            accept_msg["subprotocol"] = upstream.subprotocol
+        await send(accept_msg)
+
+        async def _client_to_upstream() -> None:
+            try:
+                while True:
+                    msg = await receive()
+                    mtype = msg.get("type")
+                    if mtype == "websocket.disconnect":
+                        await upstream.close(code=msg.get("code", 1000) or 1000)
+                        return
+                    if mtype != "websocket.receive":
+                        continue
+                    if msg.get("bytes") is not None:
+                        await upstream.send(msg["bytes"])
+                    elif msg.get("text") is not None:
+                        await upstream.send(msg["text"])
+            except websockets.ConnectionClosed:
+                return
+
+        async def _upstream_to_client() -> None:
+            try:
+                async for frame in upstream:
+                    if isinstance(frame, bytes):
+                        await send({"type": "websocket.send", "bytes": frame})
+                    else:
+                        await send({"type": "websocket.send", "text": frame})
+            except websockets.ConnectionClosed:
+                return
+
+        try:
+            done, pending = await asyncio.wait(
+                {
+                    asyncio.create_task(_client_to_upstream()),
+                    asyncio.create_task(_upstream_to_client()),
+                },
+                return_when=asyncio.FIRST_COMPLETED,
+            )
+            for task in pending:
+                task.cancel()
+            for task in pending:
+                try:
+                    await task
+                except (asyncio.CancelledError, Exception):
+                    pass
+        finally:
+            try:
+                await upstream.close()
+            except Exception:
+                pass
+            try:
+                await send({"type": "websocket.close", "code": 1000})
+            except Exception:
+                pass

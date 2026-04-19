@@ -2,9 +2,10 @@
  * PlatformButton — унифицированная кнопка платформы
  * Варианты: primary (violet), accent (orange), secondary, danger, ghost
  */
-import { html, css, LitElement } from 'lit';
+import { html, css } from 'lit';
+import { PlatformElement } from '../platform-element/index.js';
 
-export class PlatformButton extends LitElement {
+export class PlatformButton extends PlatformElement {
     static styles = css`
         :host {
             display: inline-flex;

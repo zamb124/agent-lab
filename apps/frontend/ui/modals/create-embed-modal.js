@@ -1,618 +1,374 @@
 /**
- * Модальное окно для создания виджета
+ * Create / edit embed modal — полный wizard конфигурации виджета.
+ *
+ * Если передан `embedConfig` — режим редактирования (PATCH /configs/{embed_id}).
+ * Без него — режим создания (POST /configs).
+ *
+ * Поля соответствуют CreateEmbedConfigRequest/UpdateEmbedConfigRequest
+ * (apps/frontend/api/embed_configs.py): name, flow_id, skill_id,
+ * allowed_origins, theme, position, show_launcher, primary_color,
+ * greeting_message, assistant_title, interface_locale, placeholder, branding.
+ *
+ * Skill заблокирован для external flows и flows без skills (бэк подставит default).
  */
 import { html, css } from 'lit';
-import { PlatformModal } from '@platform/lib/components/glass-modal.js';
-import '@platform/lib/components/platform-icon.js';
-import { formStyles } from '@platform/lib/styles/shared/form.styles.js';
-import { buttonStyles } from '@platform/lib/styles/shared/button.styles.js';
-import { FrontendStore } from '../store/frontend.store.js';
+import { PlatformFormModal } from '@platform/lib/components/glass-form-modal.js';
+import { registerModalKind } from '@platform/lib/utils/modal-registry.js';
 
-export class CreateEmbedModal extends PlatformModal {
+const POSITIONS = Object.freeze([
+    { value: 'bottom-right', key: 'pos_br' },
+    { value: 'bottom-left',  key: 'pos_bl' },
+    { value: 'center',       key: 'pos_center' },
+    { value: 'fullscreen',   key: 'pos_full' },
+]);
+
+const THEMES = Object.freeze([
+    { value: 'light', key: 'theme_light' },
+    { value: 'dark',  key: 'theme_dark' },
+    { value: 'auto',  key: 'theme_auto' },
+]);
+
+const LOCALES = Object.freeze([
+    { value: 'auto', key: 'locale_auto' },
+    { value: 'ru',   key: 'locale_ru' },
+    { value: 'en',   key: 'locale_en' },
+]);
+
+export class FrontendCreateEmbedModal extends PlatformFormModal {
+    static modalKind = 'frontend.embed_create';
+
     static styles = [
-        PlatformModal.styles,
-        formStyles,
-        buttonStyles,
+        ...PlatformFormModal.styles,
         css`
-            .flow-skill-row {
-                display: grid;
-                gap: var(--space-4, 16px);
-                margin-bottom: var(--space-5, 20px);
+            .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-3); }
+            .form-grid .form-group.full { grid-column: 1 / -1; }
+            .hint { font-size: var(--text-xs); color: var(--text-tertiary); margin-top: 4px; }
+            .radio-row { display: flex; gap: var(--space-2); flex-wrap: wrap; }
+            .radio-row label {
+                padding: var(--space-2) var(--space-3);
+                background: var(--glass-solid-subtle);
+                border: 1px solid var(--glass-border-subtle);
+                border-radius: var(--radius-md);
+                cursor: pointer; font-size: var(--text-sm);
+                display: flex; align-items: center; gap: var(--space-2);
             }
-
-            .flow-skill-row .form-group {
-                margin-bottom: 0;
-            }
-
-            .flow-skill-row--split {
-                grid-template-columns: 1fr 1fr;
-            }
-
-            @media (max-width: 520px) {
-                .flow-skill-row--split {
-                    grid-template-columns: 1fr;
-                }
-            }
-
-            .position-options {
-                display: grid;
-                grid-template-columns: repeat(2, 1fr);
-                gap: 12px;
-            }
-
-            .position-option {
-                padding: 16px;
-                background: var(--glass-tint-subtle);
-                border: 2px solid var(--border-subtle);
-                border-radius: 14px;
-                cursor: pointer;
-                transition: background 0.2s ease, border-color 0.2s ease;
-                text-align: center;
-            }
-
-            .position-option:hover {
-                background: var(--glass-tint-medium);
-                border-color: var(--border-default);
-            }
-
-            .position-option.selected {
-                background: var(--accent-subtle);
-                border-color: rgba(153, 166, 249, 0.4);
-            }
-
-            .position-icon {
-                font-size: 24px;
-                margin-bottom: 8px;
-                color: var(--text-secondary);
-                line-height: 1.2;
-            }
-
-            .position-option.selected .position-icon {
-                color: var(--accent);
-            }
-
-            .position-label {
-                font-size: 13px;
-                font-weight: 500;
-                color: var(--text-primary);
-            }
-
-            .position-option.selected .position-label {
-                color: var(--text-primary);
-            }
-
-            .actions-row {
-                display: flex;
-                gap: 12px;
-            }
-
-            .actions-row .btn {
-                flex: 1;
-            }
-
-            .flows-hint {
-                font-size: var(--text-xs, 12px);
-                color: var(--text-tertiary);
-                margin-top: var(--space-2);
-            }
-
-            .theme-label-row {
-                display: flex;
-                align-items: center;
-                justify-content: space-between;
-                gap: var(--space-3, 12px);
-                flex-wrap: wrap;
-            }
-
-            .theme-label-row .form-label {
-                margin-bottom: 0;
-            }
-
-            .theme-chips {
-                display: inline-flex;
-                align-items: center;
-                gap: 6px;
-                flex-shrink: 0;
-            }
-
-            .theme-chip {
-                display: inline-flex;
-                align-items: center;
-                justify-content: center;
-                min-width: 44px;
-                height: 40px;
-                padding: 0 12px;
-                box-sizing: border-box;
-                border: 1px solid var(--border-default);
-                border-radius: var(--radius-md, 12px);
-                background: var(--glass-tint-subtle);
-                color: var(--text-secondary);
-                cursor: pointer;
-                transition:
-                    border-color 0.15s ease,
-                    background 0.15s ease,
-                    color 0.15s ease;
-            }
-
-            .theme-chip:hover:not(:disabled) {
-                border-color: var(--border-strong);
-                color: var(--text-primary);
-                background: var(--glass-tint-medium);
-            }
-
-            .theme-chip.selected {
-                border-color: var(--accent);
-                background: var(--accent-subtle);
-                color: var(--accent);
-            }
-
-            .theme-chip:disabled {
-                opacity: 0.5;
-                cursor: not-allowed;
-            }
-
-            .theme-chip platform-icon {
-                display: block;
-            }
+            .radio-row label.checked { background: var(--glass-solid-medium); border-color: var(--accent); }
+            .switch-row { display: flex; align-items: center; gap: var(--space-2); }
+            textarea.form-input { min-height: 70px; font-family: var(--font-mono); font-size: var(--text-xs); }
+            input[type=color] { width: 60px; height: 36px; padding: 0; border-radius: var(--radius-md); border: 1px solid var(--glass-border-subtle); }
         `,
     ];
 
+    static properties = {
+        ...PlatformFormModal.properties,
+        embedConfig: { type: Object },
+        _name: { state: true },
+        _flowId: { state: true },
+        _skillId: { state: true },
+        _theme: { state: true },
+        _position: { state: true },
+        _interfaceLocale: { state: true },
+        _allowedOrigins: { state: true },
+        _showLauncher: { state: true },
+        _branding: { state: true },
+        _primaryColor: { state: true },
+        _assistantTitle: { state: true },
+        _greetingMessage: { state: true },
+        _placeholder: { state: true },
+    };
+
     constructor() {
         super();
-        this.size = 'md';
-        this.open = true;
-        this._loading = false;
+        this.embedConfig = null;
         this._name = '';
         this._flowId = '';
         this._skillId = 'default';
-        this._flows = [];
-        this._flowsLoading = true;
-        this._position = 'bottom-right';
         this._theme = 'dark';
-        this._showLauncher = true;
-        this._allowedOriginsText = '';
-        this._assistantTitle = '';
+        this._position = 'bottom-right';
         this._interfaceLocale = 'auto';
-        this._editConfig = null;
+        this._allowedOrigins = '';
+        this._showLauncher = true;
+        this._branding = true;
+        this._primaryColor = '#6366f1';
+        this._assistantTitle = '';
+        this._greetingMessage = '';
+        this._placeholder = '';
+        this.size = 'lg';
+        this._configs = this.useResource('frontend/embed_configs');
+        this._catalog = this.useOp('frontend/flows_catalog');
+        this._loaded = false;
+        this._populated = false;
     }
 
-    setEditConfig(config) {
-        this._editConfig = config;
-        this._name = config.name;
-        this._flowId = String(config.flow_id ?? config.flowId ?? '').trim();
-        this._skillId = config.skill_id || 'default';
-        this._position = config.position || 'bottom-right';
-        this._theme = config.theme || 'dark';
-        this._showLauncher = config.show_launcher !== false;
-        this._allowedOriginsText = Array.isArray(config.allowed_origins) ? config.allowed_origins.join('\n') : '';
-        this._assistantTitle = config.assistant_title || '';
-        this._interfaceLocale = config.interface_locale || 'auto';
-        this.requestUpdate();
-    }
-
-    get _isEditMode() {
-        return this._editConfig !== null;
-    }
-
-    async connectedCallback() {
-        super.connectedCallback();
-        this._i18nUnsub = this.i18n.subscribe(() => this.requestUpdate());
-        await this._loadFlows();
-    }
-
-    disconnectedCallback() {
-        if (this._i18nUnsub) {
-            this._i18nUnsub();
-            this._i18nUnsub = null;
+    willUpdate(changed) {
+        super.willUpdate(changed);
+        const isEdit = !!this.embedConfig;
+        this.title = isEdit
+            ? this.t('embed_create_modal.header_edit')
+            : this.t('embed_create_modal.header');
+        if (changed.has('open') && this.open && !this._loaded) {
+            this._loaded = true;
+            this._catalog.run(null);
         }
-        super.disconnectedCallback();
+        if (changed.has('embedConfig') && this.embedConfig && !this._populated) {
+            this._populated = true;
+            const c = this.embedConfig;
+            this._name = c.name || '';
+            this._flowId = c.flow_id || '';
+            this._skillId = c.skill_id || 'default';
+            this._theme = c.theme || 'dark';
+            this._position = c.position || 'bottom-right';
+            this._interfaceLocale = c.interface_locale || 'auto';
+            this._allowedOrigins = (c.allowed_origins || []).join('\n');
+            this._showLauncher = c.show_launcher !== false;
+            this._branding = c.branding !== false;
+            this._primaryColor = c.primary_color || '#6366f1';
+            this._assistantTitle = c.assistant_title || '';
+            this._greetingMessage = c.greeting_message || '';
+            this._placeholder = c.placeholder || '';
+        }
     }
 
-    async _loadFlows() {
-        this._flowsLoading = true;
-        this.requestUpdate();
-        try {
-            const list = await this.services.get('flowsCatalog').listFlows();
-            this._flows = Array.isArray(list) ? list : [];
-        } catch (e) {
-            const msg = e instanceof Error ? e.message : String(e);
-            this.error(msg);
-            this._flows = [];
-        }
-        this._flowsLoading = false;
-        this.requestUpdate();
-    }
-
-    _getFlowId(flow) {
-        if (!flow || typeof flow !== 'object') {
-            return '';
-        }
-        if (typeof flow.flow_id === 'string') {
-            return flow.flow_id.trim();
-        }
-        if (typeof flow.id === 'string') {
-            return flow.id.trim();
-        }
-        return '';
-    }
-
-    _normalizeFlowId(value) {
-        return String(value ?? '').trim();
-    }
-
-    _isSameFlowId(left, right) {
-        return this._normalizeFlowId(left) === this._normalizeFlowId(right);
-    }
-
-    _flowsList() {
-        const flows = (Array.isArray(this._flows) ? this._flows : [])
-            .map((flow) => {
-                const flowId = this._getFlowId(flow);
-                if (!flowId) {
-                    return null;
-                }
-                const flowName = typeof flow.name === 'string' && flow.name.trim() ? flow.name.trim() : flowId;
-                const flowType = typeof flow.type === 'string' && flow.type.trim()
-                    ? flow.type.trim().toLowerCase()
-                    : 'external';
-                return {
-                    ...flow,
-                    flow_id: flowId,
-                    name: flowName,
-                    type: flowType,
-                };
-            })
-            .filter((flow) => flow !== null);
-        const currentFlowId = this._normalizeFlowId(this._flowId);
-        if (!currentFlowId) {
-            return flows;
-        }
-        const alreadyPresent = flows.some((f) => this._isSameFlowId(f.flow_id, currentFlowId));
-        if (alreadyPresent) {
-            return flows;
-        }
-        flows.push({
-            flow_id: currentFlowId,
-            name: currentFlowId,
-            type: 'external',
-            skills: {},
-        });
-        return flows;
+    _flows() {
+        const r = this._catalog.lastResult;
+        return (r && r.flows) || [];
     }
 
     _selectedFlow() {
-        const currentFlowId = this._normalizeFlowId(this._flowId);
-        if (!currentFlowId) {
-            return null;
-        }
-        return this._flowsList().find((f) => this._isSameFlowId(f.flow_id, currentFlowId)) ?? null;
+        return this._flows().find((f) => f.flow_id === this._flowId) || null;
     }
 
-    _skillChoices() {
+    _flowSkills() {
         const flow = this._selectedFlow();
-        if (!flow || flow.type !== 'local' || !flow.skills) {
-            return [];
-        }
-        return Object.entries(flow.skills);
+        if (!flow) return [];
+        const skills = flow.skills || {};
+        if (Array.isArray(skills)) return skills.map((s) => ({ id: s, name: s }));
+        return Object.entries(skills).map(([id, v]) => ({ id, name: (v && v.name) || id }));
     }
 
-    _onFlowChange(e) {
-        this._flowId = String(e.target.value || '').trim();
+    _skillSelectorEnabled() {
         const flow = this._selectedFlow();
-        if (!flow || flow.type !== 'local') {
-            this._skillId = 'default';
-            this.requestUpdate();
-            return;
-        }
-        const entries = flow.skills ? Object.keys(flow.skills) : [];
-        if (entries.length === 0) {
-            this._skillId = 'default';
-            this.requestUpdate();
-            return;
-        }
-        if (!entries.includes(this._skillId)) {
-            this._skillId = entries.includes('default') ? 'default' : entries[0];
-        }
-        this.requestUpdate();
+        if (!flow) return false;
+        if (flow.type === 'external') return false;
+        return this._flowSkills().length > 0;
     }
 
-    _onSkillChange(e) {
-        this._skillId = e.target.value;
-        this.requestUpdate();
+    validateForm() {
+        const errors = {};
+        if (!this._name.trim()) errors.name = this.t('embed_create_modal.err_name');
+        if (!this._flowId) errors.flow_id = this.t('embed_create_modal.err_flow');
+        return errors;
     }
 
-    async _handleCreate() {
-        const td = (k, p) => this.i18n.t(k, p ?? {});
-        if (!this._name.trim()) {
-            this.error(td('embed_create_modal.err_name'));
-            return;
-        }
-
-        if (!this._flowId.trim()) {
-            this.error(td('embed_create_modal.err_flow'));
-            return;
-        }
-
-        const flow = this._selectedFlow();
-        if (!flow) {
-            this.error(td('embed_create_modal.err_flow_invalid'));
-            return;
-        }
-
-        let skillId = 'default';
-        if (flow.type === 'local' && flow.skills && Object.keys(flow.skills).length > 0) {
-            skillId = this._skillId;
-        }
-
-        this._loading = true;
-        this.requestUpdate();
-
-        const allowedOrigins = this._allowedOriginsText
+    _parseOrigins() {
+        return this._allowedOrigins
             .split('\n')
-            .map((origin) => origin.trim())
-            .filter((origin) => origin.length > 0);
+            .map((s) => s.trim())
+            .filter(Boolean);
+    }
 
+    async handleSubmit() {
+        const isEdit = !!this.embedConfig;
         const payload = {
             name: this._name.trim(),
-            flow_id: this._flowId.trim(),
-            skill_id: skillId,
-            allowed_origins: allowedOrigins,
-            position: this._position,
+            flow_id: this._flowId,
+            skill_id: this._skillSelectorEnabled() ? this._skillId : 'default',
+            allowed_origins: this._parseOrigins(),
             theme: this._theme,
+            position: this._position,
             show_launcher: this._showLauncher,
+            branding: this._branding,
+            primary_color: this._primaryColor,
             assistant_title: this._assistantTitle.trim() || null,
+            greeting_message: this._greetingMessage.trim() || null,
             interface_locale: this._interfaceLocale,
-            status: 'active',
+            placeholder: this._placeholder.trim() || null,
         };
-
-        const embedService = this.services.get('embed');
-
-        if (this._isEditMode) {
-            await embedService.update(this._editConfig.embed_id, payload);
+        if (isEdit) {
+            this._configs.update(this.embedConfig.embed_id, payload);
         } else {
-            await embedService.create(payload);
+            this._configs.create(payload);
         }
-
-        FrontendStore.setEmbedLoading(true);
-        const page = await embedService.listConfigs();
-        FrontendStore.setEmbedConfigs(page.items);
-
-        const toastKey = this._isEditMode ? 'embed_create_modal.toast_updated' : 'embed_create_modal.toast_created';
-        this.success(td(toastKey));
-        this._handleClose();
-        this.dispatchEvent(new CustomEvent(this._isEditMode ? 'updated' : 'created'));
-
-        this._loading = false;
-        this.requestUpdate();
+        this.closeAfterSave();
     }
 
-    close() {
-        this.open = false;
-        super.close();
-        this.dispatchEvent(new CustomEvent('close'));
-    }
-
-    _handleClose() {
-        this.close();
-    }
-
-    renderHeader() {
-        const key = this._isEditMode ? 'embed_create_modal.header_edit' : 'embed_create_modal.header';
-        return this.i18n.t(key, {});
-    }
-
-    renderBody() {
-        const td = (k, p) => this.i18n.t(k, p ?? {});
-        if (this._flowsLoading) {
-            return html`<div class="loading-hint">${td('embed_create_modal.loading_flows')}</div>`;
-        }
-
-        const skillEntries = this._skillChoices();
-        const showSkill = skillEntries.length > 0;
-
+    _renderRadioRow(items, current, onPick, namespace = 'embed_create_modal') {
         return html`
-            <div class="form-group">
-                <label class="form-label">${td('embed_create_modal.label_name')}</label>
-                <input
-                    class="form-input"
-                    type="text"
-                    placeholder=${td('embed_create_modal.placeholder_name')}
-                    .value=${this._name}
-                    @input=${(e) => { this._name = e.target.value; this.requestUpdate(); }}
-                    ?disabled=${this._loading}
-                />
-                <div class="form-hint">${td('embed_create_modal.name_hint')}</div>
-            </div>
-
-            <div class="flow-skill-row ${showSkill ? 'flow-skill-row--split' : ''}">
-                <div class="form-group">
-                    <label class="form-label">${td('embed_create_modal.label_flow')}</label>
-                    <select
-                        class="form-select"
-                        .value=${this._flowId}
-                        @change=${(e) => this._onFlowChange(e)}
-                        ?disabled=${this._loading}
-                    >
-                        <option value="">${td('embed_create_modal.flow_placeholder')}</option>
-                        ${this._flowsList().map(
-                            (f) => html`
-                                <option value=${f.flow_id} ?selected=${this._isSameFlowId(f.flow_id, this._flowId)}>
-                                    ${f.name} (${f.flow_id})
-                                </option>
-                            `,
-                        )}
-                    </select>
-                    <div class="form-hint">${td('embed_create_modal.flow_hint')}</div>
-                </div>
-
-                ${showSkill
-                    ? html`
-                          <div class="form-group">
-                              <label class="form-label">${td('embed_create_modal.label_skill')}</label>
-                              <select
-                                  class="form-select"
-                                  .value=${this._skillId}
-                                  @change=${(e) => this._onSkillChange(e)}
-                                  ?disabled=${this._loading}
-                              >
-                                  ${skillEntries.map(
-                                      ([skillId, skill]) => html`
-                                          <option value=${skillId}>
-                                              ${skill.name ? `${skill.name} (${skillId})` : skillId}
-                                          </option>
-                                      `,
-                                  )}
-                              </select>
-                              <div class="form-hint">${td('embed_create_modal.skill_hint')}</div>
-                          </div>
-                      `
-                    : this._flowId
-                      ? html`
-                            <div class="form-group flows-hint">
-                                ${td('embed_create_modal.skill_default_hint')}
-                            </div>
-                        `
-                      : html``}
-            </div>
-
-            <div class="flow-skill-row flow-skill-row--split">
-                <div class="form-group">
-                    <label class="form-label">${td('embed_create_modal.label_assistant_title')}</label>
-                    <input
-                        class="form-input"
-                        type="text"
-                        placeholder=${td('embed_create_modal.placeholder_assistant_title')}
-                        .value=${this._assistantTitle}
-                        @input=${(e) => { this._assistantTitle = e.target.value; this.requestUpdate(); }}
-                        ?disabled=${this._loading}
-                    />
-                    <div class="form-hint">${td('embed_create_modal.assistant_title_hint')}</div>
-                </div>
-                <div class="form-group">
-                    <label class="form-label">${td('embed_create_modal.label_interface_locale')}</label>
-                    <select
-                        class="form-select"
-                        .value=${this._interfaceLocale}
-                        @change=${(e) => { this._interfaceLocale = e.target.value; this.requestUpdate(); }}
-                        ?disabled=${this._loading}
-                    >
-                        <option value="auto">${td('embed_create_modal.locale_auto')}</option>
-                        <option value="ru">${td('embed_create_modal.locale_ru')}</option>
-                        <option value="en">${td('embed_create_modal.locale_en')}</option>
-                    </select>
-                    <div class="form-hint">${td('embed_create_modal.interface_locale_hint')}</div>
-                </div>
-            </div>
-
-            <div class="form-group">
-                <label class="form-label">${td('embed_create_modal.label_allowed_origins')}</label>
-                <textarea
-                    class="form-textarea"
-                    rows="4"
-                    placeholder=${td('embed_create_modal.placeholder_allowed_origins')}
-                    .value=${this._allowedOriginsText}
-                    @input=${(e) => { this._allowedOriginsText = e.target.value; this.requestUpdate(); }}
-                    ?disabled=${this._loading}
-                ></textarea>
-                <div class="form-hint">${td('embed_create_modal.allowed_origins_hint')}</div>
-            </div>
-
-            <div class="form-group">
-                <label class="form-label">${td('embed_create_modal.position_label')}</label>
-                <div class="position-options">
-                    ${this._renderPositionOption('bottom-right', '↘', td('embed_create_modal.pos_br'))}
-                    ${this._renderPositionOption('bottom-left', '↙', td('embed_create_modal.pos_bl'))}
-                    ${this._renderPositionOption('center', '◎', td('embed_create_modal.pos_center'))}
-                    ${this._renderPositionOption('fullscreen', '⛶', td('embed_create_modal.pos_full'))}
-                </div>
-            </div>
-
-            <div class="form-group">
-                <div class="theme-label-row">
-                    <span class="form-label">${td('embed_create_modal.theme_label')}</span>
-                    <div class="theme-chips" role="group" aria-label=${td('embed_create_modal.theme_group_aria')}>
-                        ${this._renderThemeChip('light', 'sun', td('embed_create_modal.theme_light'))}
-                        ${this._renderThemeChip('dark', 'moon', td('embed_create_modal.theme_dark'))}
-                        ${this._renderThemeChip('auto', 'theme-auto', td('embed_create_modal.theme_auto'))}
-                    </div>
-                </div>
-            </div>
-            <div class="form-group">
-                <label class="form-label">
-                    <input
-                        type="checkbox"
-                        .checked=${this._showLauncher}
-                        @change=${(e) => { this._showLauncher = e.target.checked; this.requestUpdate(); }}
-                        ?disabled=${this._loading}
-                    />
-                    ${td('embed_create_modal.label_show_launcher')}
-                </label>
-                <div class="form-hint">${td('embed_create_modal.show_launcher_hint')}</div>
+            <div class="radio-row">
+                ${items.map((item) => html`
+                    <label class=${current === item.value ? 'checked' : ''}>
+                        <input
+                            type="radio"
+                            .checked=${current === item.value}
+                            @change=${() => { onPick(item.value); this.isDirty = true; }}
+                        />
+                        ${this.t(`${namespace}.${item.key}`)}
+                    </label>
+                `)}
             </div>
         `;
     }
 
-    renderSaveHeaderButton() {
-        const td = (k, p) => this.i18n.t(k, p ?? {});
-        const loadingKey = this._isEditMode ? 'embed_create_modal.saving' : 'embed_create_modal.creating';
-        const submitKey = this._isEditMode ? 'embed_create_modal.save' : 'embed_create_modal.submit';
-        const title = this._loading ? td(loadingKey) : td(submitKey);
-        return this._renderHeaderSaveIcon({
-            onClick: () => this._handleCreate(),
-            disabled: this._loading || this._flowsLoading,
-            title,
-        });
+    renderBody() {
+        const flows = this._flows();
+        const flowsLoading = this._catalog.busy;
+        const skillEnabled = this._skillSelectorEnabled();
+        const skills = this._flowSkills();
+        return html`
+            <form @submit=${this._onSubmit}>
+                <div class="form-grid">
+                    <div class="form-group full">
+                        <label class="form-label">${this.t('embed_create_modal.label_name')}</label>
+                        <input
+                            class="form-input"
+                            name="name"
+                            .value=${this._name}
+                            placeholder=${this.t('embed_create_modal.placeholder_name')}
+                            @input=${(e) => { this._name = e.target.value; this.isDirty = true; }}
+                            autofocus
+                        />
+                        <div class="hint">${this.t('embed_create_modal.name_hint')}</div>
+                        ${this.renderFieldError('name')}
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label">${this.t('embed_create_modal.label_flow')}</label>
+                        ${flowsLoading
+                            ? html`<div class="hint">${this.t('embed_create_modal.loading_flows')}</div>`
+                            : html`
+                                <select
+                                    class="form-select"
+                                    .value=${this._flowId}
+                                    @change=${(e) => { this._flowId = e.target.value; this._skillId = 'default'; this.isDirty = true; }}
+                                >
+                                    <option value="">${this.t('embed_create_modal.flow_placeholder')}</option>
+                                    ${flows.map((f) => html`
+                                        <option value=${f.flow_id} ?selected=${this._flowId === f.flow_id}>
+                                            ${f.name || f.flow_id}
+                                        </option>
+                                    `)}
+                                </select>
+                            `}
+                        <div class="hint">${this.t('embed_create_modal.flow_hint')}</div>
+                        ${this.renderFieldError('flow_id')}
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label">${this.t('embed_create_modal.label_skill')}</label>
+                        ${skillEnabled
+                            ? html`
+                                <select
+                                    class="form-select"
+                                    .value=${this._skillId}
+                                    @change=${(e) => { this._skillId = e.target.value; this.isDirty = true; }}
+                                >
+                                    ${skills.map((s) => html`
+                                        <option value=${s.id} ?selected=${this._skillId === s.id}>${s.name}</option>
+                                    `)}
+                                </select>
+                                <div class="hint">${this.t('embed_create_modal.skill_hint')}</div>
+                            `
+                            : html`<div class="hint">${this.t('embed_create_modal.skill_default_hint')}</div>`}
+                    </div>
+
+                    <div class="form-group full">
+                        <label class="form-label">${this.t('embed_create_modal.position_label')}</label>
+                        ${this._renderRadioRow(POSITIONS, this._position, (v) => { this._position = v; })}
+                    </div>
+
+                    <div class="form-group full">
+                        <label class="form-label" aria-label=${this.t('embed_create_modal.theme_group_aria')}>
+                            ${this.t('embed_create_modal.theme_label')}
+                        </label>
+                        ${this._renderRadioRow(THEMES, this._theme, (v) => { this._theme = v; })}
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label">${this.t('embed_create_modal.label_assistant_title')}</label>
+                        <input
+                            class="form-input"
+                            .value=${this._assistantTitle}
+                            placeholder=${this.t('embed_create_modal.placeholder_assistant_title')}
+                            @input=${(e) => { this._assistantTitle = e.target.value; this.isDirty = true; }}
+                        />
+                        <div class="hint">${this.t('embed_create_modal.assistant_title_hint')}</div>
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label">${this.t('embed_create_modal.label_interface_locale')}</label>
+                        <select
+                            class="form-select"
+                            .value=${this._interfaceLocale}
+                            @change=${(e) => { this._interfaceLocale = e.target.value; this.isDirty = true; }}
+                        >
+                            ${LOCALES.map((l) => html`
+                                <option value=${l.value} ?selected=${this._interfaceLocale === l.value}>
+                                    ${this.t(`embed_create_modal.${l.key}`)}
+                                </option>
+                            `)}
+                        </select>
+                        <div class="hint">${this.t('embed_create_modal.interface_locale_hint')}</div>
+                    </div>
+
+                    <div class="form-group full">
+                        <label class="form-label">${this.t('embed_create_modal.label_allowed_origins')}</label>
+                        <textarea
+                            class="form-input"
+                            .value=${this._allowedOrigins}
+                            placeholder=${this.t('embed_create_modal.placeholder_allowed_origins')}
+                            @input=${(e) => { this._allowedOrigins = e.target.value; this.isDirty = true; }}
+                        ></textarea>
+                        <div class="hint">${this.t('embed_create_modal.allowed_origins_hint')}</div>
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label">primary_color</label>
+                        <input
+                            type="color"
+                            .value=${this._primaryColor}
+                            @input=${(e) => { this._primaryColor = e.target.value; this.isDirty = true; }}
+                        />
+                    </div>
+
+                    <div class="form-group">
+                        <label class="switch-row">
+                            <input
+                                type="checkbox"
+                                .checked=${this._showLauncher}
+                                @change=${(e) => { this._showLauncher = e.target.checked; this.isDirty = true; }}
+                            />
+                            <span>${this.t('embed_create_modal.label_show_launcher')}</span>
+                        </label>
+                        <div class="hint">${this.t('embed_create_modal.show_launcher_hint')}</div>
+                    </div>
+                </div>
+            </form>
+        `;
     }
 
     renderFooter() {
-        const td = (k, p) => this.i18n.t(k, p ?? {});
+        const isEdit = !!this.embedConfig;
+        const canSubmit = this._name.trim().length > 0 && !!this._flowId && !this.loading;
+        const submitLabel = isEdit
+            ? (this.loading ? this.t('embed_create_modal.saving') : this.t('embed_create_modal.save'))
+            : (this.loading ? this.t('embed_create_modal.creating') : this.t('embed_create_modal.submit'));
         return html`
-            <div class="actions-row">
+            <div class="form-actions">
+                <button type="button" class="btn btn-secondary" @click=${() => this.close()}>
+                    ${this.t('embed_create_modal.cancel')}
+                </button>
                 <button
-                    class="btn btn-secondary"
-                    @click=${this._handleClose}
-                    ?disabled=${this._loading}
+                    type="button"
+                    class="btn btn-primary"
+                    ?disabled=${!canSubmit}
+                    @click=${() => this._performSave()}
                 >
-                    ${td('embed_create_modal.cancel')}
+                    ${submitLabel}
                 </button>
             </div>
         `;
     }
-
-    _renderPositionOption(value, icon, label) {
-        return html`
-            <div
-                class="position-option ${this._position === value ? 'selected' : ''}"
-                @click=${() => { if (!this._loading) { this._position = value; this.requestUpdate(); }}}
-            >
-                <div class="position-icon">${icon}</div>
-                <div class="position-label">${label}</div>
-            </div>
-        `;
-    }
-
-    _renderThemeChip(value, iconName, title) {
-        const selected = this._theme === value;
-        return html`
-            <button
-                type="button"
-                class="theme-chip ${selected ? 'selected' : ''}"
-                title=${title}
-                aria-label=${title}
-                aria-pressed=${selected ? 'true' : 'false'}
-                ?disabled=${this._loading}
-                @click=${() => {
-                    if (this._loading) {
-                        return;
-                    }
-                    this._theme = value;
-                    this.requestUpdate();
-                }}
-            >
-                <platform-icon name=${iconName} size="20"></platform-icon>
-            </button>
-        `;
-    }
 }
 
-customElements.define('create-embed-modal', CreateEmbedModal);
+customElements.define('frontend-create-embed-modal', FrontendCreateEmbedModal);
+registerModalKind(FrontendCreateEmbedModal.modalKind, 'frontend-create-embed-modal');

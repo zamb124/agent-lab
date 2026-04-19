@@ -1,1206 +1,445 @@
 /**
- * Entity Card - Детальная карточка сущности
- * Показывает: данные, связанные entities, attachments, grants panel
- * Граф связей загружается лениво по кнопке пользователя
+ * EntityCard — правая детальная панель карточки сущности на странице
+ * `entities-page`. Получает entity-объект через свойство `.entity` (полная
+ * запись из выдачи `crm/entities_list` или `crm/entities/get`).
+ *
+ * Источники данных:
+ *   - `useResource('crm/entities')`   — загрузить сущность по id, если в проп
+ *     пришёл только идентификатор (карточку открыли по ссылке).
+ *   - `useOp('crm/entity_grants_list')` — список грантов по этой сущности
+ *     (lazy, по кнопке «Доступы»).
+ *   - `useOp('crm/related_entities')`  — связанные сущности 1-го уровня
+ *     (lazy, по кнопке «Граф связей»).
+ *
+ * Никаких прямых HTTP-вызовов и stateful-импортов — только helpers платформы.
  */
-import { html, css } from 'lit';
-import { PlatformElement } from '@platform/lib/platform-element/index.js';
-import { buttonStyles } from '@platform/lib/styles/shared/button.styles.js';
-import { platformConfirm } from '@platform/lib/components/platform-confirm-modal.js';
-import { AppEvents } from '@platform/lib/utils/types.js';
-import { CRMStore } from '../store/crm.store.js';
-import { nextModalLayerZIndex } from '@platform/lib/utils/modal-z-stack.js';
-import './grants-panel.js';
-import '@platform/lib/components/platform-icon.js';
-import '@platform/lib/components/fields/platform-field.js';
 
-export class EntityCard extends PlatformElement {
+import { html, css, nothing } from 'lit';
+import { PlatformElement } from '@platform/lib/platform-element/index.js';
+import '@platform/lib/components/platform-icon.js';
+import '@platform/lib/components/glass-spinner.js';
+
+export class CRMEntityCard extends PlatformElement {
+    static i18nNamespace = 'crm';
+
     static properties = {
-        entityId: { type: String },
-        showBackButton: { type: Boolean },
-        _entity: { state: true },
-        _relatedEntities: { state: true },
-        _entityTypes: { state: true },
-        _loading: { state: true },
-        _isOwner: { state: true },
-        _pendingAccessRequests: { state: true },
-        _requestsLoading: { state: true },
-        _processingRequestId: { state: true },
-        _graphVisible: { state: true },
-        _deleting: { state: true },
-        _headerMenuOpen: { state: true },
-        _headerMenuAnchor: { state: true },
-        _headerMenuZ: { state: true },
-        _entityGrants: { state: true },
-        _entityCardNotFound: { state: true },
+        entity: { attribute: false },
+        entityId: { type: String, attribute: 'entity-id' },
+        _grantsExpanded: { state: true },
+        _relatedExpanded: { state: true },
     };
 
     static styles = [
         PlatformElement.styles,
-        buttonStyles,
         css`
             :host {
-                display: block;
+                display: flex;
+                flex-direction: column;
                 width: 100%;
                 height: 100%;
-                background: var(--crm-surface);
-                backdrop-filter: blur(var(--glass-blur-strong));
-                border: 1px solid var(--crm-stroke-strong);
-                border-radius: var(--radius-2xl);
+                min-height: 0;
+                background: var(--crm-surface, #fff);
+                border: 1px solid var(--crm-stroke);
+                border-radius: 16px;
                 overflow: hidden;
+            }
+
+            .empty {
+                display: flex;
+                flex: 1;
+                flex-direction: column;
+                align-items: center;
+                justify-content: center;
+                gap: var(--space-2);
+                color: var(--text-tertiary);
+                padding: var(--space-6);
+                text-align: center;
+            }
+            .empty-title { font-size: var(--text-base); color: var(--text-secondary); }
+            .empty-subtitle { font-size: var(--text-sm); }
+
+            .scroll {
+                flex: 1;
+                overflow-y: auto;
+                padding: var(--space-4);
+                display: flex;
+                flex-direction: column;
+                gap: var(--space-3);
             }
 
             .header {
                 display: flex;
-                align-items: center;
+                align-items: flex-start;
                 gap: var(--space-3);
-                padding: var(--space-4);
-                border-bottom: 1px solid var(--crm-stroke);
-                background: var(--crm-surface-tint);
             }
 
-            .back-btn {
-                padding: var(--space-2);
-                background: var(--crm-surface-muted);
-                border: 1px solid var(--crm-stroke);
-                border-radius: var(--radius-lg);
-                color: var(--text-primary);
-                cursor: pointer;
-                transition: all var(--duration-fast);
-            }
-
-            .back-btn:hover {
-                background: var(--crm-surface);
-            }
-
-            .header-icon {
+            .type-icon {
                 width: 48px;
                 height: 48px;
-                display: flex;
-                align-items: center;
-                justify-content: center;
-                border-radius: var(--radius-xl);
-                font-size: var(--text-2xl);
-                flex-shrink: 0;
-            }
-
-            .header-content {
-                flex: 1;
-                min-width: 0;
-            }
-
-            .header-name {
-                font-size: var(--text-xl);
-                font-weight: 600;
-                color: var(--text-primary);
-                margin-bottom: var(--space-1);
-            }
-
-            .header-type {
-                font-size: var(--text-sm);
-                color: var(--text-secondary);
-            }
-
-            .header-actions {
-                display: flex;
-                gap: var(--space-2);
-            }
-
-            .action-btn {
-                padding: var(--space-2) var(--space-3);
-                background: var(--accent-secondary);
-                border: 1px solid var(--accent-secondary);
-                border-radius: var(--radius-lg);
-                color: var(--platform-btn-secondary-text);
-                font-size: var(--text-sm);
-                cursor: pointer;
-                transition: all var(--duration-fast);
-            }
-
-            .action-btn:hover {
-                background: var(--platform-btn-secondary-hover);
-                border-color: var(--platform-btn-secondary-hover);
-                color: var(--platform-btn-secondary-text);
-            }
-
-            .action-btn.primary {
-                background: var(--accent);
-                border-color: var(--accent);
-                color: var(--platform-btn-primary-text);
-            }
-
-            .action-btn.primary:hover {
-                background: var(--platform-btn-primary-hover);
-                border-color: var(--platform-btn-primary-hover);
-            }
-
-            .icon-btn {
-                width: 36px;
-                height: 36px;
                 display: inline-flex;
                 align-items: center;
                 justify-content: center;
                 border-radius: var(--radius-lg);
+                background: var(--crm-surface-tint);
+                color: var(--text-secondary);
+                flex-shrink: 0;
+            }
+
+            .header-text { flex: 1; min-width: 0; }
+            .name {
+                font-size: var(--text-lg);
+                font-weight: 700;
+                color: var(--text-primary);
+                margin: 0 0 4px 0;
+                word-wrap: break-word;
+            }
+            .meta {
+                font-size: var(--text-xs);
+                color: var(--text-tertiary);
+                display: flex;
+                gap: var(--space-2);
+                flex-wrap: wrap;
+            }
+            .meta .dot { color: var(--text-tertiary); opacity: 0.4; }
+
+            .status-badge {
+                display: inline-flex;
+                align-items: center;
+                gap: 4px;
+                padding: 2px 8px;
+                border-radius: var(--radius-full);
+                font-size: var(--text-xs);
+                font-weight: 500;
+                background: var(--crm-surface-tint);
+                color: var(--text-secondary);
+            }
+            .status-badge.active { background: rgba(34, 197, 94, 0.15); color: #16a34a; }
+            .status-badge.archived { background: rgba(148, 163, 184, 0.15); color: #64748b; }
+            .status-badge.pending { background: rgba(234, 179, 8, 0.15); color: #ca8a04; }
+            .status-badge.approved { background: rgba(34, 197, 94, 0.15); color: #16a34a; }
+            .status-badge.rejected { background: rgba(244, 63, 94, 0.15); color: #e11d48; }
+
+            .description {
+                color: var(--text-secondary);
+                font-size: var(--text-sm);
+                line-height: 1.5;
+                margin: 0;
+                white-space: pre-wrap;
+                word-wrap: break-word;
+            }
+
+            .actions-bar {
+                display: flex;
+                gap: var(--space-2);
+                flex-wrap: wrap;
+            }
+
+            .btn {
+                display: inline-flex;
+                align-items: center;
+                justify-content: center;
+                gap: 6px;
+                min-height: 32px;
+                padding: 0 var(--space-3);
+                border-radius: var(--radius-full);
                 border: 1px solid var(--crm-stroke);
                 background: var(--crm-surface-muted);
                 color: var(--text-secondary);
+                font-size: var(--text-xs);
+                font-weight: 500;
                 cursor: pointer;
-                transition: all var(--duration-fast);
-                padding: 0;
-                flex-shrink: 0;
+                transition: background var(--duration-fast), color var(--duration-fast);
             }
-
-            .icon-btn:hover {
-                background: var(--crm-surface);
-                color: var(--text-primary);
-                border-color: var(--accent-subtle);
+            .btn:hover { background: var(--crm-surface); color: var(--text-primary); }
+            .btn-primary {
+                background: var(--crm-daily-notes-cta-bg);
+                color: var(--text-inverse);
+                border-color: transparent;
             }
-
-            .icon-btn.danger {
-                border-color: rgba(244, 63, 94, 0.4);
-                color: var(--error, #f43f5e);
-            }
-
-            .icon-btn.danger:hover:not(:disabled) {
-                background: rgba(244, 63, 94, 0.12);
-                border-color: var(--error, #f43f5e);
-                color: var(--error, #f43f5e);
-            }
-
-            .icon-btn:disabled {
-                opacity: 0.5;
-                cursor: not-allowed;
-            }
-
-            .header-menu-root {
-                position: relative;
-            }
-
-            .header-dropdown {
-                min-width: 240px;
-                padding: var(--space-2);
-                background: var(--crm-surface);
-                border: 1px solid var(--crm-stroke-strong);
-                border-radius: var(--radius-lg);
-                box-shadow: 0 8px 32px rgba(0, 0, 0, 0.24);
-            }
-
-            .header-dropdown-item {
-                width: 100%;
-                display: flex;
-                align-items: center;
-                gap: var(--space-3);
-                padding: var(--space-2) var(--space-3);
-                border: none;
-                border-radius: var(--radius-md);
-                background: transparent;
-                color: var(--text-primary);
-                font-size: var(--text-sm);
-                text-align: left;
-                cursor: pointer;
-                transition: background var(--duration-fast);
-            }
-
-            .header-dropdown-item:hover {
-                background: var(--crm-surface-muted);
-            }
-
-            .header-dropdown-item.danger {
-                color: var(--error, #f43f5e);
-            }
-
-            .header-dropdown-item.danger:hover {
-                background: rgba(244, 63, 94, 0.1);
-            }
-
-            .content {
-                height: calc(100% - 85px);
-                overflow-y: auto;
-                padding: var(--space-4);
-                animation: card-fade-in 0.15s ease-out;
-            }
-
-            @keyframes card-fade-in {
-                from { opacity: 0; transform: translateY(4px); }
-                to { opacity: 1; transform: translateY(0); }
-            }
-
-            .section {
-                margin-bottom: var(--space-6);
-            }
+            .btn-primary:hover { background: var(--crm-daily-notes-cta-hover); }
+            .btn-danger { color: var(--error, #f43f5e); border-color: rgba(244, 63, 94, 0.35); }
 
             .section-title {
-                font-size: var(--text-sm);
+                font-size: var(--text-xs);
                 font-weight: 600;
                 text-transform: uppercase;
-                letter-spacing: 0.05em;
+                letter-spacing: 0.04em;
                 color: var(--text-tertiary);
-                margin-bottom: var(--space-3);
+                margin: 0;
             }
 
-            .description {
-                font-size: var(--text-base);
-                color: var(--text-primary);
-                line-height: 1.6;
-                white-space: pre-wrap;
-            }
-
-            .attributes-grid {
-                display: grid;
-                grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
-                gap: var(--space-3);
-            }
-
-            .attribute-item {
-                padding: var(--space-3);
-                background: var(--crm-surface-muted);
-                border-radius: var(--radius-lg);
-            }
-
-            .attribute-label {
+            .tags {
                 display: flex;
-                align-items: center;
-                gap: var(--space-1);
-                font-size: var(--text-xs);
-                color: var(--text-tertiary);
-                margin-bottom: var(--space-1);
+                flex-wrap: wrap;
+                gap: 6px;
             }
-
-            .attribute-value {
-                font-size: var(--text-base);
-                color: var(--text-primary);
-                word-break: break-word;
-            }
-
-            .attr-badge {
+            .tag {
                 display: inline-flex;
                 align-items: center;
-                padding: 0 4px;
-                border-radius: var(--radius-sm);
-                font-size: 9px;
-                font-weight: 600;
+                padding: 2px 8px;
+                border-radius: var(--radius-full);
+                background: var(--crm-surface-tint);
+                color: var(--text-secondary);
+                font-size: var(--text-xs);
+            }
+
+            .attrs {
+                display: grid;
+                grid-template-columns: minmax(100px, 1fr) 2fr;
+                row-gap: 6px;
+                column-gap: var(--space-2);
+                font-size: var(--text-sm);
+            }
+            .attr-key {
+                color: var(--text-tertiary);
+                font-size: var(--text-xs);
                 text-transform: uppercase;
-                letter-spacing: 0.03em;
-                line-height: 14px;
-                flex-shrink: 0;
+                letter-spacing: 0.04em;
+                padding-top: 2px;
+            }
+            .attr-val { color: var(--text-primary); word-break: break-word; }
+
+            .collapsible-header {
+                display: flex;
+                align-items: center;
+                justify-content: space-between;
+                cursor: pointer;
+                padding: var(--space-2) 0;
+                border-top: 1px solid var(--crm-stroke);
             }
 
-            .attr-badge.required {
-                background: rgba(239, 68, 68, 0.12);
-                color: #ef4444;
+            .collapsible-content {
+                padding-bottom: var(--space-2);
             }
 
-            .attr-badge.optional {
-                background: rgba(59, 130, 246, 0.10);
-                color: #3b82f6;
-            }
-
-            .attr-badge.public {
-                background: rgba(34, 197, 94, 0.10);
-                color: #22c55e;
+            .empty-soft {
+                color: var(--text-tertiary);
+                font-size: var(--text-xs);
+                padding: var(--space-2) 0;
             }
 
             .related-list {
                 display: flex;
                 flex-direction: column;
-                gap: var(--space-2);
+                gap: 6px;
             }
-
             .related-item {
                 display: flex;
                 align-items: center;
-                gap: var(--space-3);
-                padding: var(--space-3);
-                background: var(--crm-surface-muted);
+                gap: var(--space-2);
+                padding: 6px 8px;
                 border: 1px solid var(--crm-stroke);
-                border-radius: var(--radius-lg);
-                cursor: pointer;
-                transition: all var(--duration-fast);
-                width: 100%;
-                text-align: left;
-            }
-
-            .related-item:hover {
-                background: var(--crm-surface);
-                border-color: var(--accent-subtle);
-            }
-
-            .related-icon {
-                width: 32px;
-                height: 32px;
-                display: flex;
-                align-items: center;
-                justify-content: center;
                 border-radius: var(--radius-md);
-                font-size: var(--text-lg);
-                flex-shrink: 0;
+                cursor: pointer;
+                background: var(--crm-surface-muted);
+                transition: background var(--duration-fast);
             }
-
+            .related-item:hover { background: var(--crm-surface); }
             .related-name {
+                font-size: var(--text-sm);
+                color: var(--text-primary);
                 flex: 1;
-                font-size: var(--text-sm);
-                color: var(--text-primary);
+                min-width: 0;
+                overflow: hidden;
+                text-overflow: ellipsis;
+                white-space: nowrap;
             }
-
-            .related-type {
-                font-size: var(--text-xs);
-                color: var(--text-tertiary);
-            }
-
-            .empty-state {
-                display: flex;
-                flex-direction: column;
-                align-items: center;
-                justify-content: center;
-                height: 100%;
-                color: var(--text-tertiary);
-                text-align: center;
-                gap: var(--space-2);
-            }
-
-            .tags-list {
-                display: flex;
-                flex-wrap: wrap;
-                gap: var(--space-2);
-            }
-
-            .tag {
-                padding: var(--space-1) var(--space-3);
-                background: var(--crm-surface-tint);
-                border-radius: var(--radius-full);
-                font-size: var(--text-sm);
-                color: var(--text-secondary);
-            }
-
-            .show-graph-btn {
-                width: 100%;
-                padding: var(--space-3);
-                background: var(--crm-surface-muted);
-                border: 1px dashed var(--crm-stroke);
-                border-radius: var(--radius-lg);
-                color: var(--text-secondary);
-                font-size: var(--text-sm);
-                cursor: pointer;
-                display: flex;
-                align-items: center;
-                justify-content: center;
-                gap: var(--space-2);
-                transition: all var(--duration-fast);
-            }
-
-            .show-graph-btn:hover {
-                border-color: var(--accent-subtle);
-                color: var(--text-primary);
-            }
-
-            .requests-list {
-                display: flex;
-                flex-direction: column;
-                gap: var(--space-2);
-            }
-
-            .request-item {
-                border: 1px solid var(--crm-stroke);
-                border-radius: var(--radius-lg);
-                background: var(--crm-surface-muted);
-                padding: var(--space-3);
-                display: flex;
-                flex-direction: column;
-                gap: var(--space-2);
-            }
-
-            .request-title {
-                font-size: var(--text-sm);
-                font-weight: 600;
-                color: var(--text-primary);
-            }
-
-            .request-message {
-                font-size: var(--text-sm);
-                color: var(--text-secondary);
-                white-space: pre-wrap;
-            }
-
-            .request-actions {
-                display: flex;
-                justify-content: flex-end;
-                gap: var(--space-2);
-            }
-
-            .request-btn {
-                height: 30px;
-                border: none;
-                border-radius: var(--radius-md);
-                padding: 0 var(--space-3);
-                font-size: var(--text-xs);
-                cursor: pointer;
-            }
-
-            .request-btn.approve {
-                background: var(--accent);
-                color: var(--platform-btn-primary-text);
-            }
-
-            .request-btn.reject {
-                background: rgba(255, 136, 92, 0.18);
-                color: #ff885c;
-            }
-
-            .request-btn:disabled {
-                opacity: 0.6;
-                cursor: not-allowed;
-            }
-
-            @media (max-width: 767px) {
-                :host {
-                    border-radius: 0;
-                    border: none;
-                }
-            }
-        `
+            .related-type { font-size: var(--text-xs); color: var(--text-tertiary); }
+        `,
     ];
 
     constructor() {
         super();
-        this.entityId = null;
-        this.showBackButton = false;
-        this._entity = null;
-        this._relatedEntities = [];
-        this._entityTypes = [];
-        this._loading = false;
-        this._isOwner = false;
-        this._pendingAccessRequests = [];
-        this._requestsLoading = false;
-        this._processingRequestId = '';
-        this._graphVisible = false;
-        this._deleting = false;
-        this._headerMenuOpen = false;
-        this._headerMenuAnchor = null;
-        this._headerMenuZ = 0;
-        this._entityGrants = [];
-        this._entityCardNotFound = false;
-        this._syncedAccessRequestsForEntityId = '';
-        this._boundAuthChangeForOwnership = this._onAuthChangeForOwnership.bind(this);
-        this._boundCloseHeaderMenu = this._closeHeaderMenuOnOutside.bind(this);
-
-        this._unsubscribe = CRMStore.subscribe(state => {
-            this._entity = state.entities.currentEntity;
-            this._relatedEntities = state.entities.currentEntityRelated || [];
-            this._entityTypes = state.entities.entityTypes || [];
-            this._loading = state.entities.cardLoading || false;
-            this._entityCardNotFound = state.entities.entityCardNotFound === true;
-            this._entityGrants = state.grants.currentEntityGrants || [];
-            this._syncOwnershipAndAccessUI();
-        });
+        this.entity = null;
+        this.entityId = '';
+        this._grantsExpanded = false;
+        this._relatedExpanded = false;
+        this._entityResource = this.useResource('crm/entities');
+        this._grantsOp = this.useOp('crm/entity_grants_list');
+        this._relatedOp = this.useOp('crm/related_entities');
     }
 
-    connectedCallback() {
-        super.connectedCallback();
-        window.addEventListener(AppEvents.AUTH_CHANGE, this._boundAuthChangeForOwnership);
-        document.addEventListener('pointerdown', this._boundCloseHeaderMenu, true);
-        this._syncOwnershipAndAccessUI();
-    }
-
-    disconnectedCallback() {
-        document.removeEventListener('pointerdown', this._boundCloseHeaderMenu, true);
-        window.removeEventListener(AppEvents.AUTH_CHANGE, this._boundAuthChangeForOwnership);
-        super.disconnectedCallback();
-        this._unsubscribe?.();
-    }
-
-    _onAuthChangeForOwnership() {
-        this._syncOwnershipAndAccessUI();
-    }
-
-    updated(changedProperties) {
-        if (changedProperties.has('entityId')) {
-            this._graphVisible = false;
-            this._headerMenuOpen = false;
-            this._syncedAccessRequestsForEntityId = '';
-            if (this.entityId) {
-                this._loadEntityCard();
-            }
+    willUpdate(changed) {
+        if (changed.has('entityId') && this.entityId && (!this.entity || this.entity.entity_id !== this.entityId)) {
+            this._entityResource.get(this.entityId);
         }
     }
 
-    _closeHeaderMenuOnOutside(ev) {
-        if (!this._headerMenuOpen) {
-            return;
-        }
-        const root = this.renderRoot;
-        const trigger = root.querySelector('.header-menu-trigger');
-        const panel = root.querySelector('.header-dropdown');
-        if (!trigger || !panel) {
-            return;
-        }
-        const path = ev.composedPath();
-        for (const n of path) {
-            if (n === trigger || n === panel) {
-                return;
-            }
-            if (n instanceof Node && trigger.contains(n)) {
-                return;
-            }
-            if (n instanceof Node && panel.contains(n)) {
-                return;
-            }
-        }
-        this._headerMenuOpen = false;
-        this.requestUpdate();
-    }
-
-    _toggleHeaderMenu(ev) {
-        ev.preventDefault();
-        ev.stopPropagation();
-        if (this._headerMenuOpen) {
-            this._headerMenuOpen = false;
-            return;
-        }
-        const btn = ev.currentTarget;
-        const r = btn.getBoundingClientRect();
-        this._headerMenuAnchor = {
-            top: Math.round(r.bottom + 6),
-            right: Math.round(document.documentElement.clientWidth - r.right),
-        };
-        this._headerMenuZ = nextModalLayerZIndex();
-        this._headerMenuOpen = true;
-    }
-
-    _hasPublicGrant() {
-        return this._entityGrants.some((g) => g.grant_type === 'public');
-    }
-
-    async _headerMenuMakePublic() {
-        this._headerMenuOpen = false;
-        if (!this.entityId) {
-            return;
-        }
-        const crmApi = this.crmApi;
-        await CRMStore.makeEntityPublic(crmApi, this.entityId);
-        this.success(this.i18n.t('grants.success_entity_public'));
-    }
-
-    _headerMenuShareUser() {
-        this._headerMenuOpen = false;
-        if (!this.entityId) {
-            return;
-        }
-        const modal = document.createElement('share-modal');
-        modal.entityId = this.entityId;
-        modal.shareType = 'user';
-        document.body.appendChild(modal);
-        modal.showModal();
-        modal.addEventListener('close', () => modal.remove());
-        modal.addEventListener('shared', () => {
-            void CRMStore.loadEntityGrants(this.crmApi, this.entityId);
-        });
-    }
-
-    _headerMenuShareCompany() {
-        this._headerMenuOpen = false;
-        if (!this.entityId) {
-            return;
-        }
-        const modal = document.createElement('share-modal');
-        modal.entityId = this.entityId;
-        modal.shareType = 'company';
-        document.body.appendChild(modal);
-        modal.showModal();
-        modal.addEventListener('close', () => modal.remove());
-        modal.addEventListener('shared', () => {
-            void CRMStore.loadEntityGrants(this.crmApi, this.entityId);
-        });
-    }
-
-    _syncOwnershipAndAccessUI() {
-        const authUserId = this._platformAuthUserId(this.auth?.user);
-        const entity = this._entity;
-        const eid = typeof entity?.entity_id === 'string' ? entity.entity_id.trim() : '';
-        const entityOwnerId =
-            typeof entity?.user_id === 'string' && entity.user_id.trim().length > 0
-                ? entity.user_id.trim()
-                : null;
-        const nextOwner = Boolean(authUserId && entityOwnerId && eid && entityOwnerId === authUserId);
-        const prevOwner = this._isOwner;
-        this._isOwner = nextOwner;
-
-        if (!nextOwner) {
-            this._pendingAccessRequests = [];
-            this._syncedAccessRequestsForEntityId = '';
-            if (prevOwner !== nextOwner) {
-                this.requestUpdate();
-            }
-            return;
-        }
-
-        const shouldLoadRequests = eid !== this._syncedAccessRequestsForEntityId || (!prevOwner && nextOwner);
-        if (shouldLoadRequests) {
-            this._syncedAccessRequestsForEntityId = eid;
-            this._loadPendingRequests();
-        } else if (prevOwner !== nextOwner) {
-            this.requestUpdate();
-        }
-    }
-
-    async _loadEntityCard() {
-        if (!this.entityId) return;
-
-        const crmApi = this.crmApi;
-        await CRMStore.loadEntityCard(crmApi, this.entityId);
-        this._syncOwnershipAndAccessUI();
-    }
-
-    _platformAuthUserId(user) {
-        if (!user || typeof user !== 'object') {
-            return null;
-        }
-        if (typeof user.user_id === 'string' && user.user_id.trim().length > 0) {
-            return user.user_id.trim();
-        }
-        if (typeof user.id === 'string' && user.id.trim().length > 0) {
-            return user.id.trim();
-        }
+    _resolveEntity() {
+        if (this.entity && typeof this.entity === 'object') return this.entity;
+        if (!this.entityId) return null;
+        const byId = this._entityResource.byId;
+        if (byId && byId[this.entityId]) return byId[this.entityId];
         return null;
     }
 
-    _resolveRequestEntityId(request) {
-        const entityId = request?.resource_id || request?.entity_id;
-        if (typeof entityId !== 'string' || entityId.trim().length === 0) {
-            throw new Error('Access request entity id is required');
-        }
-        return entityId;
+    _onEdit(entity) {
+        this.openModal('crm.entity', { mode: 'edit', id: entity.entity_id });
     }
 
-    _resolveRequestId(request) {
-        const requestId = request?.request_id || request?.id;
-        if (typeof requestId !== 'string' || requestId.trim().length === 0) {
-            throw new Error('Access request id is required');
-        }
-        return requestId;
+    _onShare(entity) {
+        this.openModal('crm.share', { entityId: entity.entity_id });
     }
 
-    _resolveRequesterLabel(request) {
-        if (typeof request?.requester_name === 'string' && request.requester_name.trim().length > 0) {
-            return request.requester_name;
-        }
-        if (typeof request?.requester_id === 'string' && request.requester_id.trim().length > 0) {
-            return request.requester_id;
-        }
-        if (typeof request?.user_id === 'string' && request.user_id.trim().length > 0) {
-            return request.user_id;
-        }
-        return this.i18n.t('entity_card.requester_fallback');
+    _onAccessRequest(entity) {
+        this.openModal('crm.access_request', { entityId: entity.entity_id });
     }
 
-    async _loadPendingRequests() {
-        const crmApi = this.crmApi;
-        this._requestsLoading = true;
-        try {
-            const requests = await CRMStore.loadAccessRequests(crmApi, 'pending');
-            if (!Array.isArray(requests)) {
-                throw new Error('Access requests payload must be array');
-            }
-            this._pendingAccessRequests = requests.filter((request) => this._resolveRequestEntityId(request) === this.entityId);
-        } finally {
-            this._requestsLoading = false;
+    _onToggleGrants(entityId) {
+        this._grantsExpanded = !this._grantsExpanded;
+        if (this._grantsExpanded) {
+            this._grantsOp.run({ entity_id: entityId });
         }
     }
 
-    async _approveRequest(request) {
-        const requestId = this._resolveRequestId(request);
-        this._processingRequestId = requestId;
-        try {
-            const crmApi = this.crmApi;
-            await CRMStore.approveAccessRequest(crmApi, requestId);
-            await this._loadPendingRequests();
-        } finally {
-            this._processingRequestId = '';
+    _onToggleRelated(entityId) {
+        this._relatedExpanded = !this._relatedExpanded;
+        if (this._relatedExpanded) {
+            this._relatedOp.run({ entity_id: entityId });
         }
     }
 
-    async _rejectRequest(request) {
-        const requestId = this._resolveRequestId(request);
-        this._processingRequestId = requestId;
-        try {
-            const crmApi = this.crmApi;
-            await CRMStore.rejectAccessRequest(crmApi, requestId);
-            await this._loadPendingRequests();
-        } finally {
-            this._processingRequestId = '';
-        }
+    _onOpenRelated(relatedId) {
+        this.dispatch('crm/entity_card/related_selected', { entity_id: relatedId }, { source: 'local' });
     }
 
-    _getEntityTypeConfig(entity) {
-        const typeId = entity?.entity_subtype || entity?.entity_type;
-        const entityType = this._entityTypes.find(t => t.type_id === typeId);
-        if (entityType) {
-            return {
-                icon: this._resolveIconName(entityType.icon),
-                color: entityType.color || 'var(--text-tertiary)',
-                label: entityType.name || typeId,
-            };
-        }
-        return { icon: 'folder', color: 'var(--text-tertiary)', label: entity?.entity_type || '' };
-    }
-
-    _hexToRgba(hex, alpha) {
-        if (!hex || hex.startsWith('var(')) {
-            return `rgba(148, 163, 184, ${alpha})`;
-        }
-        const clean = hex.replace('#', '');
-        const r = parseInt(clean.substring(0, 2), 16);
-        const g = parseInt(clean.substring(2, 4), 16);
-        const b = parseInt(clean.substring(4, 6), 16);
-        return `rgba(${r}, ${g}, ${b}, ${alpha})`;
-    }
-
-    _resolveIconName(iconName) {
-        if (iconName === 'file') {
-            return 'folder';
-        }
-        if (typeof iconName === 'string' && /^[a-z0-9-]+$/i.test(iconName)) {
-            return iconName;
-        }
-        return 'folder';
-    }
-
-    _onBack() {
-        this.dispatchEvent(new CustomEvent('back'));
-    }
-
-    _onEdit() {
-        const modal = document.createElement('entity-modal');
-        modal.entityId = this.entityId;
-        modal.entity = this._entity;
-        document.body.appendChild(modal);
-        modal.showModal();
-        modal.addEventListener('close', () => modal.remove());
-        modal.addEventListener('saved', () => this._loadEntityCard());
-    }
-
-    async _onDelete() {
-        this._headerMenuOpen = false;
-        if (!this.entityId || !this._entity || this._deleting) {
-            return;
-        }
-        const displayName =
-            typeof this._entity.name === 'string' && this._entity.name.trim().length > 0
-                ? this._entity.name.trim()
-                : this.entityId;
-        const confirmed = await platformConfirm(
-            this.i18n.t('entities_page.delete_entity_confirm', { name: displayName }),
-            {
-                title: this.i18n.t('entities_page.delete_entity_title'),
-                variant: 'danger',
-                confirmVariant: 'danger',
-                confirmText: this.i18n.t('delete', {}, 'common'),
-                cancelText: this.i18n.t('cancel', {}, 'common'),
-            }
-        );
-        if (!confirmed) {
-            return;
-        }
-        this._deleting = true;
-        try {
-            await CRMStore.deleteEntity(this.crmApi, this.entityId);
-        } catch {
-            this.error(this.i18n.t('entities_page.delete_entity_failed'));
-        } finally {
-            this._deleting = false;
-        }
-    }
-
-    _onRequestAccess() {
-        const modal = document.createElement('access-request-modal');
-        modal.entityId = this.entityId;
-        modal.entityName = this._entity?.name;
-        document.body.appendChild(modal);
-        modal.showModal();
-        modal.addEventListener('close', () => modal.remove());
-    }
-
-    _onRelatedClick(entityId) {
-        CRMStore.setCurrentEntity(entityId);
-    }
-
-    async _onShowGraph() {
-        this._graphVisible = true;
-        await this.updateComplete;
-        await import('./mini-graph-preview.js');
-    }
-
-    _getAttributeFieldType(fieldKey) {
-        const typeId = this._entity?.entity_subtype || this._entity?.entity_type;
-        const entityType = this._entityTypes.find(t => t.type_id === typeId);
-        if (!entityType) return 'string';
-        const spec = entityType.required_fields?.[fieldKey]
-            || entityType.optional_fields?.[fieldKey];
-        return spec?.type || 'string';
-    }
-
-    _getAttributeFieldConfig(fieldKey) {
-        const typeId = this._entity?.entity_subtype || this._entity?.entity_type;
-        const entityType = this._entityTypes.find(t => t.type_id === typeId);
-        if (!entityType) return {};
-        const spec = entityType.required_fields?.[fieldKey]
-            || entityType.optional_fields?.[fieldKey];
-        if (spec?.type === 'enum') {
-            return { values: spec.values || [] };
-        }
-        return {};
-    }
-
-    _getEntityTypeForCurrent() {
-        const typeId = this._entity?.entity_subtype || this._entity?.entity_type;
-        return this._entityTypes.find(t => t.type_id === typeId) || null;
-    }
-
-    _isAttributeRequired(key) {
-        const entityType = this._getEntityTypeForCurrent();
-        return Boolean(entityType?.required_fields?.[key]);
-    }
-
-    _isAttributeOptional(key) {
-        const entityType = this._getEntityTypeForCurrent();
-        return Boolean(entityType?.optional_fields?.[key]);
-    }
-
-    _isAttributePublic(key) {
-        const entityType = this._getEntityTypeForCurrent();
-        return (entityType?.public_fields || []).includes(key);
-    }
-
-    _getAttributeLabel(key) {
-        const entityType = this._getEntityTypeForCurrent();
-        const spec = entityType?.required_fields?.[key]
-            || entityType?.optional_fields?.[key];
-        return spec?.label || key;
-    }
-
-    _renderAttributeBadges(key) {
-        const badges = [];
-        if (this._isAttributeRequired(key)) {
-            badges.push(html`<span class="attr-badge required">${this.i18n.t('entity_card.badge_required')}</span>`);
-        } else if (this._isAttributeOptional(key)) {
-            badges.push(html`<span class="attr-badge optional">${this.i18n.t('entity_card.badge_optional')}</span>`);
-        }
-        if (this._isAttributePublic(key)) {
-            badges.push(html`<span class="attr-badge public">${this.i18n.t('entity_card.badge_public')}</span>`);
-        }
-        return badges;
-    }
-
-    _renderAttributes(attributes) {
-        if (!attributes || Object.keys(attributes).length === 0) {
-            return '';
-        }
-
+    _renderAttrs(entity) {
+        const attrs = entity.attributes;
+        if (!attrs || typeof attrs !== 'object') return nothing;
+        const entries = Object.entries(attrs).filter(([, v]) => v !== null && v !== undefined && v !== '');
+        if (entries.length === 0) return nothing;
         return html`
-            <div class="section">
-                <div class="section-title">${this.i18n.t('entities.attributes')}</div>
-                <div class="attributes-grid">
-                    ${Object.entries(attributes).map(([key, value]) => html`
-                        <div class="attribute-item">
-                            <div class="attribute-label">
-                                ${this._getAttributeLabel(key)}
-                                ${this._renderAttributeBadges(key)}
-                            </div>
-                            <platform-field
-                                .type=${this._getAttributeFieldType(key)}
-                                .value=${value}
-                                .config=${this._getAttributeFieldConfig(key)}
-                                mode="view"
-                            ></platform-field>
-                        </div>
-                    `)}
-                </div>
+            <div class="attrs">
+                ${entries.map(([k, v]) => html`
+                    <div class="attr-key">${k}</div>
+                    <div class="attr-val">${typeof v === 'object' ? JSON.stringify(v) : String(v)}</div>
+                `)}
             </div>
         `;
     }
 
     _renderRelated() {
-        if (this._relatedEntities.length === 0) {
-            return '';
+        if (this._relatedOp.busy) {
+            return html`<div class="empty-soft"><glass-spinner size="sm"></glass-spinner></div>`;
         }
-
-        return html`
-            <div class="section">
-                <div class="section-title">${this.i18n.t('entity_card.related_entities')}</div>
-                <div class="related-list">
-                    ${this._relatedEntities.map(entity => {
-                        const typeConfig = this._getEntityTypeConfig(entity);
-                        const bgColor = this._hexToRgba(typeConfig.color, 0.15);
-
-                        return html`
-                            <button
-                                class="related-item"
-                                type="button"
-                                @click=${() => this._onRelatedClick(entity.entity_id)}
-                            >
-                                <div
-                                    class="related-icon"
-                                    style="background: ${bgColor}; color: ${typeConfig.color};"
-                                >
-                                    <platform-icon name="${typeConfig.icon}" size="18"></platform-icon>
-                                </div>
-                                <div class="related-name">${entity.name}</div>
-                                <div class="related-type">${typeConfig.label}</div>
-                            </button>
-                        `;
-                    })}
-                </div>
-            </div>
-        `;
-    }
-
-    _renderGraph() {
-        if (!this.entityId) return '';
-
-        if (!this._graphVisible) {
-            return html`
-                <div class="section">
-                    <div class="section-title">${this.i18n.t('entity_card.graph_section')}</div>
-                    <button class="show-graph-btn" type="button" @click=${this._onShowGraph}>
-                        <platform-icon name="link" size="16"></platform-icon>
-                        ${this.i18n.t('entity_card.show_graph')}
-                    </button>
-                </div>
-            `;
-        }
-
-        return html`
-            <div class="section">
-                <div class="section-title">${this.i18n.t('entity_card.graph_section')}</div>
-                <mini-graph-preview
-                    .entityId=${this.entityId}
-                    .maxDepth=${5}
-                    height="200px"
-                    @entity-open=${(e) => this._onRelatedClick(e.detail.entityId)}
-                ></mini-graph-preview>
-            </div>
-        `;
-    }
-
-    _renderPendingAccessRequests() {
-        if (!this._isOwner) {
-            return '';
+        const result = this._relatedOp.lastResult;
+        const items = result && Array.isArray(result.items) ? result.items : [];
+        if (items.length === 0) {
+            return html`<div class="empty-soft">${this.t('entity_card.requests_empty')}</div>`;
         }
         return html`
-            <div class="section">
-                <div class="section-title">${this.i18n.t('entity_card.access_requests')}</div>
-                ${this._requestsLoading ? html`
-                    <div class="request-item">
-                        <div class="request-message">${this.i18n.t('entity_card.requests_loading')}</div>
+            <div class="related-list">
+                ${items.map((it) => html`
+                    <div class="related-item" @click=${() => this._onOpenRelated(it.entity_id)}>
+                        <platform-icon name="link" size="14"></platform-icon>
+                        <span class="related-name">${it.name}</span>
+                        <span class="related-type">${it.entity_type}</span>
                     </div>
-                ` : this._pendingAccessRequests.length === 0 ? html`
-                    <div class="request-item">
-                        <div class="request-message">${this.i18n.t('entity_card.requests_empty')}</div>
-                    </div>
-                ` : html`
-                    <div class="requests-list">
-                        ${this._pendingAccessRequests.map((request) => {
-                            const requestId = this._resolveRequestId(request);
-                            const message = request?.message && typeof request.message === 'string'
-                                ? request.message
-                                : this.i18n.t('entity_card.no_comment');
-                            return html`
-                                <div class="request-item">
-                                    <div class="request-title">${this._resolveRequesterLabel(request)}</div>
-                                    <div class="request-message">${message}</div>
-                                    <div class="request-actions">
-                                        <button
-                                            class="request-btn reject"
-                                            type="button"
-                                            ?disabled=${this._processingRequestId === requestId}
-                                            @click=${() => this._rejectRequest(request)}
-                                        >
-                                            ${this.i18n.t('entity_card.request_reject')}
-                                        </button>
-                                        <button
-                                            class="request-btn approve"
-                                            type="button"
-                                            ?disabled=${this._processingRequestId === requestId}
-                                            @click=${() => this._approveRequest(request)}
-                                        >
-                                            ${this.i18n.t('entity_card.request_approve')}
-                                        </button>
-                                    </div>
-                                </div>
-                            `;
-                        })}
-                    </div>
-                `}
+                `)}
             </div>
         `;
     }
 
     render() {
-        if (!this.entityId) {
-            return html`
-                <div class="empty-state">
-                    <platform-icon name="book-open" size="56"></platform-icon>
-                    <div>${this.i18n.t('entity_card.empty_pick_title')}</div>
-                    <div style="font-size: var(--text-sm);">
-                        ${this.i18n.t('entity_card.empty_pick_subtitle')}
+        const entity = this._resolveEntity();
+        if (!entity) {
+            if (this.entityId && this._entityResource.loading) {
+                return html`
+                    <div class="empty">
+                        <glass-spinner size="md"></glass-spinner>
                     </div>
-                </div>
-            `;
-        }
-
-        if (this._entityCardNotFound) {
+                `;
+            }
             return html`
-                <div class="empty-state">
-                    <platform-icon name="info" size="56"></platform-icon>
-                    <div>${this.i18n.t('entity_card.not_found_title')}</div>
-                    <div style="font-size: var(--text-sm);">
-                        ${this.i18n.t('entity_card.not_found_subtitle')}
-                    </div>
+                <div class="empty">
+                    <platform-icon name="folder" size="48"></platform-icon>
+                    <div class="empty-title">${this.t('entity_card.empty_pick_title')}</div>
+                    <div class="empty-subtitle">${this.t('entity_card.empty_pick_subtitle')}</div>
                 </div>
             `;
         }
 
-        if (this._loading || !this._entity) {
-            return html`
-                <div class="empty-state">
-                    <div>${this.i18n.t('loading', {}, 'common')}</div>
-                </div>
-            `;
-        }
-
-        const typeConfig = this._getEntityTypeConfig(this._entity);
-        const bgColor = this._hexToRgba(typeConfig.color, 0.15);
+        const tags = Array.isArray(entity.tags) ? entity.tags : [];
 
         return html`
-            <div class="header">
-                ${this.showBackButton ? html`
-                    <button class="back-btn" @click=${this._onBack}>
-                        <platform-icon name="arrow-left" size="18"></platform-icon>
+            <div class="scroll">
+                <div class="header">
+                    <div class="type-icon">
+                        <platform-icon name="folder" size="22"></platform-icon>
+                    </div>
+                    <div class="header-text">
+                        <h2 class="name">${entity.name}</h2>
+                        <div class="meta">
+                            <span>${entity.entity_type}</span>
+                            ${entity.entity_subtype
+                                ? html`<span class="dot">/</span><span>${entity.entity_subtype}</span>`
+                                : nothing}
+                            ${entity.status
+                                ? html`<span class="status-badge ${entity.status}">${entity.status}</span>`
+                                : nothing}
+                        </div>
+                    </div>
+                </div>
+
+                ${entity.description
+                    ? html`<p class="description">${entity.description}</p>`
+                    : nothing}
+
+                ${tags.length > 0
+                    ? html`
+                        <div class="tags">
+                            ${tags.map((t) => html`<span class="tag">${t}</span>`)}
+                        </div>
+                    `
+                    : nothing}
+
+                ${this._renderAttrs(entity)}
+
+                <div class="actions-bar">
+                    <button class="btn btn-primary" @click=${() => this._onEdit(entity)}>
+                        <platform-icon name="edit" size="14"></platform-icon>
+                        ${this.t('edit', {}, 'common')}
                     </button>
-                ` : ''}
-
-                <div
-                    class="header-icon"
-                    style="background: ${bgColor}; color: ${typeConfig.color};"
-                >
-                    <platform-icon name="${typeConfig.icon}" size="22"></platform-icon>
+                    <button class="btn" @click=${() => this._onShare(entity)}>
+                        <platform-icon name="share" size="14"></platform-icon>
+                        ${this.t('grants.share_user')}
+                    </button>
+                    <button class="btn" @click=${() => this._onAccessRequest(entity)}>
+                        <platform-icon name="lock" size="14"></platform-icon>
+                        ${this.t('entity_card.request_access_tooltip')}
+                    </button>
                 </div>
 
-                <div class="header-content">
-                    <div class="header-name">${this._entity.name}</div>
-                    <div class="header-type">${typeConfig.label}</div>
+                <div class="collapsible-header" @click=${() => this._onToggleRelated(entity.entity_id)}>
+                    <span class="section-title">${this.t('entity_card.related_entities')}</span>
+                    <platform-icon
+                        name=${this._relatedExpanded ? 'chevron-up' : 'chevron-down'}
+                        size="14"
+                    ></platform-icon>
                 </div>
+                ${this._relatedExpanded
+                    ? html`<div class="collapsible-content">${this._renderRelated()}</div>`
+                    : nothing}
 
-                <div class="header-actions">
-                    ${this._isOwner ? html`
-                        <button class="icon-btn" @click=${this._onEdit} title=${this.i18n.t('edit', {}, 'common')}>
-                            <platform-icon name="edit" size="16"></platform-icon>
-                        </button>
-                        <div class="header-menu-root">
-                            <button
-                                class="icon-btn header-menu-trigger"
-                                type="button"
-                                title=${this.i18n.t('entity_card.actions_menu_tooltip')}
-                                aria-label=${this.i18n.t('entity_card.actions_menu_tooltip')}
-                                aria-haspopup="menu"
-                                aria-expanded=${this._headerMenuOpen ? 'true' : 'false'}
-                                @click=${this._toggleHeaderMenu}
-                            >
-                                <platform-icon name="more-vertical" size="16"></platform-icon>
-                            </button>
-                            ${this._headerMenuOpen && this._headerMenuAnchor
-                                ? html`
-                                    <div
-                                        class="header-dropdown"
-                                        role="menu"
-                                        style="position: fixed; top: ${this._headerMenuAnchor.top}px; right: ${this._headerMenuAnchor.right}px; z-index: ${this._headerMenuZ}"
-                                        @pointerdown=${(e) => e.stopPropagation()}
-                                    >
-                                        ${!this._hasPublicGrant()
-                                            ? html`
-                                                <button
-                                                    type="button"
-                                                    class="header-dropdown-item"
-                                                    role="menuitem"
-                                                    @click=${this._headerMenuMakePublic}
-                                                >
-                                                    <platform-icon name="globe" size="16"></platform-icon>
-                                                    ${this.i18n.t('grants.make_public_entity')}
-                                                </button>
-                                            `
-                                            : ''}
-                                        <button
-                                            type="button"
-                                            class="header-dropdown-item"
-                                            role="menuitem"
-                                            @click=${this._headerMenuShareUser}
-                                        >
-                                            <platform-icon name="user" size="16"></platform-icon>
-                                            ${this.i18n.t('grants.share_user')}
-                                        </button>
-                                        <button
-                                            type="button"
-                                            class="header-dropdown-item"
-                                            role="menuitem"
-                                            @click=${this._headerMenuShareCompany}
-                                        >
-                                            <platform-icon name="building-one" size="16"></platform-icon>
-                                            ${this.i18n.t('grants.share_company')}
-                                        </button>
-                                        <button
-                                            type="button"
-                                            class="header-dropdown-item danger"
-                                            role="menuitem"
-                                            ?disabled=${this._deleting}
-                                            @click=${this._onDelete}
-                                        >
-                                            <platform-icon name="trash" size="16"></platform-icon>
-                                            ${this.i18n.t('entity_card.delete_entity_tooltip')}
-                                        </button>
-                                    </div>
-                                `
-                                : ''}
+                <div class="collapsible-header" @click=${() => this._onToggleGrants(entity.entity_id)}>
+                    <span class="section-title">${this.t('grants.section_title')}</span>
+                    <platform-icon
+                        name=${this._grantsExpanded ? 'chevron-up' : 'chevron-down'}
+                        size="14"
+                    ></platform-icon>
+                </div>
+                ${this._grantsExpanded
+                    ? html`
+                        <div class="collapsible-content">
+                            ${this._grantsOp.busy
+                                ? html`<div class="empty-soft"><glass-spinner size="sm"></glass-spinner></div>`
+                                : html`<div class="empty-soft">${this.t('grants.loading')}</div>`}
                         </div>
-                    ` : html`
-                        <button class="icon-btn" @click=${this._onRequestAccess} title=${this.i18n.t('entity_card.request_access_tooltip')}>
-                            <platform-icon name="lock" size="16"></platform-icon>
-                        </button>
-                    `}
-                </div>
-            </div>
-
-            <div class="content">
-                ${this._entity.description ? html`
-                    <div class="section">
-                        <div class="section-title">${this.i18n.t('tasks.description')}</div>
-                        <div class="description">${this._entity.description}</div>
-                    </div>
-                ` : ''}
-
-                ${this._entity.tags?.length > 0 ? html`
-                    <div class="section">
-                        <div class="section-title">${this.i18n.t('tasks.tags')}</div>
-                        <div class="tags-list">
-                            ${this._entity.tags.map(tag => html`
-                                <span class="tag">${tag}</span>
-                            `)}
-                        </div>
-                    </div>
-                ` : ''}
-
-                ${this._renderAttributes(this._entity.attributes)}
-
-                ${this._renderRelated()}
-
-                ${this._renderGraph()}
-
-                ${this._renderPendingAccessRequests()}
-
-                ${this._isOwner ? html`
-                    <grants-panel .entityId=${this.entityId}></grants-panel>
-                ` : ''}
+                    `
+                    : nothing}
             </div>
         `;
     }
 }
 
-customElements.define('entity-card', EntityCard);
+customElements.define('crm-entity-card', CRMEntityCard);

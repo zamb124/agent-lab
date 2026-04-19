@@ -48,6 +48,12 @@ x-common-env: &common-env
   PUSH__VAPID_EMAIL: ${PUSH__VAPID_EMAIL:-ops@humanitec.ru}
   # APNs: опционально отдельный .p8 (если не тот же, что AUTH__PROVIDERS__APPLE__APPLE_PRIVATE_KEY). team_id / key_id / bundle_id — в conf.json (push или auth.providers.apple).
   PUSH__APNS_PRIVATE_KEY: ${PUSH__APNS_PRIVATE_KEY:-}
+  # FCM (Android Capacitor через @capacitor/push-notifications): service account JSON одной строкой.
+  # Берётся в Firebase Console → Project settings → Service accounts → Generate new private key.
+  # Пустое значение допустимо: тогда FcmPushService не инициализируется и Android-устройства не получают push.
+  PUSH__FCM_CREDENTIALS_JSON: ${PUSH__FCM_CREDENTIALS_JSON:-}
+  # Опционально: project_id переопределяет значение из service account JSON.
+  PUSH__FCM_PROJECT_ID: ${PUSH__FCM_PROJECT_ID:-}
   # WebRTC звонки: livekit доступен внутри Docker по имени сервиса.
   # CALLS__LIVEKIT_PUBLIC_URL — публичный wss:// URL для браузеров (через nginx/ingress).
   # CALLS__TURN_HOST использует SERVER_HOST (тот же IP что и для SSH деплоя).

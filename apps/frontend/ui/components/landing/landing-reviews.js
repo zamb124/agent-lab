@@ -4,9 +4,9 @@
 import { html, css } from 'lit';
 import { classMap } from 'lit/directives/class-map.js';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
-import { I18nNs } from '@platform/services/i18n/i18n.service.js';
-
 export class LandingReviews extends PlatformElement {
+    static i18nNamespace = 'landing';
+
     static styles = [
         PlatformElement.styles,
         css`
@@ -196,21 +196,16 @@ export class LandingReviews extends PlatformElement {
 
     connectedCallback() {
         super.connectedCallback();
-        this._i18nUnsub = this.i18n.subscribe(() => this.requestUpdate());
         this._startAutoplay();
     }
 
     disconnectedCallback() {
         this._stopAutoplay();
-        if (this._i18nUnsub) {
-            this._i18nUnsub();
-            this._i18nUnsub = null;
-        }
         super.disconnectedCallback();
     }
 
     _getReviews() {
-        const t = (key) => this.i18n.t(key, {}, I18nNs.LANDING);
+        const t = (key) => (this.t(key) || key);
         return [
             {
                 name: t('testimonials.slide1_name'),
@@ -264,7 +259,7 @@ export class LandingReviews extends PlatformElement {
         return html`
             <div class="reviews-container">
                 <h2 class="reviews-title">
-                    ${this.i18n.t('testimonials.tag', {}, I18nNs.LANDING)}
+                    ${(this.t('testimonials.tag') || 'testimonials.tag')}
                 </h2>
                 
                 <div class="review-card">

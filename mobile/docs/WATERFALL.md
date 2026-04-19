@@ -6,10 +6,13 @@
 
 | Направление | Документ |
 |-------------|----------|
-| Android TWA, Bubblewrap, сборка AAB | [`android/README.md`](../android/README.md) |
+| Android Capacitor, AndroidManifest, App Links, FCM, сборка AAB | [`android/README.md`](../android/README.md) |
 | iOS Capacitor, WKWebView, Xcode | [`IOS_CAPACITOR.md`](IOS_CAPACITOR.md) |
 | App Store (что заполнять в Apple вручную) | [`APPLE_MANUAL.md`](APPLE_MANUAL.md) |
-| Web Push vs APNs на iOS (опционально) | [`PUSH_PARITY_APNS.md`](PUSH_PARITY_APNS.md) |
+| App Store: тексты витрины Humanitec | [`APP_STORE_HUMANITEC.md`](APP_STORE_HUMANITEC.md) |
+| Google Play (что заполнять в Console вручную) | [`PLAY_MANUAL.md`](PLAY_MANUAL.md) |
+| Google Play: тексты витрины Humanitec | [`PLAY_HUMANITEC.md`](PLAY_HUMANITEC.md) |
+| Push-паритет: Web Push, APNs (iOS), FCM (Android) | [`PUSH_PARITY.md`](PUSH_PARITY.md) |
 | Матрица ручных тестов перед релизом | [`QA_MATRIX_TEMPLATE.md`](QA_MATRIX_TEMPLATE.md) |
 
 ## Справочно
@@ -19,4 +22,4 @@
 
 ## Зависимости (логический порядок)
 
-Сначала доступен тот же URL в браузере, что подхватит оболочка. Затем Android и/или iOS можно вести параллельно после публикации `assetlinks.json` (Android) и настройки подписи (обе платформы). Витрина и отправка на ревью — после стабильных сборок; push в фоне на iOS — отдельный слой, см. `PUSH_PARITY_APNS.md`.
+Сначала доступен тот же URL в браузере, что подхватит оболочка. Затем Android и/или iOS можно вести параллельно после публикации `assetlinks.json` (Android) и настройки подписи (обе платформы). Витрина и отправка на ревью — после стабильных сборок; push в фоне на iOS (APNs) и на Android (FCM) — отдельный слой, см. `PUSH_PARITY.md`.

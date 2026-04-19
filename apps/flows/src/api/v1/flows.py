@@ -14,8 +14,10 @@ import yaml
 from apps.flows.src.container import FlowContainer
 from apps.flows.src.dependencies import ContainerDep
 from apps.flows.src.services.flows_loader import FlowsLoader, load_tools_to_db
+from core.context import get_context
 from core.logging import get_logger
 from core.pagination import OffsetPage, ListResponse
+from core.ui_events import publish_ui_event_to_user
 from apps.flows.src.models import Edge, FlowConfig, SkillConfig, NodeConfig, FlowType, ExternalAgentStatus, TriggerConfig
 from apps.flows.src.services.flow_validator import FlowValidator
 
@@ -523,7 +525,7 @@ async def validate_flow(
     )
 
 
-@router.get("/", response_model=OffsetPage[FlowResponse])
+@router.get("", response_model=OffsetPage[FlowResponse])
 async def list_flows(
     container: ContainerDep,
     type: Optional[FlowType] = None,
@@ -698,7 +700,7 @@ async def _validate_tool_nodes(
                             )
 
 
-@router.post("/", response_model=FlowResponse)
+@router.post("", response_model=FlowResponse)
 async def create_flow(
     request: FlowCreateRequest, container: ContainerDep
 ) -> FlowResponse:
@@ -957,6 +959,14 @@ async def update_flow(
 
     await container.flow_repository.set(flow_config)
 
+    ctx = get_context()
+    if ctx and ctx.user and ctx.user.user_id:
+        await publish_ui_event_to_user(
+            user_id=ctx.user.user_id,
+            type="flows/flow/updated",
+            payload={"flow_id": flow_id, "version": flow_config.version or ""},
+        )
+
     skills_response = {
         skill_id: _skill_config_to_response(skill)
         for skill_id, skill in flow_config.skills.items()
@@ -999,6 +1009,15 @@ async def delete_flow(
     deleted = await container.flow_repository.delete(flow_id)
     if not deleted:
         raise HTTPException(status_code=404, detail="Flow not found")
+
+    ctx = get_context()
+    if ctx and ctx.user and ctx.user.user_id:
+        await publish_ui_event_to_user(
+            user_id=ctx.user.user_id,
+            type="flows/flow/deleted",
+            payload={"flow_id": flow_id},
+        )
+
     return {"status": "deleted", "flow_id": flow_id}
 
 

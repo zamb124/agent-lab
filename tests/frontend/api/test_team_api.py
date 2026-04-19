@@ -367,8 +367,9 @@ class TestSystemAccessAPI:
     ):
         import uuid
         from core.models.identity_models import Company
+        from core.utils.tokens import get_token_service
 
-        system_user_id, auth_headers = await self._create_system_actor(frontend_container)
+        system_user_id, _ = await self._create_system_actor(frontend_container)
         company_id = f"target_company_{uuid.uuid4().hex[:8]}"
         target_company = Company(
             company_id=company_id,
@@ -384,9 +385,18 @@ class TestSystemAccessAPI:
         user.active_company_id = company_id
         await frontend_container.user_repository.set(user)
 
+        # Токен должен содержать целевую компанию: AuthMiddleware
+        # `_sync_active_company` синхронизирует user.active_company_id
+        # с компанией, которую разрешил CompanyResolver. В реальном UX
+        # пользователь сначала входит в компанию (ставит её активной), а потом
+        # из неё выходит — токен на момент DELETE как раз указывает на target.
+        token_service = get_token_service()
+        target_token = token_service.create_token(user_id=system_user_id, company_id=company_id)
+        target_auth_headers = {"Authorization": f"Bearer {target_token}"}
+
         response = await frontend_client.delete(
             f"/frontend/api/companies/{company_id}/system-access",
-            headers=auth_headers,
+            headers=target_auth_headers,
         )
 
         assert response.status_code == 200

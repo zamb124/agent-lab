@@ -7,17 +7,18 @@ description: "CRM NetWorkle система управления сущностя
 
 ## UI: специфические детали фронтенда
 
+- **Канон фронтенда:** UI CRM строится по канону **`frontend.mdc`** + **`ui_factories.mdc`** + **`ui_events.mdc`** + **`ui_components.mdc`**. Все доменные операции — через фабрики `apps/crm/ui/events/resources/*.resource.js` и helpers `PlatformElement` (`this.useResource('crm/<entity>')`, `this.useOp('crm/<entity>_<verb>')`). Никаких `services/`, `store/`, `features/`, `*.service.js`, `*.store.js`, `BaseStore`, `CRMStore`, `ServiceRegistry`, прямых `fetch`/`httpRequest`, прямых `dispatch(CoreEvents.UI_*|AUTH_*|...)` — только helpers.
 - **Primary `platform-button` в CRM:** в **`apps/crm/ui/index.html`** на **`body.platform-shell`** заданы **`--platform-btn-primary-*`** из **`--crm-button-primary-*`**, т.к. **`glass-modal`** порталятся в **`document.body`** и иначе брали бы зелёный фолбэк.
 - **Доска задач** (`tasks-page`): смена колонки — оптимистичный статус + `document.startViewTransition` + `view-transition-name` на карточке; `_boardBusy` + оверлей `glass-spinner` без `_loading` на всю доску.
-- **`crm-app.checkAuth`:** обязан вызывать `await this.auth.validateToken()`, иначе `AuthService.user` остаётся `null` и владелец в `entity-card` считается неавторизованным.
-- **`entity-card`:** `_isOwner` пересчитывается в `_syncOwnershipAndAccessUI()` при каждом обновлении `CRMStore` и при `AppEvents.AUTH_CHANGE`.
+- **Auth в `<crm-app>`:** проверка сессии — через `this.useEvent(CoreAuthEvents.AUTH_LOADED, ...)` и срез `state.auth.user`. Прямого `this.auth.validateToken()` не существует — это делает core auth-эффект.
+- **`entity-card`:** `_isOwner` пересчитывается в `_syncOwnershipAndAccessUI()` при изменении среза `state.crm.entity_<id>` и при `useEvent(CoreAuthEvents.AUTH_COMPANY_SWITCHED, ...)`.
 - **Мобильный хедер CRM** (`< 768px`): единая строка `crm-mobile-app-header` — заголовок или поле поиска для notes/entities/tasks. Кнопка чата шлёт `humanitec-embed-chat-toggle`.
 - **Встраиваемый чат в CRM:** `flow-id="lara"`, `skill-id="crm"`, заголовок `X-Platform-Namespace` = выбранный namespace. `getExtraMetadataVariables` → `GET /workspace/lara-summary?namespace=` (кэш ~45 с) → `metadata.variables` (`crm_lara_summary`, `crm_lara_summary_json`, счётчики импортов и черновиков). Lara skill CRM — `apps/flows/bundles/lara/`, реестр `apps/flows/registry.yaml`.
 - **Lara skill CRM:** после `crm_create_note` — спрашивать через `ask_user` об анализе; `crm_analyze_note_text` без согласия не вызывать. Тул принимает опциональный `namespace`.
-- **Daily notes период:** `CRMStore.ui.dailyNotesRange` — текущая календарная неделя (пн–вс, local); `dailyNotesRangePersistVersion === 2`.
+- **Daily notes период:** срез `state.crm.daily_notes.range` — текущая календарная неделя (пн–вс, local); `dailyNotesRangePersistVersion === 2`.
 - **Чипы сводки:** если имя из ответа API совпадает с `name` entity из `related_entities` периода → кнопка → `entity-modal`; иначе нередактируемый `span`.
 - **История импорта** (`namespace-imports-page`): при `running/pending` — `_loadImports({ silent: true })`; кнопка отмены — inline SVG, не `platform-icon`.
-- i18n: `this.i18n.t('группа.ключ')`, namespace `crm`, файлы `core/i18n/translations/{ru,en}/crm.json`, проверка — `make check-i18n`. Сканер: `uv run python scripts/report_ui_i18n_gaps.py --app crm`.
+- i18n: `this.t('группа.ключ')`, namespace `crm` через `static i18nNamespace = 'crm';` или `defaultI18nNamespace='crm'` в `<crm-app>`; файлы `core/i18n/translations/{ru,en}/crm.json`, проверка — `make check-i18n`, `make check-i18n-keys`. Сканер: `uv run python scripts/report_ui_i18n_gaps.py --app crm`.
 - **Namespace в localStorage:** UI хранит последний выбранный namespace по `company_id`; если пропал из списка — сброс на «Все» (не подстановка другого).
 - **`mini-graph-preview`:** один запрос `getInfluenceGraph(max_depth≤5)`, фильтр уровней без повторного запроса (`initialDisplayDepth=1`). Модалка `note-graph-modal` — отдельная поверх `note-view-modal`; `ResizeObserver` подгоняет canvas.
 - **Модалка заметки:** мини-граф открывается в отдельной `note-graph-modal`, чтобы WebGL не конфликтовал со скроллом.

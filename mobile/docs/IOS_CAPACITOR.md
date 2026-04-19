@@ -46,7 +46,7 @@ npx cap open ios
 ## Universal Links (ссылка из Mail / Notes открывает приложение)
 
 1. На сервере: **`GET https://<домен>/.well-known/apple-app-site-association`** — JSON без расширения (в репозитории: **`core/frontend/pwa/apple-app-site-association`**, отдаёт **`pwa_routes.py`**). Префиксы **`paths`** в файле должны совпадать с **`DEEPLINK_PATH_PREFIXES`** в **`core/frontend/static/lib/utils/platform-deeplink-paths.js`**.
-2. В приложении: **`App.entitlements`** — **`com.apple.developer.associated-domains`**, значения **`applinks:humanitec.ru`** и при необходимости **`www.`** / другие продуктовые домены (файл в репо: **`mobile/ios/App/App/App.entitlements`**).
+2. В приложении: **`App.entitlements`** — **`com.apple.developer.associated-domains`**, значения **`applinks:humanitec.ru`**, **`applinks:www.humanitec.ru`** и **`applinks:*.humanitec.ru`** (wildcard для tenant-поддоменов вида **`artflash.humanitec.ru`**); аналогично для **`humanetic.ru`** и **`agents-lab.ru`**. Файл в репо: **`mobile/ios/App/App/App.entitlements`**. Apple для wildcard-записей подтягивает **AASA** с каждого поддомена при первом открытии — наш бэкенд отдаёт **`/.well-known/apple-app-site-association`** через **`core/app/pwa_routes.py`** на любом хосте, который ходит в тот же образ, поэтому отдельный файл для каждого slug не нужен.
 3. Плагин **`@capacitor/app`**: **`npm install`** в **`mobile/`**, **`npx cap sync ios`**. В веб-странице: **`platform-deeplink-init.js`** (подключение из **`app-loader.js`**) подписывается на **`appUrlOpen`** и делает **`location.assign`** на внутренний маршрут; фильтр URL — **`isInternalProductNavigationUrl`** в **`native-app-shell.js`**.
 4. Проверка: [Apple App Search API Validation](https://search.developer.apple.com/appsearch-validation-tool/) или открытие ссылки из Notes на устройстве с установленной сборкой.
 
@@ -54,7 +54,7 @@ npx cap open ios
 
 ## Пуши
 
-Веб Push в установленной из App Store WKWebView-оболочке **не** эквивалентен Safari PWA; для фоновых уведомлений используются **APNs** и плагин **`@capacitor/push-notifications`** (см. [`PUSH_PARITY_APNS.md`](PUSH_PARITY_APNS.md)).
+Веб Push в установленной из App Store WKWebView-оболочке **не** эквивалентен Safari PWA; для фоновых уведомлений используются **APNs** и плагин **`@capacitor/push-notifications`** (см. [`PUSH_PARITY.md`](PUSH_PARITY.md)).
 
 **Xcode:** Target приложения → **Signing & Capabilities** → **+ Capability** → **Push Notifications** (профиль подписи должен быть с включённым Push для этого App ID). После добавления плагина: `npm install` в **`mobile/`**, **`npx cap sync ios`**.
 

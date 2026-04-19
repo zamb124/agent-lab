@@ -6,7 +6,7 @@ import { html, css } from 'lit';
 import { PlatformModal } from './glass-modal.js';
 import { buttonStyles } from '../styles/shared/button.styles.js';
 import { BaseService } from '../services/BaseService.js';
-import { I18nNs } from '../../services/i18n/i18n-default-namespace.js';
+import { I18nNs } from '../utils/i18n-namespace.js';
 import './platform-button.js';
 
 export class FileTextPreviewModal extends PlatformModal {
@@ -92,7 +92,7 @@ export class FileTextPreviewModal extends PlatformModal {
     }
 
     _t(key) {
-        return this.i18n.t(`file_preview_modal.${key}`, {}, I18nNs.PLATFORM);
+        return (this.t(`file_preview_modal.${key}`, {}, I18nNs.PLATFORM) || `file_preview_modal.${key}`, {}, I18nNs.PLATFORM);
     }
 
     _resolveBaseUrl() {
@@ -100,7 +100,7 @@ export class FileTextPreviewModal extends PlatformModal {
         if (explicit) {
             return explicit.replace(/\/$/, '');
         }
-        const crm = this.services?.crmApi;
+        const crm = null;  /* CRM functionality moved to dispatch in CRM-specific components */
         if (crm && typeof crm.baseUrl === 'string' && crm.baseUrl.trim()) {
             return crm.baseUrl.replace(/\/$/, '');
         }

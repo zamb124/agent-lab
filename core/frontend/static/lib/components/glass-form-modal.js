@@ -37,10 +37,19 @@ export class PlatformFormModal extends PlatformModal {
     }
 
     close() {
-        const msg = this.i18n.t('form_modal.unsaved_close', {}, 'shell');
+        const msg = (this.t('form_modal.unsaved_close') || 'form_modal.unsaved_close');
         if (this.isDirty && !confirm(msg)) {
             return;
         }
+        super.close();
+    }
+
+    /**
+     * Закрытие модалки после успешного submit без подтверждения dirty-формы.
+     * isDirty чистится перед super.close(), который дёрнет dispatch UI_MODAL_CLOSE.
+     */
+    closeAfterSave() {
+        this.isDirty = false;
         super.close();
     }
 
@@ -67,7 +76,7 @@ export class PlatformFormModal extends PlatformModal {
     }
 
     _saveHeaderTitle() {
-        return this.i18n.t('modal.save', {}, 'shell');
+        return (this.t('modal.save') || 'modal.save');
     }
 
     async _performSave() {
@@ -96,7 +105,7 @@ export class PlatformFormModal extends PlatformModal {
             onClick: () => this._performSave(),
             disabled: this.loading,
             title: this.loading
-                ? this.i18n.t('modal.saving', {}, 'shell')
+                ? (this.t('modal.saving') || 'modal.saving')
                 : this._saveHeaderTitle(),
         });
     }
@@ -117,7 +126,7 @@ export class PlatformFormModal extends PlatformModal {
         return html`
             <div class="form-actions">
                 <button type="button" class="btn btn-secondary" @click=${this.close}>
-                    ${this.i18n.t('form_modal.cancel', {}, 'shell')}
+                    ${(this.t('form_modal.cancel') || 'form_modal.cancel')}
                 </button>
             </div>
         `;

@@ -401,7 +401,7 @@ async def test_channels_typing_member_ok(
     assert res.ok
     assert res.result is None
     assert len(res.events) == 1
-    assert res.events[0].type == "channel.typing"
+    assert res.events[0].type == "sync/channel/typing"
     assert res.events[0].payload["channel_id"] == channel_id
     assert res.events[0].payload["typing"] is True
     assert res.events[0].payload["user"]["user_id"] == "u1"
@@ -1030,7 +1030,7 @@ async def test_call_hangup_auto_stops_recording_for_recording_owner(
     )
     assert result.ok
     assert helper_calls == [rec_id]
-    assert any(event.type == "call.recording.stopped" for event in result.events)
+    assert any(event.type == "sync/call/recording_stopped" for event in result.events)
 
 
 @pytest.mark.asyncio
@@ -1329,7 +1329,7 @@ async def test_call_recording_stop_allowed_for_recording_starter_non_admin(
     assert result.ok
     assert result.result is not None
     assert result.result.status == "uploaded"
-    assert any(event.type == "call.recording.stopped" for event in result.events)
+    assert any(event.type == "sync/call/recording_stopped" for event in result.events)
 
 
 @pytest.mark.asyncio
@@ -1420,7 +1420,7 @@ async def test_call_admin_transfer_updates_call_admin(
     assert result.ok
     assert result.result is not None
     assert result.result.created_by_user_id == target_user_id
-    assert any(event.type == "call.admin.changed" for event in result.events)
+    assert any(event.type == "sync/call/admin_changed" for event in result.events)
 
 
 @pytest.mark.asyncio
@@ -1793,7 +1793,7 @@ async def test_messages_transcribe_audio_sets_processing_and_emits_event(
     assert res.ok is True
     assert res.result is not None
     assert len(res.events) == 1
-    assert res.events[0].type == "message.updated"
+    assert res.events[0].type == "sync/message/updated"
     updated_audio = next(c for c in res.result.contents if c.type == MessageContentType.FILE_AUDIO)
     assert updated_audio.data.transcription_status == AudioTranscriptionStatus.PROCESSING
     assert updated_audio.data.transcription_text is None
@@ -1925,7 +1925,7 @@ async def test_sync_transcribe_audio_message_task_marks_done(
     assert content.type == MessageContentType.FILE_AUDIO
     assert content.data.transcription_status == AudioTranscriptionStatus.DONE
     assert content.data.transcription_text == "Привет из аудио"
-    assert published_types == ["message.updated"]
+    assert published_types == ["sync/message/updated"]
 
 
 @pytest.mark.asyncio

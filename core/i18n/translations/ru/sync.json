@@ -26,7 +26,19 @@
     "call_active_title": "Идёт звонок — войти",
     "call_join": "Войти",
     "channel_settings_title": "Настройки канала",
-    "channel_settings_aria": "Настройки канала"
+    "channel_settings_aria": "Настройки канала",
+    "meta_direct": "Личный",
+    "meta_meeting": "Встреча",
+    "meta_group": "Группа",
+    "title": "Sync",
+    "section_channels": "Каналы",
+    "section_directs": "Личные",
+    "section_team": "Команда",
+    "section_spaces": "Пространства",
+    "action_adhoc_call": "Создать встречу",
+    "row_typing": "печатает…",
+    "row_call_active": "Активный звонок",
+    "row_online": "онлайн"
   },
   "chat_view": {
     "title_thread": "Тред",
@@ -102,10 +114,22 @@
     "err_pick_mention_user": "pickMention: userId обязателен.",
     "err_ws": "WebSocket не подключен.",
     "err_user_id": "Не удалось определить user_id.",
-    "err_emoji": "emoji обязателен."
+    "err_emoji": "emoji обязателен.",
+    "placeholder": "Сообщение…",
+    "action_send": "Отправить",
+    "action_attach": "Прикрепить файл",
+    "action_voice": "Голосовое сообщение",
+    "reply_to": "Ответ {name}",
+    "editing": "Редактирование",
+    "over_limit": "Слишком длинное сообщение (макс {max})",
+    "send_failed_default": "Не удалось отправить сообщение"
   },
   "channel_picker": {
-    "adhoc_description": "Создаётся служебный канал встречи и сразу запускается видеозвонок. Канал скрыт в списках."
+    "adhoc_description": "Создаётся служебный канал встречи и сразу запускается видеозвонок. Канал скрыт в списках.",
+    "title": "Каналы",
+    "action_create_channel": "Создать канал",
+    "action_adhoc_call": "Создать встречу",
+    "empty": "Нет каналов в выбранных пространствах"
   },
   "message_list": {
     "today": "Сегодня",
@@ -118,7 +142,8 @@
     "err_history_limit": "Превышен лимит дозагрузки истории для перехода к сообщению.",
     "loading_messages": "Загрузка сообщений…",
     "empty_messages": "Сообщений пока нет.",
-    "loading_history": "Подгружаем историю…"
+    "loading_history": "Подгружаем историю…",
+    "empty": "Нет сообщений"
   },
   "bubble": {
     "profile_title": "Профиль",
@@ -243,7 +268,15 @@
     "promote_meeting_admin": "Назначить админом встречи",
     "participant_action_unavailable": "Недоступно для этого участника",
     "screen_tile_suffix": "{{label}} — экран",
-    "minimize_title": "Свернуть в чат"
+    "minimize_title": "Свернуть в чат",
+    "title": "Звонок",
+    "you": "Вы",
+    "action_minimize": "Свернуть",
+    "action_mic": "Микрофон",
+    "action_camera": "Камера",
+    "action_screen": "Экран",
+    "action_record": "Запись",
+    "action_end": "Завершить"
   },
   "sync_store": {
     "err_channel_filter_multi": "Чтобы создать канал, оставь в фильтре одно пространство или сбрось фильтр (покажи все каналы).",
@@ -300,12 +333,24 @@
     "pin": "Закрепить",
     "forward": "Переслать",
     "select": "Выбрать",
-    "delete": "Удалить"
+    "delete": "Удалить",
+    "action_reply": "Ответить",
+    "action_open_thread": "Открыть тред",
+    "action_edit": "Редактировать",
+    "action_copy": "Скопировать",
+    "action_pin": "Закрепить",
+    "action_delete": "Удалить",
+    "toast_copied": "Скопировано",
+    "toast_copy_failed": "Не удалось скопировать"
   },
   "call_incoming": {
     "incoming_label": "Входящий звонок",
     "accept": "Принять",
-    "decline": "Отклонить"
+    "decline": "Отклонить",
+    "subtitle": "Входящий звонок",
+    "unknown_caller": "Неизвестный",
+    "action_accept": "Принять",
+    "action_decline": "Отклонить"
   },
   "lane_preview": {
     "err_payload": "payload сообщения обязателен.",
@@ -323,7 +368,9 @@
     "err_unknown_type": "Неизвестный тип контента для превью: {{type}}"
   },
   "thread_drawer": {
-    "no_threads": "Тредов пока нет."
+    "no_threads": "Тредов пока нет.",
+    "title": "Тред",
+    "close": "Закрыть"
   },
   "channel_settings": {
     "header_create": "Создать канал",
@@ -393,7 +440,9 @@
     "guest_placeholder": "Ваше имя",
     "guest_button": "Как гость",
     "divider_or": "или",
-    "login_account": "Войти в аккаунт"
+    "login_account": "Войти в аккаунт",
+    "guest_name_placeholder": "Ваше имя",
+    "action_join": "Войти"
   },
   "sync_api": {
     "err_user_id": "userId обязателен.",
@@ -423,5 +472,111 @@
     "ws_unknown_realtime": "[sync-ws] неизвестное realtime-событие: {{type}}",
     "err_sync_ws_not_initialized": "syncWs не инициализирован при accept.",
     "err_recording_action": "action должен быть start или stop."
+  },
+  "spaces": {
+    "toast_created": "Пространство создано",
+    "err_create": "Не удалось создать пространство",
+    "toast_updated": "Пространство обновлено",
+    "err_update": "Не удалось обновить пространство"
+  },
+  "channels": {
+    "toast_created": "Канал создан",
+    "err_create": "Не удалось создать канал",
+    "toast_updated": "Канал обновлён",
+    "err_update": "Не удалось обновить канал",
+    "toast_member_added": "Участник добавлен",
+    "err_member_add": "Не удалось добавить участника",
+    "toast_notifications_updated": "Настройки уведомлений сохранены",
+    "err_notifications": "Не удалось обновить настройки уведомлений"
+  },
+  "threads": {
+    "toast_created": "Тред создан",
+    "err_create": "Не удалось создать тред"
+  },
+  "calls": {
+    "toast_link_created": "Ссылка создана",
+    "err_link_create": "Не удалось создать ссылку",
+    "toast_link_updated": "Ссылка обновлена",
+    "err_link_update": "Не удалось обновить ссылку",
+    "toast_link_removed": "Ссылка удалена",
+    "err_link_remove": "Не удалось удалить ссылку"
+  },
+  "git_resources": {
+    "toast_upserted": "Git-ссылка сохранена",
+    "err_upsert": "Не удалось сохранить git-ссылку"
+  },
+  "chat_header": {
+    "menu": "Меню",
+    "subtitle_typing": "{names} печатает(ют)…",
+    "subtitle_online": "онлайн",
+    "subtitle_last_seen": "был(а) недавно",
+    "subtitle_direct": "Личные сообщения",
+    "call_minimized": "Звонок свёрнут",
+    "action_call": "Позвонить",
+    "action_members": "Участники",
+    "action_settings": "Настройки"
+  },
+  "message_bubble": {
+    "action_transcribe": "Расшифровать",
+    "transcribe_processing": "Расшифровка…",
+    "call_started": "Звонок начался",
+    "call_ended": "Звонок завершён",
+    "action_join_call": "Войти",
+    "edited": "изменено",
+    "attachment_default_name": "Файл"
+  },
+  "space_modal": {
+    "title_create": "Создать пространство",
+    "title_edit": "Изменить пространство",
+    "field_name": "Название",
+    "field_transcribe": "Транскрибировать голосовые",
+    "field_speech_to_chat": "Речь в ленту",
+    "action_create": "Создать",
+    "action_save": "Сохранить",
+    "action_cancel": "Отмена"
+  },
+  "channel_modal": {
+    "title_create": "Создать канал",
+    "title_edit": "Изменить канал",
+    "field_name": "Название",
+    "field_type": "Тип",
+    "field_space": "Пространство",
+    "field_space_none": "Без пространства",
+    "type_topic": "Тематический",
+    "type_group": "Группа",
+    "action_create": "Создать",
+    "action_save": "Сохранить",
+    "action_cancel": "Отмена"
+  },
+  "channel_notifications": {
+    "title": "Уведомления канала",
+    "field_muted": "Отключить уведомления",
+    "action_save": "Сохранить",
+    "action_cancel": "Отмена"
+  },
+  "channel_members_add": {
+    "title": "Добавить участников",
+    "search_placeholder": "Поиск…",
+    "action_add": "Добавить ({count})",
+    "action_cancel": "Отмена"
+  },
+  "call_link": {
+    "title_create": "Создать ссылку встречи",
+    "title_edit": "Изменить ссылку",
+    "field_title": "Название",
+    "field_scheduled_at": "Дата и время",
+    "field_duration": "Длительность (мин)",
+    "action_create": "Создать",
+    "action_save": "Сохранить",
+    "action_delete": "Удалить",
+    "action_cancel": "Отмена"
+  },
+  "calls_scheduled": {
+    "title": "Запланированные встречи",
+    "action_create": "Создать встречу",
+    "empty": "Нет запланированных встреч"
+  },
+  "settings": {
+    "title": "Настройки Sync"
   }
 }

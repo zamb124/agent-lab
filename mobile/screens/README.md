@@ -1,14 +1,15 @@
-# Скриншоты для App Store Connect
+# Скриншоты для App Store Connect и Google Play
 
-Исходные кадры можно класть **в `source/`** или **прямо в `mobile/screens/`** (рядом с `generate_app_store_screenshots.py`) — если в `source/` нет картинок, скрипт возьмёт PNG/JPEG из корня `screens/`. Подпапки `generated/`, `source/`, `source_watch/` при этом не сканируются для этого режима.
+Исходные кадры можно класть **в `source/`** или **прямо в `mobile/screens/`** (рядом с `generate_app_store_screenshots.py`) — если в `source/` нет картинок, скрипт возьмёт PNG/JPEG из корня `screens/`. Подпапки `generated/`, `source/`, `source_watch/`, `source_mac/`, `source_play/` при этом не сканируются для этого режима.
 
 **В репозитории `source/` может быть пустой** — скриншоты вы добавляете локально. В подпапках есть краткие `README.md`.
 
 | Каталог | Назначение |
 |---------|------------|
-| **`source/`** | Скриншоты для **iPhone и iPad** (один набор; для каждого требуемого размера генерируется отдельная подпапка) |
+| **`source/`** | Скриншоты для **iPhone и iPad** (один набор; для каждого требуемого размера генерируется отдельная подпапка). Используется как fallback для Watch/Mac/Play, если соответствующие папки пусты |
 | **`source_watch/`** | Отдельные кадры для **Apple Watch** (масштаб интерфейса часов отличается от телефона) |
 | **`source_mac/`** | Отдельные кадры для **Mac** (App Store Connect: 1280×800, 1440×900, 2560×1600, 2880×1800) |
+| **`source_play/`** | Отдельные кадры для **Google Play** (Phone, 7" Tablet, 10" Tablet); если пусто — берётся `source/` |
 
 Поддерживаемые расширения: **`.png`**, **`.jpg`**, **`.jpeg`**. Файлы обрабатываются в **лексикографическом порядке** имён (`01.png`, `02.png`, …).
 
@@ -26,6 +27,7 @@ uv run python mobile/screens/generate_app_store_screenshots.py
 - `--source` — путь к папке с исходниками iPhone/iPad (по умолчанию `mobile/screens/source`)
 - `--source-watch` — исходники Watch (по умолчанию `mobile/screens/source_watch`)
 - `--source-mac` — исходники Mac (по умолчанию `mobile/screens/source_mac`)
+- `--source-play` — исходники Google Play (по умолчанию `mobile/screens/source_play`)
 - `--out` — куда писать результат (по умолчанию `mobile/screens/generated`)
 
 Если **`source_watch/`** пуста, для Watch используются **те же исходники**, что и для iPhone/iPad (масштабирование под маленькие размеры). Для **отдельных** скринов с часов положите файлы в `source_watch/`.
@@ -45,6 +47,16 @@ uv run python mobile/screens/generate_app_store_screenshots.py
 - До **10 скриншотов** на тип дисплея; до **3 App Preview** (видео) — **видео этот скрипт не создаёт**, только статичные PNG.
 - Если файлов больше 10, скрипт выводит **предупреждение** в stderr, но всё равно генерирует файлы.
 
+## Ограничения Google Play Console
+
+- **Минимум 2** и **максимум 8** скриншотов на тип (Phone / 7" Tablet / 10" Tablet).
+- Phone — соотношение 16:9 или 9:16, минимум 320 px по короткой стороне; в скрипте — 1080×1920 и 1920×1080.
+- 7" Tablet — 1200×1920 и 1920×1200.
+- 10" Tablet — 1600×2560 и 2560×1600.
+- Дополнительные обязательные поля Play Console (генерируются `scripts/generate_humanitec_pwa_icons.py`):
+  - **High-res icon** 512×512 → `mobile/screens/play_icon_512.png`
+  - **Feature graphic** 1024×500 → `mobile/screens/play_feature_graphic_1024x500.png`
+
 ## Размеры (справочно)
 
-Соответствуют актуальным подсказкам в App Store Connect для iPhone, iPad 12.9"/13", Apple Watch (Ultra 3, Series 11/9/6/3) и **Mac** (четыре допустимых размера скриншотов).
+Соответствуют актуальным подсказкам в App Store Connect для iPhone, iPad 12.9"/13", Apple Watch (Ultra 3, Series 11/9/6/3), **Mac** (четыре допустимых размера) и **Google Play** (Phone / 7" Tablet / 10" Tablet, портрет + ландшафт).

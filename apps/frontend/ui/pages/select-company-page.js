@@ -1,318 +1,86 @@
-import { html, css } from 'lit';
-import { PlatformElement } from '@platform/lib/platform-element/index.js';
-import { Services } from '@platform/services/index.js';
-import { buildCompanySubdomainUrl, formatCompanySubdomainLabel } from '@platform/lib/utils/tenant-url.js';
-import '@platform/lib/components/company-modal.js';
-
 /**
- * Страница выбора компании после авторизации
- * Показывается только на главном домене без субдомена
+ * Select company page — после логина пользователь с несколькими компаниями
+ * выбирает активную через core companies effect.
  */
-export class SelectCompanyPage extends PlatformElement {
-    static properties = {
-        companies: { type: Array },
-        loading: { type: Boolean },
-        error: { type: String },
-        showCreateModal: { type: Boolean }
-    };
+import { html, css } from 'lit';
+import { PlatformPage } from '@platform/lib/base/PlatformPage.js';
+import { CoreEvents } from '@platform/lib/events/contract.js';
+import { COMPANIES_EVENTS } from '@platform/lib/events/reducers/companies.js';
+import '@platform/lib/components/platform-icon.js';
 
+export class SelectCompanyPage extends PlatformPage {
     static styles = [
-        PlatformElement.styles,
+        PlatformPage.styles,
         css`
             :host {
-                display: block;
-                min-height: var(--app-vh, 100vh);
-                background: var(--landing-background, #0F0F0F);
-                padding: max(40px, var(--platform-safe-top)) max(20px, var(--platform-safe-right))
-                    max(40px, var(--platform-safe-bottom)) max(20px, var(--platform-safe-left));
-                box-sizing: border-box;
+                display: flex; align-items: center; justify-content: center;
+                min-height: 100vh; padding: var(--space-6);
+                background: var(--bg-gradient);
             }
-
-            .container {
-                max-width: 800px;
-                margin: 0 auto;
+            .card {
+                max-width: 520px; width: 100%; padding: var(--space-8);
+                background: var(--glass-solid-medium);
+                border: 1px solid var(--glass-border-medium);
+                border-radius: var(--radius-2xl);
             }
-
-            .header {
-                display: flex;
-                flex-direction: column;
-                align-items: center;
-                text-align: center;
-                margin-bottom: 48px;
+            h1 { color: var(--text-primary); margin-bottom: var(--space-4); text-align: center; }
+            .item {
+                display: flex; align-items: center; gap: var(--space-3);
+                padding: var(--space-3) var(--space-4);
+                margin-bottom: var(--space-2);
+                background: transparent; border: 1px solid var(--glass-border-subtle);
+                border-radius: var(--radius-lg);
+                cursor: pointer; color: var(--text-primary); width: 100%; text-align: left;
             }
-
-            .title {
-                font-family: 'Fira Sans Condensed', sans-serif;
-                font-size: 48px;
-                font-weight: 600;
-                color: var(--landing-secondary);
-                margin: 0 0 16px 0;
-            }
-
-            .subtitle {
-                font-family: 'Fira Sans', sans-serif;
-                font-size: 18px;
-                color: var(--landing-secondary);
-                opacity: 0.7;
-            }
-
-            .companies-grid {
-                display: grid;
-                grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
-                gap: 24px;
-                margin-bottom: 32px;
-            }
-
-            .company-card {
-                background: var(--glass-bg);
-                border: 1px solid var(--glass-border);
-                border-radius: 16px;
-                padding: 32px;
-                cursor: pointer;
-                transition: all 0.3s ease;
-                backdrop-filter: blur(20px);
-            }
-
-            .company-card:hover {
-                transform: translateY(-4px);
-                border-color: var(--landing-primary);
-                box-shadow: 0 8px 24px rgba(87, 104, 254, 0.2);
-            }
-
-            .company-name {
-                font-family: 'Fira Sans Condensed', sans-serif;
-                font-size: 24px;
-                font-weight: 600;
-                color: var(--landing-secondary);
-                margin: 0 0 8px 0;
-            }
-
-            .company-subdomain {
-                font-family: 'Fira Sans', sans-serif;
-                font-size: 14px;
-                color: var(--landing-primary);
-                margin: 0 0 12px 0;
-            }
-
-            .company-role {
-                display: inline-block;
-                padding: 4px 12px;
-                background: rgba(255, 255, 255, 0.05);
-                border-radius: 12px;
-                font-size: 12px;
-                color: var(--landing-secondary);
-                opacity: 0.7;
-            }
-
-            .create-button {
-                width: 100%;
-                padding: 20px;
-                background: var(--landing-primary);
-                color: var(--landing-secondary);
-                border: none;
-                border-radius: 16px;
-                font-family: 'Fira Sans', sans-serif;
-                font-size: 18px;
-                font-weight: 600;
-                cursor: pointer;
-                transition: all 0.3s ease;
-            }
-
-            .create-button:hover {
-                background: #6877ff;
-                transform: translateY(-2px);
-            }
-
-            .loading {
-                text-align: center;
-                padding: 60px 20px;
-                color: var(--landing-secondary);
-                font-size: 18px;
-            }
-
-            .error {
-                padding: 16px;
-                background: rgba(255, 59, 48, 0.1);
-                border: 1px solid rgba(255, 59, 48, 0.3);
-                border-radius: 12px;
-                color: #FF3B30;
-                text-align: center;
-                margin-bottom: 24px;
-            }
-
-            .empty-state {
-                text-align: center;
-                padding: 60px 20px;
-            }
-
-            .empty-icon {
-                font-size: 64px;
-                margin-bottom: 16px;
-            }
-
-            .empty-title {
-                font-family: 'Fira Sans Condensed', sans-serif;
-                font-size: 24px;
-                color: var(--landing-secondary);
-                margin: 0 0 8px 0;
-            }
-
-            .empty-text {
-                font-family: 'Fira Sans', sans-serif;
-                font-size: 16px;
-                color: var(--landing-secondary);
-                opacity: 0.7;
-                margin: 0 0 32px 0;
-            }
-        `
+            .item:hover { background: var(--glass-solid-strong); border-color: var(--accent); }
+            .item.active { border-color: var(--accent); color: var(--accent); }
+        `,
     ];
 
     constructor() {
         super();
-        this.companies = [];
-        this.loading = true;
-        this.error = '';
-        this.showCreateModal = false;
+        this._companiesSel = this.select((s) => s.companies.list);
+        this._authSel = this.select((s) => s.auth.user);
+        this._loaded = false;
     }
 
-    async connectedCallback() {
+    connectedCallback() {
         super.connectedCallback();
-        this._i18nUnsub = this.i18n.subscribe(() => this.requestUpdate());
-        await this.loadCompanies();
+        this.useEvent(CoreEvents.AUTH_COMPANY_SWITCHED, () => {
+            this.navigate('dashboard');
+        });
     }
 
-    disconnectedCallback() {
-        if (this._i18nUnsub) {
-            this._i18nUnsub();
-            this._i18nUnsub = null;
-        }
-        super.disconnectedCallback();
-    }
-
-    async loadCompanies() {
-        this.loading = true;
-        this.error = '';
-
-        try {
-            this.companies = await Services.companies.getMyCompanies();
-
-            if (this.companies.length === 1) {
-                this.handleCompanySelect(this.companies[0]);
-                return;
-            }
-
-            const urlParams = new URLSearchParams(window.location.search);
-            if (
-                this.companies.length > 1 &&
-                urlParams.get('action') !== 'create'
-            ) {
-                const active = this.companies.find((c) => c.is_active === true);
-                if (active && active.subdomain) {
-                    this.handleCompanySelect(active);
-                    return;
-                }
-            }
-
-            if (urlParams.get('action') === 'create' && this.companies.length === 0) {
-                this.showCreateModal = true;
-            }
-        } catch (error) {
-            console.error('Error loading companies:', error);
-            this.error = error.message;
-        } finally {
-            this.loading = false;
+    updated() {
+        if (!this._loaded) {
+            this._loaded = true;
+            this.dispatch(COMPANIES_EVENTS.LOAD_REQUESTED, null);
         }
     }
 
-    handleCompanySelect(company) {
-        window.location.href = buildCompanySubdomainUrl(company.subdomain, '/dashboard');
-    }
-
-    handleCreateCompany() {
-        this.showCreateModal = true;
-    }
-
-    handleCompanyCreated(e) {
-        const { redirect_url } = e.detail;
-        if (redirect_url) {
-            window.location.href = redirect_url;
-        } else {
-            this.loadCompanies();
-        }
+    _select(companyId) {
+        this.switchCompany(companyId);
     }
 
     render() {
-        const td = (key, params) => this.i18n.t(key, params ?? {});
-        if (this.loading) {
-            return html`
-                <div class="container">
-                    <div class="loading">${td('select_company.loading')}</div>
-                </div>
-            `;
-        }
-
+        const companies = this._companiesSel.value;
+        const user = this._authSel.value;
+        const currentId = user && (user.company_id || (user.raw && user.raw.company_id));
         return html`
-            <div class="container">
-                <div class="header">
-                    <h1 class="title">${td('select_company.title')}</h1>
-                    <p class="subtitle">${td('select_company.subtitle')}</p>
-                </div>
-
-                ${this.error ? html`
-                    <div class="error">${this.error}</div>
-                ` : ''}
-
-                ${this.companies.length > 0 ? html`
-                    <div class="companies-grid">
-                        ${this.companies.map(company => html`
-                            <div 
-                                class="company-card" 
-                                @click=${() => this.handleCompanySelect(company)}
-                            >
-                                <h3 class="company-name">${company.name}</h3>
-                                <p class="company-subdomain">${formatCompanySubdomainLabel(company.subdomain)}</p>
-                                <span class="company-role">${this._getRoleLabel(company.role)}</span>
-                            </div>
-                        `)}
-                    </div>
-                ` : html`
-                    <div class="empty-state">
-                        <div class="empty-icon">🏢</div>
-                        <h2 class="empty-title">${td('select_company.empty_title')}</h2>
-                        <p class="empty-text">${td('select_company.empty_text')}</p>
-                    </div>
-                `}
-
-                <button 
-                    class="create-button" 
-                    @click=${this.handleCreateCompany}
-                >
-                    ${td('select_company.create_button')}
-                </button>
-
-                <company-modal 
-                    ?open=${this.showCreateModal}
-                    @company-created=${this.handleCompanyCreated}
-                    @click=${(e) => {
-                        if (e.target.tagName === 'COMPANY-MODAL') {
-                            this.showCreateModal = false;
-                        }
-                    }}
-                ></company-modal>
+            <div class="card">
+                <h1>${this.t('select_company.title')}</h1>
+                ${companies.length === 0
+                    ? html`<p>${this.t('select_company.empty_text')}</p>`
+                    : companies.map((c) => html`
+                        <button class="item ${c.company_id === currentId ? 'active' : ''}" @click=${() => this._select(c.company_id)}>
+                            <platform-icon name="building-one" size="18"></platform-icon>
+                            <span>${c.name}</span>
+                        </button>
+                    `)
+                }
             </div>
         `;
-    }
-
-    _getRoleLabel(role) {
-        const td = (key) => this.i18n.t(key, {});
-        const labels = {
-            owner: td('select_company.role_owner'),
-            admin: td('select_company.role_admin'),
-            member: td('select_company.role_member'),
-        };
-        return labels[role] || role;
     }
 }
 
 customElements.define('select-company-page', SelectCompanyPage);
-

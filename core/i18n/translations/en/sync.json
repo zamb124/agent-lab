@@ -26,7 +26,19 @@
     "call_active_title": "Call in progress — join",
     "call_join": "Join",
     "channel_settings_title": "Channel settings",
-    "channel_settings_aria": "Channel settings"
+    "channel_settings_aria": "Channel settings",
+    "meta_direct": "Direct",
+    "meta_meeting": "Meeting",
+    "meta_group": "Group",
+    "title": "Sync",
+    "section_channels": "Channels",
+    "section_directs": "Direct",
+    "section_team": "Team",
+    "section_spaces": "Spaces",
+    "action_adhoc_call": "Start meeting",
+    "row_typing": "typing…",
+    "row_call_active": "Active call",
+    "row_online": "online"
   },
   "chat_view": {
     "title_thread": "Thread",
@@ -102,10 +114,22 @@
     "err_pick_mention_user": "pickMention: userId is required.",
     "err_ws": "WebSocket is not connected.",
     "err_user_id": "Could not resolve user_id.",
-    "err_emoji": "emoji is required."
+    "err_emoji": "emoji is required.",
+    "placeholder": "Message…",
+    "action_send": "Send",
+    "action_attach": "Attach file",
+    "action_voice": "Voice message",
+    "reply_to": "Reply to {name}",
+    "editing": "Editing",
+    "over_limit": "Message too long (max {max})",
+    "send_failed_default": "Failed to send message"
   },
   "channel_picker": {
-    "adhoc_description": "Creates a hidden meeting channel and starts a video call immediately. The channel is hidden from lists."
+    "adhoc_description": "Creates a hidden meeting channel and starts a video call immediately. The channel is hidden from lists.",
+    "title": "Channels",
+    "action_create_channel": "Create channel",
+    "action_adhoc_call": "Start meeting",
+    "empty": "No channels in selected spaces"
   },
   "message_list": {
     "today": "Today",
@@ -118,7 +142,8 @@
     "err_history_limit": "History preload limit exceeded while jumping to message.",
     "loading_messages": "Loading messages…",
     "empty_messages": "No messages yet.",
-    "loading_history": "Loading older messages…"
+    "loading_history": "Loading older messages…",
+    "empty": "No messages yet"
   },
   "bubble": {
     "profile_title": "Profile",
@@ -243,7 +268,15 @@
     "promote_meeting_admin": "Make meeting admin",
     "participant_action_unavailable": "Not available for this participant",
     "screen_tile_suffix": "{{label}} — screen",
-    "minimize_title": "Minimize to chat"
+    "minimize_title": "Minimize to chat",
+    "title": "Call",
+    "you": "You",
+    "action_minimize": "Minimize",
+    "action_mic": "Microphone",
+    "action_camera": "Camera",
+    "action_screen": "Screen",
+    "action_record": "Recording",
+    "action_end": "End call"
   },
   "sync_store": {
     "err_channel_filter_multi": "To create a channel, leave only one space in the filter or reset the filter (show all channels).",
@@ -300,12 +333,24 @@
     "pin": "Pin",
     "forward": "Forward",
     "select": "Select",
-    "delete": "Delete"
+    "delete": "Delete",
+    "action_reply": "Reply",
+    "action_open_thread": "Open thread",
+    "action_edit": "Edit",
+    "action_copy": "Copy",
+    "action_pin": "Pin",
+    "action_delete": "Delete",
+    "toast_copied": "Copied",
+    "toast_copy_failed": "Copy failed"
   },
   "call_incoming": {
     "incoming_label": "Incoming call",
     "accept": "Accept",
-    "decline": "Decline"
+    "decline": "Decline",
+    "subtitle": "Incoming call",
+    "unknown_caller": "Unknown",
+    "action_accept": "Accept",
+    "action_decline": "Decline"
   },
   "lane_preview": {
     "err_payload": "Message payload is required.",
@@ -323,7 +368,9 @@
     "err_unknown_type": "Unknown content type for preview: {{type}}"
   },
   "thread_drawer": {
-    "no_threads": "No threads yet."
+    "no_threads": "No threads yet.",
+    "title": "Thread",
+    "close": "Close"
   },
   "channel_settings": {
     "header_create": "Create channel",
@@ -393,7 +440,9 @@
     "guest_placeholder": "Your name",
     "guest_button": "Join as guest",
     "divider_or": "or",
-    "login_account": "Sign in"
+    "login_account": "Sign in",
+    "guest_name_placeholder": "Your name",
+    "action_join": "Join"
   },
   "sync_api": {
     "err_user_id": "userId is required.",
@@ -423,5 +472,111 @@
     "ws_unknown_realtime": "[sync-ws] unknown realtime event: {{type}}",
     "err_sync_ws_not_initialized": "syncWs is not initialized on accept.",
     "err_recording_action": "action must be start or stop."
+  },
+  "spaces": {
+    "toast_created": "Space created",
+    "err_create": "Failed to create space",
+    "toast_updated": "Space updated",
+    "err_update": "Failed to update space"
+  },
+  "channels": {
+    "toast_created": "Channel created",
+    "err_create": "Failed to create channel",
+    "toast_updated": "Channel updated",
+    "err_update": "Failed to update channel",
+    "toast_member_added": "Member added",
+    "err_member_add": "Failed to add member",
+    "toast_notifications_updated": "Notification settings saved",
+    "err_notifications": "Failed to update notification settings"
+  },
+  "threads": {
+    "toast_created": "Thread created",
+    "err_create": "Failed to create thread"
+  },
+  "calls": {
+    "toast_link_created": "Link created",
+    "err_link_create": "Failed to create link",
+    "toast_link_updated": "Link updated",
+    "err_link_update": "Failed to update link",
+    "toast_link_removed": "Link removed",
+    "err_link_remove": "Failed to remove link"
+  },
+  "git_resources": {
+    "toast_upserted": "Git resource saved",
+    "err_upsert": "Failed to save git resource"
+  },
+  "chat_header": {
+    "menu": "Menu",
+    "subtitle_typing": "{names} typing…",
+    "subtitle_online": "online",
+    "subtitle_last_seen": "last seen recently",
+    "subtitle_direct": "Direct messages",
+    "call_minimized": "Call minimized",
+    "action_call": "Call",
+    "action_members": "Members",
+    "action_settings": "Settings"
+  },
+  "message_bubble": {
+    "action_transcribe": "Transcribe",
+    "transcribe_processing": "Transcribing…",
+    "call_started": "Call started",
+    "call_ended": "Call ended",
+    "action_join_call": "Join",
+    "edited": "edited",
+    "attachment_default_name": "File"
+  },
+  "space_modal": {
+    "title_create": "Create space",
+    "title_edit": "Edit space",
+    "field_name": "Name",
+    "field_transcribe": "Transcribe voice messages",
+    "field_speech_to_chat": "Speech to chat",
+    "action_create": "Create",
+    "action_save": "Save",
+    "action_cancel": "Cancel"
+  },
+  "channel_modal": {
+    "title_create": "Create channel",
+    "title_edit": "Edit channel",
+    "field_name": "Name",
+    "field_type": "Type",
+    "field_space": "Space",
+    "field_space_none": "No space",
+    "type_topic": "Topic",
+    "type_group": "Group",
+    "action_create": "Create",
+    "action_save": "Save",
+    "action_cancel": "Cancel"
+  },
+  "channel_notifications": {
+    "title": "Channel notifications",
+    "field_muted": "Mute notifications",
+    "action_save": "Save",
+    "action_cancel": "Cancel"
+  },
+  "channel_members_add": {
+    "title": "Add members",
+    "search_placeholder": "Search…",
+    "action_add": "Add ({count})",
+    "action_cancel": "Cancel"
+  },
+  "call_link": {
+    "title_create": "Create meeting link",
+    "title_edit": "Edit link",
+    "field_title": "Title",
+    "field_scheduled_at": "Scheduled at",
+    "field_duration": "Duration (min)",
+    "action_create": "Create",
+    "action_save": "Save",
+    "action_delete": "Delete",
+    "action_cancel": "Cancel"
+  },
+  "calls_scheduled": {
+    "title": "Scheduled meetings",
+    "action_create": "New meeting",
+    "empty": "No scheduled meetings"
+  },
+  "settings": {
+    "title": "Sync settings"
   }
 }

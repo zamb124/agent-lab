@@ -540,10 +540,11 @@ class TestAnalysisDraftApplyPartialFailureCompensation:
             ent: AIExtractedEntity,
             namespace: str,
             merge_target_locks: dict,
+            source_entity_id: str | None = None,
         ):
             if ent.name == fail_name:
                 raise ValueError("simulated_row_persist_failure")
-            return await orig(self, ent, namespace, merge_target_locks)
+            return await orig(self, ent, namespace, merge_target_locks, source_entity_id)
 
         monkeypatch.setattr(EntityService, "_persist_analysis_draft_entity_row", _patched)
 

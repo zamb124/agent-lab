@@ -1,0 +1,160 @@
+/**
+ * Notes — заметки CRM. Это сущности с `entity_type === 'note'` (или системным
+ * type_id заметки), управляются через `/crm/api/v1/entities`. Здесь — отдельная
+ * лента, операции голосового ввода, текстового поиска по заметкам, batch-загрузки
+ * карточек связанных entity и AI-анализа черновика.
+ *
+ * Backend:
+ *   PATCH /crm/api/v1/entities/notes/{note_id}/analysis-draft → AIAnalysisDraftStored
+ *   POST  /crm/api/v1/tasks/note-analyze                       → TaskResponse (start_note_analyze)
+ *   POST  /crm/api/v1/entities/voice-input                     → { text, stt }
+ *   GET   /crm/api/v1/entities/search?q=&entity_type=note&search_mode= → CursorPage[Entity]
+ *   POST  /crm/api/v1/entities/cards/bulk                      → { [entity_id]: card }
+ */
+
+import {
+    createCursorList,
+    createAsyncOp,
+} from '@platform/lib/events/index.js';
+import { httpRequest } from '@platform/lib/events/http.js';
+
+function _buildNoteDateFilter(filters) {
+    const leaves = [];
+    if (typeof filters.date_from === 'string' && filters.date_from.length > 0) {
+        leaves.push({ field: 'note_date', op: '$gte', value: filters.date_from });
+    }
+    if (typeof filters.date_to === 'string' && filters.date_to.length > 0) {
+        leaves.push({ field: 'note_date', op: '$lte', value: filters.date_to });
+    }
+    if (leaves.length === 0) return null;
+    if (leaves.length === 1) return leaves[0];
+    return { $and: leaves };
+}
+
+export const notesListResource = createCursorList({
+    name: 'crm/notes_list',
+    baseUrl: '/crm/api/v1/entities/query',
+    pageSize: 50,
+    httpMethod: 'POST',
+    buildQuery: (filters) => {
+        if (!filters || typeof filters !== 'object') {
+            throw new Error('notesListResource.buildQuery: filters required');
+        }
+        const body = { entity_type: 'note' };
+        if (typeof filters.namespace === 'string' && filters.namespace.length > 0) {
+            body.namespace = filters.namespace;
+        }
+        if (typeof filters.q === 'string' && filters.q.length > 0) {
+            body.query = filters.q;
+        }
+        const dsl = _buildNoteDateFilter(filters);
+        if (dsl !== null) body.filters = dsl;
+        return body;
+    },
+    errorToastKey: 'crm:toast.notes_list.failed',
+});
+
+export const noteAnalysisDraftSaveOp = createAsyncOp({
+    name: 'crm/note_analysis_draft_save',
+    silent: true,
+    request: async ({ payload }) => {
+        if (!payload || typeof payload.note_id !== 'string' || !payload.draft) {
+            throw new Error('noteAnalysisDraftSaveOp: { note_id, draft } required');
+        }
+        return await httpRequest({
+            method: 'PATCH',
+            url: `/crm/api/v1/entities/notes/${encodeURIComponent(payload.note_id)}/analysis-draft`,
+            body: payload.draft,
+        });
+    },
+});
+
+export const noteVoiceInputOp = createAsyncOp({
+    name: 'crm/note_voice_input',
+    successToastKey: 'crm:toast.note.voice_stopped',
+    errorToastKey: 'crm:toast.note.voice_failed',
+    request: async ({ payload }) => {
+        if (!payload || !(payload.audio instanceof Blob)) {
+            throw new Error('noteVoiceInputOp: payload.audio (Blob) required');
+        }
+        const formData = new FormData();
+        const fileName = typeof payload.file_name === 'string' && payload.file_name.length > 0
+            ? payload.file_name
+            : 'voice-input.webm';
+        formData.append('file', payload.audio, fileName);
+        if (typeof payload.language === 'string' && payload.language.length > 0) {
+            formData.append('language', payload.language);
+        }
+        return await httpRequest({
+            method: 'POST',
+            url: '/crm/api/v1/entities/voice-input',
+            body: formData,
+        });
+    },
+});
+
+export const noteSearchOp = createAsyncOp({
+    name: 'crm/note_search',
+    silent: true,
+    request: async ({ payload }) => {
+        if (!payload || typeof payload.q !== 'string' || payload.q.length === 0) {
+            throw new Error('noteSearchOp: payload.q (non-empty string) required');
+        }
+        const search_mode = typeof payload.search_mode === 'string' && payload.search_mode.length > 0
+            ? payload.search_mode
+            : 'hybrid';
+        const limit = typeof payload.limit === 'number' && payload.limit > 0 ? payload.limit : 50;
+        const body = {
+            query: payload.q,
+            entity_type: 'note',
+            search_mode,
+            limit,
+        };
+        if (typeof payload.namespace === 'string' && payload.namespace.length > 0) {
+            body.namespace = payload.namespace;
+        }
+        return await httpRequest({
+            method: 'POST',
+            url: '/crm/api/v1/entities/query',
+            body,
+        });
+    },
+});
+
+export const entityCardsBulkOp = createAsyncOp({
+    name: 'crm/entity_cards_bulk',
+    silent: true,
+    request: async ({ payload }) => {
+        if (!payload || !Array.isArray(payload.entity_ids) || payload.entity_ids.length === 0) {
+            throw new Error('entityCardsBulkOp: payload.entity_ids (non-empty array) required');
+        }
+        return await httpRequest({
+            method: 'POST',
+            url: '/crm/api/v1/entities/cards/bulk',
+            body: { entity_ids: payload.entity_ids },
+        });
+    },
+});
+
+export const noteAnalyzeStartOp = createAsyncOp({
+    name: 'crm/note_analyze_start',
+    successToastKey: 'crm:toast.note.analyze_started',
+    errorToastKey: 'crm:toast.note.analyze_start_failed',
+    request: async ({ payload }) => {
+        if (!payload || typeof payload.note_id !== 'string') {
+            throw new Error('noteAnalyzeStartOp: payload.note_id required');
+        }
+        const body = { note_id: payload.note_id };
+        if (typeof payload.mode === 'string' && payload.mode.length > 0) {
+            body.mode = payload.mode;
+        }
+        if (typeof payload.namespace === 'string') {
+            body.namespace = payload.namespace;
+        }
+        return await httpRequest({
+            method: 'POST',
+            url: '/crm/api/v1/tasks/note-analyze',
+            body,
+        });
+    },
+});

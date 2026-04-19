@@ -11,6 +11,8 @@ from core.config import get_settings
 from core.logging import get_logger, setup_logging
 from core.push.apns_credentials import resolve_apns_credentials
 from core.push.apns_service import init_apns_push_service
+from core.push.fcm_credentials import resolve_fcm_credentials
+from core.push.fcm_service import init_fcm_push_service
 from core.push.service import init_web_push_service
 from core.tasks.broker import (
     create_broker,
@@ -65,6 +67,15 @@ async def sync_worker_startup(state: TaskiqState) -> None:
             use_sandbox=apns.use_sandbox,
         )
         logger.info("Sync Worker: ApnsPushService инициализирован")
+    fcm = resolve_fcm_credentials(settings)
+    if fcm:
+        init_fcm_push_service(
+            project_id=fcm.project_id,
+            client_email=fcm.client_email,
+            private_key_pem=fcm.private_key_pem,
+            token_uri=fcm.token_uri,
+        )
+        logger.info("Sync Worker: FcmPushService инициализирован project_id=%s", fcm.project_id)
     logger.info("Sync Worker: запуск")
 
 

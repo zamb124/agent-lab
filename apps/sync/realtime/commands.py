@@ -1,4 +1,14 @@
-"""Команды realtime слоя Sync (совместимы с REST DTO)."""
+"""Команды realtime слоя Sync (совместимы с REST DTO).
+
+CommandEnvelope — единая внутренняя оболочка команды для бизнес-логики
+`apps.sync.realtime.handlers.execute_command`. Тип внутри использует
+короткие имена (`spaces.create`, `messages.send`, ...). Маппинг
+каноничных WS-имён (`sync/<entity>/<verb>_requested`) в эти короткие типы
+живёт в `apps/sync/realtime/command_router.py`.
+
+Сама доставка фреймов идёт через `core.websocket.command_router`
+(см. `architecture.mdc`, раздел «REST-зеркало команд»).
+"""
 
 from __future__ import annotations
 
@@ -6,13 +16,12 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, Field, model_validator
 
-from apps.sync.models.calls import CallRead, CallType
-from apps.sync.models.channels import ChannelCreate, ChannelRead, ChannelUpdate
-from apps.sync.models.git import GitResourceRefCreate, GitResourceRefRead
-from apps.sync.models.messages import MessageCreate, MessageEdit, MessageRead
-from apps.sync.models.meetings import CallRecordingRead
-from apps.sync.models.spaces import SpaceCreate, SpaceRead, SpaceUpdate
-from apps.sync.models.threads import ThreadCreate, ThreadRead
+from apps.sync.models.calls import CallType
+from apps.sync.models.channels import ChannelCreate, ChannelUpdate
+from apps.sync.models.git import GitResourceRefCreate
+from apps.sync.models.messages import MessageCreate, MessageEdit
+from apps.sync.models.spaces import SpaceCreate, SpaceUpdate
+from apps.sync.models.threads import ThreadCreate
 from core.calls.models import SignalType
 
 
@@ -49,42 +58,15 @@ CommandType = Literal[
 class CommandEnvelope(BaseModel):
     """Единая оболочка команды.
 
-    `id` приходит от клиента (uuid). Сервер не генерирует id за клиента.
+    `id` приходит от клиента или генерируется WS-роутером.
     `company_id` проставляется из контекста для изоляции в воркере.
     """
 
-    id: str = Field(description="UUID команды (client-generated).")
+    id: str = Field(description="UUID команды (client-generated или server-issued).")
     actor_user_id: str = Field(description="Пользователь, от имени которого выполняется команда.")
     company_id: str = Field(description="Компания для изоляции данных.")
     type: CommandType = Field(description="Тип команды.")
     payload: dict = Field(description="Payload команды (совместим с REST DTO).")
-
-
-class WsCommandFrame(BaseModel):
-    """Команда, пришедшая по WebSocket."""
-
-    id: str = Field(description="UUID команды (client-generated).")
-    type: CommandType = Field(description="Тип команды.")
-    payload: dict = Field(description="Payload команды.")
-
-
-class WsResultFrame(BaseModel):
-    """Результат команды по WebSocket."""
-
-    id: str
-    ok: bool
-    result: (
-        SpaceRead
-        | ChannelRead
-        | ThreadRead
-        | MessageRead
-        | GitResourceRefRead
-        | CallRead
-        | CallRecordingRead
-        | None
-    ) = None
-    error_code: str | None = None
-    error_detail: str | None = None
 
 
 class SpacesCreatePayload(BaseModel):

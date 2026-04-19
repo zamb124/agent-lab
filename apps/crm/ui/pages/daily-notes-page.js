@@ -1,43 +1,151 @@
+/**
+ * DailyNotesPage — главный экран CRM («ежедневник»).
+ *
+ * Источники данных (только helpers, никаких прямых импортов resource-объектов):
+ *   - useCursorList('crm/notes_list')   — лента заметок за выбранный диапазон дат
+ *   - useOp('crm/note_search')          — текстовый/семантический поиск по заметкам
+ *   - useOp('crm/daily_summary')        — AI-сводка одного дня
+ *   - useOp('crm/period_summary')       — AI-сводка диапазона
+ *   - useOp('crm/task_daily_summary_start') / 'crm/task_period_summary_start' — пересчёт сводки
+ *   - useOp('crm/note_voice_input')     — STT (запись голоса → текст)
+ *   - useOp('crm/note_analyze_start')   — старт AI-анализа заметки
+ *   - useOp('crm/entity_cards_bulk')    — batch-загрузка карточек связанных entity
+ *
+ * Realtime: подписка на WS-события `crm/note/updated` и `crm/daily_summary/updated`,
+ * которые публикует backend через `core/ui_events/dispatcher.py`. Изменение
+ * namespace приходит как `ui/namespace/changed` (CoreEvents.UI_NAMESPACE_CHANGED) —
+ * page перезапрашивает ленту и сводку.
+ *
+ * Открытие заметки: страница навигирует на роут `note` (`/crm/notes/:itemId`),
+ * редактирование живёт на `note-page`, отдельной модалки нет. Создание новой
+ * заметки и распознавание голоса передают `itemId='new'`/`itemId='draft-<ts>'`,
+ * `note-page` отвечает за edit-режим.
+ *
+ * Открытие связанной entity (chip / related): пока entity-page не реализован,
+ * страница показывает информационный toast и не пытается открыть несуществующую
+ * модалку.
+ */
+
 import { html, css } from 'lit';
-import { PlatformElement } from '@platform/lib/platform-element/index.js';
-import { CRMStore } from '../store/crm.store.js';
-import { getUserMediaCompat, hasGetUserMediaApi, pickVoiceMimeType } from '@platform/lib/utils/voice-recording.js';
+import { PlatformPage } from '@platform/lib/base/PlatformPage.js';
+import { CoreEvents } from '@platform/lib/events/index.js';
+import {
+    getUserMediaCompat,
+    hasGetUserMediaApi,
+    pickVoiceMimeType,
+} from '@platform/lib/utils/voice-recording.js';
 import '@platform/lib/components/platform-icon.js';
 import '@platform/lib/components/platform-date-picker.js';
 import '@platform/lib/components/glass-spinner.js';
-import '@platform/lib/components/platform-breadcrumbs.js';
-import '../modals/entity-modal.js';
-import '../modals/ai-analysis-modal.js';
 
-export class DailyNotesPage extends PlatformElement {
+const DAILY_NOTES_RANGE_KEY = 'crm:daily-notes-range';
+
+const DEFAULT_RANGE_DAYS = 7;
+
+function _formatIsoDate(d) {
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${y}-${m}-${day}`;
+}
+
+function _today() {
+    return _formatIsoDate(new Date());
+}
+
+function _defaultRange() {
+    const to = new Date();
+    const from = new Date();
+    from.setDate(from.getDate() - (DEFAULT_RANGE_DAYS - 1));
+    return { from: _formatIsoDate(from), to: _formatIsoDate(to) };
+}
+
+function _readPersistedRange() {
+    if (typeof window === 'undefined' || !window.localStorage) {
+        return _defaultRange();
+    }
+    const raw = window.localStorage.getItem(DAILY_NOTES_RANGE_KEY);
+    if (!raw) {
+        return _defaultRange();
+    }
+    let parsed = null;
+    try {
+        parsed = JSON.parse(raw);
+    } catch {
+        return _defaultRange();
+    }
+    if (!parsed || typeof parsed !== 'object'
+        || typeof parsed.from !== 'string' || typeof parsed.to !== 'string'
+        || !/^\d{4}-\d{2}-\d{2}$/.test(parsed.from)
+        || !/^\d{4}-\d{2}-\d{2}$/.test(parsed.to)) {
+        return _defaultRange();
+    }
+    return { from: parsed.from, to: parsed.to };
+}
+
+function _persistRange(range) {
+    if (typeof window === 'undefined' || !window.localStorage) return;
+    window.localStorage.setItem(DAILY_NOTES_RANGE_KEY, JSON.stringify(range));
+}
+
+function _formatHHMM(date) {
+    const hours = String(date.getHours()).padStart(2, '0');
+    const minutes = String(date.getMinutes()).padStart(2, '0');
+    return `${hours}:${minutes}`;
+}
+
+function _normalizeChipKey(label) {
+    if (typeof label !== 'string') return null;
+    let s = label.trim();
+    if (!s) return null;
+    if (s.startsWith('@')) s = s.slice(1).trim();
+    s = s.replace(/^["'([{]+|["')\]}.,;:!?]+$/g, '').trim();
+    return s.length === 0 ? null : s.toLowerCase();
+}
+
+function _initials(name) {
+    if (typeof name !== 'string' || name.trim().length === 0) return '?';
+    const parts = name.trim().split(/\s+/);
+    if (parts.length === 1) return parts[0].slice(0, 1).toUpperCase();
+    return `${parts[0].slice(0, 1)}${parts[1].slice(0, 1)}`.toUpperCase();
+}
+
+const SUMMARY_CHIP_TONES = ['blue', 'cyan', 'orange', 'rose'];
+const ENTITY_TAG_TONES = ['primary', 'secondary', 'accent'];
+const NOTE_SUBTYPE_ICONS = {
+    call: 'phone-call',
+    meeting: 'calendar',
+    email: 'mail',
+    task: 'tasks',
+    note: 'doc-detail',
+};
+const ENTITY_TYPE_ICONS = {
+    member: 'user-shield',
+    contact: 'user',
+    company: 'building',
+    namespace: 'layers',
+    organization: 'database',
+};
+const SEARCH_MODES = ['text', 'semantic', 'hybrid'];
+
+export class CRMDailyNotesPage extends PlatformPage {
+    static i18nNamespace = 'crm';
+
     static properties = {
-        _notes: { state: true },
         _query: { state: true },
+        _searchMode: { state: true },
         _dateFrom: { state: true },
         _dateTo: { state: true },
-        _currentNamespace: { state: true },
-        _noteEntitiesByNoteId: { state: true },
-        _currentUser: { state: true },
-        _summaryText: { state: true },
-        _summaryEntities: { state: true },
-        _summaryGeneratedAt: { state: true },
-        _loadingSummary: { state: true },
-        _summaryRevalidating: { state: true },
         _isMobile: { state: true },
         _summaryOpen: { state: true },
-        _notesLeavingIds: { state: true },
-        _namespaceHasAnyEntity: { state: true },
-        _namespaceProbeValid: { state: true },
-        _analyzingNoteId: { state: true },
         _voiceState: { state: true },
-        _searchMode: { state: true },
+        _noteEntitiesByNoteId: { state: true },
         _searchResults: { state: true },
         _searchLoading: { state: true },
-        _debounceTimer: { state: true },
     };
 
     static styles = [
-        PlatformElement.styles,
+        PlatformPage.styles,
         css`
             :host {
                 display: flex;
@@ -71,36 +179,6 @@ export class DailyNotesPage extends PlatformElement {
                 position: relative;
             }
 
-            .main-column.busy .cards-scroll {
-                filter: saturate(0.92);
-                opacity: 0.6;
-                pointer-events: none;
-                transition: filter 0.2s ease, opacity 0.2s ease;
-            }
-
-            .list-overlay {
-                position: absolute;
-                inset: 0;
-                z-index: 6;
-                display: flex;
-                align-items: center;
-                justify-content: center;
-                pointer-events: none;
-                animation: list-overlay-in 0.2s ease;
-            }
-
-            @keyframes list-overlay-in {
-                from { opacity: 0; }
-                to { opacity: 1; }
-            }
-
-            .page-header {
-                display: flex;
-                align-items: center;
-                gap: var(--space-2);
-                margin-bottom: var(--space-3);
-            }
-
             .section-label {
                 color: var(--text-tertiary);
                 font-size: var(--text-sm);
@@ -128,6 +206,7 @@ export class DailyNotesPage extends PlatformElement {
                 display: inline-flex;
                 align-items: center;
                 justify-content: center;
+                cursor: pointer;
             }
 
             .top-row {
@@ -166,14 +245,37 @@ export class DailyNotesPage extends PlatformElement {
                 outline: none;
             }
 
+            .search-voice-btn {
+                display: inline-flex;
+                align-items: center;
+                justify-content: center;
+                width: 28px;
+                height: 28px;
+                border: none;
+                background: transparent;
+                color: var(--text-tertiary);
+                cursor: pointer;
+                border-radius: var(--radius-full);
+                flex-shrink: 0;
+            }
+            .search-voice-btn:hover { background: var(--glass-tint-medium); color: var(--text-primary); }
+            .search-voice-btn.recording {
+                background: var(--color-danger, #ef4444);
+                color: white;
+                animation: searchVoicePulse 1.4s ease-in-out infinite;
+            }
+            .search-voice-btn:disabled { opacity: 0.5; cursor: wait; }
+            @keyframes searchVoicePulse {
+                0%, 100% { opacity: 1; }
+                50% { opacity: 0.55; }
+            }
+
             .date-input {
                 min-width: 180px;
                 --platform-date-picker-labeled-bg: var(--crm-surface-muted);
                 --platform-date-picker-labeled-border: transparent;
                 --platform-date-picker-labeled-height: 44px;
                 --platform-date-picker-labeled-padding: 0 var(--space-3);
-                --platform-date-picker-label-size: 11px;
-                --platform-date-picker-value-size: 16px;
             }
 
             .cta-btn {
@@ -189,10 +291,7 @@ export class DailyNotesPage extends PlatformElement {
                 transition: background var(--duration-fast);
                 white-space: nowrap;
             }
-
-            .cta-btn:hover {
-                background: var(--crm-daily-notes-cta-hover);
-            }
+            .cta-btn:hover { background: var(--crm-daily-notes-cta-hover); }
 
             .voice-btn {
                 min-height: 44px;
@@ -208,20 +307,13 @@ export class DailyNotesPage extends PlatformElement {
                 transition: all var(--duration-fast);
                 flex-shrink: 0;
             }
-            .voice-btn:hover {
-                background: var(--crm-surface-elevated);
-                color: var(--text-primary);
-            }
             .voice-btn.recording {
-                background: var(--platform-danger-bg, #fef2f2);
-                border-color: var(--platform-danger, #ef4444);
-                color: var(--platform-danger, #ef4444);
+                background: rgba(239, 68, 68, 0.12);
+                border-color: #ef4444;
+                color: #ef4444;
                 animation: voice-pulse 1.5s ease-in-out infinite;
             }
-            .voice-btn.processing {
-                opacity: 0.6;
-                cursor: wait;
-            }
+            .voice-btn.processing { opacity: 0.6; cursor: wait; }
             @keyframes voice-pulse {
                 0%, 100% { transform: scale(1); }
                 50% { transform: scale(1.08); }
@@ -233,7 +325,6 @@ export class DailyNotesPage extends PlatformElement {
                 overflow-x: hidden;
                 min-height: 0;
                 min-width: 0;
-                max-width: 100%;
                 padding-right: var(--space-2);
             }
 
@@ -257,46 +348,14 @@ export class DailyNotesPage extends PlatformElement {
                 gap: 16px;
                 min-height: 222px;
                 min-width: 0;
-                max-width: 100%;
                 box-sizing: border-box;
                 overflow: hidden;
                 cursor: pointer;
-                opacity: 1;
-                transform: none;
-                transition:
-                    border-color var(--duration-fast),
-                    background var(--duration-fast),
-                    opacity 0.22s ease,
-                    transform 0.22s ease;
+                transition: border-color var(--duration-fast), background var(--duration-fast);
             }
-
-            .note-card.note-card-leaving {
-                opacity: 0;
-                transform: translateY(-10px) scale(0.98);
-                pointer-events: none;
-            }
-
             .note-card:hover {
                 border-color: var(--crm-stroke-strong);
                 background: var(--crm-surface-elevated);
-            }
-
-            .note-tags-row {
-                position: relative;
-                min-height: 24px;
-                min-width: 0;
-                max-width: 100%;
-            }
-
-            .note-tags-row::after {
-                content: '';
-                position: absolute;
-                top: 0;
-                right: 0;
-                width: 56px;
-                height: 24px;
-                background: linear-gradient(90deg, rgba(0, 0, 0, 0) 0%, var(--crm-surface) 42%);
-                pointer-events: none;
             }
 
             .note-tags {
@@ -306,13 +365,20 @@ export class DailyNotesPage extends PlatformElement {
                 min-height: 24px;
                 overflow-x: auto;
                 overflow-y: hidden;
-                padding-right: 52px;
                 scrollbar-width: none;
-                -ms-overflow-style: none;
             }
+            .note-tags::-webkit-scrollbar { display: none; }
 
-            .note-tags::-webkit-scrollbar {
-                display: none;
+            .note-type-badge {
+                display: inline-flex;
+                align-items: center;
+                justify-content: center;
+                width: 24px;
+                height: 24px;
+                border-radius: 8px;
+                background: var(--crm-surface-elevated);
+                color: var(--text-tertiary);
+                flex-shrink: 0;
             }
 
             .note-tag {
@@ -332,22 +398,9 @@ export class DailyNotesPage extends PlatformElement {
                 white-space: nowrap;
                 flex: 0 0 auto;
             }
-
-            .note-tag:hover {
-                filter: brightness(0.96);
-            }
-
-            .note-tag.primary {
-                background: #99A6F9;
-            }
-
-            .note-tag.secondary {
-                background: #FAD17A;
-            }
-
-            .note-tag.accent {
-                background: #FF885C;
-            }
+            .note-tag.primary { background: #99A6F9; }
+            .note-tag.secondary { background: #FAD17A; }
+            .note-tag.accent { background: #FF885C; }
 
             .note-title {
                 font-size: 20px;
@@ -355,19 +408,14 @@ export class DailyNotesPage extends PlatformElement {
                 font-weight: 700;
                 color: var(--text-primary);
                 margin: 0;
-                min-width: 0;
                 overflow-wrap: anywhere;
-                word-break: break-word;
             }
-
             .note-text {
                 margin: 0;
                 color: var(--text-primary);
                 font-size: 16px;
                 line-height: 20px;
-                min-width: 0;
                 overflow-wrap: anywhere;
-                word-break: break-word;
             }
 
             .note-footer {
@@ -375,8 +423,6 @@ export class DailyNotesPage extends PlatformElement {
                 align-items: center;
                 justify-content: space-between;
                 gap: 16px;
-                min-height: 32px;
-                min-width: 0;
                 margin-top: auto;
             }
 
@@ -386,9 +432,7 @@ export class DailyNotesPage extends PlatformElement {
                 gap: 4px;
                 color: var(--text-primary);
                 font-size: 12px;
-                line-height: 15px;
             }
-
             .author-avatar {
                 width: 32px;
                 height: 32px;
@@ -397,35 +441,18 @@ export class DailyNotesPage extends PlatformElement {
                 display: inline-flex;
                 align-items: center;
                 justify-content: center;
-                flex-shrink: 0;
                 background: var(--accent-gradient);
+                flex-shrink: 0;
             }
-
-            .author-avatar img {
-                width: 100%;
-                height: 100%;
-                object-fit: cover;
-                display: block;
-            }
-
-            .author-avatar-fallback {
-                color: var(--text-inverse);
-                font-size: 12px;
-                font-weight: 600;
-                line-height: 1;
-            }
+            .author-avatar img { width: 100%; height: 100%; object-fit: cover; }
+            .author-avatar-fallback { color: var(--text-inverse); font-size: 12px; font-weight: 600; }
 
             .note-footer-right {
                 display: inline-flex;
                 align-items: center;
                 gap: 8px;
             }
-
-            .published-at {
-                color: var(--text-tertiary);
-                font-size: 12px;
-                line-height: 15px;
-            }
+            .published-at { color: var(--text-tertiary); font-size: 12px; }
 
             .analyze-btn {
                 border: 1px solid var(--crm-stroke);
@@ -439,66 +466,28 @@ export class DailyNotesPage extends PlatformElement {
                 justify-content: center;
                 cursor: pointer;
             }
-
             .analyze-btn.has-draft {
                 border-color: var(--accent-secondary);
                 background: rgba(255, 136, 92, 0.18);
                 color: var(--accent-secondary);
             }
-
             .analyze-btn.has-applied {
                 border-color: rgba(34, 197, 94, 0.5);
                 background: rgba(34, 197, 94, 0.12);
                 color: #16a34a;
             }
-
-            .note-type-badge {
-                display: inline-flex;
-                align-items: center;
-                justify-content: center;
-                width: 24px;
-                height: 24px;
-                border-radius: 8px;
-                background: var(--crm-surface-elevated, rgba(0,0,0,0.05));
-                color: var(--text-tertiary);
-                flex-shrink: 0;
-            }
-
             .analyze-btn.needs-ai {
                 border-color: rgba(139, 92, 246, 0.5);
                 background: rgba(139, 92, 246, 0.14);
                 color: #8b5cf6;
-                box-shadow: 0 0 8px rgba(139, 92, 246, 0.25);
                 animation: ai-pulse 2s ease-in-out infinite;
             }
-
-            .analyze-btn.analyzing {
-                border-color: rgba(139, 92, 246, 0.5);
-                background: rgba(139, 92, 246, 0.14);
-                color: #8b5cf6;
-                box-shadow: 0 0 8px rgba(139, 92, 246, 0.25);
-                animation: analyze-btn-busy 1.2s ease-in-out infinite;
-                cursor: wait;
-                pointer-events: none;
-            }
-
-            .analyze-btn:disabled {
-                opacity: 0.72;
-                cursor: not-allowed;
-            }
-
-            @keyframes analyze-btn-busy {
-                0%, 100% {
-                    opacity: 1;
-                }
-                50% {
-                    opacity: 0.55;
-                }
-            }
-
+            .analyze-btn.analyzing { animation: analyze-busy 1.2s ease-in-out infinite; cursor: wait; }
+            .analyze-btn:disabled { opacity: 0.72; cursor: not-allowed; }
+            @keyframes analyze-busy { 0%,100% { opacity: 1; } 50% { opacity: 0.55; } }
             @keyframes ai-pulse {
-                0%, 100% { box-shadow: 0 0 6px rgba(139, 92, 246, 0.2); }
-                50% { box-shadow: 0 0 12px rgba(139, 92, 246, 0.4); }
+                0%,100% { box-shadow: 0 0 6px rgba(139,92,246,0.2); }
+                50% { box-shadow: 0 0 12px rgba(139,92,246,0.4); }
             }
 
             .summary-panel {
@@ -512,30 +501,21 @@ export class DailyNotesPage extends PlatformElement {
                 max-height: 100%;
                 overflow: hidden;
             }
-
             .summary-header {
                 display: grid;
                 grid-template-columns: minmax(0, 1fr) auto;
-                align-items: start;
                 gap: var(--space-2);
                 margin-bottom: var(--space-2);
             }
-
             .summary-title {
                 display: flex;
-                flex-wrap: wrap;
                 align-items: flex-start;
                 gap: var(--space-2);
                 margin: 0;
-                min-width: 0;
             }
-
             .summary-title-text {
                 flex: 1 1 12rem;
                 min-width: 0;
-                white-space: normal;
-                overflow-wrap: anywhere;
-                word-break: break-word;
                 font-size: var(--text-xl);
                 font-weight: 700;
                 line-height: 1.35;
@@ -544,7 +524,6 @@ export class DailyNotesPage extends PlatformElement {
                 background-clip: text;
                 -webkit-text-fill-color: transparent;
             }
-
             .summary-title-icon {
                 width: 36px;
                 height: 36px;
@@ -552,15 +531,9 @@ export class DailyNotesPage extends PlatformElement {
                 display: inline-flex;
                 align-items: center;
                 justify-content: center;
-                flex-shrink: 0;
                 background: var(--crm-summary-title-gradient);
-                box-shadow: var(--glass-shadow-subtle);
             }
-
-            .summary-title-icon platform-icon {
-                color: var(--text-inverse);
-            }
-
+            .summary-title-icon platform-icon { color: var(--text-inverse); }
             .summary-refresh-btn {
                 width: 32px;
                 height: 32px;
@@ -572,43 +545,20 @@ export class DailyNotesPage extends PlatformElement {
                 align-items: center;
                 justify-content: center;
                 cursor: pointer;
-                flex-shrink: 0;
                 margin-top: 2px;
-                box-shadow: var(--glass-shadow-subtle);
-                transition: opacity var(--duration-fast), transform var(--duration-fast);
             }
-
-            .summary-refresh-btn:hover {
-                opacity: 0.85;
-                transform: scale(1.06);
-            }
-
-            .summary-refresh-btn:disabled {
-                opacity: 0.45;
-                cursor: not-allowed;
-                transform: none;
-            }
-
+            .summary-refresh-btn:disabled { opacity: 0.45; cursor: not-allowed; }
             .summary-refresh-icon.spinning {
-                animation: summary-ai-rebuild-spin 0.9s linear infinite;
+                animation: summary-spin 0.9s linear infinite;
                 transform-origin: center;
             }
-
-            @keyframes summary-ai-rebuild-spin {
-                from {
-                    transform: rotate(0deg);
-                }
-                to {
-                    transform: rotate(360deg);
-                }
-            }
+            @keyframes summary-spin { from { transform: rotate(0); } to { transform: rotate(360deg); } }
 
             .summary-meta {
                 color: var(--crm-summary-meta);
                 font-size: var(--text-base);
                 margin-bottom: var(--space-4);
             }
-
             .summary-text {
                 color: var(--text-primary);
                 font-size: var(--text-xl);
@@ -619,14 +569,12 @@ export class DailyNotesPage extends PlatformElement {
                 overflow-y: auto;
                 overflow-x: hidden;
             }
-
             .summary-tags {
                 display: flex;
                 flex-wrap: wrap;
                 gap: var(--space-2);
                 margin-top: var(--space-3);
             }
-
             .summary-chip {
                 display: inline-flex;
                 align-items: center;
@@ -639,38 +587,11 @@ export class DailyNotesPage extends PlatformElement {
                 border: none;
                 font-weight: var(--font-medium);
             }
-
-            .summary-chip.cyan {
-                background: var(--crm-summary-chip-cyan-bg);
-            }
-
-            .summary-chip.orange {
-                background: var(--crm-summary-chip-orange-bg);
-            }
-
-            .summary-chip.rose {
-                background: var(--crm-summary-chip-rose-bg);
-            }
-
-            .summary-chip--clickable {
-                cursor: pointer;
-                font-family: inherit;
-                text-align: left;
-            }
-
-            .summary-chip--clickable:hover {
-                filter: brightness(1.12);
-            }
-
-            .summary-chip--clickable:focus-visible {
-                outline: 2px solid var(--accent-tertiary);
-                outline-offset: 2px;
-            }
-
-            .summary-chip--clickable:disabled {
-                cursor: default;
-                filter: none;
-            }
+            .summary-chip.cyan { background: var(--crm-summary-chip-cyan-bg); }
+            .summary-chip.orange { background: var(--crm-summary-chip-orange-bg); }
+            .summary-chip.rose { background: var(--crm-summary-chip-rose-bg); }
+            .summary-chip--clickable { cursor: pointer; font-family: inherit; }
+            .summary-chip--clickable:hover { filter: brightness(1.12); }
 
             .empty {
                 border: 1px dashed var(--crm-stroke);
@@ -682,204 +603,56 @@ export class DailyNotesPage extends PlatformElement {
                 color: var(--text-tertiary);
             }
 
-            .empty-import {
-                flex-direction: column;
-                gap: var(--space-4);
-                padding: var(--space-6) var(--space-4);
-                text-align: center;
-                max-width: 440px;
-                margin: 0 auto;
-                box-sizing: border-box;
-            }
-
-            .empty-import-text {
-                color: var(--text-secondary);
-                font-size: var(--text-base);
-                line-height: 1.5;
-                margin: 0;
-            }
-
-            .import-wizard-btn {
-                display: inline-flex;
-                align-items: center;
-                justify-content: center;
-                gap: var(--space-2);
-                min-height: 40px;
-                border: none;
-                border-radius: var(--radius-full);
-                background: var(--crm-daily-notes-cta-bg);
-                color: var(--text-inverse);
-                font-size: var(--text-sm);
-                font-weight: 500;
-                padding: 0 var(--space-5);
-                cursor: pointer;
-                font-family: inherit;
-                transition: background var(--duration-fast);
-            }
-
-            .import-wizard-btn:hover {
-                background: var(--crm-daily-notes-cta-hover);
-            }
-
-            .import-wizard-btn:focus-visible {
-                outline: 2px solid var(--accent-tertiary);
-                outline-offset: 2px;
-            }
-
-            .summary-fab {
-                display: none;
-            }
-
-            .summary-overlay {
-                display: none;
-            }
+            .summary-fab { display: none; }
+            .summary-overlay { display: none; }
 
             @media (max-width: 1279px) {
-                .layout {
-                    grid-template-columns: 1fr;
-                }
-                .summary-panel {
-                    min-height: 240px;
-                    margin-top: 0;
-                }
-                .top-row {
-                    grid-template-columns: 1fr;
-                    align-items: stretch;
-                }
-                .summary-title-text {
-                    font-size: var(--text-lg);
-                }
-
-                .summary-title-icon {
-                    width: 32px;
-                    height: 32px;
-                }
-                .summary-text {
-                    font-size: var(--text-lg);
-                }
-                .toolbar-actions {
-                    margin-left: 0;
-                    justify-content: flex-start;
-                }
-                .date-input {
-                    min-width: 0;
-                    width: 100%;
-                }
+                .layout { grid-template-columns: 1fr; }
+                .summary-panel { min-height: 240px; }
+                .top-row { grid-template-columns: 1fr; }
             }
 
             @media (max-width: 767px) {
-                :host {
-                    padding: var(--space-2) var(--space-3) 0;
-                }
-
-                .section-label {
-                    display: none;
-                }
-
-                .title {
-                    display: none;
-                }
-
-                .top-row {
-                    display: flex;
-                    flex-direction: column;
-                    gap: var(--space-2);
-                    margin-bottom: var(--space-3);
-                }
-
-                .title-settings {
-                    display: none;
-                }
-
-                .search-box {
-                    display: none;
-                }
-
-                .cta-btn {
-                    display: none;
-                }
-
-                .toolbar-actions {
-                    flex-direction: row;
-                    gap: var(--space-2);
-                }
-
-                .date-input {
-                    flex: 1;
-                    min-width: 0;
-                    width: 100%;
-                }
-
-                .cards-grid {
-                    grid-template-columns: 1fr;
-                    gap: var(--space-3);
-                }
-
-                .note-card {
-                    min-height: 160px;
-                    padding: 16px;
-                }
-
-                .summary-panel {
-                    display: none;
-                }
-
+                :host { padding: var(--space-2) var(--space-3) 0; }
+                .section-label, .title, .title-settings { display: none; }
+                .top-row { display: flex; flex-direction: column; gap: var(--space-2); margin-bottom: var(--space-3); }
+                .search-box, .cta-btn { display: none; }
+                .toolbar-actions { flex-direction: row; gap: var(--space-2); }
+                .date-input { flex: 1; min-width: 0; width: 100%; }
+                .cards-grid { grid-template-columns: 1fr; gap: var(--space-3); }
+                .summary-panel { display: none; }
                 .summary-fab {
                     display: flex;
                     position: fixed;
                     bottom: calc(var(--space-5) + env(safe-area-inset-bottom, 0px));
                     right: var(--space-4);
-                    width: 52px;
-                    height: 52px;
+                    width: 52px; height: 52px;
                     border-radius: 50%;
                     border: none;
                     background: var(--accent-gradient);
                     color: var(--text-inverse);
-                    align-items: center;
-                    justify-content: center;
+                    align-items: center; justify-content: center;
                     cursor: pointer;
-                    box-shadow: 0 4px 16px rgba(153, 166, 249, 0.4);
                     z-index: 1200;
-                    transition: transform var(--duration-fast);
+                    box-shadow: 0 4px 16px rgba(153, 166, 249, 0.4);
                 }
-
-                .summary-fab:hover {
-                    transform: scale(1.08);
-                }
-
                 .summary-overlay {
-                    position: fixed;
-                    inset: 0;
+                    position: fixed; inset: 0;
                     background: rgba(15, 23, 42, 0.55);
                     backdrop-filter: blur(6px);
-                    -webkit-backdrop-filter: blur(6px);
                     z-index: 1300;
                     display: flex;
                     align-items: flex-end;
                     justify-content: center;
                     padding: var(--space-3);
-                    padding-bottom: calc(var(--space-3) + env(safe-area-inset-bottom, 0px));
-                    isolation: isolate;
                 }
-
                 .summary-overlay .summary-panel {
                     display: flex;
-                    position: relative;
-                    z-index: 1;
                     width: 100%;
-                    max-width: min(100%, 100vw - 2 * var(--space-3));
                     max-height: 70vh;
-                    box-sizing: border-box;
                     background: var(--crm-surface);
                     border: 1px solid var(--crm-stroke);
-                    border-radius: var(--radius-xl) var(--radius-xl) var(--radius-lg) var(--radius-lg);
-                    box-shadow: var(--glass-shadow-strong, 0 12px 40px rgba(0, 0, 0, 0.25));
-                    animation: summary-slide-up 0.2s ease-out;
-                }
-
-                @keyframes summary-slide-up {
-                    from { transform: translateY(100%); opacity: 0; }
-                    to { transform: translateY(0); opacity: 1; }
+                    border-radius: var(--radius-xl);
                 }
             }
 
@@ -898,19 +671,12 @@ export class DailyNotesPage extends PlatformElement {
                 background: transparent;
                 color: var(--text-secondary);
                 cursor: pointer;
-                transition: all var(--duration-fast);
-                white-space: nowrap;
             }
-            .search-mode-btn:not(:last-child) {
-                border-right: 1px solid var(--glass-border-subtle);
-            }
+            .search-mode-btn:not(:last-child) { border-right: 1px solid var(--glass-border-subtle); }
             .search-mode-btn.active {
                 background: var(--crm-selected-bg);
                 color: var(--crm-selected-text);
                 font-weight: 500;
-            }
-            .search-mode-btn:hover:not(.active) {
-                background: var(--glass-bg-subtle);
             }
 
             .card-score {
@@ -919,32 +685,20 @@ export class DailyNotesPage extends PlatformElement {
                 gap: 6px;
                 height: 16px;
                 position: relative;
-                background: var(--glass-bg-subtle, rgba(255,255,255,0.06));
+                background: var(--glass-bg-subtle);
                 border-radius: 8px;
                 overflow: hidden;
                 margin-bottom: 6px;
                 cursor: help;
             }
             .score-bar {
-                position: absolute;
-                left: 0;
-                top: 0;
-                height: 100%;
+                position: absolute; left: 0; top: 0; height: 100%;
                 background: linear-gradient(90deg, #3b82f6, #8b5cf6);
                 opacity: 0.25;
-                border-radius: 8px;
             }
-            .score-label {
-                position: relative;
-                z-index: 1;
-                font-size: 10px;
-                font-weight: 600;
-                color: var(--text-secondary);
-                padding-left: 6px;
-            }
+            .score-label { position: relative; z-index: 1; font-size: 10px; font-weight: 600; padding-left: 6px; }
             .match-type-badge {
-                position: relative;
-                z-index: 1;
+                position: relative; z-index: 1;
                 font-size: 9px;
                 text-transform: uppercase;
                 color: var(--text-tertiary);
@@ -956,960 +710,548 @@ export class DailyNotesPage extends PlatformElement {
 
     constructor() {
         super();
-        this._notes = [];
-        this._notesLeavingIds = [];
-        this._dateFrom = null;
-        this._dateTo = null;
-        this._currentNamespace = null;
-        this._namespaceProbeValid = false;
+        const range = _readPersistedRange();
+        this._dateFrom = range.from;
+        this._dateTo = range.to;
         this._query = '';
-        this._searchResults = [];
-        this._debounceTimer = null;
-        this._noteEntitiesByNoteId = {};
-        this._analyzingNoteId = null;
-        this._isMobile = false;
-        this._activeAnalysisTasks = [];
-        this._summaryEntities = [];
-        this._summaryGeneratedAt = '';
-        this._loadingSummary = false;
-        this._summaryRevalidating = false;
-        this._isMobile = false;
-        this._summaryOpen = false;
-        this._currentUser = null;
-        this._summaryText = '';
-        this._notesLeavingIds = [];
-        this._namespaceHasAnyEntity = false;
-        this._namespaceProbeValid = false;
-        this._analyzingNoteId = null;
-        this._voiceState = 'idle';
         this._searchMode = 'hybrid';
+        this._summaryOpen = false;
+        this._voiceState = 'idle';
+        this._voiceMode = 'note';
+        this._noteEntitiesByNoteId = {};
         this._searchResults = [];
         this._searchLoading = false;
+        this._isMobile = typeof window !== 'undefined' && window.innerWidth <= 767;
+
+        this._notes = this.useCursorList('crm/notes_list');
+        this._search = this.useOp('crm/note_search');
+        this._dailySummary = this.useOp('crm/daily_summary');
+        this._periodSummary = this.useOp('crm/period_summary');
+        this._dailySummaryStart = this.useOp('crm/task_daily_summary_start');
+        this._periodSummaryStart = this.useOp('crm/task_period_summary_start');
+        this._voice = this.useOp('crm/note_voice_input');
+        this._analyze = this.useOp('crm/note_analyze_start');
+        this._cardsBulk = this.useOp('crm/entity_cards_bulk');
+
+        this._authSel = this.select((s) => s.auth.user);
+        this._namespaceSelectionSel = this.select((s) => {
+            const user = s.auth.user;
+            if (!user || typeof user.company_id !== 'string') return 'all';
+            const cid = user.company_id;
+            const map = s.ui.namespace.selectionByCompany;
+            const selection = map[cid];
+            if (selection === 'all' || selection === undefined) return 'all';
+            return selection;
+        });
+
+        this._mql = null;
+        this._mqlListener = null;
         this._debounceTimer = null;
         this._mediaRecorder = null;
         this._audioChunks = [];
-        this._unsubscribe = null;
-        this._onPlatformNotification = this._onPlatformNotification.bind(this);
-        this._onMobileSearch = this._onMobileSearch.bind(this);
-        this._goToImportWizard = this._goToImportWizard.bind(this);
+        this._lastSearchRequestId = null;
     }
 
     connectedCallback() {
         super.connectedCallback();
-        const range = CRMStore.getDailyNotesRange();
-        this._dateFrom = range.from;
-        this._dateTo = range.to;
-        this._currentNamespace = CRMStore.state.namespaces.current;
-        this._isMobile = CRMStore.state.ui.isMobile;
-        const initialAid = CRMStore.state.ai.analyzingNoteId;
-        this._analyzingNoteId = typeof initialAid === 'string' && initialAid.trim().length > 0 ? initialAid.trim() : null;
-        window.addEventListener('crm-mobile-search', this._onMobileSearch);
-        this._unsubscribe = CRMStore.subscribe((state) => {
-            const { from, to } = CRMStore.getDailyNotesRange();
-            this._dateFrom = from;
-            this._dateTo = to;
-            this._isMobile = state.ui.isMobile;
-            const aid = state.ai.analyzingNoteId;
-            const nextAnalyzingId = typeof aid === 'string' && aid.trim().length > 0 ? aid.trim() : null;
-            const analyzingIdChanged = nextAnalyzingId !== this._analyzingNoteId;
-            if (analyzingIdChanged) {
-                this._analyzingNoteId = nextAnalyzingId;
-            }
-            const previousNamespace = this._normalizeNamespaceName(this._getCurrentNamespaceName());
-            this._currentNamespace = state.namespaces.current;
-            const nextNamespace = this._normalizeNamespaceName(this._getCurrentNamespaceName());
-            const namespaceChanged = previousNamespace !== nextNamespace;
-            if (namespaceChanged) {
-                this._namespaceProbeValid = false;
-                this._reloadNotesForSelectedDate();
-                this._loadDailySummary();
-            } else {
-                this._syncNotesLeavingWithStore(state);
-                const storeNotes = Array.isArray(state.entities.notes) ? state.entities.notes : [];
-                const storeNotesMap = new Map(storeNotes.map((n) => [n.entity_id, n]));
-                this._notes = this._notes.map((note) => {
-                    const storeNote = storeNotesMap.get(note.entity_id);
-                    return storeNote || note;
-                });
-            }
-            if (analyzingIdChanged) {
-                this.requestUpdate();
-            }
-            this._loadVisibleNoteEntities();
+        if (typeof window !== 'undefined' && typeof window.matchMedia === 'function') {
+            this._mql = window.matchMedia('(max-width: 767px)');
+            this._mqlListener = (e) => { this._isMobile = e.matches; };
+            this._mql.addEventListener('change', this._mqlListener);
+            this._isMobile = this._mql.matches;
+        }
+
+        this.useEvent(CoreEvents.UI_NAMESPACE_CHANGED, () => {
+            this._reloadNotes();
+            this._reloadSummary();
         });
-        window.addEventListener('platform-notification-received', this._onPlatformNotification);
-        this._reloadNotesForSelectedDate();
-        this._loadDailySummary();
-        this._loadCurrentUser();
-        this._loadActiveAnalysisTasks();
-        this._tasksRefreshInterval = setInterval(() => this._loadActiveAnalysisTasks(), 5000);
+        this.useEvent('crm/note/updated', (event) => this._onNoteWsUpdate(event.payload));
+        this.useEvent('crm/daily_summary/updated', (event) => this._onSummaryWsUpdate(event.payload));
+
+        this.useEvent('crm/note_search/succeeded', (event) => {
+            if (event.meta && event.meta.causation_id !== this._lastSearchRequestId) return;
+            const result = event.payload && event.payload.result;
+            const items = result && Array.isArray(result.items) ? result.items : [];
+            this._searchResults = items;
+            this._searchLoading = false;
+            this._loadCardsForVisibleNotes(items);
+        });
+        this.useEvent('crm/note_search/failed', () => { this._searchLoading = false; });
+
+        this.useEvent('crm/note_voice_input/succeeded', (event) => this._onVoiceTranscribed(event.payload.result));
+
+        this.useEvent('crm/notes_list/loaded', (event) => {
+            const items = event.payload && Array.isArray(event.payload.items) ? event.payload.items : [];
+            if (this._query.trim().length === 0) {
+                this._loadCardsForVisibleNotes(items);
+            }
+        });
+
+        this._reloadNotes();
+        this._reloadSummary();
     }
 
     disconnectedCallback() {
+        if (this._mql && this._mqlListener) {
+            this._mql.removeEventListener('change', this._mqlListener);
+        }
+        if (this._debounceTimer) {
+            clearTimeout(this._debounceTimer);
+            this._debounceTimer = null;
+        }
+        if (this._mediaRecorder && this._mediaRecorder.state === 'recording') {
+            this._mediaRecorder.stop();
+        }
         super.disconnectedCallback();
-        this._unsubscribe?.();
-        window.removeEventListener('platform-notification-received', this._onPlatformNotification);
-        window.removeEventListener('crm-mobile-search', this._onMobileSearch);
-        if (this._tasksRefreshInterval) {
-            clearInterval(this._tasksRefreshInterval);
-            this._tasksRefreshInterval = null;
+    }
+
+    _currentNamespace() {
+        const selection = this._namespaceSelectionSel.value;
+        return selection === 'all' ? null : selection;
+    }
+
+    _isPeriod() { return this._dateFrom !== this._dateTo; }
+
+    _reloadNotes() {
+        const filters = {
+            date_from: this._dateFrom,
+            date_to: this._dateTo,
+        };
+        const ns = this._currentNamespace();
+        if (typeof ns === 'string' && ns.length > 0) filters.namespace = ns;
+        this._noteEntitiesByNoteId = {};
+        this._notes.load(filters);
+    }
+
+    _reloadSummary(options) {
+        const force_rebuild = options && options.force_rebuild === true;
+        const ns = this._currentNamespace();
+        const payload = this._isPeriod()
+            ? { date_from: this._dateFrom, date_to: this._dateTo, namespace: ns, force_rebuild }
+            : { date: this._dateFrom, namespace: ns, force_rebuild };
+        if (this._isPeriod()) {
+            this._periodSummary.run(payload);
+        } else {
+            this._dailySummary.run(payload);
         }
     }
 
-    async _loadActiveAnalysisTasks() {
-        try {
-            const crmApi = this.services.get('crmApi');
-            const namespace = this._getCurrentNamespaceName();
-            if (!namespace) {
-                return;
-            }
-            const tasks = await crmApi.listTasks(namespace, 50, 'note_analyze');
-            const activeTasks = (tasks.items || []).filter((task) => task.status === 'running' || task.status === 'pending');
-            console.log('[DailyNotesPage] _loadActiveAnalysisTasks:', { namespace, totalTasks: tasks.items?.length, activeTasks: activeTasks.length, activeTaskIds: activeTasks.map(t => t.data?.note_id), activeTasksDetails: activeTasks });
-            const tasksChanged = JSON.stringify(activeTasks) !== JSON.stringify(this._activeAnalysisTasks);
-            if (tasksChanged) {
-                this._activeAnalysisTasks = activeTasks;
-                this.requestUpdate();
-            }
-        } catch (error) {
-            console.error('[DailyNotesPage] Error loading active analysis tasks:', error);
-        }
-    }
-
-    _onMobileSearch(event) {
-        this._query = event.detail?.query || '';
-        CRMStore.setNotesPageSearchQuery(this._query);
-    }
-
-    _getCurrentNamespaceName() {
-        if (!this._currentNamespace) {
-            return null;
-        }
-        if (typeof this._currentNamespace === 'string') {
-            return this._currentNamespace;
-        }
-        if (typeof this._currentNamespace === 'object' && typeof this._currentNamespace.name === 'string') {
-            return this._currentNamespace.name;
-        }
-        throw new Error('Invalid namespace in daily notes state');
-    }
-
-    async _loadDailySummary(options = {}) {
-        const { forceRebuild = false, waitForWsUpdate = false } = options;
-        const { from, to } = CRMStore.getDailyNotesRange();
-        this._dateFrom = from;
-        this._dateTo = to;
-        this._loadingSummary = true;
-        try {
-            const crmApi = this.services.get('crmApi');
-            const ns = this._getCurrentNamespaceName();
-            const response = from !== to
-                ? await crmApi.getPeriodSummary(from, to, {
-                    forceRebuild,
-                    namespace: ns,
-                })
-                : await crmApi.getDailySummary(from, {
-                    forceRebuild,
-                    namespace: ns,
-                });
-            this._applySummaryPayload(response);
-            if (!waitForWsUpdate) {
-                this._loadingSummary = false;
-            }
-        } catch (error) {
-            this._loadingSummary = false;
-            throw error;
-        }
-    }
-
-    _applySummaryPayload(payload) {
-        if (!payload || typeof payload !== 'object') {
-            throw new Error('Daily summary response must be object');
-        }
-        if (typeof payload.summary !== 'string') {
-            throw new Error('Daily summary response.summary must be string');
-        }
-        const payloadEntities = payload.entities;
-        if (payloadEntities !== undefined && !Array.isArray(payloadEntities)) {
-            throw new Error('Daily summary response.entities must be array when present');
-        }
-        this._summaryText = payload.summary;
-        this._summaryEntities = Array.isArray(payloadEntities)
-            ? payloadEntities.filter((entityName) => typeof entityName === 'string' && entityName.trim().length > 0)
-            : [];
-        this._summaryRevalidating = payload.revalidating === true;
-
-        if (typeof payload.generated_at === 'string' && payload.generated_at.trim().length > 0) {
-            this._summaryGeneratedAt = this._formatSummaryGeneratedAt(new Date(payload.generated_at));
+    _onSummaryWsUpdate(payload) {
+        if (!payload || typeof payload !== 'object') return;
+        const ns = this._currentNamespace();
+        const payloadNs = payload.namespace === null || payload.namespace === undefined
+            ? null
+            : (typeof payload.namespace === 'string' && payload.namespace.length > 0 ? payload.namespace : null);
+        if (ns !== payloadNs) return;
+        const st = payload.summary_state;
+        if (!st || typeof st !== 'object') return;
+        const isPeriod = st.period === true;
+        if (isPeriod) {
+            if (!this._isPeriod()) return;
+            if (st.date_to !== this._dateTo || st.date_from < this._dateFrom) return;
+            this._periodSummary.applyWsPatch({
+                summary: typeof st.summary === 'string' ? st.summary : '',
+                entities: Array.isArray(st.entities) ? st.entities : [],
+                revalidating: false,
+                generated_at: typeof st.generated_at === 'string' ? st.generated_at : new Date().toISOString(),
+            });
             return;
         }
-        if (payload.summary.trim().length > 0) {
-            this._summaryGeneratedAt = this._formatSummaryGeneratedAt(new Date());
-            return;
-        }
-        this._summaryGeneratedAt = '';
+        if (this._isPeriod()) return;
+        if (payload.date !== this._dateFrom) return;
+        this._dailySummary.applyWsPatch({
+            summary: typeof st.summary === 'string' ? st.summary : '',
+            entities: Array.isArray(st.entities) ? st.entities : [],
+            revalidating: false,
+            generated_at: typeof st.generated_at === 'string' ? st.generated_at : new Date().toISOString(),
+        });
     }
 
-    _normalizeNamespaceName(namespace) {
-        if (!namespace) {
-            return 'all';
-        }
-        if (typeof namespace === 'string') {
-            return namespace.trim() === '' ? 'all' : namespace;
-        }
-        throw new Error('Invalid summary notification namespace');
-    }
-
-    _onPlatformNotification(event) {
-        const notification = event.detail;
-        if (!notification || notification.service !== 'crm') {
-            return;
-        }
-        if (notification.type === 'crm_daily_summary_updated') {
-            const payload = notification.data;
-            if (!payload || payload.event !== 'crm.daily_summary.updated') {
-                return;
-            }
-
-            const selectedNamespace = this._normalizeNamespaceName(this._getCurrentNamespaceName());
-            const payloadNamespace = this._normalizeNamespaceName(payload.namespace);
-            if (payloadNamespace !== selectedNamespace) {
-                return;
-            }
-            const st = payload.summary_state;
-            if (st && st.period === true) {
-                if (this._dateFrom === this._dateTo) {
-                    return;
-                }
-                if (st.date_to !== this._dateTo || st.date_from < this._dateFrom) {
-                    return;
-                }
-                this._loadingSummary = false;
-                const genAt =
-                    typeof st.generated_at === 'string' && st.generated_at.trim().length > 0
-                        ? st.generated_at
-                        : new Date().toISOString();
-                this._applySummaryPayload({
-                    summary: typeof st.summary === 'string' ? st.summary : '',
-                    entities: Array.isArray(st.entities) ? st.entities : [],
-                    revalidating: false,
-                    generated_at: genAt,
-                });
-                return;
-            }
-            if (this._dateFrom !== this._dateTo || payload.date !== this._dateFrom) {
-                return;
-            }
-
-            this._loadingSummary = false;
-            this._applySummaryPayload(payload.summary_state);
-            return;
-        }
-        if (notification.type === 'crm_note_updated') {
-            void this._handleCrmNoteWsNotification(notification);
-        }
-    }
-
-    async _handleCrmNoteWsNotification(notification) {
-        const payload = notification.data;
-        if (!payload || payload.event !== 'crm.note.updated') {
-            return;
-        }
-        if (typeof payload.note_id !== 'string' || payload.note_id.trim().length === 0) {
-            return;
-        }
-        const selectedNamespace = this._normalizeNamespaceName(this._getCurrentNamespaceName());
-        const payloadNamespace = this._normalizeNamespaceName(payload.namespace);
-        if (payloadNamespace !== selectedNamespace) {
-            return;
-        }
-        if (payload.note_date == null || typeof payload.note_date !== 'string') {
-            return;
-        }
-        if (payload.note_date < this._dateFrom || payload.note_date > this._dateTo) {
-            return;
-        }
-        const noteId = payload.note_id.trim();
-        if (payload.action === 'updated' || payload.action === 'created') {
-            const nextCache = { ...this._noteEntitiesByNoteId };
-            delete nextCache[noteId];
-            this._noteEntitiesByNoteId = nextCache;
-        }
-        await this._reloadNotesForSelectedDate();
-        await this._loadVisibleNoteEntities();
-        void this._loadDailySummary();
-        this.requestUpdate();
-    }
-
-    _formatSummaryGeneratedAt(date) {
-        const hours = String(date.getHours()).padStart(2, '0');
-        const minutes = String(date.getMinutes()).padStart(2, '0');
-        return `${hours}:${minutes}`;
-    }
-
-    _formatTime(dateString) {
-        const date = new Date(dateString);
-        const hours = String(date.getHours()).padStart(2, '0');
-        const minutes = String(date.getMinutes()).padStart(2, '0');
-        return `${hours}:${minutes}`;
-    }
-
-    _getLimitedText(text, maxLength = 220) {
-        if (typeof text !== 'string') {
-            return '';
-        }
-        const normalized = text.trim();
-        if (normalized.length <= maxLength) {
-            return normalized;
-        }
-        return `${normalized.slice(0, maxLength).trimEnd()}...`;
-    }
-
-    _getNotePreviewText(note) {
-        if (!note || typeof note !== 'object') {
-            throw new Error('Note object is required');
-        }
-        const attrs = note.attributes;
-        if (attrs && typeof attrs === 'object' && typeof attrs.ai_summary === 'string' && attrs.ai_summary.trim().length > 0) {
-            return this._getLimitedText(attrs.ai_summary, 260);
-        }
-        return this._getLimitedText(this._getTextValue(note.description, this.i18n.t('note_content.no_description')), 220);
-    }
-
-    _getTextValue(value, defaultValue) {
-        if (typeof value === 'string' && value.trim().length > 0) {
-            return value;
-        }
-        return defaultValue;
-    }
-
-    _isNoteAiAnalyzing(note) {
-        if (!note || typeof note !== 'object') {
-            throw new Error('Note object is required');
-        }
-        const id = note.entity_id;
-        if (typeof id !== 'string' || id.trim().length === 0) {
-            return false;
-        }
-        // Проверяем analyzingNoteId из store (для анализа, запущенного с фронтенда)
-        if (this._analyzingNoteId === id.trim()) {
-            return true;
-        }
-        // Проверяем кешированные активные задачи (для автоматического анализа)
-        const hasRunningTask = this._activeAnalysisTasks.some((task) => task.data?.note_id === id.trim() && (task.status === 'running' || task.status === 'pending'));
-        console.log('[DailyNotesPage] _isNoteAiAnalyzing:', { noteId: id.trim(), analyzingNoteId: this._analyzingNoteId, activeTasksCount: this._activeAnalysisTasks.length, activeTaskIds: this._activeAnalysisTasks.map(t => t.data?.note_id), hasRunningTask });
-        return hasRunningTask;
+    _onNoteWsUpdate(payload) {
+        if (!payload || typeof payload !== 'object') return;
+        if (typeof payload.note_id !== 'string' || payload.note_id.trim().length === 0) return;
+        const ns = this._currentNamespace();
+        const payloadNs = payload.namespace === null || payload.namespace === undefined
+            ? null
+            : (typeof payload.namespace === 'string' && payload.namespace.length > 0 ? payload.namespace : null);
+        if (ns !== payloadNs) return;
+        if (typeof payload.note_date !== 'string') return;
+        if (payload.note_date < this._dateFrom || payload.note_date > this._dateTo) return;
+        const next = { ...this._noteEntitiesByNoteId };
+        delete next[payload.note_id.trim()];
+        this._noteEntitiesByNoteId = next;
+        this._reloadNotes();
+        this._reloadSummary();
     }
 
     _onSearchInput(event) {
         this._query = event.target.value;
-        CRMStore.setNotesPageSearchQuery(this._query);
         if (this._debounceTimer) clearTimeout(this._debounceTimer);
-        if (!this._query.trim()) {
+        if (this._query.trim().length === 0) {
             this._searchResults = [];
-            this._loadVisibleNoteEntities();
+            this._searchLoading = false;
             return;
         }
-        this._debounceTimer = setTimeout(() => this._doSearch(), 300);
+        this._debounceTimer = setTimeout(() => this._runSearch(), 300);
     }
 
-    async _doSearch() {
-        const crmApi = this.services.get('crmApi');
+    _runSearch() {
+        const q = this._query.trim();
+        if (q.length === 0) return;
         this._searchLoading = true;
-        const result = await crmApi.searchEntities(this._query.trim(), {
-            entity_type: 'note',
-            search_mode: this._searchMode,
-            limit: 50,
-        });
-        this._searchResults = Array.isArray(result?.items) ? result.items : [];
-        this._searchLoading = false;
+        const ns = this._currentNamespace();
+        const payload = { q, search_mode: this._searchMode, limit: 50 };
+        if (typeof ns === 'string' && ns.length > 0) payload.namespace = ns;
+        const event = this._search.run(payload);
+        this._lastSearchRequestId = event && typeof event.id === 'string' ? event.id : null;
     }
 
     _onSearchModeChange(mode) {
         this._searchMode = mode;
-        if (this._query.trim()) this._doSearch();
+        if (this._query.trim().length > 0) this._runSearch();
     }
 
-    async _onDateRangeChange(event) {
+    _onDateRangeChange(event) {
         const detail = event.detail;
         if (!detail || detail.selection !== 'range') {
-            throw new Error('Expected platform-date-picker selection=range');
+            throw new Error('platform-date-picker must use selection=range');
         }
         const v = detail.value;
-        if (!v || typeof v !== 'object') {
-            throw new Error('Range value must be an object');
-        }
-        const start = v.start;
-        const end = v.end;
-        if (typeof start !== 'string' || typeof end !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(start) || !/^\d{4}-\d{2}-\d{2}$/.test(end)) {
-            const wk = CRMStore.defaultDailyNotesRange();
-            CRMStore.setDailyNotesRange({ from: wk.from, to: wk.to });
+        if (!v || typeof v !== 'object'
+            || typeof v.start !== 'string' || typeof v.end !== 'string'
+            || !/^\d{4}-\d{2}-\d{2}$/.test(v.start)
+            || !/^\d{4}-\d{2}-\d{2}$/.test(v.end)) {
+            const fallback = _defaultRange();
+            this._dateFrom = fallback.from;
+            this._dateTo = fallback.to;
         } else {
-            CRMStore.setDailyNotesRange({ from: start, to: end });
+            this._dateFrom = v.start;
+            this._dateTo = v.end;
         }
-        const range = CRMStore.getDailyNotesRange();
-        this._dateFrom = range.from;
-        this._dateTo = range.to;
-        await this._reloadNotesForSelectedDate();
-        await this._loadDailySummary();
-        await this._loadVisibleNoteEntities();
+        _persistRange({ from: this._dateFrom, to: this._dateTo });
+        this._reloadNotes();
+        this._reloadSummary();
     }
 
-    _syncNotesLeavingWithStore(state) {
-        const storeNotes = Array.isArray(state.entities.notes) ? state.entities.notes : [];
-        const storeIds = new Set(storeNotes.map((n) => n.entity_id));
-        const leaving = new Set(this._notesLeavingIds);
-        let changed = false;
-        for (const id of [...leaving]) {
-            if (storeIds.has(id)) {
-                leaving.delete(id);
-                changed = true;
-            }
-        }
-        for (const note of this._notes) {
-            const id = note.entity_id;
-            if (typeof id !== 'string' || id.trim().length === 0) {
-                throw new Error('Note entity_id is required');
-            }
-            if (!storeIds.has(id) && !leaving.has(id)) {
-                leaving.add(id);
-                changed = true;
-            }
-        }
-        if (changed) {
-            this._notesLeavingIds = [...leaving];
-        }
-    }
-
-    _onNoteCardLeaveTransitionEnd(noteId, event) {
-        if (event.target !== event.currentTarget) {
-            return;
-        }
-        if (event.propertyName !== 'opacity') {
-            return;
-        }
-        this._notes = this._notes.filter((n) => n.entity_id !== noteId);
-        this._notesLeavingIds = this._notesLeavingIds.filter((id) => id !== noteId);
-    }
-
-    async _reloadNotesForSelectedDate() {
-        const crmApi = this.services.get('crmApi');
-        this._noteEntitiesByNoteId = {};
-        this._notesLeavingIds = [];
-        const { from, to } = CRMStore.getDailyNotesRange();
-        this._dateFrom = from;
-        this._dateTo = to;
-        const notes = await CRMStore.loadNotes(crmApi, {
-            dateFrom: from,
-            dateTo: to,
-            limit: 300,
-        });
-        this._notes = Array.isArray(notes) ? notes : [];
-        await this._loadVisibleNoteEntities();
-        await this._probeNamespaceHasAnyEntity();
-    }
-
-    async _probeNamespaceHasAnyEntity() {
-        const crmApi = this.services.get('crmApi');
-        const raw = this._getCurrentNamespaceName();
-        const namespace = typeof raw === 'string' && raw.trim().length > 0 ? raw.trim() : 'default';
-        const response = await crmApi.getEntities({ namespace, limit: 1 });
-        const currentRaw = this._getCurrentNamespaceName();
-        const currentNs = typeof currentRaw === 'string' && currentRaw.trim().length > 0 ? currentRaw.trim() : 'default';
-        if (currentNs !== namespace) {
-            return;
-        }
-        this._namespaceHasAnyEntity = Array.isArray(response.items) && response.items.length > 0;
-        this._namespaceProbeValid = true;
-        this.requestUpdate();
-    }
-
-    _goToImportWizard() {
-        const c = CRMStore.state.namespaces.current;
-        const name = typeof c === 'string' && c.trim()
-            ? c.trim()
-            : (c && typeof c === 'object' && typeof c.name === 'string' && c.name.trim() ? c.name.trim() : 'default');
-        CRMStore.setSettingsNamespaceSelection(name);
-        CRMStore.setCurrentView('namespace_imports');
-    }
-
-    async _onCreateNote() {
-        const focusDate = CRMStore.getDailyNotesFocusDate();
-        const draftNote = {
-            entity_id: `draft-${Date.now()}`,
-            entity_type: 'note',
-            entity_subtype: null,
-            name: '',
-            description: '',
-            note_date: focusDate,
-            attributes: {},
-        };
-        this._openNoteModal(draftNote, { editable: true, draftMode: true });
+    _onCreateNote() {
+        this.navigate('note', { itemId: 'new' });
     }
 
     async _onVoiceToggle() {
+        await this._startVoice('note', 'voice-input.webm');
+    }
+
+    async _onVoiceSearchToggle() {
+        await this._startVoice('search', 'voice-search.webm');
+    }
+
+    async _startVoice(mode, fileName) {
         if (this._voiceState === 'recording') {
-            this._stopVoiceRecording();
+            this._stopVoice();
             return;
         }
         if (this._voiceState !== 'idle') return;
-
-        const notify = this.services.get('notify');
-
-        if (!window.isSecureContext) {
-            notify.warning(this.i18n.t('voice.audio_https_only', {}, 'common'));
+        if (typeof window === 'undefined' || !window.isSecureContext) {
+            this.toast('toast.note.voice_unavailable_https', { type: 'warning' });
             return;
         }
-        if (!hasGetUserMediaApi()) {
-            notify.warning(this.i18n.t('voice.audio_no_recorder', {}, 'common'));
+        if (!hasGetUserMediaApi() || typeof MediaRecorder === 'undefined') {
+            this.toast('toast.note.voice_unavailable_recorder', { type: 'warning' });
             return;
         }
-        if (typeof MediaRecorder === 'undefined') {
-            notify.warning(this.i18n.t('voice.audio_no_recorder', {}, 'common'));
-            return;
-        }
-
-        let stream;
-        try {
-            stream = await getUserMediaCompat({ audio: true });
-        } catch (err) {
-            const msg = err instanceof Error ? err.message : String(err);
-            notify.warning(msg || this.i18n.t('voice.audio_start_failed', {}, 'common'));
-            return;
-        }
-
-        this._audioChunks = [];
+        this._voiceMode = mode;
+        const stream = await getUserMediaCompat({ audio: true });
         const mimeType = pickVoiceMimeType();
-        this._mediaRecorder = mimeType
-            ? new MediaRecorder(stream, { mimeType })
-            : new MediaRecorder(stream);
-        const resolvedMime = this._mediaRecorder.mimeType || mimeType || 'audio/mp4';
-
-        this._mediaRecorder.ondataavailable = (e) => {
-            if (e.data.size > 0) {
-                this._audioChunks.push(e.data);
-            }
-        };
-
-        this._mediaRecorder.onstop = async () => {
-            stream.getTracks().forEach(t => t.stop());
+        this._mediaRecorder = mimeType ? new MediaRecorder(stream, { mimeType }) : new MediaRecorder(stream);
+        this._audioChunks = [];
+        const resolvedMime = this._mediaRecorder.mimeType || mimeType || 'audio/webm';
+        this._mediaRecorder.ondataavailable = (e) => { if (e.data.size > 0) this._audioChunks.push(e.data); };
+        this._mediaRecorder.onstop = () => {
+            stream.getTracks().forEach((t) => t.stop());
             this._voiceState = 'processing';
             const blob = new Blob(this._audioChunks, { type: resolvedMime });
-            const crmApi = this.services.get('crmApi');
-            try {
-                const result = await crmApi.voiceInput(blob);
-                this._voiceState = 'idle';
-                this._mediaRecorder = null;
-                this._audioChunks = [];
-
-                if (!result.text || !result.text.trim()) {
-                    notify.warning(this.i18n.t('voice_input.empty_result'));
-                    return;
-                }
-                const focusDate = CRMStore.getDailyNotesFocusDate();
-                const draftNote = {
-                    entity_id: `draft-${Date.now()}`,
-                    entity_type: 'note',
-                    entity_subtype: null,
-                    name: '',
-                    description: result.text.trim(),
-                    note_date: focusDate,
-                    attributes: {},
-                };
-                this._openNoteModal(draftNote, { editable: true, draftMode: true });
-            } catch (err) {
-                this._voiceState = 'idle';
-                this._mediaRecorder = null;
-                this._audioChunks = [];
-                const msg = err instanceof Error ? err.message : String(err);
-                notify.error(msg || this.i18n.t('voice.audio_start_failed', {}, 'common'));
-            }
+            this._voice.run({ audio: blob, file_name: fileName });
         };
-
         this._mediaRecorder.start();
         this._voiceState = 'recording';
+        this.toast('toast.note.voice_started', { type: 'info' });
     }
 
-    _stopVoiceRecording() {
+    _stopVoice() {
         if (this._mediaRecorder && this._mediaRecorder.state === 'recording') {
             this._mediaRecorder.stop();
         }
     }
 
-    async _onRefreshSummary() {
-        await this._loadDailySummary({ forceRebuild: true, waitForWsUpdate: true });
-    }
-
-    async _onAnalyzeNote(note) {
-        if (!note || typeof note.description !== 'string') {
-            throw new Error('Note description is required for AI analysis');
-        }
-        if (this._hasNoteAnalysisDraft(note)) {
-            this._openNoteAnalysisDraftModal(note);
+    _onVoiceTranscribed(result) {
+        const mode = this._voiceMode;
+        this._voiceState = 'idle';
+        this._voiceMode = 'note';
+        this._mediaRecorder = null;
+        this._audioChunks = [];
+        if (!result || typeof result.text !== 'string' || result.text.trim().length === 0) {
+            this.toast('toast.note.voice_empty', { type: 'warning' });
             return;
         }
-        if (this._hasNoteAnalysisApplied(note)) {
-            this._openNoteModal(note);
+        if (mode === 'search') {
+            this._query = result.text.trim();
+            this._runSearch();
             return;
         }
-        const noteText = note.description.trim();
-        if (!noteText) {
-            throw new Error('Empty note cannot be analyzed');
+        this.navigate('note', { itemId: 'new' });
+    }
+
+    _onAnalyzeNote(note) {
+        if (!note || typeof note.entity_id !== 'string') {
+            throw new Error('Note entity_id required for analysis');
         }
-        CRMStore.setCurrentNote(note.entity_id);
-        const analysisModal = document.createElement('ai-analysis-modal');
-        analysisModal.loading = true;
-        document.body.appendChild(analysisModal);
-        analysisModal.showModal();
-        analysisModal.addEventListener('close', () => analysisModal.remove());
-        const crmApi = this.services.get('crmApi');
-        try {
-            const relatedEntities = this._getNoteEntities(note);
-            const mentionedEntityIds = relatedEntities
-                .map((entity) => entity?.entity_id)
-                .filter((entityId) => typeof entityId === 'string' && entityId.trim().length > 0);
-            await CRMStore.analyzeNote(crmApi, note.entity_id, {
-                mentionedEntityIds,
-                extractEntityTypes: ['note', 'task', 'person', 'organization'],
-                extractRelationshipTypes: ['mentions'],
-                checkDuplicates: true,
-            });
-        } finally {
-            analysisModal.loading = false;
+        if (this._hasAnalysisDraft(note) || this._hasAnalysisApplied(note)) {
+            this.openModal('crm.ai_analysis', { noteId: note.entity_id });
+            return;
+        }
+        const ns = this._currentNamespace();
+        const payload = { note_id: note.entity_id };
+        if (typeof ns === 'string' && ns.length > 0) payload.namespace = ns;
+        this._analyze.run(payload);
+        this.openModal('crm.ai_analysis', { noteId: note.entity_id });
+    }
+
+    _onRefreshSummary() {
+        this._reloadSummary({ force_rebuild: true });
+    }
+
+    _loadCardsForVisibleNotes(notes) {
+        const ids = notes
+            .map((n) => n && typeof n.entity_id === 'string' ? n.entity_id.trim() : null)
+            .filter((id) => typeof id === 'string' && id.length > 0)
+            .filter((id) => !Object.prototype.hasOwnProperty.call(this._noteEntitiesByNoteId, id));
+        if (ids.length === 0) return;
+        this._cardsBulk.run({ entity_ids: ids });
+    }
+
+    _onCardsBulkLoaded(payload) {
+        if (!payload || typeof payload !== 'object') return;
+        const next = { ...this._noteEntitiesByNoteId };
+        for (const [entityId, card] of Object.entries(payload)) {
+            if (card && Array.isArray(card.related_entities)) {
+                next[entityId] = card.related_entities;
+            } else {
+                next[entityId] = [];
+            }
+        }
+        this._noteEntitiesByNoteId = next;
+    }
+
+    updated(changedProps) {
+        super.updated(changedProps);
+        const cardsResult = this._cardsBulk.lastResult;
+        if (cardsResult && cardsResult !== this._lastCardsResult) {
+            this._lastCardsResult = cardsResult;
+            this._onCardsBulkLoaded(cardsResult);
         }
     }
 
-    _hasNoteAnalysisDraft(note) {
-        if (!note || typeof note !== 'object') {
-            throw new Error('Note object is required');
-        }
-        const attrs = note.attributes;
-        if (!attrs || typeof attrs !== 'object') {
-            return false;
-        }
+    _hasAnalysisDraft(note) {
+        const attrs = note && note.attributes;
+        if (!attrs || typeof attrs !== 'object') return false;
         const draft = attrs.ai_analysis_draft;
-        return typeof draft === 'object'
-            && draft !== null
-            && typeof draft.draft_version === 'number';
+        return typeof draft === 'object' && draft !== null && typeof draft.draft_version === 'number';
     }
 
-    _hasNoteAnalysisApplied(note) {
-        if (!note || typeof note !== 'object') {
-            throw new Error('Note object is required');
-        }
-        const attrs = note.attributes;
-        if (!attrs || typeof attrs !== 'object') {
-            return false;
-        }
+    _hasAnalysisApplied(note) {
+        const attrs = note && note.attributes;
+        if (!attrs || typeof attrs !== 'object') return false;
         return typeof attrs.ai_analysis_applied_at === 'string'
             && attrs.ai_analysis_applied_at.length > 0
-            && !this._hasNoteAnalysisDraft(note);
+            && !this._hasAnalysisDraft(note);
     }
 
-    _noteNeedsAiProcessing(note) {
-        if (!note || typeof note !== 'object') {
-            throw new Error('Note object is required');
-        }
-        const attrs = note.attributes;
-        if (!attrs || typeof attrs !== 'object') {
-            return false;
-        }
-        if (attrs.ai_analysis_applied_at) {
-            return false;
-        }
-        if (attrs.ai_analysis_draft && typeof attrs.ai_analysis_draft === 'object') {
-            return false;
-        }
-        return false;
+    _noteNeedsAi(note) {
+        const attrs = note && note.attributes;
+        if (!attrs || typeof attrs !== 'object') return true;
+        if (attrs.ai_analysis_applied_at) return false;
+        if (attrs.ai_analysis_draft && typeof attrs.ai_analysis_draft === 'object') return false;
+        return true;
     }
 
-    _openNoteAnalysisDraftModal(note) {
-        if (!note || typeof note !== 'object') {
-            throw new Error('Note object is required');
-        }
-        if (typeof note.entity_id !== 'string' || note.entity_id.trim().length === 0) {
-            throw new Error('Note entity_id is required');
-        }
-        CRMStore.openNoteAnalysisDraft(note.entity_id);
-        const analysisModal = document.createElement('ai-analysis-modal');
-        document.body.appendChild(analysisModal);
-        analysisModal.showModal();
-        analysisModal.addEventListener('close', () => analysisModal.remove());
+    _isAnalyzingNote(note) {
+        return this._analyze.busy
+            && this._analyze.lastResult
+            && this._analyze.lastResult.note_id === note.entity_id;
     }
 
-    _getFilteredNotes() {
-        if (this._query.trim()) {
-            return this._searchResults;
-        }
-        const leavingSet = new Set(this._notesLeavingIds);
-        return this._notes.filter((note) => !leavingSet.has(note.entity_id));
+    _filteredNotes() {
+        if (this._query.trim().length > 0) return this._searchResults;
+        return this._notes.items;
     }
 
-    _getSummaryChipTone(index) {
-        const tones = ['blue', 'cyan', 'orange', 'rose'];
-        return tones[index % tones.length];
+    _summaryResult() {
+        return this._isPeriod() ? this._periodSummary.lastResult : this._dailySummary.lastResult;
     }
 
-    _normalizeSummaryChipLookupKey(label) {
-        if (typeof label !== 'string') {
-            return null;
+    _summaryBusy() {
+        if (this._isPeriod()) {
+            return this._periodSummary.busy || this._periodSummaryStart.busy;
         }
-        let s = label.trim();
-        if (!s) {
-            return null;
-        }
-        if (s.startsWith('@')) {
-            s = s.slice(1).trim();
-        }
-        s = s.replace(/^["'([{]+|["')\]}.,;:!?]+$/g, '').trim();
-        if (!s) {
-            return null;
-        }
-        return s.toLowerCase();
+        return this._dailySummary.busy || this._dailySummaryStart.busy;
     }
 
-    _buildSummaryEntityLookupMap() {
+    _summaryEntities() {
+        const r = this._summaryResult();
+        if (!r || !Array.isArray(r.entities)) return [];
+        return r.entities.filter((e) => typeof e === 'string' && e.trim().length > 0);
+    }
+
+    _summaryText() {
+        const r = this._summaryResult();
+        return r && typeof r.summary === 'string' ? r.summary : '';
+    }
+
+    _summaryGeneratedAt() {
+        const r = this._summaryResult();
+        if (!r) return '';
+        const raw = typeof r.generated_at === 'string' && r.generated_at.length > 0 ? r.generated_at : null;
+        if (!raw) return '';
+        const date = new Date(raw);
+        if (Number.isNaN(date.getTime())) return '';
+        return _formatHHMM(date);
+    }
+
+    _summaryRevalidating() {
+        const r = this._summaryResult();
+        return r && r.revalidating === true;
+    }
+
+    _summaryPanelTitle() {
+        if (this._isPeriod()) {
+            return this.t('daily_notes_page.summary_panel_title_period', { from: this._dateFrom, to: this._dateTo });
+        }
+        return this.t('daily_notes_page.summary_panel_title_daily');
+    }
+
+    _summaryMetaLine() {
+        if (this._summaryBusy()) return this.t('daily_notes_page.summary_generating');
+        if (this._summaryRevalidating()) {
+            const at = this._summaryGeneratedAt();
+            return at
+                ? this.t('daily_notes_page.summary_revalidating_last', { time: at })
+                : this.t('daily_notes_page.summary_revalidating');
+        }
+        const at = this._summaryGeneratedAt();
+        return at
+            ? this.t('daily_notes_page.summary_generated_at', { time: at })
+            : this.t('daily_notes_page.summary_none');
+    }
+
+    _buildEntityLookupMap() {
         const map = new Map();
-        const lists = Object.values(this._noteEntitiesByNoteId);
-        for (let i = 0; i < lists.length; i += 1) {
-            const related = lists[i];
-            if (!Array.isArray(related)) {
-                continue;
-            }
-            for (let j = 0; j < related.length; j += 1) {
-                const ent = related[j];
-                if (!ent || typeof ent !== 'object' || typeof ent.entity_id !== 'string' || !ent.entity_id.trim()) {
-                    continue;
-                }
-                if (ent.entity_type === 'note') {
-                    continue;
-                }
+        for (const list of Object.values(this._noteEntitiesByNoteId)) {
+            if (!Array.isArray(list)) continue;
+            for (const ent of list) {
+                if (!ent || typeof ent !== 'object' || typeof ent.entity_id !== 'string') continue;
+                if (ent.entity_type === 'note') continue;
                 const rawName = typeof ent.name === 'string' ? ent.name : '';
-                const key = this._normalizeSummaryChipLookupKey(rawName);
-                if (!key || map.has(key)) {
-                    continue;
-                }
+                const key = _normalizeChipKey(rawName);
+                if (!key || map.has(key)) continue;
                 map.set(key, ent);
             }
         }
         return map;
     }
 
-    _resolveEntityForSummaryChip(displayLabel, lookupMap) {
-        const key = this._normalizeSummaryChipLookupKey(displayLabel);
-        if (!key) {
-            return null;
-        }
-        return lookupMap.get(key) ?? null;
-    }
-
-    async _loadCurrentUser() {
-        const user = await this.auth.get('/api/auth/me');
-        if (!user || typeof user !== 'object') {
-            throw new Error('Current user payload must be object');
-        }
-        this._currentUser = user;
-    }
-
-    async _loadVisibleNoteEntities() {
-        const filteredNotes = this._getFilteredNotes();
-        const noteIds = filteredNotes
-            .map((note) => note.entity_id)
-            .filter((entityId) => typeof entityId === 'string' && entityId.trim().length > 0);
-        const unresolvedNoteIds = noteIds.filter(
-            (entityId) => !Object.prototype.hasOwnProperty.call(this._noteEntitiesByNoteId, entityId),
-        );
-        if (unresolvedNoteIds.length === 0) {
-            return;
-        }
-
-        const crmApi = this.services.get('crmApi');
-        const cardsMap = await crmApi.getEntityCardsBulk(unresolvedNoteIds);
-
-        const next = { ...this._noteEntitiesByNoteId };
-        for (const entityId of unresolvedNoteIds) {
-            const card = cardsMap[entityId];
-            if (!card) {
-                next[entityId] = [];
-                continue;
-            }
-            if (!Array.isArray(card.related_entities)) {
-                throw new Error('Entity card must contain related_entities array');
-            }
-            next[entityId] = card.related_entities;
-        }
-        this._noteEntitiesByNoteId = next;
-    }
-
-    _getNoteEntities(note) {
-        if (!note || typeof note.entity_id !== 'string') {
-            throw new Error('Note entity_id is required');
-        }
-        const relatedEntities = this._noteEntitiesByNoteId[note.entity_id];
-        if (!Array.isArray(relatedEntities)) {
-            return [];
-        }
-        return relatedEntities;
-    }
-
-    _getEntityTagTone(index) {
-        const tones = ['primary', 'secondary', 'accent'];
-        return tones[index % tones.length];
+    _resolveChipEntity(label, lookup) {
+        const key = _normalizeChipKey(label);
+        if (!key) return null;
+        const found = lookup.get(key);
+        return found === undefined ? null : found;
     }
 
     _getEntityTagIcon(entity) {
-        const entityType = typeof entity?.entity_type === 'string' ? entity.entity_type : '';
-        const iconMap = {
-            'member': 'user-shield',
-            'contact': 'user',
-            'company': 'building',
-            'namespace': 'layers',
-            'organization': 'database',
-        };
-        return iconMap[entityType] || 'folder';
-    }
-
-    _getNoteSubtypeLabel(note) {
-        const subtype = typeof note?.entity_subtype === 'string' ? note.entity_subtype.trim() : '';
-        if (subtype.length === 0) {
-            return '';
-        }
-        return subtype
-            .split('_')
-            .filter((part) => part.length > 0)
-            .map((part) => `${part.charAt(0).toUpperCase()}${part.slice(1)}`)
-            .join(' ');
+        const t = typeof entity && entity.entity_type === 'string' ? entity.entity_type : '';
+        const icon = ENTITY_TYPE_ICONS[t];
+        return icon === undefined ? 'folder' : icon;
     }
 
     _getNoteSubtypeIcon(note) {
-        const subtype = typeof note?.entity_subtype === 'string' ? note.entity_subtype.trim() : '';
-        const iconMap = {
-            call: 'phone-call',
-            meeting: 'calendar',
-            email: 'mail',
-            task: 'tasks',
-            note: 'doc-detail',
-        };
-        if (subtype.length > 0) {
-            return iconMap[subtype] ?? 'doc-detail';
+        const sub = typeof note && note.entity_subtype === 'string' ? note.entity_subtype.trim() : '';
+        if (sub.length === 0) return 'doc-detail';
+        const icon = NOTE_SUBTYPE_ICONS[sub];
+        return icon === undefined ? 'doc-detail' : icon;
+    }
+
+    _notePreview(note) {
+        const attrs = note && note.attributes;
+        if (attrs && typeof attrs === 'object'
+            && typeof attrs.ai_summary === 'string' && attrs.ai_summary.trim().length > 0) {
+            return this._truncate(attrs.ai_summary, 260);
         }
-        return 'doc-detail';
+        const desc = typeof note.description === 'string' && note.description.trim().length > 0
+            ? note.description
+            : this.t('note_content.no_description');
+        return this._truncate(desc, 220);
+    }
+
+    _truncate(text, maxLength) {
+        const s = typeof text === 'string' ? text.trim() : '';
+        if (s.length <= maxLength) return s;
+        return `${s.slice(0, maxLength).trimEnd()}...`;
+    }
+
+    _formatTime(dateString) {
+        const d = new Date(dateString);
+        if (Number.isNaN(d.getTime())) return '';
+        return _formatHHMM(d);
     }
 
     _getAuthorName(note) {
-        if (!note || typeof note !== 'object') {
-            throw new Error('Note object is required');
-        }
-        const attrs = note.attributes;
-        if (attrs && typeof attrs === 'object' && typeof attrs.author_name === 'string' && attrs.author_name.trim().length > 0) {
+        const attrs = note && note.attributes;
+        if (attrs && typeof attrs.author_name === 'string' && attrs.author_name.trim().length > 0) {
             return attrs.author_name;
         }
-        if (
-            this._currentUser
-            && typeof this._currentUser === 'object'
-            && note.user_id === this._currentUser.user_id
-            && typeof this._currentUser.name === 'string'
-            && this._currentUser.name.trim().length > 0
-        ) {
-            return this._currentUser.name;
+        const user = this._authSel.value;
+        if (user && note.user_id === user.user_id && typeof user.name === 'string' && user.name.trim().length > 0) {
+            return user.name;
         }
-        return this.i18n.t('entity_card.requester_fallback');
+        return this.t('entity_card.requester_fallback');
     }
 
-    _getAuthorAvatarUrl(note) {
-        if (!note || typeof note !== 'object') {
-            throw new Error('Note object is required');
+    _getAuthorAvatar(note) {
+        const attrs = note && note.attributes;
+        if (attrs) {
+            if (typeof attrs.author_avatar_url === 'string' && attrs.author_avatar_url.trim().length > 0) {
+                return attrs.author_avatar_url;
+            }
+            if (typeof attrs.avatar_url === 'string' && attrs.avatar_url.trim().length > 0) {
+                return attrs.avatar_url;
+            }
         }
-        const attrs = note.attributes;
-        if (!attrs || typeof attrs !== 'object') {
-            return '';
-        }
-        if (typeof attrs.author_avatar_url === 'string' && attrs.author_avatar_url.trim().length > 0) {
-            return attrs.author_avatar_url;
-        }
-        if (typeof attrs.avatar_url === 'string' && attrs.avatar_url.trim().length > 0) {
-            return attrs.avatar_url;
-        }
-        if (
-            this._currentUser
-            && typeof this._currentUser === 'object'
-            && note.user_id === this._currentUser.user_id
-            && typeof this._currentUser.avatar_url === 'string'
-            && this._currentUser.avatar_url.trim().length > 0
-        ) {
-            return this._currentUser.avatar_url;
+        const user = this._authSel.value;
+        if (user && note.user_id === user.user_id && typeof user.avatar_url === 'string' && user.avatar_url.trim().length > 0) {
+            return user.avatar_url;
         }
         return '';
     }
 
-    _getInitials(name) {
-        if (typeof name !== 'string' || name.trim().length === 0) {
-            return '?';
+    _openNote(note) {
+        if (!note || typeof note.entity_id !== 'string' || note.entity_id.length === 0) {
+            throw new Error('CRMDailyNotesPage._openNote: note.entity_id required');
         }
-        const parts = name.trim().split(/\s+/);
-        if (parts.length === 1) {
-            return parts[0].slice(0, 1).toUpperCase();
-        }
-        return `${parts[0].slice(0, 1)}${parts[1].slice(0, 1)}`.toUpperCase();
+        this.navigate('note', { itemId: note.entity_id });
     }
 
-    _openEntityModal(entity, event = null) {
-        event?.stopPropagation();
-        if (!entity || typeof entity !== 'object') {
-            throw new Error('Entity object is required');
+    _openEntity(entity, event) {
+        if (event) event.stopPropagation();
+        if (!entity || typeof entity.entity_id !== 'string' || entity.entity_id.length === 0) {
+            throw new Error('CRMDailyNotesPage._openEntity: entity.entity_id required');
         }
-        if (typeof entity.entity_id !== 'string' || entity.entity_id.trim().length === 0) {
-            throw new Error('Entity ID is required');
-        }
-
-        CRMStore.setCurrentEntity(entity.entity_id);
-        const modal = document.createElement('entity-modal');
-        modal.entityId = entity.entity_id;
-        modal.entity = entity;
-        document.body.appendChild(modal);
-        modal.showModal();
-        modal.addEventListener('close', () => modal.remove());
+        this.navigate('entity', { itemId: entity.entity_id });
     }
 
-    _openNoteModal(note, options = {}) {
-        if (!note || typeof note !== 'object') {
-            throw new Error('Note object is required');
-        }
-        if (typeof note.entity_id !== 'string' || note.entity_id.trim().length === 0) {
-            throw new Error('Note entity_id is required');
-        }
-        CRMStore.setCurrentNoteId(note.entity_id);
-        if (window.__PLATFORM_ROUTER__) {
-            window.__PLATFORM_ROUTER__.navigateByRoute('note', { itemId: note.entity_id }, { skipUrl: false });
-        }
-    }
-
-    _summaryPanelTitle() {
-        if (this._dateFrom !== this._dateTo) {
-            return this.i18n.t('daily_notes_page.summary_panel_title_period', {
-                from: this._dateFrom,
-                to: this._dateTo,
-            });
-        }
-        return this.i18n.t('daily_notes_page.summary_panel_title_daily');
-    }
-
-    _summaryMetaLine() {
-        if (this._loadingSummary) {
-            return this.i18n.t('daily_notes_page.summary_generating');
-        }
-        if (this._summaryRevalidating) {
-            return this._summaryGeneratedAt
-                ? this.i18n.t('daily_notes_page.summary_revalidating_last', { time: this._summaryGeneratedAt })
-                : this.i18n.t('daily_notes_page.summary_revalidating');
-        }
-        return this._summaryGeneratedAt
-            ? this.i18n.t('daily_notes_page.summary_generated_at', { time: this._summaryGeneratedAt })
-            : this.i18n.t('daily_notes_page.summary_none');
-    }
-
-    _renderSummaryContent(summaryTags) {
-        const summaryEntityLookup = this._buildSummaryEntityLookupMap();
+    _renderSummary() {
+        const tags = this._summaryEntities();
+        const lookup = this._buildEntityLookupMap();
+        const summaryText = this._summaryText();
+        const busy = this._summaryBusy();
         return html`
             <div class="summary-header">
                 <h3 class="summary-title">
@@ -1918,39 +1260,41 @@ export class DailyNotesPage extends PlatformElement {
                     </span>
                     <span class="summary-title-text">${this._summaryPanelTitle()}</span>
                 </h3>
-                <button class="summary-refresh-btn" type="button" title=${this.i18n.t('daily_notes_page.summary_rebuild_tooltip')} @click=${this._onRefreshSummary} ?disabled=${this._loadingSummary}>
+                <button
+                    class="summary-refresh-btn"
+                    type="button"
+                    title=${this.t('daily_notes_page.summary_rebuild_tooltip')}
+                    ?disabled=${busy}
+                    @click=${this._onRefreshSummary}
+                >
                     <platform-icon
-                        class=${this._loadingSummary ? 'summary-refresh-icon spinning' : 'summary-refresh-icon'}
+                        class="summary-refresh-icon ${busy ? 'spinning' : ''}"
                         name="refresh"
                         size="18"
                     ></platform-icon>
                 </button>
             </div>
-            <div class="summary-meta">
-                ${this._summaryMetaLine()}
-            </div>
-            <p class="summary-text">${this._summaryText}</p>
+            <div class="summary-meta">${this._summaryMetaLine()}</div>
+            <p class="summary-text">${summaryText}</p>
             <div class="summary-tags">
-                ${summaryTags.map((tag, index) => {
-                    const tone = this._getSummaryChipTone(index);
-                    const resolved = this._resolveEntityForSummaryChip(tag, summaryEntityLookup);
+                ${tags.map((tag, i) => {
+                    const tone = SUMMARY_CHIP_TONES[i % SUMMARY_CHIP_TONES.length];
+                    const resolved = this._resolveChipEntity(tag, lookup);
                     if (resolved) {
                         return html`
                             <button
-                                type="button"
                                 class="summary-chip summary-chip--clickable ${tone}"
-                                title=${this.i18n.t('daily_notes_page.summary_entity_open')}
-                                @click=${(event) => this._openEntityModal(resolved, event)}
+                                type="button"
+                                title=${this.t('daily_notes_page.summary_entity_open')}
+                                @click=${(e) => this._openEntity(resolved, e)}
                             >
-                                <platform-icon name="folder" size="14"></platform-icon>
-                                ${tag}
+                                <platform-icon name="folder" size="14"></platform-icon>${tag}
                             </button>
                         `;
                     }
                     return html`
                         <span class="summary-chip ${tone}">
-                            <platform-icon name="folder" size="14"></platform-icon>
-                            ${tag}
+                            <platform-icon name="folder" size="14"></platform-icon>${tag}
                         </span>
                     `;
                 })}
@@ -1958,36 +1302,115 @@ export class DailyNotesPage extends PlatformElement {
         `;
     }
 
-    render() {
-        const filteredNotes = this._getFilteredNotes();
-        const summaryTags = this._summaryEntities;
-
+    _renderNoteCard(note) {
+        const related = Array.isArray(this._noteEntitiesByNoteId[note.entity_id])
+            ? this._noteEntitiesByNoteId[note.entity_id]
+            : [];
+        const isAnalyzing = this._isAnalyzingNote(note);
+        const draft = this._hasAnalysisDraft(note);
+        const applied = this._hasAnalysisApplied(note);
+        const needsAi = this._noteNeedsAi(note);
+        const author = this._getAuthorName(note);
+        const avatar = this._getAuthorAvatar(note);
+        const updated = typeof note.updated_at === 'string' && note.updated_at.length > 0 ? note.updated_at : note.created_at;
+        const time = typeof updated === 'string' && updated.length > 0 ? this._formatTime(updated) : '';
         return html`
-            <platform-breadcrumbs></platform-breadcrumbs>
+            <article class="note-card" @click=${() => this._openNote(note)}>
+                <div class="note-tags">
+                    <span class="note-type-badge">
+                        <platform-icon name=${this._getNoteSubtypeIcon(note)} size="14"></platform-icon>
+                    </span>
+                    ${related.map((entity, i) => html`
+                        <button
+                            class="note-tag ${ENTITY_TAG_TONES[i % ENTITY_TAG_TONES.length]}"
+                            type="button"
+                            @click=${(e) => this._openEntity(entity, e)}
+                        >
+                            <platform-icon name=${this._getEntityTagIcon(entity)} size="12"></platform-icon>
+                            ${typeof entity.name === 'string' && entity.name.length > 0 ? entity.name : 'Entity'}
+                        </button>
+                    `)}
+                </div>
+                ${typeof note.score === 'number' ? html`
+                    <div class="card-score">
+                        <div class="score-bar" style="width: ${Math.round(note.score * 100)}%"></div>
+                        <span class="score-label">${(note.score * 100).toFixed(0)}%</span>
+                        <span class="match-type-badge">${this._searchMode}</span>
+                    </div>
+                ` : ''}
+                <h3 class="note-title">${note.name}</h3>
+                <p class="note-text">${this._notePreview(note)}</p>
+                <div class="note-footer">
+                    <span class="author">
+                        <span class="author-avatar">
+                            ${avatar.length > 0
+                                ? html`<img src=${avatar} alt=${author} />`
+                                : html`<span class="author-avatar-fallback">${_initials(author)}</span>`}
+                        </span>
+                        ${author}
+                    </span>
+                    <div class="note-footer-right">
+                        <span class="published-at">${time}</span>
+                        <button
+                            class="analyze-btn ${isAnalyzing ? 'analyzing' : ''} ${draft ? 'has-draft' : applied ? 'has-applied' : needsAi ? 'needs-ai' : ''}"
+                            type="button"
+                            ?disabled=${isAnalyzing}
+                            @click=${(e) => { e.stopPropagation(); this._onAnalyzeNote(note); }}
+                            title=${draft ? this.t('daily_notes_page.analysis_open_draft')
+                                : applied ? this.t('daily_notes_page.analysis_view_applied')
+                                : this.t('daily_notes_page.analysis_run')}
+                        >
+                            <platform-icon name="ai" size="14" colored></platform-icon>
+                        </button>
+                    </div>
+                </div>
+            </article>
+        `;
+    }
+
+    render() {
+        const filteredNotes = this._filteredNotes();
+        const loading = this._notes.loading || this._searchLoading;
+        return html`
+            <div class="section-label">${this.t('daily_notes_page.section_title')}</div>
             <div class="top-row">
-                <div class="title">
-                    ${this.i18n.t('daily_notes_page.section_title')}
-                    <button class="title-settings" type="button" title=${this.i18n.t('daily_notes_page.settings_tooltip')}>
+                <h1 class="title">
+                    ${this.t('daily_notes_page.section_title')}
+                    <button class="title-settings" type="button" @click=${() => this.navigate('settings')}>
                         <platform-icon name="settings" size="18"></platform-icon>
                     </button>
-                </div>
+                </h1>
                 <label class="search-box">
                     <platform-icon name="search" size="14"></platform-icon>
                     <input
                         class="search-input"
                         type="text"
-                        placeholder=${this.i18n.t('search.placeholder')}
+                        placeholder=${this.t('search.placeholder')}
                         .value=${this._query}
                         @input=${this._onSearchInput}
                     />
-                    ${this._query.trim() ? html`
-                        <div class="search-mode-toggle" @click=${(e) => e.preventDefault()}>
-                            ${['text', 'semantic', 'hybrid'].map(mode => html`
+                    <button
+                        type="button"
+                        class="search-voice-btn ${this._voiceMode === 'search' && this._voiceState === 'recording' ? 'recording' : ''}"
+                        title=${this._voiceMode === 'search' && this._voiceState === 'recording'
+                            ? this.t('daily_notes_page.voice_search_stop')
+                            : this.t('daily_notes_page.voice_search_start')}
+                        ?disabled=${this._voiceState === 'processing'}
+                        @click=${(e) => { e.preventDefault(); this._onVoiceSearchToggle(); }}
+                    >
+                        <platform-icon
+                            name=${this._voiceMode === 'search' && this._voiceState === 'recording' ? 'square' : 'microphone'}
+                            size="14"
+                        ></platform-icon>
+                    </button>
+                    ${this._query.trim().length > 0 ? html`
+                        <div class="search-mode-toggle">
+                            ${SEARCH_MODES.map((mode) => html`
                                 <button
                                     type="button"
                                     class="search-mode-btn ${this._searchMode === mode ? 'active' : ''}"
                                     @click=${(e) => { e.preventDefault(); this._onSearchModeChange(mode); }}
-                                >${this.i18n.t(`entities.search_modes.${mode}`)}</button>
+                                >${mode}</button>
                             `)}
                         </div>
                     ` : ''}
@@ -1995,152 +1418,52 @@ export class DailyNotesPage extends PlatformElement {
                 <div class="toolbar-actions">
                     <platform-date-picker
                         class="date-input"
-                        mode="date"
+                        labeled
                         selection="range"
-                        value-format="iso"
-                        label=${this.i18n.t('daily_notes_page.period_label')}
                         .value=${{ start: this._dateFrom, end: this._dateTo }}
-                        @change=${this._onDateRangeChange}
+                        @date-change=${this._onDateRangeChange}
                     ></platform-date-picker>
                     <button
-                        class="voice-btn ${this._voiceState}"
+                        class="voice-btn ${this._voiceState === 'recording' ? 'recording' : this._voiceState === 'processing' ? 'processing' : ''}"
                         type="button"
-                        title=${this.i18n.t(`voice_input.btn_${this._voiceState}`)}
-                        ?disabled=${this._voiceState === 'processing'}
                         @click=${this._onVoiceToggle}
+                        ?disabled=${this._voiceState === 'processing'}
+                        title=${this.t('daily_notes_page.voice_tooltip')}
                     >
-                        <platform-icon name=${this._voiceState === 'recording' ? 'stop' : 'microphone'} size="18"></platform-icon>
+                        <platform-icon name="microphone" size="18"></platform-icon>
                     </button>
-                    <button class="cta-btn" type="button" @click=${this._onCreateNote}>${this.i18n.t('daily_notes_page.add_note')}</button>
+                    <button class="cta-btn" type="button" @click=${this._onCreateNote}>
+                        ${this.t('daily_notes_page.add_note')}
+                    </button>
                 </div>
             </div>
 
             <div class="layout">
-                <section class="main-column ${this._searchLoading ? 'busy' : ''}">
-                    ${this._searchLoading ? html`
-                        <div class="list-overlay">
-                            <glass-spinner size="lg"></glass-spinner>
-                        </div>
-                    ` : ''}
+                <section class="main-column">
                     <div class="cards-scroll">
-                        ${filteredNotes.length === 0 ? html`
-                            <div class="empty ${this._namespaceProbeValid && !this._namespaceHasAnyEntity ? 'empty-import' : ''}">
-                                ${this._namespaceProbeValid && !this._namespaceHasAnyEntity ? html`
-                                    <p class="empty-import-text">${this.i18n.t('import_wizard_cta.empty_notes_hint')}</p>
-                                    <button class="import-wizard-btn" type="button" @click=${this._goToImportWizard}>
-                                        <platform-icon name="import" size="18"></platform-icon>
-                                        ${this.i18n.t('import_wizard_cta.open_wizard')}
-                                    </button>
-                                ` : html`
-                                    <span>${this.i18n.t('daily_notes_page.empty_period')}</span>
-                                `}
-                            </div>
+                        ${loading && filteredNotes.length === 0 ? html`
+                            <div class="empty"><glass-spinner size="40"></glass-spinner></div>
+                        ` : filteredNotes.length === 0 ? html`
+                            <div class="empty">${this.t('daily_notes_page.empty_period')}</div>
                         ` : html`
                             <div class="cards-grid">
-                                ${filteredNotes.map((note) => html`
-                                    <article
-                                        class="note-card ${this._notesLeavingIds.includes(note.entity_id) ? 'note-card-leaving' : ''}"
-                                        @click=${() => this._openNoteModal(note)}
-                                        @transitionend=${(e) => this._onNoteCardLeaveTransitionEnd(note.entity_id, e)}
-                                    >
-                                        ${(() => {
-                                            const relatedEntities = this._getNoteEntities(note);
-                                            return html`
-                                                <div class="note-tags-row">
-                                                    <div class="note-tags">
-                                                        <span
-                                                            class="note-type-badge"
-                                                            title=${this._getNoteSubtypeLabel(note) || this.i18n.t('daily_notes_page.note_type_default')}
-                                                        >
-                                                            <platform-icon name=${this._getNoteSubtypeIcon(note)} size="14"></platform-icon>
-                                                        </span>
-                                                        ${relatedEntities.map((entity, index) => html`
-                                                            <button
-                                                                class="note-tag ${this._getEntityTagTone(index)}"
-                                                                type="button"
-                                                                title=${this.i18n.t('ai_analysis_modal.open_entity_title')}
-                                                                @click=${(event) => this._openEntityModal(entity, event)}
-                                                            >
-                                                                <platform-icon name=${this._getEntityTagIcon(entity)} size="12"></platform-icon>
-                                                                ${this._getTextValue(entity.name, 'Entity')}
-                                                            </button>
-                                                        `)}
-                                                    </div>
-                                                </div>
-                                            `;
-                                        })()}
-                                        ${note.score != null ? html`
-                                            <div class="card-score" title="${(() => {
-                                                const modeTitle = {
-                                                    semantic: this.i18n.t('search.score_title_semantic'),
-                                                    text: this.i18n.t('search.score_title_text'),
-                                                    hybrid: this.i18n.t('search.score_title_hybrid'),
-                                                }[this._searchMode] ?? '';
-                                                if (this._searchMode === 'hybrid' && note.match_type) {
-                                                    const foundBy = {
-                                                        text: this.i18n.t('search.found_by_text'),
-                                                        semantic: this.i18n.t('search.found_by_semantic'),
-                                                        hybrid: this.i18n.t('search.found_by_both'),
-                                                    }[note.match_type] ?? '';
-                                                    return foundBy ? `${modeTitle}\n${foundBy}` : modeTitle;
-                                                }
-                                                return modeTitle;
-                                            })()}">
-                                                <div class="score-bar" style="width: ${Math.round(note.score * 100)}%"></div>
-                                                <span class="score-label">${(note.score * 100).toFixed(0)}%</span>
-                                                <span class="match-type-badge">${this._searchMode}</span>
-                                            </div>
-                                        ` : ''}
-                                        <h3 class="note-title">${note.name}</h3>
-                                        <p class="note-text">${this._getNotePreviewText(note)}</p>
-                                        <div class="note-footer">
-                                            ${(() => {
-                                                const authorName = this._getAuthorName(note);
-                                                const authorAvatarUrl = this._getAuthorAvatarUrl(note);
-                                                return html`
-                                                    <span class="author">
-                                                        <span class="author-avatar">
-                                                            ${authorAvatarUrl
-                                                                ? html`<img src=${authorAvatarUrl} alt=${authorName} />`
-                                                                : html`<span class="author-avatar-fallback">${this._getInitials(authorName)}</span>`}
-                                                        </span>
-                                                        ${authorName}
-                                                    </span>
-                                                `;
-                                            })()}
-                                            <div class="note-footer-right">
-                                                <span class="published-at">${this.i18n.t('daily_notes_page.published_at', { time: this._formatTime(this._getTextValue(note.updated_at, this._getTextValue(note.created_at, new Date().toISOString()))) })}</span>
-                                                <button
-                                                    class="analyze-btn ${this._isNoteAiAnalyzing(note) ? 'analyzing' : (this._hasNoteAnalysisDraft(note) ? 'has-draft' : (this._hasNoteAnalysisApplied(note) ? 'has-applied' : ''))}"
-                                                    type="button"
-                                                    ?disabled=${this._isNoteAiAnalyzing(note)}
-                                                    @click=${(event) => { event.stopPropagation(); this._onAnalyzeNote(note); }}
-                                                    title=${this._isNoteAiAnalyzing(note)
-                                                        ? this.i18n.t('daily_notes_page.analysis_in_progress')
-                                                        : (this._hasNoteAnalysisDraft(note)
-                                                            ? this.i18n.t('daily_notes_page.analysis_open_draft')
-                                                            : (this._hasNoteAnalysisApplied(note)
-                                                                ? this.i18n.t('daily_notes_page.analysis_view_applied')
-                                                                : this.i18n.t('daily_notes_page.analysis_run')))}
-                                                >
-                                                    <platform-icon name="ai" size="14" colored></platform-icon>
-                                                </button>
-                                            </div>
-                                        </div>
-                                    </article>
-                                `)}
+                                ${filteredNotes.map((note) => this._renderNoteCard(note))}
                             </div>
                         `}
                     </div>
                 </section>
-
                 <aside class="summary-panel">
-                    ${this._renderSummaryContent(summaryTags)}
+                    ${this._renderSummary()}
                 </aside>
             </div>
 
             ${this._isMobile ? html`
-                <button class="summary-fab" type="button" @click=${() => { this._summaryOpen = true; }} title=${this.i18n.t('daily_notes_page.summary_fab_open')}>
+                <button
+                    class="summary-fab"
+                    type="button"
+                    @click=${() => { this._summaryOpen = true; }}
+                    title=${this.t('daily_notes_page.summary_fab_open')}
+                >
                     <platform-icon name="ai" size="24" colored></platform-icon>
                 </button>
             ` : ''}
@@ -2148,7 +1471,7 @@ export class DailyNotesPage extends PlatformElement {
             ${this._isMobile && this._summaryOpen ? html`
                 <div class="summary-overlay" @click=${(e) => { if (e.target === e.currentTarget) this._summaryOpen = false; }}>
                     <aside class="summary-panel">
-                        ${this._renderSummaryContent(summaryTags)}
+                        ${this._renderSummary()}
                     </aside>
                 </div>
             ` : ''}
@@ -2156,4 +1479,4 @@ export class DailyNotesPage extends PlatformElement {
     }
 }
 
-customElements.define('daily-notes-page', DailyNotesPage);
+customElements.define('crm-daily-notes-page', CRMDailyNotesPage);

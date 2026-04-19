@@ -45,3 +45,44 @@ def test_ios_apns_rejects_invalid_token():
             transport="ios_apns",
             keys={"device_token": "not-hex!!!"},
         )
+
+
+def test_android_fcm_normalizes_endpoint_and_keys():
+    token = (
+        "eXamPLEfcmToken1234567890_:abcdefghijklmnopqrstuvwxyz"
+        "ABCDEFGHIJKLMNOPQRSTUVWXYZ:0987654321zyxwvutsrqponmlkjihgfedcba"
+    )
+    body = SubscribeRequest(
+        transport="android_fcm",
+        endpoint="",
+        keys={"device_token": token},
+    )
+    assert body.endpoint == f"fcm:{token}"
+    assert body.keys == {"device_token": token}
+    assert body.platform == "android_native"
+
+
+def test_android_fcm_keeps_explicit_platform():
+    token = "abc_def-ghi:" + ("Z" * 30)
+    body = SubscribeRequest(
+        transport="android_fcm",
+        keys={"device_token": token},
+        platform="android_capacitor",
+    )
+    assert body.platform == "android_capacitor"
+
+
+def test_android_fcm_rejects_short_token():
+    with pytest.raises(ValidationError):
+        SubscribeRequest(
+            transport="android_fcm",
+            keys={"device_token": "short"},
+        )
+
+
+def test_android_fcm_rejects_missing_token():
+    with pytest.raises(ValidationError):
+        SubscribeRequest(
+            transport="android_fcm",
+            keys={},
+        )

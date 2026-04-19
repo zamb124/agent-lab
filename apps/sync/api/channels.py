@@ -138,6 +138,32 @@ async def mark_channel_read(container: ContainerDep, channel_id: str) -> None:
         raise RuntimeError(f"Command failed: {body.get('error_detail')}")
 
 
+class _TypingBody(__import__("pydantic").BaseModel):
+    typing: bool
+    thread_id: str | None = None
+
+
+@router.post("/{channel_id}/typing", status_code=204)
+async def typing_channel(container: ContainerDep, channel_id: str, body: _TypingBody) -> None:
+    """REST-зеркало команды `sync/channels/typing_requested`.
+
+    Эфемерное событие — публикуется напрямую через `dispatch_sync_command`
+    (без TaskIQ). Возвращает 204.
+    """
+    _ = container
+    context = get_context()
+    cmd = CommandEnvelope(
+        id=uuid.uuid4().hex,
+        actor_user_id=context.user.user_id,
+        company_id=context.active_company.company_id,
+        type="channels.typing",
+        payload={"channel_id": channel_id, "typing": body.typing, "thread_id": body.thread_id},
+    )
+    result = await dispatch_sync_command(cmd)
+    if not result.get("ok"):
+        raise RuntimeError(f"Command failed: {result.get('error_detail')}")
+
+
 @router.post("/", status_code=201)
 async def create_channel(container: ContainerDep, body: ChannelCreate) -> ChannelRead:
     """Создание канала через TaskIQ."""

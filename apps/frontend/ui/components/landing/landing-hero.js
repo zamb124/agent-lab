@@ -4,11 +4,10 @@
 import { html, css } from 'lit';
 import { unsafeHTML } from 'lit/directives/unsafe-html.js';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
-import { I18nNs } from '@platform/services/i18n/i18n.service.js';
-
 export class LandingHero extends PlatformElement {
+    static i18nNamespace = 'landing';
+
     static properties = {
-        isAuthenticated: { type: Boolean },
     };
 
     static styles = [
@@ -217,48 +216,23 @@ export class LandingHero extends PlatformElement {
 
     constructor() {
         super();
-        this.isAuthenticated = false;
-    }
-
-    connectedCallback() {
-        super.connectedCallback();
-        this._i18nUnsub = this.i18n.subscribe(() => this.requestUpdate());
-        void this._checkAuth();
-    }
-
-    disconnectedCallback() {
-        if (this._i18nUnsub) {
-            this._i18nUnsub();
-            this._i18nUnsub = null;
-        }
-        super.disconnectedCallback();
-    }
-
-    async _checkAuth() {
-        const response = await fetch('/frontend/api/auth/me', {
-            credentials: 'include',
-        });
-        if (response.ok) {
-            this.isAuthenticated = true;
-            this.requestUpdate();
-        }
+        this._authSel = this.select((s) => s.auth.status);
     }
 
     _handleCTA = () => {
-        if (this.isAuthenticated) {
-            window.location.href = '/dashboard';
+        if (this._authSel.value === 'authenticated') {
+            this.navigate('dashboard');
             return;
         }
-        this.dispatchEvent(
-            new CustomEvent('open-auth-modal', {
-                bubbles: true,
-                composed: true,
-            })
-        );
+        this.openModal('auth.login');
     };
 
+    get isAuthenticated() {
+        return this._authSel.value === 'authenticated';
+    }
+
     render() {
-        const t = (key) => this.i18n.t(key, {}, I18nNs.LANDING);
+        const t = (key) => (this.t(key) || key);
         return html`
             <div class="hero-container">
                 <h1 class="hero-title">HUMANITEC</h1>

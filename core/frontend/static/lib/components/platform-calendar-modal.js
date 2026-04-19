@@ -3,9 +3,13 @@ import { PlatformModal } from './glass-modal.js';
 import { formStyles } from '../styles/shared/form.styles.js';
 import { buttonStyles } from '../styles/shared/button.styles.js';
 import './platform-icon.js';
-import { resolveFileIconKey } from '../../services/icon.service.js';
+import { resolveFileIconKey } from '../utils/file-icons.js';
 import './platform-date-picker.js';
 import './platform-switch.js';
+import { CALENDAR_EVENTS } from '../events/reducers/calendar.js';
+import { TEAM_EVENTS } from '../events/reducers/team.js';
+import { FILES_EVENTS } from '../events/reducers/files.js';
+import { registerModalKind } from '../utils/modal-registry.js';
 
 const BASE_TIMEZONE_OPTIONS = [
     'UTC',
@@ -228,13 +232,13 @@ const CALENDAR_VIEW_STORAGE_KEY = 'platform_calendar_view';
 const VALID_VIEWS = ['day', 'week', 'month'];
 
 export class PlatformCalendarModal extends PlatformModal {
+    static modalKind = 'platform.calendar';
+    static i18nNamespace = 'calendar';
+
     static properties = {
         ...PlatformModal.properties,
         _view: { state: true },
         _anchorDate: { state: true },
-        _events: { state: true },
-        _integrations: { state: true },
-        _loading: { state: true },
         _saving: { state: true },
         _syncing: { state: true },
         _selectedEventId: { state: true },
@@ -250,7 +254,6 @@ export class PlatformCalendarModal extends PlatformModal {
         _selectedEventKind: { state: true },
         _selectedEventNamespace: { state: true },
         _timezoneOptions: { state: true },
-        _teamMembers: { state: true },
         _attendeeDraft: { state: true },
         _attendeeDropdownOpen: { state: true },
         _eventForm: { state: true },
@@ -262,6 +265,7 @@ export class PlatformCalendarModal extends PlatformModal {
         _dragEvent: { state: true },
         _dragGhostTop: { state: true },
         _dragGhostLeft: { state: true },
+        _pendingAttachmentUploads: { state: true },
     };
 
     static styles = [
@@ -272,6 +276,92 @@ export class PlatformCalendarModal extends PlatformModal {
             :host {
                 --calendar-sidebar-width: 420px;
                 --calendar-grid-columns: 7;
+            }
+
+            :host([open]) .modal-overlay {
+                padding: 0 !important;
+                inset: 0 !important;
+            }
+
+            :host([open]) .modal,
+            :host([open]) .modal.full,
+            :host([open]) .modal.fullscreen {
+                position: fixed !important;
+                inset: 0 !important;
+                left: 0 !important;
+                top: 0 !important;
+                width: 100vw !important;
+                max-width: 100vw !important;
+                height: 100dvh !important;
+                max-height: 100dvh !important;
+                min-height: 100dvh !important;
+                border-radius: 0 !important;
+                margin: 0 !important;
+                transform-origin: center center;
+                --modal-content-inset: 0;
+                --modal-content-radius: 0;
+            }
+
+            @keyframes calendarModalIn {
+                from {
+                    opacity: 0;
+                    transform: translateY(12px) scale(0.985);
+                }
+                to {
+                    opacity: 1;
+                    transform: none;
+                }
+            }
+
+            :host([open]) .modal.panel-enter-active {
+                animation: calendarModalIn 320ms var(--easing-smooth, cubic-bezier(0.22, 1, 0.36, 1)) both;
+            }
+
+            :host([open]) .modal:not(.panel-enter-active) {
+                opacity: 1;
+                transform: none;
+            }
+
+            :host([open]) .modal .modal-content,
+            :host([open]) .modal.full .modal-content,
+            :host([open]) .modal.fullscreen .modal-content {
+                margin: 0 !important;
+                border-radius: 0 !important;
+                padding: var(--space-5, 20px) var(--space-6, 24px) !important;
+            }
+
+            :host([open]) .modal .modal-header,
+            :host([open]) .modal.fullscreen .modal-header {
+                padding: var(--space-4, 16px) var(--space-6, 24px) 0 var(--space-6, 24px) !important;
+            }
+
+            :host([open]) .modal .modal-actions,
+            :host([open]) .modal.fullscreen .modal-actions {
+                margin-left: 0 !important;
+                margin-right: 0 !important;
+                padding: var(--space-3, 12px) var(--space-6, 24px) var(--space-4, 16px) !important;
+            }
+
+            @media (max-width: 768px) {
+                :host([open]) .modal,
+                :host([open]) .modal.full,
+                :host([open]) .modal.fullscreen {
+                    width: 100vw !important;
+                    max-width: 100vw !important;
+                    height: 100dvh !important;
+                    max-height: 100dvh !important;
+                    border-radius: 0 !important;
+                }
+
+                :host([open]) .modal .modal-content,
+                :host([open]) .modal.fullscreen .modal-content {
+                    padding: var(--space-3, 12px) var(--space-3, 12px) max(var(--space-3, 12px), env(safe-area-inset-bottom, 0px)) !important;
+                }
+
+                :host([open]) .modal .modal-header,
+                :host([open]) .modal.fullscreen .modal-header {
+                    padding: max(var(--space-3, 12px), env(safe-area-inset-top, 0px)) var(--space-3, 12px) 0 var(--space-3, 12px) !important;
+                }
             }
 
             .calendar-shell {
@@ -358,8 +448,8 @@ export class PlatformCalendarModal extends PlatformModal {
             }
 
             .view-segment button.active {
-                background: var(--accent-tertiary-subtle);
-                color: var(--accent-tertiary);
+                background: var(--accent-subtle);
+                color: var(--accent);
             }
 
             .calendar-panel {
@@ -395,12 +485,12 @@ export class PlatformCalendarModal extends PlatformModal {
 
             .btn.btn-primary.btn-calendar-create {
                 padding: 0;
-                background: var(--accent-tertiary);
+                background: var(--accent);
                 color: #fff;
             }
 
             .btn.btn-primary.btn-calendar-create:hover {
-                background: color-mix(in srgb, var(--accent-tertiary) 85%, #000);
+                background: color-mix(in srgb, var(--accent) 85%, #000);
             }
 
             .calendar-fab {
@@ -1902,7 +1992,7 @@ export class PlatformCalendarModal extends PlatformModal {
                     border: none;
                     align-items: center;
                     justify-content: center;
-                    background: color-mix(in srgb, var(--accent-tertiary) 92%, #000);
+                    background: color-mix(in srgb, var(--accent) 92%, #000);
                     color: #fff;
                     font-size: 26px;
                     line-height: 1;
@@ -1924,13 +2014,9 @@ export class PlatformCalendarModal extends PlatformModal {
 
     constructor() {
         super();
-        this.title = '';
         const savedView = localStorage.getItem(CALENDAR_VIEW_STORAGE_KEY);
         this._view = VALID_VIEWS.includes(savedView) ? savedView : 'month';
         this._anchorDate = toDateInputValue(new Date());
-        this._events = [];
-        this._integrations = [];
-        this._loading = false;
         this._saving = false;
         this._syncing = false;
         this._selectedEventId = null;
@@ -1946,9 +2032,15 @@ export class PlatformCalendarModal extends PlatformModal {
         this._selectedEventKind = 'meeting';
         this._selectedEventNamespace = null;
         this._timezoneOptions = [...BASE_TIMEZONE_OPTIONS];
-        this._teamMembers = [];
         this._attendeeDraft = '';
         this._attendeeDropdownOpen = false;
+        this._pendingAttachmentUploads = new Map();
+        this._eventsSelect = this.select((s) => s.calendar.events);
+        this._integrationsSelect = this.select((s) => s.calendar.integrations);
+        this._calendarLoadingSelect = this.select((s) => s.calendar.loading);
+        this._calendarSyncingSelect = this.select((s) => s.calendar.syncing);
+        this._teamMembersSelect = this.select((s) => s.team.members);
+        this._localeSelect = this.select((s) => s.i18n.locale);
         const currentTimeZone = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
         if (!this._timezoneOptions.includes(currentTimeZone)) {
             this._timezoneOptions = [currentTimeZone, ...this._timezoneOptions];
@@ -1995,87 +2087,133 @@ export class PlatformCalendarModal extends PlatformModal {
 
     willUpdate(changedProperties) {
         super.willUpdate(changedProperties);
-        this.title = this.i18n.t('title', {}, 'calendar');
-    }
-
-    _calT(key, params = {}) {
-        return this.i18n.t(key, params, 'calendar');
-    }
-
-    _calendarLocaleTag() {
-        const code = this.i18n.getCurrentLocale();
-        if (code === 'ru') {
-            return 'ru-RU';
+        this.title = this.t('title');
+        if (changedProperties.has('open')) {
+            if (this.open) {
+                this._onModalOpened();
+            } else {
+                this._onModalClosed();
+            }
         }
-        return 'en-US';
     }
 
-    async showModal() {
+    _onModalOpened() {
         this._dateSheetOpen = false;
         this._integrationsMenuOpen = false;
         this._integrationModalProvider = null;
         this._isCompactLayout = window.matchMedia('(max-width: 767px)').matches;
-        this._isFullscreen = !this._isCompactLayout;
         if (this._isCompactLayout) {
             this._view = 'day';
-            this.size = 'full';
-        } else {
-            this.size = 'md';
         }
-        this._onDocumentClickBound = this._onDocumentClickBound || ((e) => {
-            if (!this._integrationsMenuOpen) {
-                return;
-            }
-            const anchor = this.renderRoot?.querySelector('.integrations-menu-anchor');
-            if (anchor && !anchor.contains(e.composedPath()[0])) {
-                this._integrationsMenuOpen = false;
-            }
-        });
+        this.size = 'full';
+        this._isFullscreen = true;
+        if (!this._onDocumentClickBound) {
+            this._onDocumentClickBound = (e) => {
+                if (!this._integrationsMenuOpen) {
+                    return;
+                }
+                const anchor = this.renderRoot?.querySelector('.integrations-menu-anchor');
+                if (anchor && !anchor.contains(e.composedPath()[0])) {
+                    this._integrationsMenuOpen = false;
+                }
+            };
+        }
         document.addEventListener('click', this._onDocumentClickBound);
-        super.showModal();
-        await this._loadTeamMembers();
-        await this._reload();
+        this._kickInitialLoad();
     }
 
-    disconnectedCallback() {
-        super.disconnectedCallback();
+    _onModalClosed() {
         if (this._onDocumentClickBound) {
             document.removeEventListener('click', this._onDocumentClickBound);
         }
+        this._dateSheetOpen = false;
+        this._integrationsMenuOpen = false;
+        this._integrationModalProvider = null;
+        this._eventDialogOpen = false;
     }
 
-    async _loadTeamMembers() {
-        const teamMembers = await this.services.get('team').getMembers();
-        if (!Array.isArray(teamMembers)) {
-            throw new Error('Team members response must be array');
-        }
-        this._teamMembers = teamMembers;
+    _calT(key, params = {}) {
+        return this.t(key, params);
     }
 
-    async _reload({ silent = false } = {}) {
-        let loaderTimer = null;
-        if (!silent) {
-            loaderTimer = setTimeout(() => { this._loading = true; }, 300);
-        }
+    _calendarLocaleTag() {
+        return this._localeSelect.value === 'ru' ? 'ru-RU' : 'en-US';
+    }
+
+    _kickInitialLoad() {
         const range = this._viewRange();
-        const result = await this.calendarApi.listEvents({
-            startAt: range.start.toISOString(),
-            endAt: range.end.toISOString(),
-            includeSources: null,
+        this.dispatch(TEAM_EVENTS.MEMBERS_LOAD_REQUESTED, null);
+        this.dispatch(CALENDAR_EVENTS.INTEGRATIONS_LOAD_REQUESTED, null);
+        this.dispatch(CALENDAR_EVENTS.EVENTS_LOAD_REQUESTED, {
+            start_at: range.start.toISOString(),
+            end_at: range.end.toISOString(),
+            include_sources: null,
             limit: 2000,
         });
-        if (loaderTimer !== null) {
-            clearTimeout(loaderTimer);
-        }
-        if (!result || !Array.isArray(result.events) || !Array.isArray(result.integrations)) {
-            throw new Error('Calendar API response is invalid');
-        }
-        this._events = result.events;
-        this._integrations = result.integrations;
-        this._loading = false;
         if (this._view === 'day' || this._view === 'week') {
             this._scrollToWorkZone();
         }
+    }
+
+    _reload() {
+        const range = this._viewRange();
+        this.dispatch(CALENDAR_EVENTS.EVENTS_LOAD_REQUESTED, {
+            start_at: range.start.toISOString(),
+            end_at: range.end.toISOString(),
+            include_sources: null,
+            limit: 2000,
+        });
+        if (this._view === 'day' || this._view === 'week') {
+            this._scrollToWorkZone();
+        }
+    }
+
+    connectedCallback() {
+        super.connectedCallback();
+        this.useEvent(CALENDAR_EVENTS.EVENTS_LOAD_FAILED, (e) => {
+            this.toast('err_load_events', { type: 'error', vars: { message: e.payload?.message || '' } });
+        });
+        this.useEvent(CALENDAR_EVENTS.EVENT_CREATE_FAILED, (e) => {
+            this._saving = false;
+            this.toast('err_save_event', { type: 'error', vars: { message: e.payload?.message || '' } });
+        });
+        this.useEvent(CALENDAR_EVENTS.EVENT_UPDATE_FAILED, (e) => {
+            this._saving = false;
+            this.toast('err_save_event', { type: 'error', vars: { message: e.payload?.message || '' } });
+        });
+        this.useEvent(CALENDAR_EVENTS.EVENT_DELETE_FAILED, (e) => {
+            this.toast('err_delete_event', { type: 'error', vars: { message: e.payload?.message || '' } });
+        });
+        this.useEvent(CALENDAR_EVENTS.INTEGRATIONS_LOAD_FAILED, (e) => {
+            this.toast('err_load_integrations', { type: 'error', vars: { message: e.payload?.message || '' } });
+        });
+        this.useEvent(CALENDAR_EVENTS.INTEGRATION_CONNECT_FAILED, (e) => {
+            this._saving = false;
+            this.toast('err_connect_integration', { type: 'error', vars: { message: e.payload?.message || '' } });
+        });
+        this.useEvent(CALENDAR_EVENTS.INTEGRATION_DISCONNECT_FAILED, (e) => {
+            this.toast('err_disconnect_integration', { type: 'error', vars: { message: e.payload?.message || '' } });
+        });
+        this.useEvent(CALENDAR_EVENTS.SYNC_FAILED, (e) => {
+            this._syncing = false;
+            this.toast('err_sync', { type: 'error', vars: { message: e.payload?.message || '' } });
+        });
+        this.useEvent(TEAM_EVENTS.MEMBERS_LOAD_FAILED, (e) => {
+            this.toast('err_load_team', { type: 'error', vars: { message: e.payload?.message || '' } });
+        });
+        this.useEvent(CALENDAR_EVENTS.EVENT_CREATED, () => { this._saving = false; });
+        this.useEvent(CALENDAR_EVENTS.EVENT_UPDATED, () => { this._saving = false; });
+        this.useEvent(CALENDAR_EVENTS.SYNC_COMPLETED, () => { this._syncing = false; });
+        this.useEvent(CALENDAR_EVENTS.INTEGRATION_CONNECTED, () => { this._saving = false; });
+        this.useEvent(FILES_EVENTS.UPLOAD_COMPLETED, (e) => this._onFileUploadCompleted(e));
+        this.useEvent(FILES_EVENTS.UPLOAD_FAILED, (e) => this._onFileUploadFailed(e));
+    }
+
+    disconnectedCallback() {
+        if (this._onDocumentClickBound) {
+            document.removeEventListener('click', this._onDocumentClickBound);
+        }
+        super.disconnectedCallback();
     }
 
     _viewRange() {
@@ -2331,7 +2469,7 @@ export class PlatformCalendarModal extends PlatformModal {
         return null;
     }
 
-    async _applyDrop(event, dropTarget) {
+    _applyDrop(event, dropTarget) {
         const eventStart = new Date(event.start_at);
         const eventEnd = new Date(event.end_at);
         const durationMs = eventEnd.getTime() - eventStart.getTime();
@@ -2355,14 +2493,8 @@ export class PlatformCalendarModal extends PlatformModal {
             return;
         }
 
-        this._events = this._events.map((ev) => {
-            if (ev.event_id !== event.event_id) {
-                return ev;
-            }
-            return { ...ev, start_at: startAt.toISOString(), end_at: endAt.toISOString() };
-        });
-
-        await this.calendarApi.updateEvent(event.event_id, {
+        this.dispatch(CALENDAR_EVENTS.EVENT_UPDATE_REQUESTED, {
+            event_id: event.event_id,
             title: event.title,
             kind: event.kind,
             source: event.source,
@@ -2382,13 +2514,13 @@ export class PlatformCalendarModal extends PlatformModal {
             deep_link: event.deep_link ?? null,
             metadata: event.metadata ?? {},
         });
-        await this._reload({ silent: true });
     }
 
     _eventsForDate(date) {
         const dayStart = new Date(date.getFullYear(), date.getMonth(), date.getDate(), 0, 0, 0, 0);
         const dayEnd = addDays(dayStart, 1);
-        return this._events.filter((event) => {
+        const events = this._eventsSelect.value;
+        return events.filter((event) => {
             const start = new Date(event.start_at);
             const end = new Date(event.end_at);
             return start < dayEnd && end > dayStart;
@@ -2780,7 +2912,7 @@ export class PlatformCalendarModal extends PlatformModal {
             return;
         }
         if (!EMAIL_PATTERN.test(normalized)) {
-            this.error(this._calT('error_email_invalid'));
+            this.toast('error_email_invalid', { type: 'error' });
             return;
         }
         const current = this._attendeeTags();
@@ -2838,7 +2970,7 @@ export class PlatformCalendarModal extends PlatformModal {
     _attendeeSuggestions() {
         const query = this._attendeeDraft.trim().toLowerCase();
         const selectedEmails = new Set(this._attendeeTags().map((item) => item.email));
-        const membersWithEmail = this._teamMembers
+        const membersWithEmail = this._teamMembersSelect.value
             .filter((member) => normalizeEmail(member.email) !== '')
             .filter((member) => !selectedEmails.has(normalizeEmail(member.email)));
         if (!query) {
@@ -2925,130 +3057,146 @@ export class PlatformCalendarModal extends PlatformModal {
         fileInput.click();
     }
 
-    async _onAttachmentInputChange(event) {
+    _onAttachmentInputChange(event) {
         const files = Array.from(event.target.files || []);
         if (files.length === 0) {
             return;
         }
-        this._uploadingAttachments = true;
-        try {
-            const uploadedAttachments = [];
-            for (const file of files) {
-                const uploadedFile = await this.filesApi.uploadFile(file);
-                if (!uploadedFile || typeof uploadedFile !== 'object') {
-                    throw new Error('File upload response is invalid');
-                }
-                if (typeof uploadedFile.file_id !== 'string' || uploadedFile.file_id === '') {
-                    throw new Error('Uploaded file_id is required');
-                }
-                if (typeof uploadedFile.url !== 'string' || uploadedFile.url === '') {
-                    throw new Error('Uploaded file url is required');
-                }
-                if (typeof uploadedFile.original_name !== 'string' || uploadedFile.original_name === '') {
-                    throw new Error('Uploaded original_name is required');
-                }
-                uploadedAttachments.push({
-                    file_id: uploadedFile.file_id,
-                    name: uploadedFile.original_name,
-                    url: uploadedFile.url,
-                    content_type: typeof uploadedFile.content_type === 'string' ? uploadedFile.content_type : '',
-                    file_size: Number.isFinite(uploadedFile.file_size) ? uploadedFile.file_size : 0,
-                });
-            }
-            const existingIds = new Set(this._eventAttachments.map((item) => item.file_id));
-            const uniqueUploads = uploadedAttachments.filter((item) => !existingIds.has(item.file_id));
-            this._eventAttachments = [...this._eventAttachments, ...uniqueUploads];
-        } finally {
-            this._uploadingAttachments = false;
+        for (const file of files) {
+            const correlation_id = `cal-upload-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+            this._pendingAttachmentUploads.set(correlation_id, { name: file.name });
+            this.dispatch(FILES_EVENTS.UPLOAD_REQUESTED, { file, name: file.name }, { correlation_id, source: 'local' });
         }
+        this._uploadingAttachments = this._pendingAttachmentUploads.size > 0;
+        this.requestUpdate();
+    }
+
+    _onFileUploadCompleted(event) {
+        const correlation_id = event.meta?.correlation_id;
+        if (!correlation_id || !this._pendingAttachmentUploads.has(correlation_id)) {
+            return;
+        }
+        this._pendingAttachmentUploads.delete(correlation_id);
+        const file = event.payload?.file;
+        if (!file || typeof file.file_id !== 'string' || file.file_id === '') {
+            this._uploadingAttachments = this._pendingAttachmentUploads.size > 0;
+            this.toast('err_upload_attachment', { type: 'error', vars: { message: 'invalid file payload' } });
+            this.requestUpdate();
+            return;
+        }
+        const existingIds = new Set(this._eventAttachments.map((item) => item.file_id));
+        if (!existingIds.has(file.file_id)) {
+            this._eventAttachments = [...this._eventAttachments, {
+                file_id: file.file_id,
+                name: typeof file.original_name === 'string' && file.original_name ? file.original_name : file.file_id,
+                url: typeof file.url === 'string' ? file.url : '',
+                content_type: typeof file.content_type === 'string' ? file.content_type : '',
+                file_size: Number.isFinite(file.file_size) ? file.file_size : 0,
+            }];
+        }
+        this._uploadingAttachments = this._pendingAttachmentUploads.size > 0;
+        this.requestUpdate();
+    }
+
+    _onFileUploadFailed(event) {
+        const correlation_id = event.meta?.correlation_id;
+        if (!correlation_id || !this._pendingAttachmentUploads.has(correlation_id)) {
+            return;
+        }
+        this._pendingAttachmentUploads.delete(correlation_id);
+        this._uploadingAttachments = this._pendingAttachmentUploads.size > 0;
+        this.toast('err_upload_attachment', { type: 'error', vars: { message: event.payload?.message || '' } });
+        this.requestUpdate();
     }
 
     _removeAttachment(fileId) {
         this._eventAttachments = this._eventAttachments.filter((item) => item.file_id !== fileId);
     }
 
-    async _saveEvent() {
-        this._saving = true;
-        try {
-            if (this._selectedEventId && !this._isEventEditable(this._selectedEventSource)) {
-                throw new Error(this._calT('err_edit_remote', { label: this._sourceLabel(this._selectedEventSource) }));
-            }
-            const payload = {
-                title: this._eventForm.title.trim(),
-                kind: String(this._eventForm.kind || '').trim(),
-                source: 'platform',
-                source_id: null,
-                namespace: null,
-                description: this._eventForm.description.trim() || null,
-                location: this._eventForm.location.trim() || null,
-                status: 'confirmed',
-                timezone: this._eventForm.timezone.trim(),
-                all_day: Boolean(this._eventForm.all_day),
-                start_at: new Date(this._eventForm.start_at).toISOString(),
-                end_at: new Date(this._eventForm.end_at).toISOString(),
-                attendees: this._attendeeTags(),
-                recurrence_rule: recurrenceToRule(this._eventForm.recurrence),
-                recurrence_id: null,
-                series_id: null,
-                deep_link: null,
-                metadata: buildEventMetadata(
-                    {
-                        ...this._eventMetadata,
-                        [EVENT_COLOR_KEY]: normalizeEventColor(this._eventForm.color),
-                    },
-                    this._eventAttachments
-                ),
-            };
-            if (!payload.title) {
-                throw new Error(this._calT('err_title_required'));
-            }
-            if (!payload.kind) {
-                throw new Error(this._calT('err_kind_required'));
-            }
-            if (new Date(payload.start_at) >= new Date(payload.end_at)) {
-                throw new Error(this._calT('err_end_after_start'));
-            }
-            if (this._selectedEventId) {
-                await this.calendarApi.updateEvent(this._selectedEventId, payload);
-            } else {
-                await this.calendarApi.createEvent(payload);
-            }
-            this._selectedEventId = null;
-            this._selectedEventSource = 'platform';
-            this._selectedEventKind = 'meeting';
-            this._selectedEventNamespace = null;
-            this._eventForm = {
-                ...this._eventForm,
-                kind: 'meeting',
-                color: DEFAULT_EVENT_COLOR,
-                title: '',
-                description: '',
-                location: '',
-                attendees: [],
-                recurrence: 'none',
-            };
-            this._eventMetadata = {};
-            this._eventDeepLink = null;
-            this._eventAttachments = [];
-            this._attendeeDraft = '';
-            this._attendeeDropdownOpen = false;
-            this._eventDialogOpen = false;
-            await this._reload();
-        } catch (error) {
-            this.error(error instanceof Error ? error.message : this._calT('error_save_event'));
-        } finally {
-            this._saving = false;
+    _saveEvent() {
+        if (this._selectedEventId && !this._isEventEditable(this._selectedEventSource)) {
+            this.toast('err_edit_remote', { type: 'error', vars: { label: this._sourceLabel(this._selectedEventSource) } });
+            return;
         }
+        const payload = {
+            title: this._eventForm.title.trim(),
+            kind: String(this._eventForm.kind || '').trim(),
+            source: 'platform',
+            source_id: null,
+            namespace: null,
+            description: this._eventForm.description.trim() || null,
+            location: this._eventForm.location.trim() || null,
+            status: 'confirmed',
+            timezone: this._eventForm.timezone.trim(),
+            all_day: Boolean(this._eventForm.all_day),
+            start_at: new Date(this._eventForm.start_at).toISOString(),
+            end_at: new Date(this._eventForm.end_at).toISOString(),
+            attendees: this._attendeeTags(),
+            recurrence_rule: recurrenceToRule(this._eventForm.recurrence),
+            recurrence_id: null,
+            series_id: null,
+            deep_link: null,
+            metadata: buildEventMetadata(
+                {
+                    ...this._eventMetadata,
+                    [EVENT_COLOR_KEY]: normalizeEventColor(this._eventForm.color),
+                },
+                this._eventAttachments
+            ),
+        };
+        if (!payload.title) {
+            this.toast('err_title_required', { type: 'error' });
+            return;
+        }
+        if (!payload.kind) {
+            this.toast('err_kind_required', { type: 'error' });
+            return;
+        }
+        if (new Date(payload.start_at) >= new Date(payload.end_at)) {
+            this.toast('err_end_after_start', { type: 'error' });
+            return;
+        }
+        this._saving = true;
+        if (this._selectedEventId) {
+            this.dispatch(CALENDAR_EVENTS.EVENT_UPDATE_REQUESTED, {
+                event_id: this._selectedEventId,
+                ...payload,
+            });
+        } else {
+            this.dispatch(CALENDAR_EVENTS.EVENT_CREATE_REQUESTED, payload);
+        }
+        this._selectedEventId = null;
+        this._selectedEventSource = 'platform';
+        this._selectedEventKind = 'meeting';
+        this._selectedEventNamespace = null;
+        this._eventForm = {
+            ...this._eventForm,
+            kind: 'meeting',
+            color: DEFAULT_EVENT_COLOR,
+            title: '',
+            description: '',
+            location: '',
+            attendees: [],
+            recurrence: 'none',
+        };
+        this._eventMetadata = {};
+        this._eventDeepLink = null;
+        this._eventAttachments = [];
+        this._attendeeDraft = '';
+        this._attendeeDropdownOpen = false;
+        this._eventDialogOpen = false;
     }
 
-    async _deleteSelectedEvent() {
+    _deleteSelectedEvent() {
         if (!this._selectedEventId) {
-            throw new Error(this._calT('err_no_event_selected'));
+            this.toast('err_no_event_selected', { type: 'error' });
+            return;
         }
         if (!this._isEventEditable(this._selectedEventSource)) {
-            throw new Error(this._calT('err_delete_remote', { label: this._sourceLabel(this._selectedEventSource) }));
+            this.toast('err_delete_remote', { type: 'error', vars: { label: this._sourceLabel(this._selectedEventSource) } });
+            return;
         }
-        await this.calendarApi.deleteEvent(this._selectedEventId);
+        this.dispatch(CALENDAR_EVENTS.EVENT_DELETE_REQUESTED, { event_id: this._selectedEventId });
         this._selectedEventId = null;
         this._selectedEventSource = 'platform';
         this._selectedEventKind = 'meeting';
@@ -3057,14 +3205,12 @@ export class PlatformCalendarModal extends PlatformModal {
         this._eventAttachments = [];
         this._eventDeepLink = null;
         this._eventDialogOpen = false;
-        await this._reload();
     }
 
-    async _saveIntegration() {
-        this._saving = true;
+    _saveIntegration() {
         if (this._activeProvider === 'google') {
-            this._saving = false;
-            throw new Error(this._calT('err_google_oauth_only'));
+            this.toast('err_google_oauth_only', { type: 'error' });
+            return;
         }
         const payload = {
             provider: this._activeProvider,
@@ -3081,44 +3227,41 @@ export class PlatformCalendarModal extends PlatformModal {
             notifications_enabled: Boolean(this._integrationForm.notifications_enabled),
         };
         if (!payload.username) {
-            this._saving = false;
-            throw new Error(this._calT('err_username_required'));
+            this.toast('err_username_required', { type: 'error' });
+            return;
         }
         if (!payload.access_token) {
-            this._saving = false;
-            throw new Error(this._calT('err_app_password_required'));
+            this.toast('err_app_password_required', { type: 'error' });
+            return;
         }
-        await this.calendarApi.connectIntegration(payload);
-        this._saving = false;
-        await this._reload();
+        this._saving = true;
+        this.dispatch(CALENDAR_EVENTS.INTEGRATION_CONNECT_REQUESTED, payload);
     }
 
     _startGoogleConnect() {
         const returnPath = `${window.location.pathname}${window.location.search}`;
-        const connectUrl = this.calendarApi.getGoogleConnectUrl(returnPath);
+        const connectUrl = `/api/calendar/integrations/google/start?return_path=${encodeURIComponent(returnPath)}`;
         window.location.assign(connectUrl);
     }
 
-    async _disconnectIntegration(provider) {
-        await this.calendarApi.disconnectIntegration(provider);
-        await this._reload();
+    _disconnectIntegration(provider) {
+        this.dispatch(CALENDAR_EVENTS.INTEGRATION_DISCONNECT_REQUESTED, { provider });
     }
 
-    async _runSync(provider) {
+    _runSync(provider) {
         this._syncing = true;
         const range = this._viewRange();
-        await this.calendarApi.runSync({
+        this.dispatch(CALENDAR_EVENTS.SYNC_REQUESTED, {
             provider,
             start_at: range.start.toISOString(),
             end_at: range.end.toISOString(),
         });
-        this._syncing = false;
-        await this._reload();
     }
 
     _onIntegrationProviderSelect(provider) {
         this._activeProvider = provider;
-        const activeIntegration = this._integrations.find((item) => item.provider === provider) || null;
+        const integrations = this._integrationsSelect.value;
+        const activeIntegration = integrations.find((item) => item.provider === provider) || null;
         if (provider !== 'yandex' || !activeIntegration) {
             return;
         }
@@ -3625,7 +3768,7 @@ export class PlatformCalendarModal extends PlatformModal {
 
     _renderIntegrationContent() {
         const c = (key, params) => this._calT(key, params);
-        const activeIntegration = this._integrations.find((item) => item.provider === this._activeProvider) || null;
+        const activeIntegration = this._integrationsSelect.value.find((item) => item.provider === this._activeProvider) || null;
 
         if (this._activeProvider === 'google') {
             return this._renderGoogleIntegration(c, activeIntegration);
@@ -3723,7 +3866,7 @@ export class PlatformCalendarModal extends PlatformModal {
         const c = (key, params) => this._calT(key, params);
         return html`
             <div class="integration-list">
-                ${this._integrations.map((integration) => html`
+                ${this._integrationsSelect.value.map((integration) => html`
                     <div class="integration-item">
                         <div>
                             <div>${integration.provider.toUpperCase()} / ${integration.settings?.default_calendar_id || 'no-calendar'}</div>
@@ -3774,7 +3917,7 @@ export class PlatformCalendarModal extends PlatformModal {
     }
 
     _renderCalendarPanel() {
-        if (this._loading) {
+        if (this._calendarLoadingSelect.value) {
             return html`<div class="hint">${this._calT('loading')}</div>`;
         }
         if (this._view === 'month') {
@@ -3875,3 +4018,4 @@ export class PlatformCalendarModal extends PlatformModal {
 }
 
 customElements.define('platform-calendar-modal', PlatformCalendarModal);
+registerModalKind(PlatformCalendarModal.modalKind, 'platform-calendar-modal');

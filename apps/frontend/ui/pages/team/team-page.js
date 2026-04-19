@@ -1,462 +1,244 @@
 /**
- * Team Page - Управление командой компании
+ * Team page — участники компании, роли, ссылки-приглашения.
+ *
+ * Поток данных:
+ *   - resource frontend/team_members → list/update/remove
+ *   - op       frontend/team_invite  → генерация invite-ссылки на роль,
+ *     результат хранится в slice как `links: { [role]: link }`.
+ *
+ * Имя участника отображается через core <platform-user-chip>; клик по чипу
+ * открывает единую модалку platform.user_info, где админ редактирует роли
+ * инлайн (отдельной строки «Изменить роль» в таблице нет).
+ *
+ * Защита owner: на бэке (apps/frontend/api/team.py) запрещено удалять owner и
+ * снимать роль owner; UI скрывает кнопку удаления для строки владельца.
  */
 import { html, css } from 'lit';
-import { PlatformElement } from '@platform/lib/platform-element/index.js';
-import { copyTextToClipboard } from '@platform/lib/utils/clipboard.js';
-import { isStandaloneOrNativeAppShell } from '@platform/lib/utils/native-app-shell.js';
-import { createAvatarRetry } from '@platform/lib/utils/avatar-retry.js';
-import { FrontendStore } from '../../store/frontend.store.js';
-import '../../modals/edit-team-member-modal.js';
+import { PlatformPage } from '@platform/lib/base/PlatformPage.js';
 import '@platform/lib/components/layout/page-header.js';
+import '@platform/lib/components/platform-icon.js';
 import '@platform/lib/components/glass-spinner.js';
+import '@platform/lib/components/platform-user-chip.js';
 
-export class TeamPage extends PlatformElement {
+const INVITE_ROLES = Object.freeze(['developer', 'admin', 'viewer']);
+
+export class FrontendTeamPage extends PlatformPage {
     static styles = [
-        PlatformElement.styles,
+        PlatformPage.styles,
         css`
-            :host {
-                display: flex;
-                flex-direction: column;
-                height: 100%;
-            }
+            :host { display: block; }
 
-            .primary-button {
-                padding: var(--space-3) var(--space-6);
-                background: var(--accent);
-                color: white;
-                border: none;
-                border-radius: var(--radius-lg);
-                font-size: var(--text-sm);
-                font-weight: var(--font-medium);
-                cursor: pointer;
-                transition: all var(--duration-fast);
-                box-shadow: 0 4px 12px rgba(153, 166, 249, 0.25);
-            }
-
-            .primary-button:hover {
-                transform: scale(1.05);
-                box-shadow: 0 8px 24px rgba(153, 166, 249, 0.4);
-            }
-
-            .members-grid {
-                display: grid;
-                gap: 16px;
-            }
-
-            .member-card {
-                background: var(--glass-solid-medium);
-                border: 1px solid var(--glass-border-subtle);
-                border-radius: var(--radius-xl);
-                padding: var(--space-6);
-                backdrop-filter: blur(20px);
-                display: flex;
-                align-items: center;
-                gap: var(--space-5);
-                transition: all var(--duration-normal);
-            }
-
-            .member-card:hover {
-                background: var(--glass-solid-strong);
-                border-color: var(--glass-border-medium);
-            }
-
-            .member-avatar {
-                width: 56px;
-                height: 56px;
-                border-radius: 50%;
-                background: var(--accent-gradient);
-                display: flex;
-                align-items: center;
-                justify-content: center;
-                font-size: var(--text-xl);
-                font-weight: var(--font-semibold);
-                color: white;
-                flex-shrink: 0;
-                overflow: hidden;
-            }
-
-            .member-avatar img {
-                width: 100%;
-                height: 100%;
-                object-fit: cover;
-                border-radius: 50%;
-            }
-
-            .member-info {
-                flex: 1;
-            }
-
-            .member-name {
-                font-size: var(--text-lg);
-                font-weight: var(--font-semibold);
-                color: var(--text-primary);
-                margin: 0 0 var(--space-1) 0;
-            }
-
-            .member-email {
-                font-size: var(--text-sm);
-                color: var(--text-secondary);
-                margin: 0 0 var(--space-2) 0;
-            }
-
-            .member-roles {
-                display: flex;
+            .invite-toolbar {
+                display: flex; align-items: center; flex-wrap: nowrap;
                 gap: var(--space-2);
-                flex-wrap: wrap;
-            }
-
-            .role-badge {
-                padding: var(--space-1) var(--space-3);
-                background: var(--accent-subtle);
-                border: 1px solid var(--accent);
-                border-radius: var(--radius-md);
-                font-size: var(--text-xs);
-                font-weight: var(--font-semibold);
-                color: var(--accent);
-                text-transform: uppercase;
-                letter-spacing: 0.5px;
-            }
-
-            .role-badge.owner {
-                background: rgba(255, 215, 0, 0.15);
-                border-color: rgba(255, 215, 0, 0.3);
-                color: #FFD700;
-            }
-
-            .role-badge.admin {
-                background: rgba(255, 69, 58, 0.15);
-                border-color: rgba(255, 69, 58, 0.3);
-                color: #FF453A;
-            }
-
-            .member-actions {
-                display: flex;
-                gap: var(--space-2);
-            }
-
-            .icon-button {
-                width: 40px;
-                height: 40px;
-                display: flex;
-                align-items: center;
-                justify-content: center;
+                margin-bottom: var(--space-4);
+                padding: var(--space-3);
                 background: var(--glass-solid-subtle);
                 border: 1px solid var(--glass-border-subtle);
                 border-radius: var(--radius-md);
-                color: var(--text-secondary);
-                font-size: var(--text-base);
-                cursor: pointer;
-                transition: all var(--duration-fast);
             }
-
-            .icon-button:hover {
-                background: var(--glass-solid-medium);
-                transform: scale(1.1);
-            }
-
-            .icon-button.danger:hover {
-                background: var(--error-subtle);
-                border-color: var(--error);
-                color: var(--error);
-            }
-
-            .empty-state {
-                text-align: center;
-                padding: var(--space-16) var(--space-6);
-                color: var(--text-secondary);
-            }
-
-            .empty-icon {
-                font-size: 64px;
-                margin-bottom: var(--space-4);
-            }
-
-            .empty-title {
-                font-size: var(--text-2xl);
-                font-weight: var(--font-semibold);
+            .invite-toolbar .invite-role {
+                flex: 0 0 auto;
+                width: auto;
+                min-width: 160px;
+                padding: var(--space-2) var(--space-3);
+                background: var(--glass-solid-strong);
+                border: 1px solid var(--glass-border-subtle);
+                border-radius: var(--radius-md);
                 color: var(--text-primary);
-                margin: 0 0 var(--space-2) 0;
+                font-size: var(--text-sm);
+                cursor: pointer;
+            }
+            .invite-toolbar .btn { flex: 0 0 auto; white-space: nowrap; }
+            .invite-link {
+                flex: 1 1 0;
+                min-width: 0;
+                padding: var(--space-2) var(--space-3);
+                font-family: var(--font-mono);
+                font-size: var(--text-xs);
+                background: var(--glass-solid-strong);
+                border: 1px solid var(--glass-border-subtle);
+                border-radius: var(--radius-md);
+                color: var(--text-primary);
+                user-select: all;
+                overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
             }
 
-            .empty-description {
-                font-size: var(--text-base);
-                margin: 0 0 var(--space-6) 0;
+            .btn {
+                padding: var(--space-2) var(--space-4);
+                background: var(--accent); color: white; border: none;
+                border-radius: var(--radius-md); cursor: pointer;
+                font-size: var(--text-sm); font-weight: var(--font-medium);
             }
-
-            .page-loading {
-                display: flex;
-                align-items: center;
-                justify-content: center;
-                flex: 1;
-                min-height: 200px;
+            .btn:hover { filter: brightness(1.1); }
+            .btn-ghost {
+                background: transparent; color: var(--text-secondary);
+                border: 1px solid var(--glass-border-subtle);
             }
+            .btn-ghost:hover { color: var(--text-primary); border-color: var(--accent); }
+            .btn-danger { color: var(--error); }
 
-            @media (max-width: 768px) {
-                .page-header {
-                    flex-direction: column;
-                    align-items: flex-start;
-                    gap: var(--space-4);
-                }
-
-                .member-card {
-                    flex-direction: column;
-                    align-items: flex-start;
-                }
-
-                .member-actions {
-                    width: 100%;
-                    justify-content: flex-end;
-                }
+            table { width: 100%; border-collapse: collapse; }
+            th, td {
+                padding: var(--space-3);
+                border-bottom: 1px solid var(--glass-border-subtle);
+                text-align: left;
             }
-        `
+            th {
+                color: var(--text-tertiary);
+                font-size: var(--text-xs);
+                text-transform: uppercase; letter-spacing: 0.05em;
+            }
+            td { color: var(--text-primary); font-size: var(--text-sm); vertical-align: middle; }
+            td.actions { text-align: right; }
+            td.actions button + button { margin-left: var(--space-2); }
+
+            .role-tag {
+                padding: 2px 8px;
+                background: var(--glass-solid-medium);
+                border-radius: var(--radius-full);
+                font-size: var(--text-xs); color: var(--text-secondary);
+                margin-right: var(--space-1);
+            }
+            .role-tag.owner { background: var(--accent); color: white; }
+
+            .empty {
+                padding: var(--space-8) var(--space-6);
+                text-align: center; color: var(--text-tertiary);
+                background: var(--glass-solid-subtle);
+                border: 1px dashed var(--glass-border-subtle);
+                border-radius: var(--radius-lg);
+            }
+            .empty .empty-title { color: var(--text-primary); font-weight: var(--font-semibold); margin-bottom: var(--space-2); }
+        `,
     ];
+
+    static properties = {
+        _selectedRole: { state: true },
+    };
 
     constructor() {
         super();
-        this._canManageTeam = false;
-        this._avatarRetries = new Map();
-        this.state = this.use((s) => ({
-            members: s.entities.team.members,
-            loading: s.entities.team.loading,
-        }));
+        this._members = this.useResource('frontend/team_members', { autoload: true });
+        this._invite = this.useOp('frontend/team_invite');
+        this._selectedRole = 'developer';
     }
 
-    disconnectedCallback() {
-        super.disconnectedCallback?.();
-        for (const ctrl of this._avatarRetries.values()) {
-            ctrl.cancel();
-        }
-        this._avatarRetries.clear();
+    _generateInvite() {
+        this._invite.run({ role: this._selectedRole });
     }
 
-    _getAvatarRetry(memberId) {
-        if (!this._avatarRetries.has(memberId)) {
-            this._avatarRetries.set(memberId, createAvatarRetry(() => this.requestUpdate()));
-        }
-        return this._avatarRetries.get(memberId);
+    _copyInvite(link) {
+        this.copyToClipboard(link, {
+            success_i18n_key: 'team_page.toast_invite_copied',
+            error_i18n_key: 'team_page.err_clipboard',
+        });
     }
 
-    _computeCanManageTeam() {
-        const u = this.services.get('auth').user;
-        if (!u || !Array.isArray(u.roles)) {
-            return false;
-        }
-        return u.roles.includes('owner') || u.roles.includes('admin');
+    _removeMember(member) {
+        const name = member.name || member.email || this.t('team_page.member_fallback');
+        const message = this.t('team_page.confirm_remove', { name });
+        if (!confirm(message)) return;
+        this._members.remove(member.user_id);
     }
 
-    async connectedCallback() {
-        super.connectedCallback();
-        this._i18nUnsub = this.i18n.subscribe(() => this.requestUpdate());
-        await this.services.get('auth').validateToken();
-        this._canManageTeam = this._computeCanManageTeam();
-        this.requestUpdate();
-        await this._loadMembers();
+    _isOwner(member) {
+        return Array.isArray(member.roles) && member.roles.includes('owner');
     }
 
-    disconnectedCallback() {
-        if (this._i18nUnsub) {
-            this._i18nUnsub();
-            this._i18nUnsub = null;
-        }
-        super.disconnectedCallback();
+    _renderRoles(member) {
+        const roles = member.roles || [];
+        if (roles.length === 0) return '';
+        return roles.map((r) => html`
+            <span class="role-tag ${r === 'owner' ? 'owner' : ''}">${this.t(`team_roles.${r}`)}</span>
+        `);
     }
 
-    async _loadMembers() {
-        FrontendStore.setTeamLoading(true);
-        const teamMembers = await this.services.get('team').getMembers();
-        FrontendStore.setTeamMembers(teamMembers);
+    _renderInviteToolbar(inviteLinks) {
+        const link = inviteLinks[this._selectedRole];
+        return html`
+            <div class="invite-toolbar">
+                <select
+                    class="invite-role"
+                    .value=${this._selectedRole}
+                    @change=${(e) => { this._selectedRole = e.target.value; }}
+                >
+                    ${INVITE_ROLES.map((r) => html`
+                        <option value=${r}>${this.t(`team_roles.${r}`)}</option>
+                    `)}
+                </select>
+                ${link ? html`
+                    <span class="invite-link" title=${link}>${link}</span>
+                    <button class="btn btn-ghost" @click=${() => this._copyInvite(link)}>
+                        ${this.t('api_keys_page.copy_title')}
+                    </button>
+                ` : ''}
+                <button class="btn" @click=${this._generateInvite}>
+                    ${this.t('team_page.copy_invite')}
+                </button>
+            </div>
+        `;
+    }
+
+    _renderEmpty() {
+        return html`
+            <div class="empty">
+                <div class="empty-title">${this.t('team_page.empty_title')}</div>
+                <div>${this.t('team_page.empty_description')}</div>
+            </div>
+        `;
+    }
+
+    _renderRow(m) {
+        const isOwner = this._isOwner(m);
+        return html`
+            <tr>
+                <td><platform-user-chip user-id=${m.user_id} size="md"></platform-user-chip></td>
+                <td>${m.email || ''}</td>
+                <td>${this._renderRoles(m)}</td>
+                <td class="actions">
+                    ${isOwner ? '' : html`
+                        <button class="btn btn-ghost btn-danger" @click=${() => this._removeMember(m)}>
+                            ${this.t('team_page.remove')}
+                        </button>
+                    `}
+                </td>
+            </tr>
+        `;
     }
 
     render() {
-        const td = (key, params) => this.i18n.t(key, params ?? {});
+        const members = this._members.items;
+        const loading = this._members.loading;
+        const inviteLinks = this._invite.state.links;
         return html`
-            <page-header title=${td('team_page.title')}>
-                <button slot="actions" class="primary-button" @click=${this._onCopyInviteLink}>
-                    ${td('team_page.copy_invite')}
-                </button>
-            </page-header>
+            <page-header
+                title=${this.t('team_page.title')}
+                subtitle=${this.t('team_page.subtitle')}
+            ></page-header>
 
-            ${this._renderContent()}
-        `;
-    }
+            ${this._renderInviteToolbar(inviteLinks)}
 
-    _renderContent() {
-        const td = (key, params) => this.i18n.t(key, params ?? {});
-        const { members, loading } = this.state.value;
-        const membersArray = Array.isArray(members) ? members : [];
-        
-        if (loading) {
-            return html`<div class="page-loading"><glass-spinner size="lg"></glass-spinner></div>`;
-        }
-
-        if (membersArray.length === 0) {
-            return html`
-                <div class="empty-state">
-                    <div class="empty-icon">T</div>
-                    <h2 class="empty-title">${td('team_page.empty_title')}</h2>
-                    <p class="empty-description">${td('team_page.empty_description')}</p>
-                    <button class="primary-button" @click=${this._onCopyInviteLink}>
-                        ${td('team_page.copy_invite_action')}
-                    </button>
-                </div>
-            `;
-        }
-
-        return html`
-            <div class="members-grid">
-                ${membersArray.map((member) => this._renderMemberCard(member))}
-            </div>
-        `;
-    }
-
-    _renderMemberCard(member) {
-        const td = (key, params) => this.i18n.t(key, params ?? {});
-        const roleLabel = (r) => this.i18n.t(`team_roles.${r}`, {});
-        const initials = this._getInitials(member.name);
-        const retry = this._getAvatarRetry(member.user_id);
-        const originalUrl = member.avatar_url ?? null;
-        const avatarSrc = retry.currentSrc(originalUrl);
-        
-        return html`
-            <div class="member-card">
-                <div class="member-avatar">
-                    ${avatarSrc
-                        ? html`<img src=${avatarSrc} alt=""
-                            @load=${() => retry.onLoad()}
-                            @error=${() => retry.onError(originalUrl)} />`
-                        : initials}
-                </div>
-                
-                <div class="member-info">
-                    <h3 class="member-name">${member.name}</h3>
-                    ${member.email ? html`
-                        <p class="member-email">${member.email}</p>
-                    ` : ''}
-                    <div class="member-roles">
-                        ${member.roles.map((role) => html`
-                            <span class="role-badge ${role}">${roleLabel(role)}</span>
-                        `)}
-                    </div>
-                </div>
-                
-                <div class="member-actions">
-                    ${this._canManageTeam
-                        ? html`
-                              <button
-                                  class="icon-button"
-                                  title=${td('team_page.edit_role')}
-                                  @click=${() => this._onEditRole(member)}
-                              >
-                                  E
-                              </button>
-                              ${!member.roles.includes('owner')
-                                  ? html`
-                                        <button
-                                            class="icon-button danger"
-                                            title=${td('team_page.remove')}
-                                            @click=${() => this._onRemoveMember(member)}
-                                        >
-                                            X
-                                        </button>
-                                    `
-                                  : ''}
-                          `
-                        : ''}
-                </div>
-            </div>
-        `;
-    }
-
-    _getInitials(name) {
-        if (!name) return 'U';
-        const parts = name.split(' ');
-        if (parts.length >= 2) {
-            return `${parts[0][0]}${parts[1][0]}`.toUpperCase();
-        }
-        return name[0].toUpperCase();
-    }
-
-    async _shareInviteUrl(url) {
-        if (typeof navigator.share !== 'function') {
-            return 'unavailable';
-        }
-        const payloads = [{ url }, { url, text: url }];
-        for (const data of payloads) {
-            if (typeof navigator.canShare === 'function' && !navigator.canShare(data)) {
-                continue;
+            ${loading && members.length === 0
+                ? html`<div class="empty"><glass-spinner></glass-spinner></div>`
+                : members.length === 0
+                    ? this._renderEmpty()
+                    : html`
+                        <table>
+                            <thead><tr>
+                                <th>${this.t('team_page.col_name')}</th>
+                                <th>${this.t('team_page.col_email')}</th>
+                                <th>${this.t('team_page.col_role')}</th>
+                                <th>${this.t('team_page.col_actions')}</th>
+                            </tr></thead>
+                            <tbody>
+                                ${members.map((m) => this._renderRow(m))}
+                            </tbody>
+                        </table>
+                    `
             }
-            try {
-                await navigator.share(data);
-                return 'shared';
-            } catch (err) {
-                const name = err && typeof err === 'object' && 'name' in err ? err.name : '';
-                if (name === 'AbortError') {
-                    return 'aborted';
-                }
-            }
-        }
-        return 'failed';
-    }
-
-    async _onCopyInviteLink() {
-        const td = (key) => this.i18n.t(key, {});
-        let result;
-        try {
-            result = await this.services.get('team').generateInviteLink('developer');
-        } catch {
-            this.error(td('team_page.err_invite'));
-            return;
-        }
-
-        const url = result.invite_url;
-        const shell = typeof window !== 'undefined' && isStandaloneOrNativeAppShell();
-
-        try {
-            await copyTextToClipboard(url);
-            this.success(td('team_page.toast_invite_copied'));
-            return;
-        } catch {
-            if (!shell) {
-                this.error(td('team_page.err_clipboard'));
-                return;
-            }
-        }
-
-        const shareOutcome = await this._shareInviteUrl(url);
-        if (shareOutcome === 'shared') {
-            this.success(td('team_page.toast_invite_shared'));
-            return;
-        }
-        if (shareOutcome === 'aborted') {
-            return;
-        }
-        this.error(td('team_page.err_clipboard'));
-    }
-
-    async _reloadMembers() {
-        FrontendStore.setTeamLoading(true);
-        const members = await this.services.get('team').getMembers();
-        FrontendStore.setTeamMembers(members);
-    }
-
-    _onEditRole(member) {
-        const modal = document.createElement('edit-team-member-modal');
-        document.body.appendChild(modal);
-        modal.addEventListener('close', () => modal.remove());
-        modal.addEventListener('saved', () => this._reloadMembers());
-        modal.show(member);
-    }
-
-    async _onRemoveMember(member) {
-        const td = (key, params) => this.i18n.t(key, params ?? {});
-        const confirmed = confirm(td('team_page.confirm_remove', { name: member.name }));
-        if (!confirmed) return;
-        
-        await this.services.get('team').removeMember(member.user_id);
-        await this._reloadMembers();
-        this.success(td('team_page.toast_removed', { name: member.name }));
+        `;
     }
 }
 
-customElements.define('team-page', TeamPage);
+customElements.define('frontend-team-page', FrontendTeamPage);

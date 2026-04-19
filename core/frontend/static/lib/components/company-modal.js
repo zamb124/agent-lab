@@ -1,432 +1,274 @@
+/**
+ * company-modal — окно создания компании.
+ *
+ * Открытие: dispatch CoreEvents.UI_MODAL_OPEN { kind: 'platform.company_create' }.
+ * Закрытие: this.close() / this.closeAfterSave() (dispatch CoreEvents.UI_MODAL_CLOSE).
+ *
+ * Логика:
+ *   - проверка slug — dispatch COMPANIES_EVENTS.SLUG_CHECK_REQUESTED, ответ берётся
+ *     селектором из state.companies.slugChecks[slug];
+ *   - создание компании — dispatch COMPANIES_EVENTS.CREATE_REQUESTED, по CREATED
+ *     модалка закрывается и происходит навигация по redirect_url из payload.
+ */
 import { html, css } from 'lit';
-import { PlatformElement } from '../platform-element/index.js';
-import { Services } from '@platform/services/index.js';
-import { nextModalLayerZIndex } from '../utils/modal-z-stack.js';
+import { PlatformFormModal } from './glass-form-modal.js';
+import { registerModalKind } from '../utils/modal-registry.js';
+import { COMPANIES_EVENTS } from '../events/reducers/companies.js';
 import { formatCompanySubdomainLabel } from '../utils/tenant-url.js';
 
-export class CompanyModal extends PlatformElement {
+const TRANSLIT = {
+    'а': 'a', 'б': 'b', 'в': 'v', 'г': 'g', 'д': 'd', 'е': 'e', 'ё': 'yo', 'ж': 'zh',
+    'з': 'z', 'и': 'i', 'й': 'y', 'к': 'k', 'л': 'l', 'м': 'm', 'н': 'n', 'о': 'o',
+    'п': 'p', 'р': 'r', 'с': 's', 'т': 't', 'у': 'u', 'ф': 'f', 'х': 'h', 'ц': 'ts',
+    'ч': 'ch', 'ш': 'sh', 'щ': 'sch', 'ъ': '', 'ы': 'y', 'ь': '', 'э': 'e', 'ю': 'yu', 'я': 'ya',
+};
+
+function _slugify(text) {
+    if (!text) return '';
+    let slug = text.toLowerCase();
+    for (const [cyr, lat] of Object.entries(TRANSLIT)) {
+        slug = slug.replace(new RegExp(cyr, 'g'), lat);
+    }
+    slug = slug.replace(/[^a-z0-9-]/g, '-');
+    slug = slug.replace(/-+/g, '-');
+    slug = slug.replace(/^-+|-+$/g, '');
+    return slug;
+}
+
+export class CompanyModal extends PlatformFormModal {
+    static modalKind = 'platform.company_create';
+
     static properties = {
-        open: { type: Boolean },
-        loading: { type: Boolean },
-        error: { type: String },
-        companyName: { type: String },
-        companySlug: { type: String },
-        slugAvailable: { type: Boolean },
-        slugChecking: { type: Boolean },
-        slugError: { type: String },
-        slugTouched: { type: Boolean }
+        ...PlatformFormModal.properties,
+        companyName: { state: true },
+        companySlug: { state: true },
+        slugTouched: { state: true },
+        slugChecking: { state: true },
+        error: { state: true },
     };
 
     static styles = [
-        PlatformElement.styles,
+        PlatformFormModal.styles,
         css`
-            :host {
-                display: none;
-                position: fixed;
-                top: 0;
-                left: 0;
-                width: 100%;
-                height: 100%;
-                z-index: var(--platform-modal-layer-z, var(--z-modal, 1000));
+            .input-wrapper { position: relative; }
+            .slug-status {
+                position: absolute; right: var(--space-3); top: 50%;
+                transform: translateY(-50%); font-size: var(--text-sm);
             }
-
-            :host([open]) {
-                display: flex;
-                align-items: center;
-                justify-content: center;
-            }
-
-            .modal-overlay {
-                position: absolute;
-                top: 0;
-                left: 0;
-                width: 100%;
-                height: 100%;
-                background: rgba(0, 0, 0, 0.7);
-                backdrop-filter: blur(10px);
-                display: flex;
-                align-items: center;
-                justify-content: center;
-            }
-
-            .modal-content {
-                background: var(--glass-bg);
-                border: 1px solid var(--glass-border);
-                border-radius: 24px;
-                padding: 40px;
-                max-width: 500px;
-                width: 90%;
-                backdrop-filter: blur(20px);
-                box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
-            }
-
-            .modal-header {
-                text-align: center;
-                margin-bottom: 32px;
-            }
-
-            .modal-title {
-                font-family: 'Fira Sans Condensed', sans-serif;
-                font-size: 28px;
-                font-weight: 600;
-                color: var(--landing-secondary);
-                margin: 0 0 8px 0;
-            }
-
-            .modal-subtitle {
-                font-family: 'Fira Sans', sans-serif;
-                font-size: 16px;
-                color: var(--landing-secondary);
-                opacity: 0.7;
-            }
-
-            .form-group {
-                margin-bottom: 24px;
-            }
-
-            .form-label {
-                display: block;
-                font-family: 'Fira Sans', sans-serif;
-                font-size: 14px;
-                color: var(--landing-secondary);
-                margin-bottom: 8px;
-            }
-
-            .form-input {
-                width: 100%;
-                padding: 12px 16px;
-                background: rgba(255, 255, 255, 0.05);
-                border: 1px solid rgba(255, 255, 255, 0.1);
-                border-radius: 12px;
-                font-family: 'Fira Sans', sans-serif;
-                font-size: 16px;
-                color: var(--landing-secondary);
-                transition: all 0.3s ease;
-            }
-
-            .form-input:focus {
-                outline: none;
-                border-color: var(--landing-primary);
-                background: rgba(255, 255, 255, 0.08);
-            }
-
-            .button-group {
-                display: flex;
-                gap: 12px;
-            }
-
-            .button {
-                flex: 1;
-                padding: 14px 20px;
-                border-radius: 12px;
-                font-family: 'Fira Sans', sans-serif;
-                font-size: 16px;
-                font-weight: 500;
-                cursor: pointer;
-                transition: all 0.3s ease;
-                border: none;
-            }
-
-            .button-primary {
-                background: var(--landing-primary);
-                color: var(--landing-secondary);
-            }
-
-            .button-primary:hover:not(:disabled) {
-                background: #6877ff;
-            }
-
-            .button-secondary {
-                background: rgba(255, 255, 255, 0.05);
-                color: var(--landing-secondary);
-                border: 1px solid rgba(255, 255, 255, 0.1);
-            }
-
-            .button-secondary:hover:not(:disabled) {
-                background: rgba(255, 255, 255, 0.1);
-            }
-
-            .button:disabled {
-                opacity: 0.5;
-                cursor: not-allowed;
-            }
-
+            .slug-status.checking { opacity: 0.6; }
+            .slug-status.available { color: #34C759; }
+            .slug-status.unavailable { color: #FF3B30; }
+            .slug-hint { font-size: var(--text-xs); opacity: 0.6; margin-top: 4px; }
+            .slug-preview { font-size: var(--text-xs); color: var(--accent); margin-top: 4px; }
+            .slug-error { font-size: var(--text-xs); color: #FF3B30; margin-top: 4px; }
             .error {
-                margin-top: 16px;
-                padding: 12px;
+                margin-top: var(--space-3); padding: var(--space-3);
                 background: rgba(255, 59, 48, 0.1);
                 border: 1px solid rgba(255, 59, 48, 0.3);
-                border-radius: 8px;
-                color: #FF3B30;
-                font-size: 14px;
-                text-align: center;
+                border-radius: var(--radius-sm);
+                color: #FF3B30; font-size: var(--text-sm); text-align: center;
             }
-
-            .input-wrapper {
-                position: relative;
-            }
-
-            .slug-status {
-                position: absolute;
-                right: 16px;
-                top: 50%;
-                transform: translateY(-50%);
-                font-size: 14px;
-            }
-
-            .slug-status.checking {
-                color: var(--landing-secondary);
-                opacity: 0.5;
-            }
-
-            .slug-status.available {
-                color: #34C759;
-            }
-
-            .slug-status.unavailable {
-                color: #FF3B30;
-            }
-
-            .slug-hint {
-                font-size: 12px;
-                color: var(--landing-secondary);
-                opacity: 0.6;
-                margin-top: 4px;
-            }
-
-            .slug-preview {
-                font-size: 12px;
-                color: var(--landing-primary);
-                margin-top: 4px;
-            }
-
-            .slug-error {
-                font-size: 12px;
-                color: #FF3B30;
-                margin-top: 4px;
-            }
-        `
+        `,
     ];
 
     constructor() {
         super();
-        this.open = false;
-        this.loading = false;
-        this.error = '';
         this.companyName = '';
         this.companySlug = '';
-        this.slugAvailable = null;
-        this.slugChecking = false;
-        this.slugError = '';
         this.slugTouched = false;
-        this._debounceTimer = null;
-    }
-
-    willUpdate(changedProperties) {
-        super.willUpdate(changedProperties);
-        if (changedProperties.has('open') && this.open) {
-            this.style.setProperty(
-                '--platform-modal-layer-z',
-                String(nextModalLayerZIndex()),
-            );
-        }
-    }
-
-    _slugify(text) {
-        if (!text) return '';
-        
-        const translitMap = {
-            'а': 'a', 'б': 'b', 'в': 'v', 'г': 'g', 'д': 'd', 'е': 'e', 'ё': 'yo', 'ж': 'zh', 
-            'з': 'z', 'и': 'i', 'й': 'y', 'к': 'k', 'л': 'l', 'м': 'm', 'н': 'n', 'о': 'o', 
-            'п': 'p', 'р': 'r', 'с': 's', 'т': 't', 'у': 'u', 'ф': 'f', 'х': 'h', 'ц': 'ts', 
-            'ч': 'ch', 'ш': 'sh', 'щ': 'sch', 'ъ': '', 'ы': 'y', 'ь': '', 'э': 'e', 'ю': 'yu', 'я': 'ya'
-        };
-        
-        let slug = text.toLowerCase();
-        for (const [cyr, lat] of Object.entries(translitMap)) {
-            slug = slug.replace(new RegExp(cyr, 'g'), lat);
-        }
-        
-        slug = slug.replace(/[^a-z0-9-]/g, '-');
-        slug = slug.replace(/-+/g, '-');
-        slug = slug.replace(/^-+|-+$/g, '');
-        
-        return slug;
-    }
-
-    _handleNameInput(e) {
-        this.companyName = e.target.value;
-        
-        if (!this.slugTouched) {
-            this.companySlug = this._slugify(this.companyName);
-            this._debouncedCheckSlug();
-        }
-    }
-
-    _handleSlugInput(e) {
-        this.companySlug = e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, '');
-        this.slugTouched = true;
-        this._debouncedCheckSlug();
-    }
-
-    _debouncedCheckSlug() {
-        clearTimeout(this._debounceTimer);
-        this._debounceTimer = setTimeout(() => this._checkSlugAvailability(), 500);
-    }
-
-    async _checkSlugAvailability() {
-        if (!this.companySlug || this.companySlug.length < 3) {
-            this.slugAvailable = null;
-            this.slugError = this.companySlug ? this.i18n.t('company.slug_min', {}, 'shell') : '';
-            return;
-        }
-
-        this.slugChecking = true;
-        this.slugError = '';
-
-        try {
-            const data = await Services.companies.checkSlugAvailability(this.companySlug);
-            this.slugAvailable = data.available;
-            
-            if (!data.available) {
-                this.slugError = this.i18n.t('company.slug_taken', {}, 'shell');
-            }
-        } catch (error) {
-            console.error('Error checking slug:', error);
-            this.slugError = this.i18n.t('company.slug_check_error', {}, 'shell');
-        } finally {
-            this.slugChecking = false;
-        }
-    }
-
-    async handleSubmit(e) {
-        e.preventDefault();
-        
-        if (!this.companyName.trim()) {
-            this.error = this.i18n.t('company.error_name_required', {}, 'shell');
-            return;
-        }
-
-        if (!this.companySlug || this.companySlug.length < 3) {
-            this.error = this.i18n.t('company.error_slug_invalid', {}, 'shell');
-            return;
-        }
-
-        if (this.slugAvailable === false) {
-            this.error = this.i18n.t('company.error_slug_taken', {}, 'shell');
-            return;
-        }
-
-        this.loading = true;
+        this.slugChecking = false;
         this.error = '';
+        this._debounceTimer = null;
+        this._slugChecksSel = this.select((s) => s.companies.slugChecks);
+    }
 
-        try {
-            const data = await Services.companies.createCompany(this.companyName, this.companySlug);
-
-            this.open = false;
-            this.dispatchEvent(new CustomEvent('company-created', { detail: data }));
-            
-            if (data.redirect_url) {
-                window.location.href = data.redirect_url;
+    connectedCallback() {
+        super.connectedCallback();
+        this.useEvent(COMPANIES_EVENTS.SLUG_CHECKED, (e) => {
+            const slug = e.payload && e.payload.slug;
+            if (slug === this.companySlug) {
+                this.slugChecking = false;
+            }
+        });
+        this.useEvent(COMPANIES_EVENTS.SLUG_CHECK_FAILED, (e) => {
+            const slug = e.payload && e.payload.slug;
+            if (slug === this.companySlug) {
+                this.slugChecking = false;
+                this.error = (e.payload && e.payload.message)
+                    || (this.t('company.slug_check_error') || 'company.slug_check_error');
+            }
+        });
+        this.useEvent(COMPANIES_EVENTS.CREATED, (e) => {
+            this.loading = false;
+            this.closeAfterSave();
+            const url = e.payload && e.payload.redirect_url;
+            if (url) {
+                window.location.href = url;
             } else {
                 window.location.reload();
             }
-        } catch (error) {
-            this.error = error.message;
-        } finally {
+        });
+        this.useEvent(COMPANIES_EVENTS.CREATE_FAILED, (e) => {
             this.loading = false;
+            this.error = (e.payload && e.payload.message)
+                || (this.t('company.error_create') || 'company.error_create');
+        });
+    }
+
+    disconnectedCallback() {
+        super.disconnectedCallback();
+        if (this._debounceTimer) {
+            clearTimeout(this._debounceTimer);
+            this._debounceTimer = null;
         }
     }
 
-    _handleContentClick(e) {
-        // Предотвращаем закрытие модалки при клике на содержимое
-        e.stopPropagation();
+    willUpdate(changed) {
+        super.willUpdate(changed);
+        this.title = this.t('company.create_title') || 'company.create_title';
     }
 
-    _handleOverlayClick(e) {
-        // Закрываем модалку только при клике на overlay (фон), но не на содержимое
-        if (e.target === e.currentTarget) {
-            this.open = false;
-            this.dispatchEvent(new CustomEvent('close', { bubbles: true, composed: true }));
+    _slugCheck() {
+        const slug = this.companySlug;
+        if (!slug || slug.length < 3) return null;
+        const checks = (this._slugChecksSel && this._slugChecksSel.value) || {};
+        return checks[slug] || null;
+    }
+
+    _slugError() {
+        if (!this.companySlug) return '';
+        if (this.companySlug.length < 3) return this.t('company.slug_min') || 'company.slug_min';
+        const r = this._slugCheck();
+        if (r && r.available === false) return this.t('company.slug_taken') || 'company.slug_taken';
+        return '';
+    }
+
+    _isAvailable() {
+        const r = this._slugCheck();
+        return r && r.available === true;
+    }
+
+    _onName(e) {
+        this.companyName = e.target.value;
+        this.isDirty = true;
+        if (!this.slugTouched) {
+            this.companySlug = _slugify(this.companyName);
+            this._scheduleSlugCheck();
         }
     }
 
-    render() {
-        const t = (key) => this.i18n.t(key, {}, 'shell');
+    _onSlug(e) {
+        this.companySlug = e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, '');
+        this.slugTouched = true;
+        this.isDirty = true;
+        this._scheduleSlugCheck();
+    }
+
+    _scheduleSlugCheck() {
+        if (this._debounceTimer) clearTimeout(this._debounceTimer);
+        this._debounceTimer = setTimeout(() => {
+            if (!this.companySlug || this.companySlug.length < 3) return;
+            const checks = (this._slugChecksSel && this._slugChecksSel.value) || {};
+            if (checks[this.companySlug]) return;
+            this.slugChecking = true;
+            this.dispatch(COMPANIES_EVENTS.SLUG_CHECK_REQUESTED, { slug: this.companySlug });
+        }, 400);
+    }
+
+    validateForm() {
+        const errs = {};
+        if (!this.companyName.trim()) {
+            errs.name = this.t('company.error_name_required') || 'company.error_name_required';
+        }
+        if (!this.companySlug || this.companySlug.length < 3) {
+            errs.slug = this.t('company.error_slug_invalid') || 'company.error_slug_invalid';
+        }
+        if (!this._isAvailable()) {
+            errs.slug = this.t('company.error_slug_taken') || 'company.error_slug_taken';
+        }
+        return errs;
+    }
+
+    async handleSubmit() {
+        this.error = '';
+        this.dispatch(COMPANIES_EVENTS.CREATE_REQUESTED, {
+            name: this.companyName,
+            slug: this.companySlug,
+        });
+    }
+
+    renderBody() {
+        const t = (key) => this.t(key) || key;
+        const slugErr = this._slugError();
+        const isAvail = this._isAvailable();
         return html`
-            <div class="modal-overlay" @click=${this._handleOverlayClick}>
-                <div class="modal-content" @click=${this._handleContentClick}>
-                <div class="modal-header">
-                    <h2 class="modal-title">${t('company.create_title')}</h2>
-                    <p class="modal-subtitle">${t('company.create_subtitle')}</p>
+            <p class="modal-subtitle">${t('company.create_subtitle')}</p>
+            <form @submit=${this._onSubmit}>
+                <div class="form-group">
+                    <label class="form-label">${t('company.name_label')}</label>
+                    <input
+                        type="text"
+                        class="form-input"
+                        .value=${this.companyName}
+                        @input=${this._onName}
+                        placeholder=${t('company.name_placeholder')}
+                        ?disabled=${this.loading}
+                        required
+                    />
                 </div>
-
-                <form @submit=${this.handleSubmit}>
-                    <div class="form-group">
-                        <label class="form-label">${t('company.name_label')}</label>
+                <div class="form-group">
+                    <label class="form-label">${t('company.slug_label')}</label>
+                    <div class="input-wrapper">
                         <input
                             type="text"
                             class="form-input"
-                            .value=${this.companyName}
-                            @input=${this._handleNameInput}
-                            placeholder=${t('company.name_placeholder')}
+                            .value=${this.companySlug}
+                            @input=${this._onSlug}
+                            placeholder="moya-kompaniya"
+                            pattern="[a-z0-9-]+"
+                            minlength="3"
+                            maxlength="63"
                             ?disabled=${this.loading}
                             required
                         />
+                        ${this.slugChecking
+                            ? html`<span class="slug-status checking">…</span>`
+                            : isAvail
+                                ? html`<span class="slug-status available">✓</span>`
+                                : (slugErr
+                                    ? html`<span class="slug-status unavailable">✗</span>`
+                                    : '')}
                     </div>
-
-                    <div class="form-group">
-                        <label class="form-label">${t('company.slug_label')}</label>
-                        <div class="input-wrapper">
-                            <input
-                                type="text"
-                                class="form-input"
-                                .value=${this.companySlug}
-                                @input=${this._handleSlugInput}
-                                placeholder="moya-kompaniya"
-                                pattern="[a-z0-9-]+"
-                                minlength="3"
-                                maxlength="63"
-                                ?disabled=${this.loading}
-                                required
-                            />
-                            ${this.slugChecking ? html`
-                                <span class="slug-status checking">⏳</span>
-                            ` : this.slugAvailable === true ? html`
-                                <span class="slug-status available">✓</span>
-                            ` : this.slugAvailable === false ? html`
-                                <span class="slug-status unavailable">✗</span>
-                            ` : ''}
-                        </div>
-                        ${this.companySlug && !this.slugError ? html`
-                            <div class="slug-preview">
-                                ${formatCompanySubdomainLabel(this.companySlug)}
-                            </div>
-                        ` : ''}
-                        ${this.slugError ? html`
-                            <div class="slug-error">${this.slugError}</div>
-                        ` : html`
-                            <div class="slug-hint">${t('company.slug_hint')}</div>
-                        `}
-                    </div>
-
-                    <div class="button-group">
-                        <button
-                            type="submit"
-                            class="button button-primary"
-                            ?disabled=${this.loading || this.slugChecking || this.slugAvailable === false}
-                        >
-                            ${this.loading ? t('company.creating') : t('company.submit')}
-                        </button>
-                    </div>
-
-                    ${this.error ? html`<div class="error">${this.error}</div>` : ''}
-                </form>
+                    ${slugErr
+                        ? html`<div class="slug-error">${slugErr}</div>`
+                        : (this.companySlug
+                            ? html`<div class="slug-preview">${formatCompanySubdomainLabel(this.companySlug)}</div>`
+                            : html`<div class="slug-hint">${t('company.slug_hint')}</div>`)}
                 </div>
+                ${this.error ? html`<div class="error">${this.error}</div>` : ''}
+            </form>
+        `;
+    }
+
+    renderFooter() {
+        const t = (key) => this.t(key) || key;
+        return html`
+            <div class="form-actions">
+                <button type="button" class="btn btn-secondary" @click=${this.close}>
+                    ${t('form_modal.cancel')}
+                </button>
+                <button
+                    type="button"
+                    class="btn btn-primary"
+                    @click=${() => this._performSave()}
+                    ?disabled=${this.loading || this.slugChecking || !this._isAvailable()}
+                >
+                    ${this.loading ? t('company.creating') : t('company.submit')}
+                </button>
             </div>
         `;
     }
 }
 
 customElements.define('company-modal', CompanyModal);
-
+registerModalKind(CompanyModal.modalKind, 'company-modal');

@@ -1,0 +1,312 @@
+---
+alwaysApply: true
+---
+# UI Components — правила core UI Kit
+
+Все компоненты UI Kit живут в `core/frontend/static/lib/components/**` и
+наследуют `PlatformElement`. Это **единственная зона**, где допустимы прямые
+вызовы `dispatch(CoreEvents.UI_*|ROUTER_*|AUTH_*|...)` и `new CustomEvent(...)`
+для slot-композиции — потому что тут эти helpers и реализуются.
+
+См. также: `frontend.mdc` (запреты в apps), `ui_factories.mdc` (контракт
+фабрик), `ui_events.mdc` (контракт событий).
+
+## Категории
+
+1. **Presentational** (`glass-button`, `glass-input`, `glass-textarea`,
+   `glass-card`, `glass-spinner`, `platform-button`, `platform-switch`,
+   `tag-input`, `platform-icon-picker`, `platform-help-hint`,
+   `platform-shell-page`, `layout/*`, `fields/*`):
+   - Не читают state платформы (только `t()` для подписей).
+   - Не диспатчат в bus, кроме `CoreEvents.UI_TOAST_SHOW` (через `this.toast(...)`).
+   - Локальные DOM-события `this.emit('change', detail)` для родителя.
+
+2. **Container** (`platform-icon`, `platform-user`, `platform-user-chip`,
+   `platform-user-info-modal`, `platform-notification-manager`,
+   `platform-deployment-version`, `pwa-install-banner`, `glass-modal` и
+   наследники, `platform-breadcrumbs`, `platform-audio-message-player`,
+   `platform-date-picker`, `platform-calendar-modal`, `auth-modal`,
+   `company-modal`, `file-text-preview-modal`,
+   `prompt-editor`, `app-loader`, `glass-toast`, `platform-modal-stack`,
+   `layout/platform-sidebar`, `layout/platform-service-sidebar`):
+   - Читают срез через `this.select(...)` (или ставят свой
+     `useResource`/`useOp`).
+   - Действия — через `this.dispatch(<CoreEvents.X>, payload)` (это и есть
+     реализация helpers `PlatformElement`).
+   - Никаких `this.services.*`, `BaseStore`, `ServiceRegistry`, `AppEvents`.
+
+## CoreEvents в core vs apps
+
+| Зона | Прямой `dispatch(CoreEvents.X)` | Импорт `CoreEvents` |
+|---|---|---|
+| `core/frontend/static/lib/components/**` | разрешён (это и есть реализация helpers) | разрешён |
+| `core/frontend/static/lib/base/**`        | разрешён (helpers `PlatformElement`)     | разрешён |
+| `apps/<svc>/ui/{pages,modals,components}/**` | **запрещён** для UI/AUTH/I18N/THEME/COMPANIES/ROUTER (используй helpers) | разрешён только для подписок `useEvent` на доменные события |
+
+## Запреты (CI)
+
+- `extends LitElement` напрямую — только `PlatformElement` /
+  `PlatformPage` / `PlatformModal*`.
+- `import` любого `*.service.js` или `services/` — таких файлов нет.
+- `import { ServiceRegistry }` / `BaseStore` / `BaseService` / `AppEvents` —
+  таких модулей нет.
+- `fetch(`, `axios` в компонентах — HTTP только в `request` функции
+  фабрики.
+- Прямое присваивание полю state — никогда. State приходит через
+  `select.value` или контроллер.
+- `||`/`??` фолбеки на чтение state — `selectController.value` всегда
+  возвращает то, что положил reducer фабрики (для core slices —
+  `initialSlice` redúcer'а core).
+
+## Стили и токены
+
+CSS variables из `core/frontend/static/assets/css/tokens.css`:
+`--space-*`, `--text-*`, `--font-*`, `--glass-solid-*`, `--glass-border-*`,
+`--accent`, `--text-primary`, `--bg-gradient` и т.д. Тема — атрибут
+`[data-theme="dark|light"]`.
+
+## emit vs dispatch
+
+- `this.emit(name, detail)` — DOM event для slot-композиции (child→parent),
+  composed boundary. Имя короткое (`change`, `close`, `open`).
+- `this.dispatch(type, payload)` — bus-event. Имя — строгий формат
+  `<scope>/<entity>/<verb>`.
+
+## Подписки
+
+```javascript
+constructor() {
+    super();
+    this._toastsSel = this.select((s) => s.notify.toasts);
+}
+render() {
+    const toasts = this._toastsSel.value;
+    return html`...`;
+}
+```
+
+`this.select` возвращает `SelectController`. Чтение — `.value`. Любая смена
+state триггерит `requestUpdate`. `selectController.value` гарантированно
+определено — `initialSlice` reducer'а core всегда отдаёт нужную форму.
+
+## Modal canon (registry + stack + dispatch)
+
+Все модалки — через события и реестр:
+
+- Открытие: `this.openModal(SomeModal, props)` (helper диспатчит
+  `CoreEvents.UI_MODAL_OPEN`).
+- Закрытие: `this.close()` внутри модалки (диспатчит `UI_MODAL_CLOSE`).
+- Стек живёт в `state.modals.stack`
+  (`core/frontend/static/lib/events/reducers/modals.js`).
+- Рендер — `<platform-modal-stack>`, монтируется один раз в
+  `PlatformApp.render()`.
+
+### Регистрация модалки
+
+```javascript
+import { PlatformModal } from '@platform/lib/components/glass-modal.js';
+import { registerModalKind } from '@platform/lib/utils/modal-registry.js';
+
+export class FrontendCreateApiKeyModal extends PlatformModal {
+    static modalKind = 'frontend.api_key_create';
+}
+customElements.define('frontend-create-api-key-modal', FrontendCreateApiKeyModal);
+registerModalKind(FrontendCreateApiKeyModal.modalKind, 'frontend-create-api-key-modal');
+```
+
+`kind` — строго `<scope>.<entity>` (snake_case,
+`[a-z][a-z0-9_]*\.[a-z][a-z0-9_]*`): `auth.login`, `frontend.embed_create`,
+`crm.entity_share`.
+
+### Закрытие из формы
+
+`PlatformFormModal.closeAfterSave()` сбрасывает `isDirty` и вызывает
+`super.close()`. `super.close()` диспатчит `UI_MODAL_CLOSE` с `_modalId` —
+стек убирает модалку из DOM. Прямое `this.open = false` запрещено.
+
+### Открытие из любого места
+
+```javascript
+this.openModal(SomeModal, { entityId: '...' });
+```
+
+`platform-modal-stack` создаст элемент по `kind`, проставит `props` и
+`_modalId`, поднимет `open`. `document.createElement('*-modal')` /
+`document.body.appendChild(...)` запрещены и проверяются
+`scripts/check_ui_canon.sh`.
+
+### Запреты
+
+- `extends LitElement` или `extends PlatformElement` для модалок — только
+  `PlatformModal` / `PlatformFormModal` / `PlatformLightModal`.
+- `document.createElement('*-modal')`, `document.body.appendChild(modalEl)`.
+- `modal.open = true` / `this.open = false`.
+- Слушатели `CustomEvent('open-modal' / 'close')` для открытия/закрытия —
+  только `dispatch`/helper.
+
+## Platform User Chip / Info Modal
+
+Любое отображение пользователя по `user_id` в UI — **только** через
+core-компоненты `<platform-user-chip>` и core-модалку `platform.user_info`
+(`<platform-user-info-modal>`). Сырая строка `user_id` (или его обрезанный
+префикс) в pages/modals/components/таблицах/title'ах **запрещена**.
+
+`platform.user_info` — **единственная** модалка для работы с профилем
+пользователя в платформе. Она же открывается из меню `platform-user`
+(пункты «Профиль» и «Настройки» оба ведут в неё) и из любого клика по
+`<platform-user-chip>`. Отдельных «модалки профиля» и «модалки
+редактирования участника команды» в `core/` и `apps/` быть не должно.
+
+### Источник данных
+
+`<platform-user-chip>` и `<platform-user-info-modal>` читают:
+
+- `state.team.members` — участники активной компании (бэкенд
+  `core/api/team.py`, эффект `createTeamEffect`,
+  GET `<svc>/api/team/members`, поля `user_id`, `name`, `email`, `roles`,
+  `joined_at`, `avatar_url`);
+- `state.auth.user` — текущий пользователь (для режима «свой профиль»);
+- `state.companies.active` — активная компания (для проверки прав на
+  редактирование ролей: `owner`/`admin` в `user.raw.companies[*].roles`).
+
+Загрузку списка участников триггерит сам chip/модалка при первом
+монтировании, если `state.team.members` пуст и `state.team.loading === false`.
+Отдельных опс/фабрик для этого добавлять не нужно — `createTeamEffect`
+зарегистрирован в `core/.../events/bootstrap.js` для каждого `PlatformApp`.
+
+### Контракт `<platform-user-chip>`
+
+```html
+<platform-user-chip user-id="user_..."></platform-user-chip>
+<platform-user-chip user-id="user_..." size="md"></platform-user-chip>
+<platform-user-chip user-id="user_..." ?interactive=${false}></platform-user-chip>
+```
+
+- `user-id` (обязателен, non-empty string) — отсутствие = `throw`.
+- `size` — `'sm'` (default, аватар 24×24, имя) или `'md'` (аватар 32×32,
+  имя + email).
+- `interactive` — по умолчанию `true`. Клик открывает `platform.user_info`.
+
+Если member не найден (бывший участник, service-account, чужая компания) —
+chip рендерит сокращённый id и подпись `user_chip.unknown`, клик отключён.
+
+### Контракт `<platform-user-info-modal>`
+
+- modalKind: `platform.user_info`.
+- Базовый класс: `PlatformFormModal` (умеет dirty-tracking и
+  `closeAfterSave()` для редактирования).
+- props: `{ userId: string }`.
+- Режим определяется автоматически по `userId`:
+  - **own** (`userId === state.auth.user.user_id`) — форма
+    редактирования собственного профиля. Поля: `first_name`, `last_name`,
+    `name`, `email` (read-only), `bio`, `language`. Submit диспатчит
+    `auth/profile/update_requested` (effect `auth.effect.js` шлёт
+    PUT `<svc>/api/auth/me`, схема `UserUpdate`). В футере доп. кнопка
+    «Выйти из аккаунта» → `AUTH_LOGOUT_REQUESTED` + редирект на login.
+  - **other** (`userId !== state.auth.user.user_id`) — read-only карточка:
+    крупный аватар (96×96), имя, email, чипы ролей, `joined_at`. Если
+    текущий пользователь имеет роль `owner` или `admin` в активной
+    компании, ниже карточки отрисовывается **inline-секция
+    редактирования ролей**: чек-боксы (`owner` залочен у владельца),
+    кнопка «Сохранить роли» → `frontend/team_members.update`
+    (PATCH `/frontend/api/team/members/{user_id}`, схема
+    `TeamMemberUpdate`).
+- Read-only действия в other-режиме:
+  - «Написать в Sync» → `window.location.href = '/sync?direct=' + encodeURIComponent(userId)`;
+  - «Открыть в Команде» → `window.location.href = '/frontend/team?focus=' + encodeURIComponent(userId)`;
+  - «Скопировать ID» → `this.copyToClipboard(userId, { success_i18n_key: 'platform:user_info_modal.toast_copied', error_i18n_key: 'platform:user_info_modal.toast_copy_failed' })`.
+
+Открывается **только** через helper
+`this.openModal('platform.user_info', { userId })`. `userId` обязателен —
+без него модалка падает.
+
+### i18n
+
+Ключи живут в `core/i18n/translations/{ru,en}/platform.json`,
+namespace `platform`, секции `user_chip` и `user_info_modal`.
+
+`user_chip.*`: `unknown`, `you`.
+
+`user_info_modal.*` (общие): `header`, `roles_label`, `joined_at`,
+`action_write_sync`, `action_open_team`, `action_copy_id`,
+`toast_copied`, `toast_copy_failed`.
+
+`user_info_modal.*` (own-режим / форма профиля): `field_first_name`,
+`field_last_name`, `field_name`, `field_email`, `field_email_locked`,
+`field_bio`, `field_language`, `lang_ru`, `lang_en`, `action_save`,
+`action_cancel`, `action_logout`, `toast_profile_saved`,
+`error_name_required`.
+
+`user_info_modal.*` (other-режим / редактирование ролей):
+`section_roles`, `role_owner`, `role_admin`, `role_developer`,
+`role_viewer`, `role_owner_locked`, `action_save_roles`,
+`error_role_required`.
+
+Список ролей платформы — каноничный (`owner`, `admin`, `developer`,
+`viewer`); сервисные дубли в `frontend.json` / `crm.json` для тех же
+ролей запрещены. Если сервису нужна **своя** роль — добавляется
+отдельным ключом в свой namespace.
+
+### Запреты
+
+- ad-hoc «маленькие» компоненты вроде `*-user-row`/`*-user-avatar`/
+  `*-user-cell` в `apps/<svc>/ui/components/` для отображения чужого
+  пользователя — заменить на `<platform-user-chip>`.
+- использование `apps/sync/ui/modals/user-info-modal.js` из других
+  сервисов — он sync-only и переиспользуется только внутри sync.
+- `dispatch(TEAM_EVENTS.MEMBERS_LOAD_REQUESTED)` напрямую из pages/modals
+  ради аватарок — chip/модалка сами триггерят загрузку при первом mount.
+- регистрация альтернативных модалок с `modalKind === 'platform.user_info'`,
+  отдельной модалки «редактирование своего профиля» или «редактирование
+  участника команды» — всё это покрывает `platform-user-info-modal`.
+- открытие `platform.user_info` без `userId`-prop'а; передача чужого
+  `userId` без явного `state.team.members` лоада запрещена логикой
+  модалки (она сама дёргает `createTeamEffect`).
+- прямой переход «Профиль/Настройки» из `platform-user` меню на
+  `/<svc>/settings` — пункты меню **обязаны** открывать
+  `platform.user_info`.
+
+## Sidebar / breadcrumbs / namespace canon
+
+Межкомпонентные команды слева/сверху едут через bus, **не** через
+`window.dispatchEvent` / `window.addEventListener`.
+
+### Sidebar
+
+- Открыть мобильную раскладку: `dispatch(CoreEvents.UI_SIDEBAR_OPEN_REQUESTED, null)`.
+- Закрыть: `dispatch(CoreEvents.UI_SIDEBAR_CLOSE_REQUESTED, null)`.
+- `platform-sidebar` сам диспатчит `UI_SIDEBAR_COLLAPSE_CHANGED` /
+  `UI_SIDEBAR_MOBILE_CHANGED`; читать состояние только селектором
+  `state.ui.sidebar`.
+- `page-header` мобильной кнопкой «меню» делает
+  `dispatch(UI_SIDEBAR_OPEN_REQUESTED)` и берёт `mobileOpen` из
+  `state.ui.sidebar.mobileOpen`.
+
+### Breadcrumbs
+
+- `platform-breadcrumbs` слушает `CoreEvents.ROUTER_ROUTE_CHANGED` и читает
+  конфигурацию маршрутов из глобального `window.__PLATFORM_ROUTER__`
+  (config-only API, не side-effect диспатчер).
+- Клик по крошке = `dispatch(CoreEvents.ROUTER_NAVIGATE_REQUESTED, { routeKey, params })`
+  (в core разрешено; в apps — `this.navigate(routeKey, params)`).
+- `CustomEvent('navigate', ...)` — запрещён.
+
+### Namespace выбор
+
+- `setPlatformNamespaceSelection(companyId, name)` диспатчит
+  `CoreEvents.UI_NAMESPACE_SELECT_REQUESTED`. `ui.effect.js` персистит
+  выбор в `localStorage` и эмитит `UI_NAMESPACE_CHANGED` +
+  `UI_DOCUMENTS_RELOAD_REQUESTED`.
+- Подписка на смену namespace / перезагрузку — `useEvent(UI_DOCUMENTS_RELOAD_REQUESTED)`,
+  не `window.addEventListener('office-documents-list-reload')`.
+
+### Запреты (apps + core/frontend/static, проверяет `scripts/check_ui_canon.sh`)
+
+- `window.dispatchEvent(new CustomEvent('platform-sidebar-open' | 'platform-sidebar-mobile-change' | 'office-documents-list-reload'))`.
+- `window.addEventListener('platform-sidebar-open' | 'platform-sidebar-mobile-change' | 'office-documents-list-reload', ...)`.
+- `new CustomEvent('navigate', ...)` для роутинга.
+- `this.calendarApi`, `this.companies`, `this.team` и подобные геттеры в
+  `core/frontend/static/lib/**` — только `dispatch(<SLICE_EVENTS>)` + `select`.
+
+Исключение — `core/frontend/static/lib/embed-chat/**`: у встраиваемого
+виджета свой standalone bus и явный host-интерфейс через `postMessage`.

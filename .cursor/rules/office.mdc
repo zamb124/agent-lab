@@ -26,29 +26,172 @@ globs:
 ## Иконки типов файлов (`files_icons`) и IconService
 
 - **Каталог SVG:** **`core/frontend/static/assets/icons/files_icons/`** — цветные иконки типов (не смешивать с обычными UI-иконками в корне **`.../assets/icons/`**).
-- **`IconService`** (`core/frontend/static/services/icon.service.js`): общие иконки — **`load(name)`**; файловые — **`loadFileIcon(name)`** (алиас или basename), **`resolveFileIconKey(filename, mimeType)`** (логический ключ для `file-icon` по имени и MIME), **`loadFileIconForOfficeDocumentType('word'|'cell'|'slide')`**, **`preloadFileIcons`**, **`getFileIconFromCache`**. Список файлов на диске — экспорт **`FILE_ICON_BASE_NAMES`**; объединённый справочник имён — геттер **`availableFileIcons`**. URL: **`{basePath}/files_icons/{encodeURIComponent(basename)}.svg`**.
+- **Иконки файлов** живут в slice `state.icon` (`core/frontend/static/lib/events/reducers/icon.js`). Эффект `core/frontend/static/lib/events/effects/icon.effect.js` грузит SVG по событию `ICON_EVENTS.LOAD_REQUESTED` (для общих иконок) и `ICON_EVENTS.FILE_LOAD_REQUESTED` (для файловых; имя резолвится через `resolveFileIconKey(filename, mimeType)` из `core/frontend/static/lib/utils/file-icons.js`). Список файлов на диске — экспорт **`FILE_ICON_BASE_NAMES`** оттуда же. Компонент **`<platform-icon>`** уже подписан на slice — в коде сервиса напрямую `IconService` дёргать не нужно, достаточно отрендерить `<platform-icon name=...>` или `<file-icon filename=... mime-type=...>`. URL: **`{basePath}/files_icons/{encodeURIComponent(basename)}.svg`**.
 - **`platform-icon`:** **`file-icon`** + **`name`** (например **`word`**, **`pdf`**, **`cell`**) — вызывает **`loadFileIcon`**; стили обводки UI к таким SVG не применяются.
 
 ## UI (канон платформы)
 
-- **i18n UI:** бандлы **`documents.json`** (`ru`/`en`) — дефолтный namespace по **`getBaseUrl()`** = `/documents`.
-- **`apps/office/ui/utils/office-binding-id.js`:** **`isPlausibleOfficeBindingId`** — защита от мусорного сегмента в **`/documents/edit/...`** (слэши, **`..`**, **`.html`**); при невалидном — **`replaceState`** на **`/documents`** или сообщение в редакторе. При корректном ingress единый origin устраняет типичную подмену пути **`…/edit/common/index.html`**.
-- **`apps/office/ui/app/office-app.js`:** **`auth.validateToken()`** перед показом shell (как Sync); **`baseUrl`** **`/documents`**; маршруты: **`/`** — список, **`/documents/catalogs`** — **`office-catalogs-dashboard`**, **`/documents/edit/:bindingId`** — редактор (**`document-editor-page`**); устаревший **`/documents/catalog/:id`** при открытии заменяется на **`/documents`** с выставлением **`OfficeStore.activeCatalogId`**; **`popstate`** и **`navigate`**. На **`:host`** заданы **`--documents-title-gradient`** и переопределение **`--text-primary`** в палитре градиента лого (светлая / **`data-theme="dark"`**). В режиме редактора **`platform-island`**: **`content-no-scroll`**, **`padding="none"`**; класс **`main--bleed`** на **`.main`** (`padding: 0`, без вертикального скролла main). Рядом с main: **`office-documents-shell-actions`** (модалка нового документа: **`glass-input`** + карточки типов с **`platform-icon` `file-icon`**, скрытый file input). **Мобильный превью (`max-width: 767px`):** шапка **`.office-mobile-bar`** с **`platform-sidebar-open`** и заголовком (список / редактор); **`platform-sidebar-mobile-change`** скрывает кнопку меню при открытом drawer; **`main`** без горизонтальных отступов; при смене маршрута **`office-sidebar.closeMobile()`**. Кнопка «назад» в баре на маршруте редактора — **`navigate`** на **`/documents`**.
-- **`office-documents-shell-actions`:** слушает **`window`**: **`office-documents-open-empty`**, **`office-documents-pick-file`**. Создание пустого: **`OfficeAPIService.createEmptyDocument(title, { document_type, spreadsheet_format? })`** → **`POST /documents/api/v1/documents/empty`**. После создания/загрузки — **`office-documents-list-reload`** (подписан **`documents-list-page`**). Работает на маршруте редактора, когда список не смонтирован. Контент модалки — обёртка **`office-empty-doc-modal`**; сетка тайлов и выделение задаются **`ensureOfficeEmptyDocGlobalStyles()`** в **`document.head`**, т.к. открытый **`glass-modal`** переносится в **`document.body`** и стили из shadow этого компонента на слот не распространяются.
-- **`office-sidebar`:** **`slot="header"`** — блок выбора namespace **как в NetWorkle** (`crm-sidebar.js`): классы **`namespace-selector`**, **`namespace-label`**, **`namespace-add-btn`**, токены **`--crm-*`**; первая опция **«Все»**, подписи из **`crm.json`**; плюс открывает **`office-namespace-modal`** (событие **`open-namespace-modal`** → **`office-app`**). Хранилище: **`getPlatformNamespaceSidebarSelection`**, **`setPlatformNamespaceSelection`**, **`GET /documents/api/v1/namespaces`**, **`X-Platform-Namespace`** через **`platform-namespace.js`**. BFF прокси к CRM: **`GET /documents/api/v1/namespaces/templates`**, **`POST /documents/api/v1/namespaces`** (`ServiceClient` → **`/crm/api/v1/namespaces/...`**). Пункт **«Каталоги»** → **`/documents/catalogs`**. **`activeView`**: **`list` | `catalogs` | `edit`**; в **`edit`** select namespace **disabled**. Событие **`office-sidebar-reload-namespaces`** обновляет список пространств в сайдбаре после создания.
-- **`documents-list-page`:** при наличии каталогов — **одна строка фильтра**: **`OfficeStore.filterCatalogIds`** (мультивыбор), теги-кнопки **`doc-catalog-filter-tag`** (**`aria-pressed`**, **`list.catalogToggleHint`**); при **≥ 8** каталогов слева компактный **`type="search"`** (**`list.catalogFilterSearchPlaceholder`**) фильтрует подписи в полосе тегов, выбранные теги остаются видимыми. **`GET /documents/api/v1/documents`** с повторяющимся query **`catalog_ids`** (или одиночный **`catalog_id`** для совместимости). **`OfficeStore.activeCatalogId`** синхронизируется с выбранными каталогами (для создания документа и shell). При смене namespace **`filterCatalogIds`** сбрасывается в сайдбаре. Если **`GET /catalogs`** вернул **0** каталогов — **не** дергается **`listDocuments`**; пустой экран — **`list.noCatalogsState*`** и **`navigate`** на **`/documents/catalogs`**. Если каталоги есть, а документов нет — **`list.emptyState*`** и события **`office-documents-open-empty`** / **`office-documents-pick-file`**. Заголовок (крупный **700**, градиент **`--documents-title-gradient`**). Модалка переименования (**`glass-input`**), удаление — **`platformConfirm`**. **Десктоп:** таблица (**5** колонок): **Название** (слева тег каталога **`doc-catalog-tag`** → **`_toggleCatalogFilter`**; **`disabled`**, если остался один выбранный каталог и тег в фильтре), **Создан**, **Автор**, **Тип** (иконка **`file-icon`**), **Действия** (rename/delete). **`max-width: 767px`:** та же строка данных в виде карточек (**`doc-card`**, **`list.cardsAria`**), заголовок и дата без жёсткого обрезания в одну строку.
-- **`office-catalogs-dashboard`:** заголовок с градиентом как у списка документов; при **0** каталогов — центрированный empty state (**`platform-icon`** **`folder`**, **`catalogs.emptyState*`**), кнопка **`catalogs.create`** открывает модалку создания с **`platform-switch`** «общий каталог» (**по умолчанию включён** = **`is_public: true`**). Карточка: справа сверху тег **`catalogs.tagPublic`** / **`tagPrivate`**. Модалка **«Участники»** (**`glass-modal`** → портал): **`office-catalog-members-modal`** + **`ensureOfficeCatalogMembersModalGlobalStyles()`**. Владелец: тот же **`platform-switch`** для **`PATCH …/catalogs/{id}`** с **`is_public`**; при **общем** каталоге блок приглашения по списку скрыт (**`POST …/members`** на бэкенде отклоняется для **`is_public`**). Иначе — поиск и список как в Sync. Доступ: **`office_document_catalogs.is_public`** — любой пользователь компании в том же namespace видит каталог и документы; иначе владелец + **`office_catalog_members`**. Миграция **`office_0003`**. На карточке владелец — **`person-inline`** в shadow.
-- **`document-editor-page` (контракт ONLYOFFICE и DOM):**
-  - **`api.js`:** **`GET {document_server_url}/web-apps/apps/api/documents/api.js`** — тот же origin, что страница **`/documents`** (обеспечивает ingress / локальный эквивалент). Текст скрипта с **Document Server**, не из репозитория. Прокси **`/documents/api/v1/onlyoffice/api.js`** в BFF не используется.
-  - **Iframe** редактора — с публичного DS; при жёстком CSP нужен **`frame-src`** на хост Document Server.
-  - Официальный пример: **`https://api.onlyoffice.com/docs/docs-api/usage-api/config/`** — **`new DocsAPI.DocEditor("placeholder", config)`**, первый аргумент — **строка `id` элемента в `document`** (не в shadow).
-  - Режимы **`type`**: **desktop / mobile / embedded** — см. тот же **config** и **https://api.onlyoffice.com/editors/faq/embedding** (`embedded` — упрощённая панель для встраивания в страницу; по умолчанию **desktop**).
-  - **JWT:** поля инициализации **`DocEditor`**, которые входят в подпись (**`width`**, **`height`**, вложенный **`document`**, **`editorConfig`** и т.д.), нельзя подменять иными значениями, чем в токене — иначе Document Server возвращает **-20** (*The document security token is not correctly formed*). Размер области редактора задаётся **`100%`** в JWT и вёрсткой **`.editor-host` / `.oo-doc-root`**.
-  - **`api.js`** создаёт **`iframe[name="frameEditor"]`** с **`frameEditorId`** в query URL (идентификация экземпляра для **postMessage**). **Куда именно в DOM вставлен iframe**, задаёт **реализация вендора**; в актуальных сборках **часто прямой потомок `document.body`**. В публичной документации **нет** опции «создать iframe сразу внутри произвольного контейнера» — только **`id`** плейсхолдера в **`document`** для **`DocsAPI.DocEditor`**.
-  - Наш UI: **`div`-плейсхолдер в `body`** (требование **`getElementById`**); сразу после появления **`iframe`** в DOM — **`appendChild`** в **`#oo-editor-target`** (shadow **Lit**), чтобы узел был в нужном контейнере; пока **`iframe`** ещё на **`body`**, запасной вариант — **`position: fixed`** по **`getBoundingClientRect(.editor-host)`**; в контейнере — **`100%` высота/ширина** и **`flex`** на **`.editor-host` / `.oo-doc-root`**; с **`iframe`** снимаются атрибуты **`width`/`height`/`align`**; выбор экземпляра — по **`frameEditorId`** в **`src`** (нормализация UUID); **`MutationObserver`** на **`body`** (**`subtree`**) до переноса и на атрибуты **`width`/`height`** у **`iframe`**; **`ResizeObserver`**, **`window.resize`**, **`document` scroll в capture**.
-- **Shell:** **`office-sidebar`** — **`platform-service-sidebar`** с **`logo-src`** **`/static/core/assets/service_logos/documents_logo.svg`** и **`logo-text`** из i18n **`sidebar.title`**; **`platform-notification-manager`** в слоте **`user-toolbar`** у **`platform-user`** (как CRM); **`platform-deployment-version`** (`base-url="/documents"`).
-- **`OfficeAPIService`:** заголовок **`X-Platform-Namespace`** и **`company_id`** как выше; **`GET /documents/api/v1/namespaces`** — локально **`NamespaceRepository`**; **`GET …/namespaces/templates`** и **`POST …/namespaces`** — BFF проксирует в CRM (**`ServiceClient`**). Модалка **`office-namespace-modal`** использует эти методы; тексты формы — **`crm.json`** (**`namespace_modal.*`**, **`note_content.no_description`**).
-- **Статус интеграции:** **`GET /documents/api/v1/integration/status`** — при отсутствии конфигурации OnlyOffice баннер в списке (i18n **`integration.notConfigured`**).
+UI сервиса — `apps/office/ui/`, полностью на event-канон фабрик
+(`frontend.mdc`, `ui_factories.mdc`, `ui_events.mdc`, `ui_components.mdc`).
+
+### Структура `apps/office/ui/`
+
+```
+app/office-app.js                     # PlatformApp; static factories, defaultI18nNamespace='documents'
+events/resources/                     # все доменные фабрики (createAsyncOp/Resource/Form)
+  _namespace-header.js                # hdr `X-Platform-Namespace` для http
+  integration.resource.js             # office/integration_status
+  namespaces.resource.js              # office/namespaces (resource), namespace_create_form, namespace_templates
+  catalogs.resource.js                # office/catalogs (resource list/get/create/update/remove), catalog_create_form, catalog_edit_form
+  catalog-members.resource.js         # office/catalog_members + catalog_member_add + catalog_member_remove
+  company-members.resource.js         # office/company_members
+  documents.resource.js               # office/documents (slice items+filterCatalogIds+activeCatalogId), document_create_empty, document_upload, document_rename, document_remove, document_rename_form
+  editor.resource.js                  # office/document_editor_config
+components/                           # PlatformElement
+  office-sidebar.js                   # ns-select + nav + actions
+  onlyoffice-host.js                  # iframe-портал DocsAPI.DocEditor
+  office-document-row.js              # презентационная строка документа
+  office-catalog-card.js              # карточка каталога
+  office-integration-banner.js        # баннер `integration.notConfigured`
+pages/                                # PlatformPage (zero-import canon)
+  documents-list-page.js              # /documents
+  documents-catalogs-page.js          # /documents/catalogs (+ alias /documents/catalog/:catalogId)
+  document-editor-page.js             # /documents/edit/:bindingId
+modals/                               # PlatformFormModal + registerModalKind
+  namespace-create-modal.js           # office.namespace_create
+  catalog-create-modal.js             # office.catalog_create
+  catalog-edit-modal.js               # office.catalog_edit
+  catalog-members-modal.js            # office.catalog_members
+  document-rename-modal.js            # office.document_rename
+  document-create-empty-modal.js      # office.document_create_empty
+  document-upload-modal.js            # office.document_upload
+```
+
+### Фабрики и REST-зеркала
+
+Все 18 фабрик регистрируются через `OfficeApp.static factories`. Префикс
+HTTP `/documents/api/v1` (см. `server.name=documents` в `conf.json`),
+заголовок `X-Platform-Namespace` подмешивается через `nsHeader(ctx)` на
+каждый запрос (createResourceCollection поддерживает опцию
+`requestHeaders`). REST-эндпоинты для каждой operation физически живут в
+`apps/office/api/bff.py` — проверяет `scripts/check_command_rest_mirror.py`.
+
+| Имя фабрики | Операции | REST |
+|---|---|---|
+| `office/integration_status` | run | GET `/integration/status` |
+| `office/namespaces` (createResourceCollection) | list/create | GET/POST `/namespaces` |
+| `office/namespace_templates` | run | GET `/namespaces/templates` |
+| `office/catalogs` (createResourceCollection) | list/get/create/update/remove | `/catalogs[/{catalog_id}]` |
+| `office/catalog_members` | run | GET `/catalogs/{catalog_id}/members` |
+| `office/catalog_member_add` | run | POST `/catalogs/{catalog_id}/members` |
+| `office/catalog_member_remove` | run | DELETE `/catalogs/{catalog_id}/members/{member_user_id}` |
+| `office/company_members` | run | GET `/company-members` |
+| `office/documents` | run + setActiveCatalog/setFilterCatalogs/clearFilter | GET `/documents?catalog_ids=...` |
+| `office/document_create_empty` | run | POST `/documents/empty` |
+| `office/document_upload` | run (multipart) | POST `/documents` |
+| `office/document_rename` | run | PATCH `/documents/{binding_id}` |
+| `office/document_remove` | run | DELETE `/documents/{binding_id}` |
+| `office/document_editor_config` | run | GET `/documents/{binding_id}/editor-config` |
+| `office/namespace_create_form` / `office/catalog_create_form` / `office/catalog_edit_form` / `office/document_rename_form` (createForm) | submitEvent → CREATE/UPDATE/REQUESTED соответствующего ops | — |
+
+Slice `office/documents` хранит `items`, `loadedCatalogIds`,
+`activeCatalogId`, `filterCatalogIds`. `setActiveCatalog`/`setFilterCatalogs`
+доступны как actions контроллера (`useOp('office/documents').setActiveCatalog({catalogId})`).
+После `documentCreateEmptyOp.SUCCEEDED` / `documentUploadOp.SUCCEEDED`
+фабрика сама диспатчит `ROUTER_NAVIGATE_REQUESTED` на `document_editor` (если
+передан `openAfterCreate/openAfterUpload`) и перезагружает `documentsOp`.
+
+### Маршрутизация
+
+`createRouterEffect({ baseUrl: '/documents', routes })` в
+`OfficeApp.getServiceEffects()`:
+
+| `routeKey` | path | компонент |
+|---|---|---|
+| `documents_list` | `''` | `<office-documents-list-page>` |
+| `documents_catalogs` | `'catalogs'` | `<office-documents-catalogs-page>` |
+| `documents_catalogs` | `'catalog/:catalogId'` | то же (legacy alias, focusCatalogId prop) |
+| `document_editor` | `'edit/:bindingId'` | `<office-document-editor-page>` |
+
+Открытие документа — `this.navigate('document_editor', { bindingId })`.
+Открытие каталога с фильтром — `_documents.setActiveCatalog({catalogId}) +
+setFilterCatalogs({catalogIds:[catalogId]}) + navigate('documents_list')`.
+
+### Модалки
+
+Все модалки наследуют `PlatformFormModal`, имеют `static modalKind =
+'office.<entity>'` и регистрируются через `registerModalKind`.
+Открытие — `this.openModal('office.<kind>', { props })`. Закрытие —
+`closeAfterSave()` (PlatformFormModal сбрасывает dirty + dispatches
+`UI_MODAL_CLOSE`). Прямого `<modal .open=true>` или `document.body.appendChild`
+не существует — рендерит `<platform-modal-stack>`.
+
+`office.catalog_members` — это `PlatformFormModal` с пустым
+`renderSaveHeaderButton()` и `useOp('office/catalog_members')` +
+`useOp('office/company_members')` для typeahead. Add/remove идут через
+`catalogMemberAddOp`/`catalogMemberRemoveOp`, после `SUCCEEDED` фабрика
+сама перезапускает `catalogMembersOp` (см. `onSuccess`).
+
+### Sidebar / breadcrumbs / namespace
+
+`<office-sidebar>` — `useResource('office/namespaces', autoload)` для
+NS-select, `setPlatformNamespaceSelection(companyId, name)` пишет выбор
+через `UI_NAMESPACE_SELECT_REQUESTED` (core ui.effect персистит). Кнопка
+"+" → `openModal('office.namespace_create')`. Активный пункт меню — по
+`select(state.router.routeKey)`. Кнопки New/Upload в sidebar открывают
+`office.document_create_empty` / `office.document_upload` с активным
+catalogId из slice `state.officeDocuments.activeCatalogId`. Если активного
+нет — disabled (бэкенд требует явный `catalog_id`).
+
+### Document editor (`document-editor-page` + `<onlyoffice-host>`)
+
+Страница тонкая (~150 строк): `useOp('office/document_editor_config').run({bindingId})`
+и рендер `<onlyoffice-host .config=${result} @editor-error=${...}>`.
+
+`<onlyoffice-host>` (presentational, `core/`-style правила: `this.emit`
+для composition разрешён) инкапсулирует:
+
+- Динамическую загрузку `{document_server_url}/web-apps/apps/api/documents/api.js`
+  (singleton по origin: `window.__ooDocsApiOrigin`).
+- `new DocsAPI.DocEditor(placeholder.id, { ...claims, token, type, events })`.
+  `placeholder` создаётся в `document.body` (требование `getElementById`,
+  shadow DOM не виден); `iframe[name="frameEditor"]` после появления
+  переносится в `#oo-editor-target` shadow-host.
+- `MutationObserver` на `document.body` (subtree) до переноса и на
+  атрибуты `width/height` iframe; `ResizeObserver` на anchor + `:host`;
+  `window.resize`; `document` scroll в capture. Запасной режим (пока
+  iframe ещё на body): `position: fixed` по
+  `getBoundingClientRect(.editor-host)` (`z-index: 41`).
+- `disconnectedCallback` корректно убивает редактор и observers.
+- Любая фатальная ошибка эмитится как `editor-error` с
+  `{ code: 'bad_config'|'docs_api'|'ds_error'|'open_timeout', detail }`.
+  Page переводит код в i18n-сообщение и зовёт `this.toast`.
+
+Защита от мусорных URL `_isPlausibleBindingId` (запрещены `/`, `..`,
+`.html?`) — в page, до запуска `documentEditorConfigOp`.
+
+### i18n
+
+Бандл `documents` (`core/i18n/translations/{ru,en}/documents.json`).
+`OfficeApp.defaultI18nNamespace = 'documents'`; во всех компонентах —
+`this.t('key', vars?)`, без `this.i18n.t` и без кросс-сервисных префиксов
+(`crm:*` запрещён). Toast-ключи фабрик (`toast.namespace_created`,
+`toast.catalog_*`, `toast.document_*`, `toast.catalog_member_*`) парны в
+`ru` и `en`. Form-ошибки — `form.namespace_template_required`,
+`form.namespace_name_invalid`, `form.catalog_title_required`,
+`form.document_title_required`. Модалки имеют свои секции
+(`namespace_modal.*`, `catalog_create_modal.*`, `catalog_edit_modal.*`,
+`catalog_members_modal.*`, `document_rename_modal.*`,
+`document_create_empty_modal.*`, `document_upload_modal.*`).
+
+### CI
+
+`office` входит в `FACTORY_CANON_SERVICES` в
+`scripts/check_ui_canon.sh` и `scripts/check_command_rest_mirror.py`.
+Дополнительные проверки публичного префикса: `check_ui_factories.py`
+знает про маппинг `office → documents` (allowed `/documents/api`),
+`check_command_rest_mirror.py` тот же маппинг через `SERVICE_PUBLIC_NAME`.
+Цель: `make check-events-canon` exit 0 для office.
 
 ## Callback OnlyOffice и уведомления
 

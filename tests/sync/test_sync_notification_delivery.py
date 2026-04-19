@@ -19,7 +19,8 @@ import redis.asyncio as aioredis
 
 from apps.sync.db.models import SyncChannel, SyncSpace
 from apps.sync.realtime.notification_tasks import deliver_channel_message_notification
-from core.websocket.manager import REDIS_CHANNEL, notification_manager
+from core.ui_events.dispatcher import UI_EVENTS_REDIS_CHANNEL as REDIS_CHANNEL
+from core.websocket.manager import notification_manager
 from core.websocket.publisher import NotificationType
 
 deliver_fn = deliver_channel_message_notification.original_func
@@ -66,14 +67,20 @@ async def _redis_envelope_for_message_id(
     message_id: str,
     deadline_monotonic: float,
 ) -> dict:
-    """Слушает общий канал platform:notifications; отбрасывает чужие сообщения (параллельные тесты)."""
+    """Слушает общий канал platform:ui_events; отбрасывает чужие конверты.
+
+    Контракт конверта (см. `core.ui_events.dispatcher`):
+        {"target": {"user_id"|"company_id"|"broadcast"...},
+         "event": {"type": "notify/<svc>/<kind>_received", "payload": {...}}}
+    """
     while time.monotonic() < deadline_monotonic:
         raw = await pubsub.get_message(ignore_subscribe_messages=True, timeout=0.5)
         if raw is None or raw.get("type") != "message":
             continue
         envelope = json.loads(raw["data"])
-        notif = envelope.get("notification") or {}
-        data = notif.get("data") or {}
+        event = envelope.get("event") or {}
+        payload = event.get("payload") or {}
+        data = payload.get("data") or {}
         if data.get("message_id") == message_id:
             return envelope
     raise AssertionError(f"Не получено сообщение Redis с message_id={message_id}")
@@ -251,9 +258,11 @@ async def test_deliver_notify_user_publishes_to_redis(
             message_id=message_id,
             deadline_monotonic=time.monotonic() + 8.0,
         )
-        assert envelope["user_id"] == recipient
-        assert envelope["notification"]["type"] == NotificationType.SYNC_NEW_MESSAGE.value
-        assert envelope["notification"]["data"]["channel_id"] == channel_id
+        assert envelope["target"]["user_id"] == recipient
+        event = envelope["event"]
+        assert event["type"] == f"notify/sync/{NotificationType.SYNC_NEW_MESSAGE.value}_received"
+        assert event["payload"]["data"]["channel_id"] == channel_id
+        assert event["payload"]["kind"] == NotificationType.SYNC_NEW_MESSAGE.value
     finally:
         await pubsub.unsubscribe(REDIS_CHANNEL)
         await pubsub.aclose()

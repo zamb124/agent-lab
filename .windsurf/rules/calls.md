@@ -2,85 +2,115 @@
 trigger: model_decision
 description: "WebRTC звонки в Sync: архитектура, сигналинг, LiveKit SFU, гостевые ссылки"
 globs:
+  - "core/calls/**"
+  - "apps/sync/realtime/call_handlers.py"
+  - "apps/sync/api/calls.py"
+  - "apps/sync/db/repositories/call_repository.py"
+  - "apps/sync/ui/modals/sync-call-*.js"
+  - "apps/sync/ui/pages/sync-call-join-page.js"
+  - "apps/sync/ui/events/resources/calls.resource.js"
+alwaysApply: false
 ---
 
 # WebRTC Звонки (Sync)
 
 ## Тип звонка и клиент
 
-- В API и БД один тип: **`call_type: "video"`**. Значение `audio` в старых клиентах (`call.invite`, `POST /calls/links`) нормализуется в `video` на сервере; миграция `sync_0008` приводит исторические строки в БД.
-- Камера по умолчанию и при переключении: **`localStorage`** ключ `humanitec.sync.call.camera_enabled` (boolean-строка). После `enableCameraAndMicrophone()` SFU выставляет `setCameraEnabled` из LS; в P2P — `getVideoTracks().enabled`.
-- Демонстрация экрана: `new Room({ publishDefaults: { screenShareEncoding: ScreenSharePresets.h1080fps30.encoding } })` — выше битрейт/кадры, чем дефолт SDK (`h1080fps15`). При старте шеринга камера **вымкнута** (`setCameraEnabled(false)`), состояние до шеринга хранится для восстановления; после остановки экрана (кнопка или системный «Stop sharing») камера возвращается. Пока идёт демонстрация, кнопка камеры **disabled**. В сетке при активном screen share у участника показывается **только** плитка экрана (`_videoPubsForGrid`). Кнопка экрана только при `getDisplayMedia`; класс плитки экрана — `screen`, `object-fit: contain`.
-- Полный экран по плитке: кнопка на плитке с видео — в DOM **после** `<video>` и подписи, иначе видео перекрывает кнопку и выход из fullscreen только с клавиатуры. Выход: повторный клик (учитывается, что `document.fullscreenElement` иногда сам `<video>` внутри плитки, а не `.participant-tile` — проверка `tile.contains(fullscreenElement)`), **Escape** при фокусе на странице, синхронизация иконки через `fullscreenchange` и `data-tile-key` с `closest('.participant-tile')`; префиксы webkit / moz / ms; при завершении звонка — выход из fullscreen. **iOS Safari на телефоне:** полноэкранный API для произвольного `div` часто недоступен — используется **`video.webkitEnterFullscreen()`**, сброс активной кнопки по `webkitendfullscreen`. **Android (Chrome и др. Blink):** у `<video>` обычно **нет** `webkitEnterFullscreen` — срабатывает **`element.requestFullscreen()`** на плитке; разрешения камеры/микрофона — системный диалог при первом захвате (LiveKit `enableCameraAndMicrophone`), отдельного кода под Android не требуется. Оверлей: отступы **`env(safe-area-inset-*)`** на `:host` при `viewport-fit=cover` (вырезы, нижняя панель жестов). Сетка на узком экране: **column flex** вместо `place-items: center` у grid, чтобы плитки не наезжали друг на друга. Глобальный порядок слоя: `nextModalLayerZIndex()` и `--platform-modal-layer-z` на `:host` у `call-overlay` / `call-incoming` (как у платформенных модалок).
+- В API и БД один тип: **`call_type: "video"`**. Значение `audio` нормализуется в `video` на сервере.
+- Все звонки в текущем коде — **SFU** (`P2P_MAX = 0` в `apps/sync/realtime/call_handlers.py`); P2P-ветки оставлены как заготовка.
+- Камера по умолчанию и при переключении: `localStorage` ключ `humanitec.sync.call.camera_enabled` (boolean-строка). После `enableCameraAndMicrophone()` SFU выставляет `setCameraEnabled` из LS.
+- Демонстрация экрана: `new Room({ publishDefaults: { screenShareEncoding: ScreenSharePresets.h1080fps30.encoding } })`. При старте шеринга камера выключается и состояние сохраняется для восстановления после остановки. Кнопка камеры `disabled` пока идёт демонстрация. В сетке при активном screen share у участника показывается только плитка экрана (`_videoPubsForGrid`). Класс плитки экрана — `screen`, `object-fit: contain`.
+- Полный экран по плитке: кнопка на плитке с видео — в DOM **после** `<video>` и подписи; повторный клик / Escape / `fullscreenchange` синхронизируют иконку. iOS Safari — `video.webkitEnterFullscreen()` + `webkitendfullscreen`. Android (Chrome/Blink) — `element.requestFullscreen()` на `.participant-tile`. Оверлей: `env(safe-area-inset-*)` на `:host` при `viewport-fit=cover`. Глобальный порядок слоя: `nextModalLayerZIndex()` и `--platform-modal-layer-z` на `:host` `sync.call_overlay` / `sync.call_incoming`.
 
 ### Инкогнито и «пустая комната»
 
-- **Пустой `localStorage`** (новое окно / инкогнито): не восстанавливается выбранный канал и прочие сохранённые настройки UI. Звонок из шапки без выбранного канала идёт в **отдельный** скрытый канал встречи — в комнате только вы, это не баг маршрутизации LiveKit.
-- **Гостевая ссылка** `POST /calls/links` **без** привязки к текущему `call_id` (или первый заход по ссылке, пока в БД у записи `sync_call_links.call_id` ещё `NULL`): при первом `POST /calls/join/{token}` создаётся **отдельный** SFU-звонок и комната `link-{prefix}`, не та же, что у участников звонка из чата. Чтобы гость попал в **тот же** LiveKit room, что и чат, ссылка должна быть создана с **`call_id`** активного звонка (кнопка «Скопировать ссылку» в оверлее передаёт его).
+- Пустой `localStorage` (новое окно / инкогнито): не восстанавливается выбранный канал и прочие настройки UI.
+- Гостевая ссылка `POST /calls/links` без привязки к текущему `call_id`: первый `POST /calls/join/{token}` создаёт отдельный `SyncCall` и LiveKit-комнату `link-{prefix}`. Чтобы гость попал в ту же комнату, что и чат, ссылка должна быть создана с `call_id` активного звонка (кнопка «Скопировать ссылку» в оверлее передаёт его).
 
-### UI оверлея (устройства и качество звука, только SFU)
+### UI оверлея (устройства и качество звука)
 
-Готового виджета устройств у LiveKit нет — в [`call-overlay.js`](apps/sync/ui/features/call-overlay.js) своя панель: **слева** кнопка (шестерёнка) — микрофон, камера, динамик; **по центру** микрофон, камера, экран, сброс; **справа** «⋯» — пункт «Качество звука» с подменю (шумодав, эхоподавление, автогромкость). Десктоп: `.call-menu-flyout` слева от строки (`right: calc(100% + 8px)`). **Узкий экран:** flyout **под** пунктом (relative, колонка), иначе касания уходят под слой видео. Закрытие по касанию снаружи: `pointerdown`/`touchstart` на `document` в **bubble**; «внутри» не закрывать — `.call-menu` / `.call-menu-flyout`, вся `.controls-bar`, `.header`, `.settings-error` (иначе на iOS `requestUpdate` после touch ломает последующий `click` по центральным кнопкам). Тап по сетке видео закрывает меню. **iOS WebKit:** у `.participant-tile video` — `pointer-events: none`, у кнопки полноэкранного режима и подписи — `auto`; в нативном fullscreen плитки у видео снова `pointer-events: auto`. Шапка и `.controls-bar`: высокий `z-index`, `transform: translateZ(0)`, `-webkit-backdrop-filter` у панели — чтобы слой UI был над композитным слоем видео. Показывается только при активном SFU (`_sfuMediaUiAvailable()`); в P2P этих кнопок нет.
+`sync.call_overlay` (`apps/sync/ui/modals/sync-call-overlay-modal.js`) — `PlatformModal` с собственной панелью устройств:
 
-- Смена устройства: `navigator.mediaDevices.enumerateDevices()` + `room.switchActiveDevice('audioinput' | 'videoinput' | 'audiooutput', deviceId)`. Выбор динамика — только если в браузере есть `HTMLMediaElement.setSinkId` (иначе блок скрыт).
-- Обработка звука: у публикации микрофона `LocalAudioTrack.restartTrack({ noiseSuppression, echoCancellation, autoGainControl })`. Сохранение в **localStorage**: `humanitec.sync.call.audio_noise_suppression`, `humanitec.sync.call.audio_echo_cancellation`, `humanitec.sync.call.audio_auto_gain` (строки `"true"` / `"false"`). После подключения перезапуск с этими флагами выполняется только если хотя бы один из ключей уже задан (иначе остаются дефолты захвата LiveKit/браузера).
-- Ошибки смены устройств/перезапуска: строка `_mediaSettingsError` над панелью, без перехода в полноэкранную «Ошибка звонка».
-- Атрибут `call-type="audio"`: при старте SFU камера выключается, в меню устройств скрыт выбор камеры; P2P — `getUserMedia` без видеодорожки. Текущий API чата нормализует `call_type` в `video` на сервере, но атрибут оставлен для совместимости.
+- Слева: микрофон, камера, динамик (`navigator.mediaDevices.enumerateDevices()` + `room.switchActiveDevice('audioinput'|'videoinput'|'audiooutput', deviceId)`). Динамик показывается только если в браузере есть `HTMLMediaElement.setSinkId`.
+- По центру: микрофон, камера, экран, сброс.
+- Справа: «⋯» — «Качество звука» (шумодав, эхоподавление, автогромкость) через `LocalAudioTrack.restartTrack({ noiseSuppression, echoCancellation, autoGainControl })`. Сохранение: `humanitec.sync.call.audio_noise_suppression` / `audio_echo_cancellation` / `audio_auto_gain` (`"true"`/`"false"`).
+- Десктоп: `.call-menu-flyout` слева от строки. Узкий экран: flyout под пунктом, иначе тач-события уходят под слой видео.
+- Закрытие меню по касанию снаружи — `pointerdown`/`touchstart` на `document` в bubble; внутри `.call-menu` / `.call-menu-flyout` / `.controls-bar` / `.header` / `.settings-error` не закрывать (иначе на iOS `requestUpdate` после touch ломает последующий `click`).
+- iOS WebKit: у `.participant-tile video` — `pointer-events: none`, у кнопки полноэкранного режима — `auto`; в нативном fullscreen — снова `auto`. Шапка и `.controls-bar` — высокий `z-index`, `transform: translateZ(0)`, `-webkit-backdrop-filter`.
+- Ошибки смены устройств — `_mediaSettingsError` строка над панелью, без перехода в полноэкранную «Ошибка звонка».
 
 ## Архитектура
 
 | Участников | Режим | Медиа-путь |
 |---|---|---|
-| 2 | P2P | Браузер ↔ Браузер (DTLS/SRTP напрямую) |
-| 3+ | SFU | Браузер ↔ LiveKit ↔ Браузер |
+| 1+ (текущая реализация) | SFU | Браузер ↔ LiveKit ↔ Браузер |
 
-Сервер **не участвует** в медиа-потоке при P2P. При SFU — только LiveKit.
-
-В коде [`call_handlers.py`](apps/sync/realtime/call_handlers.py) сейчас **`P2P_MAX = 0`**: все звонки — **SFU**. **Speech-to-chat** (речь в ленту): канал **`speech_to_chat_enabled`**, серверный LiveKit segmented egress микрофона → S3 → `messages.send`; пустой `file_results` у egress — догрузка сегментов листингом S3 по префиксу `sync-speech/...` и курсору **`last_segment_s3_key`**. Длительность сегмента egress — **`calls.speech_to_chat.segment_seconds`** (по умолчанию 60 с; при смене очень больших значений сверять с лимитами вашей версии LiveKit Egress на стенде). После скачивания сегмента воркер: **`volumedetect`** — если **`max_volume` < `speech_segment_discard_below_max_volume_db`**, сообщение в канал не создаётся, курсор сегмента всё равно сдвигается; иначе **обрезка кромочной тишины** (`silenceremove` + `areverse` в [`core/files/audio_silence.py`](core/files/audio_silence.py)) с порогами **`speech_segment_trim_*`**; если после обрезки длительность < **`speech_segment_min_post_duration_ms`**, публикация тоже пропускается. Полное описание пайплайнов, locks и флагов — **[`sync.mdc`](.cursor/rules/sync.mdc)**; TTL lock авто-STT — **`transcribe_audio_redis_lock_ttl_seconds`** в [`BaseSettings`](core/config/base.py).
+Сервер не участвует в медиа-потоке. **Speech-to-chat** (речь в ленту): канал с `speech_to_chat_enabled`, серверный LiveKit segmented egress микрофона → S3 → `messages.send`; пустой `file_results` у egress — догрузка сегментов листингом S3 по префиксу `sync-speech/...` и курсору `last_segment_s3_key`. Длительность сегмента — `calls.speech_to_chat.segment_seconds` (default 60s). После скачивания сегмента воркер: `volumedetect` (`speech_segment_discard_below_max_volume_db` для отбраковки), затем обрезка кромочной тишины (`silenceremove + areverse` в `core/files/audio_silence.py`) с порогами `speech_segment_trim_*`; если после обрезки `< speech_segment_min_post_duration_ms` — пропуск. TTL lock авто-STT — `transcribe_audio_redis_lock_ttl_seconds`. Полное описание pipelines / locks — `sync.mdc`.
 
 ## Сигналинг
 
 ```
-Мутации (call.invite/accept/decline/hangup):
-  /sync/ws → TaskIQ (sync queue) → call_handlers.py → SyncCall БД
-             → publish_realtime_events → Redis sync.realtime.events
-             → PubSubFanout в ws.py → только сокеты (company_id, user_id) из recipient_user_ids
-               (участники канала звонка; call.signal — один target_user_id)
+Мутации (call.invite/accept/decline/hangup/recording.start/stop/admin.transfer):
+  WS frame { request_id, type: 'sync/calls/<verb>_requested', payload }
+    → core.websocket.command_router → register_ws_command_handler в
+      apps/sync/realtime/command_router.SYNC_COMMAND_TYPE_MAP
+    → CommandEnvelope → handle_command.kiq (TaskIQ sync queue) →
+      apps/sync/realtime/handlers.execute_command (call_handlers внутри) →
+      БД sync_calls / sync_call_participants
+    → publish_realtime_events → core.ui_events.publish_ui_event_to_*
+    → Redis platform:ui_events
+    → core.websocket.manager форвардит target_user_ids → WS-сокеты
+       /sync/api/ws/notifications
 
-P2P relay (call.signal):
-  /sync/ws → ws.py (ПРЯМОЙ relay, без TaskIQ) → тот же Redis + fanout только на target_user_id
-             Обход TaskIQ критичен для WebRTC latency!
+call.signal (быстрый путь без TaskIQ):
+  WS frame sync/calls/signal_requested →
+    apps/sync/realtime/command_router._handle_call_signal →
+    publish_realtime_events напрямую → platform:ui_events → fanout per target_user_id
 
 Токен SFU:
   GET /sync/api/v1/calls/{call_id}/token → LiveKitClient.generate_token()
+  Frontend фабрика sync/call_token (transport: 'http')
 ```
 
 ## WS Команды
 
-| Тип | Через TaskIQ | Описание |
-|---|---|---|
-| `call.invite` | да | Создаёт звонок, уведомляет участников |
-| `call.accept` | да | Участник принимает |
-| `call.decline` | да | Участник отклоняет |
-| `call.hangup` | да | Участник завершает |
-| `call.signal` | **НЕТ** | P2P relay (offer/answer/ICE), прямой путь в ws.py |
+Канонические имена `sync/calls/<verb>_requested` зарегистрированы в `SYNC_COMMAND_TYPE_MAP`; UI-фабрики в `apps/sync/ui/events/resources/calls.resource.js` указывают их через `commandType` (имя фабрики `sync/calls_<verb>` для уникальности slice).
 
-## WS События (→ /sync/ws, изолировано по компании и каналу)
+| Канонический WS-тип | UI фабрика | Через TaskIQ | Описание |
+|---|---|---|---|
+| `sync/calls/invite_requested` | `callInviteOp` | да | Создаёт звонок, уведомляет участников канала |
+| `sync/calls/accept_requested` | `callAcceptOp` | да | Участник принимает |
+| `sync/calls/decline_requested` | `callDeclineOp` | да | Участник отклоняет |
+| `sync/calls/hangup_requested` | `callHangupOp` | да | Участник завершает |
+| `sync/calls/recording_start_requested` | `callRecordingStartOp` | да | Запуск LiveKit egress в S3 |
+| `sync/calls/recording_stop_requested` | `callRecordingStopOp` | да | Остановка egress по `provider_job_id` |
+| `sync/calls/admin_transfer_requested` | `callAdminTransferOp` | да | Передача админа встречи |
+| `sync/calls/signal_requested` | `callSignalOp` | **нет** | Быстрый путь сигналинга (offer/answer/ICE/SFU) |
 
-`call.incoming`, `call.accepted`, `call.declined`, `call.ended`, `call.signal`, `call.participant_joined`, `call.participant_left`
+REST-зеркала: `apps/sync/api/calls.py` — `POST /sync/api/v1/calls/{call_id}/{invite|accept|decline|hangup|recording/start|recording/stop|admin/transfer|signal}` с тем же payload.
 
-К телу `call.incoming` (после `CallRead`) сервер добавляет: `initiator_user_id`, `caller_display_name` (имя из `UserRepository`), `incoming_channel_kind` (`direct` / `group` / `topic`), для не-direct при непустом имени — `channel_display_name`. Клиент баннера: заголовок через `SyncStore.channelDisplayTitle` если канал уже в store, иначе подсказки с сервера.
+## WS События (push через `platform:ui_events`)
 
-В Redis публикуется `RealtimeEvent` с полями `company_id` и `recipient_user_ids` (маршрутизация); в WebSocket клиенту уходит только `{type, channel_id?, payload}` — без утечки списка получателей. Call-события уходят **только участникам канала** (не всей компании). Платформенные тосты `/ws/notifications` для call-событий не используются.
+Сервер публикует через `core.ui_events.publish_ui_event_to_user` / `_to_company`; адресация в `recipient_user_ids` = участники канала звонка (для `signal` — один `target_user_id`). UI диспатчит фрейм как обычное событие в bus, slice фабрики `sync/call_ui` (`createSlice`) реагирует через `extraReducer`.
+
+Типы: `sync/call/incoming`, `sync/call/accepted`, `sync/call/declined`, `sync/call/ended`, `sync/call/signal`, `sync/call/participant_joined`, `sync/call/participant_left`, `sync/call/recording_started|stopped|failed`, `sync/call/admin_changed`, `sync/call/transcribe_*` для расшифровки.
+
+К телу `sync/call/incoming` (после `CallRead`) сервер добавляет: `initiator_user_id`, `caller_display_name`, `incoming_channel_kind` (`direct`/`group`/`topic`), `channel_display_name` для не-direct. Sync UI: `sync-app.js` подписан `useEvent('sync/call/incoming')` и открывает `sync.call_incoming` модалку.
 
 ## REST API
 
 ```
 GET  /sync/api/v1/calls/turn-credentials     → TurnCredentials (HMAC-SHA1, stateless)
-POST /sync/api/v1/calls/links                → CallLinkRead (auth required, создаёт гостевую ссылку)
+POST /sync/api/v1/calls/links                → CallLinkRead (auth required)
+GET  /sync/api/v1/calls/links/scheduled      → list of scheduled CallLinkRead
+PATCH /sync/api/v1/calls/links/{token}       → CallLinkRead (update)
+DELETE /sync/api/v1/calls/links/{token}      → 204
 GET  /sync/api/v1/calls/{call_id}            → CallRead
 GET  /sync/api/v1/calls/{call_id}/token      → {token, livekit_url} (только SFU)
-GET  /sync/api/v1/calls/join/{token}         → CallLinkInfo (публично, без auth; `creator_avatar_url` при наличии аватара в профиле)
+POST /sync/api/v1/calls/{call_id}/{invite|accept|decline|hangup|signal|admin/transfer}
+POST /sync/api/v1/calls/{call_id}/recording/start | recording/stop
+GET  /sync/api/v1/calls/{call_id}/recordings → list of CallRecordingRead
+GET  /sync/api/v1/calls/join/{token}         → CallLinkInfo (публично, без auth)
 POST /sync/api/v1/calls/join/{token}         → JoinResponse (`participant_names`: identity → имя для оверлея у гостя)
 ```
 
@@ -88,11 +118,11 @@ POST /sync/api/v1/calls/join/{token}         → JoinResponse (`participant_name
 
 - Зарегистрированный → identity = `user_id`, cookie auth.
 - Гость → body `{guest_name}` → identity = `guest:{uuid8}:{name}`.
-- Всегда SFU режим (P2P для гостей не поддерживается).
-- `POST /calls/links` с **`call_id`** (оверлей «Скопировать ссылку»): ссылка сразу привязана к текущему `SyncCall` — гость в той же LiveKit-комнате, что и чат (`call-{uuid}`), без отдельной `link-*`.
-- Без `call_id`: первый вход по ссылке создаёт новый `SyncCall` и комнату `link-{tokenPrefix}`; последующие по той же ссылке переиспользуют.
-- Публичный URL для календаря и UI: **`join_url`** в ответе API — `{platform_public_base_url}/l/{code}`; резолв на frontend (`GET /l/{code}`) → редирект на `/sync/join/{link_token}`. Хранение: `platform_short_links` (kind `sync_call_join`), `ShortLinkService` в `core/short_links/`; при удалении ссылки звонка — удаление short link по `link_token`.
-- Страница: `/sync/join/{token}` → `call-join.html` (публичный маршрут в `main.py`).
+- Всегда SFU режим.
+- `POST /calls/links` с `call_id` (оверлей «Скопировать ссылку»): ссылка привязана к текущему `SyncCall` — гость в той же LiveKit-комнате, что и чат.
+- Без `call_id`: первый вход по ссылке создаёт новый `SyncCall` и комнату `link-{tokenPrefix}`; последующие переиспользуют.
+- Публичный URL: `join_url` в ответе API — `{platform_public_base_url}/l/{code}`; резолв на frontend (`GET /l/{code}`) → редирект на `/sync/join/{link_token}`. Хранение: `platform_short_links` (kind `sync_call_join`), `ShortLinkService` в `core/short_links/`; при удалении ссылки звонка — удаление short link по `link_token`.
+- Страница: `/sync/join/{token}` → `apps/sync/ui/pages/sync-call-join-page.js` (`PlatformPage`, route `call_join` в `SYNC_ROUTES`); фабрики `sync/call_join_info` и `sync/call_join_accept` (HTTP-only).
 - Route config: `/sync/api/v1/calls/join/*` → `auth_required=False`.
 
 ## core/calls/
@@ -100,14 +130,14 @@ POST /sync/api/v1/calls/join/{token}         → JoinResponse (`participant_name
 | Файл | Содержимое |
 |---|---|
 | `models.py` | `TurnCredentials`, `CallMode`, `SignalType` |
-| `livekit_client.py` | `LiveKitClient` — create_room, delete_room, generate_token, start/stop egress в S3; трейсируемые вызовы требуют **`company_id` и `user_id`** (платформенный журнал). `_api_url()` конвертирует `ws://` → `http://` для Twirp API |
+| `livekit_client.py` | `LiveKitClient` — create_room, delete_room, generate_token, start/stop egress в S3; трейсируемые вызовы требуют `company_id` и `user_id`. `_api_url()` конвертирует `ws://` → `http://` для Twirp API |
 | `turn.py` | `generate_turn_credentials()` — HMAC-SHA1, алгоритм coturn REST |
 
 ### CallOverlay SFU (переподключение)
 
-После hangup `livekit-token` остаётся в атрибутах; в `updated()` без флага `_sfuSessionFinished` снова вызывался бы `_connectSFU()`. Флаг выставляют hangup, `RoomEvent.Disconnected`, `disconnectedCallback`. В `sync-app`: `call-ended` только снимает оверлей; `call-hangup-request` — одна отправка WS `call.hangup` (не дублировать с `call-ended`). Ack на `call.hangup` возвращает `CallRead` с `call_id` (как и `call.invite`); обработчик WS-ответов не должен снова вызывать `_openCallOverlay` для этого ack — иначе оверлей закрывается по `call-ended` и тут же открывается. Решение: помечать `id` исходящей команды `call.hangup` (`_callHangupRequestIds`) и при ack с этим `id` не открывать оверлей.
+После hangup `livekit-token` остаётся в атрибутах модалки; флаг `_sfuSessionFinished` блокирует повторный `_connectSFU()` в `updated()`. Флаг выставляют hangup, `RoomEvent.Disconnected`, `disconnectedCallback`. Сетка строится из `_tiles` по публикациям камеры и screen share; `LocalTrackPublished` / `LocalTrackUnpublished` обновляют сетку.
 
-Видеосетка строится из `_tiles` (по публикациям камеры и screen share на участника). События `LocalTrackPublished` / `LocalTrackUnpublished` обновляют сетку.
+Push `sync/call/ended` обрабатывается в reducer'е slice `sync/call_ui`: сбрасывает `activeCall`, `overlayMinimized`, `recordingStatus`. `sync-app.js` подписан на `sync/call/ended` и закрывает модалку `sync.call_overlay` через `closeModal('sync.call_overlay')`.
 
 ## Конфигурация
 
@@ -133,47 +163,47 @@ POST /sync/api/v1/calls/join/{token}         → JoinResponse (`participant_name
 | test | 7890 (ext) / 7880 (int) | нет |
 | prod | 7880 | host network |
 
-`make test` запускает `livekit-test`, `livekit-egress-test` и `livekit-cli-test` автоматически через `mk/test.mk`.
+`make test` запускает `livekit-test`, `livekit-egress-test` и `livekit-cli-test` через `mk/test.mk`.
 
 ### Headless publisher в тестах
 
-- Для egress E2E без браузера используется `livekit-cli-test` (`livekit/livekit-cli`) как headless участник комнаты.
-- Команда для симуляции медиа-потока: `lk room join --url ws://livekit-test:7880 --api-key devkey --api-secret secret --identity <id> --publish-demo <room>`.
-- Для контейнерного egress endpoint `localhost`/`127.0.0.1` в S3-конфиге нормализуется в `host.docker.internal`, иначе egress внутри контейнера не сможет достучаться до host MinIO.
-- При custom S3 endpoint (`S3Upload.endpoint`) включать `S3Upload.force_path_style = true`, иначе egress может строить virtual-host URL вида `<bucket>.<endpoint>` и падать на DNS в MinIO/локальном окружении.
-- В `docker-compose-dev.yaml`, `docker-compose-prod.yaml` и `docker-compose-test.yaml` для `livekit-egress` должен быть `session_limits.file_output_max_duration: 1h`, чтобы запись не длилась дольше часа даже без клиентского stop.
+- `livekit-cli-test` (`livekit/livekit-cli`) как headless участник комнаты для egress E2E без браузера.
+- Команда: `lk room join --url ws://livekit-test:7880 --api-key devkey --api-secret secret --identity <id> --publish-demo <room>`.
+- Контейнерный egress: endpoint `localhost`/`127.0.0.1` в S3-конфиге нормализуется в `host.docker.internal`, иначе egress не достучится до host MinIO.
+- Custom S3 endpoint (`S3Upload.endpoint`): включать `S3Upload.force_path_style = true`, иначе egress строит virtual-host URL `<bucket>.<endpoint>` и падает на DNS.
+- В `docker-compose-{dev,test,prod}.yaml` для `livekit-egress` обязателен `session_limits.file_output_max_duration: 1h`.
 - Без опубликованного медиатрэка egress завершится с `Start signal not received`, файл в S3 не появится.
 
 ## БД (sync)
 
 | Таблица | Описание |
 |---|---|
-| `sync_calls` | Звонки: mode (p2p/sfu), status (ringing/active/ended), livekit_room_name |
+| `sync_calls` | Звонки: mode (sfu), status (ringing/active/ended), livekit_room_name |
 | `sync_call_participants` | Участники: status (invited/joined/declined/left) |
 | `sync_call_links` | Гостевые ссылки: link_token, expires_at, call_type |
 | `sync_call_recordings` | Записи звонков: status (requested/recording/uploaded/failed), provider_job_id, raw_file_id |
 
 ## Запись и канал как интерфейс STT
 
-- WS-команды: `call.recording.start`, `call.recording.stop` (без `call.meeting.*`).
-- `call.recording.start` запускает `RoomCompositeEgress` с `EncodedFileOutput.s3`.
-- `call.recording.stop` останавливает egress по `provider_job_id`.
-- `sync_finalize_recording_task`: ожидание готового egress — **`calls.finalize_recording_egress_wait_timeout_seconds`** и **`finalize_recording_egress_poll_interval_seconds`**; затем `file/video` в канал с `call_id`. Отдельных таблиц встреч/summary для sync нет. Если egress завершился с «Stop called before pipeline could start» (слишком короткая запись), пользователю показывается «Запись слишком короткая — файл не был создан».
-- WS-события звонка: `call.recording.started|stopped|failed` и прочие события участников; событий `call.transcript.*`, `call.summary.*`, `call.export.crm.*` нет.
+- WS-команды: `sync/calls/recording_start_requested`, `sync/calls/recording_stop_requested`.
+- `recording_start` запускает `RoomCompositeEgress` с `EncodedFileOutput.s3` (ключ `sync-recordings/{company_id}/{call_id}/{recording_id}.mp4`).
+- `recording_stop` останавливает egress по `provider_job_id`. Запустить запись может только текущий админ встречи; остановить — админ или пользователь, запустивший активную запись (`sync_call_recordings.started_by_user_id`).
+- Передача админа: `sync/calls/admin_transfer_requested`; новый админ должен быть `joined` участником (гостей назначать нельзя).
+- `sync_finalize_recording_task`: ожидание готового egress — `calls.finalize_recording_egress_wait_timeout_seconds` и `finalize_recording_egress_poll_interval_seconds`; затем `file/video` в канал с `call_id`. Отдельных таблиц встреч/summary нет. Если egress завершился с «Stop called before pipeline could start» — пользователю показывается «Запись слишком короткая — файл не был создан».
+- WS-события: `sync/call/recording_started|stopped|failed`. Событий `call.transcript.*`, `call.summary.*`, `call.export.crm.*` нет.
 - REST: `GET /sync/api/v1/calls/{call_id}/recordings`; транскрипция через `POST .../messages/.../transcribe`, `.../transcribe-video`, `POST .../channels/{channel_id}/calls/{call_id}/transcribe` (см. `sync.mdc`).
-- `sync_spaces`: `namespace` для CRM/RAG; колонок автоэкспорта транскрипта/summary нет.
 
 ## Ключевые файлы
 
-- `core/calls/` — переиспользуемая библиотека
-- `apps/sync/realtime/call_handlers.py` — бизнес-логика P2P/SFU
-- `apps/sync/ws.py` — прямой relay `call.signal`
-- `apps/sync/api/calls.py` — REST + публичные эндпоинты
-- `apps/sync/ui/features/call-overlay.js` — WebRTC оверлей (P2P нативный + SFU через `@livekit/client`, бандл в `core/frontend/static/assets/js/livekit/`, `importmap` в `index.html` / `call-join.html`)
-- `apps/sync/ui/features/call-incoming.js` — баннер входящего звонка
-- `apps/sync/ui/features/call-join.js` — страница входа по ссылке
-- `apps/sync/ui/call-join.html` — отдельный HTML (не SPA sync)
-- `tests/sync/unit/test_turn_credentials.py` — HMAC математика
-- `tests/sync/db/test_call_repository.py` — CRUD реальная БД
-- `tests/sync/realtime/test_call_handlers.py` — execute_command с реальным Redis и LiveKit
-- `tests/sync/api/test_calls_api.py` — HTTP API
+- `core/calls/` — переиспользуемая библиотека (LiveKit/turn).
+- `apps/sync/realtime/call_handlers.py` — бизнес-логика звонков (invite/accept/decline/hangup/recording/admin_transfer).
+- `apps/sync/realtime/command_router.py` — `_handle_call_signal` (быстрый путь без TaskIQ) + `SYNC_COMMAND_TYPE_MAP`.
+- `apps/sync/api/calls.py` — REST + публичные эндпоинты гостевой ссылки.
+- `apps/sync/ui/events/resources/calls.resource.js` — фабрики (HTTP + WS ops с `commandType`, `createSlice('sync/call_ui')` для UI-state).
+- `apps/sync/ui/modals/sync-call-overlay-modal.js` — `PlatformModal` с LiveKit Room (бандл в `core/frontend/static/assets/js/livekit/`, `importmap` в `index.html`).
+- `apps/sync/ui/modals/sync-call-incoming-modal.js` — `PlatformLightModal` входящего звонка; auto-open через `useEvent('sync/call/incoming')` в `sync-app.js`.
+- `apps/sync/ui/pages/sync-call-join-page.js` — `PlatformPage`, маршрут `/sync/join/:linkToken`.
+- `tests/sync/unit/test_turn_credentials.py` — HMAC математика.
+- `tests/sync/db/test_call_repository.py` — CRUD реальная БД.
+- `tests/sync/realtime/test_call_handlers.py` — execute_command с реальным Redis и LiveKit.
+- `tests/sync/api/test_calls_api.py` — HTTP API.

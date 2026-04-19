@@ -50,7 +50,7 @@ export class PlatformFieldString extends PlatformElement {
             const display = this.value != null && this.value !== '';
             return display
                 ? html`<span class="view-value">${this.value}</span>`
-                : html`<span class="view-value empty">${this.i18n.t('platform_field.empty_value', {}, 'platform')}</span>`;
+                : html`<span class="view-value empty">${(this.t('platform_field.empty_value') || 'platform_field.empty_value')}</span>`;
         }
 
         return html`

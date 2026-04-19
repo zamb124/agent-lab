@@ -10,6 +10,7 @@
 import { html, css } from 'lit';
 import { PlatformElement } from '../platform-element/index.js';
 import { nextModalLayerZIndex } from '../utils/modal-z-stack.js';
+import { CoreEvents } from '../events/contract.js';
 import './platform-icon.js';
 import './platform-button.js';
 
@@ -20,6 +21,8 @@ export class GlassModal extends PlatformElement {
         size: { type: String },
         heading: { type: String },
         title: { type: String },
+        _modalId: { state: true },
+        _modalKind: { state: true },
         _isFullscreen: { type: Boolean, state: true },
         _isDragging: { type: Boolean, state: true },
         _position: { type: Object, state: true },
@@ -622,6 +625,8 @@ export class GlassModal extends PlatformElement {
         this.size = 'md';
         this.heading = '';
         this.title = '';
+        this._modalId = null;
+        this._modalKind = null;
         this._isFullscreen = false;
         this._isDragging = false;
         this._panelEnterActive = false;
@@ -641,30 +646,17 @@ export class GlassModal extends PlatformElement {
     }
 
     /**
-     * Открывает модалку: поднимает z-index через nextModalLayerZIndex (вложенные модалки
-     * оказываются выше предыдущих), переносит хост в document.body в willUpdate.
+     * Закрытие = dispatch UI_MODAL_CLOSE с _modalId. Reducer снимет элемент со стека,
+     * platform-modal-stack удалит DOM-узел. Любая прямая мутация this.open=false
+     * запрещена: source of truth — state.modals.stack.
      */
-    showModal() {
-        this.style.setProperty(
-            '--platform-modal-layer-z',
-            String(nextModalLayerZIndex()),
-        );
-        this.open = true;
-        this._position = { x: null, y: null };
-    }
-
     close() {
-        this.open = false;
-        this._isFullscreen = false;
-        this._position = { x: null, y: null };
-        this.dispatchEvent(new CustomEvent('modal-closed', {
-            bubbles: false,
-            composed: true,
-        }));
-        this.dispatchEvent(new CustomEvent('close', {
-            bubbles: false,
-            composed: true,
-        }));
+        if (!this._modalId) {
+            throw new Error(
+                'GlassModal.close: _modalId is empty. Modals must be opened via dispatch(UI_MODAL_OPEN, { kind, props }) — direct mounting запрещён.',
+            );
+        }
+        this.dispatch(CoreEvents.UI_MODAL_CLOSE, { id: this._modalId });
     }
 
     toggleFullscreen() {
@@ -930,7 +922,7 @@ export class GlassModal extends PlatformElement {
             this.open && this._panelEnterActive ? 'panel-enter-active' : '',
         ].filter(Boolean).join(' ');
 
-        const tm = (key) => this.i18n.t(key, {}, 'shell');
+        const tm = (key) => (this.t(key) || key);
         return html`
             <div class="modal-svg-hidden" aria-hidden="true">
                 <svg width="0" height="0">

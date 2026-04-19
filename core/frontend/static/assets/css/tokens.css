@@ -355,7 +355,32 @@
     --crm-summary-chip-cyan-bg: rgba(117, 219, 246, 0.28);
     --crm-summary-chip-orange-bg: rgba(255, 171, 120, 0.3);
     --crm-summary-chip-rose-bg: rgba(250, 176, 187, 0.32);
-    
+
+    /* CRM accents (Figma palette) */
+    --crm-accent-violet: #99A6F9;
+    --crm-accent-yellow: #FAD17A;
+    --crm-accent-orange: #FF885C;
+
+    /* CRM note view (dark — приглушённые оттенки) */
+    --crm-note-summary-bg: rgba(153, 166, 249, 0.18);
+    --crm-note-tasks-bg: rgba(255, 255, 255, 0.05);
+    --crm-note-related-violet-bg: rgba(153, 166, 249, 0.18);
+    --crm-note-related-yellow-bg: rgba(250, 209, 122, 0.22);
+    --crm-note-related-orange-bg: rgba(255, 136, 92, 0.18);
+    --crm-note-action-bg: rgba(255, 255, 255, 0.06);
+    --crm-note-action-bg-hover: rgba(255, 255, 255, 0.1);
+    --crm-note-action-orange-bg: rgba(255, 136, 92, 0.22);
+    --crm-note-action-orange-color: var(--accent-secondary);
+    --crm-note-checkbox-pending-border: rgba(255, 255, 255, 0.18);
+    --crm-note-checkbox-checked-bg: var(--accent);
+    --crm-note-checkbox-checked-mark: #FFFFFF;
+    --crm-note-input-bg: rgba(255, 255, 255, 0.05);
+    --crm-note-text-muted: var(--text-tertiary);
+    --crm-note-text-strikethrough: rgba(255, 255, 255, 0.25);
+    --crm-note-summary-title-gradient: linear-gradient(80.46deg, #FAD17A 9.08%, #FF9A76 44.12%, #99A6F9 85.61%);
+    --crm-note-icon-gradient: linear-gradient(80.46deg, #FAD17A 9.08%, #FF9A76 44.12%, #99A6F9 85.61%);
+    --crm-note-related-icon-gradient: linear-gradient(312.35deg, #FAD17A 18.71%, #FF9A76 82.25%, #99A6F9 157.48%);
+
     /* ========== SYNC SEMANTIC TOKENS ========== */
 
     --sync-bubble-own-bg: linear-gradient(135deg, rgba(153, 166, 249, 0.18) 0%, rgba(255, 136, 92, 0.10) 100%);
@@ -542,6 +567,23 @@
     --crm-summary-chip-cyan-bg: rgba(117, 219, 246, 0.32);
     --crm-summary-chip-orange-bg: rgba(255, 171, 120, 0.35);
     --crm-summary-chip-rose-bg: rgba(250, 176, 187, 0.38);
+
+    /* CRM note view (Figma light) */
+    --crm-note-summary-bg: rgba(153, 166, 249, 0.2);
+    --crm-note-tasks-bg: rgba(34, 34, 34, 0.05);
+    --crm-note-related-violet-bg: rgba(153, 166, 249, 0.2);
+    --crm-note-related-yellow-bg: rgba(250, 209, 122, 0.3);
+    --crm-note-related-orange-bg: rgba(255, 136, 92, 0.2);
+    --crm-note-action-bg: rgba(34, 34, 34, 0.05);
+    --crm-note-action-bg-hover: rgba(34, 34, 34, 0.08);
+    --crm-note-action-orange-bg: rgba(255, 136, 92, 0.15);
+    --crm-note-action-orange-color: var(--accent-secondary);
+    --crm-note-checkbox-pending-border: rgba(34, 34, 34, 0.1);
+    --crm-note-checkbox-checked-bg: var(--accent);
+    --crm-note-checkbox-checked-mark: #FFFFFF;
+    --crm-note-input-bg: rgba(34, 34, 34, 0.05);
+    --crm-note-text-muted: rgba(34, 34, 34, 0.3);
+    --crm-note-text-strikethrough: rgba(34, 34, 34, 0.2);
 }
 
 /* ========== Office / Documents service palette ========== */

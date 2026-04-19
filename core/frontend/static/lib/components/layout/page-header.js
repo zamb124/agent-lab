@@ -8,6 +8,7 @@
  */
 import { html, css } from 'lit';
 import { PlatformElement } from '../../platform-element/index.js';
+import { CoreEvents } from '../../events/contract.js';
 import '../platform-icon.js';
 
 export class PageHeader extends PlatformElement {
@@ -15,7 +16,6 @@ export class PageHeader extends PlatformElement {
         title: { type: String },
         subtitle: { type: String },
         _isMobile: { state: true },
-        _sidebarOpen: { state: true },
     };
 
     static styles = [
@@ -151,9 +151,8 @@ export class PageHeader extends PlatformElement {
         this.title = '';
         this.subtitle = '';
         this._isMobile = false;
-        this._sidebarOpen = false;
         this._resizeObserver = null;
-        this._boundMobileChangeHandler = this._onSidebarMobileChange.bind(this);
+        this._sidebarOpenSel = this.select((s) => s.ui.sidebar.mobileOpen);
     }
 
     connectedCallback() {
@@ -161,7 +160,6 @@ export class PageHeader extends PlatformElement {
         this._checkMobile();
         this._resizeObserver = new ResizeObserver(() => this._checkMobile());
         this._resizeObserver.observe(document.body);
-        window.addEventListener('platform-sidebar-mobile-change', this._boundMobileChangeHandler);
     }
 
     disconnectedCallback() {
@@ -170,26 +168,19 @@ export class PageHeader extends PlatformElement {
             this._resizeObserver.disconnect();
             this._resizeObserver = null;
         }
-        window.removeEventListener('platform-sidebar-mobile-change', this._boundMobileChangeHandler);
     }
 
     _checkMobile() {
         this._isMobile = window.innerWidth <= 767;
     }
 
-    _onSidebarMobileChange(e) {
-        this._sidebarOpen = e.detail?.open || false;
-    }
-
     _openSidebar() {
-        window.dispatchEvent(new CustomEvent('platform-sidebar-open', {
-            bubbles: true,
-            composed: true,
-        }));
+        this.dispatch(CoreEvents.UI_SIDEBAR_OPEN_REQUESTED, null);
     }
 
     render() {
-        const showMenu = this._isMobile && !this._sidebarOpen;
+        const sidebarOpen = !!(this._sidebarOpenSel && this._sidebarOpenSel.value);
+        const showMenu = this._isMobile && !sidebarOpen;
 
         return html`
             <div class="header-wrap">

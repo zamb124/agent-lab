@@ -11,6 +11,7 @@ from apps.crm.services.namespace_notification_recipients import (
     resolve_user_ids_for_namespace_broadcast,
 )
 from core.logging import get_logger
+from core.ui_events import publish_ui_event_to_user
 from core.websocket.publisher import Notification, NotificationType, notify_user
 
 if TYPE_CHECKING:
@@ -56,6 +57,13 @@ async def broadcast_crm_note_event(
     else:
         title = "Заметка удалена"
         message = "Заметка удалена"
+    ui_event_payload = {
+        "company_id": company_id,
+        "namespace": normalized_namespace,
+        "note_id": note_id,
+        "note_date": note_date_iso,
+        "action": action,
+    }
     for user_id in recipient_user_ids:
         await notify_user(
             user_id=user_id,
@@ -66,6 +74,11 @@ async def broadcast_crm_note_event(
                 service="crm",
                 data=notification_data,
             ),
+        )
+        await publish_ui_event_to_user(
+            user_id=user_id,
+            type="crm/note/updated",
+            payload=ui_event_payload,
         )
     logger.debug(
         "CRM note WS broadcast: action=%s note_id=%s namespace=%s recipients=%s",

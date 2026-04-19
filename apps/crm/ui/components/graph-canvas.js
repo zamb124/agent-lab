@@ -1,3 +1,11 @@
+/**
+ * graph-canvas — обёртка над оффлайновым `ForceGraph3D` (window.ForceGraph3D).
+ *
+ * Презентационный компонент: всё состояние графа приходит через properties,
+ * взаимодействие наружу — DOM-события `node-click`, `node-dblclick`,
+ * `node-contextmenu`, `link-click`, `canvas-click`.
+ */
+
 import { html, css } from 'lit';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
 import {
@@ -17,7 +25,9 @@ const GRAPH_WORLD_RADIUS = 220;
 const MIN_CAMERA_DISTANCE = 760;
 const ADAPTIVE_LABEL_DISTANCE = 900;
 
-export class GraphCanvas extends PlatformElement {
+export class CRMGraphCanvas extends PlatformElement {
+    static i18nNamespace = 'crm';
+
     static properties = {
         graphNodes: { type: Array },
         graphEdges: { type: Array },
@@ -294,31 +304,19 @@ export class GraphCanvas extends PlatformElement {
             })
             .nodeThreeObjectExtend(false)
             .linkColor((link) => {
-                if (link.path_kind === 'directed') {
-                    return '#41d36d';
-                }
-                if (link.path_kind === 'undirected') {
-                    return '#f2c94c';
-                }
-                if (link.path_kind === 'both') {
-                    return '#9adf5d';
-                }
-                if (link.highlighted) {
-                    return '#ff6b6b';
-                }
+                if (link.path_kind === 'directed') return '#41d36d';
+                if (link.path_kind === 'undirected') return '#f2c94c';
+                if (link.path_kind === 'both') return '#9adf5d';
+                if (link.highlighted) return '#ff6b6b';
                 const typeColor = this.relationshipTypeColors.get(link.relation_type);
-                if (typeColor) {
-                    return typeColor;
-                }
+                if (typeColor) return typeColor;
                 return '#9ba3bf';
             })
             .linkWidth((link) => {
                 if (link.path_kind === 'directed' || link.path_kind === 'undirected' || link.path_kind === 'both') {
                     return 4;
                 }
-                if (link.highlighted) {
-                    return 4;
-                }
+                if (link.highlighted) return 4;
                 const edgeWeight = typeof link.weight === 'number' && Number.isFinite(link.weight) ? link.weight : 1;
                 const weightWidth = Math.max(0.8, Math.min(4, edgeWeight * 1.5));
                 if (this._isLinkNearSelectedNode(link)) {
@@ -330,28 +328,20 @@ export class GraphCanvas extends PlatformElement {
                 if (link.path_kind === 'directed' || link.path_kind === 'undirected' || link.path_kind === 'both') {
                     return 0.95;
                 }
-                if (link.highlighted || link.id === this.selectedEdgeId) {
-                    return 0.95;
-                }
-                if (this._isLinkNearSelectedNode(link)) {
-                    return 0.75;
-                }
+                if (link.highlighted || link.id === this.selectedEdgeId) return 0.95;
+                if (this._isLinkNearSelectedNode(link)) return 0.75;
                 return 0.45;
             })
             .linkThreeObjectExtend(true)
             .linkThreeObject((link) => {
                 const linkLabelColor = getComputedStyle(document.documentElement).getPropertyValue('--text-secondary').trim() || '#d4dae8';
                 const sprite = this._createTextSprite(link.relation_type || 'related', linkLabelColor, 20);
-                if (!sprite) {
-                    return null;
-                }
+                if (!sprite) return null;
                 sprite.visible = this._shouldShowLinkLabel(link);
                 return sprite;
             })
             .linkPositionUpdate((sprite, { start, end }, link) => {
-                if (!sprite || !start || !end) {
-                    return false;
-                }
+                if (!sprite || !start || !end) return false;
                 sprite.visible = this._shouldShowLinkLabel(link);
                 const middlePosition = {
                     x: start.x + ((end.x - start.x) / 2),
@@ -362,32 +352,20 @@ export class GraphCanvas extends PlatformElement {
                 return true;
             })
             .linkDirectionalArrowLength((link) => {
-                if (link.path_kind === 'undirected') {
-                    return 0;
-                }
+                if (link.path_kind === 'undirected') return 0;
                 return link.directed ? 8 : 0;
             })
             .linkDirectionalArrowRelPos(0.88)
             .linkDirectionalArrowColor((link) => {
-                if (link.path_kind === 'directed') {
-                    return '#41d36d';
-                }
-                if (link.path_kind === 'both') {
-                    return '#9adf5d';
-                }
+                if (link.path_kind === 'directed') return '#41d36d';
+                if (link.path_kind === 'both') return '#9adf5d';
                 const typeColor = this.relationshipTypeColors.get(link.relation_type);
-                if (typeColor) {
-                    return typeColor;
-                }
+                if (typeColor) return typeColor;
                 return null;
             })
             .linkDirectionalParticles((link) => {
-                if (link.highlighted) {
-                    return 4;
-                }
-                if (link.directed) {
-                    return 2;
-                }
+                if (link.highlighted) return 4;
+                if (link.directed) return 2;
                 return 0;
             })
             .linkDirectionalParticleWidth((link) => (link.highlighted ? 3 : 1.5))
@@ -406,13 +384,9 @@ export class GraphCanvas extends PlatformElement {
                 node.fz = node.z;
             })
             .onEngineStop(() => {
-                if (!this._graphInstance) {
-                    return;
-                }
+                if (!this._graphInstance) return;
                 const currentGraphData = this._graphInstance.graphData();
-                if (!currentGraphData || !Array.isArray(currentGraphData.nodes)) {
-                    return;
-                }
+                if (!currentGraphData || !Array.isArray(currentGraphData.nodes)) return;
                 if (currentGraphData.nodes.length <= 1) {
                     this._autoFitPending = false;
                     this._applySingleNodeCamera();
@@ -435,14 +409,10 @@ export class GraphCanvas extends PlatformElement {
     }
 
     _applyGraphDimensionsFromContainer() {
-        if (!this._graphInstance || !this._graphContainerEl) {
-            return;
-        }
+        if (!this._graphInstance || !this._graphContainerEl) return;
         const widthPx = this._graphContainerEl.clientWidth;
         const heightPx = this._graphContainerEl.clientHeight;
-        if (widthPx <= 0 || heightPx <= 0) {
-            return;
-        }
+        if (widthPx <= 0 || heightPx <= 0) return;
         this._graphInstance.width(widthPx);
         this._graphInstance.height(heightPx);
     }
@@ -453,27 +423,17 @@ export class GraphCanvas extends PlatformElement {
             const restoringStrength = 0.12 * alpha;
             nodes.forEach((node) => {
                 const hasCoordinates = [node.x, node.y, node.z].every((value) => typeof value === 'number' && Number.isFinite(value));
-                if (!hasCoordinates) {
-                    return;
-                }
+                if (!hasCoordinates) return;
                 const distance = Math.sqrt((node.x ** 2) + (node.y ** 2) + (node.z ** 2));
-                if (distance <= worldRadius || distance === 0) {
-                    return;
-                }
+                if (distance <= worldRadius || distance === 0) return;
                 const overshoot = distance - worldRadius;
                 const nx = node.x / distance;
                 const ny = node.y / distance;
                 const nz = node.z / distance;
                 const pull = overshoot * restoringStrength;
-                if (typeof node.vx !== 'number' || !Number.isFinite(node.vx)) {
-                    node.vx = 0;
-                }
-                if (typeof node.vy !== 'number' || !Number.isFinite(node.vy)) {
-                    node.vy = 0;
-                }
-                if (typeof node.vz !== 'number' || !Number.isFinite(node.vz)) {
-                    node.vz = 0;
-                }
+                if (typeof node.vx !== 'number' || !Number.isFinite(node.vx)) node.vx = 0;
+                if (typeof node.vy !== 'number' || !Number.isFinite(node.vy)) node.vy = 0;
+                if (typeof node.vz !== 'number' || !Number.isFinite(node.vz)) node.vz = 0;
                 node.vx -= nx * pull;
                 node.vy -= ny * pull;
                 node.vz -= nz * pull;
@@ -486,9 +446,7 @@ export class GraphCanvas extends PlatformElement {
     }
 
     _fitGraphToViewport(durationMs = 260, paddingPx = 90) {
-        if (!this._graphInstance) {
-            return;
-        }
+        if (!this._graphInstance) return;
         this._graphInstance.zoomToFit(durationMs, paddingPx);
         requestAnimationFrame(() => {
             this._enforceMinCameraDistance(MIN_CAMERA_DISTANCE);
@@ -496,17 +454,11 @@ export class GraphCanvas extends PlatformElement {
     }
 
     _enforceMinCameraDistance(minDistance) {
-        if (!this._graphInstance) {
-            return;
-        }
+        if (!this._graphInstance) return;
         const position = this._graphInstance.cameraPosition();
-        if (!position) {
-            return;
-        }
+        if (!position) return;
         const distance = Math.sqrt((position.x ** 2) + (position.y ** 2) + (position.z ** 2));
-        if (!Number.isFinite(distance) || distance >= minDistance) {
-            return;
-        }
+        if (!Number.isFinite(distance) || distance >= minDistance) return;
         if (distance === 0) {
             this._graphInstance.cameraPosition({ x: 0, y: 0, z: minDistance }, { x: 0, y: 0, z: 0 }, 180);
             return;
@@ -520,16 +472,12 @@ export class GraphCanvas extends PlatformElement {
     }
 
     _applySingleNodeCamera() {
-        if (!this._graphInstance) {
-            return;
-        }
+        if (!this._graphInstance) return;
         this._graphInstance.cameraPosition({ x: 0, y: 0, z: MIN_CAMERA_DISTANCE }, { x: 0, y: 0, z: 0 }, 220);
     }
 
     _syncGraph() {
-        if (!this._graphInstance) {
-            return;
-        }
+        if (!this._graphInstance) return;
         const graphData = this._buildGraphDataForScene();
         if (graphData.nodes.length === 1) {
             const singleNode = graphData.nodes[0];
@@ -544,13 +492,9 @@ export class GraphCanvas extends PlatformElement {
         this._graphInstance.graphData(graphData);
         this._graphInstance.d3Force('charge').strength(GRAPH_PRESETS[this.graphPreset].charge);
         this._graphInstance.nodeRelSize(GRAPH_PRESETS[this.graphPreset].nodeRelSize);
-        if (graphData.nodes.length === 0) {
-            return;
-        }
+        if (graphData.nodes.length === 0) return;
         if (graphData.nodes.length === 1) {
-            if (this._graphInstance) {
-                this._applySingleNodeCamera();
-            }
+            this._applySingleNodeCamera();
             return;
         }
         this._autoFitPending = true;
@@ -559,9 +503,7 @@ export class GraphCanvas extends PlatformElement {
     _assertOfflineVendorSetup() {
         const expectedSrc = '/crm/ui/vendor/3d-force-graph/3d-force-graph.min.js';
         const hasExpectedScript = Array.from(document.scripts).some((script) => {
-            if (typeof script.src !== 'string') {
-                return false;
-            }
+            if (typeof script.src !== 'string') return false;
             return script.src.includes(expectedSrc);
         });
         if (!hasExpectedScript) {
@@ -585,67 +527,41 @@ export class GraphCanvas extends PlatformElement {
     }
 
     _shouldShowNodeLabel(node) {
-        if (this.labelMode !== 'adaptive') {
-            return false;
-        }
+        if (this.labelMode !== 'adaptive') return false;
         const isImportant = node.id === this.selectedNodeId
             || node.id === this.pathSourceId
             || node.id === this.pathTargetId;
-        if (isImportant) {
-            return true;
-        }
-        if (this.graphNodes.length <= 80) {
-            return true;
-        }
+        if (isImportant) return true;
+        if (this.graphNodes.length <= 80) return true;
         const distance = this._getCameraDistance();
-        if (distance < ADAPTIVE_LABEL_DISTANCE && this.graphNodes.length <= 220) {
-            return true;
-        }
+        if (distance < ADAPTIVE_LABEL_DISTANCE && this.graphNodes.length <= 220) return true;
         return false;
     }
 
     _shouldShowLinkLabel(link) {
-        if (this.labelMode !== 'adaptive') {
-            return false;
-        }
-        if (link.id === this.selectedEdgeId || link.highlighted) {
-            return true;
-        }
-        if (this.graphEdges.length <= 16 && this._getCameraDistance() < ADAPTIVE_LABEL_DISTANCE * 0.82) {
-            return true;
-        }
+        if (this.labelMode !== 'adaptive') return false;
+        if (link.id === this.selectedEdgeId || link.highlighted) return true;
+        if (this.graphEdges.length <= 16 && this._getCameraDistance() < ADAPTIVE_LABEL_DISTANCE * 0.82) return true;
         return false;
     }
 
     _getCameraDistance() {
-        if (!this._graphInstance) {
-            return MIN_CAMERA_DISTANCE;
-        }
+        if (!this._graphInstance) return MIN_CAMERA_DISTANCE;
         const position = this._graphInstance.cameraPosition();
-        if (!position) {
-            return MIN_CAMERA_DISTANCE;
-        }
+        if (!position) return MIN_CAMERA_DISTANCE;
         const distance = Math.sqrt((position.x ** 2) + (position.y ** 2) + (position.z ** 2));
-        if (!Number.isFinite(distance) || distance <= 0) {
-            return MIN_CAMERA_DISTANCE;
-        }
+        if (!Number.isFinite(distance) || distance <= 0) return MIN_CAMERA_DISTANCE;
         return distance;
     }
 
     _getLinkEndpointId(endpoint) {
-        if (typeof endpoint === 'string') {
-            return endpoint;
-        }
-        if (endpoint && typeof endpoint === 'object') {
-            return endpoint.id || endpoint.entity_id || '';
-        }
+        if (typeof endpoint === 'string') return endpoint;
+        if (endpoint && typeof endpoint === 'object') return endpoint.id || endpoint.entity_id || '';
         return '';
     }
 
     _isLinkNearSelectedNode(link) {
-        if (!this.selectedNodeId) {
-            return false;
-        }
+        if (!this.selectedNodeId) return false;
         const sourceId = this._getLinkEndpointId(link.source);
         const targetId = this._getLinkEndpointId(link.target);
         return sourceId === this.selectedNodeId || targetId === this.selectedNodeId;
@@ -656,4 +572,4 @@ export class GraphCanvas extends PlatformElement {
     }
 }
 
-customElements.define('graph-canvas', GraphCanvas);
+customElements.define('crm-graph-canvas', CRMGraphCanvas);

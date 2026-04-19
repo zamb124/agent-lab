@@ -47,6 +47,10 @@ from apps.crm.constants_graph import (
 from apps.crm.services.attachment_service import AttachmentService
 from apps.crm.services.user_person_service import UserPersonService
 from apps.crm.services.crm_note_ws_broadcast import broadcast_crm_note_event
+from apps.crm.services.crm_summary_ws_broadcast import (
+    broadcast_crm_daily_summary_updated,
+    broadcast_crm_period_summary_updated,
+)
 from apps.crm.services.daily_summary_cache_service import DailySummaryCacheService
 from apps.crm.services.daily_summary_artifact_service import DailySummaryArtifactService
 from apps.crm.services.saga import EntityDeletionSaga, SagaStep
@@ -721,6 +725,9 @@ class EntityService:
             attributes=attributes or {},
             entity_subtype=entity_subtype,
         )
+
+        if entity_type == "note" and kwargs.get("note_date") is None:
+            kwargs["note_date"] = datetime.now(timezone.utc).date()
 
         entity = CRMEntity(
             user_id=user_id,
@@ -3206,6 +3213,14 @@ class EntityService:
             date_str=date_str,
             payload=state,
         )
+        await broadcast_crm_daily_summary_updated(
+            company_id=company_id,
+            namespace=namespace,
+            date_str=date_str,
+            state=state,
+            company_repository=self._company_repo,
+            access_grant_repository=self._access_grant_repo,
+        )
 
     async def _materialize_empty_daily_summary(
         self,
@@ -3805,6 +3820,15 @@ class EntityService:
                 namespace=namespace,
                 date_from=date_from,
                 date_to=date_to,
+            )
+            await broadcast_crm_period_summary_updated(
+                company_id=company_id,
+                namespace=namespace,
+                date_from=date_from,
+                date_to=date_to,
+                state=state,
+                company_repository=self._company_repo,
+                access_grant_repository=self._access_grant_repo,
             )
             return state
         except Exception:

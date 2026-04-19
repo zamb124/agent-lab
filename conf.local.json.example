@@ -105,7 +105,9 @@
     "apns_key_id": null,
     "apns_private_key": null,
     "apns_bundle_id": null,
-    "apns_use_sandbox": false
+    "apns_use_sandbox": false,
+    "fcm_credentials_json": null,
+    "fcm_project_id": null
   },
   "calendar_sync": {
     "sync_meeting_reminder_enabled": true,

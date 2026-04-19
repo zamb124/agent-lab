@@ -1,35 +1,38 @@
 /**
- * Platform Management - Entry Point
+ * Frontend Service UI — entry point.
+ *
+ * Bootstrap корневого компонента; страницы/модалки/секции лендинга подключаются
+ * транзитивно через `frontend-app.js`.
  */
 
-import './app/FrontendApp.js';
-
-import './components/frontend-sidebar.js';
-
+import '@platform/lib/components/platform-icon.js';
+import '@platform/lib/components/glass-button.js';
+import '@platform/lib/components/glass-card.js';
+import '@platform/lib/components/glass-input.js';
+import '@platform/lib/components/glass-textarea.js';
+import '@platform/lib/components/glass-spinner.js';
+import '@platform/lib/components/platform-button.js';
+import '@platform/lib/components/platform-switch.js';
 import '@platform/lib/components/platform-user.js';
+import '@platform/lib/components/platform-notification-manager.js';
+import '@platform/lib/components/platform-deployment-version.js';
+import '@platform/lib/components/platform-shell-page.js';
+import '@platform/lib/components/pwa-install-banner.js';
+import '@platform/lib/components/auth-modal.js';
+import '@platform/lib/components/company-modal.js';
+import '@platform/lib/components/glass-toast.js';
+import '@platform/lib/components/layout/page-header.js';
+import '@platform/lib/components/platform-modal-stack.js';
 
-import './pages/landing-page.js';
-import './pages/select-company-page.js';
-import './pages/join-page.js';
-import './pages/dashboard-page.js';
-import './pages/team/team-page.js';
-import './pages/api-keys/api-keys-page.js';
-import './pages/embed-configs-page.js';
-import './pages/settings/settings-page.js';
-import './pages/billing/billing-page.js';
-import './pages/scheduler-tasks-page.js';
-import './pages/leads-requests-page.js';
-import './pages/admin/tracing-page.js';
-import './pages/admin/billing-admin-page.js';
+import './modals/lead-form-modal.js';
+import './modals/create-api-key-modal.js';
+import './modals/edit-api-key-modal.js';
+import './modals/create-embed-modal.js';
+import './modals/embed-code-modal.js';
+import './modals/create-scheduler-task-modal.js';
+import './modals/topup-modal.js';
+import './modals/system-access-modal.js';
 
-// Страницы продуктов
-import './pages/products/product-agents-page.js';
-import './pages/products/product-rag-page.js';
-import './pages/products/product-crm-page.js';
-import './pages/products/product-sync-page.js';
-import './pages/products/product-documents-page.js';
-
-// Импортируем компоненты лендинга
 import './components/landing/landing-header.js';
 import './components/landing/landing-hero.js';
 import './components/landing/landing-about.js';
@@ -40,3 +43,5 @@ import './components/landing/landing-reviews.js';
 import './components/landing/landing-faq.js';
 import './components/landing/landing-cta.js';
 import './components/landing/landing-footer.js';
+
+import './app/frontend-app.js';

@@ -1,119 +1,85 @@
-import { html, css } from 'lit';
-import { PlatformModal } from '@platform/lib/components/glass-modal.js';
-import { buttonStyles } from '@platform/lib/styles/shared/button.styles.js';
-import { CRMStore, isRelationshipSuggestion } from '../store/crm.store.js';
-import '@platform/lib/components/platform-icon.js';
-import './entity-modal.js';
+/**
+ * CRMAiAnalysisModal — модалка AI-анализа заметки.
+ *
+ * Props:
+ *   - noteId: string — обязательный, id заметки.
+ *
+ * Поток:
+ *   1. На open подгружаем заметку через `entitiesResource.get(noteId)`.
+ *      Из `entity.attributes.ai_analysis_draft` достаём текущий черновик
+ *      (note + entities + relationships + draft_version).
+ *   2. Подписка на WS `crm/note/updated` для noteId — перезагрузка entity
+ *      (когда воркер докинул свежий draft или применил его).
+ *   3. Действия:
+ *      - «Запустить анализ» — `noteAnalyzeStartOp.run({ note_id, mode: 'analyze' })`.
+ *      - «Применить» — `noteAnalyzeStartOp.run({ note_id, mode: 'apply' })`.
+ *      - per-row «удалить» — кладём draft_entity_id / draft_relationship_id
+ *        в локальные _pendingRemoveEntityIds / _pendingRemoveRelIds.
+ *      - «Сохранить изменения» — `noteAnalysisDraftSaveOp.run({ note_id, draft })`,
+ *        где draft.expected_version берётся из текущего draft.
+ *      - «Запустить заново» — повторный analyze поверх той же заметки.
+ *   4. Render — двухколоночный layout: левая колонка summary + suggested
+ *      tasks; правая — suggested entities/relationships.
+ */
 
-export class AIAnalysisModal extends PlatformModal {
+import { html, css, nothing } from 'lit';
+import { PlatformModal } from '@platform/lib/components/glass-modal.js';
+import { registerModalKind } from '@platform/lib/utils/modal-registry.js';
+import '@platform/lib/components/platform-icon.js';
+import '@platform/lib/components/glass-spinner.js';
+
+const ENTITIES_NAME = 'crm/entities';
+const ANALYZE_OP = 'crm/note_analyze_start';
+const DRAFT_SAVE_OP = 'crm/note_analysis_draft_save';
+
+const TASK_TYPE = 'task';
+
+function _isObject(value) {
+    return typeof value === 'object' && value !== null;
+}
+
+function _readDraft(entity) {
+    if (entity === null) return null;
+    const attrs = entity.attributes;
+    if (!_isObject(attrs)) return null;
+    const draft = attrs.ai_analysis_draft;
+    if (!_isObject(draft)) return null;
+    if (typeof draft.draft_version !== 'number') return null;
+    return draft;
+}
+
+function _isApplied(entity) {
+    if (entity === null) return false;
+    const attrs = entity.attributes;
+    if (!_isObject(attrs)) return false;
+    return typeof attrs.ai_analysis_applied_at === 'string'
+        && attrs.ai_analysis_applied_at.length > 0
+        && _readDraft(entity) === null;
+}
+
+export class CRMAiAnalysisModal extends PlatformModal {
+    static modalKind = 'crm.ai_analysis';
+    static i18nNamespace = 'crm';
+
     static properties = {
         ...PlatformModal.properties,
-        _suggestions: { state: true },
-        _notes: { state: true },
-        _currentNoteId: { state: true },
-        _entityTypes: { state: true },
-        _relationshipTypes: { state: true },
-        _taskStates: { state: true },
-        _taskDraft: { state: true },
-        _saving: { state: true },
-        _analyzing: { state: true },
-        loading: { type: Boolean },
-        _loadingProgress: { state: true },
-        _loadingMessageIndex: { state: true },
-        _expandedSuggestions: { state: true },
-        _attributeDrafts: { state: true },
-        _importReviewActive: { state: true },
+        noteId: { type: String },
+        _pendingRemoveEntityIds: { state: true },
+        _pendingRemoveRelIds: { state: true },
+        _attrsExpandedIds: { state: true },
+        _saveError: { state: true },
     };
 
     static styles = [
-        PlatformModal.styles,
-        buttonStyles,
+        ...PlatformModal.styles,
         css`
-            :host {
-                --modal-max-width: 1120px;
-                --ai-analysis-save-bg: #7c3aed;
-                --ai-analysis-save-hover: #6d28d9;
-                --ai-analysis-save-shadow: 0 2px 14px rgba(124, 58, 237, 0.55);
-                --ai-analysis-save-shadow-hover: 0 4px 20px rgba(124, 58, 237, 0.65);
-            }
+            :host { --modal-max-width: 1120px; }
 
-            .header-btn.header-save-btn--primary {
-                background: var(--ai-analysis-save-bg);
-                color: #ffffff;
-                box-shadow: var(--ai-analysis-save-shadow);
-            }
-
-            .header-btn.header-save-btn--primary:hover:not(:disabled) {
-                background: var(--ai-analysis-save-hover);
-                color: #ffffff;
-                box-shadow: var(--ai-analysis-save-shadow-hover);
-            }
-
-            .header-btn.header-save-btn--primary:disabled {
-                box-shadow: none;
-            }
-
-            .root {
+            .body {
                 display: grid;
-                grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-                gap: var(--space-3);
-                min-height: 520px;
-                width: 100%;
-                min-width: 0;
-                box-sizing: border-box;
-            }
-
-            .loading-shell {
-                width: 100%;
-                min-height: 620px;
-                display: flex;
-                align-items: center;
-                justify-content: center;
-                padding: 24px;
-            }
-
-            .loading-wrap {
-                width: 547px;
-                max-width: 100%;
-                display: flex;
-                flex-direction: column;
-                align-items: center;
-                gap: 48px;
-            }
-
-            .loading-title {
-                margin: 0;
-                width: 100%;
-                text-align: center;
-                font-size: 28px;
-                line-height: 34px;
-                font-weight: 700;
-                color: #99a6f9;
-            }
-
-            .loading-percent {
-                margin: 0;
-                font-size: 14px;
-                line-height: 18px;
-                font-weight: 600;
-                color: #99a6f9;
-                opacity: 0.95;
-            }
-
-            .loading-track {
-                width: 100%;
-                height: 24px;
-                border-radius: 999px;
-                background: rgba(34, 34, 34, 0.05);
-                position: relative;
-                overflow: hidden;
-            }
-
-            .loading-fill {
-                height: 100%;
-                border-radius: inherit;
-                background: #99a6f9;
-                transition: width 500ms linear;
+                grid-template-columns: 1fr 1fr;
+                gap: var(--space-4);
+                min-height: 480px;
             }
 
             .column {
@@ -121,7 +87,6 @@ export class AIAnalysisModal extends PlatformModal {
                 flex-direction: column;
                 gap: var(--space-3);
                 min-height: 0;
-                min-width: 0;
             }
 
             .block {
@@ -129,89 +94,11 @@ export class AIAnalysisModal extends PlatformModal {
                 border-radius: var(--radius-xl);
                 background: var(--crm-surface-muted);
                 padding: var(--space-3);
-                min-width: 0;
-                max-width: 100%;
-                box-sizing: border-box;
             }
 
-            .ai-summary {
+            .block.summary {
                 background: var(--crm-selected-bg);
                 border-color: var(--crm-selected-stroke);
-            }
-
-            .missing-entities-banner {
-                display: flex;
-                align-items: flex-start;
-                gap: var(--space-2);
-                padding: var(--space-3);
-                border-radius: var(--radius-xl);
-                border: 1px solid rgba(251, 191, 36, 0.45);
-                background: rgba(120, 53, 15, 0.18);
-                font-size: var(--text-sm);
-                color: #fde68a;
-                line-height: 1.5;
-                min-width: 0;
-            }
-
-            :host-context([data-theme='light']) .missing-entities-banner {
-                background: rgba(254, 243, 199, 0.9);
-                border-color: rgba(217, 119, 6, 0.45);
-                color: #92400e;
-            }
-
-            .missing-entities-banner platform-icon {
-                flex-shrink: 0;
-                margin-top: 1px;
-                color: #fbbf24;
-            }
-
-            :host-context([data-theme='light']) .missing-entities-banner platform-icon {
-                color: #d97706;
-            }
-
-            .missing-entities-text { min-width: 0; }
-
-            .missing-entities-title {
-                font-weight: 600;
-                margin-bottom: 2px;
-            }
-
-            .missing-entities-ids {
-                margin-top: var(--space-1);
-                font-size: var(--text-xs);
-                opacity: 0.8;
-                font-family: ui-monospace, monospace;
-                word-break: break-all;
-            }
-
-            .import-tasks-hint {
-                margin: 0 0 var(--space-2) 0;
-                font-size: var(--text-xs);
-                color: var(--text-tertiary);
-                line-height: 1.5;
-            }
-
-            .import-entities-summary {
-                display: flex;
-                align-items: center;
-                gap: var(--space-2);
-                padding: var(--space-2) var(--space-3);
-                border-radius: var(--radius-lg);
-                border: 1px solid var(--crm-stroke);
-                background: var(--crm-surface-muted);
-                font-size: var(--text-xs);
-                color: var(--text-secondary);
-                margin-bottom: var(--space-1);
-            }
-
-            .import-entities-summary platform-icon {
-                flex-shrink: 0;
-                color: var(--text-tertiary);
-            }
-
-            .import-entities-summary-count {
-                font-weight: 600;
-                color: var(--text-primary);
             }
 
             .block-title {
@@ -219,486 +106,188 @@ export class AIAnalysisModal extends PlatformModal {
                 display: inline-flex;
                 align-items: center;
                 gap: var(--space-2);
-                font-size: var(--text-2xl);
-                font-weight: 700;
-                color: var(--text-primary);
-            }
-
-            .gradient-title {
-                background: var(--accent-gradient);
-                -webkit-background-clip: text;
-                background-clip: text;
-                -webkit-text-fill-color: transparent;
-            }
-
-            .analysis-header-title {
-                display: inline-flex;
-                align-items: center;
-                gap: 12px;
-                font-size: 34px;
-                line-height: 1;
-                font-weight: 700;
-                background: linear-gradient(80.46deg, #FAD17A 9.08%, #FF9A76 44.12%, #99A6F9 85.61%, #99A6F9 85.61%);
-                -webkit-background-clip: text;
-                background-clip: text;
-                -webkit-text-fill-color: transparent;
-            }
-
-            .analysis-header-sub {
                 font-size: var(--text-lg);
                 font-weight: 600;
-                color: var(--text-secondary);
-                -webkit-text-fill-color: var(--text-secondary);
-                background: none;
+                color: var(--text-primary);
             }
 
             .summary-text {
                 margin: 0;
                 color: var(--text-primary);
                 line-height: 1.45;
-                font-size: var(--text-base);
-                overflow-wrap: anywhere;
-                word-break: break-word;
+                font-size: var(--text-sm);
+                white-space: pre-wrap;
             }
 
-            .chips {
-                margin-top: var(--space-3);
+            .empty-state {
                 display: flex;
-                flex-wrap: wrap;
-                gap: var(--space-2);
-            }
-
-            .chip {
-                display: inline-flex;
+                flex-direction: column;
                 align-items: center;
-                gap: 6px;
-                font-size: var(--text-xs);
-                padding: 4px 10px;
-                border-radius: var(--radius-full);
-                border: 1px solid var(--crm-stroke);
-                background: var(--crm-surface-elevated);
+                gap: var(--space-3);
+                padding: var(--space-6);
+                text-align: center;
+                color: var(--text-tertiary);
             }
+            .empty-state .hint { font-size: var(--text-sm); }
 
-            .tasks-wrap {
+            .loading-state {
                 display: flex;
                 flex-direction: column;
-                min-height: 0;
-                flex: 1;
+                align-items: center;
+                gap: var(--space-3);
+                padding: var(--space-6);
             }
 
-            .tasks-list {
+            .applied-banner {
+                display: flex;
+                align-items: center;
+                gap: var(--space-2);
+                padding: var(--space-3);
+                background: var(--crm-selected-bg);
+                border: 1px solid var(--crm-selected-stroke);
+                border-radius: var(--radius-md);
+                color: var(--text-secondary);
+                font-size: var(--text-sm);
+            }
+
+            .items-list {
                 display: flex;
                 flex-direction: column;
                 gap: var(--space-2);
-                max-height: 220px;
-                overflow: auto;
-                margin-bottom: var(--space-3);
+                max-height: 360px;
+                overflow-y: auto;
             }
 
-            .task-row {
+            .item-row {
                 display: grid;
                 grid-template-columns: auto 1fr auto;
-                align-items: center;
+                align-items: start;
                 gap: var(--space-2);
-                color: var(--text-secondary);
+                padding: var(--space-2) var(--space-3);
+                background: var(--crm-surface);
+                border: 1px solid var(--crm-stroke);
+                border-radius: var(--radius-md);
             }
-
-            .task-row.done {
-                color: var(--text-tertiary);
+            .item-row.removed {
+                opacity: 0.45;
                 text-decoration: line-through;
             }
-
-            .task-remove {
-                border: none;
-                background: transparent;
-                color: var(--text-tertiary);
-                width: 20px;
-                height: 20px;
-                display: inline-flex;
-                align-items: center;
-                justify-content: center;
-                cursor: pointer;
-            }
-
-            .task-input-wrap {
-                border: 1px solid var(--crm-stroke);
-                border-radius: var(--radius-full);
-                background: var(--crm-surface-elevated);
-                display: flex;
-                align-items: center;
-                gap: var(--space-2);
-                padding: 0 var(--space-3);
-                min-height: 40px;
-            }
-
-            .task-input {
-                border: none;
-                background: transparent;
-                outline: none;
-                color: var(--text-primary);
-                width: 100%;
-                font-size: var(--text-sm);
-            }
-
-            .connections-title {
-                margin: 0 0 var(--space-3) 0;
-                font-size: 40px;
-                line-height: 1.1;
-                font-weight: 700;
-                color: var(--text-primary);
-            }
-
-            .connections-list {
-                display: flex;
-                flex-direction: column;
-                gap: var(--space-3);
-                overflow: auto;
-                min-width: 0;
-            }
-
-            .connection-card {
-                border-radius: var(--radius-xl);
-                padding: 12px;
-                display: flex;
-                align-items: flex-start;
-                gap: var(--space-2);
-                border: none;
-                min-width: 0;
-                max-width: 100%;
-                box-sizing: border-box;
-            }
-
-            .connection-card.blue {
-                background: rgba(153, 166, 249, 0.3);
-            }
-
-            .connection-card.yellow {
-                background: rgba(250, 209, 122, 0.34);
-            }
-
-            .connection-card.orange {
-                background: rgba(255, 154, 118, 0.28);
-            }
-
-            .connection-avatar {
-                width: 64px;
-                height: 64px;
-                border-radius: var(--radius-md);
-                background: var(--crm-surface-elevated);
-                border: none;
-                display: flex;
-                align-items: center;
-                justify-content: center;
-                color: var(--text-secondary);
-            }
-
-            .connection-main {
-                flex: 1;
-                min-width: 0;
-            }
-
-            .connection-name {
-                font-weight: 600;
-                color: var(--text-primary);
-                white-space: nowrap;
-                overflow: hidden;
-                text-overflow: ellipsis;
-                font-size: var(--text-base);
-            }
-
-            .connection-subtitle {
-                color: var(--text-tertiary);
-                font-size: var(--text-xs);
-                margin-top: 2px;
-            }
-
-            .score-track {
-                height: 16px;
-                border-radius: var(--radius-full);
-                background: var(--glass-tint-strong);
-                margin-top: var(--space-2);
-                position: relative;
-                overflow: hidden;
-            }
-
-            .score-fill {
-                height: 100%;
-                border-radius: inherit;
-            }
-
-            .score-fill.blue {
-                background: #8e9bf7;
-            }
-
-            .score-fill.yellow {
-                background: #f0c35f;
-            }
-
-            .score-fill.orange {
-                background: #f78d61;
-            }
-
-            .score-label {
-                position: absolute;
-                inset: 0;
-                display: flex;
-                align-items: center;
-                justify-content: center;
-                font-size: var(--text-xs);
-                color: var(--text-inverse);
-            }
-
-            .connection-actions {
-                display: flex;
-                flex-direction: column;
-                align-items: flex-end;
-                gap: var(--space-2);
-            }
-
-            .new-badge {
-                font-size: var(--text-xs);
-                border-radius: var(--radius-full);
-                padding: 3px 10px;
-                color: var(--text-primary);
-            }
-
-            .new-badge.blue {
-                background: #8e9bf7;
-                color: #fff;
-            }
-
-            .new-badge.yellow {
-                background: #f0c35f;
-            }
-
-            .new-badge.orange {
-                background: #f78d61;
-                color: #fff;
-            }
-
-            .new-badge.existing {
-                background: rgba(250, 209, 122, 0.5);
-                color: #5c4700;
-            }
-
-            .existing-hint {
-                margin-top: 4px;
-                font-size: var(--text-xs);
-                color: var(--text-secondary);
-            }
-
-            .existing-link {
-                border: none;
-                background: transparent;
-                color: var(--crm-selected-text);
-                font-size: var(--text-sm);
-                font-weight: var(--font-bold);
-                line-height: 1.25;
-                padding: 0;
-                cursor: pointer;
-                text-decoration: none;
-                font-family: inherit;
-            }
-
-            .existing-link:hover {
-                color: var(--platform-btn-primary-hover);
-            }
-
-            .remove-connection {
-                border: none;
-                background: transparent;
-                color: var(--text-tertiary);
-                cursor: pointer;
-                width: 24px;
-                height: 24px;
-                display: inline-flex;
-                align-items: center;
-                justify-content: center;
-            }
-
-            .connection-header {
-                display: flex;
-                align-items: flex-start;
-                justify-content: space-between;
-                gap: var(--space-2);
-                min-width: 0;
-                flex-wrap: wrap;
-            }
-
-            .connection-meta {
-                display: flex;
-                align-items: center;
-                gap: var(--space-2);
-                flex-shrink: 0;
-                margin-left: auto;
-            }
-
-            .relationship-type {
-                font-size: var(--text-xs);
-                line-height: 16px;
-                color: var(--text-tertiary);
-                margin-top: 4px;
-            }
-
-            .relationship-line {
-                display: flex;
-                align-items: center;
-                gap: 8px;
-                margin-top: 4px;
-                min-width: 0;
-                flex-wrap: wrap;
-            }
-
-            .relationship-entity {
-                font-size: var(--text-sm);
-                color: var(--text-primary);
-                font-weight: 500;
-                max-width: 100%;
-            }
-
-            .relationship-arrow {
-                color: var(--text-tertiary);
-                display: inline-flex;
-                align-items: center;
-            }
-
-            .relationship-object-link {
-                border: none;
-                background: var(--crm-selected-bg);
-                color: var(--crm-selected-text);
-                border-radius: 12px;
-                padding: 2px 10px;
-                font-size: var(--text-xs);
-                line-height: 18px;
-                cursor: pointer;
-                max-width: 100%;
-                white-space: nowrap;
-                overflow: hidden;
-                text-overflow: ellipsis;
-            }
-
-            .relationship-object-link:disabled {
-                cursor: not-allowed;
-                color: var(--text-disabled);
-                background: var(--glass-tint-medium);
-            }
-
-            .attr-toggle {
-                border: none;
-                background: transparent;
-                color: var(--text-secondary);
-                font-size: var(--text-xs);
-                cursor: pointer;
-                padding: 0;
-                margin-top: 6px;
-            }
-
-            .attrs-panel {
-                margin-top: var(--space-2);
-                border-top: 1px solid var(--crm-stroke);
-                padding-top: var(--space-2);
-                display: flex;
-                flex-direction: column;
-                gap: 8px;
-            }
-
-            .attr-row {
-                display: grid;
-                grid-template-columns: 1fr 1fr auto;
-                gap: 8px;
-                align-items: center;
-            }
-
-            .attr-input {
-                border: 1px solid var(--crm-stroke);
-                border-radius: 10px;
-                height: 30px;
-                padding: 0 10px;
-                background: var(--crm-surface-elevated);
-                color: var(--text-primary);
-                font-size: var(--text-xs);
-                min-width: 0;
-            }
-
-            .attr-input:focus {
-                outline: 1px solid var(--accent);
-                border-color: transparent;
-            }
-
-            .attr-remove {
-                width: 24px;
-                height: 24px;
-                border: none;
-                border-radius: 12px;
-                background: var(--glass-tint-medium);
-                color: var(--text-secondary);
-                cursor: pointer;
-                display: inline-flex;
-                align-items: center;
-                justify-content: center;
-            }
-
-            .attr-add-row {
-                display: grid;
-                grid-template-columns: 1fr 1fr auto;
-                gap: 8px;
-                align-items: center;
-            }
-
-            .attr-add-btn {
-                border: none;
-                border-radius: 16px;
+            .item-row .icon {
+                width: 28px;
                 height: 28px;
-                padding: 0 12px;
-                background: rgba(153, 166, 249, 0.2);
+                display: inline-flex;
+                align-items: center;
+                justify-content: center;
+                background: var(--crm-selected-bg);
+                color: var(--accent);
+                border-radius: var(--radius-sm);
+            }
+            .item-row .meta {
+                display: grid;
+                gap: 2px;
+                min-width: 0;
+            }
+            .item-row .name {
+                font-weight: 500;
                 color: var(--text-primary);
+                font-size: var(--text-sm);
+                overflow: hidden;
+                text-overflow: ellipsis;
+                white-space: nowrap;
+            }
+            .item-row .sub {
                 font-size: var(--text-xs);
+                color: var(--text-tertiary);
+            }
+            .item-row .actions {
+                display: inline-flex;
+                gap: 4px;
+                align-items: center;
+            }
+            .icon-btn {
+                width: 24px;
+                height: 24px;
+                display: inline-flex;
+                align-items: center;
+                justify-content: center;
+                background: transparent;
+                border: none;
+                color: var(--text-tertiary);
                 cursor: pointer;
+                border-radius: var(--radius-sm);
+            }
+            .icon-btn:hover { background: var(--crm-surface-muted); color: var(--text-primary); }
+
+            .badge {
+                display: inline-flex;
+                align-items: center;
+                gap: 4px;
+                padding: 2px 8px;
+                font-size: var(--text-xs);
+                border-radius: var(--radius-full);
+                background: var(--crm-selected-bg);
+                color: var(--text-secondary);
+                white-space: nowrap;
+            }
+            .badge.dedup-existing { background: rgba(250, 209, 122, 0.34); color: var(--text-primary); }
+            .badge.dedup-new { background: rgba(142, 155, 247, 0.34); color: var(--text-primary); }
+
+            .attrs-preview {
+                margin-top: var(--space-2);
+                padding: var(--space-2);
+                background: var(--crm-surface-muted);
+                border-radius: var(--radius-sm);
+                font-family: var(--font-mono);
+                font-size: var(--text-xs);
+                color: var(--text-tertiary);
+                white-space: pre-wrap;
+                max-height: 160px;
+                overflow-y: auto;
             }
 
             .footer-actions {
                 display: flex;
                 gap: var(--space-2);
-                justify-content: flex-end;
+                justify-content: space-between;
+                align-items: center;
                 width: 100%;
             }
-
-            .btn-disabled {
-                background: var(--glass-tint-subtle);
-                color: var(--text-disabled);
+            .footer-actions .left,
+            .footer-actions .right {
+                display: flex;
+                gap: var(--space-2);
+                align-items: center;
             }
+            .submit-error {
+                color: var(--color-danger);
+                font-size: var(--text-sm);
+            }
+
+            .btn {
+                padding: var(--space-2) var(--space-4);
+                border-radius: var(--radius-md);
+                font-size: var(--text-sm);
+                font-weight: 500;
+                cursor: pointer;
+                border: 1px solid transparent;
+                background: var(--crm-surface);
+                border-color: var(--crm-stroke);
+                color: var(--text-secondary);
+            }
+            .btn:hover:not(:disabled) {
+                background: var(--crm-surface-muted);
+                color: var(--text-primary);
+            }
+            .btn-primary {
+                background: var(--accent);
+                border-color: var(--accent);
+                color: white;
+            }
+            .btn-primary:hover:not(:disabled) { filter: brightness(1.05); }
+            .btn:disabled { opacity: 0.5; cursor: not-allowed; }
 
             @media (max-width: 1024px) {
-                .root {
-                    grid-template-columns: minmax(0, 1fr);
-                }
-                .connections-title {
-                    font-size: 30px;
-                }
-                .block-title {
-                    font-size: var(--text-xl);
-                }
-            }
-
-            @media (max-width: 480px) {
-                .connection-avatar {
-                    width: 48px;
-                    height: 48px;
-                }
-
-                .attr-row,
-                .attr-add-row {
-                    grid-template-columns: 1fr;
-                }
-
-                .task-row {
-                    grid-template-columns: auto minmax(0, 1fr) auto;
-                }
-
-                .task-row span {
-                    min-width: 0;
-                    overflow-wrap: anywhere;
-                }
+                .body { grid-template-columns: 1fr; }
             }
         `,
     ];
@@ -706,951 +295,463 @@ export class AIAnalysisModal extends PlatformModal {
     constructor() {
         super();
         this.size = 'xl';
-        this._suggestions = [];
-        this._notes = [];
-        this._currentNoteId = null;
-        this._entityTypes = [];
-        this._relationshipTypes = [];
-        this._taskStates = [];
-        this._taskDraft = '';
-        this._saving = false;
-        this._analyzing = false;
-        this.loading = false;
-        this._loadingProgress = 0;
-        this._loadingMessageIndex = 0;
-        this._expandedSuggestions = [];
-        this._attributeDrafts = {};
-        this._importReviewActive = false;
-        this._loadingIntervalId = null;
-        this._loadingStartedAt = 0;
-        this._unsubscribe = null;
-        this.headerSavePrimary = true;
+        this.noteId = '';
+        this._pendingRemoveEntityIds = [];
+        this._pendingRemoveRelIds = [];
+        this._attrsExpandedIds = [];
+        this._saveError = '';
+
+        this._entities = this.useResource(ENTITIES_NAME);
+        this._analyzeOp = this.useOp(ANALYZE_OP);
+        this._draftSaveOp = this.useOp(DRAFT_SAVE_OP);
     }
 
     connectedCallback() {
         super.connectedCallback();
-        this._loadTypeMetadata();
-        this._initFromStore();
-        this._unsubscribe = CRMStore.subscribe(() => {
-            this._initFromStore();
+        if (typeof this.noteId !== 'string' || this.noteId.length === 0) {
+            throw new Error('CRMAiAnalysisModal: prop "noteId" required');
+        }
+
+        this._entities.get(this.noteId);
+
+        this.useEvent('crm/note/updated', (event) => {
+            const payload = event && event.payload;
+            if (!_isObject(payload)) return;
+            if (payload.note_id !== this.noteId && payload.entity_id !== this.noteId) return;
+            this._entities.get(this.noteId);
+        });
+
+        this.useEvent(this._draftSaveOp.op.events.SUCCEEDED, () => {
+            this._pendingRemoveEntityIds = [];
+            this._pendingRemoveRelIds = [];
+            this._saveError = '';
+            this._entities.get(this.noteId);
+        });
+        this.useEvent(this._draftSaveOp.op.events.FAILED, (event) => {
+            const payload = event && event.payload;
+            const message = _isObject(payload) && typeof payload.message === 'string'
+                ? payload.message
+                : this.t('ai_analysis_modal.err_save');
+            this._saveError = message;
         });
     }
 
-    disconnectedCallback() {
-        super.disconnectedCallback();
-        this._unsubscribe?.();
-        this._stopLoadingTicker();
+    _entity() {
+        const item = this._entities.byId[this.noteId];
+        return item === undefined ? null : item;
     }
 
-    updated() {
-        super.updated?.();
-        this._syncLoadingTicker();
+    _draft() {
+        return _readDraft(this._entity());
     }
 
-    _initFromStore() {
-        const state = CRMStore.state;
-        this._suggestions = Array.isArray(state.ai.suggestions) ? state.ai.suggestions : [];
-        this._notes = Array.isArray(state.entities.notes) ? state.entities.notes : [];
-        this._currentNoteId = state.entities.currentNoteId;
-        this._entityTypes = Array.isArray(state.entities.entityTypes) ? state.entities.entityTypes : [];
-        this._relationshipTypes = Array.isArray(state.entities.relationshipTypes) ? state.entities.relationshipTypes : [];
-        this._importReviewActive = Boolean(state.ai.importReview);
-        const aid = state.ai.analyzingNoteId;
-        this._analyzing = typeof aid === 'string' && aid.trim().length > 0;
-        const taskSuggestions = this._getTaskSuggestions();
-        const currentDoneMap = new Map(this._taskStates.map((task) => [task.id, task.done]));
-        this._taskStates = taskSuggestions.map((task) => ({
-            id: this._getTaskId(task),
-            name: this._getTaskName(task),
-            done: this._getTaskDoneState(currentDoneMap, task),
-        }));
+    _isPendingRemoveEntity(draftEntityId) {
+        return this._pendingRemoveEntityIds.indexOf(draftEntityId) !== -1;
     }
 
-    _isLoadingActive() {
-        return this.loading || this._analyzing;
+    _isPendingRemoveRel(draftRelId) {
+        return this._pendingRemoveRelIds.indexOf(draftRelId) !== -1;
     }
 
-    _syncLoadingTicker() {
-        if (this._isLoadingActive()) {
-            this._startLoadingTicker();
-            return;
+    _toggleRemoveEntity(draftEntityId) {
+        if (this._isPendingRemoveEntity(draftEntityId)) {
+            this._pendingRemoveEntityIds = this._pendingRemoveEntityIds.filter((id) => id !== draftEntityId);
+        } else {
+            this._pendingRemoveEntityIds = [...this._pendingRemoveEntityIds, draftEntityId];
         }
-        this._stopLoadingTicker();
     }
 
-    _startLoadingTicker() {
-        if (this._loadingIntervalId !== null) {
-            return;
+    _toggleRemoveRel(draftRelId) {
+        if (this._isPendingRemoveRel(draftRelId)) {
+            this._pendingRemoveRelIds = this._pendingRemoveRelIds.filter((id) => id !== draftRelId);
+        } else {
+            this._pendingRemoveRelIds = [...this._pendingRemoveRelIds, draftRelId];
         }
-        this._loadingStartedAt = Date.now();
-        this._loadingProgress = 0;
-        this._loadingMessageIndex = 0;
-        this._loadingIntervalId = window.setInterval(() => {
-            const elapsedMs = Date.now() - this._loadingStartedAt;
-            const progress = Math.min(99, Math.floor((elapsedMs / 60000) * 100));
-            const messageIndex = Math.floor(elapsedMs / 4500);
-            this._loadingProgress = progress;
-            this._loadingMessageIndex = messageIndex;
-        }, 500);
     }
 
-    _stopLoadingTicker() {
-        if (this._loadingIntervalId === null) {
-            return;
+    _toggleAttrs(draftEntityId) {
+        if (this._attrsExpandedIds.indexOf(draftEntityId) !== -1) {
+            this._attrsExpandedIds = this._attrsExpandedIds.filter((id) => id !== draftEntityId);
+        } else {
+            this._attrsExpandedIds = [...this._attrsExpandedIds, draftEntityId];
         }
-        window.clearInterval(this._loadingIntervalId);
-        this._loadingIntervalId = null;
-        this._loadingProgress = 0;
-        this._loadingMessageIndex = 0;
     }
 
-    _getLoadingMessage() {
-        const messages = [
-            this.i18n.t('ai_analysis_modal.loading_1'),
-            this.i18n.t('ai_analysis_modal.loading_2'),
-            this.i18n.t('ai_analysis_modal.loading_3'),
-            this.i18n.t('ai_analysis_modal.loading_4'),
-            this.i18n.t('ai_analysis_modal.loading_5'),
-        ];
-        if (this._loadingProgress >= 99) {
-            return messages[messages.length - 1];
-        }
-        const index = this._loadingMessageIndex % messages.length;
-        return messages[index];
+    _hasPendingChanges() {
+        return this._pendingRemoveEntityIds.length > 0 || this._pendingRemoveRelIds.length > 0;
     }
 
-    async _loadTypeMetadata() {
-        const crmApi = this.services.get('crmApi');
-        await CRMStore.loadEntityTypes(crmApi);
-        await CRMStore.loadRelationshipTypes(crmApi);
-    }
-
-    _getTaskId(task) {
-        if (typeof task.entity_id === 'string' && task.entity_id.length > 0) {
-            return task.entity_id;
-        }
-        if (typeof task.name === 'string' && task.name.length > 0) {
-            return task.name;
-        }
-        throw new Error('Task suggestion requires entity_id or name');
-    }
-
-    _getTaskName(task) {
-        if (typeof task.name === 'string' && task.name.length > 0) {
-            return task.name;
-        }
-        return this.i18n.t('ai_analysis_modal.task_fallback');
-    }
-
-    _getTaskDoneState(currentDoneMap, task) {
-        const taskId = this._getTaskId(task);
-        const doneState = currentDoneMap.get(taskId);
-        return doneState === true;
-    }
-
-    _getCurrentNote() {
-        const ir = CRMStore.state.ai.importReview;
-        if (ir && ir.anchorNote && typeof ir.anchorNote === 'object') {
-            return ir.anchorNote;
-        }
-        const note = this._notes.find((entry) => entry.entity_id === this._currentNoteId);
-        return note === undefined ? null : note;
-    }
-
-    _getTaskSuggestions() {
-        return this._suggestions.filter((item) => item.entity_type === 'task');
-    }
-
-    _getConnectionSuggestions() {
-        return this._suggestions.filter((item) => {
-            if (isRelationshipSuggestion(item)) {
-                return true;
-            }
-            if (!item.entity_type) {
-                return false;
-            }
-            return item.entity_type !== 'task';
+    _onAnalyze() {
+        const entity = this._entity();
+        if (entity === null) return;
+        const namespace = typeof entity.namespace === 'string' && entity.namespace.length > 0
+            ? entity.namespace
+            : 'default';
+        this._analyzeOp.run({
+            note_id: this.noteId,
+            mode: 'analyze',
+            namespace,
         });
     }
 
-    _onToggleTask(taskId) {
-        this._taskStates = this._taskStates.map((task) => (
-            task.id === taskId ? { ...task, done: !task.done } : task
-        ));
-    }
-
-    _onRemoveTask(taskId) {
-        this._taskStates = this._taskStates.filter((task) => task.id !== taskId);
-    }
-
-    _onTaskDraftInput(event) {
-        this._taskDraft = event.target.value;
-    }
-
-    _onTaskDraftKeydown(event) {
-        if (event.key !== 'Enter') {
+    _onApply() {
+        const draft = this._draft();
+        if (draft === null) return;
+        const entity = this._entity();
+        const namespace = entity !== null && typeof entity.namespace === 'string' && entity.namespace.length > 0
+            ? entity.namespace
+            : 'default';
+        if (this._hasPendingChanges()) {
+            this._draftSaveOp.run({
+                note_id: this.noteId,
+                draft: {
+                    expected_version: draft.draft_version,
+                    remove_entity_draft_ids: this._pendingRemoveEntityIds,
+                    remove_relationship_draft_ids: this._pendingRemoveRelIds,
+                },
+            });
             return;
         }
-        const value = this._taskDraft.trim();
-        if (!value) {
-            return;
-        }
-        const id = `${Date.now()}-${value}`;
-        this._taskStates = [...this._taskStates, { id, name: value, done: false }];
-        this._taskDraft = '';
-    }
-
-    async _onRemoveConnection(index) {
-        if (this._importReviewActive) {
-            this.error(this.i18n.t('ai_analysis_modal.remove_disabled_import'));
-            return;
-        }
-        const crmApi = this.services.get('crmApi');
-        await CRMStore.removeSuggestionWithServerDraftSync(crmApi, index);
-    }
-
-    _getSuggestionUiKey(item, index) {
-        if (typeof item.entity_id === 'string' && item.entity_id.length > 0) {
-            return item.entity_id;
-        }
-        if (typeof item.name === 'string' && item.name.length > 0) {
-            return `${item.name}-${index}`;
-        }
-        return `${item.entity_type || 'entity'}-${index}`;
-    }
-
-    _toggleSuggestionExpanded(key) {
-        if (this._expandedSuggestions.includes(key)) {
-            this._expandedSuggestions = this._expandedSuggestions.filter((entry) => entry !== key);
-            return;
-        }
-        this._expandedSuggestions = [...this._expandedSuggestions, key];
-    }
-
-    _isSuggestionExpanded(key) {
-        return this._expandedSuggestions.includes(key);
-    }
-
-    _getSuggestionAttributes(item) {
-        const attributes = item.attributes;
-        if (!attributes || typeof attributes !== 'object' || Array.isArray(attributes)) {
-            return [];
-        }
-        return Object.entries(attributes).filter(([, value]) => (
-            typeof value === 'string'
-            || typeof value === 'number'
-            || typeof value === 'boolean'
-        ));
-    }
-
-    _onSuggestionNameInput(index, event) {
-        CRMStore.updateSuggestion(index, { name: event.target.value });
-    }
-
-    _onSuggestionSubtitleInput(index, event) {
-        CRMStore.updateSuggestion(index, { description: event.target.value });
-    }
-
-    _onAttributeKeyInput(index, oldKey, event) {
-        const suggestion = this._suggestions[index];
-        if (!suggestion) {
-            throw new Error('Suggestion is required');
-        }
-        const attributes = { ...(suggestion.attributes || {}) };
-        const value = attributes[oldKey];
-        delete attributes[oldKey];
-        const nextKey = event.target.value.trim();
-        if (nextKey.length > 0) {
-            attributes[nextKey] = value;
-        }
-        CRMStore.updateSuggestion(index, { attributes });
-    }
-
-    _onAttributeValueInput(index, key, event) {
-        const suggestion = this._suggestions[index];
-        if (!suggestion) {
-            throw new Error('Suggestion is required');
-        }
-        const attributes = { ...(suggestion.attributes || {}) };
-        attributes[key] = event.target.value;
-        CRMStore.updateSuggestion(index, { attributes });
-    }
-
-    _onRemoveAttribute(index, key) {
-        const suggestion = this._suggestions[index];
-        if (!suggestion) {
-            throw new Error('Suggestion is required');
-        }
-        const attributes = { ...(suggestion.attributes || {}) };
-        delete attributes[key];
-        CRMStore.updateSuggestion(index, { attributes });
-    }
-
-    _onAttributeDraftInput(index, field, event) {
-        const previous = this._attributeDrafts[index] || { key: '', value: '' };
-        this._attributeDrafts = {
-            ...this._attributeDrafts,
-            [index]: { ...previous, [field]: event.target.value },
-        };
-    }
-
-    _onAddAttribute(index) {
-        const draft = this._attributeDrafts[index];
-        if (!draft) {
-            return;
-        }
-        const key = draft.key.trim();
-        if (key.length === 0) {
-            return;
-        }
-        const suggestion = this._suggestions[index];
-        if (!suggestion) {
-            throw new Error('Suggestion is required');
-        }
-        const attributes = { ...(suggestion.attributes || {}) };
-        attributes[key] = draft.value;
-        CRMStore.updateSuggestion(index, { attributes });
-        this._attributeDrafts = {
-            ...this._attributeDrafts,
-            [index]: { key: '', value: '' },
-        };
-    }
-
-    _buildSummaryTags() {
-        const selected = this._suggestions.slice(0, 2);
-        return selected.map((item) => {
-            if (typeof item.name === 'string' && item.name.length > 0) {
-                return item.name;
-            }
-            if (typeof item.entity_type === 'string' && item.entity_type.length > 0) {
-                return item.entity_type;
-            }
-            return 'Entity';
+        this._analyzeOp.run({
+            note_id: this.noteId,
+            mode: 'apply',
+            namespace,
         });
     }
 
-    _getAISummaryText(note) {
-        if (note && typeof note === 'object') {
-            const attrs = note.attributes;
-            if (attrs && typeof attrs === 'object') {
-                if (typeof attrs.ai_summary === 'string' && attrs.ai_summary.trim().length > 0) {
-                    return attrs.ai_summary.trim();
-                }
-                const draft = attrs.ai_analysis_draft;
-                if (
-                    draft
-                    && typeof draft === 'object'
-                    && draft.note
-                    && typeof draft.note === 'object'
-                    && typeof draft.note.description === 'string'
-                    && draft.note.description.trim().length > 0
-                ) {
-                    return draft.note.description.trim();
-                }
-            }
-        }
-        const noteId = typeof this._currentNoteId === 'string' ? this._currentNoteId : '';
-        if (noteId.length > 0) {
-            const noteSummary = CRMStore.state.ai.noteSummaries[noteId];
-            if (
-                noteSummary
-                && typeof noteSummary === 'object'
-                && typeof noteSummary.summary === 'string'
-                && noteSummary.summary.trim().length > 0
-            ) {
-                return noteSummary.summary.trim();
-            }
-            const draft = CRMStore.state.ai.draftByNoteId[noteId];
-            if (
-                draft
-                && typeof draft === 'object'
-                && draft.note
-                && typeof draft.note === 'object'
-                && typeof draft.note.description === 'string'
-                && draft.note.description.trim().length > 0
-            ) {
-                return draft.note.description.trim();
-            }
-        }
-        return this.i18n.t('ai_analysis_modal.summary_empty');
-    }
-
-    _getScoreValue(item) {
-        const raw = item.dedup_confidence;
-        if (typeof raw === 'number' && Number.isFinite(raw)) {
-            return Math.max(0, Math.min(100, Math.round(raw * 100)));
-        }
-        return 80;
-    }
-
-    _getConnectionTheme(index) {
-        if (index % 3 === 0) {
-            return 'blue';
-        }
-        if (index % 3 === 1) {
-            return 'yellow';
-        }
-        return 'orange';
-    }
-
-    _getDedupBadge(item) {
-        const isExisting = item?.dedup_action === 'merge'
-            || (typeof item?.dedup_existing_id === 'string' && item.dedup_existing_id.trim().length > 0)
-            || (typeof item?.existing_entity_id === 'string' && item.existing_entity_id.trim().length > 0);
-        const confidence = typeof item?.dedup_confidence === 'number' && Number.isFinite(item.dedup_confidence)
-            ? Math.max(0, Math.min(100, Math.round(item.dedup_confidence * 100)))
-            : null;
-        if (isExisting) {
-            return {
-                label: this.i18n.t('ai_analysis_modal.dedup_existing'),
-                className: 'existing',
-                confidence,
-            };
-        }
-        return {
-            label: this.i18n.t('ai_analysis_modal.dedup_new'),
-            className: '',
-            confidence: null,
-        };
-    }
-
-    _getExistingEntityRef(item) {
-        const existingId = typeof item?.dedup_existing_id === 'string' && item.dedup_existing_id.trim().length > 0
-            ? item.dedup_existing_id
-            : (typeof item?.existing_entity_id === 'string' && item.existing_entity_id.trim().length > 0
-                ? item.existing_entity_id
-                : '');
-        const existingName = typeof item?.dedup_existing_name === 'string' && item.dedup_existing_name.trim().length > 0
-            ? item.dedup_existing_name
-            : (typeof item?.existing_entity_name === 'string' && item.existing_entity_name.trim().length > 0
-                ? item.existing_entity_name
-                : '');
-        return { existingId, existingName };
-    }
-
-    _resolveIconName(rawIconName) {
-        if (typeof rawIconName !== 'string' || rawIconName.trim().length === 0) {
-            return 'folder';
-        }
-        const iconName = rawIconName.trim();
-        if (iconName === 'file') {
-            return 'folder';
-        }
-        if (/^[a-z0-9-]+$/i.test(iconName)) {
-            return iconName;
-        }
-        const emojiIconAliases = {
-            '🤝': 'share',
-            '👤': 'user',
-            '🏢': 'database',
-        };
-        const aliasName = emojiIconAliases[iconName];
-        return typeof aliasName === 'string' ? aliasName : 'folder';
-    }
-
-    _getEntityTypeIcon(typeId) {
-        if (typeof typeId !== 'string' || typeId.trim().length === 0) {
-            return null;
-        }
-        const typeConfig = this._entityTypes.find((item) => item?.type_id === typeId);
-        if (!typeConfig) {
-            return null;
-        }
-        return this._resolveIconName(typeConfig.icon);
-    }
-
-    _getRelationshipTypeIcon(typeId) {
-        if (typeof typeId !== 'string' || typeId.trim().length === 0) {
-            return null;
-        }
-        const typeConfig = this._relationshipTypes.find((item) => item?.type_id === typeId);
-        if (!typeConfig) {
-            return null;
-        }
-        return this._resolveIconName(typeConfig.icon);
-    }
-
-    _getRelationshipTypeLabel(typeId) {
-        if (typeof typeId !== 'string' || typeId.trim().length === 0) {
-            return this.i18n.t('ai_analysis_modal.relationship_fallback');
-        }
-        const typeConfig = this._relationshipTypes.find((item) => item?.type_id === typeId);
-        if (typeConfig && typeof typeConfig.name === 'string' && typeConfig.name.trim().length > 0) {
-            return typeConfig.name;
-        }
-        return this._humanizeRelationshipTypeId(typeId);
-    }
-
-    _humanizeRelationshipTypeId(typeId) {
-        const typeAliases = {
-            attended: 'ai_analysis_modal.rel_type_attended',
-            works_at: 'ai_analysis_modal.rel_type_works_at',
-            involved_organization: 'ai_analysis_modal.rel_type_involved_organization',
-            documents: 'ai_analysis_modal.rel_type_documents',
-            mentions: 'ai_analysis_modal.rel_type_mentions',
-        };
-        if (Object.prototype.hasOwnProperty.call(typeAliases, typeId)) {
-            return this.i18n.t(typeAliases[typeId]);
-        }
-        const normalized = typeId
-            .split('_')
-            .map((part) => part.trim())
-            .filter((part) => part.length > 0)
-            .join(' ');
-        if (normalized.length === 0) {
-            return this.i18n.t('ai_analysis_modal.relationship_fallback');
-        }
-        return normalized.charAt(0).toUpperCase() + normalized.slice(1);
-    }
-
-    _draftEndpointLabel(draftEntityId) {
-        if (typeof draftEntityId !== 'string' || draftEntityId.trim().length === 0) {
-            throw new Error('draft_entity_id is required for relationship endpoint');
-        }
-        const ctx = CRMStore.state.ai.analyzeContextNote;
-        if (ctx?.draft_entity_id === draftEntityId) {
-            if (typeof ctx.name === 'string' && ctx.name.trim().length > 0) {
-                return ctx.name.trim();
-            }
-            return this.i18n.t('note_content.note_title_fallback');
-        }
-        const row = this._suggestions.find((s) => s?.draft_entity_id === draftEntityId && s.entity_type);
-        if (!row || typeof row.name !== 'string' || row.name.trim().length === 0) {
-            return draftEntityId;
-        }
-        return row.name.trim();
-    }
-
-    _draftEndpointRealEntityId(draftEntityId) {
-        if (typeof draftEntityId !== 'string' || draftEntityId.trim().length === 0) {
-            return '';
-        }
-        if (draftEntityId.startsWith('ki:')) {
-            return draftEntityId.slice(3).trim();
-        }
-        const noteId = typeof this._currentNoteId === 'string' ? this._currentNoteId : '';
-        const ctx = CRMStore.state.ai.analyzeContextNote;
-        if (ctx?.draft_entity_id === draftEntityId && noteId.length > 0) {
-            return noteId;
-        }
-        const row = this._suggestions.find((s) => s?.draft_entity_id === draftEntityId && s.entity_type);
-        if (row?.dedup_action === 'merge' && typeof row.dedup_existing_id === 'string' && row.dedup_existing_id.trim().length > 0) {
-            return row.dedup_existing_id.trim();
-        }
-        const resolved = CRMStore.state.ai.resolvedDraftEntityIds;
-        if (resolved && typeof resolved[draftEntityId] === 'string' && resolved[draftEntityId].trim().length > 0) {
-            return resolved[draftEntityId].trim();
-        }
-        return '';
-    }
-
-    _getRelationshipDisplay(item) {
-        if (!isRelationshipSuggestion(item)) {
-            throw new Error('Expected draft relationship (draft_relationship_id)');
-        }
-        const sourceLabel = this._draftEndpointLabel(item.source_draft_entity_id);
-        const targetLabel = this._draftEndpointLabel(item.target_draft_entity_id);
-        const targetReal = this._draftEndpointRealEntityId(item.target_draft_entity_id);
-        const sourceReal = this._draftEndpointRealEntityId(item.source_draft_entity_id);
-        let objectId = '';
-        let objectLabel = targetLabel;
-        if (targetReal.length > 0) {
-            objectId = targetReal;
-            objectLabel = targetLabel;
-        } else if (sourceReal.length > 0) {
-            objectId = sourceReal;
-            objectLabel = sourceLabel;
-        }
-        return {
-            sourceLabel,
-            targetLabel,
-            objectId,
-            objectLabel,
-        };
-    }
-
-    _openEntityModalById(entityId) {
-        if (typeof entityId !== 'string' || entityId.trim().length === 0) {
-            throw new Error('Entity ID is required');
-        }
-        CRMStore.setCurrentEntity(entityId);
-        const modal = document.createElement('entity-modal');
-        modal.entityId = entityId;
-        document.body.appendChild(modal);
-        modal.showModal();
-        modal.addEventListener('close', () => modal.remove());
-    }
-
-    _getConnectionIcon(item) {
-        if (!item || typeof item !== 'object') {
-            throw new Error('Connection item is required');
-        }
-        if (typeof item.relationship_type === 'string' && item.relationship_type.trim().length > 0) {
-            const relationshipIcon = this._getRelationshipTypeIcon(item.relationship_type);
-            if (relationshipIcon) {
-                return relationshipIcon;
-            }
-            return 'share';
-        }
-        const entityTypeId = typeof item.entity_subtype === 'string' && item.entity_subtype.trim().length > 0
-            ? item.entity_subtype
-            : item.entity_type;
-        const entityIcon = this._getEntityTypeIcon(entityTypeId);
-        if (entityIcon) {
-            return entityIcon;
-        }
-        if (item.entity_type === 'organization') {
-            return 'database';
-        }
-        if (item.entity_type === 'task') {
-            return 'check';
-        }
-        return 'user';
+    _onSavePending() {
+        const draft = this._draft();
+        if (draft === null) return;
+        if (!this._hasPendingChanges()) return;
+        this._draftSaveOp.run({
+            note_id: this.noteId,
+            draft: {
+                expected_version: draft.draft_version,
+                remove_entity_draft_ids: this._pendingRemoveEntityIds,
+                remove_relationship_draft_ids: this._pendingRemoveRelIds,
+            },
+        });
     }
 
     renderHeader() {
-        const ir = CRMStore.state.ai.importReview;
         return html`
-            <span class="analysis-header-title">
-                <platform-icon name="ai" size="32" colored></platform-icon>
-                ${this.i18n.t('ai_analysis_modal.header_title')}
-                ${ir
-                    ? html`<span class="analysis-header-sub"> · ${this.i18n.t('ai_analysis_modal.import_review_header_suffix')}</span>`
-                    : ''}
+            <span style="display:inline-flex;align-items:center;gap:8px;">
+                <platform-icon name="sparkle" size="16"></platform-icon>
+                ${this.t('ai_analysis_modal.header_title')}
             </span>
         `;
     }
 
     renderBody() {
-        if (this.loading || this._analyzing) {
-            const progressWidth = Math.max(2, this._loadingProgress);
+        const entity = this._entity();
+        if (entity === null) {
             return html`
-                <div class="loading-shell">
-                    <div class="loading-wrap">
-                        <h2 class="loading-title">${this._getLoadingMessage()}</h2>
-                        <p class="loading-percent">${this._loadingProgress}%</p>
-                        <div class="loading-track">
-                            <div class="loading-fill" style=${`width:${progressWidth}%;`}></div>
-                        </div>
-                    </div>
+                <div class="loading-state">
+                    <glass-spinner></glass-spinner>
+                    <span>${this.t('ai_analysis_modal.loading_1')}</span>
                 </div>
             `;
         }
 
-        const note = this._getCurrentNote();
-        const noteText = this._getAISummaryText(note);
-        const tags = this._buildSummaryTags();
-        const connections = this._getConnectionSuggestions();
+        const draft = _readDraft(entity);
+        if (draft === null) {
+            return this._renderEmptyState(entity);
+        }
 
         return html`
-            <div class="root">
-                <section class="column">
-                    <article class="block ai-summary">
-                        <h3 class="block-title gradient-title">
-                            <platform-icon name="ai" size="15" colored></platform-icon>
-                            ${this.i18n.t('ai_analysis_modal.block_summary_title')}
-                        </h3>
-                        <p class="summary-text">${noteText}</p>
-                        <div class="chips">
-                            ${tags.map((tag) => html`
-                                <span class="chip">
-                                    <platform-icon name="doc-detail" size="11"></platform-icon>
-                                    ${tag}
-                                </span>
-                            `)}
-                        </div>
-                    </article>
-
-                    <article class="block tasks-wrap">
-                        <h3 class="block-title">
-                            ${this._importReviewActive
-                                ? this.i18n.t('ai_analysis_modal.import_review_tasks_title')
-                                : this.i18n.t('ai_analysis_modal.suggested_tasks_title')}
-                        </h3>
-                        ${this._importReviewActive && this._taskStates.length > 0 ? html`
-                            <p class="import-tasks-hint">${this.i18n.t('ai_analysis_modal.import_review_tasks_hint')}</p>
-                        ` : ''}
-                        <div class="tasks-list">
-                            ${this._taskStates.map((task) => html`
-                                <label class="task-row ${task.done ? 'done' : ''}">
-                                    ${this._importReviewActive
-                                        ? html`<platform-icon name="checklist" size="14" style="flex-shrink:0;color:var(--text-tertiary)"></platform-icon>`
-                                        : html`<input type="checkbox" .checked=${task.done} @change=${() => this._onToggleTask(task.id)} />`}
-                                    <span>${task.name}</span>
-                                    ${this._importReviewActive
-                                        ? ''
-                                        : html`<button class="task-remove" type="button" @click=${() => this._onRemoveTask(task.id)}>
-                                            <platform-icon name="close" size="12"></platform-icon>
-                                        </button>`}
-                                </label>
-                            `)}
-                        </div>
-                        ${!this._importReviewActive ? html`
-                            <label class="task-input-wrap">
-                                <platform-icon name="ai" size="12" colored></platform-icon>
-                                <input
-                                    class="task-input"
-                                    type="text"
-                                    placeholder=${this.i18n.t('ai_analysis_modal.task_input_placeholder')}
-                                    .value=${this._taskDraft}
-                                    @input=${this._onTaskDraftInput}
-                                    @keydown=${this._onTaskDraftKeydown}
-                                />
-                            </label>
-                        ` : ''}
-                    </article>
-                </section>
-
-                <section class="column">
-                    ${this._importReviewActive && this._suggestions.length > 0 ? html`
-                        <div class="import-entities-summary">
-                            <platform-icon name="layers" size="14"></platform-icon>
-                            <span>
-                                ${this.i18n.t('ai_analysis_modal.import_review_total', {
-                                    total: String(this._suggestions.length),
-                                    tasks: String(this._taskStates.length),
-                                    entities: String(connections.length),
-                                })}
-                            </span>
-                        </div>
-                    ` : ''}
-                    ${(() => {
-                        const ir = CRMStore.state.ai.importReview;
-                        const missing = ir && Array.isArray(ir.missingEntityIds) ? ir.missingEntityIds : [];
-                        if (missing.length === 0) {
-                            return '';
-                        }
-                        return html`
-                            <div class="missing-entities-banner" role="alert">
-                                <platform-icon name="alert-triangle" size="16"></platform-icon>
-                                <div class="missing-entities-text">
-                                    <div class="missing-entities-title">
-                                        ${this.i18n.t('ai_analysis_modal.missing_entities_title', { count: String(missing.length) })}
-                                    </div>
-                                    <div>${this.i18n.t('ai_analysis_modal.missing_entities_body')}</div>
-                                    <div class="missing-entities-ids">${missing.join(', ')}</div>
-                                </div>
-                            </div>
-                        `;
-                    })()}
-                    <div class="connections-list">
-                        ${connections.map((item, index) => {
-                            const suggestionIndex = this._suggestions.indexOf(item);
-                            if (suggestionIndex < 0) {
-                                throw new Error('Suggestion index is required');
-                            }
-                            const theme = this._getConnectionTheme(index);
-                            const score = this._getScoreValue(item);
-                            const uiKey = this._getSuggestionUiKey(item, suggestionIndex);
-                            const attributes = this._getSuggestionAttributes(item);
-                            const expanded = this._isSuggestionExpanded(uiKey);
-                            const draft = this._attributeDrafts[suggestionIndex] || { key: '', value: '' };
-                            const subtitle = item.description || this._getConnectionSubtitle(item);
-                            const isRelationship = isRelationshipSuggestion(item);
-                            const dedupBadge = this._getDedupBadge(item);
-                            const existingEntityRef = this._getExistingEntityRef(item);
-                            const relationshipTypeLabel = isRelationship
-                                ? this._getRelationshipTypeLabel(item.relationship_type)
-                                : '';
-                            const relationshipDisplay = isRelationship ? this._getRelationshipDisplay(item) : null;
-                            return html`
-                                <article class="connection-card ${theme}">
-                                    <div class="connection-avatar">
-                                        <platform-icon name=${this._getConnectionIcon(item)} size="24"></platform-icon>
-                                    </div>
-                                    <div class="connection-main">
-                                        <div class="connection-header">
-                                            <div style="min-width:0;flex:1;">
-                                                ${isRelationship ? html`
-                                                    <div class="connection-name">${relationshipTypeLabel}</div>
-                                                    <div class="relationship-type">${this.i18n.t('ai_analysis_modal.relationship_line', { source: relationshipDisplay.sourceLabel, target: relationshipDisplay.targetLabel })}</div>
-                                                    <div class="relationship-line">
-                                                        <span class="relationship-entity">${relationshipDisplay.sourceLabel}</span>
-                                                        <span class="relationship-arrow">
-                                                            <platform-icon name="arrow-right" size="12"></platform-icon>
-                                                        </span>
-                                                        <button
-                                                            class="relationship-object-link"
-                                                            type="button"
-                                                            ?disabled=${relationshipDisplay.objectId.length === 0}
-                                                            @click=${() => this._openEntityModalById(relationshipDisplay.objectId)}
-                                                            title=${this.i18n.t('ai_analysis_modal.open_entity_title')}
-                                                        >
-                                                            ${relationshipDisplay.objectLabel}
-                                                        </button>
-                                                    </div>
-                                                ` : html`
-                                                    <input
-                                                        class="attr-input"
-                                                        style="height:28px;font-weight:600;"
-                                                        .value=${this._getConnectionName(item)}
-                                                        @input=${(event) => this._onSuggestionNameInput(suggestionIndex, event)}
-                                                    />
-                                                    <input
-                                                        class="attr-input"
-                                                        style="height:26px;margin-top:4px;"
-                                                        .value=${subtitle}
-                                                        @input=${(event) => this._onSuggestionSubtitleInput(suggestionIndex, event)}
-                                                    />
-                                                `}
-                                            </div>
-                                            <div class="connection-meta">
-                                                <span class="new-badge ${theme} ${dedupBadge.className}">
-                                                    ${dedupBadge.label}
-                                                    ${dedupBadge.confidence !== null ? ` ${dedupBadge.confidence}%` : ''}
-                                                </span>
-                                                ${this._importReviewActive
-                                                    ? null
-                                                    : html`
-                                                          <button
-                                                              class="remove-connection"
-                                                              type="button"
-                                                              @click=${() => {
-                                                                  this._onRemoveConnection(suggestionIndex).catch((err) => {
-                                                                      this.error(err?.message || String(err));
-                                                                  });
-                                                              }}
-                                                          >
-                                                              <platform-icon name="close" size="14"></platform-icon>
-                                                          </button>
-                                                      `}
-                                            </div>
-                                        </div>
-                                        ${dedupBadge.className === 'existing' ? html`
-                                            <div class="existing-hint">
-                                                ${this.i18n.t('ai_entity_card.will_update_prefix')}
-                                                ${existingEntityRef.existingId.length > 0 ? html`
-                                                    <button
-                                                        class="existing-link"
-                                                        type="button"
-                                                        @click=${() => this._openEntityModalById(existingEntityRef.existingId)}
-                                                    >
-                                                        ${existingEntityRef.existingName || existingEntityRef.existingId}
-                                                    </button>
-                                                ` : html`
-                                                    ${existingEntityRef.existingName || this.i18n.t('ai_analysis_modal.existing_entity_fallback')}
-                                                `}
-                                            </div>
-                                        ` : ''}
-                                        <div class="score-track">
-                                            <div class="score-fill ${theme}" style=${`width:${score}%;`}></div>
-                                            <div class="score-label">${this.i18n.t('ai_analysis_modal.score_label', { value: String(score) })}</div>
-                                        </div>
-                                        <button class="attr-toggle" type="button" @click=${() => this._toggleSuggestionExpanded(uiKey)}>
-                                            ${expanded ? this.i18n.t('ai_analysis_modal.toggle_attrs_hide') : this.i18n.t('ai_analysis_modal.toggle_attrs_show')}
-                                        </button>
-                                        ${expanded ? html`
-                                            <div class="attrs-panel">
-                                                ${attributes.map(([key, value]) => html`
-                                                    <div class="attr-row">
-                                                        <input
-                                                            class="attr-input"
-                                                            .value=${String(key)}
-                                                            @input=${(event) => this._onAttributeKeyInput(suggestionIndex, key, event)}
-                                                        />
-                                                        <input
-                                                            class="attr-input"
-                                                            .value=${String(value)}
-                                                            @input=${(event) => this._onAttributeValueInput(suggestionIndex, key, event)}
-                                                        />
-                                                        <button class="attr-remove" type="button" @click=${() => this._onRemoveAttribute(suggestionIndex, key)}>
-                                                            <platform-icon name="close" size="12"></platform-icon>
-                                                        </button>
-                                                    </div>
-                                                `)}
-                                                <div class="attr-add-row">
-                                                    <input
-                                                        class="attr-input"
-                                                        placeholder=${this.i18n.t('ai_entity_card.attr_key_placeholder')}
-                                                        .value=${draft.key}
-                                                        @input=${(event) => this._onAttributeDraftInput(suggestionIndex, 'key', event)}
-                                                    />
-                                                    <input
-                                                        class="attr-input"
-                                                        placeholder=${this.i18n.t('ai_entity_card.attr_value_placeholder')}
-                                                        .value=${draft.value}
-                                                        @input=${(event) => this._onAttributeDraftInput(suggestionIndex, 'value', event)}
-                                                    />
-                                                    <button class="attr-add-btn" type="button" @click=${() => this._onAddAttribute(suggestionIndex)}>
-                                                        ${this.i18n.t('ai_analysis_modal.add_attribute_row')}
-                                                    </button>
-                                                </div>
-                                            </div>
-                                        ` : ''}
-                                    </div>
-                                </article>
-                            `;
-                        })}
-                    </div>
-                </section>
+            <div class="body">
+                ${this._renderLeftColumn(entity, draft)}
+                ${this._renderRightColumn(draft)}
             </div>
         `;
     }
 
-    async _onSave() {
-        this._saving = true;
-        try {
-            const crmApi = this.services.get('crmApi');
-            if (CRMStore.state.ai.importReview) {
-                await CRMStore.persistKnowledgeImportReview(crmApi);
-            } else {
-                const taskId = await CRMStore.confirmAllSuggestions(crmApi);
-                // Уведомляем родителя о запущенной задаче до закрытия модалки
-                this.dispatchEvent(new CustomEvent('apply-task-started', {
-                    detail: { taskId },
-                    bubbles: true,
-                    composed: true,
-                }));
-            }
-            this.dispatchEvent(new CustomEvent('saved'));
-            this.close();
-        } catch (error) {
-            const message = error instanceof Error
-                ? error.message
-                : this.i18n.t('ai_analysis_modal.err_save');
-            this.error(message);
-            throw error;
-        } finally {
-            this._saving = false;
+    _renderEmptyState(entity) {
+        const applied = _isApplied(entity);
+        const analyzing = this._analyzeOp.busy;
+        if (analyzing) {
+            return html`
+                <div class="loading-state">
+                    <glass-spinner></glass-spinner>
+                    <span>${this.t('ai_analysis_modal.loading_2')}</span>
+                </div>
+            `;
         }
+        if (applied) {
+            return html`
+                <div class="empty-state">
+                    <platform-icon name="check" size="32"></platform-icon>
+                    <div class="hint">${this.t('ai_analysis_modal.empty_applied')}</div>
+                    <button class="btn" type="button" @click=${() => this._onAnalyze()}>
+                        ${this.t('ai_analysis_modal.action_re_analyze')}
+                    </button>
+                </div>
+            `;
+        }
+        return html`
+            <div class="empty-state">
+                <platform-icon name="sparkle" size="32"></platform-icon>
+                <div class="hint">${this.t('ai_analysis_modal.empty_no_draft')}</div>
+                <button class="btn btn-primary" type="button" @click=${() => this._onAnalyze()}>
+                    ${this.t('ai_analysis_modal.action_analyze')}
+                </button>
+            </div>
+        `;
     }
 
-    _getConnectionName(item) {
-        if (typeof item.name === 'string' && item.name.length > 0) {
-            return item.name;
-        }
-        if (typeof item.entity_type === 'string' && item.entity_type.length > 0) {
-            return item.entity_type;
-        }
-        return this.i18n.t('ai_analysis_modal.relationship_fallback');
+    _renderLeftColumn(entity, draft) {
+        const summary = this._summaryText(entity, draft);
+        const draftEntities = Array.isArray(draft.entities) ? draft.entities : [];
+        const tasks = draftEntities.filter((e) => e.entity_type === TASK_TYPE);
+        return html`
+            <section class="column">
+                <article class="block summary">
+                    <h3 class="block-title">
+                        <platform-icon name="sparkle" size="14"></platform-icon>
+                        ${this.t('ai_analysis_modal.block_summary_title')}
+                    </h3>
+                    <p class="summary-text">${summary}</p>
+                </article>
+                <article class="block">
+                    <h3 class="block-title">
+                        <platform-icon name="check-square" size="14"></platform-icon>
+                        ${this.t('ai_analysis_modal.suggested_tasks_title')}
+                    </h3>
+                    ${tasks.length === 0
+                        ? html`<div class="hint" style="color: var(--text-tertiary); font-size: var(--text-sm);">${this.t('ai_analysis_modal.no_tasks')}</div>`
+                        : html`<div class="items-list">${tasks.map((t) => this._renderEntityRow(t))}</div>`}
+                </article>
+            </section>
+        `;
     }
 
-    _getConnectionSubtitle(item) {
-        if (typeof item.entity_subtype === 'string' && item.entity_subtype.length > 0) {
-            return item.entity_subtype;
-        }
-        if (typeof item.entity_type === 'string' && item.entity_type.length > 0) {
-            return item.entity_type;
-        }
-        return this.i18n.t('ai_analysis_modal.object_fallback');
+    _renderRightColumn(draft) {
+        const draftEntities = Array.isArray(draft.entities) ? draft.entities : [];
+        const entities = draftEntities.filter((e) => e.entity_type !== TASK_TYPE);
+        const relationships = Array.isArray(draft.relationships) ? draft.relationships : [];
+        return html`
+            <section class="column">
+                <article class="block">
+                    <h3 class="block-title">
+                        <platform-icon name="link" size="14"></platform-icon>
+                        ${this.t('ai_analysis_modal.suggested_entities_title')}
+                    </h3>
+                    ${entities.length === 0
+                        ? html`<div class="hint" style="color: var(--text-tertiary); font-size: var(--text-sm);">${this.t('ai_analysis_modal.no_entities')}</div>`
+                        : html`<div class="items-list">${entities.map((e) => this._renderEntityRow(e))}</div>`}
+                </article>
+                <article class="block">
+                    <h3 class="block-title">
+                        <platform-icon name="git-branch" size="14"></platform-icon>
+                        ${this.t('ai_analysis_modal.suggested_relationships_title')}
+                    </h3>
+                    ${relationships.length === 0
+                        ? html`<div class="hint" style="color: var(--text-tertiary); font-size: var(--text-sm);">${this.t('ai_analysis_modal.no_relationships')}</div>`
+                        : html`<div class="items-list">${relationships.map((r) => this._renderRelRow(r, draft))}</div>`}
+                </article>
+            </section>
+        `;
     }
 
-    renderSaveHeaderButton() {
-        const title = this._saving
-            ? this.i18n.t('entity_modal.saving')
-            : (CRMStore.state.ai.importReview
-                ? this.i18n.t('knowledge_import.detail_approve')
-                : this.i18n.t('save', {}, 'common'));
-        return this._renderHeaderSaveIcon({
-            onClick: () => this._onSave(),
-            disabled: this._saving || this._analyzing || this.loading,
-            title,
-        });
+    _summaryText(entity, draft) {
+        if (draft && draft.note && typeof draft.note.description === 'string' && draft.note.description.length > 0) {
+            return draft.note.description;
+        }
+        if (typeof entity.description === 'string' && entity.description.length > 0) {
+            return entity.description;
+        }
+        return this.t('ai_analysis_modal.summary_empty');
+    }
+
+    _renderEntityRow(item) {
+        const draftId = typeof item.draft_entity_id === 'string' && item.draft_entity_id.length > 0
+            ? item.draft_entity_id
+            : item.name;
+        const removed = this._isPendingRemoveEntity(draftId);
+        const expanded = this._attrsExpandedIds.indexOf(draftId) !== -1;
+        const name = typeof item.name === 'string' && item.name.length > 0
+            ? item.name
+            : this.t('ai_analysis_modal.existing_entity_fallback');
+        const subtitle = this._entitySubtitle(item);
+        const dedup = this._dedupBadge(item);
+        const hasAttrs = _isObject(item.attributes) && Object.keys(item.attributes).length > 0;
+
+        return html`
+            <div class="item-row ${removed ? 'removed' : ''}">
+                <div class="icon">
+                    <platform-icon name=${this._iconForType(item.entity_type)} size="14"></platform-icon>
+                </div>
+                <div class="meta">
+                    <div class="name">${name}</div>
+                    <div class="sub">${subtitle}</div>
+                    ${expanded && hasAttrs
+                        ? html`<pre class="attrs-preview">${JSON.stringify(item.attributes, null, 2)}</pre>`
+                        : nothing}
+                </div>
+                <div class="actions">
+                    ${dedup}
+                    ${hasAttrs
+                        ? html`
+                            <button
+                                type="button"
+                                class="icon-btn"
+                                title=${expanded ? this.t('ai_analysis_modal.toggle_attrs_hide') : this.t('ai_analysis_modal.toggle_attrs_show')}
+                                @click=${() => this._toggleAttrs(draftId)}
+                            >
+                                <platform-icon name=${expanded ? 'chevron-up' : 'chevron-down'} size="12"></platform-icon>
+                            </button>
+                        `
+                        : nothing}
+                    <button
+                        type="button"
+                        class="icon-btn"
+                        title=${removed ? this.t('ai_analysis_modal.action_undo') : this.t('ai_analysis_modal.action_remove')}
+                        @click=${() => this._toggleRemoveEntity(draftId)}
+                    >
+                        <platform-icon name=${removed ? 'rotate-ccw' : 'close'} size="12"></platform-icon>
+                    </button>
+                </div>
+            </div>
+        `;
+    }
+
+    _renderRelRow(rel, draft) {
+        const draftId = rel.draft_relationship_id;
+        const removed = this._isPendingRemoveRel(draftId);
+        const sourceName = this._draftEntityName(draft, rel.source_draft_entity_id);
+        const targetName = this._draftEntityName(draft, rel.target_draft_entity_id);
+        const relType = typeof rel.relationship_type === 'string' && rel.relationship_type.length > 0
+            ? rel.relationship_type
+            : this.t('ai_analysis_modal.relationship_fallback');
+
+        return html`
+            <div class="item-row ${removed ? 'removed' : ''}">
+                <div class="icon">
+                    <platform-icon name="git-branch" size="14"></platform-icon>
+                </div>
+                <div class="meta">
+                    <div class="name">${this.t('ai_analysis_modal.relationship_line', { source: sourceName, target: targetName })}</div>
+                    <div class="sub">${relType}</div>
+                </div>
+                <div class="actions">
+                    <button
+                        type="button"
+                        class="icon-btn"
+                        title=${removed ? this.t('ai_analysis_modal.action_undo') : this.t('ai_analysis_modal.action_remove')}
+                        @click=${() => this._toggleRemoveRel(draftId)}
+                    >
+                        <platform-icon name=${removed ? 'rotate-ccw' : 'close'} size="12"></platform-icon>
+                    </button>
+                </div>
+            </div>
+        `;
+    }
+
+    _entitySubtitle(item) {
+        const parts = [];
+        if (typeof item.entity_type === 'string' && item.entity_type.length > 0) parts.push(item.entity_type);
+        if (typeof item.entity_subtype === 'string' && item.entity_subtype.length > 0) parts.push(item.entity_subtype);
+        if (parts.length === 0) return this.t('ai_analysis_modal.object_fallback');
+        return parts.join(' · ');
+    }
+
+    _dedupBadge(item) {
+        if (item.dedup_action === 'merge') {
+            const score = typeof item.dedup_confidence === 'number' && Number.isFinite(item.dedup_confidence)
+                ? Math.round(item.dedup_confidence * 100)
+                : null;
+            const label = score !== null
+                ? `${this.t('ai_analysis_modal.dedup_existing')} ${score}%`
+                : this.t('ai_analysis_modal.dedup_existing');
+            return html`<span class="badge dedup-existing">${label}</span>`;
+        }
+        if (item.dedup_action === 'create') {
+            return html`<span class="badge dedup-new">${this.t('ai_analysis_modal.dedup_new')}</span>`;
+        }
+        return nothing;
+    }
+
+    _iconForType(entityType) {
+        if (entityType === 'task') return 'check-square';
+        if (entityType === 'member') return 'user';
+        if (entityType === 'company') return 'building';
+        if (entityType === 'meeting') return 'calendar';
+        if (entityType === 'note') return 'doc-detail';
+        return 'circle';
+    }
+
+    _draftEntityName(draft, draftEntityId) {
+        if (!_isObject(draft) || typeof draftEntityId !== 'string') {
+            return this.t('ai_analysis_modal.existing_entity_fallback');
+        }
+        const draftEntities = Array.isArray(draft.entities) ? draft.entities : [];
+        const found = draftEntities.find((e) => e.draft_entity_id === draftEntityId);
+        if (!_isObject(found)) {
+            return this.t('ai_analysis_modal.existing_entity_fallback');
+        }
+        if (typeof found.name === 'string' && found.name.length > 0) return found.name;
+        return this.t('ai_analysis_modal.existing_entity_fallback');
     }
 
     renderFooter() {
-        return html``;
+        const draft = this._draft();
+        const hasDraft = draft !== null;
+        const pending = this._hasPendingChanges();
+        const savingPending = this._draftSaveOp.busy;
+        const analyzing = this._analyzeOp.busy;
+
+        return html`
+            <div class="footer-actions">
+                <div class="left">
+                    ${this._saveError.length > 0
+                        ? html`<span class="submit-error">${this._saveError}</span>`
+                        : nothing}
+                </div>
+                <div class="right">
+                    <button type="button" class="btn" @click=${() => this.close()}>
+                        ${this.t('ai_analysis_modal.action_close')}
+                    </button>
+                    ${hasDraft
+                        ? html`
+                            <button
+                                type="button"
+                                class="btn"
+                                ?disabled=${analyzing}
+                                @click=${() => this._onAnalyze()}
+                            >
+                                ${analyzing
+                                    ? this.t('ai_analysis_modal.action_re_analyzing')
+                                    : this.t('ai_analysis_modal.action_re_analyze')}
+                            </button>
+                            ${pending
+                                ? html`
+                                    <button
+                                        type="button"
+                                        class="btn"
+                                        ?disabled=${savingPending}
+                                        @click=${() => this._onSavePending()}
+                                    >
+                                        ${savingPending
+                                            ? this.t('ai_analysis_modal.action_saving')
+                                            : this.t('ai_analysis_modal.action_save_changes')}
+                                    </button>
+                                `
+                                : nothing}
+                            <button
+                                type="button"
+                                class="btn btn-primary"
+                                ?disabled=${analyzing || savingPending}
+                                @click=${() => this._onApply()}
+                            >
+                                ${this.t('ai_analysis_modal.action_apply')}
+                            </button>
+                        `
+                        : nothing}
+                </div>
+            </div>
+        `;
     }
 }
 
-customElements.define('ai-analysis-modal', AIAnalysisModal);
+customElements.define('crm-ai-analysis-modal', CRMAiAnalysisModal);
+registerModalKind(CRMAiAnalysisModal.modalKind, 'crm-ai-analysis-modal');

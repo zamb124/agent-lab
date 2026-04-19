@@ -43,7 +43,10 @@ from core.app.health_payload import build_health_payload
 from core.logging import setup_logging
 from core.middleware.auth import AuthMiddleware
 from core.middleware.deployment_headers import DeploymentHeadersMiddleware
-from core.middleware.dev_inter_service_proxy import DevInterServiceProxyMiddleware
+from core.middleware.dev_inter_service_proxy import (
+    DevInterServiceProxyMiddleware,
+    DevInterServiceWsProxyMiddleware,
+)
 from core.tracing import setup_tracing
 from core.tracing.tracer import set_span_repository, set_tracing_service_name
 from core.websocket.manager import notification_manager
@@ -56,6 +59,8 @@ from core.api.team import router as core_team_router
 from core.push.router import router as push_router
 from core.push.apns_credentials import resolve_apns_credentials
 from core.push.apns_service import init_apns_push_service
+from core.push.fcm_credentials import resolve_fcm_credentials
+from core.push.fcm_service import init_fcm_push_service
 from core.push.service import init_web_push_service
 from core.app.pwa_routes import register_platform_pwa_routes
 from core.app.i18n_routes import register_platform_i18n_routes
@@ -198,6 +203,16 @@ def create_service_app(
                 use_sandbox=apns.use_sandbox,
             )
             logger.info("ApnsPushService инициализирован")
+
+        fcm = resolve_fcm_credentials(settings)
+        if fcm:
+            init_fcm_push_service(
+                project_id=fcm.project_id,
+                client_email=fcm.client_email,
+                private_key_pem=fcm.private_key_pem,
+                token_uri=fcm.token_uri,
+            )
+            logger.info("FcmPushService инициализирован project_id=%s", fcm.project_id)
         
         # Кастомный startup
         if on_startup:
@@ -279,6 +294,8 @@ def create_service_app(
 
     # Локальный dev/test: браузер на :8002 с путём /flows/... без ingress — пересылаем на flows_service_url
     app.add_middleware(DevInterServiceProxyMiddleware, service_name=settings.server.name)
+    # Тот же прокси, но для WebSocket-апгрейдов: ASGI-уровневый, BaseHTTPMiddleware WS не покрывает.
+    app.add_middleware(DevInterServiceWsProxyMiddleware, service_name=settings.server.name)
 
     # API prefix
     # api_version="v1" → /flows/api/v1 (REST API)
@@ -353,11 +370,14 @@ def create_service_app(
     logger.info(f"Подключение push роутера ({push_prefix}/api/push/*)")
     app.include_router(push_router, prefix=push_prefix, tags=["push"])
     
-    # WebSocket роутер для уведомлений (автоматически для всех сервисов)
-    # Монтируем с префиксом сервиса для правильного роутинга через nginx
-    ws_path = f"/{public_segment}/ws/notifications" if service_name != "core" else "/ws/notifications"
+    # WebSocket роутер для уведомлений (автоматически для всех сервисов).
+    # Монтируем с префиксом /<service>/api — каноничный путь
+    # `/<svc>/api/ws/notifications` (см. `architecture.mdc`, раздел про
+    # «REST-зеркало команд» и единый WS).
+    ws_prefix = f"/{public_segment}/api" if service_name != "core" else ""
+    ws_path = f"{ws_prefix}/ws/notifications" if service_name != "core" else "/ws/notifications"
     logger.info(f"Подключение WebSocket роутера для уведомлений ({ws_path})")
-    app.include_router(ws_router, prefix=f"/{public_segment}" if service_name != "core" else "", tags=["websocket"])
+    app.include_router(ws_router, prefix=ws_prefix, tags=["websocket"])
     
     # Pages роутеры (добавляем префикс сервиса к их собственному префиксу)
     if pages_routers:

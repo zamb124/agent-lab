@@ -1,7 +1,20 @@
+/**
+ * graph-search-pill — поиск + режим (text/semantic/hybrid) + minScore + view-mode
+ * (influence/related/path) для граф-страницы.
+ *
+ * Композиционный child-компонент: эмитит DOM-события `search-input`, `search-clear`,
+ * `search-submit`, `search-mode-change`, `min-score-change`, `mode-change`, `refresh`.
+ */
+
 import { html, css } from 'lit';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
+import '@platform/lib/components/platform-icon.js';
 
-export class GraphSearchPill extends PlatformElement {
+const SEARCH_MODES = ['text', 'semantic', 'hybrid'];
+
+export class CRMGraphSearchPill extends PlatformElement {
+    static i18nNamespace = 'crm';
+
     static properties = {
         query: { type: String },
         viewMode: { type: String, attribute: 'view-mode' },
@@ -42,9 +55,7 @@ export class GraphSearchPill extends PlatformElement {
                 outline: none;
             }
 
-            .pill input::placeholder {
-                color: var(--text-tertiary);
-            }
+            .pill input::placeholder { color: var(--text-tertiary); }
 
             .pill-icon-btn {
                 width: 32px;
@@ -59,19 +70,7 @@ export class GraphSearchPill extends PlatformElement {
                 flex-shrink: 0;
             }
 
-            .pill-icon-btn:hover {
-                color: var(--text-primary);
-            }
-
-            .pill-icon-btn svg {
-                width: 14px;
-                height: 14px;
-                fill: none;
-                stroke: currentColor;
-                stroke-width: 2;
-                stroke-linecap: round;
-                stroke-linejoin: round;
-            }
+            .pill-icon-btn:hover { color: var(--text-primary); }
 
             .mode-pills {
                 display: flex;
@@ -181,38 +180,15 @@ export class GraphSearchPill extends PlatformElement {
                 cursor: pointer;
             }
 
-            .score-threshold input[type="range"]::-moz-range-thumb {
-                width: 13px;
-                height: 13px;
-                border-radius: 50%;
-                background: var(--accent);
-                cursor: pointer;
-                border: none;
-            }
-
             @media (max-width: 1199px) {
-                .pill input {
-                    width: 140px;
-                }
+                .pill input { width: 140px; }
             }
 
             @media (max-width: 767px) {
-                :host {
-                    flex-wrap: wrap;
-                }
-
-                .pill input {
-                    width: 100px;
-                }
-
-                .mode-pills {
-                    gap: 3px;
-                }
-
-                .mode-pill {
-                    font-size: 11px;
-                    padding: 4px 8px;
-                }
+                :host { flex-wrap: wrap; }
+                .pill input { width: 100px; }
+                .mode-pills { gap: 3px; }
+                .mode-pill { font-size: 11px; padding: 4px 8px; }
             }
         `,
     ];
@@ -267,20 +243,20 @@ export class GraphSearchPill extends PlatformElement {
                 <input
                     type="text"
                     .value=${this.query}
-                    placeholder=${this.i18n.t('graph.search_placeholder_short')}
+                    placeholder=${this.t('graph.search_placeholder_short')}
                     @input=${this._onInput}
                     @keydown=${this._onKeydown}
                 />
                 ${hasQuery
-                    ? html`<button class="pill-icon-btn" type="button" title=${this.i18n.t('graph.search_clear')} @click=${this._onClear}>
+                    ? html`<button class="pill-icon-btn" type="button" title=${this.t('graph.search_clear')} @click=${this._onClear}>
                         <platform-icon name="close" size="16"></platform-icon>
                     </button>`
-                    : html`<button class="pill-icon-btn" type="button" title=${this.i18n.t('graph.search_refresh_graph')} @click=${this._onRefresh}>
+                    : html`<button class="pill-icon-btn" type="button" title=${this.t('graph.search_refresh_graph')} @click=${this._onRefresh}>
                         <platform-icon name="refresh" size="16"></platform-icon>
                     </button>`
                 }
             </div>
-            <div class="score-threshold" title=${this.i18n.t('graph.search_min_score')}>
+            <div class="score-threshold" title=${this.t('graph.search_min_score')}>
                 <input
                     type="range"
                     min="0"
@@ -292,13 +268,13 @@ export class GraphSearchPill extends PlatformElement {
                 <span class="score-threshold-label">≥ ${Math.round(this.minScore * 100)}%</span>
             </div>
             <div class="search-mode-toggle">
-                ${['text', 'semantic', 'hybrid'].map((mode) => html`
+                ${SEARCH_MODES.map((mode) => html`
                     <button
                         class="search-mode-btn ${this.searchMode === mode ? 'active' : ''}"
                         type="button"
-                        title=${this.i18n.t(`graph.search_mode_${mode}`)}
+                        title=${this.t(`graph.search_mode_${mode}`)}
                         @click=${() => this._onSearchModeChange(mode)}
-                    >${this.i18n.t(`entities.search_modes.${mode}`)}</button>
+                    >${this.t(`entities.search_modes.${mode}`)}</button>
                 `)}
             </div>
             <div class="mode-pills">
@@ -307,11 +283,11 @@ export class GraphSearchPill extends PlatformElement {
                         class="mode-pill ${this.viewMode === mode ? 'active' : ''}"
                         type="button"
                         @click=${() => this._onModeChange(mode)}
-                    >${mode}</button>
+                    >${this.t(`graph.view_mode_${mode}`)}</button>
                 `)}
             </div>
         `;
     }
 }
 
-customElements.define('graph-search-pill', GraphSearchPill);
+customElements.define('crm-graph-search-pill', CRMGraphSearchPill);

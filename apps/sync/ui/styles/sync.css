@@ -1,0 +1,21 @@
+/*
+ * Sync UI — глобальные стили сервиса.
+ *
+ * Большая часть стилей описана внутри shadow DOM компонентов через `static styles`.
+ * Здесь только переменные/global-настройки уровня документа, специфичные для sync.
+ */
+
+:root {
+    --sync-overlay-z: 4000;
+    --sync-banner-z: 3500;
+    --sync-typing-color: var(--text-secondary);
+}
+
+[data-call-overlay-expanded="true"] platform-shell-page,
+[data-call-overlay-expanded="true"] platform-island {
+    pointer-events: none;
+}
+
+[data-call-overlay-expanded="true"] sync-call-overlay-modal {
+    pointer-events: auto;
+}

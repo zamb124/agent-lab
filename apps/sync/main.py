@@ -8,30 +8,34 @@ Sync Service - FastAPI приложение для инженерного чат
 import logging
 from pathlib import Path
 
-from fastapi import FastAPI, HTTPException, WebSocket
+from fastapi import FastAPI, HTTPException
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
-from core.app import create_service_app
-from core.config import get_settings
+
+from apps.sync.api import get_api_router
 from apps.sync.config import SyncSettings
 from apps.sync.container import get_sync_container
 from apps.sync.dependencies import ContainerDep
-from apps.sync.ws import fanout, websocket_endpoint
-from apps.sync.api import get_api_router
+from apps.sync.realtime.command_router import register_sync_ws_commands
+from apps.sync.realtime.presence_hooks import register_presence_hooks
+from apps.sync.realtime.read_handlers import register_sync_ws_read_handlers
+from core.app import create_service_app
+from core.config import get_settings
 
 logger = logging.getLogger(__name__)
 
 
 async def on_startup(app: FastAPI, container, settings):
-    """Инициализация PubSubFanout. Схема БД только через Alembic (make migrate)."""
-    await fanout.start()
-    logger.info("Sync Service: PubSubFanout запущен")
+    """Регистрация WS command-handler'ов и presence hook'ов в core.websocket.
 
-
-async def on_shutdown(app: FastAPI, container):
-    """Остановка PubSubFanout."""
-    await fanout.stop()
-    logger.info("Sync Service: PubSubFanout остановлен")
+    Сам WS-сокет /sync/api/ws/notifications поднимает `core.websocket.router`
+    через `create_service_app`. Push-события идут через `platform:ui_events`
+    (см. `architecture.mdc`, раздел «REST-зеркало команд»).
+    """
+    register_sync_ws_commands()
+    register_sync_ws_read_handlers()
+    register_presence_hooks()
+    logger.info("Sync Service: WS command-router и presence hooks готовы")
 
 
 app = create_service_app(
@@ -42,7 +46,6 @@ app = create_service_app(
         get_api_router(),
     ],
     on_startup=on_startup,
-    on_shutdown=on_shutdown,
     title="Sync Service",
     description="Инженерный чат с Git-интеграцией",
     api_version="v1",
@@ -89,12 +92,6 @@ async def serve_sync_ui(container: ContainerDep, path: str = ""):
     if not ui_file.exists():
         raise HTTPException(status_code=404, detail="Sync UI not found")
     return FileResponse(ui_file)
-
-
-@app.websocket("/sync/ws")
-async def ws_endpoint(websocket: WebSocket) -> None:
-    """WebSocket endpoint для realtime."""
-    await websocket_endpoint(websocket)
 
 
 if __name__ == "__main__":

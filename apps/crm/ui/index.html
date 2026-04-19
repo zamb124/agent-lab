@@ -25,7 +25,6 @@
             "lit/directives/guard.js": "/static/core/assets/js/lit/directives/guard.min.js",
             "@platform/lib/": "/static/core/lib/",
             "@platform/lib/embed-chat/": "/static/core/lib/embed-chat/",
-            "@platform/services/": "/static/core/services/",
             "@capacitor/app": "/static/core/assets/js/vendor/@capacitor/app/index.js",
             "@capacitor/core": "/static/core/assets/js/vendor/@capacitor/core/index.js",
             "@capacitor/splash-screen": "/static/core/assets/js/vendor/@capacitor/splash-screen/index.js",
@@ -38,11 +37,7 @@
     <link rel="stylesheet" href="/static/core/assets/css/reset.css">
 
     <!-- Platform button tokens inherited from tokens.css -->
-
-    <script type="module">
-        import '/static/core/lib/components/app-loader.js';
-    </script>
-    <script type="module">
+<script type="module">
         import * as THREE from '/crm/ui/vendor/three/three.module.min.js';
         window.THREE = THREE;
     </script>
@@ -50,9 +45,7 @@
     <script src="/static/core/assets/js/marked.min.js"></script>
 
     <style>
-        crm-app:not(:defined) { opacity: 0; }
-
-        app-loader:not(:defined) {
+crm-app:not(:defined) {
             position: fixed;
             inset: 0;
             display: flex;
@@ -64,23 +57,13 @@
             font-family: 'SF Pro Display', -apple-system, BlinkMacSystemFont, sans-serif;
         }
 
-        app-loader:not(:defined)::after {
+        crm-app:not(:defined)::after {
             content: 'CRM';
         }
-    </style>
+</style>
 </head>
 <body class="platform-shell">
-    <app-loader id="app-loader" fullscreen></app-loader>
     <crm-app></crm-app>
     <script type="module" src="/crm/ui/static/index.js"></script>
-    <script>
-        customElements.whenDefined('crm-app').then(() => {
-            const loader = document.getElementById('app-loader');
-            if (loader) {
-                loader.classList.add('hidden');
-                setTimeout(() => loader.remove(), 400);
-            }
-        });
-    </script>
 </body>
 </html>

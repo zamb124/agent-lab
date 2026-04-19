@@ -1,7 +1,14 @@
 /**
  * Текущий CRM/RAG namespace для HTTP X-Platform-Namespace.
- * Ключ localStorage совпадает с CRMStore (apps/crm/ui/store/crm.store.js).
+ *
+ * Источник правды о выборе namespace — state.ui.namespace (см. reducers/ui.js).
+ * Хранилище localStorage поддерживается ui.effect.js при UI_NAMESPACE_SELECT_REQUESTED;
+ * утилита используется только http-слоем для подмешивания заголовка и
+ * легаси-чтения сразу при старте, до того как bus прогрузит state.
  */
+
+import { CoreEvents } from '../events/contract.js';
+import { getPlatformBus } from '../events/bus-singleton.js';
 
 const LAST_NAMESPACE_STORAGE_KEY = 'crm:last-namespace-by-company';
 const ALL_NAMESPACES_SENTINEL = '__ALL__';
@@ -64,12 +71,12 @@ export function setPlatformNamespaceSelection(companyId, rawName) {
         rawName === null ||
         rawName === undefined ||
         (typeof rawName === 'string' && rawName.trim().length === 0);
-    const value = useAll ? ALL_NAMESPACES_SENTINEL : rawName.trim();
-    const existing = readNamespaceMap();
-    const map = existing ? { ...existing } : {};
-    map[cid] = value;
-    window.localStorage.setItem(LAST_NAMESPACE_STORAGE_KEY, JSON.stringify(map));
-    window.dispatchEvent(new CustomEvent('office-documents-list-reload', { bubbles: true }));
+    const selection = useAll ? 'all' : rawName.trim();
+    getPlatformBus().dispatch(
+        CoreEvents.UI_NAMESPACE_SELECT_REQUESTED,
+        { company_id: cid, selection },
+        { source: 'local' },
+    );
 }
 
 /**

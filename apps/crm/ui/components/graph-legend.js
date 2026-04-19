@@ -1,7 +1,16 @@
+/**
+ * graph-legend — легенда графа: список цветов entity_type, hint текущего режима,
+ * выбранный node/edge.
+ *
+ * Чисто-презентационный компонент: только props и render, без emit/dispatch.
+ */
+
 import { html, css } from 'lit';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
 
-export class GraphLegend extends PlatformElement {
+export class CRMGraphLegend extends PlatformElement {
+    static i18nNamespace = 'crm';
+
     static properties = {
         nodes: { type: Array },
         entityTypeColors: { type: Object, attribute: 'entity-type-colors' },
@@ -48,18 +57,7 @@ export class GraphLegend extends PlatformElement {
                 flex-shrink: 0;
             }
 
-            .hint-pill {
-                display: inline-flex;
-                align-items: center;
-                gap: var(--space-2);
-                padding: var(--space-1) var(--space-2);
-                border-radius: var(--radius-full);
-                background: var(--glass-solid-medium);
-                border: 1px solid var(--glass-border-subtle);
-                font-size: var(--text-xs);
-                color: var(--text-secondary);
-            }
-
+            .hint-pill,
             .node-pill {
                 display: inline-flex;
                 align-items: center;
@@ -73,19 +71,12 @@ export class GraphLegend extends PlatformElement {
             }
 
             @media (max-width: 1199px) {
-                :host {
-                    max-width: 320px;
-                }
+                :host { max-width: 320px; }
             }
 
             @media (max-width: 767px) {
-                :host {
-                    padding: 6px 8px;
-                }
-
-                .row {
-                    gap: 6px;
-                }
+                :host { padding: 6px 8px; }
+                .row { gap: 6px; }
             }
         `,
     ];
@@ -100,22 +91,24 @@ export class GraphLegend extends PlatformElement {
     }
 
     _getVisibleTypes() {
-        const colors = this.entityTypeColors instanceof Map
+        const palette = this.entityTypeColors instanceof Map
             ? this.entityTypeColors
             : new Map(Object.entries(this.entityTypeColors));
 
-        return Array.from(new Set(
-            this.nodes
-                .map((node) => {
-                    const typeId = typeof node.entity_type === 'string' ? node.entity_type.trim() : '';
-                    return typeId;
-                })
-                .filter((typeId) => typeId.length > 0 && typeId !== 'hidden'),
-        )).map((typeId) => ({ typeId, color: colors.get(typeId) || '#888' }));
+        const seen = new Set();
+        const result = [];
+        for (const node of this.nodes) {
+            const typeId = typeof node.entity_type === 'string' ? node.entity_type.trim() : '';
+            if (!typeId || typeId === 'hidden' || seen.has(typeId)) continue;
+            seen.add(typeId);
+            result.push({ typeId, color: palette.get(typeId) || '#888' });
+        }
+        return result;
     }
 
     render() {
         const visibleTypes = this._getVisibleTypes();
+        const dash = '\u2014';
 
         return html`
             <div class="row">
@@ -124,17 +117,17 @@ export class GraphLegend extends PlatformElement {
                         <span class="dot" style="background:${color}"></span>${typeId}
                     </div>
                 `)}
-                <div class="legend-item"><span class="dot" style="background:#7f7f8f"></span> Hidden</div>
-                <div class="legend-item"><span class="dot" style="background:#41d36d"></span> Path directed</div>
-                <div class="legend-item"><span class="dot" style="background:#f2c94c"></span> Path undirected</div>
+                <div class="legend-item"><span class="dot" style="background:#7f7f8f"></span>${this.t('graph.legend_hidden')}</div>
+                <div class="legend-item"><span class="dot" style="background:#41d36d"></span>${this.t('graph.legend_path_directed')}</div>
+                <div class="legend-item"><span class="dot" style="background:#f2c94c"></span>${this.t('graph.legend_path_undirected')}</div>
             </div>
             <div class="row">
                 <span class="hint-pill">${this.canvasHint}</span>
-                <span class="node-pill">node: ${this.selectedNodeId || '\u2014'}</span>
-                <span class="node-pill">edge: ${this.selectedEdgeId || '\u2014'}</span>
+                <span class="node-pill">${this.t('graph.legend_node_label')}: ${this.selectedNodeId || dash}</span>
+                <span class="node-pill">${this.t('graph.legend_edge_label')}: ${this.selectedEdgeId || dash}</span>
             </div>
         `;
     }
 }
 
-customElements.define('graph-legend', GraphLegend);
+customElements.define('crm-graph-legend', CRMGraphLegend);

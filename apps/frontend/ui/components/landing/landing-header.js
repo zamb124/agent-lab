@@ -4,9 +4,20 @@
 import { html, css } from 'lit';
 import { classMap } from 'lit/directives/class-map.js';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
-import { I18nNs } from '@platform/services/i18n/i18n.service.js';
+
+const INTERNAL_HREF_TO_ROUTE = Object.freeze({
+    '/': 'landing',
+    '/products/agents':    'product-agents',
+    '/products/rag':       'product-rag',
+    '/products/crm':       'product-crm',
+    '/products/sync':      'product-sync',
+    '/products/documents': 'product-documents',
+    '/dashboard':          'dashboard',
+});
 
 export class LandingHeader extends PlatformElement {
+    static i18nNamespace = 'landing';
+
     static styles = [
         PlatformElement.styles,
         css`
@@ -457,32 +468,28 @@ export class LandingHeader extends PlatformElement {
 
     static properties = {
         mobileMenuOpen: { type: Boolean },
-        isAuthenticated: { type: Boolean },
-        user: { type: Object },
         productsDropdownOpen: { type: Boolean }
     };
 
     constructor() {
         super();
         this.mobileMenuOpen = false;
-        this.isAuthenticated = false;
-        this.user = null;
         this.productsDropdownOpen = false;
-        this._i18nUnsub = null;
+        this._authSel = this.select((s) => ({ status: s.auth.status, user: s.auth.user }));
+    }
+
+    get isAuthenticated() {
+        const v = this._authSel.value;
+        return !!(v && v.status === 'authenticated');
+    }
+
+    get user() {
+        const v = this._authSel.value;
+        return (v && v.user && v.user.raw) || (v && v.user) || null;
     }
 
     _lt(key) {
-        return this.i18n.t(key, {}, I18nNs.LANDING);
-    }
-
-    async _checkAuth() {
-        const response = await fetch('/frontend/api/auth/me', {
-            credentials: 'include'
-        });
-        if (response.ok) {
-            this.user = await response.json();
-            this.isAuthenticated = true;
-        }
+        return this.t(key);
     }
 
     _toggleMobileMenu() {
@@ -511,11 +518,15 @@ export class LandingHeader extends PlatformElement {
         this._closeMobileMenu();
     }
 
-    async _setLang(lang) {
-        if (this.i18n.getCurrentLocale() === lang) {
+    _setLang(lang) {
+        if (this.bus.getState().i18n.locale === lang) {
             return;
         }
-        await this.i18n.setLocale(lang);
+        this.setLocale(lang);
+    }
+
+    _navigateRoute(routeKey) {
+        this.navigate(routeKey);
     }
 
     _resolveLandingPage() {
@@ -547,6 +558,12 @@ export class LandingHeader extends PlatformElement {
         if (href?.startsWith('#')) {
             e.preventDefault();
             this._scrollToLandingSection(href.slice(1));
+        } else {
+            const routeKey = INTERNAL_HREF_TO_ROUTE[href];
+            if (routeKey) {
+                e.preventDefault();
+                this._navigateRoute(routeKey);
+            }
         }
         this._closeMobileMenu();
         this._closeProductsDropdown();
@@ -564,17 +581,11 @@ export class LandingHeader extends PlatformElement {
 
     connectedCallback() {
         super.connectedCallback();
-        this._i18nUnsub = this.i18n.subscribe(() => this.requestUpdate());
-        void this._checkAuth();
         this._handleOutsideClick = this._handleOutsideClick.bind(this);
         document.addEventListener('click', this._handleOutsideClick);
     }
 
     disconnectedCallback() {
-        if (this._i18nUnsub) {
-            this._i18nUnsub();
-            this._i18nUnsub = null;
-        }
         document.removeEventListener('click', this._handleOutsideClick);
         super.disconnectedCallback();
     }
@@ -588,14 +599,11 @@ export class LandingHeader extends PlatformElement {
     }
 
     _handleLoginClick() {
-        this.dispatchEvent(new CustomEvent('open-auth-modal', {
-            bubbles: true,
-            composed: true
-        }));
+        this.openModal('auth.login');
     }
 
     render() {
-        const uiLocale = this.i18n.getCurrentLocale();
+        const uiLocale = this.bus.getState().i18n.locale;
         const h = (sub) => this._lt(`header.${sub}`);
         return html`
             <header class="header-container" @click=${this._onHeaderBarClick}>
@@ -679,7 +687,7 @@ export class LandingHeader extends PlatformElement {
                     </div>
                     
                     ${this.isAuthenticated
-                        ? html`<a href="/dashboard" class="dashboard-btn">${h('dashboard')}</a>`
+                        ? html`<a href="/dashboard" class="dashboard-btn" @click=${this._handleNavClick}>${h('dashboard')}</a>`
                         : html`<button class="login-btn" @click=${this._handleLoginClick}>${h('login')}</button>`
                     }
                     
@@ -738,7 +746,7 @@ export class LandingHeader extends PlatformElement {
                 
                 <a href="/documentation" class="nav-link" @click=${this._handleNavClick}>${h('docs')}</a>
                 ${this.isAuthenticated
-                    ? html`<a href="/dashboard" class="dashboard-btn" @click=${this._closeMobileMenu}>${h('dashboard')}</a>`
+                    ? html`<a href="/dashboard" class="dashboard-btn" @click=${this._handleNavClick}>${h('dashboard')}</a>`
                     : html`<button class="login-btn" @click=${() => { this._closeMobileMenu(); this._handleLoginClick(); }}>${h('login')}</button>`
                 }
             </div>

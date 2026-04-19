@@ -8,6 +8,7 @@ from uuid import uuid4
 
 from fastapi import APIRouter, HTTPException, Query, Request
 from fastapi.responses import JSONResponse
+from pydantic import BaseModel
 
 from core.pagination import OffsetPage
 from apps.sync.constants import CHANNEL_TYPE_CALENDAR_MEETING
@@ -25,6 +26,12 @@ from apps.sync.models.calls import (
     JoinResponse,
 )
 from apps.sync.models.meetings import CallRecordingRead
+from apps.sync.realtime.command_dispatch import dispatch_sync_command
+from apps.sync.realtime.commands import CommandEnvelope
+from apps.sync.realtime.publish_events import publish_realtime_events
+from apps.sync.realtime.events import event_call_signal
+from apps.sync.realtime.commands import CallSignalPayload
+from apps.sync.realtime.tasks import handle_command
 from core.calls.livekit_client import LiveKitClient
 from core.calls.models import TurnCredentials
 from core.calls.turn import generate_turn_credentials
@@ -598,3 +605,143 @@ async def join_via_link(
         mode="sfu",
         participant_names=participant_names,
     )
+
+
+# ============================================================================
+# REST-зеркала WS-команд звонка (платформенный инвариант: command = REST + WS).
+# Все эндпоинты используют тот же handle_command.kiq pipeline, что и WS.
+# ============================================================================
+
+
+class _CallTransferAdminBody(BaseModel):
+    target_user_id: str
+
+
+class _CallSignalBody(BaseModel):
+    target_user_id: str
+    signal_type: str
+    data: dict
+
+
+async def _run_call_command(actor_user_id: str, company_id: str, cmd_type: str, payload: dict) -> dict:
+    cmd = CommandEnvelope(
+        id=uuid4().hex,
+        actor_user_id=actor_user_id,
+        company_id=company_id,
+        type=cmd_type,
+        payload=payload,
+    )
+    task = await handle_command.kiq(cmd.model_dump())
+    res = await task.wait_result(
+        timeout=get_settings().sync_taskiq_wait_result_timeout_seconds,
+    )
+    if res.is_err:
+        raise HTTPException(status_code=500, detail=f"Command failed: {res.error}")
+    body = res.return_value
+    if not body.get("ok"):
+        raise HTTPException(status_code=400, detail=body.get("error_detail") or "Command failed")
+    return body.get("result")
+
+
+@router.post("/{call_id}/invite")
+async def invite_call(container: ContainerDep, call_id: str, body: dict) -> CallRead:
+    """REST-зеркало `sync/calls/invite_requested`.
+
+    `body` совместим с `CallInvitePayload.body` (ожидается `channel_id`).
+    """
+    _ = container
+    context = get_context()
+    payload = {**body}
+    result = await _run_call_command(
+        context.user.user_id, context.active_company.company_id, "call.invite", payload,
+    )
+    return CallRead.model_validate(result)
+
+
+@router.post("/{call_id}/accept")
+async def accept_call(container: ContainerDep, call_id: str) -> CallRead:
+    _ = container
+    context = get_context()
+    result = await _run_call_command(
+        context.user.user_id, context.active_company.company_id, "call.accept", {"call_id": call_id},
+    )
+    return CallRead.model_validate(result)
+
+
+@router.post("/{call_id}/decline", status_code=204)
+async def decline_call(container: ContainerDep, call_id: str) -> None:
+    _ = container
+    context = get_context()
+    await _run_call_command(
+        context.user.user_id, context.active_company.company_id, "call.decline", {"call_id": call_id},
+    )
+
+
+@router.post("/{call_id}/hangup")
+async def hangup_call(container: ContainerDep, call_id: str) -> CallRead:
+    _ = container
+    context = get_context()
+    result = await _run_call_command(
+        context.user.user_id, context.active_company.company_id, "call.hangup", {"call_id": call_id},
+    )
+    return CallRead.model_validate(result)
+
+
+@router.post("/{call_id}/recording/start")
+async def start_call_recording(container: ContainerDep, call_id: str) -> CallRecordingRead:
+    _ = container
+    context = get_context()
+    result = await _run_call_command(
+        context.user.user_id, context.active_company.company_id, "call.recording.start", {"call_id": call_id},
+    )
+    return CallRecordingRead.model_validate(result)
+
+
+@router.post("/{call_id}/recording/stop")
+async def stop_call_recording(container: ContainerDep, call_id: str) -> CallRecordingRead:
+    _ = container
+    context = get_context()
+    result = await _run_call_command(
+        context.user.user_id, context.active_company.company_id, "call.recording.stop", {"call_id": call_id},
+    )
+    return CallRecordingRead.model_validate(result)
+
+
+@router.post("/{call_id}/admin/transfer")
+async def transfer_call_admin(container: ContainerDep, call_id: str, body: _CallTransferAdminBody) -> CallRead:
+    _ = container
+    context = get_context()
+    result = await _run_call_command(
+        context.user.user_id,
+        context.active_company.company_id,
+        "call.admin.transfer",
+        {"call_id": call_id, "target_user_id": body.target_user_id},
+    )
+    return CallRead.model_validate(result)
+
+
+@router.post("/{call_id}/signal", status_code=204)
+async def signal_call(container: ContainerDep, call_id: str, body: _CallSignalBody) -> None:
+    """REST-зеркало `sync/calls/signal_requested`.
+
+    Быстрый путь: без TaskIQ, прямая публикация в `platform:ui_events`.
+    Зеркало WS-handler'а из `apps/sync/realtime/command_router.py`.
+    """
+    _ = container
+    context = get_context()
+    signal_payload = CallSignalPayload(
+        call_id=call_id,
+        target_user_id=body.target_user_id,
+        signal_type=body.signal_type,
+        data=body.data,
+    )
+    event = event_call_signal(
+        signal_payload.call_id,
+        signal_payload.signal_type,
+        signal_payload.data,
+        company_id=context.active_company.company_id,
+        recipient_user_ids=[signal_payload.target_user_id],
+    )
+    event.payload["target_user_id"] = signal_payload.target_user_id
+    event.payload["sender_user_id"] = context.user.user_id
+    await publish_realtime_events([event])

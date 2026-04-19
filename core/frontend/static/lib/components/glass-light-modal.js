@@ -4,7 +4,7 @@
  * работающими с глобальными стилями (например, Drawflow)
  */
 import { PlatformElement } from '../platform-element/index.js';
-import { AppEvents } from '../utils/types.js';
+import { CoreEvents } from '../events/contract.js';
 import { nextModalLayerZIndex } from '../utils/modal-z-stack.js';
 
 let lightModalStylesInjected = false;
@@ -103,13 +103,13 @@ export class PlatformLightModal extends PlatformElement {
 
     showModal() {
         this.open = true;
-        this.emit(AppEvents.MODAL_OPEN, { modal: this });
+        this.dispatch(CoreEvents.UI_MODAL_OPEN, { kind: this.localName });
         document.body.style.overflow = 'hidden';
     }
 
     close() {
         this.open = false;
-        this.emit(AppEvents.MODAL_CLOSE, { modal: this });
+        this.dispatch(CoreEvents.UI_MODAL_CLOSED, { kind: this.localName });
         document.body.style.overflow = '';
     }
 

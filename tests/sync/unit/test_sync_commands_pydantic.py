@@ -1,4 +1,10 @@
-"""Валидация DTO команд Sync (без БД)."""
+"""Валидация DTO команд Sync (без БД).
+
+Транспорт фрейма WS — единый платформенный command-router
+(`core.websocket.command_router`), формат `{ request_id, type, payload }`
+проверяется в `tests/sync/api/test_sync_websocket.py`. Здесь — только
+внутренние Pydantic-модели CommandEnvelope + payload-классы.
+"""
 
 from __future__ import annotations
 
@@ -8,7 +14,6 @@ from pydantic import ValidationError
 from apps.sync.realtime.commands import (
     CommandEnvelope,
     SpacesCreatePayload,
-    WsCommandFrame,
 )
 
 
@@ -37,24 +42,6 @@ def test_command_envelope_invalid_type_raises() -> None:
 def test_spaces_create_payload() -> None:
     p = SpacesCreatePayload.model_validate({"body": {"name": "S", "description": None}})
     assert p.body.name == "S"
-
-
-def test_ws_command_frame() -> None:
-    f = WsCommandFrame.model_validate(
-        {"id": "id1", "type": "spaces.create", "payload": {"body": {"name": "W", "description": None}}}
-    )
-    assert f.type == "spaces.create"
-
-
-def test_ws_command_frame_channels_typing() -> None:
-    f = WsCommandFrame.model_validate(
-        {
-            "id": "a" * 32,
-            "type": "channels.typing",
-            "payload": {"channel_id": "ch1", "typing": True, "thread_id": None},
-        }
-    )
-    assert f.type == "channels.typing"
 
 
 def test_command_envelope_channels_typing() -> None:

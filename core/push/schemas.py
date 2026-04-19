@@ -9,7 +9,7 @@ from typing import Literal
 
 from pydantic import BaseModel, Field, model_validator
 
-PushTransport = Literal["web_vapid", "ios_apns"]
+PushTransport = Literal["web_vapid", "ios_apns", "android_fcm"]
 
 
 def _normalize_apns_device_token(raw: str) -> str:
@@ -18,6 +18,16 @@ def _normalize_apns_device_token(raw: str) -> str:
         s = s[2:]
     if not re.fullmatch(r"[0-9a-f]{8,200}", s):
         raise ValueError("keys.device_token должен быть hex-строкой (8–200 символов)")
+    return s
+
+
+def _normalize_fcm_registration_token(raw: str) -> str:
+    s = raw.strip()
+    if not re.fullmatch(r"[A-Za-z0-9_:\-]{20,4096}", s):
+        raise ValueError(
+            "android_fcm: keys.device_token должен быть FCM registration token "
+            "(буквы, цифры, _, -, :, длиной 20–4096 символов)"
+        )
     return s
 
 
@@ -46,14 +56,25 @@ class SubscribeRequest(BaseModel):
             }
             return self
 
+        if self.transport == "ios_apns":
+            token_raw = self.keys.get("device_token")
+            if not token_raw:
+                raise ValueError("ios_apns: keys.device_token обязателен")
+            normalized = _normalize_apns_device_token(str(token_raw))
+            self.endpoint = f"apns:{normalized}"
+            self.keys = {"device_token": normalized}
+            if self.platform == "unknown":
+                self.platform = "ios_native"
+            return self
+
         token_raw = self.keys.get("device_token")
         if not token_raw:
-            raise ValueError("ios_apns: keys.device_token обязателен")
-        normalized = _normalize_apns_device_token(str(token_raw))
-        self.endpoint = f"apns:{normalized}"
+            raise ValueError("android_fcm: keys.device_token обязателен")
+        normalized = _normalize_fcm_registration_token(str(token_raw))
+        self.endpoint = f"fcm:{normalized}"
         self.keys = {"device_token": normalized}
         if self.platform == "unknown":
-            self.platform = "ios_native"
+            self.platform = "android_native"
         return self
 
 

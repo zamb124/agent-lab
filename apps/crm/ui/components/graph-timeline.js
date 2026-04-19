@@ -1,8 +1,17 @@
+/**
+ * graph-timeline — вертикальный ползунок временного диапазона графа.
+ *
+ * Композиционный child-компонент: эмитит `timeline-change`
+ * (detail = { startPercent, endPercent }).
+ */
+
 import { html, css } from 'lit';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
 import '@platform/lib/components/platform-icon.js';
 
-export class GraphTimeline extends PlatformElement {
+export class CRMGraphTimeline extends PlatformElement {
+    static i18nNamespace = 'crm';
+
     static properties = {
         minTimestamp: { type: Number },
         maxTimestamp: { type: Number },
@@ -91,17 +100,9 @@ export class GraphTimeline extends PlatformElement {
                 box-shadow: 0 1px 4px rgba(0, 0, 0, 0.4);
             }
 
-            .slider.start {
-                z-index: 2;
-            }
-
-            .slider.end {
-                z-index: 1;
-            }
-
-            .slider.end::-webkit-slider-thumb {
-                background: #f2c94c;
-            }
+            .slider.start { z-index: 2; }
+            .slider.end { z-index: 1; }
+            .slider.end::-webkit-slider-thumb { background: #f2c94c; }
 
             .date-label {
                 font-size: 8px;
@@ -131,28 +132,14 @@ export class GraphTimeline extends PlatformElement {
             }
 
             @media (max-width: 1199px) {
-                .sliders {
-                    height: 160px;
-                }
-
-                .slider {
-                    width: 160px;
-                }
+                .sliders { height: 160px; }
+                .slider { width: 160px; }
             }
 
             @media (max-width: 767px) {
-                :host {
-                    width: 48px;
-                    padding: 4px;
-                }
-
-                .sliders {
-                    height: 100px;
-                }
-
-                .slider {
-                    width: 100px;
-                }
+                :host { width: 48px; padding: 4px; }
+                .sliders { height: 100px; }
+                .slider { width: 100px; }
             }
         `,
     ];
@@ -166,7 +153,8 @@ export class GraphTimeline extends PlatformElement {
     }
 
     _formatDate(ts) {
-        return new Date(ts).toLocaleDateString('ru-RU');
+        if (!ts) return '';
+        return new Date(ts).toLocaleDateString();
     }
 
     _onStartInput(e) {
@@ -195,7 +183,7 @@ export class GraphTimeline extends PlatformElement {
 
     render() {
         return html`
-            <span class="title">Timeline</span>
+            <span class="title">${this.t('graph.timeline_title')}</span>
             <span class="date-label">${this._formatDate(this.maxTimestamp)}</span>
             <div class="sliders">
                 <div class="track"></div>
@@ -223,11 +211,11 @@ export class GraphTimeline extends PlatformElement {
                 />
             </div>
             <span class="date-label">${this._formatDate(this.minTimestamp)}</span>
-            <button class="reset-btn" type="button" title=${this.i18n.t('graph.timeline_reset')} @click=${this._reset}>
+            <button class="reset-btn" type="button" title=${this.t('graph.timeline_reset')} @click=${this._reset}>
                 <platform-icon name="refresh" size="16"></platform-icon>
             </button>
         `;
     }
 }
 
-customElements.define('graph-timeline', GraphTimeline);
+customElements.define('crm-graph-timeline', CRMGraphTimeline);

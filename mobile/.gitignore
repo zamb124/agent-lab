@@ -8,8 +8,15 @@
 *.ipa
 *.aab
 *.apk
-android/twa-project/
-android/bubblewrap-output/
+android/.gradle/
+android/build/
+android/app/build/
+android/app/release/
+android/app/debug/
+android/captures/
+android/local.properties
+android/.idea/
+android/app/google-services.json
 node_modules/
 .DS_Store
 lighthouse-reports/

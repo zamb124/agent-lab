@@ -1,0 +1,160 @@
+/**
+ * Flows — каталог потоков (flow_id, конфиг, версии).
+ *
+ * REST-зеркало живёт в `apps/flows/src/api/v1/flows.py`.
+ * Все операции — `transport: 'http'` (CRUD без долгоживущей подписки).
+ */
+
+import { createResourceCollection, createAsyncOp } from '@platform/lib/events/index.js';
+import { httpRequest } from '@platform/lib/events/http.js';
+
+export const flowsResource = createResourceCollection({
+    name: 'flows/flows',
+    baseUrl: '/flows/api/v1/flows',
+    idField: 'flow_id',
+    operations: ['list', 'get', 'create', 'remove'],
+    toastKeys: {
+        create: 'flows:toast.flow_created',
+        create_error: 'flows:toast.flow_create_error',
+        remove: 'flows:toast.flow_removed',
+        remove_error: 'flows:toast.flow_remove_error',
+    },
+    listQuery: (payload) => {
+        const query = {};
+        if (payload && typeof payload === 'object') {
+            if (typeof payload.limit === 'number') query.limit = payload.limit;
+            if (typeof payload.offset === 'number') query.offset = payload.offset;
+        }
+        return query;
+    },
+});
+
+// Backend требует PUT (а не PATCH, как у дефолтного `createResourceCollection.update`),
+// поэтому update вынесен в отдельный AsyncOp.
+export const flowUpdateOp = createAsyncOp({
+    name: 'flows/flow_update',
+    successToastKey: 'flows:toast.flow_updated',
+    errorToastKey: 'flows:toast.flow_update_error',
+    restMirror: { method: 'PUT', path: '/flows/api/v1/flows/{flow_id}' },
+    request: async ({ payload }) => {
+        if (!payload || typeof payload.flow_id !== 'string' || payload.flow_id.length === 0 || !payload.body) {
+            throw new Error('flowUpdateOp: { flow_id, body } required');
+        }
+        return httpRequest({
+            method: 'PUT',
+            url: `/flows/api/v1/flows/${encodeURIComponent(payload.flow_id)}`,
+            body: payload.body,
+        });
+    },
+});
+
+export const flowReloadFromBundleOp = createAsyncOp({
+    name: 'flows/flow_reload_from_bundle',
+    successToastKey: 'flows:toast.flow_reloaded',
+    errorToastKey: 'flows:toast.flow_reload_error',
+    restMirror: { method: 'POST', path: '/flows/api/v1/flows/{flow_id}/reload-from-bundle' },
+    request: async ({ payload }) => {
+        if (!payload || typeof payload.flow_id !== 'string' || payload.flow_id.length === 0) {
+            throw new Error('flowReloadFromBundleOp: { flow_id } required');
+        }
+        return httpRequest({
+            method: 'POST',
+            url: `/flows/api/v1/flows/${encodeURIComponent(payload.flow_id)}/reload-from-bundle`,
+            body: {},
+        });
+    },
+});
+
+export const flowVersionsListOp = createAsyncOp({
+    name: 'flows/flow_versions_list',
+    silent: true,
+    restMirror: { method: 'GET', path: '/flows/api/v1/flows/{flow_id}/versions' },
+    request: async ({ payload }) => {
+        if (!payload || typeof payload.flow_id !== 'string' || payload.flow_id.length === 0) {
+            throw new Error('flowVersionsListOp: { flow_id } required');
+        }
+        return httpRequest({
+            method: 'GET',
+            url: `/flows/api/v1/flows/${encodeURIComponent(payload.flow_id)}/versions`,
+        });
+    },
+});
+
+export const flowStoreBundlesOp = createAsyncOp({
+    name: 'flows/flow_store_bundles',
+    silent: true,
+    restMirror: { method: 'GET', path: '/flows/api/v1/flows/store/bundles' },
+    request: async () => {
+        return httpRequest({
+            method: 'GET',
+            url: '/flows/api/v1/flows/store/bundles',
+        });
+    },
+});
+
+export const flowValidateOp = createAsyncOp({
+    name: 'flows/flow_validate',
+    silent: true,
+    restMirror: { method: 'POST', path: '/flows/api/v1/flows/validate' },
+    request: async ({ payload }) => {
+        if (!payload || typeof payload !== 'object') {
+            throw new Error('flowValidateOp: payload required');
+        }
+        return httpRequest({
+            method: 'POST',
+            url: '/flows/api/v1/flows/validate',
+            body: payload,
+        });
+    },
+});
+
+// Skills (через A2A router в a2a.py — тот же base prefix /flows/api/v1).
+export const skillCreateOp = createAsyncOp({
+    name: 'flows/skill_create',
+    successToastKey: 'flows:toast.skill_created',
+    errorToastKey: 'flows:toast.skill_create_error',
+    restMirror: { method: 'POST', path: '/flows/api/v1/{flow_id}/skills' },
+    request: async ({ payload }) => {
+        if (!payload || typeof payload.flow_id !== 'string' || !payload.body) {
+            throw new Error('skillCreateOp: { flow_id, body } required');
+        }
+        return httpRequest({
+            method: 'POST',
+            url: `/flows/api/v1/${encodeURIComponent(payload.flow_id)}/skills`,
+            body: payload.body,
+        });
+    },
+});
+
+export const skillUpdateOp = createAsyncOp({
+    name: 'flows/skill_update',
+    successToastKey: 'flows:toast.skill_updated',
+    errorToastKey: 'flows:toast.skill_update_error',
+    restMirror: { method: 'PUT', path: '/flows/api/v1/{flow_id}/skills/{skill_id}' },
+    request: async ({ payload }) => {
+        if (!payload || typeof payload.flow_id !== 'string' || typeof payload.skill_id !== 'string' || !payload.body) {
+            throw new Error('skillUpdateOp: { flow_id, skill_id, body } required');
+        }
+        return httpRequest({
+            method: 'PUT',
+            url: `/flows/api/v1/${encodeURIComponent(payload.flow_id)}/skills/${encodeURIComponent(payload.skill_id)}`,
+            body: payload.body,
+        });
+    },
+});
+
+export const skillRemoveOp = createAsyncOp({
+    name: 'flows/skill_remove',
+    successToastKey: 'flows:toast.skill_removed',
+    errorToastKey: 'flows:toast.skill_remove_error',
+    restMirror: { method: 'DELETE', path: '/flows/api/v1/{flow_id}/skills/{skill_id}' },
+    request: async ({ payload }) => {
+        if (!payload || typeof payload.flow_id !== 'string' || typeof payload.skill_id !== 'string') {
+            throw new Error('skillRemoveOp: { flow_id, skill_id } required');
+        }
+        return httpRequest({
+            method: 'DELETE',
+            url: `/flows/api/v1/${encodeURIComponent(payload.flow_id)}/skills/${encodeURIComponent(payload.skill_id)}`,
+        });
+    },
+});

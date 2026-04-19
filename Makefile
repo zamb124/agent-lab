@@ -1,6 +1,6 @@
 .PHONY: build up rebuild down logs clean help docker-build docker-push deploy conf deploy-agents deploy-frontend deploy-crm deploy-worker deploy-rag base stats
 .PHONY: dev-up dev-down dev-logs dev-minio-restart dev-bootstrap-postgres test-runner test-runner-down test-runner-unit test-integration prod-up prod-down prod-logs
-.PHONY: test-frontend test-rag run-rag check-ui-canon check-i18n build-i18n
+.PHONY: test-frontend test-rag run-rag check-ui-canon check-i18n check-i18n-keys check-ui-factories check-command-rest-mirror check-core-frontend-canon check-events-canon build-i18n
 
 # Docker Registry
 DOCKER_REGISTRY ?= zambas/repo
@@ -85,9 +85,34 @@ test-frontend:
 check-ui-canon:
 	@./scripts/check_ui_canon.sh
 
+# Lint UI-фабрик (createAsyncOp / createResourceCollection / createCursorList / createFacets / createForm)
+# Уникальность name, namespace по сервису, парность toast-i18n-ключей, idField для update/remove/get.
+check-ui-factories:
+	@uv run python scripts/check_ui_factories.py
+
+# Платформенный инвариант: каждая factory operation имеет REST-эндпоинт в apps/<svc>/api/**.
+# Push-события (publish_ui_event_*) REST-зеркала не имеют. См. architecture.mdc.
+check-command-rest-mirror:
+	@uv run python scripts/check_command_rest_mirror.py
+
+# Канон самого core/frontend/static/lib/** — что фундамент event-архитектуры
+# не нарушает свои же правила (regex-парсинг, секунды).
+check-core-frontend-canon:
+	@uv run python scripts/check_core_frontend_canon.py
+
+# Полный канон event-driven UI: ядро (core lib) + страницы/модалки apps + lint фабрик + REST-зеркало + i18n cross-check.
+check-events-canon: check-core-frontend-canon check-ui-canon check-ui-factories check-command-rest-mirror check-i18n check-i18n-keys
+	@echo "check-events-canon: OK"
+
 # JSON переводы ru/en: парсинг и парность имён файлов в корне locales
 check-i18n:
 	@./scripts/check_i18n.sh
+
+# Cross-check код ↔ JSON: missing (используется в коде, нет в бандле)
+# и unused (есть в бандле, не дёргается из JS). Пройти полностью: --strict в CI.
+# Опции: --mode missing|unused|all, --app <name>, --strict, --show-skipped.
+check-i18n-keys:
+	@uv run python scripts/check_i18n_keys.py
 
 # Сборка объединённых JSON переводов для статической отдачи (dev)
 build-i18n:

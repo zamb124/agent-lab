@@ -1,67 +1,108 @@
 /**
- * Flows Builder - Entry Point
+ * Bootstrap Flows UI: импорт <flows-app> + страниц + компонентов.
+ *
+ * Доменные операции — фабрики в `events/resources/*.resource.js`. Транспорт —
+ * единый platform WS `/flows/api/ws/notifications` для команд чата/operator
+ * и REST для CRUD.
  */
 
-import './app/FlowsApp.js';
-
-import './components/editors/code-editor.js';
-
+import '@platform/lib/components/glass-card.js';
 import '@platform/lib/components/glass-modal.js';
 import '@platform/lib/components/glass-form-modal.js';
-import '@platform/lib/components/platform-icon.js';
-import '@platform/lib/components/platform-user.js';
+import '@platform/lib/components/glass-light-modal.js';
 import '@platform/lib/components/glass-button.js';
 import '@platform/lib/components/glass-input.js';
 import '@platform/lib/components/glass-textarea.js';
-import '@platform/lib/components/glass-toast.js';
 import '@platform/lib/components/glass-spinner.js';
+import '@platform/lib/components/glass-toast.js';
+import '@platform/lib/components/platform-modal-stack.js';
+import '@platform/lib/components/platform-icon.js';
+import '@platform/lib/components/platform-user.js';
 import '@platform/lib/components/platform-help-hint.js';
+import '@platform/lib/components/platform-notification-manager.js';
+import '@platform/lib/components/layout/platform-island.js';
+import '@platform/lib/components/platform-shell-page.js';
 
-// Компоненты выполнения
-import './components/execution-runner/index.js';
-import './components/execution-panel/index.js';
-import './components/breakpoint-manager/index.js';
-import './components/variables-panel/index.js';
-import './components/variable-editor-modal/index.js';
+import './app/flows-app.js';
 
-// Редакторы
-import './components/editors/json-field-editor.js';
-import './components/editors/tag-input.js';
-import './components/editors/llm-config-editor.js';
-import './components/editors/llm-mocks-editor.js';
-import './components/editors/state-mapping-editor.js';
-import './components/editors/python-code-editor.js';
-import './components/editors/test-panel.js';
+// Страницы
+import './pages/flows-list-page.js';
+import './pages/flows-empty-state.js';
+import './pages/chat-page.js';
+import './pages/flow-editor-page.js';
+import './pages/operator-page.js';
+
+// Компоненты
+import './components/flows-sidebar.js';
+import './components/flow-card.js';
+import './components/skill-item.js';
+import './components/chat/chat-input.js';
+import './components/chat/chat-message.js';
+import './components/chat/chat-messages.js';
+
+// Универсальные редакторы
+import './components/editors/flows-code-editor.js';
+import './components/editors/flows-json-field-editor.js';
+import './components/editors/flows-llm-config-editor.js';
+import './components/editors/flows-llm-mocks-editor.js';
+import './components/editors/flows-state-mapping-editor.js';
+import './components/editors/flows-variable-input.js';
+import './components/editors/flows-test-panel.js';
 
 // Редакторы нод
-import './components/nodes/index.js';
+import './components/nodes/flows-base-node-editor.js';
+import './components/nodes/flows-llm-node-editor.js';
+import './components/nodes/flows-code-node-editor.js';
+import './components/nodes/flows-channel-node-editor.js';
+import './components/nodes/flows-flow-node-editor.js';
+import './components/nodes/flows-mcp-node-editor.js';
+import './components/nodes/flows-hitl-node-editor.js';
+import './components/nodes/flows-external-api-editor.js';
+import './components/nodes/flows-remote-flow-editor.js';
 
-// Модальные окна (загружаем ДО функциональных компонентов, которые их используют)
-import './modals/confirm-modal.js';
-import './modals/sessions-modal.js';
-import './modals/tracing-modal.js';
-import './modals/span-details-modal.js';
-import './modals/raw-json-modal.js';
-import './modals/state-modal.js';
-import './modals/flow-edit-modal.js';
-import './modals/flow-create-modal.js';
-import './modals/edge-condition-modal.js';
-import './modals/incoming-policy-modal.js';
-import './modals/mcp-servers-modal.js';
-import './modals/variables-modal.js';
+// Редакторы ресурсов
+import './components/resources/flows-base-resource-editor.js';
+import './components/resources/flows-llm-resource-editor.js';
+import './components/resources/flows-secret-resource-editor.js';
+import './components/resources/flows-code-resource-editor.js';
+import './components/resources/flows-http-resource-editor.js';
+import './components/resources/flows-files-resource-editor.js';
+import './components/resources/flows-prompt-resource-editor.js';
+import './components/resources/flows-rag-resource-editor.js';
+import './components/resources/flows-cache-resource-editor.js';
 
-// Функциональные компоненты
-import './features/chat/chat-message.js';
-import './features/chat/chat-messages.js';
-import './features/chat/chat-input.js';
-import './features/chat/platform-chat.js';
-import './components/sidebar/flows-sidebar.js';
+// Editor shell
+import './components/editor/flows-editor-header.js';
+import './components/editor/flows-bottom-toolbar.js';
+import './components/editor/flows-node-types-sidebar.js';
+import './components/editor/flows-property-panel.js';
+import './components/editor/flows-resource-property-panel.js';
+import './components/editor/flows-skills-tabs.js';
+import './components/editor/flows-breakpoint-manager.js';
+import './components/editor/flows-execution-panel.js';
+import './components/editor/flows-variables-panel.js';
+import './components/flow-canvas/flows-flow-canvas.js';
 
-// Редактор flow (граф, skills)
-import './features/flow-editor/flow-editor-page.js';
-import './features/flow-editor/editor-header.js';
-import './features/flow-editor/node-types-sidebar.js';
-import './features/flow-editor/flow-canvas/index.js';
-import './features/flow-editor/bottom-toolbar.js';
-import './features/flow-editor/property-panel.js';
-import './features/flow-editor/skills-tabs/index.js';
+// Editor-related modals
+import './modals/flows-edge-condition-modal.js';
+import './modals/flows-incoming-policy-modal.js';
+import './modals/flows-tool-picker-modal.js';
+import './modals/flows-tool-create-modal.js';
+import './modals/flows-code-modal.js';
+import './modals/flows-code-docs-modal.js';
+import './modals/flows-tracing-modal.js';
+import './modals/flows-span-details-modal.js';
+import './modals/flows-raw-json-modal.js';
+import './modals/flows-state-modal.js';
+
+// CRUD-модалки
+import './modals/flows-flow-create-modal.js';
+import './modals/flows-flow-edit-modal.js';
+import './modals/flows-skill-create-modal.js';
+import './modals/flows-sessions-modal.js';
+import './modals/flows-mcp-servers-modal.js';
+import './modals/flows-variable-editor-modal.js';
+import './modals/flows-variables-modal.js';
+import './modals/flows-trigger-editor-modal.js';
+import './modals/flows-triggers-modal.js';
+import './modals/flows-integrations-modal.js';

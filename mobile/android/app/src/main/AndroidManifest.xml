@@ -1,0 +1,103 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <!-- Базовые сетевые права -->
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+
+    <!-- Звонки и голосовые сообщения в Sync (паритет с iOS Info.plist) -->
+    <uses-permission android:name="android.permission.RECORD_AUDIO" />
+    <uses-permission android:name="android.permission.CAMERA" />
+    <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />
+
+    <!-- Push через FCM (@capacitor/push-notifications). POST_NOTIFICATIONS — Android 13+ -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
+
+    <!-- Аплоад файлов из галереи -->
+    <uses-permission android:name="android.permission.READ_MEDIA_IMAGES" />
+    <uses-permission android:name="android.permission.READ_MEDIA_VIDEO" />
+    <uses-permission android:name="android.permission.READ_MEDIA_AUDIO" />
+    <!-- Совместимость для Android <= 12, перекрывается maxSdkVersion -->
+    <uses-permission
+        android:name="android.permission.READ_EXTERNAL_STORAGE"
+        android:maxSdkVersion="32" />
+
+    <uses-feature android:name="android.hardware.camera" android:required="false" />
+    <uses-feature android:name="android.hardware.microphone" android:required="false" />
+
+    <application
+        android:allowBackup="true"
+        android:icon="@mipmap/ic_launcher"
+        android:label="@string/app_name"
+        android:roundIcon="@mipmap/ic_launcher_round"
+        android:supportsRtl="true"
+        android:theme="@style/AppTheme">
+
+        <activity
+            android:configChanges="orientation|keyboardHidden|keyboard|screenSize|locale|smallestScreenSize|screenLayout|uiMode"
+            android:name=".MainActivity"
+            android:label="@string/title_activity_main"
+            android:theme="@style/AppTheme.NoActionBarLaunch"
+            android:launchMode="singleTask"
+            android:exported="true">
+
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+
+            <!--
+                App Links (аналог Universal Links на iOS).
+                Хосты — те же, что в mobile/ios/App/App/App.entitlements:
+                апексы + wildcard-поддомены для tenant slug'ов
+                (artflash.humanitec.ru и т.п. — каждый клиент компании).
+                Префиксы путей синхронизированы с DEEPLINK_PATH_PREFIXES в
+                core/frontend/static/lib/utils/platform-deeplink-paths.js.
+
+                autoVerify=true (требует Android 12+ / API 31+ для wildcard-хостов):
+                верификация идёт по /.well-known/assetlinks.json на апексе
+                (humanitec.ru / humanetic.ru / agents-lab.ru) с правильным
+                sha256_cert_fingerprints — отдельный JSON на каждом поддомене
+                не требуется.
+            -->
+            <intent-filter android:autoVerify="true">
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+
+                <data android:scheme="https" />
+
+                <data android:host="humanitec.ru" />
+                <data android:host="*.humanitec.ru" />
+                <data android:host="humanetic.ru" />
+                <data android:host="*.humanetic.ru" />
+                <data android:host="agents-lab.ru" />
+                <data android:host="*.agents-lab.ru" />
+
+                <data android:pathPrefix="/" />
+                <data android:pathPrefix="/join" />
+                <data android:pathPrefix="/frontend" />
+                <data android:pathPrefix="/sync" />
+                <data android:pathPrefix="/crm" />
+                <data android:pathPrefix="/rag" />
+                <data android:pathPrefix="/flows" />
+                <data android:pathPrefix="/documents" />
+                <data android:pathPrefix="/documentation" />
+                <data android:pathPrefix="/scheduler" />
+            </intent-filter>
+
+        </activity>
+
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.fileprovider"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/file_paths"></meta-data>
+        </provider>
+    </application>
+
+</manifest>

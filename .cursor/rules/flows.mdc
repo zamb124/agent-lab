@@ -10,18 +10,181 @@ alwaysApply: false
 2. **Stream-First** - все события через Redis Pub/Sub
 3. **Zero-Guess** - нет fallback значений, ошибка = exception
 
+## UI: канон фронтенда
+
+UI flows (`apps/flows/ui/`) строится по канону **`frontend.mdc`** + **`ui_factories.mdc`** + **`ui_events.mdc`** + **`ui_components.mdc`**: фабрики в `apps/flows/ui/events/resources/*.resource.js`, регистрация в `apps/flows/ui/app/flows-app.js` через `static factories`, доступ только helpers `PlatformElement` (`this.useResource('flows/<entity>')`, `this.useOp('flows/<entity>_<verb>')`). Никаких `services/`, `store/`, `flows.store`, `*.service.js`, `BaseStore`, прямых `fetch`/`httpRequest`, прямых `dispatch(CoreEvents.UI_*|AUTH_*|...)` в pages/modals/components.
+
+### Структура `apps/flows/ui/`
+
+```
+apps/flows/ui/
+  index.html                  # без Jinja-переменных, монтирует <flows-app>
+  index.js                    # bootstrap: <flows-app> + страницы + компоненты
+  app/flows-app.js            # extends PlatformApp; static factories,
+                              # defaultI18nNamespace='flows',
+                              # getServiceEffects() = [createRouterEffect(FLOWS_ROUTES)]
+  events/resources/           # фабрики (createAsyncOp/createResourceCollection)
+    flows.resource.js         # CRUD списка flow'ов
+    tools.resource.js         # каталог inline-tools
+    resources-bundle.resource.js  # ресурсы (LLM, secret, code, http, …)
+    mcp.resource.js           # MCP-серверы + sync/test ops
+    triggers.resource.js      # триггеры flow'а (telegram, webhook)
+    variables.resource.js     # KV-переменные company-уровня
+    nodes-catalog.resource.js # пользовательские ноды
+    sessions.resource.js      # история сессий
+    traces.resource.js        # OTEL-трейсы
+    metadata.resource.js      # реестр типов нод
+    models.resource.js        # доступные LLM-модели
+    code.resource.js          # editor-state, validate, execute, completions
+    prompts.resource.js       # render шаблона
+    integrations.resource.js  # OAuth credentials
+    files.resource.js         # multipart upload
+    chat.resource.js          # WS send/cancel + push-события flows/chat/*
+    operator.resource.js      # operator queues + tasks + WS-команды
+    editor.resource.js        # UI-state редактора (выбор/панели/undo)
+  pages/                      # PlatformPage
+    flows-list-page.js
+    flows-empty-state.js
+    chat-page.js
+    flow-editor-page.js
+    operator-page.js
+  components/
+    flows-sidebar.js, flow-card.js, skill-item.js
+    chat/chat-input.js, chat-message.js, chat-messages.js
+    editors/                  # универсальные редакторы значений
+      flows-code-editor.js    # PlatformElement-обёртка над vendored CodeMirror
+                              # (lazy import /static/core/assets/codemirror/codemirror-bundle.js,
+                              #  language='python'|'json'|'text', theme-aware,
+                              #  python-completions через useOp('flows/code_completions'))
+      flows-json-field-editor.js, flows-llm-config-editor.js,
+      flows-llm-mocks-editor.js, flows-state-mapping-editor.js,
+      flows-variable-input.js, flows-test-panel.js
+    nodes/                    # редакторы 9 типов нод
+      flows-base-node-editor.js (общая обёртка с табами Settings/Input/Output/Test),
+      flows-llm-node-editor.js, flows-code-node-editor.js,
+      flows-channel-node-editor.js, flows-flow-node-editor.js,
+      flows-mcp-node-editor.js, flows-hitl-node-editor.js,
+      flows-external-api-editor.js, flows-remote-flow-editor.js
+    resources/                # редакторы 9 типов ресурсов
+      flows-base-resource-editor.js, flows-llm-resource-editor.js,
+      flows-secret-resource-editor.js, flows-code-resource-editor.js,
+      flows-http-resource-editor.js, flows-files-resource-editor.js,
+      flows-prompt-resource-editor.js, flows-rag-resource-editor.js,
+      flows-cache-resource-editor.js
+    editor/                   # editor shell
+      flows-editor-header.js, flows-bottom-toolbar.js,
+      flows-node-types-sidebar.js, flows-property-panel.js,
+      flows-resource-property-panel.js, flows-skills-tabs.js,
+      flows-breakpoint-manager.js, flows-execution-panel.js,
+      flows-variables-panel.js
+    flow-canvas/
+      flows-flow-canvas.js    # native SVG (без vendored Drawflow):
+                              # <g class="node">/<path class="edge">/<circle class="port">,
+                              # drag/drop узлов, drag-create из node-types-sidebar
+                              # (HTML5 DnD, mime application/x-flow-node-type),
+                              # connect ports, wheel+ctrl zoom, viewBox.
+                              # Все мутации skillsData идут через useOp('flows/editor').updateSkillsData
+                              # с pushHistory + setDirty.
+  modals/
+    flows-flow-create-modal.js   ('flows.flow_create')
+    flows-flow-edit-modal.js     ('flows.flow_edit')
+    flows-skill-create-modal.js  ('flows.skill_create')
+    flows-sessions-modal.js      ('flows.sessions')
+    flows-mcp-servers-modal.js   ('flows.mcp_servers')
+    flows-variables-modal.js     ('flows.variables')
+    flows-variable-editor-modal.js  ('flows.variable_editor')
+    flows-triggers-modal.js      ('flows.triggers')
+    flows-trigger-editor-modal.js   ('flows.trigger_editor')
+    flows-integrations-modal.js  ('flows.integrations')
+    flows-edge-condition-modal.js   ('flows.edge_condition')
+    flows-incoming-policy-modal.js  ('flows.incoming_policy')
+    flows-tool-picker-modal.js   ('flows.tool_picker')
+    flows-tool-create-modal.js   ('flows.tool_create')
+    flows-code-modal.js          ('flows.code')
+    flows-code-docs-modal.js     ('flows.code_docs')
+    flows-tracing-modal.js       ('flows.tracing')
+    flows-span-details-modal.js  ('flows.span_details')
+    flows-raw-json-modal.js      ('flows.raw_json')
+    flows-state-modal.js         ('flows.state')
+```
+
+Каждая модалка наследует `PlatformModal`/`PlatformFormModal`/`PlatformLightModal`,
+имеет `static modalKind = 'flows.<entity>'` и `registerModalKind(...)` при импорте.
+Для подтверждений использует core-helper `platformConfirm({...})` из
+[core/frontend/static/lib/components/platform-confirm-modal.js](core/frontend/static/lib/components/platform-confirm-modal.js)
+— отдельной `flows.confirm` нет.
+
+### Маршруты (`createRouterEffect(FLOWS_ROUTES)`)
+
+| key                      | path                                  |
+|--------------------------|---------------------------------------|
+| `list`                   | `/flows`                              |
+| `operator`               | `/flows/operator`                     |
+| `flow_chat`              | `/flows/:flowId`                      |
+| `flow_chat_skill`        | `/flows/:flowId/skill/:skillId`       |
+| `flow_chat_session`      | `/flows/:flowId/session/:sessionId`   |
+| `flow_editor`            | `/flows/:flowId/editor`               |
+| `flow_editor_skill`      | `/flows/:flowId/editor/:skillId`      |
+
+Навигация — только `this.navigate(routeKey, params)`. Старые `?session=`/`?edit=`/`?skill=` query-параметры удалены.
+
+### Чат: WS-команды + push-события (платформенный инвариант)
+
+| Канон-имя WS-команды           | Транспорт | REST-зеркало                                  |
+|--------------------------------|-----------|-----------------------------------------------|
+| `flows/chat/send_requested`    | `ws`      | `POST /flows/api/v1/{flow_id}` (A2A `message/stream`) |
+| `flows/chat/cancel_requested`  | `ws`      | `POST /flows/api/v1/{flow_id}` (A2A `tasks/cancel`) |
+| `flows/operator_task/claim_requested` | `ws` | `POST /flows/api/v1/operator/tasks/{task_id}/claim` |
+| `flows/operator_task/post_message_requested` | `ws` | `POST /flows/api/v1/operator/tasks/{task_id}/messages` |
+| `flows/operator_task/complete_requested` | `ws` | `POST /flows/api/v1/operator/tasks/{task_id}/complete` |
+
+Все команды зарегистрированы в `apps/flows/src/realtime/command_router.py` через `register_ws_command_handler` (вызов `register_flows_ws_commands()` в `on_startup` сервиса).
+
+Push-события чата (через `core.ui_events.publish_ui_event_to_user`, маппинг — в `apps/flows/src/services/chat_stream_publisher.py`):
+
+| Push-событие                    | Когда публикуется                                                |
+|---------------------------------|------------------------------------------------------------------|
+| `flows/chat/task_started`       | Старт стрима, до первого артефакта                              |
+| `flows/chat/content_chunk`      | Текстовый чанк ответа ассистента                                 |
+| `flows/chat/reasoning_chunk`    | Чанк reasoning                                                  |
+| `flows/chat/operator_reply`     | Реплика оператора (artifact `operator_reply`)                    |
+| `flows/chat/operator_files`     | Файлы оператора (artifact `operator_files`)                      |
+| `flows/chat/tool_calls`         | Очередной набор tool_calls                                       |
+| `flows/chat/tool_result`        | Результат tool                                                   |
+| `flows/chat/breakpoint`         | `state=input-required` + `metadata.breakpoint`                   |
+| `flows/chat/input_required`     | `state=input-required` (general handoff/oauth)                   |
+| `flows/chat/completed`          | `state=completed`/`finished`, `final=true`                       |
+| `flows/chat/failed`             | `state=failed`/`error` или ошибка стрима                         |
+
+Слайс `flows/chat` (`extraReducer` в `events/resources/chat.resource.js`) применяет каждое push-событие к `messagesByContextId[ctx]`. UI получает их через `useEvent('flows/chat/...')` или просто читает `useResource('flows/chat').state` (slice автоматически обновляется).
+
+### Push-события flow и skill (синхронизация открытых редакторов)
+
+Бэкенд публикует через `core.ui_events.publish_ui_event_to_user` после успешного REST-вызова (PUT/DELETE flow, POST/PUT/DELETE skill):
+
+| Push-событие             | Источник | Слушатель |
+|--------------------------|----------|-----------|
+| `flows/flow/updated`     | [`apps/flows/src/api/v1/flows.py`](apps/flows/src/api/v1/flows.py) `update_flow` | `<flows-app>` (`useResource('flows/flows').get(flow_id)`) |
+| `flows/flow/deleted`     | то же, `delete_flow` | `<flows-app>` (`useResource('flows/flows').load()`) |
+| `flows/skill/created`    | [`apps/flows/src/api/a2a.py`](apps/flows/src/api/a2a.py) `create_skill` | `<flows-app>` (`get(flow_id)`) |
+| `flows/skill/updated`    | то же, `update_skill` | то же |
+| `flows/skill/deleted`    | то же, `delete_skill` | то же |
+| `notify/flows/flows_operator_tasks_updated_received` | [`operator_tasks_broadcast.py`](apps/flows/src/services/operator_tasks_broadcast.py) | `<operator-page>` `useEvent` → reload tasks |
+
+REST-зеркало `POST /flows/api/v1/{flow_id}` (A2A SSE) **остаётся** для CLI/SDK/embed — REST по-прежнему стримит в `text/event-stream`. Бэк передаёт стрим в две стороны: для WS-клиента — push-события, для REST-клиента — оригинальный SSE.
+
 ## UI: i18n (flows)
 
-- Тексты интерфейса редактора и embed — только через **`this.i18n.t('группа.ключ')`** при дефолтном namespace **`flows`** (URL `/flows`, см. `i18nDefaultNamespaceForBaseUrl`).
-- Файлы переводов: **`core/i18n/translations/ru/flows.json`** и **`en/flows.json`** — ключи **парно**, проверка **`make check-i18n`**.
-- Соглашение по ключам: **`snake_case`**, верхний уровень = зона экрана или фичи (`editor`, `llm_node`, `state_modal`, `skills_tabs`, `variables_panel`, `node_modal`, …). Общие слова вне flows (Отмена, Сохранить, …) — **`this.i18n.t('cancel', {}, 'common')`** и т.п. из **`common.json`**.
+- Тексты интерфейса — только через **`this.t('группа.ключ')`**; namespace `flows` через `static i18nNamespace = 'flows';` или `defaultI18nNamespace='flows'` в `<flows-app>`.
+- Файлы переводов: **`core/i18n/translations/ru/flows.json`** и **`en/flows.json`** — ключи **парно**, проверка **`make check-i18n`**, **`make check-i18n-keys`**.
+- Соглашение по ключам: **`snake_case`**, верхний уровень = зона экрана или фичи (`editor`, `llm_node`, `state_modal`, `skills_tabs`, `variables_panel`, `node_modal`, …). Общие слова вне flows (Отмена, Сохранить, …) — **`this.t('cancel', {}, 'common')`** и т.п. из **`common.json`**.
 - Хардкод кириллицы в **`apps/flows/ui/**/*.js`** — ориентир для выноса в JSON; то же правило сканирования: **`uv run python scripts/report_ui_i18n_gaps.py --app flows`**. Полный список без фильтра комментариев: **`scripts/report_ui_cyrillic.sh`**.
 - Сообщения **`console.*` и технические комментарии** в коде — на **английском** (без ключей i18n), чтобы не раздувать бандл и не дублировать переводы для отладки.
 
 ## UI: `/flows/operator` и футер `flows-sidebar`
 
-- **Доступ**: пункт **«Задачи поддержки»** и страница **`/flows/operator`** только при ролях **`admin`** или **`owner`** в JWT (текущая компания); иначе экран отказа (**`flows_app.operator_denied_*`**) и ссылка на **`/flows/example_react`**. Утилита **`canManageOperatorWorkbench`** в **`apps/flows/ui/utils/operator-workbench-access.js`**; обновление после смены компании — слушатель **`AppEvents.AUTH_CHANGE`** в **`FlowsApp`** и **`flows-sidebar`**.
-- **`operator-workbench-page`**: разметка **`.body`**: в DOM сначала **`.detail`**, затем **`.kanban`**, **`flex-direction: row-reverse`** — канбан визуально слева, панель справа, рост **`flex-basis`** панели идёт **справа налево** (от правого края). При выбранной задаче канбан ~**1/3** ширины, панель ~**2/3**; на узком экране при выборе **`column-reverse`** (канбан сверху). Шапка панели — заголовок и **«Закрыть»**; в общей шапке страницы рядом с **Back to flows** — кнопка смены темы (**`ThemeService.toggle`**, иконка sun/moon, слушатель **`AppEvents.THEME_CHANGE`**). Карточка канбана: человекочитаемо **`flow_display_name` [`skill_display_name`]** (из **`FlowConfig`**), строкой ниже серым **`flow_id` / `skill_id`**, затем **`handoff_title`** и превью **`handoff_message_preview`** из **`interrupt_snapshot`** задачи (**`OperatorTaskOut`** в **`GET .../operator/tasks`**). Real-time канбан: WebSocket **`/flows/ws/notifications`** (те же cookie, что и у колокольчика), сообщения типа **`flows_operator_tasks_updated`** → перезагрузка списка задач; **`flows-sidebar`**: **`platform-notification-manager`** в **`platform-user`** slot **`user-toolbar`** (единый WS на экранах с сайдбаром).
+- **Доступ**: пункт **«Задачи поддержки»** и страница **`/flows/operator`** только при ролях **`admin`** или **`owner`** в JWT (текущая компания). Проверка ролей делается inline в `flows-sidebar` через `select(s => s.auth.user/companies)` (ранее жила в `utils/operator-workbench-access.js`, удалён в ходе миграции). Срез обновляется автоматически на смене компании.
+- **`operator-workbench-page`**: разметка **`.body`**: в DOM сначала **`.detail`**, затем **`.kanban`**, **`flex-direction: row-reverse`** — канбан визуально слева, панель справа, рост **`flex-basis`** панели идёт **справа налево** (от правого края). При выбранной задаче канбан ~**1/3** ширины, панель ~**2/3**; на узком экране при выборе **`column-reverse`** (канбан сверху). Шапка панели — заголовок и **«Закрыть»**; в общей шапке страницы рядом с **Back to flows** — кнопка смены темы (`this.setTheme(name)` helper; срез темы — `useEvent(CoreEvents.THEME_CHANGED, ...)`). Карточка канбана: человекочитаемо **`flow_display_name` [`skill_display_name`]** (из **`FlowConfig`**), строкой ниже серым **`flow_id` / `skill_id`**, затем **`handoff_title`** и превью **`handoff_message_preview`** из **`interrupt_snapshot`** задачи (**`OperatorTaskOut`** в **`GET .../operator/tasks`**). Real-time канбан: WebSocket **`/flows/ws/notifications`** (те же cookie, что и у колокольчика), сообщения типа **`flows_operator_tasks_updated`** → перезагрузка списка задач; **`flows-sidebar`**: **`platform-notification-manager`** в **`platform-user`** slot **`user-toolbar`** (единый WS на экранах с сайдбаром).
 - **`/flows/operator`**: в **`FlowsApp`** только **`operator-workbench-page`** (без **`flows-sidebar`**). Ссылка в редактор: слева в шапке на **`/flows/example_react`**. Блок **«Очереди операторов»**: **`GET/POST /flows/api/v1/operator/queues`** через **`A2AService.listOperatorQueues` / `createOperatorQueue`** — slug очереди должен совпадать с **`assignee_queue`** в **`hitl_operator_task`** и **`operator_queue_slug`** у **`hitl_node`**. **`GET/POST .../queues`** — только **`admin`/`owner`**. **`PATCH .../queues/{id}`**, **`POST/DELETE .../members`** — участник очереди **или** **`admin`/`owner`** (админ может добавить себя в очередь без участников, в т.ч. демо **`example_hitl`**). В ответе **`GET .../queues`** — **`i_am_member`**; на **`operator-workbench-page`**: **«Стать оператором»** при **`i_am_member: false`** (**`addOperatorQueueMember`**), **«Покинуть очередь»** при **`true`** (**`removeOperatorQueueMember`** → **`DELETE .../members/{user_id}`**). Редактор **`hitl-node-editor`**: список очередей с поиском (**`listOperatorQueues`**); компактный блок handoff (режим + fallback заголовок/текст, сетка 1/3 + 2/3); **`input_mapping`**: **`assignee_queue`**, **`task_title`**, **`user_facing_message`**, **`question`** — приоритет над полями конфига (**`HitlNode._run_impl`**). В UI поля UUID очереди нет; в JSON/API **`operator_queue_id`** по-прежнему может встречаться для совместимости.
 - Футер сайдбара (**`flows-sidebar`**): сетка **2 колонки** — **задачи оператора** (ссылка на `/flows/operator`, только admin/owner), **сессии**, **MCP**, **переменные**; без Docs.
 

@@ -1,292 +1,425 @@
 /**
- * Access Request Modal - Запрос доступа к чужой сущности
- * Использует PlatformModal с fullscreen и drag поддержкой
+ * CRMAccessRequestModal — запрос доступа к чужой сущности.
+ *
+ * Props:
+ *   - entityId: string — обязательный, сущность, на которую запрашивается доступ.
+ *
+ * Поток:
+ *   1. На open: `entitiesResource.get(entityId)` подгружает имя/тип/namespace
+ *      для шапки (если у пользователя есть хотя бы read-видимость).
+ *   2. Форма:
+ *        - message: textarea (max 1000), не обязательный.
+ *        - include_dependencies: чекбокс.
+ *        - max_depth: range 1..5 (виден только если include_dependencies).
+ *   3. Submit: `accessRequestsResource.create({
+ *        resource_type: 'entity', resource_id: entityId, message?,
+ *        include_dependencies, max_depth
+ *      })`.
+ *   4. На CREATED — close(); на CREATE_FAILED — показать ошибку в footer.
  */
-import { html, css } from 'lit';
+
+import { html, css, nothing } from 'lit';
 import { PlatformModal } from '@platform/lib/components/glass-modal.js';
-import { formStyles } from '@platform/lib/styles/shared/form.styles.js';
-import { buttonStyles } from '@platform/lib/styles/shared/button.styles.js';
-import { CRMStore } from '../store/crm.store.js';
+import { registerModalKind } from '@platform/lib/utils/modal-registry.js';
 import '@platform/lib/components/platform-icon.js';
 
-export class AccessRequestModal extends PlatformModal {
+const ENTITIES_NAME = 'crm/entities';
+const ACCESS_REQUESTS_NAME = 'crm/access_requests';
+
+const MESSAGE_MAX = 1000;
+const DEPTH_MIN = 1;
+const DEPTH_MAX = 5;
+
+export class CRMAccessRequestModal extends PlatformModal {
+    static modalKind = 'crm.access_request';
+    static i18nNamespace = 'crm';
+
     static properties = {
         ...PlatformModal.properties,
         entityId: { type: String },
-        entityName: { type: String },
         _message: { state: true },
         _includeDeps: { state: true },
         _maxDepth: { state: true },
-        _sending: { state: true },
+        _submitFailedMessage: { state: true },
     };
 
     static styles = [
-        PlatformModal.styles,
-        formStyles,
-        buttonStyles,
+        ...PlatformModal.styles,
         css`
-            .form-grid {
+            .body {
                 display: grid;
                 gap: var(--space-4);
+                padding: var(--space-2) 0;
             }
-
-            .entity-preview {
-                padding: var(--space-3);
-                background: var(--crm-surface-muted);
-                border: 1px solid var(--crm-stroke);
-                border-radius: var(--radius-lg);
+            .entity-head {
                 display: flex;
                 align-items: center;
                 gap: var(--space-3);
+                padding: var(--space-3);
+                background: var(--crm-surface-muted);
+                border: 1px solid var(--crm-stroke);
+                border-radius: var(--radius-md);
             }
-
-            .entity-preview-icon {
-                width: 40px;
-                height: 40px;
-                display: flex;
+            .entity-head .icon {
+                width: 36px;
+                height: 36px;
+                display: inline-flex;
                 align-items: center;
                 justify-content: center;
                 background: var(--crm-selected-bg);
-                color: var(--crm-selected-text);
-                border-radius: var(--radius-lg);
+                color: var(--accent);
+                border-radius: var(--radius-md);
             }
-
-            .entity-preview-name {
-                font-size: var(--text-base);
-                font-weight: 500;
+            .entity-head .meta { display: grid; gap: 2px; min-width: 0; }
+            .entity-head .name {
+                font-weight: 600;
                 color: var(--text-primary);
+                overflow: hidden;
+                text-overflow: ellipsis;
+                white-space: nowrap;
             }
-
-            .checkbox-group {
+            .entity-head .sub {
+                font-size: var(--text-xs);
+                color: var(--text-tertiary);
+            }
+            .info-box {
+                padding: var(--space-3);
+                background: var(--crm-selected-bg);
+                border: 1px solid var(--accent);
+                border-radius: var(--radius-md);
+                font-size: var(--text-sm);
+                color: var(--text-secondary);
+                display: grid;
+                gap: var(--space-1);
+            }
+            .info-box .info-title {
+                font-weight: 600;
+                color: var(--accent);
+                display: inline-flex;
+                align-items: center;
+                gap: var(--space-1);
+            }
+            .field-label {
+                font-size: var(--text-xs);
+                font-weight: 600;
+                color: var(--text-secondary);
+                text-transform: uppercase;
+                letter-spacing: 0.04em;
+            }
+            .text-area {
+                width: 100%;
+                min-height: 96px;
+                padding: var(--space-2) var(--space-3);
+                border-radius: var(--radius-md);
+                border: 1px solid var(--crm-stroke);
+                background: var(--crm-surface);
+                color: var(--text-primary);
+                font-size: var(--text-sm);
+                font-family: inherit;
+                box-sizing: border-box;
+                resize: vertical;
+            }
+            .checkbox-row {
                 display: flex;
                 align-items: flex-start;
                 gap: var(--space-3);
                 padding: var(--space-3);
                 background: var(--crm-surface-muted);
                 border: 1px solid var(--crm-stroke);
-                border-radius: var(--radius-lg);
-                cursor: pointer;
+                border-radius: var(--radius-md);
             }
-
-            .checkbox-group:hover {
-                background: var(--crm-surface);
-            }
-
-            .checkbox-group input[type="checkbox"] {
+            .checkbox-row input[type="checkbox"] {
                 margin-top: 2px;
                 width: 18px;
                 height: 18px;
                 cursor: pointer;
             }
-
-            .checkbox-content {
-                flex: 1;
+            .checkbox-row .check-content {
+                display: grid;
+                gap: 2px;
             }
-
-            .checkbox-label {
+            .checkbox-row .check-label {
                 font-size: var(--text-sm);
                 font-weight: 500;
                 color: var(--text-primary);
             }
-
-            .checkbox-description {
+            .checkbox-row .check-desc {
                 font-size: var(--text-xs);
                 color: var(--text-tertiary);
-                margin-top: var(--space-1);
             }
-
-            .depth-slider {
-                margin-top: var(--space-3);
+            .depth-control {
+                display: grid;
+                gap: var(--space-2);
                 padding: var(--space-3);
                 background: var(--crm-surface-muted);
                 border: 1px solid var(--crm-stroke);
-                border-radius: var(--radius-lg);
+                border-radius: var(--radius-md);
             }
-
-            .depth-slider-header {
+            .depth-header {
                 display: flex;
                 justify-content: space-between;
                 align-items: center;
-                margin-bottom: var(--space-2);
             }
-
-            .depth-slider-label {
+            .depth-header .depth-label {
                 font-size: var(--text-sm);
                 color: var(--text-secondary);
             }
-
-            .depth-slider-value {
+            .depth-header .depth-value {
                 font-size: var(--text-sm);
-                font-weight: 500;
+                font-weight: 600;
                 color: var(--accent);
             }
-
-            .depth-slider input[type="range"] {
+            .depth-control input[type="range"] {
                 width: 100%;
                 cursor: pointer;
             }
-
-            .info-box {
-                padding: var(--space-3);
-                background: var(--crm-info-bg);
-                border: 1px solid var(--crm-info-stroke);
-                border-radius: var(--radius-lg);
-                font-size: var(--text-sm);
-                color: var(--text-secondary);
+            .char-count {
+                font-size: var(--text-xs);
+                color: var(--text-tertiary);
+                text-align: right;
             }
-
-            .info-box-title {
-                font-weight: 500;
-                color: var(--crm-info-text);
-                margin-bottom: var(--space-1);
-            }
-
             .footer-actions {
                 display: flex;
                 gap: var(--space-3);
                 justify-content: flex-end;
                 width: 100%;
             }
-
-        `
+            .footer-actions .submit-error {
+                margin-right: auto;
+                color: var(--color-danger);
+                font-size: var(--text-sm);
+                align-self: center;
+            }
+            .btn {
+                padding: var(--space-2) var(--space-4);
+                border-radius: var(--radius-md);
+                font-size: var(--text-sm);
+                font-weight: 500;
+                cursor: pointer;
+                border: 1px solid transparent;
+            }
+            .btn-secondary {
+                background: var(--crm-surface);
+                border-color: var(--crm-stroke);
+                color: var(--text-secondary);
+            }
+            .btn-secondary:hover {
+                background: var(--crm-surface-muted);
+                color: var(--text-primary);
+            }
+            .btn-primary {
+                background: var(--accent);
+                border-color: var(--accent);
+                color: white;
+            }
+            .btn-primary:hover:not(:disabled) {
+                filter: brightness(1.05);
+            }
+            .btn-primary:disabled {
+                opacity: 0.5;
+                cursor: not-allowed;
+            }
+        `,
     ];
 
     constructor() {
         super();
         this.size = 'md';
-        this.entityId = null;
-        this.entityName = '';
+        this.entityId = '';
+
         this._message = '';
         this._includeDeps = false;
         this._maxDepth = 1;
-        this._sending = false;
+        this._submitFailedMessage = '';
+
+        this._entities = this.useResource(ENTITIES_NAME);
+        this._accessRequests = this.useResource(ACCESS_REQUESTS_NAME);
     }
 
-    renderHeader() {
-        return this.i18n.t('access_request_modal.title');
+    connectedCallback() {
+        super.connectedCallback();
+        if (typeof this.entityId !== 'string' || this.entityId.length === 0) {
+            throw new Error('CRMAccessRequestModal: prop "entityId" required');
+        }
+
+        this.useEvent(this._accessRequests.resource.events.CREATED, () => this.close());
+        this.useEvent(this._accessRequests.resource.events.CREATE_FAILED, (event) => {
+            const message = event && event.payload && typeof event.payload.message === 'string'
+                ? event.payload.message
+                : this.t('access_request_modal.submit_failed');
+            this._submitFailedMessage = message;
+        });
+
+        this._entities.get(this.entityId);
+    }
+
+    _entity() {
+        const item = this._entities.byId[this.entityId];
+        return item === undefined ? null : item;
     }
 
     _onMessageInput(e) {
-        this._message = e.target.value;
+        const value = String(e.target.value);
+        if (value.length <= MESSAGE_MAX) {
+            this._message = value;
+        } else {
+            this._message = value.slice(0, MESSAGE_MAX);
+        }
+        this._submitFailedMessage = '';
     }
 
     _onIncludeDepsChange(e) {
-        this._includeDeps = e.target.checked;
+        this._includeDeps = Boolean(e.target.checked);
     }
 
-    _onMaxDepthChange(e) {
-        this._maxDepth = parseInt(e.target.value, 10);
+    _onDepthChange(e) {
+        const value = parseInt(e.target.value, 10);
+        if (Number.isFinite(value) && value >= DEPTH_MIN && value <= DEPTH_MAX) {
+            this._maxDepth = value;
+        }
     }
 
-    async _onSendRequest() {
-        this._sending = true;
+    _isBusy() {
+        return this._accessRequests.loading;
+    }
 
-        const crmApi = this.services.get('crmApi');
-        await CRMStore.createAccessRequest(
-            crmApi,
-            this.entityId,
-            this._message.trim() || null,
-            this._includeDeps,
-            this._maxDepth
-        );
+    _onSubmit() {
+        const trimmed = this._message.trim();
+        const payload = {
+            resource_type: 'entity',
+            resource_id: this.entityId,
+            include_dependencies: this._includeDeps,
+            max_depth: this._maxDepth,
+        };
+        if (trimmed.length > 0) {
+            payload.message = trimmed;
+        }
+        this._submitFailedMessage = '';
+        this._accessRequests.create(payload);
+    }
 
-        this._sending = false;
-        this.success(this.i18n.t('access_request_modal.success_sent'));
-        this.close();
+    renderHeader() {
+        return this.t('access_request_modal.header');
     }
 
     renderBody() {
+        const entity = this._entity();
         return html`
-            <div class="form-grid">
-                <div class="entity-preview">
-                    <div class="entity-preview-icon">
-                        <platform-icon name="folder" size="20"></platform-icon>
-                    </div>
-                    <div class="entity-preview-name">
-                        ${this.entityName || this.i18n.t('access_request_modal.entity_fallback')}
-                    </div>
-                </div>
-
+            <div class="body">
+                ${this._renderEntityHead(entity)}
                 <div class="info-box">
-                    <div class="info-box-title">${this.i18n.t('access_request_modal.how_title')}</div>
-                    <div>${this.i18n.t('access_request_modal.how_body')}</div>
+                    <span class="info-title">
+                        <platform-icon name="info" size="14"></platform-icon>
+                        ${this.t('access_request_modal.how_title')}
+                    </span>
+                    <span>${this.t('access_request_modal.how_body')}</span>
                 </div>
-
-                <div class="form-group">
-                    <label class="form-label">${this.i18n.t('access_request_modal.message_label')}</label>
-                    <textarea
-                        class="form-textarea"
-                        rows="3"
-                        placeholder=${this.i18n.t('access_requests.message_placeholder')}
-                        .value=${this._message}
-                        @input=${this._onMessageInput}
-                    ></textarea>
-                </div>
-
-                <label class="checkbox-group" @click=${(e) => {
-                    if (e.target.tagName !== 'INPUT') {
-                        const checkbox = this.renderRoot.querySelector('#include-deps');
-                        checkbox.checked = !checkbox.checked;
-                        this._includeDeps = checkbox.checked;
-                    }
-                }}>
-                    <input
-                        type="checkbox"
-                        id="include-deps"
-                        .checked=${this._includeDeps}
-                        @change=${this._onIncludeDepsChange}
-                    />
-                    <div class="checkbox-content">
-                        <div class="checkbox-label">${this.i18n.t('access_request_modal.include_related')}</div>
-                        <div class="checkbox-description">
-                            ${this.i18n.t('access_request_modal.include_related_hint')}
-                        </div>
-                    </div>
-                </label>
-
-                ${this._includeDeps ? html`
-                    <div class="depth-slider">
-                        <div class="depth-slider-header">
-                            <span class="depth-slider-label">${this.i18n.t('access_request_modal.depth_label')}</span>
-                            <span class="depth-slider-value">${this._maxDepth}</span>
-                        </div>
-                        <input
-                            type="range"
-                            min="1"
-                            max="5"
-                            .value=${this._maxDepth}
-                            @input=${this._onMaxDepthChange}
-                        />
-                    </div>
-                ` : ''}
+                ${this._renderMessageField()}
+                ${this._renderIncludeDeps()}
+                ${this._includeDeps ? this._renderDepthSlider() : nothing}
             </div>
         `;
     }
 
-    renderSaveHeaderButton() {
-        const title = this._sending
-            ? this.i18n.t('access_request_modal.sending')
-            : this.i18n.t('access_requests.send_request');
-        return this._renderHeaderSaveIcon({
-            onClick: () => this._onSendRequest(),
-            disabled: this._sending,
-            title,
-        });
+    _renderEntityHead(entity) {
+        if (entity === null) {
+            return html`
+                <div class="entity-head">
+                    <div class="icon">
+                        <platform-icon name="link" size="18"></platform-icon>
+                    </div>
+                    <div class="meta">
+                        <div class="name">${this.entityId}</div>
+                        <div class="sub">${this.t('access_request_modal.loading_entity')}</div>
+                    </div>
+                </div>
+            `;
+        }
+        return html`
+            <div class="entity-head">
+                <div class="icon">
+                    <platform-icon name="link" size="18"></platform-icon>
+                </div>
+                <div class="meta">
+                    <div class="name">${entity.name}</div>
+                    <div class="sub">${entity.namespace} · ${entity.entity_type}</div>
+                </div>
+            </div>
+        `;
+    }
+
+    _renderMessageField() {
+        return html`
+            <div>
+                <div class="field-label">${this.t('access_request_modal.message_label')}</div>
+                <textarea
+                    class="text-area"
+                    placeholder=${this.t('access_request_modal.message_placeholder')}
+                    .value=${this._message}
+                    @input=${this._onMessageInput}
+                ></textarea>
+                <div class="char-count">${this._message.length} / ${MESSAGE_MAX}</div>
+            </div>
+        `;
+    }
+
+    _renderIncludeDeps() {
+        return html`
+            <label class="checkbox-row">
+                <input
+                    type="checkbox"
+                    .checked=${this._includeDeps}
+                    @change=${this._onIncludeDepsChange}
+                />
+                <div class="check-content">
+                    <span class="check-label">${this.t('access_request_modal.include_deps_label')}</span>
+                    <span class="check-desc">${this.t('access_request_modal.include_deps_desc')}</span>
+                </div>
+            </label>
+        `;
+    }
+
+    _renderDepthSlider() {
+        return html`
+            <div class="depth-control">
+                <div class="depth-header">
+                    <span class="depth-label">${this.t('access_request_modal.depth_label')}</span>
+                    <span class="depth-value">${this._maxDepth}</span>
+                </div>
+                <input
+                    type="range"
+                    min=${DEPTH_MIN}
+                    max=${DEPTH_MAX}
+                    step="1"
+                    .value=${String(this._maxDepth)}
+                    @input=${this._onDepthChange}
+                />
+            </div>
+        `;
     }
 
     renderFooter() {
+        const busy = this._isBusy();
         return html`
             <div class="footer-actions">
+                ${this._submitFailedMessage.length > 0
+                    ? html`<span class="submit-error">${this._submitFailedMessage}</span>`
+                    : nothing}
+                <button type="button" class="btn btn-secondary" @click=${() => this.close()}>
+                    ${this.t('access_request_modal.cancel')}
+                </button>
                 <button
                     type="button"
-                    class="btn btn-secondary"
-                    @click=${() => this.close()}
+                    class="btn btn-primary"
+                    ?disabled=${busy}
+                    @click=${() => this._onSubmit()}
                 >
-                    ${this.i18n.t('cancel', {}, 'common')}
+                    ${busy ? this.t('access_request_modal.submitting') : this.t('access_request_modal.submit')}
                 </button>
             </div>
         `;
     }
 }
 
-customElements.define('access-request-modal', AccessRequestModal);
+customElements.define('crm-access-request-modal', CRMAccessRequestModal);
+registerModalKind(CRMAccessRequestModal.modalKind, 'crm-access-request-modal');

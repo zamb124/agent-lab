@@ -1,9 +1,80 @@
 ---
-trigger: always_on
-description:
-globs:
+trigger: model_decision
+alwaysApply: true
 ---
 # Архитектурные принципы Humanitec
+
+## REST-зеркало команд (платформенный инвариант)
+
+Применяется ко **всем** сервисам: frontend, crm, rag, office, sync, flows,
+scheduler — текущим и будущим.
+
+### Правило
+
+| Тип события | REST-зеркало | WS-доступность | Источник правды |
+|---|---|---|---|
+| **Команда** (`<svc>/<entity>/<verb>_requested`) — инициирует клиент | **Обязательно** HTTP-эндпоинт в `apps/<svc>/api/**` с тем же method+path+payload+response, что и WS reply | Опционально (через `transport: 'ws'` фабрики) | Один и тот же handler / бизнес-логика в `apps/<svc>/services/` |
+| **Success/Failure** (`<...>_succeeded` / `<...>_failed`) — ack автору | Body HTTP-ответа = payload event-а | Reply-фрейм с тем же `request_id` | — |
+| **Push** (`<svc>/<entity>/<verb>` без `_requested`) — server-initiated broadcast | **Запрещено** REST-зеркало (REST не делает push) | Только через `publish_ui_event_*` → `platform:ui_events` → `/<svc>/api/ws/notifications` | `core/ui_events/dispatcher.py` |
+
+### Зачем
+
+- **SDK / CLI / интеграции**: внешний клиент без WS-стенда дёргает REST.
+  Полная функциональность платформы доступна через HTTP.
+- **Гостевые / pre-WS-connect** сценарии (call-join, lead form, embed):
+  работают без подключения WS.
+- **Тесты API**: можно покрывать без WS-инфры.
+- **Отладка**: `curl` против любой команды — полный аналог WS-вызова.
+
+### Контракт `restMirror` у фабрики
+
+Каждая фабрика (`createAsyncOp` / `createResourceCollection` /
+`createCursorList`) объявляет **`restMirror`**:
+
+- `createAsyncOp`: `restMirror: { method, path }` — обязателен при
+  `transport: 'ws'` (URL не выводится из `request`); опционален при
+  `transport: 'http'` (URL уже в `request`).
+- `createResourceCollection`: `restMirror: { list?, get?, create?,
+  update?, remove? }` — auto-derived из `baseUrl` + `idField`. Можно
+  перекрыть для нестандартных путей.
+- `createCursorList`: `restMirror: { method: 'GET', path }` — auto-derived
+  из `baseUrl`. Метод только `GET`.
+- `createFacets`: `restMirror` auto-derived per facet key из `baseUrl` +
+  `facets[key]`.
+
+CI (`scripts/check_command_rest_mirror.py`, в `make check-events-canon`)
+проверяет:
+
+1. Каждая factory operation имеет `restMirror` (явный или auto).
+2. Соответствующий FastAPI route существует в `apps/<svc>/api/**`.
+3. Имя push-события (`publish_ui_event_*`) НЕ совпадает с именем команды.
+
+### WebSocket request-reply
+
+Один сокет `/<svc>/api/ws/notifications` (`core.websocket.router`) несёт два
+потока: push (из `platform:ui_events`) и RPC request-reply (point-to-point
+команды). Сервис регистрирует command-handlers через
+`register_ws_command_handler(command_type, handler)` из
+`core.websocket.command_router`. Reply-тип выводится механически:
+`*_requested` → `*_succeeded` / `*_failed`.
+
+Frontend-эффект `core/.../events/effects/ws.effect.js` отправляет фрейм
+`{ request_id, type, payload }`, ждёт reply с тем же `request_id`.
+Таймаут — обязательное поле `wsTimeoutMs` фабрики. No-fallback: если WS
+оборвался или истёк timeout — операция падает в `*_failed` с
+`error_code: 'ws_disconnected' | 'ws_timeout'`. Никакого retry через HTTP.
+
+### Запреты
+
+- WS-команда без REST-зеркала — фабрика падает на старте.
+- REST-эндпоинт делает что-то, чего нет в WS command-router (для сервисов
+  с `transport: 'ws'`). Если operation не нужна по WS — `transport: 'http'`,
+  и REST-зеркало = реальный путь.
+- Push-событие с именем, конфликтующим с командой (без суффикса).
+  Пример: `sync/messages/send_requested` (команда) и `sync/message/created`
+  (push) — разные entity-имена (`messages` vs `message`).
+- Fallback с WS на HTTP в коде. Транспорт выбирается в фабрике один раз
+  через поле `transport`.
 
 ## Dependency Injection (единый стандарт)
 
@@ -66,7 +137,7 @@ async def list_items(container: ContainerDep):
 - В каналах/триггерах flows — `get_container()` (не HTTP-контекст)
 - `core/push/delivery.py` — `PushSubscriptionRepository(db_url=...)` (вызывается из HTTP, WebSocket, workers — единый контейнер недоступен)
 - `apps/frontend/api/embed_configs.py` — допустимо использует flows container напрямую (монолит, все сервисы в одном процессе)
-- WebSocket-эндпоинты (`apps/sync/main.py:ws_endpoint`) — FastAPI `Depends()` не работает с WebSocket route handlers в том же виде, контейнер берётся через `get_*_container()`
+- WebSocket-эндпоинты (`core.websocket.router.notifications_endpoint`) — FastAPI `Depends()` не работает с WebSocket route handlers в том же виде, контейнер берётся через `get_*_container()` внутри handler'ов команд (`apps/<svc>/realtime/command_router.py`).
 
 ### Известные нарушения `core/ → apps/` (требуют архитектурной проработки)
 
@@ -159,12 +230,15 @@ trace_id = context.trace_id
 
 ## Хлебные крошки (Breadcrumbs)
 
-**ОБЯЗАТЕЛЬНЫЙ core-компонент на всех страницах всех сервисов.**
+**ОБЯЗАТЕЛЬНЫЙ core-компонент на всех неглавных страницах всех сервисов** (кроме sync, у которого свой UX).
 
-- Компонент: `platform-breadcrumbs` в `core/frontend/static/lib/components/platform-breadcrumbs.js`
-- Использует только `window.__PLATFORM_ROUTER__` (глобальная ссылка на Router)
-- Автоматически строит цепочку навигации на основе конфигурации Router (`buildBreadcrumbs()`)
-- Импорт: `import '@platform/lib/components/platform-breadcrumbs.js'`
-- Использование: `<platform-breadcrumbs></platform-breadcrumbs>` в начале контента страницы
-- Router инициализируется в `PlatformApp.connectedCallback()` через `setupRouter()`, устанавливает `window.__PLATFORM_ROUTER__`
-- Хлебные крошки работают только там, где инициализирован Router (сервисы с `setupRouter()`)
+- Компонент: `platform-breadcrumbs` в `core/frontend/static/lib/components/platform-breadcrumbs.js`.
+- Источник правды — slice `state.router`:
+  - `routes` — массив `{ key, path, parent? }`, регистрируется автоматически в `createRouterEffect` через событие `CoreEvents.ROUTER_ROUTES_REGISTERED` при первом тике.
+  - `routeKey` / `params` — заполняются `ROUTER_ROUTE_CHANGED`.
+- Цепочка строится поднятием по `parent` от текущего `routeKey` к корню. Для каждого узла подпись резолвится через `this.t('routes.<routeKey>')` (`defaultI18nNamespace` сервиса).
+- Импорт: `import '@platform/lib/components/platform-breadcrumbs.js'`.
+- Использование: `<platform-breadcrumbs></platform-breadcrumbs>` в начале контента страницы. Динамический хвост (имя сущности/документа) — атрибут `current-label="..."` или property `.currentLabel=${...}`.
+- Клик по неактивной крошке диспатчит `CoreEvents.ROUTER_NAVIGATE_REQUESTED` с `params` текущего маршрута (если совпадает routeKey) или `{}`.
+- i18n: каждый сервисный бандл обязан содержать секцию `"routes": { "<routeKey>": "<подпись>" }` в RU и EN — для всех ключей из массива `routes` `createRouterEffect`.
+- Никаких глобальных переменных (`window.__PLATFORM_ROUTER__`) и никакого `setupRouter()`: всё через bus + select.

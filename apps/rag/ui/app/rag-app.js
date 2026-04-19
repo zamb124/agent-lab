@@ -1,129 +1,134 @@
 /**
- * RagApp - Главное приложение RAG Service
+ * RagApp — корневой компонент сервиса RAG.
+ *
+ * Полностью event-driven canon: все доменные сущности описаны фабриками
+ * в `events/resources/*.resource.js` и регистрируются через `static factories`.
+ * Никаких ручных slice/effect/reducer/selectors. Маршрутизация — через
+ * core router.effect (`createRouterEffect`), SPA сервится по `/rag`.
+ *
+ * Маршруты:
+ *   /rag                                  → namespaces
+ *   /rag/namespaces/:namespaceId          → namespace_detail
+ *   /rag/search                           → search
+ *   /rag/settings                         → settings
  */
+
 import { html, css } from 'lit';
-import { PlatformApp, renderPlatformAppShell } from '@platform/lib/base/PlatformApp.js';
-import { RAGAPIService } from '../services/rag-api.service.js';
-import { RagStore } from '../store/rag.store.js';
+import { PlatformApp } from '@platform/lib/base/PlatformApp.js';
+import { createRouterEffect } from '@platform/lib/events/effects/router.effect.js';
+
+import { providersResource, providerSwitchOp } from '../events/resources/providers.resource.js';
+import { namespacesResource, namespaceCreateForm } from '../events/resources/namespaces.resource.js';
+import {
+    documentsResource,
+    documentUploadOp,
+    documentRemoveOp,
+    documentIngestTextOp,
+} from '../events/resources/documents.resource.js';
+import { documentStatusResource } from '../events/resources/document-status.resource.js';
+import { searchOp } from '../events/resources/search.resource.js';
+
 import '@platform/lib/components/layout/platform-island.js';
+import '../components/rag-sidebar.js';
+import '../pages/namespaces-page.js';
+import '../pages/namespace-page.js';
+import '../pages/search-page.js';
+import '../pages/settings-page.js';
+import '../modals/namespace-create-modal.js';
+
+const RAG_ROUTES = [
+    { key: 'namespaces',       path: '' },
+    { key: 'namespace_detail', path: 'namespaces/:namespaceId', parent: 'namespaces' },
+    { key: 'search',           path: 'search' },
+    { key: 'settings',         path: 'settings' },
+];
 
 export class RagApp extends PlatformApp {
-    static properties = {
-        ...PlatformApp.properties,
-        _currentView: { state: true },
-    };
+    static defaultI18nNamespace = 'rag';
+
+    static factories = [
+        providersResource,
+        providerSwitchOp,
+        namespacesResource,
+        namespaceCreateForm,
+        documentsResource,
+        documentUploadOp,
+        documentRemoveOp,
+        documentIngestTextOp,
+        documentStatusResource,
+        searchOp,
+    ];
 
     static styles = [
         PlatformApp.styles,
         css`
             :host {
-                display: flex !important;
-                flex-direction: row !important;
+                display: flex;
+                flex-direction: row;
                 width: var(--app-vw, 100vw);
                 height: var(--app-vh, 100vh);
                 overflow: hidden;
                 background: var(--bg-gradient);
             }
-            
             .sidebar {
                 height: var(--app-vh, 100vh);
                 flex-shrink: 0;
-                overflow: visible;
                 background: transparent;
             }
-            
             .main {
                 flex: 1;
+                min-width: 0;
                 height: var(--app-vh, 100vh);
-                overflow-y: auto;
                 display: flex;
+                flex-direction: column;
                 padding: var(--space-4);
+                overflow: hidden;
             }
-            
             platform-island {
                 flex: 1;
-                min-height: calc(var(--app-vh, 100vh) - 2rem);
+                min-height: 0;
+                min-width: 0;
             }
-
             @media (max-width: 767px) {
-                .sidebar {
-                    position: absolute;
-                    width: 0;
-                    height: 0;
-                    overflow: visible;
-                }
-
-                .main {
-                    padding: 0;
-                }
+                .main { padding: 0; }
+                .sidebar { position: absolute; width: 0; height: 0; overflow: visible; }
             }
-        `
+        `,
     ];
 
-    setupStore() {
-        return RagStore;
+    getBaseUrl() { return '/rag'; }
+
+    getRoutes() { return []; }
+
+    getServiceEffects() {
+        return [
+            createRouterEffect({ baseUrl: '/rag', routes: RAG_ROUTES }),
+        ];
     }
 
-    getBaseUrl() {
-        return '/rag';
-    }
-
-    async initServices() {
-        await super.initServices();
-        this.services.register('ragApi', new RAGAPIService('/rag/api/v1'));
-        
-        this._unsubscribe = RagStore.subscribe((state) => {
-            this._currentView = state.ui.currentView;
-        });
-        this._currentView = RagStore.state.ui.currentView || 'namespaces';
-    }
-    
-    disconnectedCallback() {
-        super.disconnectedCallback?.();
-        this._unsubscribe?.();
-    }
-
-    async checkAuth() {
-        const ok = await this.auth.validateToken();
-        return !!ok;
-    }
-
-    _renderContent() {
-        const currentView = this._currentView || 'namespaces';
-
-        switch (currentView) {
+    renderRoute(routeKey, params) {
+        let content;
+        switch (routeKey) {
             case 'namespaces':
-                return html`<namespace-list></namespace-list>`;
-            case 'documents':
-                return html`<namespace-detail></namespace-detail>`;
+                content = html`<rag-namespaces-page></rag-namespaces-page>`;
+                break;
+            case 'namespace_detail':
+                content = html`<rag-namespace-page .namespaceId=${params.namespaceId}></rag-namespace-page>`;
+                break;
             case 'search':
-                return html`<search-view></search-view>`;
+                content = html`<rag-search-page></rag-search-page>`;
+                break;
             case 'settings':
-                return html`<settings-view></settings-view>`;
+                content = html`<rag-settings-page></rag-settings-page>`;
+                break;
             default:
-                return html`<namespace-list></namespace-list>`;
+                content = html`<rag-namespaces-page></rag-namespaces-page>`;
+                break;
         }
-    }
-
-    render() {
-        const shell = renderPlatformAppShell(this);
-        if (shell !== null) {
-            return shell;
-        }
-
-        if (!this._servicesInitialized || !this._authChecked) {
-            return html`<app-loader></app-loader>`;
-        }
-
         return html`
-            <div class="sidebar">
-                <rag-sidebar></rag-sidebar>
-            </div>
-
+            <div class="sidebar"><rag-sidebar></rag-sidebar></div>
             <div class="main">
-                <platform-island>
-                    ${this._renderContent()}
-                </platform-island>
+                <platform-island>${content}</platform-island>
             </div>
         `;
     }

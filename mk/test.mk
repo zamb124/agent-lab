@@ -1,4 +1,4 @@
-.PHONY: test test-all test-up test-down test-cov test-cov-all test-cov-report test-browser test-unit test-ui test-ui-doc test-ui-components
+.PHONY: test test-all test-up test-down test-cov test-cov-all test-cov-report test-browser test-unit test-ui test-ui-doc test-ui-components test-frontend-core test-frontend-core-canon test-frontend-core-unit test-frontend-core-browser
 
 WORKERS ?= 3
 PYTEST_COMMAND_TIMEOUT_SECONDS ?= 600
@@ -44,8 +44,34 @@ test-ui-components:
 	npm ci
 	npm run test:ui-components
 
-# Полный запуск: unit параллельно -> retry упавших -> browser
-test: test-up
+# ==============================================================================
+# Frontend core: трёхслойная проверка фундамента event-архитектуры.
+#   Layer 1 — статический канон (regex по core/frontend/static/lib/**) — секунды.
+#   Layer 2 — pure-node unit (Vitest + MSW + MockWebSocket) — секунды.
+#   Layer 3 — браузерные тесты (Web Test Runner + Playwright Chromium) — десятки секунд.
+# Каждый следующий слой стартует только если предыдущий зелёный.
+# Полный test-frontend-core — обязательная зависимость make test (fail-fast).
+# ==============================================================================
+
+test-frontend-core-canon:
+	@echo "Layer 1/3: канон core/frontend (regex)..."
+	@uv run python scripts/check_core_frontend_canon.py
+
+test-frontend-core-unit:
+	@echo "Layer 2/3: pure-node unit (Vitest)..."
+	@npm ci --silent
+	@npm run test:core-unit
+
+test-frontend-core-browser:
+	@echo "Layer 3/3: браузерные тесты (Web Test Runner + Playwright)..."
+	@npm ci --silent
+	@npm run test:core-browser
+
+test-frontend-core: test-frontend-core-canon test-frontend-core-unit test-frontend-core-browser
+	@echo "core/frontend: 3/3 OK"
+
+# Полный запуск: фундамент UI -> unit параллельно -> retry упавших -> browser
+test: test-frontend-core test-up
 	@echo "=== 1/3 Запуск unit/API тестов в $(WORKERS) воркерах ==="
 	@set +e; \
 	phase1_rc=0; \
@@ -71,7 +97,7 @@ test: test-up
 		exit 1; \
 	fi
 
-test-all: test-up
+test-all: test-frontend-core test-up
 	@echo "=== 1/3 Запуск всех unit/API тестов в $(WORKERS) воркерах ==="
 	@set +e; \
 	phase1_rc=0; \

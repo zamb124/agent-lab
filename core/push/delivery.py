@@ -1,5 +1,5 @@
 """
-Доставка офлайн-push: Web Push (VAPID) и APNs по типу подписки.
+Доставка офлайн-push: Web Push (VAPID), APNs (iOS) и FCM (Android) по типу подписки.
 """
 
 from __future__ import annotations
@@ -9,6 +9,7 @@ from typing import Any
 from core.config import get_settings
 from core.logging import get_logger
 from core.push.apns_service import get_apns_push_service
+from core.push.fcm_service import get_fcm_push_service
 from core.push.models import PushSubscription
 from core.push.repository import PushSubscriptionRepository
 from core.push.service import get_web_push_service
@@ -18,6 +19,10 @@ logger = get_logger(__name__)
 
 def _is_apns_subscription(subscription: PushSubscription) -> bool:
     return subscription.endpoint.startswith("apns:")
+
+
+def _is_fcm_subscription(subscription: PushSubscription) -> bool:
+    return subscription.endpoint.startswith("fcm:")
 
 
 async def deliver_offline_push(
@@ -40,8 +45,12 @@ async def deliver_offline_push(
     if not subscriptions:
         return []
 
-    web_subs = [s for s in subscriptions if not _is_apns_subscription(s)]
+    web_subs = [
+        s for s in subscriptions
+        if not _is_apns_subscription(s) and not _is_fcm_subscription(s)
+    ]
     apns_subs = [s for s in subscriptions if _is_apns_subscription(s)]
+    fcm_subs = [s for s in subscriptions if _is_fcm_subscription(s)]
 
     expired_endpoints: list[str] = []
 
@@ -76,6 +85,26 @@ async def deliver_offline_push(
             elif not delivered:
                 logger.warning(
                     "APNs: пропуск удаления подписки после временной ошибки endpoint=%s",
+                    sub.endpoint[:32],
+                )
+
+    fcm_service = get_fcm_push_service()
+    if fcm_subs and fcm_service and fcm_service.is_configured:
+        for sub in fcm_subs:
+            token = sub.endpoint.removeprefix("fcm:")
+            delivered, drop = await fcm_service.send_alert(
+                registration_token=token,
+                title=title,
+                body=message,
+                url=action_url,
+                tag=tag,
+                extra=data,
+            )
+            if not delivered and drop:
+                expired_endpoints.append(sub.endpoint)
+            elif not delivered:
+                logger.warning(
+                    "FCM: пропуск удаления подписки после временной ошибки endpoint=%s",
                     sub.endpoint[:32],
                 )
 

@@ -3,12 +3,12 @@
  */
 import { html, css } from 'lit';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
-import { I18nNs } from '@platform/services/i18n/i18n.service.js';
 import { buildServiceEntryUrl } from '@platform/lib/utils/last-visited-service.js';
 import { landFlowsAbilityUrl } from '../../utils/land-product-images.js';
-import '@platform/lib/components/auth-modal.js';
 
 export class ProductAgentsPage extends PlatformElement {
+    static i18nNamespace = 'frontend_products';
+
     static styles = [
         PlatformElement.styles,
         css`
@@ -289,42 +289,17 @@ export class ProductAgentsPage extends PlatformElement {
         `
     ];
 
-    connectedCallback() {
-        super.connectedCallback();
-        this._i18nUnsub = this.i18n.subscribe(() => this.requestUpdate());
-        this.addEventListener('open-auth-modal', this._handleOpenAuthModal);
-    }
-
-    disconnectedCallback() {
-        if (this._i18nUnsub) {
-            this._i18nUnsub();
-            this._i18nUnsub = null;
-        }
-        this.removeEventListener('open-auth-modal', this._handleOpenAuthModal);
-        super.disconnectedCallback();
-    }
-
-    _handleOpenAuthModal = () => {
-        const authModal = this.shadowRoot?.querySelector('auth-modal');
-        if (authModal) {
-            authModal.open = true;
-        }
-    };
-
-    _handleProductCtaClick = async () => {
-        const response = await fetch('/frontend/api/auth/me', {
-            credentials: 'include',
-        });
-        if (response.ok) {
+    _handleProductCtaClick = () => {
+        if (this.bus.getState().auth.status === 'authenticated') {
             window.location.href = buildServiceEntryUrl('flows');
             return;
         }
-        this._handleOpenAuthModal();
+        this.openModal('auth.login', { returnPath: buildServiceEntryUrl('flows') });
     };
 
     render() {
-        const t = (key) => this.i18n.t(key, {}, I18nNs.FRONTEND_PRODUCTS);
-        const heroSrc = landFlowsAbilityUrl(this.i18n.getCurrentLocale());
+        const t = (key) => (this.t(key) || key);
+        const heroSrc = landFlowsAbilityUrl((this.bus.getState().i18n.locale || 'ru'));
         return html`
             <landing-header></landing-header>
             <div class="page-container">
@@ -447,8 +422,6 @@ export class ProductAgentsPage extends PlatformElement {
                 
                 <landing-footer></landing-footer>
             </div>
-            
-            <auth-modal return-path=${buildServiceEntryUrl('flows')}></auth-modal>
         `;
     }
 }

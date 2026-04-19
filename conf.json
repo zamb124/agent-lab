@@ -71,7 +71,14 @@
     "enabled": true,
     "vapid_public_key": "ВСТАВИТЬ_PUBLIC_ИЗ_ГЕНЕРАТОРА",
     "vapid_private_key": "ВСТАВИТЬ_PRIVATE_ИЗ_ГЕНЕРАТОРА",
-    "vapid_email": "ops@твой-домен.ru"
+    "vapid_email": "ops@твой-домен.ru",
+    "apns_team_id": null,
+    "apns_key_id": null,
+    "apns_private_key": null,
+    "apns_bundle_id": "ru.humanitec.app",
+    "apns_use_sandbox": false,
+    "fcm_credentials_json": null,
+    "fcm_project_id": null
   },
   "legal": {
     "company_name_ru": "ООО «Humanitec»",

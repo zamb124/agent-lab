@@ -142,7 +142,7 @@ async def test_get_daily_summary_cached_miss_enqueues_rebuild():
 
 
 @pytest.mark.asyncio
-async def test_get_daily_summary_cached_empty_day_no_enqueue():
+async def test_get_daily_summary_cached_empty_day_no_enqueue(monkeypatch):
     _set_test_context()
     service = _build_service()
     service._collect_notes_and_source_version = AsyncMock(
@@ -152,6 +152,13 @@ async def test_get_daily_summary_cached_empty_day_no_enqueue():
     service._daily_summary_cache_service.clear_revalidating = AsyncMock()
     service.enqueue_daily_summary_rebuild = AsyncMock(return_value=True)
 
+    # Материализация пустого дня публикует UI-событие через
+    # broadcast_crm_daily_summary_updated -> resolve_user_ids_for_namespace_broadcast,
+    # которому нужен живой Company. В юнит-тесте сам факт публикации не
+    # проверяем — изолируем broadcast через AsyncMock.
+    broadcast_mock = AsyncMock()
+    monkeypatch.setattr(entity_service_module, "broadcast_crm_daily_summary_updated", broadcast_mock)
+
     payload = await service.get_daily_summary_cached(date_str="2026-03-28", namespace=None)
 
     assert payload["revalidating"] is False
@@ -159,6 +166,7 @@ async def test_get_daily_summary_cached_empty_day_no_enqueue():
     assert "2026-03-28" in payload["summary"]
     service.enqueue_daily_summary_rebuild.assert_not_awaited()
     service._daily_summary_artifact_service.put_daily_payload.assert_awaited()
+    broadcast_mock.assert_awaited()
 
 
 @pytest.mark.asyncio

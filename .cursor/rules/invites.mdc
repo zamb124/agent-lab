@@ -25,7 +25,8 @@ alwaysApply: false
 | `apps/frontend/api/invites.py` | `POST /api/invites/generate` (mint short link), `POST /api/invites/accept` (`short_code`) |
 | `apps/frontend/main.py` | `GET /l/{code}` |
 | `apps/frontend/ui/pages/join-page.js` | `/join?c=...`, accept с `short_code` |
-| `apps/frontend/ui/services/team.service.js` | `generateInviteLink(role)` |
+| `apps/frontend/ui/events/resources/invites.resource.js` | `acceptInviteOp` (`createAsyncOp`, `POST /frontend/api/invites/accept`) |
+| `apps/frontend/ui/events/resources/team.resource.js` | `teamInviteGenerateOp` (`POST /frontend/api/invites/generate`) |
 | `core/middleware/auth/company_resolver.py` | Для `POST` на `.../invites/accept` на субдомене компании **не** требуется, чтобы пользователь уже был в `user.companies` (иначе 403 до хендлера) |
 
 ## Invite JWT payload

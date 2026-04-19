@@ -115,7 +115,7 @@ async def test_call_invite_sfu_two_members(
     assert statuses["member1"] == "invited"
     assert result.result.call_type == "video"
 
-    msg_events = [e for e in result.events if e.type == "message.created"]
+    msg_events = [e for e in result.events if e.type == "sync/message/created"]
     assert len(msg_events) == 1
     payload = msg_events[0].payload
     contents = payload.get("contents") if isinstance(payload, dict) else None
@@ -288,7 +288,7 @@ async def test_call_accept_and_hangup(
     )
     assert accept_res.ok
     assert accept_res.result.status == "active"
-    accept_boundary_msgs = [e for e in accept_res.events if e.type == "message.created"]
+    accept_boundary_msgs = [e for e in accept_res.events if e.type == "sync/message/created"]
     assert len(accept_boundary_msgs) == 0
 
     hangup_res = await execute_command(

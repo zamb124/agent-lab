@@ -1,7 +1,5 @@
 import { html, css } from 'lit';
 import { PlatformElement } from '../platform-element/index.js';
-import { AppEvents } from '../utils/types.js';
-
 function formatDuration(seconds) {
     if (!Number.isFinite(seconds) || seconds < 0) {
         return '00:00';
@@ -317,11 +315,7 @@ export class PlatformAudioMessagePlayer extends PlatformElement {
                     ? 'Воспроизведение этого формата недоступно в браузере.'
                     : (err instanceof Error ? err.message : String(err));
             this._playbackError = text;
-            window.dispatchEvent(
-                new CustomEvent(AppEvents.TOAST_SHOW, {
-                    detail: { type: 'warning', message: text, duration: 5000 },
-                })
-            );
+            this.dispatch('ui/toast/show', { type: 'warning', message: text, duration: 5000 });
         }
     }
 

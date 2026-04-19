@@ -59,7 +59,7 @@ export class PlatformFieldArray extends PlatformElement {
 
         if (this.mode === 'view') {
             if (items.length === 0) {
-                return html`<span class="empty">${this.i18n.t('platform_field.empty_value', {}, 'platform')}</span>`;
+                return html`<span class="empty">${(this.t('platform_field.empty_value') || 'platform_field.empty_value')}</span>`;
             }
             return html`
                 <div class="view-chips">
@@ -71,7 +71,7 @@ export class PlatformFieldArray extends PlatformElement {
         return html`
             <tag-input
                 .tags=${items}
-                placeholder=${this.i18n.t('platform_field.array_placeholder', {}, 'platform')}
+                placeholder=${(this.t('platform_field.array_placeholder') || 'platform_field.array_placeholder')}
                 ?disabled=${this.disabled}
                 @tags-changed=${this._onChange}
             ></tag-input>

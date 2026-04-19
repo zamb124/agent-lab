@@ -757,8 +757,17 @@ class CallsConfig(BaseModel):
 
 
 class PushConfig(BaseModel):
-    """Web Push (VAPID) и APNs. Для APNs пустые apns_team_id / apns_key_id / apns_private_key
-    дополняются из auth.providers.apple при том же .p8 (ключ в Apple должен иметь capability APNs)."""
+    """Web Push (VAPID), APNs и FCM.
+
+    Для APNs пустые apns_team_id / apns_key_id / apns_private_key дополняются из
+    auth.providers.apple при том же .p8 (ключ в Apple должен иметь capability APNs).
+
+    Для FCM используется Firebase Admin HTTP v1 API с service account JSON. Содержимое
+    google-services service account кладётся в fcm_credentials_json (одной строкой
+    JSON или объектом из conf.json). Не путать с google-services.json в Android-сборке —
+    это разные файлы: первый serverside (приватный ключ сервиса), второй clientside
+    (Sender ID и project number, кладётся в mobile/android/app/).
+    """
 
     enabled: bool = False
     vapid_public_key: Optional[str] = None
@@ -769,6 +778,8 @@ class PushConfig(BaseModel):
     apns_private_key: Optional[str] = None
     apns_bundle_id: Optional[str] = None
     apns_use_sandbox: bool = False
+    fcm_credentials_json: Optional[Any] = None
+    fcm_project_id: Optional[str] = None
 
 
 class LegalConfig(BaseModel):

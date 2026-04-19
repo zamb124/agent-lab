@@ -35,6 +35,7 @@ from apps.flows.src.container import FlowContainer
 from apps.flows.src.dependencies import ContainerDep
 from core.logging import get_logger
 from apps.flows.src.models import FlowConfig
+from core.ui_events import publish_ui_event_to_user
 from core.utils.tokens import TokenData, TokenType
 
 logger = get_logger(__name__)
@@ -662,11 +663,19 @@ async def create_skill(flow_id: str, request: Request, container: ContainerDep) 
 
     try:
         result = await channel.create_skill(skill_id, data)
-        return JSONResponse(result, status_code=201)
     except ValueError as e:
         if "already exists" in str(e):
             raise HTTPException(status_code=409, detail=str(e))
         raise HTTPException(status_code=400, detail=str(e))
+
+    if context and context.user and context.user.user_id:
+        await publish_ui_event_to_user(
+            user_id=context.user.user_id,
+            type="flows/skill/created",
+            payload={"flow_id": flow_id, "skill_id": skill_id},
+        )
+
+    return JSONResponse(result, status_code=201)
 
 
 @router.put("/{flow_id}/skills/{skill_id}")
@@ -684,11 +693,20 @@ async def update_skill(flow_id: str, skill_id: str, request: Request, container:
         raise HTTPException(status_code=400, detail="Invalid JSON body")
 
     try:
-        return await channel.update_skill(skill_id, data)
+        result = await channel.update_skill(skill_id, data)
     except ValueError as e:
         if "not found" in str(e):
             raise HTTPException(status_code=404, detail=f"Skill '{skill_id}' not found. Use POST to create.")
         raise HTTPException(status_code=400, detail=str(e))
+
+    if context and context.user and context.user.user_id:
+        await publish_ui_event_to_user(
+            user_id=context.user.user_id,
+            type="flows/skill/updated",
+            payload={"flow_id": flow_id, "skill_id": skill_id},
+        )
+
+    return result
 
 
 @router.delete("/{flow_id}/skills/{skill_id}")
@@ -701,6 +719,15 @@ async def delete_skill(flow_id: str, skill_id: str, container: ContainerDep) -> 
         raise HTTPException(status_code=404, detail=f"Flow '{flow_id}' not found")
 
     try:
-        return await channel.delete_skill(skill_id)
+        result = await channel.delete_skill(skill_id)
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
+
+    if context and context.user and context.user.user_id:
+        await publish_ui_event_to_user(
+            user_id=context.user.user_id,
+            type="flows/skill/deleted",
+            payload={"flow_id": flow_id, "skill_id": skill_id},
+        )
+
+    return result

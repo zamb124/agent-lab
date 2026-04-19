@@ -1,22 +1,36 @@
 """
-Публикация уведомлений из сервисов.
+Публикация уведомлений пользователям.
+
+Чисто event-driven: каждый сервис формирует доменное событие через
+`publish_ui_event_to_user(user_id, type, payload, ...)` (см.
+`core/ui_events/dispatcher.py`). Этот модуль предоставляет тонкий
+адаптер `notify_user(...)`, который дополнительно умеет доставить
+push-уведомление при offline-пользователе.
+
+Тип события собирается как `notify/<service>/<kind>_received`, где
+service — имя бэкенд-сервиса источника (crm/sync/office/...), kind —
+конкретный подтип (note_updated, message_received и т.п.). Имя
+соответствует контракту `<scope>/<entity>/<verb>`.
 """
 
-from enum import Enum
-from typing import Dict, Any, Optional
+from __future__ import annotations
+
 from datetime import datetime, timezone
+from enum import StrEnum
+from typing import Any, Dict, Optional
 
 from pydantic import BaseModel, Field
-from core.websocket.manager import notification_manager
+
 from core.logging import get_logger
 from core.push.delivery import deliver_offline_push
+from core.ui_events.contract import UIEvent, UIEventMeta, UIEventTarget, assert_ui_event_type
+from core.ui_events.dispatcher import publish_ui_event
+from core.websocket.manager import notification_manager
 
 logger = get_logger(__name__)
 
 
-class NotificationType(str, Enum):
-    """Типы уведомлений платформы"""
-
+class NotificationType(StrEnum):
     ACCESS_REQUEST = "access_request"
     ENTITY_UPDATED = "entity_updated"
     TASK_COMPLETED = "task_completed"
@@ -33,43 +47,52 @@ class NotificationType(str, Enum):
 
 
 class Notification(BaseModel):
-    """Универсальная модель уведомления"""
+    """Уведомление для пользователя — превращается в UIEvent + опционально push."""
 
-    type: NotificationType = Field(description="Тип уведомления")
-    title: str = Field(description="Заголовок")
-    message: str = Field(description="Текст сообщения")
-    data: Dict[str, Any] = Field(default_factory=dict, description="Дополнительные данные")
-    service: str = Field(description="Сервис-источник (crm, rag, agents)")
-    priority: str = Field(
-        default="normal", description="Приоритет (low, normal, high, urgent)"
-    )
-    action_url: Optional[str] = Field(
-        default=None, description="URL для перехода по клику"
-    )
-    created_at: datetime = Field(
-        default_factory=lambda: datetime.now(timezone.utc),
-        description="Время создания",
-    )
+    type: NotificationType
+    title: str
+    message: str
+    data: Dict[str, Any] = Field(default_factory=dict)
+    service: str
+    priority: str = "normal"
+    action_url: Optional[str] = None
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
 
-async def notify_user(user_id: str, notification: Notification):
+def _event_type_for(notification: Notification) -> str:
+    candidate = f"notify/{notification.service}/{notification.type.value}_received"
+    return assert_ui_event_type(candidate)
+
+
+async def notify_user(user_id: str, notification: Notification) -> None:
     """
-    Отправить уведомление пользователю.
-    
-    1. Через WebSocket (если подключен)
-    2. Через Web Push (если есть подписка и user offline)
-    
-    Args:
-        user_id: ID пользователя
-        notification: Уведомление для отправки
+    Доставить уведомление пользователю.
+
+    1. Публикуется как UIEvent в платформенный канал `platform:ui_events`
+       — фронт получает его через WebSocket и обрабатывает в EventBus.
+    2. Если пользователь offline — отправляется Web Push / APNs через
+       `deliver_offline_push`.
     """
-    # WebSocket - real-time
-    await notification_manager.publish(user_id, notification.model_dump(mode="json"))
+    event_type = _event_type_for(notification)
+    payload = {
+        "title": notification.title,
+        "message": notification.message,
+        "data": notification.data,
+        "priority": notification.priority,
+        "action_url": notification.action_url,
+        "created_at": notification.created_at.isoformat(),
+        "service": notification.service,
+        "kind": notification.type.value,
+    }
+    event = UIEvent(type=event_type, payload=payload, meta=UIEventMeta(source="system"))
+    await publish_ui_event(event, UIEventTarget(user_id=user_id))
     logger.info(
-        f"Уведомление опубликовано: user={user_id}, type={notification.type}, service={notification.service}"
+        "Notification published: user=%s service=%s kind=%s",
+        user_id,
+        notification.service,
+        notification.type.value,
     )
-    
-    # Офлайн-push (Web Push и/или APNs), если пользователь не в WebSocket
+
     if not notification_manager.is_user_connected(user_id):
         await deliver_offline_push(
             user_id,

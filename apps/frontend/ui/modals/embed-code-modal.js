@@ -1,301 +1,226 @@
 /**
- * Модалка с кодом для встраивания виджета
+ * Embed code modal — display-only диалог с HTML/JS-кодом виджета и
+ * S2S-инструкциями по выдаче short-lived embed-session токена.
+ *
+ * Загружает данные через op `frontend/embed_code` (load by embed_id);
+ * результат проецируется в slice как `codeByEmbedId[id]`, чтобы повторное
+ * открытие модалки на тот же embed_id не требовало перезагрузки.
+ *
+ * Все операции копирования — через `this.copyToClipboard(...)`.
  */
 import { html, css } from 'lit';
 import { PlatformModal } from '@platform/lib/components/glass-modal.js';
-import '@platform/lib/components/platform-icon.js';
-import { formStyles } from '@platform/lib/styles/shared/form.styles.js';
-import { buttonStyles } from '@platform/lib/styles/shared/button.styles.js';
+import { registerModalKind } from '@platform/lib/utils/modal-registry.js';
+import '@platform/lib/components/glass-spinner.js';
 
-export class EmbedCodeModal extends PlatformModal {
+function _backendProxyExample(tokenEndpoint) {
+    const ep = tokenEndpoint || '<token_endpoint>';
+    return `// Server-to-server: your backend exchanges issuer token for embed-session token.
+// Call this endpoint with issuer token (hum_...).
+const response = await fetch('${ep}', {
+    method: 'POST',
+    headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer hum_<ISSUER_TOKEN>',
+    },
+    body: JSON.stringify({
+        origin: req.headers.origin,
+        expires_in_seconds: 300,
+    }),
+});
+const data = await response.json();
+// data.token — short-lived embed-session token, return it to the browser.
+return res.json({ token: data.token, expires_at: data.expires_at });`;
+}
+
+function _clientBackendExample() {
+    return `// Browser only calls your backend, never the platform directly.
+async function getChatToken() {
+    const r = await fetch('/api/chat-token', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ origin: window.location.origin, expires_in_seconds: 300 }),
+    });
+    if (!r.ok) throw new Error('Cannot get chat token');
+    return await r.json();
+}`;
+}
+
+export class FrontendEmbedCodeModal extends PlatformModal {
+    static modalKind = 'frontend.embed_code';
+
+    static properties = {
+        ...PlatformModal.properties,
+        embedId: { type: String },
+    };
+
     static styles = [
-        PlatformModal.styles,
-        formStyles,
-        buttonStyles,
+        ...PlatformModal.styles,
         css`
-            .modal-description {
-                font-size: 14px;
-                color: var(--text-secondary);
-                margin-bottom: 16px;
-                line-height: 1.5;
-            }
-
-            .steps {
-                margin: 0 0 16px 0;
-                padding-left: 18px;
-                color: var(--text-secondary);
-                line-height: 1.6;
-                font-size: 14px;
-            }
-
-            .steps li {
-                margin-bottom: 6px;
-            }
-
+            .section { margin-bottom: var(--space-5); }
             .section-title {
-                margin: 16px 0 8px;
-                font-size: 13px;
-                font-weight: 600;
+                color: var(--text-primary);
+                font-weight: var(--font-semibold);
+                font-size: var(--text-sm);
+                margin-bottom: var(--space-2);
+            }
+            .section-desc {
+                color: var(--text-secondary);
+                font-size: var(--text-sm);
+                margin-bottom: var(--space-2);
+            }
+            pre {
+                font-family: var(--font-mono);
+                font-size: var(--text-xs);
+                background: var(--glass-solid-subtle);
+                padding: var(--space-3) var(--space-4);
+                border-radius: var(--radius-md);
+                white-space: pre-wrap;
+                word-break: break-all;
+                max-height: 320px;
+                overflow: auto;
+                color: var(--text-primary);
+                margin: 0 0 var(--space-2) 0;
+            }
+            .endpoint {
+                font-family: var(--font-mono);
+                font-size: var(--text-xs);
+                background: var(--glass-solid-subtle);
+                padding: var(--space-2) var(--space-3);
+                border-radius: var(--radius-md);
+                color: var(--text-primary);
+                user-select: all;
+                margin-bottom: var(--space-2);
+                word-break: break-all;
+            }
+            ol { padding-left: var(--space-5); margin: var(--space-2) 0; color: var(--text-secondary); font-size: var(--text-sm); }
+            ol li { margin-bottom: var(--space-1); }
+            .actions { display: flex; gap: var(--space-3); justify-content: flex-end; width: 100%; }
+            .btn {
+                padding: var(--space-2) var(--space-4);
+                border: 1px solid var(--glass-border-subtle);
+                border-radius: var(--radius-md);
+                cursor: pointer;
+                font-size: var(--text-sm);
+                background: transparent;
                 color: var(--text-primary);
             }
-
-            .code-block {
-                background: var(--glass-tint-subtle);
-                border: 1px solid var(--border-default);
-                border-radius: 12px;
-                padding: 16px;
-                font-family: 'SF Mono', 'Monaco', 'Menlo', monospace;
-                font-size: 13px;
-                overflow-x: auto;
-                white-space: pre;
-                color: var(--text-primary);
-                line-height: 1.5;
+            .btn:hover { border-color: var(--accent); }
+            .btn-primary { background: var(--accent); border-color: var(--accent); color: white; }
+            .btn-primary:hover { filter: brightness(1.1); }
+            .copy-btn {
+                font-size: var(--text-xs);
+                padding: 4px 10px;
+                margin-bottom: var(--space-3);
             }
-
-            .code-actions {
-                display: flex;
-                justify-content: flex-end;
-                margin: 8px 0 16px;
-            }
-
-            .loading-state {
-                text-align: center;
-                padding: 32px;
-                color: var(--text-tertiary);
+            .loading {
+                padding: var(--space-6);
+                display: flex; justify-content: center;
             }
         `,
     ];
 
     constructor() {
         super();
+        this.embedId = '';
         this.size = 'lg';
-        this.open = false;
-        this._embedId = '';
-        this._code = '';
-        this._tokenEndpoint = '';
-        this._loading = false;
+        this._code = this.useOp('frontend/embed_code');
+        this._loaded = false;
     }
 
-    connectedCallback() {
-        super.connectedCallback();
-        this._i18nUnsub = this.i18n.subscribe(() => this.requestUpdate());
-    }
-
-    disconnectedCallback() {
-        if (this._i18nUnsub) {
-            this._i18nUnsub();
-            this._i18nUnsub = null;
+    willUpdate(changed) {
+        super.willUpdate(changed);
+        this.title = this.t('embed_code_modal.header');
+        if (changed.has('open') && this.open && this.embedId && !this._loaded) {
+            this._loaded = true;
+            this._code.run({ embed_id: this.embedId });
         }
-        super.disconnectedCallback();
-    }
-
-    async show(embedId) {
-        this._embedId = embedId;
-        this.open = true;
-        this._loading = true;
-        this.requestUpdate();
-        try {
-            const data = await this.services.get('embed').getCode(embedId);
-            this._code = data.html_code;
-            this._tokenEndpoint = data.token_endpoint || '';
-        } catch (error) {
-            const message = error instanceof Error ? error.message : this.i18n.t('embed_code_modal.load_error', {});
-            this.error(message);
-            throw error;
-        } finally {
-            this._loading = false;
-            this.requestUpdate();
+        if (changed.has('embedId')) {
+            this._loaded = false;
         }
     }
 
-    close() {
-        this.open = false;
-        super.close();
-        this.dispatchEvent(new CustomEvent('close'));
+    _entry() {
+        const map = this._code.state.codeByEmbedId;
+        return map[this.embedId] || null;
     }
 
-    _handleClose() {
-        this.close();
+    _isLoading() {
+        const map = this._code.state.codeLoadingById;
+        return Boolean(map[this.embedId]);
     }
 
-    async _copyToClipboard(text) {
-        if (typeof navigator !== 'undefined' && navigator.clipboard?.writeText) {
-            try {
-                await navigator.clipboard.writeText(text);
-                return;
-            } catch {
-                // Secure Context может отказать — пробуем execCommand
-            }
-        }
-        const ta = document.createElement('textarea');
-        ta.value = text;
-        ta.setAttribute('readonly', '');
-        ta.style.cssText = 'position:fixed;left:-9999px;top:0';
-        document.body.appendChild(ta);
-        ta.focus();
-        ta.select();
-        try {
-            const ok = document.execCommand('copy');
-            if (!ok) {
-                throw new Error(this.i18n.t('embed_code_modal.err_copy_cmd', {}));
-            }
-        } finally {
-            document.body.removeChild(ta);
-        }
-    }
-
-    async _handleCopy() {
-        const td = (k, p) => this.i18n.t(k, p ?? {});
-        if (!this._code) {
-            this.error(td('embed_code_modal.err_no_code'));
+    _copy(text, successKey) {
+        if (!text) {
+            this.toast('embed_code_modal.err_no_code', { type: 'error' });
             return;
         }
-        try {
-            await this._copyToClipboard(this._code);
-            this.success(td('embed_code_modal.toast_copied'));
-        } catch (e) {
-            const msg = e instanceof Error ? e.message : String(e);
-            this.error(td('embed_code_modal.err_copy_failed', { msg }));
-        }
-    }
-
-    _buildBackendTokenProxyExample() {
-        const endpoint = this._tokenEndpoint || 'https://api.humanitec.ru/frontend/api/embed/configs/embed_xxx/session-token';
-        const escapedEndpoint = endpoint.replaceAll('"', '\\"');
-        return `curl -X POST "${escapedEndpoint}" \\
-  -H "Authorization: Bearer hum_YOUR_ISSUER_TOKEN" \\
-  -H "Content-Type: application/json" \\
-  -d '{"origin":"https://your-site.example","expires_in_seconds":300}'`;
-    }
-
-    _buildClientBackendCallExample() {
-        return `fetch('/api/chat-token', {
-  method: 'POST',
-  headers: { 'Content-Type': 'application/json' },
-  body: JSON.stringify({
-    embed_id: '${this._embedId}',
-    origin: window.location.origin,
-    expires_in_seconds: 300
-  })
-});`;
-    }
-
-    async _handleCopyTokenEndpoint() {
-        const td = (k, p) => this.i18n.t(k, p ?? {});
-        if (!this._tokenEndpoint) {
-            this.error(td('embed_code_modal.err_no_token_endpoint'));
-            return;
-        }
-        try {
-            await this._copyToClipboard(this._tokenEndpoint);
-            this.success(td('embed_code_modal.toast_copied'));
-        } catch (e) {
-            const msg = e instanceof Error ? e.message : String(e);
-            this.error(td('embed_code_modal.err_copy_failed', { msg }));
-        }
-    }
-
-    async _handleCopyBackendProxyExample() {
-        const td = (k, p) => this.i18n.t(k, p ?? {});
-        try {
-            await this._copyToClipboard(this._buildBackendTokenProxyExample());
-            this.success(td('embed_code_modal.toast_copied'));
-        } catch (e) {
-            const msg = e instanceof Error ? e.message : String(e);
-            this.error(td('embed_code_modal.err_copy_failed', { msg }));
-        }
-    }
-
-    async _handleCopyClientBackendExample() {
-        const td = (k, p) => this.i18n.t(k, p ?? {});
-        try {
-            await this._copyToClipboard(this._buildClientBackendCallExample());
-            this.success(td('embed_code_modal.toast_copied'));
-        } catch (e) {
-            const msg = e instanceof Error ? e.message : String(e);
-            this.error(td('embed_code_modal.err_copy_failed', { msg }));
-        }
-    }
-
-    renderHeader() {
-        return this.i18n.t('embed_code_modal.header', {});
-    }
-
-    renderHeaderActions() {
-        const td = (k) => this.i18n.t(k, {});
-        if (this._loading || !this._code) {
-            return html``;
-        }
-        return html`
-            <button
-                type="button"
-                class="header-btn"
-                title=${td('embed_code_modal.copy_title')}
-                aria-label=${td('embed_code_modal.copy_title')}
-                @click=${this._handleCopy}
-            >
-                <platform-icon name="copy" size="16"></platform-icon>
-            </button>
-        `;
+        this.copyToClipboard(text, {
+            success_i18n_key: successKey,
+            error_i18n_key: 'embed_code_modal.err_copy_failed',
+        });
     }
 
     renderBody() {
-        const td = (k) => this.i18n.t(k, {});
-        const backendProxyExample = this._buildBackendTokenProxyExample();
-        const clientBackendExample = this._buildClientBackendCallExample();
-        return this._loading
-            ? html`<div class="loading-state">${td('embed_code_modal.loading')}</div>`
-            : html`
-                <p class="modal-description">${td('embed_code_modal.token_howto_title')}</p>
-                <ol class="steps">
-                    <li>${td('embed_code_modal.token_howto_step_1')}</li>
-                    <li>${td('embed_code_modal.token_howto_step_2')}</li>
-                    <li>${td('embed_code_modal.token_howto_step_3')}</li>
+        if (this._isLoading() || !this._entry()) {
+            return html`<div class="loading"><glass-spinner></glass-spinner></div>`;
+        }
+        const entry = this._entry();
+        const html_code = entry.html_code;
+        const token_endpoint = entry.token_endpoint;
+        const backendExample = _backendProxyExample(token_endpoint);
+        const clientExample = _clientBackendExample();
+        return html`
+            <div class="section">
+                <div class="section-desc">${this.t('embed_code_modal.description')}</div>
+                <pre>${html_code}</pre>
+                <button class="btn btn-primary copy-btn"
+                    @click=${() => this._copy(html_code, 'embed_code_modal.toast_copied')}
+                >${this.t('embed_code_modal.copy_title')}</button>
+            </div>
+
+            <div class="section">
+                <div class="section-title">${this.t('embed_code_modal.token_howto_title')}</div>
+                <ol>
+                    <li>${this.t('embed_code_modal.token_howto_step_1')}</li>
+                    <li>${this.t('embed_code_modal.token_howto_step_2')}</li>
+                    <li>${this.t('embed_code_modal.token_howto_step_3')}</li>
                 </ol>
+                <div class="section-desc">${this.t('embed_code_modal.token_endpoint_description')}</div>
+                <div class="endpoint">${token_endpoint}</div>
+                <button class="btn copy-btn"
+                    @click=${() => this._copy(token_endpoint, 'embed_code_modal.toast_copied')}
+                >${this.t('embed_code_modal.copy_token_endpoint')}</button>
+            </div>
 
-                <p class="modal-description">
-                    ${td('embed_code_modal.description')}
-                </p>
-                <div class="code-block">${this._code}</div>
+            <div class="section">
+                <div class="section-title">${this.t('embed_code_modal.backend_proxy_example_title')}</div>
+                <pre>${backendExample}</pre>
+                <button class="btn copy-btn"
+                    @click=${() => this._copy(backendExample, 'embed_code_modal.toast_copied')}
+                >${this.t('embed_code_modal.copy_backend_proxy_example')}</button>
+            </div>
 
-                <p class="modal-description">
-                    ${td('embed_code_modal.token_endpoint_description')}
-                </p>
-                <div class="code-block">${this._tokenEndpoint}</div>
-                <div class="code-actions">
-                    <button class="btn btn-secondary" @click=${this._handleCopyTokenEndpoint}>
-                        ${td('embed_code_modal.copy_token_endpoint')}
-                    </button>
-                </div>
-
-                <p class="section-title">${td('embed_code_modal.backend_proxy_example_title')}</p>
-                <div class="code-block">${backendProxyExample}</div>
-                <div class="code-actions">
-                    <button class="btn btn-secondary" @click=${this._handleCopyBackendProxyExample}>
-                        ${td('embed_code_modal.copy_backend_proxy_example')}
-                    </button>
-                </div>
-
-                <p class="section-title">${td('embed_code_modal.client_backend_example_title')}</p>
-                <div class="code-block">${clientBackendExample}</div>
-                <div class="code-actions">
-                    <button class="btn btn-secondary" @click=${this._handleCopyClientBackendExample}>
-                        ${td('embed_code_modal.copy_client_backend_example')}
-                    </button>
-                </div>
-            `;
+            <div class="section">
+                <div class="section-title">${this.t('embed_code_modal.client_backend_example_title')}</div>
+                <pre>${clientExample}</pre>
+                <button class="btn copy-btn"
+                    @click=${() => this._copy(clientExample, 'embed_code_modal.toast_copied')}
+                >${this.t('embed_code_modal.copy_client_backend_example')}</button>
+            </div>
+        `;
     }
 
     renderFooter() {
-        return html``;
-    }
-
-    render() {
-        if (!this.open) {
-            return html``;
-        }
-        return super.render();
+        return html`
+            <div class="actions">
+                <button class="btn" @click=${() => this.close()}>
+                    ${this.t('embed_create_modal.cancel')}
+                </button>
+            </div>
+        `;
     }
 }
 
-customElements.define('embed-code-modal', EmbedCodeModal);
+customElements.define('frontend-embed-code-modal', FrontendEmbedCodeModal);
+registerModalKind(FrontendEmbedCodeModal.modalKind, 'frontend-embed-code-modal');

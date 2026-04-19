@@ -1,3 +1,10 @@
+/**
+ * graph-toolbar — вертикальная панель действий и тогглов панелей графа.
+ *
+ * Композиционный child-компонент: эмитит DOM-события `toolbar-action`
+ * (detail = { actionId }) и `panel-toggle` (detail = { panelId }).
+ */
+
 import { html, css } from 'lit';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
 import '@platform/lib/components/platform-icon.js';
@@ -19,7 +26,9 @@ const TOOLBAR_ICONS = {
     merge_entities: html`<platform-icon name="circular-connection" size="14"></platform-icon>`,
 };
 
-export class GraphToolbar extends PlatformElement {
+export class CRMGraphToolbar extends PlatformElement {
+    static i18nNamespace = 'crm';
+
     static properties = {
         actions: { type: Array },
         toggles: { type: Array },
@@ -106,15 +115,7 @@ export class GraphToolbar extends PlatformElement {
             }
 
             @media (max-width: 767px) {
-                :host {
-                    padding: 4px;
-                    gap: 4px;
-                }
-
-                .icon-btn {
-                    width: 28px;
-                    height: 28px;
-                }
+                :host { padding: 4px; gap: 4px; }
             }
         `,
     ];
@@ -126,10 +127,10 @@ export class GraphToolbar extends PlatformElement {
         this.labelMode = 'fixed';
     }
 
-    _getIcon(actionId) {
-        const icon = TOOLBAR_ICONS[actionId];
+    _getIcon(iconKey) {
+        const icon = TOOLBAR_ICONS[iconKey];
         if (!icon) {
-            throw new Error(`Unknown toolbar icon: ${actionId}`);
+            throw new Error(`graph-toolbar: unknown icon "${iconKey}"`);
         }
         return icon;
     }
@@ -175,4 +176,4 @@ export class GraphToolbar extends PlatformElement {
     }
 }
 
-customElements.define('graph-toolbar', GraphToolbar);
+customElements.define('crm-graph-toolbar', CRMGraphToolbar);

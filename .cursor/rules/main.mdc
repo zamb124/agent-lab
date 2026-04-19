@@ -10,7 +10,7 @@ alwaysApply: true
 
 ## Стек
 
-Python 3.13+, FastAPI, PostgreSQL (pgvector), Redis, TaskIQ, UV, Lit 3, Zustand.
+Python 3.13+, FastAPI, PostgreSQL (pgvector), Redis, TaskIQ, UV, Lit 3, нативный EventBus + фабрики (`createAsyncOp`/`createResourceCollection`/`createCursorList`/`createFacets`/`createForm`).
 
 ## Сервисы
 
@@ -44,11 +44,13 @@ Python 3.13+, FastAPI, PostgreSQL (pgvector), Redis, TaskIQ, UV, Lit 3, Zustand.
 
 **Сканер непереведённого UI (кириллица в литералах):** `uv run python scripts/report_ui_i18n_gaps.py` — обходит `apps/<сервис>/ui/**/*.js`, пропускает однострочные `//` и строки JSDoc с `*`; выводит файл и строку для каждого совпадения. Флаги: `--summary` (сводка по сервисам), `--app crm|flows|frontend|office|rag|sync` (один сервис). Цель: **0** совпадений после выноса строк в `this.i18n.t(...)`. Не заменяет **`make check-i18n`** (тот проверяет структуру JSON `ru`/`en`).
 
+**Cross-check код ↔ JSON-бандлы:** **`make check-i18n-keys`** (тонкая обёртка над `scripts/check_i18n_keys.py`) — для каждого вызова `t('key', vars?, namespace?)` в `apps/*/ui/**/*.js` и `core/frontend/static/lib/**/*.js` проверяет, что ключ резолвится хотя бы в одном из бандлов `core/i18n/translations/{ru,en}/<ns>.json`. Резолв namespace такой же, как в рантайме `translate()`: явный 3-й аргумент → `static i18nNamespace = '<ns>'` (строкой) на классе → `defaultI18nNamespace` `PlatformApp` → дефолт сервиса по пути файла (`apps/<svc>/ui/...` → `<svc>`; `core/frontend/static/lib/...` → `platform`). Прямые вызовы со всеми флагами: `uv run python scripts/check_i18n_keys.py --mode missing|unused|all --app <name> --strict --show-skipped`. Режим `missing` — ключ дёргается, но в JSON его нет. Режим `unused` — ключ есть в JSON и в `ru`, и в `en`, но код не вызывает (с учётом ns-префиксов). Динамические ключи (`t(\`prefix.${var}\`)`, конкатенации) пропускаются и не валидируются. Ключи под сегментами `list`/`items`/`options`/`values` не считаются unused (типично индексируются циклом по массиву). Цель в CI: `--mode missing --strict` = exit 0 для каждого мигрированного сервиса; unused — гигиенически.
+
 ## Канон фронтенда: отклонения запрещены
 
 Весь UI в `apps/*/ui/` **строго** наследуется от общей базы в `core/frontend/static/` и правил **`frontend.mdc`**. Писать «свой» фронт в обход канона (другие базовые классы, обход import map, свой реестр сервисов в компонентах, самодельные модалки там, где нужен glass-стек) **нельзя**. Исключения (например drawer/panel, не полноценное модальное окно) — только там, где это **уже явно описано** в `frontend.mdc` / `sync.mdc`.
 
-Кратко: **`PlatformElement` / `PlatformApp` / `PlatformModal` (или `PlatformFormModal` / `PlatformLightModal` по смыслу)**; импорты только через **`@platform/...`**; сервисы в компонентах — **`this.services`**, не `ServiceRegistry`; новый shell — viewport и import map по канону. Контроль: **`make check-ui-canon`** (`scripts/check_ui_canon.sh`). Любое новое исключение из канона — **сначала правка рулов**, потом код.
+Кратко: **`PlatformElement` / `PlatformApp` / `PlatformModal` (или `PlatformFormModal` / `PlatformLightModal` по смыслу)**; импорты только через **`@platform/...`**; доменное состояние сервиса описывается **фабриками** в `apps/<svc>/ui/events/resources/*.resource.js`, регистрируется через `static factories` `PlatformApp` и достаётся из компонента **только** через helpers базы (`this.useResource`/`useOp`/`useForm`/`useCursorList`/`useFacets`); UI-команды (модалки, тосты, навигация, locale/theme/company) — **только** через helpers `this.openModal/closeModal/toast/navigate/copyToClipboard/setLocale/setTheme/switchCompany`, прямые `dispatch(CoreEvents.UI_*|ROUTER_*|AUTH_*|I18N_*|THEME_*|COMPANIES_*)` в pages/modals/components сервиса запрещены. Никаких `this.services`/`ServiceRegistry`/`BaseStore`/`AppEvents`/`features/`/`store/`/`*.service.js` в `apps/<svc>/ui/`. Контроль: **`make check-ui-canon`**, **`make check-events-canon`**. Любое новое исключение из канона — **сначала правка рулов**, потом код.
 
 ## ОЧЕНЬ ВАЖНО: ноль костылей
 
@@ -260,6 +262,8 @@ UV: `uv add package`, `uv sync`, `uv run python file.py`, `uv run pytest`.
 - **Scheduler:** control-plane в `apps/scheduler`; вызов из кода других сервисов — только через `core/clients/scheduler_client.py`, не прямой `httpx`; изоляция по `company_id`. **`taskiq.mdc`**.
 - **Трейсинг:** OTEL `trace_id` + `parent_span_id`, БД `platform_tracing`, корневой span сущности через `resource_root_span`. **`tracing.mdc`**.
 - **Тарификация:** прайс в конфиге и `billing:resource_base_prices_json`, `UsageRecord`, фоновое списание по spans с `pending_settlement`. **`billing.mdc`**, атрибуты spans — **`tracing.mdc`**.
+- **Отображение чужого `user_id` в UI:** только через core-компонент `<platform-user-chip user-id="...">` и core-модалку `platform.user_info` (`<platform-user-info-modal>`); источник данных — `state.team.members` + `state.auth.user`, авто-загрузка через `createTeamEffect`. Сырая строка `user_id` в pages/modals/components/таблицах запрещена. **`ui_components.mdc`**.
+- **REST-зеркало команд (платформенный инвариант):** каждая команда (factory operation) любого сервиса обязана иметь HTTP-эндпоинт в `apps/<svc>/api/**` с тем же method+path+payload+response, что и WS reply. Push-события (`publish_ui_event_*`) REST-зеркала **не имеют** — подписка только через `platform:ui_events` -> `/<svc>/api/ws/notifications`. WS request-reply через `core.websocket.command_router.register_ws_command_handler`; фабрика декларирует `transport: 'http'|'ws'` и `restMirror: { method, path }`. CI: **`scripts/check_command_rest_mirror.py`** в **`make check-events-canon`**. Подробности — **`architecture.mdc`** (раздел «REST-зеркало команд»), **`ui_factories.mdc`**.
 
 ## Пагинация API
 
@@ -301,7 +305,10 @@ Cursor = `base64url(json({"ts": "<created_at.isoformat()>", "id": "<entity_id>"}
 | Документы (OnlyOffice) | `office.mdc` |
 | Sync: чат, каналы, Git-интеграция | `sync.mdc` |
 | WebRTC звонки (Sync), LiveKit, сигналинг | `calls.mdc` |
-| Frontend: Lit 3, Zustand, i18n | `frontend.mdc` |
+| Frontend: Lit 3, EventBus, фабрики, helpers, i18n | `frontend.mdc` |
+| UI Factories: createAsyncOp/Resource/CursorList/Facets/Form | `ui_factories.mdc` |
+| UI Events: bus, контракт, backend → UI | `ui_events.mdc` |
+| UI Components: core UI Kit, модалки, sidebar, breadcrumbs | `ui_components.mdc` |
 | UI Kit, Design System, палитра | `frontend.mdc` (секция «UI Kit и Design System») |
 | Тестирование, фикстуры | `testing.mdc` |
 | Стиль тестов: инварианты, БД/ORM, изоляция сущностей, DI, читаемость | `testing_invariants.mdc` |

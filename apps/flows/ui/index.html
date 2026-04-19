@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, minimum-scale=1.0, user-scalable=no, viewport-fit=cover">
     <meta name="robots" content="noindex,nofollow,noarchive">
-    <title>Platform UI - {{ flow_name or flow_id }}</title>
+    <title>Flows</title>
     
     <link rel="icon" type="image/svg+xml" href="/static/core/assets/service_logos/agents_logo.svg">
     <link rel="manifest" href="/manifest.json">
@@ -57,7 +57,6 @@
             "lit/directives/when.js": "/static/core/assets/js/lit/directives/when.min.js",
             "lit/directives/guard.js": "/static/core/assets/js/lit/directives/guard.min.js",
             "@platform/lib/": "/static/core/lib/",
-            "@platform/services/": "/static/core/services/",
             "@capacitor/app": "/static/core/assets/js/vendor/@capacitor/app/index.js",
             "@capacitor/core": "/static/core/assets/js/vendor/@capacitor/core/index.js",
             "@capacitor/splash-screen": "/static/core/assets/js/vendor/@capacitor/splash-screen/index.js",
@@ -68,19 +67,11 @@
     
     <!-- External Dependencies -->
     <script src="/flows/static/assets/js/marked.min.js"></script>
-    <script src="/flows/static/assets/js/drawflow.min.js"></script>
-    <!-- Drawflow CSS загружается программно из flow-canvas.js -->
     
     <!-- Platform UI Styles (из core/frontend) -->
     <link rel="stylesheet" href="/static/core/assets/css/tokens.css">
     <link rel="stylesheet" href="/static/core/assets/css/reset.css">
-    
-    <!-- Загружаем app-loader ПЕРЕД использованием в body -->
-    <script type="module">
-        import '/static/core/lib/components/app-loader.js';
-    </script>
-    
-    <style>
+<style>
         /* Критические стили для предотвращения FOUC */
         flows-app {
             display: flex;
@@ -88,13 +79,7 @@
             height: 100vh;
             background: transparent;
         }
-        
         flows-app:not(:defined) {
-            opacity: 0;
-        }
-        
-        /* Показываем app-loader даже если он еще не определен */
-        app-loader:not(:defined) {
             position: fixed;
             inset: 0;
             display: flex;
@@ -105,39 +90,15 @@
             color: rgba(255, 255, 255, 0.5);
             font-family: 'SF Pro Display', -apple-system, BlinkMacSystemFont, sans-serif;
         }
-        
-        app-loader:not(:defined)::after {
+
+        flows-app:not(:defined)::after {
             content: 'AI Studio';
         }
-    </style>
+</style>
 </head>
 <body class="platform-shell">
-    <!-- Загрузочный экран -->
-    <app-loader id="app-loader" fullscreen></app-loader>
-    
-    <!-- Глобальные переменные -->
-    <script>
-        window.__FLOW_ID__ = '{{ flow_id }}';
-        window.__FLOW_NAME__ = '{{ flow_name or flow_id }}';
-        window.__BASE_URL__ = '{{ base_url }}';
-    </script>
-    
-    <!-- Главный компонент приложения -->
-    <flows-app flow-id="{{ flow_id }}"></flows-app>
-    
-    <!-- Platform UI Application -->
+    <flows-app></flows-app>
     <script type="module" src="/flows/static/index.js"></script>
-    
-    <script>
-        // Скрыть загрузчик когда приложение готово
-        customElements.whenDefined('flows-app').then(() => {
-            const loader = document.getElementById('app-loader');
-            if (loader) {
-                loader.classList.add('hidden');
-                setTimeout(() => loader.remove(), 400);
-            }
-        });
-    </script>
 </body>
 </html>
 

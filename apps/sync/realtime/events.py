@@ -19,42 +19,50 @@ from core.calls.models import SignalType
 
 
 EventType = Literal[
-    "space.created",
-    "channel.created",
-    "channel.member_added",
-    "channel.read_updated",
-    "channel.typing",
-    "thread.created",
-    "message.created",
-    "message.status_changed",
-    "message.updated",
-    "message.deleted",
-    "message.reaction_changed",
-    "channel.pins_changed",
-    "git_resource.upserted",
-    "call.incoming",
-    "call.signal",
-    "call.accepted",
-    "call.declined",
-    "call.ended",
-    "call.participant_joined",
-    "call.participant_left",
-    "call.admin.changed",
-    "call.recording.started",
-    "call.recording.stopped",
-    "call.recording.failed",
-    "user.presence",
+    "sync/space/created",
+    "sync/channel/created",
+    "sync/channel/member_added",
+    "sync/channel/read_updated",
+    "sync/channel/typing",
+    "sync/thread/created",
+    "sync/message/created",
+    "sync/message/status_changed",
+    "sync/message/updated",
+    "sync/message/deleted",
+    "sync/message/reaction_changed",
+    "sync/channel/pins_changed",
+    "sync/git_resource/upserted",
+    "sync/call/incoming",
+    "sync/call/signaled",
+    "sync/call/accepted",
+    "sync/call/declined",
+    "sync/call/ended",
+    "sync/call/participant_joined",
+    "sync/call/participant_left",
+    "sync/call/admin_changed",
+    "sync/call/recording_started",
+    "sync/call/recording_stopped",
+    "sync/call/recording_failed",
+    "sync/presence/changed",
 ]
 
 
 class RealtimeEvent(BaseModel):
+    """Доменное событие Sync для рассылки через `platform:ui_events`.
+
+    `channel_id` в payload остаётся (где нужно) — для фильтрации на клиенте.
+    `company_id` / `recipient_user_ids` — адресация для `publish_realtime_events`,
+    в проводной фрейм не уходят (определяют выбор `publish_ui_event_to_user`
+    vs `publish_ui_event_to_company`).
+    """
+
     type: EventType
     channel_id: str | None = Field(default=None, description="Канал события, если применимо.")
     payload: dict = Field(description="Сериализованный payload события.")
     company_id: str = Field(description="Компания-получатель (изоляция между тенантами).")
     recipient_user_ids: list[str] | None = Field(
         default=None,
-        description="None — всем с активным /sync/ws в этой компании; иначе только перечисленным user_id.",
+        description="None — broadcast компании; иначе адресная отправка перечисленным user_id.",
     )
 
 
@@ -65,7 +73,7 @@ class MessageStatusChangedPayload(BaseModel):
 
 def event_space_created(space: SpaceRead, *, company_id: str) -> RealtimeEvent:
     return RealtimeEvent(
-        type="space.created",
+        type="sync/space/created",
         channel_id=None,
         payload=space.model_dump(mode="json"),
         company_id=company_id,
@@ -80,7 +88,7 @@ def event_channel_created(
     recipient_user_ids: list[str],
 ) -> RealtimeEvent:
     return RealtimeEvent(
-        type="channel.created",
+        type="sync/channel/created",
         channel_id=channel.id,
         payload=channel.model_dump(mode="json"),
         company_id=company_id,
@@ -96,7 +104,7 @@ def event_channel_member_added(
     recipient_user_ids: list[str],
 ) -> RealtimeEvent:
     return RealtimeEvent(
-        type="channel.member_added",
+        type="sync/channel/member_added",
         channel_id=channel_id,
         payload={"channel_id": channel_id, "added_user_id": added_user_id},
         company_id=company_id,
@@ -113,7 +121,7 @@ def event_channel_read_updated(
     recipient_user_ids: list[str],
 ) -> RealtimeEvent:
     return RealtimeEvent(
-        type="channel.read_updated",
+        type="sync/channel/read_updated",
         channel_id=channel_id,
         payload={
             "channel_id": channel_id,
@@ -135,7 +143,7 @@ def event_channel_typing(
     recipient_user_ids: list[str],
 ) -> RealtimeEvent:
     return RealtimeEvent(
-        type="channel.typing",
+        type="sync/channel/typing",
         channel_id=channel_id,
         payload={
             "channel_id": channel_id,
@@ -155,7 +163,7 @@ def event_thread_created(
     recipient_user_ids: list[str],
 ) -> RealtimeEvent:
     return RealtimeEvent(
-        type="thread.created",
+        type="sync/thread/created",
         channel_id=thread.channel_id,
         payload=thread.model_dump(mode="json"),
         company_id=company_id,
@@ -170,7 +178,7 @@ def event_message_created(
     recipient_user_ids: list[str],
 ) -> RealtimeEvent:
     return RealtimeEvent(
-        type="message.created",
+        type="sync/message/created",
         channel_id=message.channel_id,
         payload=message.model_dump(mode="json"),
         company_id=company_id,
@@ -186,7 +194,7 @@ def event_message_status_changed(
     recipient_user_ids: list[str],
 ) -> RealtimeEvent:
     return RealtimeEvent(
-        type="message.status_changed",
+        type="sync/message/status_changed",
         channel_id=channel_id,
         payload=payload.model_dump(mode="json"),
         company_id=company_id,
@@ -196,7 +204,7 @@ def event_message_status_changed(
 
 def event_git_resource_upserted(ref: GitResourceRefRead, *, company_id: str) -> RealtimeEvent:
     return RealtimeEvent(
-        type="git_resource.upserted",
+        type="sync/git_resource/upserted",
         channel_id=None,
         payload=ref.model_dump(mode="json"),
         company_id=company_id,
@@ -211,7 +219,7 @@ def event_message_updated(
     recipient_user_ids: list[str],
 ) -> RealtimeEvent:
     return RealtimeEvent(
-        type="message.updated",
+        type="sync/message/updated",
         channel_id=message.channel_id,
         payload=message.model_dump(mode="json"),
         company_id=company_id,
@@ -227,7 +235,7 @@ def event_message_deleted(
     recipient_user_ids: list[str],
 ) -> RealtimeEvent:
     return RealtimeEvent(
-        type="message.deleted",
+        type="sync/message/deleted",
         channel_id=channel_id,
         payload={"message_id": message_id, "channel_id": channel_id},
         company_id=company_id,
@@ -244,7 +252,7 @@ def event_message_reaction_changed(
     recipient_user_ids: list[str],
 ) -> RealtimeEvent:
     return RealtimeEvent(
-        type="message.reaction_changed",
+        type="sync/message/reaction_changed",
         channel_id=channel_id,
         payload={"message_id": message_id, "channel_id": channel_id, "reactions": reactions},
         company_id=company_id,
@@ -259,7 +267,7 @@ def event_channel_pins_changed(
     recipient_user_ids: list[str],
 ) -> RealtimeEvent:
     return RealtimeEvent(
-        type="channel.pins_changed",
+        type="sync/channel/pins_changed",
         channel_id=channel.id,
         payload=channel.model_dump(mode="json"),
         company_id=company_id,
@@ -274,7 +282,7 @@ def event_call_incoming(
     recipient_user_ids: list[str],
 ) -> RealtimeEvent:
     return RealtimeEvent(
-        type="call.incoming",
+        type="sync/call/incoming",
         channel_id=call.channel_id,
         payload=call.model_dump(mode="json"),
         company_id=company_id,
@@ -291,7 +299,7 @@ def event_call_signal(
     recipient_user_ids: list[str],
 ) -> RealtimeEvent:
     return RealtimeEvent(
-        type="call.signal",
+        type="sync/call/signaled",
         channel_id=None,
         payload={"call_id": call_id, "signal_type": signal_type, "data": data},
         company_id=company_id,
@@ -307,7 +315,7 @@ def event_call_accepted(
     recipient_user_ids: list[str],
 ) -> RealtimeEvent:
     return RealtimeEvent(
-        type="call.accepted",
+        type="sync/call/accepted",
         channel_id=None,
         payload={"call_id": call_id, "user_id": user_id},
         company_id=company_id,
@@ -323,7 +331,7 @@ def event_call_declined(
     recipient_user_ids: list[str],
 ) -> RealtimeEvent:
     return RealtimeEvent(
-        type="call.declined",
+        type="sync/call/declined",
         channel_id=None,
         payload={"call_id": call_id, "user_id": user_id},
         company_id=company_id,
@@ -338,7 +346,7 @@ def event_call_ended(
     recipient_user_ids: list[str],
 ) -> RealtimeEvent:
     return RealtimeEvent(
-        type="call.ended",
+        type="sync/call/ended",
         channel_id=call.channel_id,
         payload=call.model_dump(mode="json"),
         company_id=company_id,
@@ -354,7 +362,7 @@ def event_call_participant_joined(
     recipient_user_ids: list[str],
 ) -> RealtimeEvent:
     return RealtimeEvent(
-        type="call.participant_joined",
+        type="sync/call/participant_joined",
         channel_id=None,
         payload={"call_id": call_id, "user_id": user_id},
         company_id=company_id,
@@ -370,7 +378,7 @@ def event_call_participant_left(
     recipient_user_ids: list[str],
 ) -> RealtimeEvent:
     return RealtimeEvent(
-        type="call.participant_left",
+        type="sync/call/participant_left",
         channel_id=None,
         payload={"call_id": call_id, "user_id": user_id},
         company_id=company_id,
@@ -385,7 +393,7 @@ def event_call_admin_changed(
     recipient_user_ids: list[str],
 ) -> RealtimeEvent:
     return RealtimeEvent(
-        type="call.admin.changed",
+        type="sync/call/admin_changed",
         channel_id=call.channel_id,
         payload=call.model_dump(mode="json"),
         company_id=company_id,
@@ -400,7 +408,7 @@ def event_call_recording_started(
     recipient_user_ids: list[str],
 ) -> RealtimeEvent:
     return RealtimeEvent(
-        type="call.recording.started",
+        type="sync/call/recording_started",
         channel_id=recording.channel_id,
         payload=recording.model_dump(mode="json"),
         company_id=company_id,
@@ -415,7 +423,7 @@ def event_call_recording_stopped(
     recipient_user_ids: list[str],
 ) -> RealtimeEvent:
     return RealtimeEvent(
-        type="call.recording.stopped",
+        type="sync/call/recording_stopped",
         channel_id=recording.channel_id,
         payload=recording.model_dump(mode="json"),
         company_id=company_id,
@@ -430,7 +438,7 @@ def event_call_recording_failed(
     recipient_user_ids: list[str],
 ) -> RealtimeEvent:
     return RealtimeEvent(
-        type="call.recording.failed",
+        type="sync/call/recording_failed",
         channel_id=recording.channel_id,
         payload=recording.model_dump(mode="json"),
         company_id=company_id,
@@ -446,7 +454,7 @@ def event_user_presence(
     last_seen_at: str | None,
 ) -> RealtimeEvent:
     return RealtimeEvent(
-        type="user.presence",
+        type="sync/presence/changed",
         channel_id=None,
         payload={
             "company_id": company_id,

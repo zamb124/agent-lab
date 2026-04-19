@@ -1,175 +1,132 @@
 /**
- * Provider Selector - dropdown для выбора RAG провайдера
+ * ProviderSelector — выбор активного RAG-провайдера на странице настроек.
+ *
+ * Чтение списка и текущего провайдера — из slice фабрики `rag/providers`
+ * (`useOp`); переключение — `useOp('rag/provider_switch').run({ providerName })`.
+ * Список загружается фабрикой при первом mount (sidebar или эта страница —
+ * что окажется раньше).
  */
+
 import { html, css } from 'lit';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
-import { RagStore } from '../store/rag.store.js';
+import '@platform/lib/components/platform-icon.js';
 
 export class ProviderSelector extends PlatformElement {
+    static i18nNamespace = 'rag';
+
     static styles = [
         PlatformElement.styles,
         css`
-            :host {
-                display: inline-block;
-                position: relative;
+            :host { display: block; }
+            .grid {
+                display: grid;
+                gap: var(--space-3);
+                grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
             }
-            
-            .selector {
+            .card {
+                padding: var(--space-3) var(--space-4);
+                border-radius: var(--radius-lg);
+                border: 1px solid var(--glass-border-subtle);
                 background: var(--glass-solid-medium);
-                border: 1px solid var(--glass-border-medium);
-                border-radius: var(--radius-md);
-                padding: var(--space-2) var(--space-4);
-                cursor: pointer;
-                display: flex;
-                align-items: center;
-                gap: var(--space-2);
-                transition: all 0.2s;
-                font-size: var(--text-sm);
-                color: var(--text-primary);
-            }
-            
-            .selector:hover {
-                border-color: var(--accent);
-            }
-            
-            .dropdown {
-                position: absolute;
-                top: calc(100% + 8px);
-                right: 0;
-                background: var(--glass-solid-strong);
-                backdrop-filter: blur(var(--glass-blur-strong));
-                border: 1px solid var(--glass-border-medium);
-                border-radius: var(--radius-md);
-                padding: var(--space-2);
-                min-width: 200px;
-                box-shadow: var(--glass-shadow-medium);
-                z-index: 100;
-            }
-            
-            .dropdown-item {
-                padding: var(--space-2) var(--space-3);
-                border-radius: var(--radius-sm);
-                cursor: pointer;
-                transition: all 0.2s;
                 display: flex;
                 align-items: center;
                 justify-content: space-between;
+                gap: var(--space-3);
+            }
+            .card.active {
+                border-color: var(--accent);
+                background: var(--accent-subtle);
+                color: var(--accent);
+            }
+            .card-name {
+                display: flex;
+                align-items: center;
+                gap: var(--space-2);
                 font-size: var(--text-sm);
+                font-weight: var(--font-semibold);
                 color: var(--text-primary);
             }
-            
-            .dropdown-item:hover {
-                background: var(--glass-solid-medium);
-            }
-            
-            .dropdown-item.active {
-                background: var(--accent);
-                color: white;
-            }
-            
+            .card.active .card-name { color: var(--accent); }
+            .badges { display: inline-flex; gap: var(--space-1); align-items: center; }
             .badge {
                 font-size: var(--text-xs);
                 padding: 2px 6px;
                 border-radius: var(--radius-sm);
-                background: var(--success);
-                color: white;
+                background: var(--glass-solid-strong);
+                color: var(--text-tertiary);
             }
-            
-            .arrow {
+            .badge.active { background: var(--accent); color: var(--text-inverse); }
+            .switch-btn {
+                background: var(--glass-solid-strong);
+                border: 1px solid var(--glass-border-medium);
+                color: var(--text-primary);
+                padding: var(--space-1) var(--space-3);
+                border-radius: var(--radius-md);
                 font-size: var(--text-xs);
-                transition: transform 0.2s;
+                cursor: pointer;
+                transition: all var(--duration-fast);
             }
-            
-            .arrow.open {
-                transform: rotate(180deg);
+            .switch-btn:hover:not(:disabled) {
+                background: var(--accent-subtle);
+                border-color: var(--accent);
+                color: var(--accent);
             }
-        `
+            .switch-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+            .empty { color: var(--text-tertiary); font-size: var(--text-sm); }
+        `,
     ];
-    
+
     constructor() {
         super();
-        this._dropdownOpen = false;
-        
-        this.state = this.use(s => ({
-            providers: s.providers.list,
-            currentProvider: s.providers.current,
-            loading: s.providers.loading,
-        }));
+        this._providers = this.useOp('rag/providers');
+        this._switch = this.useOp('rag/provider_switch');
     }
-    
-    async connectedCallback() {
+
+    connectedCallback() {
         super.connectedCallback();
-        
-        const ragApi = this.services.get('ragApi');
-        await RagStore.loadProviders(ragApi);
-        
-        document.addEventListener('click', this._handleClickOutside);
-    }
-    
-    disconnectedCallback() {
-        super.disconnectedCallback();
-        document.removeEventListener('click', this._handleClickOutside);
-    }
-    
-    _handleClickOutside = (e) => {
-        if (!this.contains(e.target)) {
-            this._dropdownOpen = false;
-            this.requestUpdate();
+        if (!this._providers.lastResult && !this._providers.busy) {
+            this._providers.run(null);
         }
     }
-    
-    _toggleDropdown(e) {
-        e.stopPropagation();
-        this._dropdownOpen = !this._dropdownOpen;
-        this.requestUpdate();
+
+    _onSelect(name) {
+        if (name === this._providers.state.current) return;
+        this._switch.run({ providerName: name });
     }
-    
-    async _selectProvider(providerName) {
-        if (providerName === this.state.value.currentProvider) {
-            this._dropdownOpen = false;
-            this.requestUpdate();
-            return;
-        }
-        
-        const ragApi = this.services.get('ragApi');
-        await RagStore.switchProvider(ragApi, providerName);
-        this._dropdownOpen = false;
-        this.requestUpdate();
-    }
-    
+
     render() {
-        const { providers, currentProvider, loading } = this.state.value;
-        
-        if (loading) {
-            return html`<div class="selector">Loading...</div>`;
+        const items = this._providers.state.items;
+        const current = this._providers.state.current;
+        const switching = this._switch.busy;
+
+        if (this._providers.busy && items.length === 0) {
+            return html`<div class="empty">${this.t('settings_view.providers_loading')}</div>`;
         }
-        
-        const current = providers.find(p => p.name === currentProvider);
-        
+
         return html`
-            <div class="selector" @click=${this._toggleDropdown}>
-                <span>Provider: ${current?.name || 'Unknown'}</span>
-                <span class="arrow ${this._dropdownOpen ? 'open' : ''}">▼</span>
-            </div>
-            
-            ${this._dropdownOpen ? html`
-                <div class="dropdown">
-                    ${providers.map(provider => html`
-                        <div 
-                            class="dropdown-item ${provider.name === currentProvider ? 'active' : ''}"
-                            @click=${(e) => {
-                                e.stopPropagation();
-                                this._selectProvider(provider.name);
-                            }}
-                        >
-                            <span>${provider.name}</span>
-                            ${provider.is_default ? html`
-                                <span class="badge">default</span>
-                            ` : ''}
+            <div class="grid">
+                ${items.map((p) => {
+                    const isActive = p.name === current;
+                    return html`
+                        <div class="card ${isActive ? 'active' : ''}">
+                            <div class="card-name">
+                                <platform-icon name="folder" size="14"></platform-icon>
+                                <span>${p.name}</span>
+                            </div>
+                            <div class="badges">
+                                ${p.is_default ? html`<span class="badge">${this.t('settings_view.providers_default_badge')}</span>` : ''}
+                                ${isActive
+                                    ? html`<span class="badge active">${this.t('settings_view.providers_active_badge')}</span>`
+                                    : html`<button class="switch-btn"
+                                                   ?disabled=${switching}
+                                                   @click=${() => this._onSelect(p.name)}>
+                                        ${this.t('settings_view.providers_switch_button')}
+                                    </button>`}
+                            </div>
                         </div>
-                    `)}
-                </div>
-            ` : ''}
+                    `;
+                })}
+            </div>
         `;
     }
 }

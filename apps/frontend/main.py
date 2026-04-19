@@ -10,6 +10,7 @@ from fastapi import FastAPI, HTTPException
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse, JSONResponse, RedirectResponse, PlainTextResponse, Response
 from apps.frontend.api.auth import router as auth_router
+from apps.frontend.api.companies import router as companies_router
 from apps.frontend.api.embed_configs import router as embed_configs_router
 from apps.frontend.api.invites import router as invites_router
 from apps.frontend.api.team import router as team_router
@@ -134,6 +135,7 @@ app = create_service_app(
     routers=[],
     pages_routers=[
         auth_router,
+        companies_router,
         embed_configs_router,
         invites_router,
         team_router,

@@ -33,7 +33,7 @@ uv run pytest tests/sync/ -v
 | Хелперы чтения | `test_read_helpers_integration.py` | `channel_read_from_entity` (direct + peer, topic + lane summary), `message_read_from_entity` |
 | Команды (happy path) | `realtime/test_handlers_execute_command.py` | `execute_command` по основным `CommandType` |
 | Команды (негативы) | `realtime/test_handlers_errors.py` | direct/topic/channel update, сообщения (чужой автор, удаление, forward/react/pin, несовпадение канала), тред без root, идемпотентность git upsert |
-| Dispatch + Redis | `realtime/test_dispatch_redis_publish.py` | После `dispatch_sync_command` подписчик на `sync.realtime.events` получает JSON события |
+| Dispatch + Redis | `realtime/test_dispatch_redis_publish.py` | После `dispatch_sync_command` подписчик на `platform:ui_events` получает JSON UIEvent с `target.kind` (broadcast/company/user_ids) |
 | HTTP (smoke) | `api/test_sync_http.py` | Список/создание space, patch, каналы |
 | HTTP (матрица) | `api/test_sync_http_matrix.py` | 401 без Bearer, 403/404 по каналам и тредам, company members, git GET/POST, цепочка сообщений + read |
 | HTTP (вложения) | `api/test_sync_messages_attachments.py` | Загрузка в S3, сообщение с `file/document` / `file/image` + текст, два документа в одном сообщении, лента |

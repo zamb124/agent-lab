@@ -1,371 +1,244 @@
 /**
- * API Keys Page - Управление API ключами
+ * API Keys page — управление API ключами компании.
+ *
+ * Источник данных — ресурс 'frontend/api_keys' (createResourceCollection),
+ * подключённый через `this.useResource(...)`. Страница не знает про httpRequest,
+ * не описывает селекторов, не дёргает CoreEvents и не импортирует объект ресурса.
+ * Поле `lastSecret` живёт в том же slice (extraReducer ресурса) и показывается в
+ * баннере до явного `dismissSecret()`.
  */
 import { html, css } from 'lit';
-import { PlatformElement } from '@platform/lib/platform-element/index.js';
-import { FrontendStore } from '../../store/frontend.store.js';
-import '../../modals/create-api-key-modal.js';
+import { PlatformPage } from '@platform/lib/base/PlatformPage.js';
 import '@platform/lib/components/layout/page-header.js';
-import '@platform/lib/components/platform-icon.js';
 import '@platform/lib/components/glass-spinner.js';
+import { platformConfirm } from '@platform/lib/components/platform-confirm-modal.js';
+import { FrontendCreateApiKeyModal } from '../../modals/create-api-key-modal.js';
+import { FrontendEditApiKeyModal } from '../../modals/edit-api-key-modal.js';
 
-export class ApiKeysPage extends PlatformElement {
+export class FrontendApiKeysPage extends PlatformPage {
     static styles = [
-        PlatformElement.styles,
+        PlatformPage.styles,
         css`
-            :host {
-                display: block;
-            }
+            :host { display: block; }
 
-            .page-container {
-                max-width: 1200px;
-                margin: 0 auto;
-            }
-
-
-            .primary-button {
-                padding: var(--space-3) var(--space-6);
-                background: var(--accent);
-                color: white;
-                border: none;
-                border-radius: var(--radius-lg);
-                font-size: var(--text-sm);
-                font-weight: var(--font-semibold);
-                cursor: pointer;
-                transition: all var(--duration-fast);
-            }
-
-            .primary-button:hover {
-                transform: scale(1.05);
-                box-shadow: 0 8px 24px rgba(153, 166, 249, 0.4);
-            }
-
-            .keys-grid {
-                display: grid;
-                gap: var(--space-4);
-            }
-
-            .key-card {
+            .info-banner {
+                display: flex; gap: var(--space-3);
+                padding: var(--space-3) var(--space-4);
                 background: var(--glass-solid-medium);
                 border: 1px solid var(--glass-border-subtle);
-                border-radius: var(--radius-xl);
-                padding: var(--space-6);
-                backdrop-filter: blur(20px);
-                transition: all var(--duration-normal);
-            }
-
-            .key-card:hover {
-                background: var(--glass-solid-strong);
-                border-color: var(--glass-border-medium);
-            }
-
-            .key-header {
-                display: flex;
-                align-items: center;
-                justify-content: space-between;
-                margin-bottom: var(--space-4);
-            }
-
-            .key-name {
-                font-size: var(--text-lg);
-                font-weight: var(--font-semibold);
-                color: var(--text-primary);
-                margin: 0;
-            }
-
-            .key-actions {
-                display: flex;
-                gap: var(--space-2);
-            }
-
-            .icon-button {
-                width: 36px;
-                height: 36px;
-                display: flex;
-                align-items: center;
-                justify-content: center;
-                background: var(--glass-solid-subtle);
-                border: 1px solid var(--glass-border-subtle);
+                border-left: 3px solid var(--info);
                 border-radius: var(--radius-md);
-                color: var(--text-secondary);
-                font-size: var(--text-sm);
-                cursor: pointer;
-                transition: all var(--duration-fast);
-            }
-
-            .icon-button:hover {
-                background: var(--glass-solid-medium);
-                transform: scale(1.1);
-            }
-
-            .icon-button.danger:hover {
-                background: var(--error-subtle);
-                border-color: var(--error);
-                color: var(--error);
-            }
-
-            .key-prefix {
-                font-family: 'Monaco', 'Menlo', 'Courier New', monospace;
-                font-size: var(--text-sm);
-                color: var(--text-secondary);
-                background: var(--glass-solid-subtle);
-                padding: var(--space-2) var(--space-3);
-                border-radius: var(--radius-md);
-                margin-bottom: var(--space-3);
-            }
-
-            .key-scopes {
-                display: flex;
-                gap: var(--space-2);
-                flex-wrap: wrap;
-                margin-bottom: var(--space-3);
-            }
-
-            .scope-badge {
-                padding: var(--space-1) var(--space-3);
-                background: var(--accent-subtle);
-                border: 1px solid var(--accent);
-                border-radius: var(--radius-sm);
-                font-size: var(--text-xs);
-                color: var(--accent);
-            }
-
-            .key-meta {
-                display: flex;
-                gap: var(--space-6);
-                font-size: var(--text-sm);
-                color: var(--text-tertiary);
-            }
-
-            .meta-item {
-                display: flex;
-                align-items: center;
-                gap: var(--space-1);
-            }
-
-            .empty-state {
-                text-align: center;
-                padding: var(--space-16) var(--space-6);
-                color: var(--text-secondary);
-            }
-
-            .empty-icon {
-                font-size: 64px;
                 margin-bottom: var(--space-4);
+                color: var(--text-secondary);
+                font-size: var(--text-sm);
             }
+            .info-banner strong { color: var(--text-primary); margin-right: var(--space-1); }
 
-            .empty-title {
-                font-size: var(--text-2xl);
-                font-weight: var(--font-semibold);
-                color: var(--text-primary);
-                margin: 0 0 var(--space-2) 0;
-            }
-
-            .empty-description {
-                font-size: var(--text-base);
-                margin: 0 0 var(--space-6) 0;
-            }
-
-            .info-box {
-                background: var(--accent-subtle);
-                border: 1px solid var(--accent);
-                border-radius: var(--radius-lg);
+            .secret-banner {
+                display: flex; flex-direction: column; gap: var(--space-2);
                 padding: var(--space-4);
-                margin-bottom: var(--space-6);
+                background: rgba(59, 130, 246, 0.08);
+                border: 1px solid rgba(59, 130, 246, 0.4);
+                border-radius: var(--radius-lg);
+                margin-bottom: var(--space-4);
+            }
+            .secret-banner .head {
+                display: flex; align-items: center; justify-content: space-between;
+                color: var(--text-primary); font-weight: var(--font-semibold);
+            }
+            .secret-banner .warning { color: var(--warning); font-size: var(--text-xs); }
+            .secret-banner .secret {
+                display: flex; align-items: center; gap: var(--space-2);
+                padding: var(--space-2) var(--space-3);
+                background: var(--glass-solid-strong);
+                border: 1px solid var(--glass-border-medium);
+                border-radius: var(--radius-md);
+                font-family: var(--font-mono); font-size: var(--text-sm);
                 color: var(--text-primary);
-                font-size: var(--text-sm);
-                line-height: 1.6;
+                word-break: break-all;
             }
+            .secret-banner .actions { display: flex; gap: var(--space-2); }
 
-            .info-box strong {
-                color: var(--accent);
+            .btn {
+                padding: var(--space-2) var(--space-4);
+                background: var(--accent); color: white; border: none;
+                border-radius: var(--radius-md); cursor: pointer;
+                font-size: var(--text-sm); font-weight: var(--font-medium);
             }
-
-            .page-loading {
-                display: flex;
-                align-items: center;
-                justify-content: center;
-                flex: 1;
-                min-height: 200px;
+            .btn:hover { filter: brightness(1.1); }
+            .btn-ghost {
+                background: transparent; color: var(--text-secondary);
+                border: 1px solid var(--glass-border-subtle);
             }
+            .btn-ghost:hover { color: var(--text-primary); border-color: var(--accent); }
+            .btn-danger { color: var(--error); }
 
-            @media (max-width: 768px) {
-                .page-header {
-                    flex-direction: column;
-                    align-items: flex-start;
-                    gap: var(--space-4);
-                }
+            table { width: 100%; border-collapse: collapse; margin-top: var(--space-4); }
+            th, td { padding: var(--space-3); border-bottom: 1px solid var(--glass-border-subtle); text-align: left; }
+            th { color: var(--text-tertiary); font-size: var(--text-xs); text-transform: uppercase; }
+            td { color: var(--text-primary); font-size: var(--text-sm); vertical-align: middle; }
+            code { font-family: var(--font-mono); color: var(--text-secondary); }
 
-                .key-header {
-                    flex-direction: column;
-                    align-items: flex-start;
-                    gap: var(--space-3);
-                }
-
-                .key-meta {
-                    flex-direction: column;
-                    gap: var(--space-2);
-                }
+            .empty {
+                padding: var(--space-8) var(--space-6);
+                text-align: center; color: var(--text-tertiary);
+                background: var(--glass-solid-subtle);
+                border: 1px dashed var(--glass-border-subtle);
+                border-radius: var(--radius-lg);
+                margin-top: var(--space-4);
             }
-        `
+            .empty .empty-title { color: var(--text-primary); font-weight: var(--font-semibold); margin-bottom: var(--space-2); }
+
+            .scopes-cell { display: flex; flex-wrap: wrap; gap: var(--space-1); }
+            .scope-tag {
+                padding: 2px 8px;
+                background: var(--glass-solid-medium);
+                border: 1px solid var(--glass-border-subtle);
+                border-radius: var(--radius-full);
+                font-size: var(--text-xs); color: var(--text-secondary);
+            }
+        `,
     ];
 
     constructor() {
         super();
-        this.state = this.use((s) => ({
-            keys: s.entities.apiKeys.keys,
-            loading: s.entities.apiKeys.loading,
-        }));
+        this._keys = this.useResource('frontend/api_keys', { autoload: true });
     }
 
-    connectedCallback() {
-        super.connectedCallback();
-        this._i18nUnsub = this.i18n.subscribe(() => this.requestUpdate());
-        this._loadKeys();
+    _create() {
+        this.openModal(FrontendCreateApiKeyModal);
     }
 
-    disconnectedCallback() {
-        if (this._i18nUnsub) {
-            this._i18nUnsub();
-            this._i18nUnsub = null;
-        }
-        super.disconnectedCallback();
+    _rename(key) {
+        this.openModal(FrontendEditApiKeyModal, { item: key });
     }
 
-    async _loadKeys() {
-        const { keys } = this.state.value;
-        if (keys.length > 0) return;
-
-        FrontendStore.setApiKeysLoading(true);
-        const page = await this.services.get('apiKeys').listKeys();
-        FrontendStore.setApiKeys(page.items);
+    async _revoke(key) {
+        const ok = await platformConfirm(
+            this.t('api_keys_page.confirm_revoke', { name: key.name }),
+            {
+                title: this.t('api_keys_page.revoke_title'),
+                variant: 'danger',
+                confirmText: this.t('api_keys_page.revoke'),
+                cancelText: this.t('api_key_modal.cancel'),
+                confirmVariant: 'danger',
+            },
+        );
+        if (!ok) return;
+        this._keys.remove(key.key_id);
     }
 
-    async _reloadKeys() {
-        FrontendStore.setApiKeysLoading(true);
-        const page = await this.services.get('apiKeys').listKeys();
-        FrontendStore.setApiKeys(page.items);
-    }
-
-    render() {
-        const td = (key, params) => this.i18n.t(key, params ?? {});
-        return html`
-            <page-header 
-                title=${td('api_keys_page.title')} 
-                subtitle=${td('api_keys_page.subtitle')}
-            >
-                <button slot="actions" class="primary-button" @click=${this._onCreateClick}>
-                    ${td('api_keys_page.create')}
-                </button>
-            </page-header>
-
-            <div class="info-box">
-                <strong>${td('api_keys_page.info_lead')}</strong>
-                ${td('api_keys_page.info_body')}
-            </div>
-
-            ${this._renderContent()}
-        `;
-    }
-
-    _renderContent() {
-        const td = (key, params) => this.i18n.t(key, params ?? {});
-        const { loading, keys } = this.state.value;
-        
-        if (loading) {
-            return html`<div class="page-loading"><glass-spinner size="lg"></glass-spinner></div>`;
-        }
-
-        if (keys.length === 0) {
-            return html`
-                <div class="empty-state">
-                    <div class="empty-icon">K</div>
-                    <h2 class="empty-title">${td('api_keys_page.empty_title')}</h2>
-                    <p class="empty-description">
-                        ${td('api_keys_page.empty_description')}
-                    </p>
-                    <button class="primary-button" @click=${this._onCreateClick}>
-                        ${td('api_keys_page.create_key')}
-                    </button>
-                </div>
-            `;
-        }
-
-        return html`
-            <div class="keys-grid">
-                ${keys.map((key) => this._renderKeyCard(key))}
-            </div>
-        `;
-    }
-
-    _renderKeyCard(key) {
-        const t = (k, p) => this.i18n.t(k, p ?? {});
-        return html`
-            <div class="key-card">
-                <div class="key-header">
-                    <h3 class="key-name">${key.name}</h3>
-                    <div class="key-actions">
-                        <button 
-                            class="icon-button danger" 
-                            title=${t('api_keys_page.revoke_title')}
-                            @click=${() => this._onRevokeKey(key)}
-                        >
-                            <platform-icon name="trash" size="16"></platform-icon>
-                        </button>
-                    </div>
-                </div>
-
-                <div class="key-prefix">${key.key_prefix}--------</div>
-
-                <div class="key-scopes">
-                    ${key.scopes.map((scope) => html`
-                        <span class="scope-badge">${scope}</span>
-                    `)}
-                </div>
-
-                <div class="key-meta">
-                    <div class="meta-item">
-                        <span>${t('api_keys_page.created')} ${this._formatDate(key.created_at)}</span>
-                    </div>
-                    ${key.last_used ? html`
-                        <div class="meta-item">
-                            <span>${t('api_keys_page.used')} ${this._formatDate(key.last_used)}</span>
-                        </div>
-                    ` : html`
-                        <div class="meta-item">
-                            <span>${t('api_keys_page.never_used')}</span>
-                        </div>
-                    `}
-                </div>
-            </div>
-        `;
-    }
-
-    _formatDate(dateStr) {
-        const date = new Date(dateStr);
-        const loc = this.i18n.getCurrentLocale() === 'en' ? 'en-US' : 'ru-RU';
-        return date.toLocaleDateString(loc, {
-            year: 'numeric',
-            month: 'short',
-            day: 'numeric',
+    _copySecret(secret) {
+        this.copyToClipboard(secret, {
+            success_i18n_key: 'api_key_modal.toast_key_copied',
+            error_i18n_key: 'api_key_modal.err_copy_failed',
         });
     }
 
-    _onCreateClick() {
-        const modal = document.createElement('create-api-key-modal');
-        document.body.appendChild(modal);
-        modal.addEventListener('close', () => modal.remove());
+    _dismissSecret() {
+        this._keys.dismissSecret();
     }
 
-    async _onRevokeKey(key) {
-        const td = (k, p) => this.i18n.t(k, p ?? {});
-        const confirmed = confirm(td('api_keys_page.confirm_revoke', { name: key.name }));
-        if (!confirmed) return;
-        
-        await this.services.get('apiKeys').revoke(key.key_id);
-        await this._reloadKeys();
-        this.success(td('api_keys_page.toast_revoked'));
+    _renderInfoBanner() {
+        return html`
+            <div class="info-banner">
+                <span><strong>${this.t('api_keys_page.info_lead')}</strong>${this.t('api_keys_page.info_body')}</span>
+            </div>
+        `;
+    }
+
+    _renderSecretBanner(lastSecret) {
+        if (!lastSecret || !lastSecret.secret) return '';
+        return html`
+            <div class="secret-banner">
+                <div class="head">
+                    <span>${this.t('api_key_modal.success_title')}</span>
+                    <button class="btn btn-ghost" @click=${this._dismissSecret}>×</button>
+                </div>
+                <div class="warning">
+                    <strong>${this.t('api_key_modal.warning_lead')}</strong>
+                    ${this.t('api_keys_page.info_body')}
+                </div>
+                <div class="secret">
+                    <code>${lastSecret.secret}</code>
+                </div>
+                <div class="actions">
+                    <button class="btn" @click=${() => this._copySecret(lastSecret.secret)}>
+                        ${this.t('api_keys_page.copy_title')}
+                    </button>
+                </div>
+            </div>
+        `;
+    }
+
+    _renderEmpty() {
+        return html`
+            <div class="empty">
+                <div class="empty-title">${this.t('api_keys_page.empty_title')}</div>
+                <div>${this.t('api_keys_page.empty_description')}</div>
+            </div>
+        `;
+    }
+
+    _renderRow(k) {
+        return html`
+            <tr>
+                <td>${k.name}</td>
+                <td><code>${k.key_prefix || k.key_id}</code></td>
+                <td>
+                    <div class="scopes-cell">
+                        ${(k.scopes || []).map((s) => html`<span class="scope-tag">${s}</span>`)}
+                    </div>
+                </td>
+                <td>${k.created_at ? new Date(k.created_at).toLocaleDateString() : ''}</td>
+                <td>
+                    <button class="btn btn-ghost" @click=${() => this._rename(k)}>
+                        ${this.t('api_keys_page.edit_title')}
+                    </button>
+                    <button class="btn btn-ghost btn-danger" @click=${() => this._revoke(k)}>
+                        ${this.t('api_keys_page.revoke')}
+                    </button>
+                </td>
+            </tr>
+        `;
+    }
+
+    render() {
+        const list = this._keys.items;
+        const loading = this._keys.loading;
+        const lastSecret = this._keys.state.lastSecret;
+        return html`
+            <page-header
+                title=${this.t('api_keys_page.title')}
+                subtitle=${this.t('api_keys_page.subtitle')}
+            >
+                <button slot="actions" class="btn" @click=${this._create}>
+                    ${this.t('api_keys_page.create')}
+                </button>
+            </page-header>
+            ${this._renderInfoBanner()}
+            ${this._renderSecretBanner(lastSecret)}
+            ${loading && list.length === 0
+                ? html`<div class="empty"><glass-spinner></glass-spinner></div>`
+                : list.length === 0
+                    ? this._renderEmpty()
+                    : html`
+                        <table>
+                            <thead><tr>
+                                <th>${this.t('api_keys_page.col_name')}</th>
+                                <th>${this.t('api_keys_page.col_key')}</th>
+                                <th>${this.t('api_keys_page.col_scopes')}</th>
+                                <th>${this.t('api_keys_page.col_created')}</th>
+                                <th></th>
+                            </tr></thead>
+                            <tbody>
+                                ${list.map((k) => this._renderRow(k))}
+                            </tbody>
+                        </table>
+                    `
+            }
+        `;
     }
 }
 
-customElements.define('api-keys-page', ApiKeysPage);
+customElements.define('frontend-api-keys-page', FrontendApiKeysPage);

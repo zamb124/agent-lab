@@ -3,9 +3,9 @@
  */
 import { html, css } from 'lit';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
-import { I18nNs } from '@platform/services/i18n/i18n.service.js';
-
 export class LandingFooter extends PlatformElement {
+    static i18nNamespace = 'landing';
+
     static styles = [
         PlatformElement.styles,
         css`
@@ -185,19 +185,14 @@ export class LandingFooter extends PlatformElement {
 
     connectedCallback() {
         super.connectedCallback();
-        this._i18nUnsub = this.i18n.subscribe(() => this.requestUpdate());
     }
 
     disconnectedCallback() {
-        if (this._i18nUnsub) {
-            this._i18nUnsub();
-            this._i18nUnsub = null;
-        }
         super.disconnectedCallback();
     }
 
     _legalUrl(pathname) {
-        const lang = this.i18n.getCurrentLocale();
+        const lang = (this.bus.getState().i18n.locale || 'ru');
         if (lang === 'ru') {
             return `${pathname}?lang=ru`;
         }
@@ -208,7 +203,7 @@ export class LandingFooter extends PlatformElement {
     }
 
     render() {
-        const t = (key, params) => this.i18n.t(key, params ?? {}, I18nNs.LANDING);
+        const t = (key, params) => (this.t(key, params ?? {}) || key);
         const year = new Date().getFullYear();
         return html`
             <footer class="footer-container">

@@ -1,141 +1,165 @@
-import { html, css } from 'lit';
-import { PlatformElement } from '@platform/lib/platform-element/index.js';
-import { CRMStore } from '../store/crm.store.js';
-import '@platform/lib/components/platform-icon.js';
-import '@platform/lib/components/platform-breadcrumbs.js';
+/**
+ * SettingsHubPage — точка входа в настройки CRM:
+ *
+ *   - templates           — каталог шаблонов пространств.
+ *   - namespace_imports   — задачи импорта знаний в пространства.
+ *   - relationship_types  — типы связей.
+ *
+ * Сами разделы рендерятся отдельными страницами; здесь — карточный навигатор.
+ */
 
-export class SettingsHubPage extends PlatformElement {
+import { html, css } from 'lit';
+import { PlatformPage } from '@platform/lib/base/PlatformPage.js';
+import '@platform/lib/components/layout/page-header.js';
+import '@platform/lib/components/platform-icon.js';
+
+const CARDS = [
+    { route: 'spaces',             icon: 'folder',   key: 'card_spaces' },
+    { route: 'templates',          icon: 'layers',   key: 'card_templates' },
+    { route: 'namespace_imports',  icon: 'workflow', key: 'card_namespace_imports' },
+    { route: 'relationship_types', icon: 'network',  key: 'card_relationship_types' },
+];
+
+export class CRMSettingsHubPage extends PlatformPage {
+    static i18nNamespace = 'crm';
+
     static styles = [
-        PlatformElement.styles,
+        PlatformPage.styles,
         css`
-            :host { display: flex; flex-direction: column; width: 100%; height: 100%; min-height: 0; overflow: hidden; }
-            .container {
+            :host {
                 display: flex;
                 flex-direction: column;
-                gap: var(--space-4);
+                width: 100%;
                 height: 100%;
-                min-width: 0;
-                max-width: 100%;
-                box-sizing: border-box;
+                min-height: 0;
+                overflow: hidden;
+            }
+
+            .scroll {
+                flex: 1;
+                min-height: 0;
                 overflow-y: auto;
                 overflow-x: hidden;
-                padding: var(--space-2);
             }
-            .section {
-                min-width: 0;
-                max-width: 100%;
-                box-sizing: border-box;
-                background: var(--crm-surface);
-                border: 1px solid var(--crm-stroke);
-                border-radius: var(--radius-xl);
+
+            .grid {
+                display: grid;
+                grid-template-columns: repeat(auto-fill, minmax(min(100%, 280px), 1fr));
+                gap: var(--space-4);
                 padding: var(--space-4);
+            }
+
+            .card {
                 display: flex;
                 flex-direction: column;
                 gap: var(--space-3);
-            }
-            .hero { display: flex; align-items: center; gap: var(--space-3); }
-            .hero-title { display: flex; align-items: center; gap: var(--space-2); color: var(--text-primary); font-size: var(--text-lg); font-weight: 700; }
-            .hero-subtitle { color: var(--text-secondary); font-size: var(--text-sm); }
-            .cards-grid { display: grid; gap: var(--space-4); grid-template-columns: repeat(auto-fit, minmax(min(100%, 280px), 1fr)); }
-            .settings-card {
-                border: 1px solid var(--crm-stroke);
-                border-radius: var(--radius-xl);
                 padding: var(--space-5);
-                background: var(--crm-surface-muted);
-                cursor: pointer;
-                transition: border-color var(--duration-fast), background var(--duration-fast), transform var(--duration-fast), box-shadow var(--duration-fast);
-                display: flex;
-                flex-direction: column;
-                gap: var(--space-3);
-            }
-            .settings-card:hover {
-                border-color: var(--crm-selected-stroke);
-                background: var(--crm-selected-bg);
-                transform: translateY(-2px);
-                box-shadow: 0 4px 16px rgba(0,0,0,0.08);
-            }
-            .card-icon-wrap {
-                width: 48px; height: 48px;
-                display: flex; align-items: center; justify-content: center;
+                background: var(--glass-solid-subtle);
+                border: 1px solid var(--glass-border-subtle);
                 border-radius: var(--radius-lg);
-                background: var(--crm-surface-elevated);
-                border: 1px solid var(--crm-stroke);
-                color: var(--text-secondary);
+                cursor: pointer;
+                transition: border-color var(--duration-fast),
+                            background var(--duration-fast),
+                            transform var(--duration-fast),
+                            box-shadow var(--duration-fast);
+                color: var(--text-primary);
+                text-align: left;
+                font: inherit;
             }
-            .settings-card:hover .card-icon-wrap { border-color: var(--crm-selected-stroke); color: var(--crm-selected-text); }
-            .card-title { color: var(--text-primary); font-size: var(--text-base); font-weight: 600; }
-            .card-description { color: var(--text-secondary); font-size: var(--text-sm); line-height: 1.5; }
-            .card-arrow { color: var(--text-tertiary); align-self: flex-end; transition: transform var(--duration-fast); }
-            .settings-card:hover .card-arrow { transform: translateX(4px); color: var(--text-primary); }
+
+            .card:hover {
+                border-color: var(--accent);
+                background: var(--glass-solid-medium);
+                transform: translateY(-2px);
+                box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08);
+            }
+
+            .card:focus-visible {
+                outline: 2px solid var(--accent);
+                outline-offset: 2px;
+            }
+
+            .card-icon {
+                width: 48px;
+                height: 48px;
+                border-radius: var(--radius-lg);
+                background: var(--glass-solid-medium);
+                border: 1px solid var(--glass-border-subtle);
+                color: var(--text-secondary);
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                transition: border-color var(--duration-fast),
+                            color var(--duration-fast);
+            }
+
+            .card:hover .card-icon {
+                border-color: var(--accent);
+                color: var(--accent);
+            }
+
+            .card-title {
+                font-size: var(--text-lg);
+                font-weight: var(--font-semibold);
+                margin: 0;
+            }
+
+            .card-description {
+                color: var(--text-secondary);
+                font-size: var(--text-sm);
+                line-height: 1.5;
+                margin: 0;
+            }
+
+            .card-arrow {
+                color: var(--text-tertiary);
+                align-self: flex-end;
+                transition: transform var(--duration-fast),
+                            color var(--duration-fast);
+            }
+
+            .card:hover .card-arrow {
+                transform: translateX(4px);
+                color: var(--text-primary);
+            }
+
             @media (max-width: 767px) {
-                .hero-title { display: none; }
-                .cards-grid { grid-template-columns: 1fr; }
+                .grid {
+                    grid-template-columns: 1fr;
+                    padding: var(--space-3);
+                    gap: var(--space-3);
+                }
+                .card {
+                    padding: var(--space-4);
+                }
             }
         `,
     ];
 
-    _navigateTo(sectionId) {
-        CRMStore.setCurrentView(sectionId);
-    }
-
-    _settingsSections() {
-        return [
-            {
-                id: 'templates',
-                icon: 'settings',
-                title: this.i18n.t('settings_hub.card_templates_title'),
-                description: this.i18n.t('settings_hub.card_templates_description'),
-            },
-            {
-                id: 'spaces',
-                icon: 'folder',
-                title: this.i18n.t('settings_hub.card_spaces_title'),
-                description: this.i18n.t('settings_hub.card_spaces_description'),
-            },
-            {
-                id: 'namespace_imports',
-                icon: 'import',
-                title: this.i18n.t('settings_hub.card_imports_title'),
-                description: this.i18n.t('settings_hub.card_imports_description'),
-            },
-            {
-                id: 'relationship_types',
-                icon: 'link',
-                title: this.i18n.t('settings_hub.card_rel_types_title'),
-                description: this.i18n.t('settings_hub.card_rel_types_description'),
-            },
-        ];
-    }
-
     render() {
-        const sections = this._settingsSections();
         return html`
-            <div class="container">
-                <div class="section">
-                    <platform-breadcrumbs></platform-breadcrumbs>
-                    <div class="hero">
-                        <div>
-                            <div class="hero-subtitle">${this.i18n.t('settings_hub.hero_subtitle')}</div>
-                        </div>
-                    </div>
-                    <div class="cards-grid">
-                        ${sections.map((section) => html`
-                            <div class="settings-card" @click=${() => this._navigateTo(section.id)}>
-                                <div class="card-icon-wrap">
-                                    <platform-icon name=${section.icon} size="24"></platform-icon>
-                                </div>
-                                <div class="card-title">${section.title}</div>
-                                <div class="card-description">${section.description}</div>
-                                <div class="card-arrow">
-                                    <platform-icon name="arrow-right" size="16"></platform-icon>
-                                </div>
+            <page-header
+                title=${this.t('settings_hub_page.title')}
+                subtitle=${this.t('settings_hub_page.subtitle')}
+            ></page-header>
+            <div class="scroll">
+                <div class="grid">
+                    ${CARDS.map((card) => html`
+                        <button class="card" @click=${() => this.navigate(card.route)}>
+                            <div class="card-icon">
+                                <platform-icon name=${card.icon} size="24"></platform-icon>
                             </div>
-                        `)}
-                    </div>
+                            <h3 class="card-title">${this.t(`settings_hub_page.${card.key}_title`)}</h3>
+                            <p class="card-description">${this.t(`settings_hub_page.${card.key}_description`)}</p>
+                            <div class="card-arrow">
+                                <platform-icon name="arrow-right" size="16"></platform-icon>
+                            </div>
+                        </button>
+                    `)}
                 </div>
             </div>
         `;
     }
 }
 
-customElements.define('settings-hub-page', SettingsHubPage);
+customElements.define('crm-settings-hub-page', CRMSettingsHubPage);

@@ -3,9 +3,9 @@
  */
 import { html, css } from 'lit';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
-import { I18nNs } from '@platform/services/i18n/i18n.service.js';
-
 export class LandingAdvantages extends PlatformElement {
+    static i18nNamespace = 'landing';
+
     static styles = [
         PlatformElement.styles,
         css`
@@ -229,19 +229,14 @@ export class LandingAdvantages extends PlatformElement {
 
     connectedCallback() {
         super.connectedCallback();
-        this._i18nUnsub = this.i18n.subscribe(() => this.requestUpdate());
     }
 
     disconnectedCallback() {
-        if (this._i18nUnsub) {
-            this._i18nUnsub();
-            this._i18nUnsub = null;
-        }
         super.disconnectedCallback();
     }
 
     render() {
-        const t = (key) => this.i18n.t(key, {}, I18nNs.LANDING);
+        const t = (key) => (this.t(key) || key);
         return html`
             <div class="blur-bg-primary"></div>
             <div class="blur-bg-white"></div>

@@ -31,21 +31,35 @@ alwaysApply: false
 
 ## UI (JavaScript)
 
-Данные приходят через `GET /api/platform/file-types` (автоматически на всех сервисах). Сервис — `this.services.fileTypes` (`FileTypesService`):
+Данные приходят через `GET /api/platform/file-types` и кладутся в core slice
+`state.fileTypes` событием `FILE_TYPES_EVENTS.LOADED`
+(`core/frontend/static/lib/events/reducers/file-types.js` +
+`core/frontend/static/lib/events/effects/file-types.effect.js`).
 
-| Метод | Назначение |
+Чтение в компоненте — через `this.select(...)` с pure-helpers того же модуля:
+
+| Helper | Назначение |
 |--|--|
-| `extensionsFor(...categories)` | Массив расширений |
-| `mimesFor(...categories)` | Массив MIME |
-| `acceptStringFor(...categories)` | HTML accept-строка |
-| `isAllowedFile(file, ...categories)` | Проверка File по MIME + расширению |
-| `categories` | Все категории (после init) |
+| `selectExtensionsFor(state, ...categories)` | массив расширений |
+| `selectMimesFor(state, ...categories)`      | массив MIME |
+| `selectAcceptStringFor(state, ...categories)` | HTML accept-строка |
+| `selectIsAllowedFile(state, file, ...categories)` | проверка `File` по MIME + расширению |
 
-Пример в Lit-компоненте:
+Пример:
 
 ```javascript
-accept=${this.services.fileTypes.acceptStringFor('image', 'video')}
+import { selectAcceptStringFor } from '@platform/lib/events/reducers/file-types.js';
+
+constructor() {
+    super();
+    this._accept = this.select((s) => selectAcceptStringFor(s, 'image', 'video'));
+}
+render() {
+    return html`<input type="file" accept=${this._accept.value}>`;
+}
 ```
+
+Никаких `this.services.fileTypes` / `FileTypesService` — таких объектов нет.
 
 ## Допустимые исключения
 

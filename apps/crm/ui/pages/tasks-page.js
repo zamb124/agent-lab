@@ -1,16 +1,32 @@
-import { html, css } from 'lit';
-import { PlatformElement } from '@platform/lib/platform-element/index.js';
-import { buttonStyles } from '@platform/lib/styles/shared/button.styles.js';
-import { resolveObjectName } from '@platform/lib/utils/entity-ref.js';
-import { CRMStore } from '../store/crm.store.js';
-import '../modals/entity-modal.js';
+/**
+ * TasksPage — kanban-доска пользовательских задач (entity_type=task) для
+ * активного namespace. Загружает задачи через `crm/entities_lookup`,
+ * создаёт через `crm/entities` (create), переносит между колонками через
+ * `crm/entity_update`. Drag&drop работает на десктопе, на мобильном —
+ * вкладки колонок. Открытие задачи — модалка `crm.entity` (mode='edit').
+ */
+
+import { html, css, nothing } from 'lit';
+import { PlatformPage } from '@platform/lib/base/PlatformPage.js';
+import { CoreEvents } from '@platform/lib/events/index.js';
 import '@platform/lib/components/platform-icon.js';
 import '@platform/lib/components/glass-spinner.js';
 import '@platform/lib/components/platform-breadcrumbs.js';
+import '@platform/lib/components/layout/page-header.js';
 
 const TASK_DND_MIME = 'application/x-crm-task-id';
+const VALID_STATUSES = ['todo', 'in_progress', 'done'];
 
-export class TasksPage extends PlatformElement {
+function _normalizeStatus(value) {
+    if (typeof value === 'string' && VALID_STATUSES.includes(value)) {
+        return value;
+    }
+    return 'todo';
+}
+
+export class CRMTasksPage extends PlatformPage {
+    static i18nNamespace = 'crm';
+
     static properties = {
         _tasks: { state: true },
         _loading: { state: true },
@@ -25,8 +41,7 @@ export class TasksPage extends PlatformElement {
     };
 
     static styles = [
-        PlatformElement.styles,
-        buttonStyles,
+        PlatformPage.styles,
         css`
             :host {
                 display: flex;
@@ -40,12 +55,6 @@ export class TasksPage extends PlatformElement {
             .page-toolbar {
                 flex-shrink: 0;
                 padding-bottom: var(--space-2);
-            }
-
-            .section-label {
-                color: var(--text-tertiary);
-                font-size: var(--text-sm);
-                margin-bottom: var(--space-1);
             }
 
             .top-row {
@@ -133,8 +142,6 @@ export class TasksPage extends PlatformElement {
                 background: var(--crm-daily-notes-cta-hover);
             }
 
-            /* === STATUS TABS === */
-
             .status-tabs {
                 display: flex;
                 gap: var(--space-2);
@@ -173,8 +180,6 @@ export class TasksPage extends PlatformElement {
                 color: var(--text-tertiary);
             }
 
-            /* === BOARD (desktop) === */
-
             .board-shell {
                 flex: 1;
                 min-height: 0;
@@ -202,32 +207,13 @@ export class TasksPage extends PlatformElement {
             .board-overlay {
                 position: absolute;
                 inset: 0;
-                z-index: 6;
                 display: flex;
                 align-items: center;
                 justify-content: center;
+                background: var(--glass-solid-subtle);
+                backdrop-filter: blur(2px);
+                z-index: 10;
                 pointer-events: auto;
-                background: color-mix(in srgb, var(--text-primary) 6%, transparent);
-                animation: board-overlay-in 0.2s ease;
-            }
-
-            @keyframes board-overlay-in {
-                from {
-                    opacity: 0;
-                }
-                to {
-                    opacity: 1;
-                }
-            }
-
-            @media (prefers-reduced-motion: reduce) {
-                .board {
-                    transition: none;
-                }
-
-                .board-overlay {
-                    animation: none;
-                }
             }
 
             .column {
@@ -249,189 +235,125 @@ export class TasksPage extends PlatformElement {
             }
 
             .column-title {
-                font-size: var(--text-sm);
                 font-weight: 600;
                 color: var(--text-primary);
+                font-size: var(--text-sm);
             }
 
             .column-count {
-                font-size: var(--text-xs);
-                color: var(--text-secondary);
-                background: var(--crm-surface-tint-strong);
-                border-radius: var(--radius-full);
-                padding: var(--space-1) var(--space-2);
+                color: var(--text-tertiary);
+                font-size: 11px;
             }
 
             .column-body {
                 flex: 1;
                 min-height: 0;
                 overflow: auto;
-                padding: var(--space-2);
+                padding: var(--space-3);
                 display: flex;
                 flex-direction: column;
                 gap: var(--space-2);
-                transition: background var(--duration-fast), box-shadow var(--duration-fast), outline-color var(--duration-fast);
             }
 
             .column-body.dnd-target {
                 outline: 2px dashed var(--crm-selected-stroke);
-                outline-offset: -2px;
-                background: color-mix(in srgb, var(--crm-selected-bg) 55%, transparent);
-                box-shadow: inset 0 0 0 1px var(--crm-selected-stroke);
+                outline-offset: -6px;
+                background: var(--crm-selected-bg);
             }
 
             .dnd-gap {
-                height: 4px;
-                margin: 4px 0;
-                border-radius: var(--radius-sm);
-                background: linear-gradient(
-                    90deg,
-                    var(--crm-daily-notes-cta-bg),
-                    var(--accent-tertiary, #8794f0)
-                );
-                box-shadow: 0 0 0 1px var(--crm-selected-stroke);
-                flex-shrink: 0;
-                pointer-events: none;
+                height: 12px;
+                border-radius: 6px;
+                background: var(--crm-selected-bg);
+                border: 1px dashed var(--crm-selected-stroke);
             }
-
-            @media (prefers-reduced-motion: reduce) {
-                .column-body {
-                    transition: none;
-                }
-
-                .task-card {
-                    transition: border-color var(--duration-fast), background var(--duration-fast), transform var(--duration-fast), opacity var(--duration-fast), box-shadow var(--duration-fast);
-                }
-            }
-
-            /* === TASK CARDS === */
 
             .task-card {
-                border: 1px solid var(--crm-stroke);
-                border-radius: 16px;
                 background: var(--crm-surface);
-                padding: 16px;
+                border: 1px solid var(--crm-stroke);
+                border-radius: 14px;
+                padding: 14px 16px;
+                cursor: pointer;
                 display: flex;
                 flex-direction: column;
                 gap: 10px;
-                cursor: pointer;
-                transition: border-color 0.2s ease, background 0.2s ease, transform 0.2s ease, opacity 0.2s ease, box-shadow 0.2s ease;
+                transition: border-color var(--duration-fast), background var(--duration-fast);
             }
 
             .task-card:hover {
-                border-color: var(--crm-stroke-strong);
-                background: var(--crm-surface-elevated);
+                border-color: var(--crm-selected-stroke);
             }
 
             .task-card.dnd-dragging {
-                opacity: 0.55;
-                transform: scale(0.98);
-                box-shadow: var(--glass-shadow-medium, 0 8px 24px rgba(0, 0, 0, 0.12));
+                opacity: 0.45;
             }
 
             .task-card-top {
                 display: flex;
-                align-items: flex-start;
-                justify-content: space-between;
-                gap: var(--space-2);
-                min-width: 0;
+                align-items: center;
+                gap: 10px;
             }
 
             .task-card-top-main {
                 display: flex;
                 align-items: center;
                 gap: 10px;
-                min-width: 0;
                 flex: 1;
-            }
-
-            .task-drag-handle {
-                flex-shrink: 0;
-                width: 32px;
-                height: 32px;
-                margin: -4px -4px 0 0;
-                padding: 0;
-                box-sizing: border-box;
-                display: inline-flex;
-                align-items: center;
-                justify-content: center;
-                border-radius: var(--radius-md);
-                background: transparent;
-                color: var(--text-tertiary);
-                cursor: grab;
-                touch-action: none;
-                user-select: none;
-                -webkit-user-select: none;
-                transition: color var(--duration-fast), background var(--duration-fast);
-            }
-
-            .task-drag-handle * {
-                pointer-events: none;
-            }
-
-            .task-drag-handle:hover {
-                color: var(--text-secondary);
-                background: var(--crm-surface-tint);
-            }
-
-            .task-drag-handle:active {
-                cursor: grabbing;
+                min-width: 0;
             }
 
             .task-icon {
                 width: 36px;
                 height: 36px;
-                display: flex;
+                display: inline-flex;
                 align-items: center;
                 justify-content: center;
-                border-radius: var(--radius-lg);
-                background: rgba(255, 152, 0, 0.15);
-                color: #FF9800;
+                border-radius: var(--radius-full);
+                background: var(--crm-surface-tint);
+                color: var(--text-secondary);
                 flex-shrink: 0;
             }
 
             .task-name {
                 font-size: 15px;
-                line-height: 20px;
-                font-weight: 700;
+                font-weight: 500;
                 color: var(--text-primary);
-                margin: 0;
                 overflow: hidden;
                 text-overflow: ellipsis;
                 white-space: nowrap;
                 flex: 1;
                 min-width: 0;
-                padding: 0;
-                text-align: left;
             }
 
-            .task-meta {
-                display: flex;
+            .task-drag-handle {
+                width: 28px;
+                height: 28px;
+                display: inline-flex;
                 align-items: center;
-                gap: var(--space-2);
-                font-size: 11px;
+                justify-content: center;
+                border-radius: var(--radius-full);
                 color: var(--text-tertiary);
+                cursor: grab;
+                flex-shrink: 0;
             }
+
+            .task-drag-handle:active { cursor: grabbing; }
 
             .task-footer {
                 display: flex;
                 align-items: center;
                 justify-content: space-between;
                 gap: 8px;
-                margin-top: auto;
             }
 
             .task-priority {
                 display: inline-flex;
                 align-items: center;
-                gap: 4px;
                 padding: 0 10px;
                 min-height: 22px;
                 font-size: 11px;
                 border-radius: 12px;
                 font-weight: 500;
-                border: none;
-                white-space: nowrap;
                 background: var(--crm-surface-tint);
                 color: var(--text-secondary);
             }
@@ -467,39 +389,15 @@ export class TasksPage extends PlatformElement {
                 text-align: center;
             }
 
-            /* === MOBILE === */
-
             @media (max-width: 1023px) {
-                .board {
-                    grid-template-columns: 1fr;
-                }
+                .board { grid-template-columns: 1fr; }
             }
 
             @media (max-width: 767px) {
-                .page-toolbar {
-                    padding: var(--space-2) var(--space-3);
-                    max-width: 100%;
-                    box-sizing: border-box;
-                    overflow: hidden;
-                }
-
-                .section-label,
-                .title,
-                .cta-btn {
-                    display: none;
-                }
-
-                .top-row {
-                    margin-bottom: var(--space-2);
-                }
-
-                .search-box {
-                    display: none;
-                }
-
-                .toolbar-actions {
-                    display: none;
-                }
+                .title, .cta-btn { display: none; }
+                .top-row { margin-bottom: var(--space-2); }
+                .search-box { display: none; }
+                .toolbar-actions { display: none; }
 
                 .status-tabs {
                     gap: 6px;
@@ -521,36 +419,17 @@ export class TasksPage extends PlatformElement {
 
                 .board .column {
                     display: none;
-                }
-
-                .board .column.mobile-active {
-                    display: flex;
                     background: transparent;
                     border: none;
                     border-radius: 0;
                 }
 
-                .board .column.mobile-active .column-header {
-                    display: none;
-                }
+                .board .column.mobile-active { display: flex; }
+                .board .column.mobile-active .column-header { display: none; }
 
-                .board .column.mobile-active .column-body {
-                    padding: var(--space-1) 0;
-                }
-
-                .task-card {
-                    padding: 14px;
-                    border-radius: 12px;
-                }
-
-                .task-icon {
-                    width: 32px;
-                    height: 32px;
-                }
-
-                .task-name {
-                    font-size: 14px;
-                }
+                .task-card { padding: 14px; border-radius: 12px; }
+                .task-icon { width: 32px; height: 32px; }
+                .task-name { font-size: 14px; }
             }
         `,
     ];
@@ -560,171 +439,171 @@ export class TasksPage extends PlatformElement {
         this._tasks = [];
         this._loading = false;
         this._filter = '';
-        this._isMobile = CRMStore.state.ui.isMobile;
+        this._isMobile = false;
         this._activeStatus = 'todo';
         this._dragOverStatus = null;
         this._draggingTaskId = null;
         this._dndInsert = null;
         this._dndSourceStatus = null;
         this._boardBusy = false;
-        this._currentNamespace = null;
-
-        this._unsubscribe = CRMStore.subscribe((state) => {
-            this._isMobile = state.ui.isMobile;
-
-            const prevNs = this._currentNamespace;
-            this._currentNamespace = state.namespaces.current;
-            const prevName = this._resolveNamespaceName(prevNs);
-            const nextName = this._resolveNamespaceName(this._currentNamespace);
-            if (prevName !== nextName && prevName !== null) {
-                this._loadTasks();
-            }
-        });
-
-        this._onTasksCreate = this._onTasksCreate.bind(this);
-        this._onTasksRefresh = this._onTasksRefresh.bind(this);
-        this._onMobileSearch = this._onMobileSearch.bind(this);
         this._suppressTaskClick = false;
+        this._mql = null;
+        this._onMqlChange = null;
+
+        this._lookupOp = this.useOp('crm/entities_lookup');
+        this._updateOp = this.useOp('crm/entity_update');
+        this._entitiesResource = this.useResource('crm/entities');
+
+        this._namespaceSel = this.select((s) => {
+            const user = s.auth.user;
+            if (!user || typeof user.company_id !== 'string') return 'all';
+            const cid = user.company_id;
+            const map = s.ui.namespace.selectionByCompany;
+            const sel = map[cid];
+            if (sel === 'all' || sel === undefined) return 'all';
+            return sel;
+        });
     }
 
     connectedCallback() {
         super.connectedCallback();
-        this._isMobile = CRMStore.state.ui.isMobile;
-        window.addEventListener('tasks-create', this._onTasksCreate);
-        window.addEventListener('tasks-refresh', this._onTasksRefresh);
-        window.addEventListener('crm-mobile-search', this._onMobileSearch);
-    }
+        this._mql = window.matchMedia('(max-width: 767px)');
+        this._isMobile = this._mql.matches;
+        this._onMqlChange = (e) => { this._isMobile = e.matches; };
+        this._mql.addEventListener('change', this._onMqlChange);
 
-    disconnectedCallback() {
-        super.disconnectedCallback();
-        this._unsubscribe?.();
-        window.removeEventListener('tasks-create', this._onTasksCreate);
-        window.removeEventListener('tasks-refresh', this._onTasksRefresh);
-        window.removeEventListener('crm-mobile-search', this._onMobileSearch);
-    }
+        this.useEvent(CoreEvents.UI_NAMESPACE_CHANGED, () => this._loadTasks());
+        this.useEvent(this._lookupOp.op.events.SUCCEEDED, (event) => this._onTasksLoaded(event.payload.result));
+        this.useEvent(this._lookupOp.op.events.FAILED, () => { this._loading = false; });
+        this.useEvent(this._updateOp.op.events.SUCCEEDED, () => { this._boardBusy = false; this._loadTasks({ silent: true }); });
+        this.useEvent(this._updateOp.op.events.FAILED, (event) => {
+            this._boardBusy = false;
+            this.toast('crm:tasks_page.move_failed', { type: 'error', vars: { message: event.payload.message } });
+            this._loadTasks({ silent: true });
+        });
+        this.useEvent(this._entitiesResource.resource.events.CREATED, () => this._loadTasks({ silent: true }));
 
-    async firstUpdated() {
-        await this._loadTasks();
-    }
-
-    _onTasksCreate() {
-        this._createTask();
-    }
-
-    _onTasksRefresh() {
         this._loadTasks();
     }
 
-    _onMobileSearch(event) {
-        this._filter = typeof event.detail?.query === 'string' ? event.detail.query : '';
+    disconnectedCallback() {
+        if (this._mql && this._onMqlChange) {
+            this._mql.removeEventListener('change', this._onMqlChange);
+        }
+        super.disconnectedCallback();
     }
 
-    _onTasksSearchInput(event) {
-        this._filter = event.target.value;
-        CRMStore.setTasksListSearchQuery(this._filter);
+    _currentNamespace() {
+        const sel = this._namespaceSel.value;
+        return sel === 'all' ? null : sel;
     }
 
-    _resolveNamespaceName(ns) {
-        if (!ns) {
-            return null;
-        }
-        if (typeof ns === 'string') {
-            return ns;
-        }
-        if (typeof ns === 'object' && typeof ns.name === 'string') {
-            return ns.name;
-        }
-        throw new Error('Invalid namespace value');
-    }
-
-    async _loadTasks(options = {}) {
-        const silent = options?.silent === true;
+    _loadTasks(options) {
+        const silent = options && options.silent === true;
         if (!silent) {
             this._loading = true;
         }
-        const crmApi = this.crmApi;
-        const namespaceName = resolveObjectName(CRMStore.state.namespaces.current, null);
-        const response = await crmApi.getEntities({
+        const namespace = this._currentNamespace();
+        const payload = {
             entity_type: 'task',
-            namespace: namespaceName,
             limit: 200,
-        });
-        this._tasks = Array.isArray(response.items) ? response.items : [];
-        if (!silent) {
-            this._loading = false;
+        };
+        if (namespace !== null) {
+            payload.namespace = namespace;
         }
+        this._lookupOp.run(payload);
+    }
+
+    _onTasksLoaded(response) {
+        this._loading = false;
+        const items = response && Array.isArray(response.items) ? response.items : [];
+        this._tasks = items.filter((item) => item && item.entity_type === 'task');
+    }
+
+    _onSearchInput(event) {
+        this._filter = event.target.value;
+    }
+
+    _filteredTasks() {
+        if (!this._filter) {
+            return this._tasks;
+        }
+        const query = this._filter.toLowerCase();
+        return this._tasks.filter((task) => {
+            const name = typeof task.name === 'string' ? task.name : '';
+            const description = typeof task.description === 'string' ? task.description : '';
+            return name.toLowerCase().includes(query) || description.toLowerCase().includes(query);
+        });
+    }
+
+    _taskStatus(task) {
+        const attrs = task && task.attributes;
+        return _normalizeStatus(attrs ? attrs.status : null);
+    }
+
+    _nextStatus(status) {
+        if (status === 'todo') return 'in_progress';
+        if (status === 'in_progress') return 'done';
+        return 'todo';
+    }
+
+    _nextStatusLabel(status) {
+        if (status === 'todo') return this.t('tasks_page.next_to_progress');
+        if (status === 'in_progress') return this.t('tasks_page.next_to_done');
+        return this.t('tasks_page.next_revert');
+    }
+
+    _nextStatusIcon(status) {
+        if (status === 'todo') return 'play';
+        if (status === 'in_progress') return 'check';
+        return 'refresh';
+    }
+
+    _statusColumns() {
+        return [
+            { id: 'todo', label: this.t('tasks_page.column_todo') },
+            { id: 'in_progress', label: this.t('tasks_page.column_in_progress') },
+            { id: 'done', label: this.t('tasks_page.column_done') },
+        ];
     }
 
     _openTask(taskId) {
-        CRMStore.setCurrentView('entities');
-        CRMStore.setCurrentEntity(taskId);
+        this.openModal('crm.entity', { mode: 'edit', id: taskId });
     }
 
-    _taskViewTransitionName(taskId) {
-        const safe = String(taskId).replace(/[^a-zA-Z0-9_-]/g, '_');
-        return `crm-task-${safe}`;
+    _createTask() {
+        const namespace = this._currentNamespace();
+        const body = {
+            entity_type: 'task',
+            name: this.t('tasks.new'),
+            description: '',
+            namespace: namespace === null ? 'default' : namespace,
+            priority: 'medium',
+            attributes: { status: 'todo' },
+        };
+        this._entitiesResource.create(body);
     }
 
-    async _moveTask(task, targetStatus) {
+    _moveTask(task, targetStatus) {
         const from = this._taskStatus(task);
-        if (from === targetStatus) {
-            return;
-        }
-        if (this._boardBusy) {
-            return;
-        }
+        if (from === targetStatus) return;
+        if (this._boardBusy) return;
 
         const taskId = task.entity_id;
-        const prevTasks = this._tasks.map((t) => ({
-            ...t,
-            attributes: { ...(t.attributes || {}) },
-        }));
-
-        const applyOptimistic = () => {
-            this._tasks = this._tasks.map((t) => {
-                if (t.entity_id !== taskId) {
-                    return t;
-                }
-                return {
-                    ...t,
-                    attributes: { ...(t.attributes || {}), status: targetStatus },
-                };
-            });
-        };
-
         this._boardBusy = true;
-        const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-        if (!reducedMotion && typeof document.startViewTransition === 'function') {
-            const transition = document.startViewTransition(async () => {
-                applyOptimistic();
-                await this.updateComplete;
-            });
-            try {
-                await transition.finished;
-            } catch {
-                /* View Transition aborted */
-            }
-        } else {
-            applyOptimistic();
-            await this.updateComplete;
-        }
+        this._tasks = this._tasks.map((t) => {
+            if (t.entity_id !== taskId) return t;
+            const attrs = t.attributes && typeof t.attributes === 'object' ? t.attributes : {};
+            return { ...t, attributes: { ...attrs, status: targetStatus } };
+        });
 
-        const crmApi = this.crmApi;
-        const attributes = {
-            ...(task.attributes || {}),
-            status: targetStatus,
-        };
-
-        try {
-            await crmApi.updateEntity(taskId, { attributes });
-            await this._loadTasks({ silent: true });
-        } catch (e) {
-            this._tasks = prevTasks;
-            const message = e?.message ?? String(e);
-            this.error(this.i18n.t('tasks_page.move_failed', { message }));
-        } finally {
-            this._boardBusy = false;
-        }
+        const attributes = task.attributes && typeof task.attributes === 'object' ? task.attributes : {};
+        this._updateOp.run({
+            id: taskId,
+            body: {
+                attributes: { ...attributes, status: targetStatus },
+            },
+        });
     }
 
     _scheduleClearSuppressTaskClick() {
@@ -737,9 +616,7 @@ export class TasksPage extends PlatformElement {
     }
 
     _onTaskDragStart(e, task) {
-        if (this._isMobile) {
-            return;
-        }
+        if (this._isMobile) return;
         this._draggingTaskId = task.entity_id;
         this._dndSourceStatus = this._taskStatus(task);
         this._dndInsert = null;
@@ -747,16 +624,12 @@ export class TasksPage extends PlatformElement {
         e.dataTransfer.setData(TASK_DND_MIME, task.entity_id);
         e.dataTransfer.setData('text/plain', task.entity_id);
         const card = e.currentTarget.closest('.task-card');
-        if (card) {
-            card.classList.add('dnd-dragging');
-        }
+        if (card) card.classList.add('dnd-dragging');
     }
 
     _onTaskDragEnd(e) {
         const card = e.currentTarget.closest('.task-card');
-        if (card) {
-            card.classList.remove('dnd-dragging');
-        }
+        if (card) card.classList.remove('dnd-dragging');
         this._draggingTaskId = null;
         this._dragOverStatus = null;
         this._dndInsert = null;
@@ -776,9 +649,7 @@ export class TasksPage extends PlatformElement {
         let beforeTaskId = '__end__';
         for (const el of cards) {
             const id = el.dataset.taskId;
-            if (!id) {
-                continue;
-            }
+            if (!id) continue;
             const r = el.getBoundingClientRect();
             const mid = r.top + r.height / 2;
             if (y < mid) {
@@ -787,16 +658,12 @@ export class TasksPage extends PlatformElement {
             }
         }
         const prev = this._dndInsert;
-        if (prev && prev.status === statusId && prev.beforeTaskId === beforeTaskId) {
-            return;
-        }
+        if (prev && prev.status === statusId && prev.beforeTaskId === beforeTaskId) return;
         this._dndInsert = { status: statusId, beforeTaskId };
     }
 
     _onColumnBodyDragOver(e, targetStatus) {
-        if (this._isMobile || !this._draggingTaskId) {
-            return;
-        }
+        if (this._isMobile || !this._draggingTaskId) return;
         e.preventDefault();
         e.dataTransfer.dropEffect = 'move';
         if (this._dragOverStatus !== targetStatus) {
@@ -806,55 +673,35 @@ export class TasksPage extends PlatformElement {
     }
 
     _onColumnDragLeave(e) {
-        if (this._isMobile || !this._draggingTaskId) {
-            return;
-        }
+        if (this._isMobile || !this._draggingTaskId) return;
         const col = e.currentTarget;
         const related = e.relatedTarget;
-        if (related && col.contains(related)) {
-            return;
-        }
+        if (related && col.contains(related)) return;
         this._dragOverStatus = null;
         this._dndInsert = null;
     }
 
     _dndGapBeforeTask(statusId, taskId) {
-        if (this._isMobile || !this._dndInsert || this._dndSourceStatus === statusId) {
-            return false;
-        }
-        if (this._dndInsert.status !== statusId) {
-            return false;
-        }
+        if (this._isMobile || !this._dndInsert || this._dndSourceStatus === statusId) return false;
+        if (this._dndInsert.status !== statusId) return false;
         return this._dndInsert.beforeTaskId === taskId;
     }
 
     _dndGapAfterLast(statusId, taskCount) {
-        if (this._isMobile || !this._dndInsert || this._dndSourceStatus === statusId) {
-            return false;
-        }
-        if (this._dndInsert.status !== statusId) {
-            return false;
-        }
-        if (this._dndInsert.beforeTaskId !== '__end__') {
-            return false;
-        }
+        if (this._isMobile || !this._dndInsert || this._dndSourceStatus === statusId) return false;
+        if (this._dndInsert.status !== statusId) return false;
+        if (this._dndInsert.beforeTaskId !== '__end__') return false;
         return taskCount > 0;
     }
 
     _dndGapEmptyColumn(statusId) {
-        if (this._isMobile || !this._dndInsert || this._dndSourceStatus === statusId) {
-            return false;
-        }
-        if (this._dndInsert.status !== statusId) {
-            return false;
-        }
+        if (this._isMobile || !this._dndInsert || this._dndSourceStatus === statusId) return false;
+        if (this._dndInsert.status !== statusId) return false;
         return this._dndInsert.beforeTaskId === '__end__';
     }
 
-    async _onColumnDrop(e, targetStatus) {
-        if (this._isMobile) {
-            return;
-        }
+    _onColumnDrop(e, targetStatus) {
+        if (this._isMobile) return;
         e.preventDefault();
         e.stopPropagation();
         this._dragOverStatus = null;
@@ -867,20 +714,14 @@ export class TasksPage extends PlatformElement {
         }
         const task = this._tasks.find((t) => t.entity_id === taskId);
         this._draggingTaskId = null;
-        if (!task) {
-            return;
-        }
+        if (!task) return;
         const from = this._taskStatus(task);
-        if (from === targetStatus) {
-            return;
-        }
-        await this._moveTask(task, targetStatus);
+        if (from === targetStatus) return;
+        this._moveTask(task, targetStatus);
     }
 
     _onTaskCardClick(task, e) {
-        if (this._suppressTaskClick) {
-            return;
-        }
+        if (this._suppressTaskClick) return;
         const path = e.composedPath();
         if (path.some((node) => node instanceof Element && (node.classList.contains('task-move-btn') || node.classList.contains('task-drag-handle')))) {
             return;
@@ -888,69 +729,8 @@ export class TasksPage extends PlatformElement {
         this._openTask(task.entity_id);
     }
 
-    async _createTask() {
-        const crmApi = this.crmApi;
-        const namespaceName = resolveObjectName(CRMStore.state.namespaces.current, null);
-        await crmApi.createEntity({
-            entity_type: 'task',
-            name: this.i18n.t('tasks.new'),
-            description: '',
-            namespace: namespaceName || 'default',
-            priority: 'medium',
-            attributes: { status: 'todo' },
-        });
-        await this._loadTasks();
-        this.success(this.i18n.t('tasks_page.success_created'));
-    }
-
-    _taskStatus(task) {
-        const status = task.attributes?.status;
-        if (['todo', 'in_progress', 'done'].includes(status)) {
-            return status;
-        }
-        return 'todo';
-    }
-
-    _filteredTasks() {
-        if (!this._filter) {
-            return this._tasks;
-        }
-        const query = this._filter.toLowerCase();
-        return this._tasks.filter((task) => {
-            const name = task.name || '';
-            const description = task.description || '';
-            return name.toLowerCase().includes(query) || description.toLowerCase().includes(query);
-        });
-    }
-
-    _nextStatus(status) {
-        if (status === 'todo') return 'in_progress';
-        if (status === 'in_progress') return 'done';
-        return 'todo';
-    }
-
-    _nextStatusLabel(status) {
-        if (status === 'todo') return this.i18n.t('tasks_page.next_to_progress');
-        if (status === 'in_progress') return this.i18n.t('tasks_page.next_to_done');
-        return this.i18n.t('tasks_page.next_revert');
-    }
-
-    _getTaskColumnStatuses() {
-        return [
-            { id: 'todo', label: this.i18n.t('tasks_page.column_todo') },
-            { id: 'in_progress', label: this.i18n.t('tasks_page.column_in_progress') },
-            { id: 'done', label: this.i18n.t('tasks_page.column_done') },
-        ];
-    }
-
-    _nextStatusIcon(status) {
-        if (status === 'todo') return 'play';
-        if (status === 'in_progress') return 'check';
-        return 'refresh';
-    }
-
     render() {
-        const taskStatuses = this._getTaskColumnStatuses();
+        const taskStatuses = this._statusColumns();
         const tasks = this._filteredTasks();
         const tasksByStatus = {
             todo: tasks.filter((task) => this._taskStatus(task) === 'todo'),
@@ -962,21 +742,22 @@ export class TasksPage extends PlatformElement {
             <div class="page-toolbar">
                 <platform-breadcrumbs></platform-breadcrumbs>
                 <div class="top-row">
+                    <h1 class="title">${this.t('tasks.title')}</h1>
                     <label class="search-box">
                         <platform-icon name="search" size="14"></platform-icon>
                         <input
                             class="search-input"
                             type="text"
-                            placeholder=${this.i18n.t('search.placeholder')}
+                            placeholder=${this.t('search.placeholder')}
                             .value=${this._filter}
-                            @input=${this._onTasksSearchInput}
+                            @input=${this._onSearchInput}
                         />
                     </label>
                     <div class="toolbar-actions">
-                        <button class="icon-btn-toolbar" type="button" @click=${this._loadTasks} title=${this.i18n.t('refresh', {}, 'common')}>
+                        <button class="icon-btn-toolbar" type="button" @click=${() => this._loadTasks()} title=${this.t('refresh', {}, 'common')}>
                             <platform-icon name="refresh" size="16"></platform-icon>
                         </button>
-                        <button class="cta-btn" type="button" @click=${this._createTask}>${this.i18n.t('create', {}, 'common')}</button>
+                        <button class="cta-btn" type="button" @click=${this._createTask}>${this.t('create', {}, 'common')}</button>
                     </div>
                 </div>
                 <div class="status-tabs">
@@ -999,88 +780,85 @@ export class TasksPage extends PlatformElement {
                     aria-busy=${this._boardBusy ? 'true' : 'false'}
                     aria-live=${this._boardBusy ? 'polite' : 'off'}
                 >
-                ${taskStatuses.map((s) => {
-                    const isActive = !this._isMobile || this._activeStatus === s.id;
-                    const statusTasks = tasksByStatus[s.id];
-                    return html`
-                        <section class="column ${isActive ? 'mobile-active' : ''}">
-                            <div class="column-header">
-                                <div class="column-title">${s.label}</div>
-                                <div class="column-count">${statusTasks.length}</div>
-                            </div>
-                            <div
-                                class="column-body ${this._dragOverStatus === s.id ? 'dnd-target' : ''}"
-                                @dragover=${(e) => this._onColumnBodyDragOver(e, s.id)}
-                                @dragleave=${this._onColumnDragLeave}
-                                @drop=${(e) => this._onColumnDrop(e, s.id)}
-                            >
-                                ${this._loading ? html`
-                                    <div class="empty">${this.i18n.t('loading', {}, 'common')}</div>
-                                ` : statusTasks.length === 0 ? html`
-                                    ${this._dndGapEmptyColumn(s.id) ? html`<div class="dnd-gap" aria-hidden="true"></div>` : ''}
-                                    <div class="empty">${this.i18n.t('tasks.empty')}</div>
-                                ` : html`
-                                    ${statusTasks.map((task) => html`
-                                        ${this._dndGapBeforeTask(s.id, task.entity_id) ? html`<div class="dnd-gap" aria-hidden="true"></div>` : ''}
-                                        <article
-                                            class="task-card"
-                                            data-task-id=${task.entity_id}
-                                            style=${`view-transition-name: ${this._taskViewTransitionName(task.entity_id)}`}
-                                            @click=${(e) => this._onTaskCardClick(task, e)}
-                                        >
-                                            <div class="task-card-top">
-                                                <div class="task-card-top-main">
-                                                    <div class="task-icon">
-                                                        <platform-icon name="checklist" size="18"></platform-icon>
+                    ${taskStatuses.map((s) => {
+                        const isActive = !this._isMobile || this._activeStatus === s.id;
+                        const statusTasks = tasksByStatus[s.id];
+                        return html`
+                            <section class="column ${isActive ? 'mobile-active' : ''}">
+                                <div class="column-header">
+                                    <div class="column-title">${s.label}</div>
+                                    <div class="column-count">${statusTasks.length}</div>
+                                </div>
+                                <div
+                                    class="column-body ${this._dragOverStatus === s.id ? 'dnd-target' : ''}"
+                                    @dragover=${(e) => this._onColumnBodyDragOver(e, s.id)}
+                                    @dragleave=${this._onColumnDragLeave}
+                                    @drop=${(e) => this._onColumnDrop(e, s.id)}
+                                >
+                                    ${this._loading ? html`
+                                        <div class="empty">${this.t('loading', {}, 'common')}</div>
+                                    ` : statusTasks.length === 0 ? html`
+                                        ${this._dndGapEmptyColumn(s.id) ? html`<div class="dnd-gap" aria-hidden="true"></div>` : nothing}
+                                        <div class="empty">${this.t('tasks.empty')}</div>
+                                    ` : html`
+                                        ${statusTasks.map((task) => html`
+                                            ${this._dndGapBeforeTask(s.id, task.entity_id) ? html`<div class="dnd-gap" aria-hidden="true"></div>` : nothing}
+                                            <article
+                                                class="task-card"
+                                                data-task-id=${task.entity_id}
+                                                @click=${(e) => this._onTaskCardClick(task, e)}
+                                            >
+                                                <div class="task-card-top">
+                                                    <div class="task-card-top-main">
+                                                        <div class="task-icon">
+                                                            <platform-icon name="checklist" size="18"></platform-icon>
+                                                        </div>
+                                                        <span class="task-name">${task.name}</span>
                                                     </div>
-                                                    <span class="task-name">${task.name}</span>
+                                                    ${!this._isMobile ? html`
+                                                        <div
+                                                            class="task-drag-handle"
+                                                            draggable="true"
+                                                            title=${this.t('tasks_page.drag_hint')}
+                                                            role="button"
+                                                            tabindex="0"
+                                                            aria-label=${this.t('tasks_page.drag_hint')}
+                                                            @dragstart=${(e) => this._onTaskDragStart(e, task)}
+                                                            @dragend=${this._onTaskDragEnd}
+                                                            @click=${(e) => e.stopPropagation()}
+                                                        >
+                                                            <platform-icon name="drag-handle" size="18"></platform-icon>
+                                                        </div>
+                                                    ` : nothing}
                                                 </div>
-                                                ${!this._isMobile ? html`
-                                                    <div
-                                                        class="task-drag-handle"
-                                                        draggable="true"
-                                                        title=${this.i18n.t('tasks_page.drag_hint')}
-                                                        role="button"
-                                                        tabindex="0"
-                                                        aria-label=${this.i18n.t('tasks_page.drag_hint')}
-                                                        @dragstart=${(e) => this._onTaskDragStart(e, task)}
-                                                        @dragend=${this._onTaskDragEnd}
-                                                        @click=${(e) => e.stopPropagation()}
-                                                    >
-                                                        <platform-icon name="drag-handle" size="18" ?filled=${true}></platform-icon>
-                                                    </div>
-                                                ` : ''}
-                                            </div>
-                                            <div class="task-footer">
-                                                <span class="task-priority">${task.priority || 'medium'}${task.due_date ? ` \u00b7 ${task.due_date}` : ''}</span>
-                                                <button class="task-move-btn" type="button" @click=${(e) => { e.stopPropagation(); this._moveTask(task, this._nextStatus(s.id)); }}>
-                                                    <platform-icon name="${this._nextStatusIcon(s.id)}" size="12"></platform-icon>
-                                                    ${this._nextStatusLabel(s.id)}
-                                                </button>
-                                            </div>
-                                        </article>
-                                    `)}
-                                    ${this._dndGapAfterLast(s.id, statusTasks.length) ? html`<div class="dnd-gap" aria-hidden="true"></div>` : ''}
-                                `}
-                            </div>
-                        </section>
-                    `;
-                })}
+                                                <div class="task-footer">
+                                                    <span class="task-priority">${task.priority ? task.priority : 'medium'}</span>
+                                                    <button class="task-move-btn" type="button" @click=${(e) => { e.stopPropagation(); this._moveTask(task, this._nextStatus(s.id)); }}>
+                                                        <platform-icon name="${this._nextStatusIcon(s.id)}" size="12"></platform-icon>
+                                                        ${this._nextStatusLabel(s.id)}
+                                                    </button>
+                                                </div>
+                                            </article>
+                                        `)}
+                                        ${this._dndGapAfterLast(s.id, statusTasks.length) ? html`<div class="dnd-gap" aria-hidden="true"></div>` : nothing}
+                                    `}
+                                </div>
+                            </section>
+                        `;
+                    })}
                 </div>
-                ${this._boardBusy
-                    ? html`
-                        <div
-                            class="board-overlay"
-                            role="status"
-                            aria-label=${this.i18n.t('tasks_page.board_syncing')}
-                        >
-                            <glass-spinner size="lg"></glass-spinner>
-                        </div>
-                    `
-                    : ''}
+                ${this._boardBusy ? html`
+                    <div
+                        class="board-overlay"
+                        role="status"
+                        aria-label=${this.t('tasks_page.board_syncing')}
+                    >
+                        <glass-spinner size="lg"></glass-spinner>
+                    </div>
+                ` : nothing}
             </div>
         `;
     }
 }
 
-customElements.define('tasks-page', TasksPage);
+customElements.define('crm-tasks-page', CRMTasksPage);

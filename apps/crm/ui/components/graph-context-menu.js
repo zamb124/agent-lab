@@ -1,14 +1,18 @@
+/**
+ * graph-context-menu — контекстное меню для нод/рёбер графа.
+ *
+ * Композиционный child-компонент: шлёт DOM-событие `ctx-action`
+ * с detail = { action, nodeId, edgeId } через `this.emit(...)`.
+ * Родитель (graph-page) сам диспатчит bus-события по этим действиям.
+ */
+
 import { html, css } from 'lit';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
+import '@platform/lib/components/platform-icon.js';
 
-const CTX_ICONS = {
-    'open-entity': html`<platform-icon name="share" size="16"></platform-icon>`,
-    'focus': html`<platform-icon name="search" size="16"></platform-icon>`,
-    'path-from': html`<platform-icon name="workflow" size="16"></platform-icon>`,
-    'graph-from': html`<platform-icon name="expand" size="16"></platform-icon>`,
-};
+export class CRMGraphContextMenu extends PlatformElement {
+    static i18nNamespace = 'crm';
 
-export class GraphContextMenu extends PlatformElement {
     static properties = {
         x: { type: Number },
         y: { type: Number },
@@ -24,7 +28,7 @@ export class GraphContextMenu extends PlatformElement {
                 position: absolute;
                 z-index: 20;
                 display: none;
-                min-width: 160px;
+                min-width: 180px;
                 background: var(--glass-solid-strong);
                 border: 1px solid var(--glass-border-medium);
                 border-radius: 10px;
@@ -55,17 +59,6 @@ export class GraphContextMenu extends PlatformElement {
 
             .ctx-item:hover {
                 background: var(--glass-solid-medium);
-            }
-
-            .ctx-item svg {
-                width: 14px;
-                height: 14px;
-                fill: none;
-                stroke: currentColor;
-                stroke-width: 1.8;
-                stroke-linecap: round;
-                stroke-linejoin: round;
-                flex-shrink: 0;
             }
 
             .separator {
@@ -105,28 +98,35 @@ export class GraphContextMenu extends PlatformElement {
             return html``;
         }
 
-        return html`
-            ${this.nodeId ? html`
-                <button class="ctx-item" @click=${() => this._onAction('open-entity')}>
-                    ${CTX_ICONS['open-entity']}
-                    ${this.i18n.t('graph.context_open_entity')}
+        if (this.nodeId) {
+            return html`
+                <button class="ctx-item" type="button" @click=${() => this._onAction('open-entity')}>
+                    <platform-icon name="share" size="16"></platform-icon>
+                    ${this.t('graph.context_open_entity')}
                 </button>
-                <button class="ctx-item" @click=${() => this._onAction('focus')}>
-                    ${CTX_ICONS['focus']}
-                    ${this.i18n.t('graph.zoom_in')}
+                <button class="ctx-item" type="button" @click=${() => this._onAction('focus')}>
+                    <platform-icon name="search" size="16"></platform-icon>
+                    ${this.t('graph.zoom_in')}
                 </button>
                 <div class="separator"></div>
-                <button class="ctx-item" @click=${() => this._onAction('path-from')}>
-                    ${CTX_ICONS['path-from']}
-                    ${this.i18n.t('graph.context_path_from')}
+                <button class="ctx-item" type="button" @click=${() => this._onAction('path-from')}>
+                    <platform-icon name="workflow" size="16"></platform-icon>
+                    ${this.t('graph.context_path_from')}
                 </button>
-                <button class="ctx-item" @click=${() => this._onAction('graph-from')}>
-                    ${CTX_ICONS['graph-from']}
-                    ${this.i18n.t('graph.context_graph_from')}
+                <button class="ctx-item" type="button" @click=${() => this._onAction('graph-from')}>
+                    <platform-icon name="expand" size="16"></platform-icon>
+                    ${this.t('graph.context_graph_from')}
                 </button>
-            ` : ''}
+            `;
+        }
+
+        return html`
+            <button class="ctx-item" type="button" @click=${() => this._onAction('edge-info')}>
+                <platform-icon name="info" size="16"></platform-icon>
+                ${this.t('graph.context_edge_info')}
+            </button>
         `;
     }
 }
 
-customElements.define('graph-context-menu', GraphContextMenu);
+customElements.define('crm-graph-context-menu', CRMGraphContextMenu);

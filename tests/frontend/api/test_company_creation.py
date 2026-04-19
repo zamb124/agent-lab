@@ -16,6 +16,7 @@ from httpx import AsyncClient
 
 @pytest.mark.asyncio
 @pytest.mark.real_taskiq  # Используем реальный TaskIQ worker
+@pytest.mark.timeout(300, func_only=True)
 async def test_company_creation_with_agents_initialization(
     frontend_client: AsyncClient,
     flows_client: AsyncClient,
@@ -29,10 +30,15 @@ async def test_company_creation_with_agents_initialization(
     
     Шаги:
     1. Создаем компанию через frontend API
+       (POST /frontend/api/companies синхронно делает межсервисные HTTP-вызовы:
+        flows /company/init и sync /spaces/, /channels/ — всё в рантайме REST,
+        поэтому endpoint сам по себе занимает десятки секунд при холодном
+        старте сервисов.)
     2. Проверяем что компания создалась
-    3. Запускаем инициализацию через API endpoint
-    4. Ждем завершения TaskIQ задачи
-    5. Проверяем что public агенты появились в БД для новой компании
+    3. Запускаем инициализацию через TaskIQ напрямую и ждём wait_result(120)
+    4. Проверяем что public агенты появились в БД для новой компании
+
+    Timeout 300s: сумма cold-start frontend + sync + flows + init_company_resources.
     """
     from core.context import set_context, clear_context, Context
     from core.models.identity_models import User, Company
@@ -397,6 +403,7 @@ async def test_company_creation_without_flows_service(
 
 @pytest.mark.asyncio
 @pytest.mark.real_taskiq
+@pytest.mark.timeout(420, func_only=True)
 async def test_company_agents_api_with_context(
     frontend_client: AsyncClient,
     flows_client: AsyncClient,
@@ -407,6 +414,11 @@ async def test_company_agents_api_with_context(
 ):
     """
     Тест что agents API корректно возвращает агенты с контекстом компании.
+
+    Timeout 420s: создаём ДВЕ компании (каждая делает синхронные межсервисные
+    HTTP к flows/sync) + два `init_company_resources.kiq().wait_result(120)`
+    последовательно + 30s polling /flows/api/v1/flows/. На холодном старте
+    общее время может достигать ~5–6 минут.
     
     Проверяет:
     1. Создание компании и инициализацию агентов

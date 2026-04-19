@@ -65,7 +65,6 @@
             "lit/directives/unsafe-svg.js": "/static/core/assets/js/lit/directives/unsafe-svg.min.js",
             "lit/directives/guard.js": "/static/core/assets/js/lit/directives/guard.min.js",
             "@platform/lib/": "/static/core/lib/",
-            "@platform/services/": "/static/core/services/",
             "@capacitor/app": "/static/core/assets/js/vendor/@capacitor/app/index.js",
             "@capacitor/core": "/static/core/assets/js/vendor/@capacitor/core/index.js",
             "@capacitor/splash-screen": "/static/core/assets/js/vendor/@capacitor/splash-screen/index.js",
@@ -78,13 +77,7 @@
     <link rel="stylesheet" href="/static/core/assets/css/tokens.css">
     <link rel="stylesheet" href="/static/core/assets/css/reset.css">
     <link rel="stylesheet" href="/static/frontend/styles/landing.css">
-    
-    <!-- Загружаем app-loader ПЕРЕД использованием в body -->
-    <script type="module">
-        import '/static/core/lib/components/app-loader.js';
-    </script>
-    
-    <style>
+<style>
         body {
             margin: 0;
             padding: 0;
@@ -101,11 +94,6 @@
         
         platform-app:not(:defined),
         frontend-app:not(:defined) {
-            opacity: 0;
-        }
-        
-        /* Показываем app-loader даже если он еще не определен */
-        app-loader:not(:defined) {
             position: fixed;
             inset: 0;
             display: flex;
@@ -116,30 +104,16 @@
             color: var(--text-secondary, rgba(255, 255, 255, 0.5));
             font-family: 'Fira Sans', sans-serif;
         }
-        
-        app-loader:not(:defined)::after {
+
+        frontend-app:not(:defined)::after {
             content: 'AI Studio';
         }
-    </style>
+</style>
 </head>
 <body>
-    <!-- Загрузочный экран -->
-    <app-loader id="app-loader" fullscreen text="Загрузка Humanitec..."></app-loader>
-    
     <frontend-app></frontend-app>
     
     <script type="module" src="/static/frontend/index.js"></script>
-    
-    <script>
-        // Скрыть загрузчик когда приложение готово
-        customElements.whenDefined('frontend-app').then(() => {
-            const loader = document.getElementById('app-loader');
-            if (loader) {
-                loader.classList.add('hidden');
-                setTimeout(() => loader.remove(), 400);
-            }
-        });
-    </script>
 </body>
 </html>
 

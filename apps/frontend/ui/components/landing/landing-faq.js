@@ -4,11 +4,11 @@
 import { html, css } from 'lit';
 import { classMap } from 'lit/directives/class-map.js';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
-import { I18nNs } from '@platform/services/i18n/i18n.service.js';
-
 const FAQ_SLOT_COUNT = 10;
 
 export class LandingFaq extends PlatformElement {
+    static i18nNamespace = 'landing';
+
     static styles = [
         PlatformElement.styles,
         css`
@@ -163,14 +163,9 @@ export class LandingFaq extends PlatformElement {
 
     connectedCallback() {
         super.connectedCallback();
-        this._i18nUnsub = this.i18n.subscribe(() => this.requestUpdate());
     }
 
     disconnectedCallback() {
-        if (this._i18nUnsub) {
-            this._i18nUnsub();
-            this._i18nUnsub = null;
-        }
         super.disconnectedCallback();
     }
 
@@ -179,7 +174,7 @@ export class LandingFaq extends PlatformElement {
     }
 
     render() {
-        const t = (key) => this.i18n.t(key, {}, I18nNs.LANDING);
+        const t = (key) => (this.t(key) || key);
         const slots = Array.from({ length: FAQ_SLOT_COUNT }, (_, i) => i + 1);
         return html`
             <div class="faq-container">

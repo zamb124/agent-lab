@@ -408,18 +408,15 @@ export class PromptEditor extends PlatformElement {
         this.fullscreenMode = false;
         this.acceptFileDrop = false;
         this._editorView = null;
-        this._icons = {};
+        this._iconCacheSelect = this.select((s) => s.icon);
         this._cmModules = null;
         this._readonlyCompartment = null;
         this._fileDropCleanup = null;
     }
 
     async firstUpdated() {
-        await Promise.all([
-            this._initCodeMirror(),
-            this._loadIcons(),
-        ]);
-        
+        this._loadIcons();
+        await this._initCodeMirror();
         this._boundEscapeHandler = this._handleEscape.bind(this);
         document.addEventListener('keydown', this._boundEscapeHandler);
     }
@@ -430,16 +427,17 @@ export class PromptEditor extends PlatformElement {
         }
     }
     
-    async _loadIcons() {
+    _loadIcons() {
         const iconNames = ['fullscreen', 'minimize', 'list'];
-        await Promise.all(iconNames.map(async (name) => {
-            try {
-                this._icons[name] = await this.icon.load(name);
-            } catch (e) {
-                console.warn(`Failed to load icon ${name}`);
-            }
-        }));
-        this.requestUpdate();
+        for (const name of iconNames) {
+            this.dispatch('icon/ui_asset/load_requested', { name });
+        }
+    }
+
+    _icon(name) {
+        const cache = this._iconCacheSelect.value;
+        if (!cache) return '';
+        return cache.uiCache[name] || '';
     }
 
     updated(changedProperties) {
@@ -1117,7 +1115,7 @@ export class PromptEditor extends PlatformElement {
                                 @click=${this._toggleSplit}
                                 title="Split view"
                             >
-                                ${this._icons['list'] ? unsafeHTML(this._icons['list']) : '⊞'}
+                                ${this._icon('list') ? unsafeHTML(this._icon('list')) : '⊞'}
                             </button>
                         ` : ''}
                         <button 
@@ -1127,8 +1125,8 @@ export class PromptEditor extends PlatformElement {
                             title="${this.fullscreenMode ? 'Выйти из полноэкранного режима' : 'Полноэкранный режим'}"
                         >
                             ${this.fullscreenMode 
-                                ? (this._icons['minimize'] ? unsafeHTML(this._icons['minimize']) : '⊠')
-                                : (this._icons['fullscreen'] ? unsafeHTML(this._icons['fullscreen']) : '⊡')
+                                ? (this._icon('minimize') ? unsafeHTML(this._icon('minimize')) : '⊠')
+                                : (this._icon('fullscreen') ? unsafeHTML(this._icon('fullscreen')) : '⊡')
                             }
                         </button>
                     </div>

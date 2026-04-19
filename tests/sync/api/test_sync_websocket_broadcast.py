@@ -57,18 +57,18 @@ async def test_two_ws_clients_receive_message_created(
         )
         assert mr.status_code in (200, 201)
 
-    uri = "ws://127.0.0.1:9005/sync/ws"
+    uri = "ws://127.0.0.1:9005/sync/api/ws/notifications"
 
     async def _wait_message_created(ws, expect_channel_id: str) -> dict:
         for _ in range(80):
             raw = await asyncio.wait_for(ws.recv(), timeout=2.0)
             parsed = json.loads(raw)
-            if parsed.get("type") != "message.created":
+            if parsed.get("type") != "sync/message/created":
                 continue
             payload = parsed.get("payload")
             if isinstance(payload, dict) and payload.get("channel_id") == expect_channel_id:
                 return parsed
-        raise AssertionError("Не получен message.created для канала")
+        raise AssertionError("Не получен sync/message/created для канала")
 
     async with websockets.connect(
         uri,
@@ -102,5 +102,5 @@ async def test_two_ws_clients_receive_message_created(
 
             got1, got2 = await asyncio.wait_for(asyncio.gather(t1, t2), timeout=45.0)
 
-    assert got1["type"] == "message.created"
-    assert got2["type"] == "message.created"
+    assert got1["type"] == "sync/message/created"
+    assert got2["type"] == "sync/message/created"

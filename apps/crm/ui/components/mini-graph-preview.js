@@ -1,6 +1,13 @@
+/**
+ * mini-graph-preview — компактная 3D-визуализация графа влияния одной сущности.
+ *
+ * Загружает данные через `useOp('crm/influence_graph')`, цвета и подписи
+ * связей берёт через `useResource('crm/entity_types' | 'crm/relationship_types')`.
+ * Открытие сущности из канваса — через DOM-событие `entity-open` (slot-композиция).
+ */
+
 import { html, css } from 'lit';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
-import { CRMStore } from '../store/crm.store.js';
 import {
     aggregateIncidentWeightsByNode,
     computeGraphNodeDisplaySize,
@@ -12,61 +19,9 @@ import {
 const API_MAX_DEPTH = 5;
 const MINI_NODE_REL_SIZE = 4;
 
-function _resolveNodeColor(node) {
-    if (node.access === false) {
-        return '#7f7f8f';
-    }
-    const entityType = typeof node.entity_type === 'string' ? node.entity_type.trim() : '';
-    if (!entityType) {
-        return '#bca8ff';
-    }
-    const entityTypes = CRMStore.state.entities.entityTypes;
-    if (!Array.isArray(entityTypes)) {
-        return '#bca8ff';
-    }
-    const match = entityTypes.find((t) => t.type_id === entityType);
-    if (!match || typeof match.color !== 'string' || !match.color.trim()) {
-        return '#bca8ff';
-    }
-    return match.color.trim();
-}
+export class CRMMiniGraphPreview extends PlatformElement {
+    static i18nNamespace = 'crm';
 
-function _normalizeLevel(rawNode, rootEntityId, nodeId) {
-    if (typeof rawNode.level === 'number' && Number.isFinite(rawNode.level)) {
-        return Math.max(0, Math.floor(rawNode.level));
-    }
-    if (nodeId === rootEntityId) {
-        return 0;
-    }
-    return 1;
-}
-
-function _edgeDirected(edge) {
-    if (typeof edge.is_directed === 'boolean') {
-        return edge.is_directed;
-    }
-    if (typeof edge.directed === 'boolean') {
-        return edge.directed;
-    }
-    return false;
-}
-
-function _relationshipTypeLabel(typeId) {
-    if (typeof typeId !== 'string' || typeId.trim().length === 0) {
-        return 'related';
-    }
-    const types = CRMStore.state.entities.relationshipTypes;
-    if (!Array.isArray(types)) {
-        return typeId;
-    }
-    const match = types.find((t) => t.type_id === typeId);
-    if (match && typeof match.name === 'string' && match.name.trim().length > 0) {
-        return match.name.trim();
-    }
-    return typeId;
-}
-
-export class MiniGraphPreview extends PlatformElement {
     static properties = {
         entityId: { type: String },
         maxDepth: { type: Number },
@@ -74,10 +29,6 @@ export class MiniGraphPreview extends PlatformElement {
         fillContainer: { type: Boolean, reflect: true },
         width: { type: String },
         height: { type: String },
-        _loading: { state: true },
-        _error: { state: true },
-        _fetchedNodes: { state: true },
-        _fetchedEdges: { state: true },
         _displayDepth: { state: true },
     };
 
@@ -175,40 +126,34 @@ export class MiniGraphPreview extends PlatformElement {
         this.fillContainer = false;
         this.width = '100%';
         this.height = '240px';
-        this._loading = false;
-        this._error = '';
-        this._fetchedNodes = [];
-        this._fetchedEdges = [];
         this._displayDepth = 1;
         this._graphInstance = null;
         this._resizeObserver = null;
+        this._graphOp = this.useOp('crm/influence_graph');
+        this._entityTypes = this.useResource('crm/entity_types', { autoload: true });
+        this._relationshipTypes = this.useResource('crm/relationship_types', { autoload: true });
+        this._lastLoadedEntityId = '';
     }
 
     firstUpdated() {
         super.firstUpdated?.();
         if (this.entityId) {
-            this._loadAndRender();
+            this._loadGraph();
         }
     }
 
     updated(changed) {
         if (changed.has('entityId')) {
+            const prev = changed.get('entityId');
             if (!this.entityId) {
                 this._destroyGraph();
-                this._fetchedNodes = [];
-                this._fetchedEdges = [];
-                this._error = '';
-                this._loading = false;
-            } else {
-                const prev = changed.get('entityId');
-                if (prev !== undefined && prev !== this.entityId) {
-                    this._loadAndRender();
-                }
+            } else if (prev !== this.entityId) {
+                this._loadGraph();
             }
             return;
         }
         if (changed.has('maxDepth') && this.entityId) {
-            this._loadAndRender();
+            this._loadGraph();
             return;
         }
         if (changed.has('_displayDepth') && this._graphInstance) {
@@ -221,6 +166,54 @@ export class MiniGraphPreview extends PlatformElement {
         this._destroyGraph();
     }
 
+    _resolveNodeColor(node) {
+        if (node.access === false) {
+            return '#7f7f8f';
+        }
+        const entityType = typeof node.entity_type === 'string' ? node.entity_type.trim() : '';
+        if (!entityType) {
+            return '#bca8ff';
+        }
+        const types = this._entityTypes.items;
+        const match = types.find((t) => t.type_id === entityType);
+        if (!match || typeof match.color !== 'string' || !match.color.trim()) {
+            return '#bca8ff';
+        }
+        return match.color.trim();
+    }
+
+    _normalizeLevel(rawNode, rootEntityId, nodeId) {
+        if (typeof rawNode.level === 'number' && Number.isFinite(rawNode.level)) {
+            return Math.max(0, Math.floor(rawNode.level));
+        }
+        if (nodeId === rootEntityId) {
+            return 0;
+        }
+        return 1;
+    }
+
+    _edgeDirected(edge) {
+        if (typeof edge.is_directed === 'boolean') {
+            return edge.is_directed;
+        }
+        if (typeof edge.directed === 'boolean') {
+            return edge.directed;
+        }
+        return false;
+    }
+
+    _relationshipTypeLabel(typeId) {
+        if (typeof typeId !== 'string' || typeId.trim().length === 0) {
+            return 'related';
+        }
+        const types = this._relationshipTypes.items;
+        const match = types.find((t) => t.type_id === typeId);
+        if (match && typeof match.name === 'string' && match.name.trim().length > 0) {
+            return match.name.trim();
+        }
+        return typeId;
+    }
+
     _getFetchDepth() {
         const n = this.maxDepth;
         if (typeof n !== 'number' || !Number.isFinite(n)) {
@@ -229,9 +222,25 @@ export class MiniGraphPreview extends PlatformElement {
         return Math.min(API_MAX_DEPTH, Math.max(1, Math.floor(n)));
     }
 
+    _getFetchedNodes() {
+        const result = this._graphOp.lastResult;
+        if (!result || !Array.isArray(result.nodes)) {
+            return [];
+        }
+        return result.nodes;
+    }
+
+    _getFetchedEdges() {
+        const result = this._graphOp.lastResult;
+        if (!result || !Array.isArray(result.edges)) {
+            return [];
+        }
+        return result.edges;
+    }
+
     _getMaxLevelInFetched() {
         const root = this.entityId;
-        const nodes = Array.isArray(this._fetchedNodes) ? this._fetchedNodes : [];
+        const nodes = this._getFetchedNodes();
         if (nodes.length === 0) {
             return 0;
         }
@@ -241,7 +250,7 @@ export class MiniGraphPreview extends PlatformElement {
             if (typeof id !== 'string') {
                 continue;
             }
-            const level = _normalizeLevel(raw, root, id);
+            const level = this._normalizeLevel(raw, root, id);
             if (level > maxL) {
                 maxL = level;
             }
@@ -261,29 +270,20 @@ export class MiniGraphPreview extends PlatformElement {
         this._displayDepth = d;
     }
 
-    async _loadAndRender() {
+    async _loadGraph() {
         if (!this.entityId) {
             return;
         }
-        this._loading = true;
-        this._error = '';
         this._destroyGraph();
-        try {
-            const response = await this.crmApi.getInfluenceGraph(this.entityId, { max_depth: this._getFetchDepth() });
-            const nodes = Array.isArray(response.nodes) ? response.nodes : [];
-            const edges = Array.isArray(response.edges) ? response.edges : [];
-            this._fetchedNodes = nodes;
-            this._fetchedEdges = edges;
-        } catch (err) {
-            const message = err instanceof Error ? err.message : String(err);
-            this._error = message;
-            this._fetchedNodes = [];
-            this._fetchedEdges = [];
-            this._loading = false;
+        this._lastLoadedEntityId = this.entityId;
+        await this._graphOp.run({
+            entityId: this.entityId,
+            params: { max_depth: this._getFetchDepth() },
+        });
+        if (this._lastLoadedEntityId !== this.entityId) {
             return;
         }
-        this._loading = false;
-        if (this._fetchedNodes.length === 0) {
+        if (this._getFetchedNodes().length === 0) {
             return;
         }
         this._clampInitialDisplayDepth();
@@ -293,17 +293,17 @@ export class MiniGraphPreview extends PlatformElement {
 
     _normalizeSceneNodes() {
         const root = this.entityId;
-        return this._fetchedNodes.map((raw) => {
+        return this._getFetchedNodes().map((raw) => {
             const id = raw.entity_id || raw.id;
             if (typeof id !== 'string' || id.trim().length === 0) {
                 throw new Error('Graph node must have entity_id or id');
             }
-            const level = _normalizeLevel(raw, root, id);
+            const level = this._normalizeLevel(raw, root, id);
             return {
                 ...raw,
                 id,
                 name: raw.name || raw.label || id,
-                color: _resolveNodeColor(raw),
+                color: this._resolveNodeColor(raw),
                 level,
             };
         });
@@ -315,7 +315,7 @@ export class MiniGraphPreview extends PlatformElement {
         const visibleIds = new Set(visibleNodes.map((n) => n.id));
 
         const sceneLinks = [];
-        for (const edge of this._fetchedEdges) {
+        for (const edge of this._getFetchedEdges()) {
             const source = edge.source_id || edge.source_entity_id || edge.source;
             const target = edge.target_id || edge.target_entity_id || edge.target;
             if (typeof source !== 'string' || typeof target !== 'string') {
@@ -324,7 +324,7 @@ export class MiniGraphPreview extends PlatformElement {
             if (!visibleIds.has(source) || !visibleIds.has(target)) {
                 continue;
             }
-            const directed = _edgeDirected(edge);
+            const directed = this._edgeDirected(edge);
             const relationType = edge.relationship_type || edge.type || 'related';
             const edgeWeight = typeof edge.weight === 'number' && Number.isFinite(edge.weight) ? edge.weight : 1;
             sceneLinks.push({
@@ -346,7 +346,7 @@ export class MiniGraphPreview extends PlatformElement {
             let graph_weight_subtitle = '';
             if (total > 0) {
                 const value = total.toLocaleString(undefined, { maximumFractionDigits: 2, minimumFractionDigits: 0 });
-                graph_weight_subtitle = this.i18n.t('graph_page.incident_weight_subtitle', { value });
+                graph_weight_subtitle = this.t('graph_page.incident_weight_subtitle', { value });
             }
             return { ...n, size, graph_weight_subtitle };
         });
@@ -454,7 +454,7 @@ export class MiniGraphPreview extends PlatformElement {
             .linkThreeObjectExtend(true)
             .linkThreeObject((link) => {
                 const typeKey = link.relation_type || 'related';
-                const label = _relationshipTypeLabel(typeKey);
+                const label = this._relationshipTypeLabel(typeKey);
                 return createGraphTextSprite(label, linkLabelColor, 13, 24);
             })
             .linkPositionUpdate((sprite, { start, end }) => {
@@ -572,19 +572,21 @@ export class MiniGraphPreview extends PlatformElement {
         const maxL = this._getMaxLevelInFetched();
         const canDecrease = this._displayDepth > 1;
         const canIncrease = maxL > 0 && this._displayDepth < maxL;
+        const fetchedNodes = this._getFetchedNodes();
+        const error = this._graphOp.error;
 
-        if (this._loading) {
-            return html`<div style="${boxStyle}" class="mini-empty">${this.i18n.t('graph.mini_loading')}</div>`;
+        if (this._graphOp.busy) {
+            return html`<div style="${boxStyle}" class="mini-empty">${this.t('graph.mini_loading')}</div>`;
         }
-        if (this._error) {
-            return html`<div style="${boxStyle}" class="mini-empty">${this._error}</div>`;
+        if (error) {
+            return html`<div style="${boxStyle}" class="mini-empty">${error}</div>`;
         }
-        if (!this._loading && this._fetchedNodes.length === 0 && this.entityId) {
-            return html`<div style="${boxStyle}" class="mini-empty">${this.i18n.t('graph.mini_no_edges')}</div>`;
+        if (fetchedNodes.length === 0 && this.entityId) {
+            return html`<div style="${boxStyle}" class="mini-empty">${this.t('graph.mini_no_edges')}</div>`;
         }
 
         const depthCap = Math.max(maxL, 1);
-        const depthLabel = this.i18n.t('graph.mini_depth_level', {
+        const depthLabel = this.t('graph.mini_depth_level', {
             current: String(this._displayDepth),
             max: String(depthCap),
         });
@@ -595,7 +597,7 @@ export class MiniGraphPreview extends PlatformElement {
                     <button
                         type="button"
                         class="mini-depth-btn"
-                        title=${this.i18n.t('graph.mini_depth_less')}
+                        title=${this.t('graph.mini_depth_less')}
                         ?disabled=${!canDecrease}
                         @click=${this._onDecreaseDepth}
                     >\u2212</button>
@@ -603,7 +605,7 @@ export class MiniGraphPreview extends PlatformElement {
                     <button
                         type="button"
                         class="mini-depth-btn"
-                        title=${this.i18n.t('graph.mini_depth_more')}
+                        title=${this.t('graph.mini_depth_more')}
                         ?disabled=${!canIncrease}
                         @click=${this._onIncreaseDepth}
                     >+</button>
@@ -616,4 +618,4 @@ export class MiniGraphPreview extends PlatformElement {
     }
 }
 
-customElements.define('mini-graph-preview', MiniGraphPreview);
+customElements.define('crm-mini-graph-preview', CRMMiniGraphPreview);

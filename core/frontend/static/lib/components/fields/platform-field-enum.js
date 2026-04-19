@@ -61,7 +61,7 @@ export class PlatformFieldEnum extends PlatformElement {
     render() {
         if (this.mode === 'view') {
             if (this.value == null || this.value === '') {
-                return html`<span class="view-value empty">${this.i18n.t('platform_field.empty_value', {}, 'platform')}</span>`;
+                return html`<span class="view-value empty">${(this.t('platform_field.empty_value') || 'platform_field.empty_value')}</span>`;
             }
             return html`<span class="enum-chip">${this.value}</span>`;
         }

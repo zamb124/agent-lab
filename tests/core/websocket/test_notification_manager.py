@@ -1,11 +1,15 @@
 """
 Unit тесты для NotificationManager.
+
+Канон: единственный путь доставки события до сокета — `_deliver_envelope`,
+вызываемый из `_redis_loop` при получении конверта `{target, event}` из
+канала `platform:ui_events` (см. `core.ui_events.dispatcher`).
 """
 
-import pytest
 import asyncio
 import json
-from unittest.mock import AsyncMock, Mock
+
+import pytest
 
 from core.websocket.manager import NotificationManager
 
@@ -14,21 +18,33 @@ class MockWebSocket:
     """Мок WebSocket для тестирования"""
 
     def __init__(self):
-        self.sent_messages = []
+        self.sent_messages: list[dict] = []
         self.closed = False
 
-    async def send_text(self, message: str):
-        """Сохраняет отправленные сообщения"""
+    async def send_text(self, message: str) -> None:
         self.sent_messages.append(json.loads(message))
 
-    async def close(self, code=None, reason=None):
-        """Помечает как закрытый"""
+    async def close(self, code=None, reason=None) -> None:
         self.closed = True
+
+
+def _envelope(user_id: str | None, event_type: str, payload: dict | None = None, *, company_id: str | None = None, broadcast: bool = False) -> dict:
+    target: dict[str, object] = {}
+    if user_id is not None:
+        target["user_id"] = user_id
+    if company_id is not None:
+        target["company_id"] = company_id
+    if broadcast:
+        target["broadcast"] = True
+    return {
+        "target": target,
+        "event": {"type": event_type, "payload": payload or {}, "meta": {"source": "system"}},
+    }
 
 
 @pytest.mark.asyncio
 async def test_single_connection():
-    """Один пользователь с одним подключением"""
+    """Один пользователь с одним подключением."""
     manager = NotificationManager()
 
     ws = MockWebSocket()
@@ -44,35 +60,31 @@ async def test_single_connection():
 
 @pytest.mark.asyncio
 async def test_multiple_connections_same_user():
-    """Несколько подключений одного пользователя"""
+    """Несколько подключений одного пользователя получают envelope."""
     manager = NotificationManager()
 
-    ws1 = MockWebSocket()
-    ws2 = MockWebSocket()
-    ws3 = MockWebSocket()
-
+    ws1, ws2, ws3 = MockWebSocket(), MockWebSocket(), MockWebSocket()
     await manager.connect(ws1, "user_123")
     await manager.connect(ws2, "user_123")
     await manager.connect(ws3, "user_123")
 
     assert len(manager._connections["user_123"]) == 3
 
-    notification = {"type": "test", "message": "Hello"}
-    await manager.send_to_user("user_123", notification)
+    envelope = _envelope("user_123", "notify/test/system_received", {"kind": "system", "title": "Hello"})
+    await manager._deliver_envelope(envelope)
 
-    assert ws1.sent_messages == [notification]
-    assert ws2.sent_messages == [notification]
-    assert ws3.sent_messages == [notification]
+    expected_event = envelope["event"]
+    assert ws1.sent_messages == [expected_event]
+    assert ws2.sent_messages == [expected_event]
+    assert ws3.sent_messages == [expected_event]
 
 
 @pytest.mark.asyncio
 async def test_disconnect_one_connection():
-    """Отключение одного из нескольких подключений"""
+    """Отключение одного из нескольких подключений."""
     manager = NotificationManager()
 
-    ws1 = MockWebSocket()
-    ws2 = MockWebSocket()
-
+    ws1, ws2 = MockWebSocket(), MockWebSocket()
     await manager.connect(ws1, "user_123")
     await manager.connect(ws2, "user_123")
 
@@ -87,21 +99,19 @@ async def test_disconnect_one_connection():
 
 @pytest.mark.asyncio
 async def test_send_to_offline_user():
-    """Отправка уведомления пользователю без подключений"""
+    """Доставка envelope пользователю без подключений — без ошибки, без сайд-эффектов."""
     manager = NotificationManager()
-
-    notification = {"type": "test", "message": "Hello"}
-    await manager.send_to_user("user_offline", notification)
+    envelope = _envelope("user_offline", "notify/test/system_received", {"kind": "system"})
+    # Не должно бросать.
+    await manager._deliver_envelope(envelope)
 
 
 @pytest.mark.asyncio
 async def test_dead_connection_cleanup():
-    """Очистка мертвых соединений"""
+    """Если send_text падает — мёртвый сокет вычищается из реестра."""
     manager = NotificationManager()
 
-    ws1 = MockWebSocket()
-    ws2 = MockWebSocket()
-
+    ws1, ws2 = MockWebSocket(), MockWebSocket()
     await manager.connect(ws1, "user_123")
     await manager.connect(ws2, "user_123")
 
@@ -110,8 +120,8 @@ async def test_dead_connection_cleanup():
 
     ws1.send_text = failing_send
 
-    notification = {"type": "test", "message": "Hello"}
-    await manager.send_to_user("user_123", notification)
+    envelope = _envelope("user_123", "notify/test/system_received", {"kind": "system"})
+    await manager._deliver_envelope(envelope)
 
     assert len(manager._connections["user_123"]) == 1
     assert ws2 in manager._connections["user_123"]
@@ -120,13 +130,10 @@ async def test_dead_connection_cleanup():
 
 @pytest.mark.asyncio
 async def test_get_stats():
-    """Получение статистики подключений"""
+    """Статистика подключений."""
     manager = NotificationManager()
 
-    ws1 = MockWebSocket()
-    ws2 = MockWebSocket()
-    ws3 = MockWebSocket()
-
+    ws1, ws2, ws3 = MockWebSocket(), MockWebSocket(), MockWebSocket()
     await manager.connect(ws1, "user_1")
     await manager.connect(ws2, "user_1")
     await manager.connect(ws3, "user_2")
@@ -140,42 +147,56 @@ async def test_get_stats():
 
 @pytest.mark.asyncio
 async def test_multiple_users():
-    """Несколько пользователей с разными подключениями"""
+    """Адресация по target.user_id: только сокеты этого пользователя получают envelope."""
     manager = NotificationManager()
 
-    ws1 = MockWebSocket()
-    ws2 = MockWebSocket()
-    ws3 = MockWebSocket()
-
+    ws1, ws2, ws3 = MockWebSocket(), MockWebSocket(), MockWebSocket()
     await manager.connect(ws1, "user_1")
     await manager.connect(ws2, "user_1")
     await manager.connect(ws3, "user_2")
 
-    notification_1 = {"type": "test", "message": "For user 1"}
-    notification_2 = {"type": "test", "message": "For user 2"}
+    env_1 = _envelope("user_1", "notify/test/system_received", {"kind": "system", "title": "For user 1"})
+    env_2 = _envelope("user_2", "notify/test/system_received", {"kind": "system", "title": "For user 2"})
 
-    await manager.send_to_user("user_1", notification_1)
-    await manager.send_to_user("user_2", notification_2)
+    await manager._deliver_envelope(env_1)
+    await manager._deliver_envelope(env_2)
 
-    assert ws1.sent_messages == [notification_1]
-    assert ws2.sent_messages == [notification_1]
-    assert ws3.sent_messages == [notification_2]
+    assert ws1.sent_messages == [env_1["event"]]
+    assert ws2.sent_messages == [env_1["event"]]
+    assert ws3.sent_messages == [env_2["event"]]
+
+
+@pytest.mark.asyncio
+async def test_company_target_delivers_to_company_sockets_only():
+    """target.company_id — фрейм уходит только сокетам, привязанным к компании."""
+    manager = NotificationManager()
+
+    ws_company = MockWebSocket()
+    ws_other = MockWebSocket()
+    await manager.connect(ws_company, "user_in_company", company_id="c1")
+    await manager.connect(ws_other, "user_other", company_id="c2")
+
+    env = _envelope(None, "crm/note/created", {"id": "n1"}, company_id="c1")
+    await manager._deliver_envelope(env)
+
+    assert ws_company.sent_messages == [env["event"]]
+    assert ws_other.sent_messages == []
 
 
 @pytest.mark.asyncio
 async def test_concurrent_connections():
-    """Одновременные подключения"""
+    """Одновременные подключения."""
     manager = NotificationManager()
 
     async def connect_user(user_id: str, count: int):
         sockets = []
-        for i in range(count):
+        for _ in range(count):
             ws = MockWebSocket()
             await manager.connect(ws, user_id)
             sockets.append(ws)
         return sockets
 
-    users_sockets = await asyncio.gather(
+    await asyncio.gather(
         connect_user("user_1", 5),
         connect_user("user_2", 3),
         connect_user("user_3", 7),
@@ -188,4 +209,3 @@ async def test_concurrent_connections():
     stats = manager.get_stats()
     assert stats["active_users"] == 3
     assert stats["total_connections"] == 15
-

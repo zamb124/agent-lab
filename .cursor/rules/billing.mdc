@@ -95,7 +95,7 @@ alwaysApply: false
 - **`/frontend/api/platform-billing`**: `GET/PUT /prices` (глобальный override каталога), **`GET/PUT /settlement-rules/{company_id}`**, `GET/PUT /prices/company/{company_id}`, `GET /usage-report`, **`GET /company-resolve?q=`** (разрешение `company_id` или subdomain/slug → `company_id`), **`GET /facets/billing-companies`** (подсказки по имени, slug, id), **`GET /default-settlement-rules`** (кодовый шаблон `SettlementRulesDocument` без записи в storage).
 - UI: **`/platform-billing`**, **`billing-admin-page`**. Сверху страницы выбирается **компания**, для которой загружаются и редактируются **правила settlement** и **override прайса**; глобальный каталог цен — отдельная секция (база для всех компаний).
 - В **`core/middleware/auth/route_config.py`** нужны и **`/platform-billing`**, и **`/frontend/platform-billing`**: префикс `/frontend/` исключён из анонимного SPA-fallback, без второго правила refresh по URL с префиксом даёт 404.
-- HTTP: `BaseService('/frontend')` — все запросы через единый `api` (не raw `fetch`).
+- HTTP: только через фабрики `apps/frontend/ui/events/resources/billing-admin.resource.js` (`createAsyncOp` с `request: ({ httpRequest }) => httpRequest('/frontend/api/...')`). В компонентах admin-страницы — `this.useOp('frontend/<op>')`. Прямой `fetch` / `httpRequest` / какие-либо `BaseService` — запрещены.
 
 ### Прайс-каталог (глобальный)
 

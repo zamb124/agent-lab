@@ -4,9 +4,9 @@
 import { html, css } from 'lit';
 import { classMap } from 'lit/directives/class-map.js';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
-import { I18nNs } from '@platform/services/i18n/i18n.service.js';
-
 export class LandingPlans extends PlatformElement {
+    static i18nNamespace = 'landing';
+
     static styles = [
         PlatformElement.styles,
         css`
@@ -246,35 +246,19 @@ export class LandingPlans extends PlatformElement {
     ];
 
     _handleCTA(planType) {
-        if (planType === 'constructor') {
-            this.dispatchEvent(new CustomEvent('open-auth-modal', {
-                bubbles: true,
-                composed: true
-            }));
-            return;
-        }
-        this.dispatchEvent(new CustomEvent('plan-selected', {
-            detail: { plan: planType },
-            bubbles: true,
-            composed: true
-        }));
+        this.openModal('auth.login', { plan: planType });
     }
 
     connectedCallback() {
         super.connectedCallback();
-        this._i18nUnsub = this.i18n.subscribe(() => this.requestUpdate());
     }
 
     disconnectedCallback() {
-        if (this._i18nUnsub) {
-            this._i18nUnsub();
-            this._i18nUnsub = null;
-        }
         super.disconnectedCallback();
     }
 
     render() {
-        const t = (key) => this.i18n.t(key, {}, I18nNs.LANDING);
+        const t = (key) => (this.t(key) || key);
         return html`
             <div class="plans-container">
                 <h2 class="plans-title">${t('plans.title')}</h2>

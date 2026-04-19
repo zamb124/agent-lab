@@ -1,157 +1,344 @@
 /**
- * Универсальный компонент пользователя для всех сервисов платформы.
- * 
- * Особенности:
- * - Автоматическая загрузка данных пользователя через auth сервис
- * - Выпадающее меню с полным функционалом
- * - Поддержка service-specific атрибутов
- * - Смена компании (если доступно несколько)
- * - Реактивность через AppEvents
+ * platform-user — кросс-сервисный компонент пользовательского меню.
+ *
+ * Канон: PlatformElement + Event Sourcing.
+ *   - чтение: this.select(...) по auth/companies/theme/i18n
+ *   - действия: this.dispatch(...), this.switchCompany(...), this.setTheme(...),
+ *     this.setLocale(...), this.openModal(...)
+ *   - смена компании: dispatch AUTH_COMPANY_SWITCH_REQUESTED → подписка на
+ *     AUTH_COMPANY_SWITCHED → редирект на subdomain выбранной компании.
+ *     Cross-tab синхронизация через localStorage 'platform:company-switch'.
+ *   - меню: Apps grid (Flows, NetWorkle, RAG, Sync, Documents, Console),
+ *     Профиль (открывает `platform.user_info` модалку с формой профиля),
+ *     Компания (если их > 1), Календарь, Документация, язык (en|ru),
+ *     переключатель темы, Выйти.
+ *   - в свернутом sidebar (`platform-sidebar[collapsed]`) меню переходит
+ *     в `position: fixed` через CSS-переменные `--user-menu-fixed-*`.
+ *
+ * i18n namespace: 'platform' (см. core/i18n/translations/{ru,en}/platform.json).
  */
 
 import { html, css } from 'lit';
 import { classMap } from 'lit/directives/class-map.js';
 import { PlatformElement } from '../platform-element/index.js';
-import { openUrlSameWindowOrTab } from '../utils/native-app-shell.js';
-import { AppEvents } from '../utils/types.js';
-import { buildScenarioDocumentationUrl } from '../utils/documentation-url.js';
+import { CoreEvents } from '../events/contract.js';
+import { COMPANIES_EVENTS } from '../events/reducers/companies.js';
+import { redirectToLogin } from '../utils/auth-redirect.js';
 import { buildCompanySubdomainUrl } from '../utils/tenant-url.js';
-import { createAvatarRetry } from '../utils/avatar-retry.js';
-import { buildServiceEntryUrl, setLastVisitedService } from '../utils/last-visited-service.js';
+import { buildScenarioDocumentationUrl } from '../utils/documentation-url.js';
 import './platform-icon.js';
+import './platform-calendar-modal.js';
+
+const COMPANY_SWITCH_STORAGE_KEY = 'platform:company-switch';
+const SERVICE_LOGO_BASE = '/static/core/assets/service_logos';
+
+const SERVICE_APPS = Object.freeze([
+    { id: 'flows',     logo: `${SERVICE_LOGO_BASE}/agents_logo.svg`,    i18n: 'apps.flows' },
+    { id: 'crm',       logo: `${SERVICE_LOGO_BASE}/crm_logo.svg`,       i18n: 'apps.crm' },
+    { id: 'rag',       logo: `${SERVICE_LOGO_BASE}/rag_logo.svg`,       i18n: 'apps.rag' },
+    { id: 'sync',      logo: `${SERVICE_LOGO_BASE}/sync_logo.svg`,      i18n: 'apps.sync' },
+    { id: 'documents', logo: `${SERVICE_LOGO_BASE}/documents_logo.svg`, i18n: 'apps.documents' },
+    { id: 'frontend',  logo: `${SERVICE_LOGO_BASE}/frontend_logo.svg`,  i18n: 'apps.frontend' },
+]);
+
+const SERVICE_DEV_PORTS = Object.freeze({
+    flows: '8001',
+    frontend: '8002',
+    crm: '8003',
+    rag: '8004',
+    sync: '8005',
+    documents: '8008',
+});
 
 export class PlatformUser extends PlatformElement {
+    static i18nNamespace = 'platform';
+
     static properties = {
-        user: { type: Object },
-        serviceAttrs: { type: Object },
-        companies: { type: Array },
-        _menuOpen: { type: Boolean },
-        _companySelectorOpen: { type: Boolean },
-        _appsMenuOpen: { type: Boolean },
-        _avatarRetryTick: { type: Number, state: true },
-        /** Необязательный тег сценария (docs/scenarios/<service>/<tag>/), если UI привязан к процессу */
-        documentationTag: { type: String },
+        block: { type: Boolean, reflect: true },
+        documentationTag: { type: String, attribute: 'documentation-tag' },
+        _menuOpen: { state: true },
+        _companySelectorOpen: { state: true },
+        _appsMenuOpen: { state: true },
+        _avatarBroken: { state: true },
     };
 
     constructor() {
         super();
-        this.user = null;
-        this.serviceAttrs = null;
-        this.companies = [];
+        this.block = false;
+        this.documentationTag = null;
         this._menuOpen = false;
         this._companySelectorOpen = false;
         this._appsMenuOpen = false;
-        this._avatarRetry = createAvatarRetry(() => this.requestUpdate());
-        this.documentationTag = null;
-        this._boundRepositionMenu = this._syncCollapsedMenuPosition.bind(this);
-        this._boundDocumentClick = (e) => this._handleDocumentClick(e);
-        this._boundCompanySwitchStorage = (e) => this._handleCompanySwitchStorage(e);
-        this._boundWindowFocus = () => this._scheduleCompanyAlignmentCheck();
-        this._boundWindowPageShow = () => {
-            this._companyAlignmentSkipUntil = 0;
-            this._scheduleCompanyAlignmentCheck();
-        };
-        this._boundVisibilityChange = () => {
-            if (document.visibilityState === 'visible') {
-                this._companyAlignmentSkipUntil = 0;
-                this._scheduleCompanyAlignmentCheck();
-            }
-        };
-        this._companyAlignmentIntervalId = null;
-        this._companyAlignmentInFlight = false;
-        this._companyAlignmentQueued = false;
-        this._companyAlignmentSkipUntil = 0;
-        this._companyAlignmentNetworkFailures = 0;
-        this._boundOnline = () => this._onBrowserOnline();
-        this._i18nUnsub = null;
-    }
+        this._avatarBroken = false;
 
-    /**
-     * Сетевой сбой (сервер не слушает, DNS, offline): fetch бросает TypeError, не HTTP-ответ.
-     */
-    _isAuthMeNetworkFailure(error) {
-        if (!error || typeof error !== 'object') {
-            return false;
-        }
-        const name = error.name;
-        const message = typeof error.message === 'string' ? error.message : '';
-        if (name === 'TypeError' && message.includes('fetch')) {
-            return true;
-        }
-        return false;
-    }
+        this._authSelect = this.select((s) => ({
+            status: s.auth.status,
+            user: s.auth.user,
+            activeCompanyId: s.auth.activeCompanyId,
+        }));
+        this._companiesSelect = this.select((s) => s.companies.list);
+        this._themeSelect = this.select((s) => s.theme.mode);
+        this._localeSelect = this.select((s) => s.i18n.locale);
 
-    _onBrowserOnline() {
-        this._companyAlignmentSkipUntil = 0;
-        this._companyAlignmentNetworkFailures = 0;
-        this._scheduleCompanyAlignmentCheck();
-    }
+        this._companiesLoaded = false;
+        this._pendingSwitchCompanyId = null;
 
-    _pt(key, params = {}) {
-        return this.i18n.t(key, params, 'platform');
+        this._onDocumentClick = this._onDocumentClick.bind(this);
+        this._onStorage = this._onStorage.bind(this);
+        this._onResize = this._syncCollapsedMenuPosition.bind(this);
     }
 
     connectedCallback() {
         super.connectedCallback();
-        this._loadUser();
-        window.addEventListener(AppEvents.AUTH_CHANGE, () => {
-            if (this.auth?.isAuthenticated) {
-                this._loadUser();
-            } else {
-                this.user = null;
-                this.companies = [];
-                this.serviceAttrs = null;
-            }
-        });
-        document.addEventListener('click', this._boundDocumentClick);
-        window.addEventListener('storage', this._boundCompanySwitchStorage);
-        window.addEventListener('focus', this._boundWindowFocus);
-        window.addEventListener('pageshow', this._boundWindowPageShow);
-        window.addEventListener('online', this._boundOnline);
-        document.addEventListener('visibilitychange', this._boundVisibilityChange);
-        this._companyAlignmentIntervalId = window.setInterval(() => {
-            this._scheduleCompanyAlignmentCheck();
-        }, 5000);
+        document.addEventListener('click', this._onDocumentClick);
+        window.addEventListener('storage', this._onStorage);
+        this.useEvent(CoreEvents.AUTH_COMPANY_SWITCHED, (event) => this._onCompanySwitched(event));
     }
 
     disconnectedCallback() {
-        super.disconnectedCallback();
-        this._avatarRetry.cancel();
-        document.removeEventListener('click', this._boundDocumentClick);
-        window.removeEventListener('storage', this._boundCompanySwitchStorage);
-        window.removeEventListener('focus', this._boundWindowFocus);
-        window.removeEventListener('pageshow', this._boundWindowPageShow);
-        window.removeEventListener('online', this._boundOnline);
-        document.removeEventListener('visibilitychange', this._boundVisibilityChange);
-        if (this._companyAlignmentIntervalId !== null) {
-            window.clearInterval(this._companyAlignmentIntervalId);
-            this._companyAlignmentIntervalId = null;
-        }
-        this._detachCollapsedMenuListeners();
+        document.removeEventListener('click', this._onDocumentClick);
+        window.removeEventListener('storage', this._onStorage);
+        this._detachCollapsedListeners();
         this._clearCollapsedMenuPosition();
+        super.disconnectedCallback();
     }
 
     updated(changedProperties) {
         super.updated(changedProperties);
+
+        const auth = this._authSelect.value;
+        if (auth.status === 'authenticated' && auth.user && !this._companiesLoaded) {
+            this._companiesLoaded = true;
+            this.dispatch(COMPANIES_EVENTS.LOAD_REQUESTED, null);
+        }
+
         if (changedProperties.has('_menuOpen')) {
             if (this._menuOpen) {
-                this._attachCollapsedMenuListeners();
+                this._attachCollapsedListeners();
                 this.updateComplete.then(() => this._syncCollapsedMenuPosition());
             } else {
-                this._detachCollapsedMenuListeners();
+                this._detachCollapsedListeners();
                 this._clearCollapsedMenuPosition();
             }
         }
     }
 
-    _attachCollapsedMenuListeners() {
-        window.addEventListener('resize', this._boundRepositionMenu);
-        window.addEventListener('scroll', this._boundRepositionMenu, true);
+    _onDocumentClick(e) {
+        if (!this._menuOpen) return;
+        const path = e.composedPath();
+        if (!path.includes(this)) {
+            this._menuOpen = false;
+            this._companySelectorOpen = false;
+            this._appsMenuOpen = false;
+        }
     }
 
-    _detachCollapsedMenuListeners() {
-        window.removeEventListener('resize', this._boundRepositionMenu);
-        window.removeEventListener('scroll', this._boundRepositionMenu, true);
+    _toggleMenu(e) {
+        e.stopPropagation();
+        const next = !this._menuOpen;
+        this._menuOpen = next;
+        if (!next) {
+            this._companySelectorOpen = false;
+            this._appsMenuOpen = false;
+        }
+    }
+
+    _toggleAppsMenu(e) {
+        e.stopPropagation();
+        this._appsMenuOpen = !this._appsMenuOpen;
+    }
+
+    _toggleCompanySelector(e) {
+        e.stopPropagation();
+        this._companySelectorOpen = !this._companySelectorOpen;
+    }
+
+    _switchCompany(companyId, e) {
+        e.stopPropagation();
+        const auth = this._authSelect.value;
+        const currentCompanyId = this._currentCompanyId(auth);
+        if (companyId === currentCompanyId) {
+            this._companySelectorOpen = false;
+            return;
+        }
+        this._pendingSwitchCompanyId = companyId;
+        this.switchCompany(companyId);
+    }
+
+    _onCompanySwitched(event) {
+        const companyId = event.payload && event.payload.company_id;
+        if (!companyId) return;
+        if (this._pendingSwitchCompanyId !== companyId) {
+            return;
+        }
+        this._pendingSwitchCompanyId = null;
+        const company = this._companiesSelect.value.find((c) => c.company_id === companyId);
+        if (!company || !company.subdomain) {
+            this.toast('company.subdomain_missing', { type: 'error' });
+            return;
+        }
+        this.toast('company.switched', { type: 'success' });
+        this._broadcastCompanySwitch(company);
+        this._redirectToCompany(company);
+    }
+
+    _broadcastCompanySwitch(company) {
+        const payload = `${Date.now()}|${company.company_id}|${company.subdomain}`;
+        window.localStorage.setItem(COMPANY_SWITCH_STORAGE_KEY, payload);
+    }
+
+    _onStorage(event) {
+        if (event.key !== COMPANY_SWITCH_STORAGE_KEY || !event.newValue) return;
+        const parts = event.newValue.split('|');
+        if (parts.length !== 3) return;
+        const targetSubdomain = parts[2];
+        if (!targetSubdomain) return;
+        this._redirectToSubdomain(targetSubdomain);
+    }
+
+    _redirectToCompany(company) {
+        this._redirectToSubdomain(company.subdomain);
+    }
+
+    _redirectToSubdomain(subdomain) {
+        const targetPath = `${window.location.pathname}${window.location.search}${window.location.hash}`;
+        const targetUrl = buildCompanySubdomainUrl(subdomain, targetPath);
+        if (targetUrl === window.location.href) return;
+        window.location.href = targetUrl;
+    }
+
+    _setLocale(locale, e) {
+        e.stopPropagation();
+        this.setLocale(locale);
+    }
+
+    _toggleTheme() {
+        const next = this._themeSelect.value === 'dark' ? 'light' : 'dark';
+        this.setTheme(next);
+    }
+
+    _openUserInfo() {
+        this._menuOpen = false;
+        const auth = this._authSelect.value;
+        const user = auth.user;
+        if (!user) return;
+        const userId = (user.raw && user.raw.user_id) || user.id;
+        if (!userId) return;
+        this.openModal('platform.user_info', { userId });
+    }
+
+    _openCalendar() {
+        this._menuOpen = false;
+        this.openModal('platform.calendar', {});
+    }
+
+    _openDocumentation() {
+        this._menuOpen = false;
+        const tag = (typeof this.documentationTag === 'string' && this.documentationTag.trim())
+            ? this.documentationTag.trim()
+            : null;
+        const url = buildScenarioDocumentationUrl({ tag });
+        window.open(url, '_blank', 'noopener,noreferrer');
+    }
+
+    _openServiceApp(serviceId, event) {
+        event.stopPropagation();
+        const url = this._buildServiceUrl(serviceId);
+        if (PlatformUser._isStandalonePwaMode()) {
+            window.location.href = url;
+            return;
+        }
+        window.open(url, '_blank', 'noopener,noreferrer');
+    }
+
+    _buildServiceUrl(serviceId) {
+        const servicePath = `/${serviceId}`;
+        const hostname = window.location.hostname;
+        if (!PlatformUser._isLocalHost(hostname)) {
+            return servicePath;
+        }
+        const targetPort = SERVICE_DEV_PORTS[serviceId];
+        if (!targetPort) {
+            throw new Error(`platform-user: unknown service id "${serviceId}"`);
+        }
+        if (window.location.port === targetPort) {
+            return servicePath;
+        }
+        return `${window.location.protocol}//${hostname}:${targetPort}${servicePath}`;
+    }
+
+    static _isLocalHost(hostname) {
+        return hostname === 'localhost'
+            || hostname === '127.0.0.1'
+            || hostname.endsWith('.localhost')
+            || hostname.endsWith('.lvh.me');
+    }
+
+    _logout() {
+        this._menuOpen = false;
+        this.dispatch(CoreEvents.AUTH_LOGOUT_REQUESTED, null);
+        redirectToLogin();
+    }
+
+    _currentCompanyId(auth) {
+        if (auth.activeCompanyId) return auth.activeCompanyId;
+        const raw = auth.user && auth.user.raw;
+        if (raw) {
+            if (raw.active_company_id) return raw.active_company_id;
+            if (raw.company_id) return raw.company_id;
+        }
+        return auth.user && auth.user.company_id ? auth.user.company_id : null;
+    }
+
+    _companyName(companyId) {
+        if (!companyId) return '';
+        const company = this._companiesSelect.value.find((c) => c.company_id === companyId);
+        return company ? company.name : '';
+    }
+
+    _displayName(user) {
+        if (user.name) return user.name;
+        const raw = user.raw;
+        if (raw && raw.name) return raw.name;
+        return this.t('menu.user_fallback');
+    }
+
+    _displayEmail(user) {
+        const raw = user.raw;
+        if (!raw) return '';
+        if (Array.isArray(raw.emails) && raw.emails.length > 0) return raw.emails[0];
+        return '';
+    }
+
+    _avatarUrl(user) {
+        const raw = user.raw;
+        if (!raw || typeof raw.avatar_url !== 'string') return null;
+        const trimmed = raw.avatar_url.trim();
+        return trimmed === '' ? null : trimmed;
+    }
+
+    _avatarLetter(user) {
+        const sources = [user.name, user.raw && user.raw.name, this._displayEmail(user)];
+        for (const src of sources) {
+            if (typeof src === 'string' && src.trim().length > 0) {
+                return src.trim().charAt(0).toUpperCase();
+            }
+        }
+        return '?';
+    }
+
+    _onAvatarError() {
+        this._avatarBroken = true;
+    }
+
+    _attachCollapsedListeners() {
+        window.addEventListener('resize', this._onResize);
+        window.addEventListener('scroll', this._onResize, true);
+    }
+
+    _detachCollapsedListeners() {
+        window.removeEventListener('resize', this._onResize);
+        window.removeEventListener('scroll', this._onResize, true);
     }
 
     _clearCollapsedMenuPosition() {
@@ -161,669 +348,204 @@ export class PlatformUser extends PlatformElement {
     }
 
     _syncCollapsedMenuPosition() {
-        if (!this._menuOpen) {
-            return;
-        }
+        if (!this._menuOpen) return;
         const sidebar = this.closest('platform-sidebar');
-        if (!sidebar?.hasAttribute('collapsed')) {
+        if (!sidebar || !sidebar.hasAttribute('collapsed')) {
             this._clearCollapsedMenuPosition();
             return;
         }
-        const anchor = this.renderRoot?.querySelector('.user-bar');
-        if (!anchor) {
-            return;
-        }
-        const rect = anchor.getBoundingClientRect();
+        const button = this.renderRoot.querySelector('.user-button');
+        if (!button) return;
+        const rect = button.getBoundingClientRect();
         const margin = 8;
-        const maxW = Math.min(240, window.innerWidth - 2 * margin);
+        const maxW = Math.min(260, window.innerWidth - 2 * margin);
         let left = rect.left;
-        if (left + maxW > window.innerWidth - margin) {
-            left = window.innerWidth - maxW - margin;
-        }
-        if (left < margin) {
-            left = margin;
-        }
+        if (left + maxW > window.innerWidth - margin) left = window.innerWidth - maxW - margin;
+        if (left < margin) left = margin;
         const bottom = window.innerHeight - rect.top + margin;
         this.style.setProperty('--user-menu-fixed-left', `${left}px`);
         this.style.setProperty('--user-menu-fixed-bottom', `${bottom}px`);
         this.style.setProperty('--user-menu-fixed-width', `${maxW}px`);
     }
 
-    async _loadUser() {
-        if (!this.auth) {
-            this.user = null;
-            return;
-        }
-
-        const userData = await this.auth.get('/api/auth/me');
-        this.user = userData;
-        this._avatarRetry.reset();
-        await this._loadCompanies();
-        this._ensureCompanyAlignment();
-        await this._loadServiceAttrs();
-    }
-
-    async _loadCompanies() {
-        const response = await this.auth.get('/api/companies/me');
-        if (!response || typeof response !== 'object' || !Array.isArray(response.items)) {
-            throw new Error('Некорректный ответ /api/companies/me: ожидался объект с массивом items');
-        }
-        const companyItems = response.items;
-
-        this.companies = companyItems.map((company) => ({
-            company_id: company.company_id,
-            subdomain: company.subdomain,
-            name: company.subdomain,
-            roles: company.role
-        }));
-    }
-
-    async _loadServiceAttrs() {
-        const service = this._getCurrentService();
-        if (!service) return;
-        
-        try {
-            this.serviceAttrs = await this.auth.getServiceAttrs(service);
-        } catch (error) {
-            console.error(`[PlatformUser] Failed to load ${service} attrs:`, error);
-        }
-    }
-
-    _getCurrentService() {
-        const path = window.location.pathname;
-        const match = path.match(/^\/([^\/]+)/);
-        const service = match?.[1];
-        
-        if (!service || ['static', 'api', 'ws'].includes(service)) {
-            return null;
-        }
-        
-        return service;
-    }
-
-    async _updateServiceAttrs(attrs) {
-        const service = this._getCurrentService();
-        if (!service) {
-            throw new Error('Cannot determine current service');
-        }
-        
-        return await this.auth.updateServiceAttrs(service, attrs);
-    }
-
-    _toggleMenu(e) {
-        e.stopPropagation();
-        const nextOpen = !this._menuOpen;
-        this._menuOpen = nextOpen;
-        if (!nextOpen) {
-            this._companySelectorOpen = false;
-            this._appsMenuOpen = false;
-        }
-        this.requestUpdate();
-    }
-
-    _handleDocumentClick(e) {
-        const path = e.composedPath();
-        const inside = path.includes(this);
-        if (!inside && this._menuOpen) {
-            this._menuOpen = false;
-            this._companySelectorOpen = false;
-            this._appsMenuOpen = false;
-            this.requestUpdate();
-        }
-    }
-
-    _toggleAppsMenu(e) {
-        e.stopPropagation();
-        this._appsMenuOpen = !this._appsMenuOpen;
-        this.requestUpdate();
-    }
-
-    _serviceAppEntries() {
-        return [
-            { id: 'flows', logo: '/static/core/assets/service_logos/agents_logo.svg' },
-            { id: 'crm', logo: '/static/core/assets/service_logos/crm_logo.svg' },
-            { id: 'rag', logo: '/static/core/assets/service_logos/rag_logo.svg' },
-            { id: 'sync', logo: '/static/core/assets/service_logos/sync_logo.svg' },
-            { id: 'documents', logo: '/static/core/assets/service_logos/documents_logo.svg' },
-            { id: 'frontend', logo: '/static/core/assets/service_logos/frontend_logo.svg' },
-        ];
-    }
-
-    async _setUiLocale(lang, e) {
-        e.stopPropagation();
-        try {
-            await this.i18n.setLocale(lang);
-        } catch (err) {
-            this.error(err instanceof Error ? err.message : String(err));
-            throw err;
-        }
-    }
-
-    _openServiceApp(serviceId, event) {
-        event.stopPropagation();
-        setLastVisitedService(serviceId);
-        const url = buildServiceEntryUrl(serviceId);
-        openUrlSameWindowOrTab(url);
-    }
-
-    _getUserInitials() {
-        if (!this.user) return '?';
-        const name = this.user.name || this.user.emails?.[0] || '';
-        return name.charAt(0).toUpperCase();
-    }
-
-    _avatarDisplayUrl() {
-        const raw = this.user?.avatar_url;
-        if (typeof raw !== 'string') {
-            return null;
-        }
-        const trimmed = raw.trim();
-        return trimmed !== '' ? trimmed : null;
-    }
-
-    _renderAvatar() {
-        const originalUrl = this._avatarDisplayUrl();
-        const src = this._avatarRetry.currentSrc(originalUrl);
-        if (src) {
-            return html`
-                <div class="user-avatar has-image" aria-hidden="true">
-                    <img
-                        class="avatar-img"
-                        src=${src}
-                        alt=""
-                        @load=${() => this._avatarRetry.onLoad()}
-                        @error=${() => this._avatarRetry.onError(originalUrl)}
-                    />
-                </div>
-            `;
-        }
-        return html`
-            <div class="user-avatar" aria-hidden="true">${this._getUserInitials()}</div>
-        `;
-    }
-
-    async _openProfileModal() {
-        this._menuOpen = false;
-        
-        try {
-            await import('./user-profile-modal.js');
-            
-            console.log('[PlatformUser] About to createElement...');
-            console.log('[PlatformUser] customElements.get result:', customElements.get('user-profile-modal'));
-            console.log('[PlatformUser] Trying new instead...');
-            
-            // Пробуем напрямую через конструктор
-            const ModalClass = customElements.get('user-profile-modal');
-            const modal = new ModalClass();
-            
-            console.log('[PlatformUser] Modal created via new:', modal);
-            
-            modal.user = this.user;
-            modal.activeCompanyName = this._getCompanyName(this.user.active_company_id || this.user.company_id);
-            modal.open = true;
-            document.body.appendChild(modal);
-            
-            modal.addEventListener('close', () => {
-                modal.remove();
-            });
-            modal.addEventListener('updated', () => this._loadUser());
-        } catch (error) {
-            console.error('[PlatformUser] Failed to open profile modal:', error);
-        }
-    }
-
-    _toggleCompanySelector(e) {
-        e.stopPropagation();
-        this._companySelectorOpen = !this._companySelectorOpen;
-        this.requestUpdate();
-    }
-
-    async _switchCompany(companyId, e) {
-        e.stopPropagation();
-        
-        if (companyId === this.user?.active_company_id) {
-            return;
-        }
-
-        try {
-            await this.auth.switchCompany(companyId);
-            const company = this.companies.find((item) => item.company_id === companyId);
-            if (!company?.subdomain) {
-                throw new Error(this._pt('company.subdomain_missing'));
-            }
-            this.success(this._pt('company.switched'));
-            this._broadcastCompanySwitch(company);
-            const targetPath = `${window.location.pathname}${window.location.search}${window.location.hash}`;
-            const targetUrl = buildCompanySubdomainUrl(company.subdomain, targetPath);
-            window.location.href = targetUrl;
-        } catch (error) {
-            console.error('[PlatformUser] Failed to switch company:', error);
-            const msg = error instanceof Error ? error.message : String(error);
-            this.error(this._pt('company.switch_error', { message: msg }));
-        }
-    }
-
-    _broadcastCompanySwitch(company) {
-        const payload = `${Date.now()}|${company.company_id}|${company.subdomain}`;
-        window.localStorage.setItem('platform:company-switch', payload);
-    }
-
-    _handleCompanySwitchStorage(event) {
-        if (event.key !== 'platform:company-switch' || !event.newValue) {
-            return;
-        }
-
-        const parts = event.newValue.split('|');
-        if (parts.length !== 3) {
-            return;
-        }
-
-        const [, , targetSubdomain] = parts;
-        if (!targetSubdomain) {
-            return;
-        }
-
-        const targetPath = `${window.location.pathname}${window.location.search}${window.location.hash}`;
-        const targetUrl = buildCompanySubdomainUrl(targetSubdomain, targetPath);
-        if (targetUrl === window.location.href) {
-            return;
-        }
-        window.location.href = targetUrl;
-    }
-
-    _scheduleCompanyAlignmentCheck() {
-        if (this._companyAlignmentInFlight) {
-            this._companyAlignmentQueued = true;
-            return;
-        }
-        this._checkCompanyAlignment();
-    }
-
-    async _checkCompanyAlignment() {
-        if (!this.auth?.isAuthenticated) {
-            return;
-        }
-        if (typeof Date.now === 'function' && Date.now() < this._companyAlignmentSkipUntil) {
-            return;
-        }
-        this._companyAlignmentInFlight = true;
-        try {
-            try {
-                const userData = await this.auth.get('/api/auth/me');
-                this._companyAlignmentNetworkFailures = 0;
-                this._companyAlignmentSkipUntil = 0;
-                this.user = userData;
-                if (!Array.isArray(this.companies) || this.companies.length === 0) {
-                    await this._loadCompanies();
-                }
-                this._ensureCompanyAlignment();
-            } catch (error) {
-                if (this._isAuthMeNetworkFailure(error)) {
-                    this._companyAlignmentNetworkFailures += 1;
-                    const exp = Math.min(this._companyAlignmentNetworkFailures, 6);
-                    const delayMs = Math.min(120000, 5000 * 2 ** exp);
-                    this._companyAlignmentSkipUntil = Date.now() + delayMs;
-                    return;
-                }
-                throw error;
-            }
-        } finally {
-            this._companyAlignmentInFlight = false;
-            if (this._companyAlignmentQueued) {
-                this._companyAlignmentQueued = false;
-                this._scheduleCompanyAlignmentCheck();
-            }
-        }
-    }
-
-    _ensureCompanyAlignment() {
-        if (!this.user?.company_id) {
-            return;
-        }
-        const selectedCompany = this.companies.find((company) => company.company_id === this.user.company_id);
-        if (!selectedCompany?.subdomain) {
-            return;
-        }
-
-        const currentSubdomain = this._getCurrentSubdomain();
-        if (currentSubdomain === selectedCompany.subdomain) {
-            return;
-        }
-
-        const targetPath = `${window.location.pathname}${window.location.search}${window.location.hash}`;
-        const targetUrl = buildCompanySubdomainUrl(selectedCompany.subdomain, targetPath);
-        if (targetUrl === window.location.href) {
-            return;
-        }
-        window.location.href = targetUrl;
-    }
-
-    _getCurrentSubdomain() {
-        const hostname = window.location.hostname;
-        if (hostname.endsWith('.lvh.me')) {
-            return hostname.slice(0, -'.lvh.me'.length);
-        }
-        if (hostname.endsWith('.localhost')) {
-            return hostname.slice(0, -'.localhost'.length);
-        }
-        if (hostname.endsWith('.humanitec.ru')) {
-            return hostname.slice(0, -'.humanitec.ru'.length);
-        }
-        if (hostname.endsWith('.agents-lab.ru')) {
-            return hostname.slice(0, -'.agents-lab.ru'.length);
-        }
-        return null;
-    }
-
-    _openSettings() {
-        this._menuOpen = false;
-        
-        const service = this._getCurrentService() || 'frontend';
-        window.location.href = `/${service}/settings`;
-    }
-
-    async _openCalendar() {
-        this._menuOpen = false;
-        await import('./platform-calendar-modal.js');
-        const modal = document.createElement('platform-calendar-modal');
-        document.body.appendChild(modal);
-        modal.showModal();
-        const cleanup = () => modal.remove();
-        modal.addEventListener('modal-closed', cleanup, { once: true });
-    }
-
-    _openDocumentation() {
-        this._menuOpen = false;
-        const tag =
-            typeof this.documentationTag === 'string' && this.documentationTag.trim()
-                ? this.documentationTag.trim()
-                : null;
-        const url = buildScenarioDocumentationUrl({ tag });
-        openUrlSameWindowOrTab(url);
-    }
-
-    _toggleTheme() {
-        this.theme?.toggle();
-    }
-
-    async _logout() {
-        this._menuOpen = false;
-        
-        try {
-            await this.auth?.logout();
-            window.location.href = '/';
-        } catch (error) {
-            console.error('[PlatformUser] Logout failed:', error);
-            window.location.href = '/';
-        }
-    }
-
-    _getCompanyName(companyId) {
-        const company = this.companies.find(c => c.company_id === companyId);
-        return company?.name || '';
+    static _isStandalonePwaMode() {
+        const mq = window.matchMedia('(display-mode: standalone)');
+        if (mq && mq.matches) return true;
+        return window.navigator.standalone === true;
     }
 
     render() {
-        if (!this.user) {
-            return html``;
-        }
+        const auth = this._authSelect.value;
+        const user = auth.user;
+        if (!user) return html``;
 
-        const currentCompanyName = this._getCompanyName(this.user.active_company_id || this.user.company_id);
-        const hasMultipleCompanies = this.companies.length > 1;
-        const uiLocale = this.i18n.getCurrentLocale();
+        const companies = this._companiesSelect.value;
+        const currentCompanyId = this._currentCompanyId(auth);
+        const currentCompanyName = this._companyName(currentCompanyId);
+        const hasMultipleCompanies = companies.length > 1;
+        const themeMode = this._themeSelect.value;
+        const locale = this._localeSelect.value;
+        const avatarUrl = this._avatarUrl(user);
 
         return html`
-            <div class="user-container">
-                <div class="user-bar">
-                    <button
-                        type="button"
-                        class="user-button"
-                        @click=${this._toggleMenu}
-                        title=${this._pt('menu.user_button_title')}
-                        aria-expanded=${this._menuOpen ? 'true' : 'false'}
-                        aria-haspopup="true"
-                    >
-                        ${this._renderAvatar()}
-                        <div class="user-info">
-                            <div class="user-name">${this.user.name || this._pt('menu.user_fallback')}</div>
-                            <div class="user-email">${this.user.emails?.[0] || ''}</div>
+            <button
+                class="user-button"
+                @click=${this._toggleMenu}
+                title=${this.t('menu.user_button_title')}
+            >
+                ${avatarUrl && !this._avatarBroken ? html`
+                    <span class="user-avatar has-image">
+                        <img class="avatar-img" src=${avatarUrl} alt="" @error=${this._onAvatarError} />
+                    </span>
+                ` : html`
+                    <span class="user-avatar">${this._avatarLetter(user)}</span>
+                `}
+                <span class="user-info">
+                    <span class="user-name">${this._displayName(user)}</span>
+                    <span class="user-email">${this._displayEmail(user)}</span>
+                </span>
+                <span class="toolbar-slot"><slot name="user-toolbar"></slot></span>
+                <platform-icon
+                    class=${classMap({ chevron: true, open: this._menuOpen })}
+                    name="chevron-down"
+                    size="14"
+                ></platform-icon>
+            </button>
+
+            ${this._menuOpen ? html`
+                <div class="user-menu" @click=${(e) => e.stopPropagation()}>
+                    <button class="menu-item apps-item" @click=${this._toggleAppsMenu}>
+                        <img class="apps-menu-logo" src="${SERVICE_LOGO_BASE}/agents_logo.svg" alt="" />
+                        <span class="menu-item-label">${this.t('menu.apps')}</span>
+                        <platform-icon
+                            class=${classMap({ 'expand-icon': true, open: this._appsMenuOpen })}
+                            name="chevron-right"
+                            size="12"
+                        ></platform-icon>
+                    </button>
+
+                    ${this._appsMenuOpen ? html`
+                        <div class="apps-grid">
+                            ${SERVICE_APPS.map((service) => html`
+                                <button class="app-card" @click=${(e) => this._openServiceApp(service.id, e)}>
+                                    <span class="app-card-header">
+                                        <img class="app-logo" src=${service.logo} alt="" />
+                                        <platform-icon class="app-go-icon" name="arrow-right" size="16"></platform-icon>
+                                    </span>
+                                    <span class="app-card-name">${this.t(`${service.i18n}.name`)}</span>
+                                    <span class="app-card-description">${this.t(`${service.i18n}.description`)}</span>
+                                </button>
+                            `)}
                         </div>
-                        <span class="user-lang-badge" aria-hidden="true">${uiLocale.toUpperCase()}</span>
-                    </button>
-                    <span class="user-toolbar-wrap"><slot name="user-toolbar"></slot></span>
-                    <button
-                        type="button"
-                        class="user-menu-chevron"
-                        @click=${this._toggleMenu}
-                        title=${this._pt('menu.user_button_title')}
-                        aria-expanded=${this._menuOpen ? 'true' : 'false'}
-                        aria-haspopup="true"
-                    >
-                        <platform-icon name="chevron-down" size="12" class="chevron ${this._menuOpen ? 'open' : ''}"></platform-icon>
-                    </button>
-                </div>
+                    ` : ''}
 
-                ${this._menuOpen ? html`
-                    <div class="user-menu">
-                        <button class="menu-item apps-item" @click=${this._toggleAppsMenu}>
-                            <img class="apps-menu-logo" src="/static/core/assets/service_logos/agents_logo.svg" alt="" />
-                            <span>${this._pt('menu.apps')}</span>
-                            <platform-icon name="chevron-right" size="12" class="expand-icon ${this._appsMenuOpen ? 'open' : ''}"></platform-icon>
+                    <div class="menu-divider"></div>
+
+                    <button class="menu-item" @click=${this._openUserInfo}>
+                        <platform-icon class="menu-icon" name="user" size="18"></platform-icon>
+                        <span class="menu-item-label">${this.t('menu.profile')}</span>
+                    </button>
+
+                    ${hasMultipleCompanies ? html`
+                        <button class="menu-item company-selector" @click=${this._toggleCompanySelector}>
+                            <platform-icon class="menu-icon" name="building-one" size="18"></platform-icon>
+                            <span class="menu-item-label">${currentCompanyName}</span>
+                            <platform-icon
+                                class=${classMap({ 'expand-icon': true, open: this._companySelectorOpen })}
+                                name="chevron-right"
+                                size="12"
+                            ></platform-icon>
                         </button>
-
-                        ${this._appsMenuOpen ? html`
-                            <div class="apps-grid">
-                                ${this._serviceAppEntries().map((service) => html`
-                                    <button class="app-card" @click=${(event) => this._openServiceApp(service.id, event)}>
-                                        <span class="app-card-header">
-                                            <img class="app-logo" src="${service.logo}" alt="" />
-                                            <platform-icon name="arrow-right" size="16" class="app-go-icon"></platform-icon>
+                        ${this._companySelectorOpen ? html`
+                            <div class="company-list">
+                                ${companies.map((company) => html`
+                                    <button
+                                        class=${classMap({ 'company-item': true, active: company.company_id === currentCompanyId })}
+                                        @click=${(e) => this._switchCompany(company.company_id, e)}
+                                    >
+                                        <span class="company-item-name">
+                                            <platform-icon name="building-one" size="14"></platform-icon>
+                                            <span>${company.name}</span>
                                         </span>
-                                        <span class="app-card-name">${this._pt(`apps.${service.id}.name`)}</span>
-                                        <span class="app-card-description">${this._pt(`apps.${service.id}.description`)}</span>
+                                        ${company.company_id === currentCompanyId ? html`
+                                            <platform-icon class="check-icon" name="check" size="14"></platform-icon>
+                                        ` : ''}
                                     </button>
                                 `)}
                             </div>
                         ` : ''}
+                    ` : ''}
 
-                        <div class="menu-divider"></div>
+                    <div class="menu-divider"></div>
 
-                        <button class="menu-item" @click=${this._openProfileModal}>
-                            <platform-icon name="user" size="18" class="menu-icon"></platform-icon>
-                            <span>${this._pt('menu.profile')}</span>
-                        </button>
-                        
-                        ${hasMultipleCompanies ? html`
-                            <div class="menu-divider"></div>
-                            <button class="menu-item company-selector" @click=${this._toggleCompanySelector}>
-                                <platform-icon name="building-one" size="18" class="menu-icon company-building-icon"></platform-icon>
-                                <span class="company-name company-name-inline">
-                                    <span>${currentCompanyName}</span>
-                                </span>
-                                <platform-icon name="chevron-right" size="12" class="expand-icon ${this._companySelectorOpen ? 'open' : ''}"></platform-icon>
-                            </button>
-                            
-                            ${this._companySelectorOpen ? html`
-                                <div class="company-list">
-                                    ${this.companies.map(company => html`
-                                        <button 
-                                            class="company-item ${company.company_id === (this.user.active_company_id || this.user.company_id) ? 'active' : ''}"
-                                            @click=${(e) => this._switchCompany(company.company_id, e)}
-                                        >
-                                            <span class="company-item-name">
-                                                <platform-icon name="building-one" size="14" class="company-building-icon"></platform-icon>
-                                                <span>${company.name}</span>
-                                            </span>
-                                            ${company.company_id === (this.user.active_company_id || this.user.company_id) ? html`
-                                                <platform-icon name="check" size="14" class="check-icon"></platform-icon>
-                                            ` : ''}
-                                        </button>
-                                    `)}
-                                </div>
-                            ` : ''}
-                        ` : ''}
-                        
-                        <div class="menu-divider"></div>
-                        
-                        <button class="menu-item" @click=${this._openSettings}>
-                            <platform-icon name="settings" size="18" class="menu-icon"></platform-icon>
-                            <span>${this._pt('menu.settings')}</span>
-                        </button>
+                    <button class="menu-item" @click=${this._openCalendar}>
+                        <platform-icon class="menu-icon" name="calendar" size="18"></platform-icon>
+                        <span class="menu-item-label">${this.t('menu.calendar')}</span>
+                    </button>
 
-                        <button class="menu-item" @click=${this._openCalendar}>
-                            <platform-icon name="calendar" size="18" class="menu-icon"></platform-icon>
-                            <span>${this._pt('menu.calendar')}</span>
-                        </button>
-                        
-                        <button class="menu-item" @click=${this._openDocumentation}>
-                            <platform-icon name="book-open" size="18" class="menu-icon"></platform-icon>
-                            <span>${this._pt('menu.documentation')}</span>
-                        </button>
+                    <button class="menu-item" @click=${this._openDocumentation}>
+                        <platform-icon class="menu-icon" name="book-open" size="18"></platform-icon>
+                        <span class="menu-item-label">${this.t('menu.documentation')}</span>
+                    </button>
 
-                        <div class="lang-row" @click=${(e) => e.stopPropagation()}>
-                            <platform-icon name="globe" size="18" class="menu-icon"></platform-icon>
-                            <span class="lang-row-label">${this._pt('menu.language')}</span>
-                            <div class="lang-switcher" role="group" aria-label=${this._pt('menu.language')}>
-                                <button
-                                    type="button"
-                                    class=${classMap({ 'lang-option': true, active: uiLocale === 'en' })}
-                                    @click=${(e) => this._setUiLocale('en', e)}
-                                >en</button>
-                                <span class="lang-separator" aria-hidden="true">|</span>
-                                <button
-                                    type="button"
-                                    class=${classMap({ 'lang-option': true, active: uiLocale === 'ru' })}
-                                    @click=${(e) => this._setUiLocale('ru', e)}
-                                >ru</button>
-                            </div>
-                        </div>
-                        
-                        <button class="menu-item" @click=${this._toggleTheme}>
-                            <platform-icon name="${this.theme?.isDark ? 'sun' : 'moon'}" size="18" class="menu-icon"></platform-icon>
-                            <span>${this.theme?.isDark ? this._pt('menu.theme_light') : this._pt('menu.theme_dark')}</span>
-                        </button>
-                        
-                        <div class="menu-divider"></div>
-                        
-                        <button class="menu-item danger" @click=${this._logout}>
-                            <platform-icon name="logout" size="18" class="menu-icon"></platform-icon>
-                            <span>${this._pt('menu.logout')}</span>
-                        </button>
+                    <div class="lang-row">
+                        <platform-icon class="menu-icon" name="globe" size="18"></platform-icon>
+                        <span class="menu-item-label">${this.t('menu.language')}</span>
+                        <span class="lang-switcher">
+                            <button
+                                class=${classMap({ 'lang-option': true, active: locale === 'en' })}
+                                @click=${(e) => this._setLocale('en', e)}
+                            >en</button>
+                            <span class="lang-separator">|</span>
+                            <button
+                                class=${classMap({ 'lang-option': true, active: locale === 'ru' })}
+                                @click=${(e) => this._setLocale('ru', e)}
+                            >ru</button>
+                        </span>
                     </div>
-                ` : ''}
-            </div>
+
+                    <button class="menu-item" @click=${this._toggleTheme}>
+                        <platform-icon class="menu-icon" name=${themeMode === 'dark' ? 'sun' : 'moon'} size="18"></platform-icon>
+                        <span class="menu-item-label">
+                            ${themeMode === 'dark' ? this.t('menu.theme_light') : this.t('menu.theme_dark')}
+                        </span>
+                    </button>
+
+                    <div class="menu-divider"></div>
+
+                    <button class="menu-item danger" @click=${this._logout}>
+                        <platform-icon class="menu-icon" name="logout" size="18"></platform-icon>
+                        <span class="menu-item-label">${this.t('menu.logout')}</span>
+                    </button>
+                </div>
+            ` : ''}
         `;
     }
 
     static styles = [
         PlatformElement.styles,
         css`
-            :host {
-                display: inline-block;
-                position: relative;
-            }
-            
-            :host([block]) {
-                display: block;
-                width: 100%;
-            }
+            :host { display: inline-block; position: relative; }
+            :host([block]) { display: block; width: 100%; }
 
             :host-context(platform-sidebar[collapsed]) .user-info,
-            :host-context(platform-sidebar[collapsed]) .user-menu-chevron {
+            :host-context(platform-sidebar[collapsed]) .chevron,
+            :host-context(platform-sidebar[collapsed]) .toolbar-slot {
                 display: none;
-            }
-
-            .user-toolbar-wrap {
-                display: flex;
-                align-items: center;
-                flex-shrink: 0;
-            }
-
-            .user-toolbar-wrap ::slotted(platform-notification-manager) {
-                flex-shrink: 0;
-            }
-
-            .user-lang-badge {
-                display: flex;
-                align-items: center;
-                justify-content: center;
-                flex-shrink: 0;
-                box-sizing: border-box;
-                min-width: 30px;
-                height: 22px;
-                padding: 0 7px;
-                font-size: 10px;
-                font-weight: var(--font-semibold);
-                line-height: 1;
-                letter-spacing: 0.04em;
-                color: var(--text-secondary);
-                background: var(--glass-solid-medium);
-                border: 1px solid var(--glass-border-subtle);
-                border-radius: var(--radius-md);
-                pointer-events: none;
-            }
-
-            :host-context(platform-sidebar[collapsed]) .user-toolbar-wrap {
-                display: none;
-            }
-
-            :host-context(platform-sidebar[collapsed]) .user-lang-badge {
-                position: absolute;
-                top: -4px;
-                right: -4px;
-                min-width: 16px;
-                height: 13px;
-                padding: 0 3px;
-                font-size: 8px;
-                font-weight: var(--font-bold);
-                margin: 0;
-                color: var(--text-primary);
-                background: var(--glass-solid-strong);
-                border: 1px solid var(--glass-border-medium);
-                border-radius: 4px;
-                z-index: 1;
-            }
-
-            :host-context(platform-sidebar[collapsed]) .user-container {
-                display: flex;
-                justify-content: center;
-                width: 100%;
-                min-width: 0;
-                box-sizing: border-box;
-            }
-
-            :host-context(platform-sidebar[collapsed]) .user-bar {
-                justify-content: center;
-                width: 100%;
-                min-width: 0;
-                padding: 0;
-                background: transparent;
-                border: none;
-                box-shadow: none;
-            }
-
-            :host-context(platform-sidebar[collapsed]) .user-bar:hover {
-                background: transparent;
-                box-shadow: none;
             }
 
             :host-context(platform-sidebar[collapsed]) .user-button {
-                position: relative;
                 justify-content: center;
-                align-items: center;
                 width: 40px;
                 height: 40px;
                 min-width: 40px;
                 min-height: 40px;
-                flex-shrink: 0;
                 gap: 0;
                 padding: 0;
                 background: transparent;
                 border: none;
                 border-radius: var(--radius-full);
                 box-shadow: none;
-                box-sizing: border-box;
-                overflow: visible;
             }
 
             :host-context(platform-sidebar[collapsed]) .user-button:hover {
@@ -837,82 +559,36 @@ export class PlatformUser extends PlatformElement {
                 bottom: var(--user-menu-fixed-bottom, auto);
                 right: auto;
                 top: auto;
-                width: var(--user-menu-fixed-width, min(240px, calc(100vw - 16px)));
-                min-width: 200px;
-                max-height: min(70vh, calc(var(--app-vh, 100vh) - 24px));
-                overflow-x: hidden;
-                overflow-y: auto;
+                width: var(--user-menu-fixed-width, min(260px, calc(100vw - 16px)));
                 z-index: var(--z-modal, 5000);
-            }
-
-            .user-container {
-                position: relative;
-                width: 100%;
-            }
-
-            .user-bar {
-                display: flex;
-                align-items: center;
-                gap: var(--space-2);
-                width: 100%;
-                box-sizing: border-box;
-                padding: var(--space-3);
-                color: var(--text-secondary);
-                background: var(--glass-solid-subtle);
-                border-radius: var(--radius-lg);
-                border: 1px solid var(--glass-border-subtle);
-                box-shadow: 0 1px 4px rgba(0,0,0,0.1);
-                transition: background var(--duration-fast), box-shadow var(--duration-fast);
-            }
-
-            .user-bar:hover {
-                background: var(--glass-solid-medium);
-                box-shadow: 0 2px 6px rgba(0,0,0,0.15);
             }
 
             .user-button {
                 display: flex;
                 align-items: center;
                 gap: var(--space-3);
-                flex: 1;
-                min-width: 0;
-                padding: 0;
-                margin: 0;
-                border: none;
-                background: transparent;
-                cursor: pointer;
-                font: inherit;
-                color: inherit;
-                text-align: left;
-                box-shadow: none;
+                padding: var(--space-3);
+                width: 100%;
                 box-sizing: border-box;
-            }
-
-            .user-menu-chevron {
-                display: flex;
-                align-items: center;
-                justify-content: center;
-                flex-shrink: 0;
-                width: 28px;
-                height: 28px;
-                padding: 0;
-                margin: 0;
-                border: none;
-                border-radius: var(--radius-md);
-                background: transparent;
+                background: var(--glass-solid-subtle);
+                border: 1px solid var(--glass-border-subtle);
+                border-radius: var(--radius-lg);
+                box-shadow: 0 1px 4px rgba(0, 0, 0, 0.1);
                 cursor: pointer;
-                color: inherit;
-                transition: background var(--duration-fast);
+                color: var(--text-primary);
+                transition: all var(--duration-fast);
+                text-align: left;
             }
-
-            .user-menu-chevron:hover {
+            .user-button:hover {
                 background: var(--glass-solid-medium);
+                box-shadow: 0 2px 6px rgba(0, 0, 0, 0.15);
             }
 
             .user-avatar {
                 width: 40px;
                 height: 40px;
-                display: flex;
+                flex-shrink: 0;
+                display: inline-flex;
                 align-items: center;
                 justify-content: center;
                 border-radius: var(--radius-full);
@@ -920,16 +596,14 @@ export class PlatformUser extends PlatformElement {
                 color: white;
                 font-weight: var(--font-bold);
                 font-size: var(--text-sm);
-                box-shadow: 0 4px 12px rgba(153, 166, 249, 0.25);
-                flex-shrink: 0;
+                box-shadow: 0 4px 12px rgba(16, 185, 129, 0.25);
                 overflow: hidden;
             }
-
             .user-avatar.has-image {
                 padding: 0;
                 background: var(--glass-solid-subtle);
+                box-shadow: none;
             }
-
             .user-avatar .avatar-img {
                 width: 100%;
                 height: 100%;
@@ -940,20 +614,19 @@ export class PlatformUser extends PlatformElement {
             .user-info {
                 flex: 1;
                 min-width: 0;
+                display: flex;
+                flex-direction: column;
             }
-
             .user-name {
                 font-size: var(--text-sm);
-                font-weight: var(--font-medium);
-                color: inherit;
+                font-weight: var(--font-semibold);
+                color: var(--text-primary);
                 white-space: nowrap;
                 overflow: hidden;
                 text-overflow: ellipsis;
             }
-
             .user-email {
                 font-size: var(--text-xs);
-                font-weight: var(--font-normal);
                 color: var(--text-tertiary);
                 white-space: nowrap;
                 overflow: hidden;
@@ -961,14 +634,13 @@ export class PlatformUser extends PlatformElement {
                 margin-top: 2px;
             }
 
+            .toolbar-slot { display: inline-flex; align-items: center; }
+
             .chevron {
                 color: var(--text-tertiary);
                 transition: transform var(--duration-fast);
             }
-
-            .chevron.open {
-                transform: rotate(180deg);
-            }
+            .chevron.open { transform: rotate(180deg); }
 
             .user-menu {
                 position: absolute;
@@ -980,23 +652,17 @@ export class PlatformUser extends PlatformElement {
                 -webkit-backdrop-filter: blur(var(--glass-blur-strong));
                 border: 1px solid var(--glass-border-medium);
                 border-radius: var(--radius-xl);
-                box-shadow: var(--glass-shadow-medium), 0 8px 32px rgba(0,0,0,0.2);
-                z-index: 1000;
-                animation: slideUp 0.2s ease;
+                box-shadow: var(--glass-shadow-medium), 0 8px 32px rgba(0, 0, 0, 0.2);
+                z-index: var(--z-dropdown, 1000);
+                padding: var(--space-1) 0;
                 max-height: min(70vh, calc(var(--app-vh, 100vh) - 24px));
-                overflow-x: hidden;
                 overflow-y: auto;
+                animation: pmu-slide-up 0.18s ease;
             }
 
-            @keyframes slideUp {
-                from {
-                    opacity: 0;
-                    transform: translateY(10px);
-                }
-                to {
-                    opacity: 1;
-                    transform: translateY(0);
-                }
+            @keyframes pmu-slide-up {
+                from { opacity: 0; transform: translateY(8px); }
+                to   { opacity: 1; transform: translateY(0); }
             }
 
             .menu-item {
@@ -1008,35 +674,14 @@ export class PlatformUser extends PlatformElement {
                 background: transparent;
                 border: none;
                 cursor: pointer;
-                font-family: inherit;
                 font-size: var(--text-sm);
-                font-weight: var(--font-medium);
-                color: var(--text-secondary);
-                transition: background var(--duration-fast), color var(--duration-fast);
+                color: var(--text-primary);
                 text-align: left;
             }
-
-            .menu-item:hover {
-                background: var(--hover-color);
-                color: var(--text-primary);
-            }
-
-            .menu-item.danger {
-                color: var(--error);
-            }
-
-            .menu-item.danger:hover {
-                background: var(--error-bg);
-                color: var(--error);
-            }
-
-            .menu-item.danger:hover .menu-icon {
-                color: var(--error);
-            }
-
-            .menu-item.company-selector {
-                justify-content: space-between;
-            }
+            .menu-item:hover { background: var(--glass-solid-medium); }
+            .menu-item.danger { color: var(--error); }
+            .menu-item.danger:hover { background: var(--error-bg); }
+            .menu-item.company-selector { justify-content: space-between; }
 
             .menu-item.apps-item {
                 background: var(--accent-subtle);
@@ -1045,84 +690,39 @@ export class PlatformUser extends PlatformElement {
                 border-radius: var(--radius-lg);
                 margin: var(--space-2);
                 width: calc(100% - var(--space-4));
+                padding: var(--space-2) var(--space-3);
+            }
+            .menu-item.apps-item .menu-item-label { color: var(--accent); }
+            .menu-item.apps-item .expand-icon { color: var(--accent); }
+            .menu-item.apps-item:hover { background: var(--accent-subtle); }
+
+            .menu-icon {
+                min-width: 20px;
+                color: var(--text-secondary);
+                display: inline-flex;
+                align-items: center;
+                justify-content: center;
             }
 
-            .menu-item.apps-item .menu-icon,
-            .menu-item.apps-item .expand-icon {
-                color: var(--accent);
+            .menu-item-label { flex: 1; min-width: 0; }
+            .expand-icon {
+                color: var(--text-tertiary);
+                transition: transform var(--duration-fast);
             }
+            .expand-icon.open { transform: rotate(90deg); }
 
-            .menu-item.apps-item:hover {
-                background: var(--accent-subtle);
-                color: var(--accent);
-            }
-
-            .menu-item.apps-item:hover .menu-icon,
-            .menu-item.apps-item:hover .expand-icon {
-                color: var(--accent);
+            .menu-divider {
+                height: 1px;
+                background: var(--glass-border-subtle);
+                margin: var(--space-1) 0;
             }
 
             .apps-menu-logo {
                 width: 18px;
                 height: 18px;
                 min-width: 18px;
-                display: block;
                 object-fit: contain;
-            }
-
-            .menu-icon {
-                min-width: 20px;
-                display: flex;
-                align-items: center;
-                justify-content: center;
-                color: var(--text-tertiary);
-            }
-
-            .menu-item:hover .menu-icon {
-                color: var(--text-secondary);
-            }
-
-            .company-name {
-                font-size: var(--text-sm);
-                color: inherit;
-                font-weight: inherit;
-                display: inline-flex;
-                align-items: center;
-                gap: var(--space-1);
-            }
-
-            .company-name-inline {
-                flex: 1;
-            }
-
-            .company-building-icon {
-                color: var(--text-tertiary);
-                flex-shrink: 0;
-                filter: grayscale(1) saturate(0) brightness(0.75);
-                opacity: 0.9;
-            }
-
-            .expand-icon {
-                color: var(--text-tertiary);
-                transition: transform var(--duration-fast);
-                display: flex;
-                align-items: center;
-            }
-
-            .expand-icon.open {
-                transform: rotate(90deg);
-            }
-
-            .company-list {
-                background: var(--glass-solid-subtle);
-                padding: var(--space-1) var(--space-2);
-                display: flex;
-                flex-direction: column;
-                gap: var(--space-1);
-                margin: 0 var(--space-2) var(--space-2);
-                border-left: 2px solid var(--glass-border-medium);
-                padding-left: var(--space-3);
-                border-radius: 0 var(--radius-md) var(--radius-md) 0;
+                display: block;
             }
 
             .apps-grid {
@@ -1130,6 +730,9 @@ export class PlatformUser extends PlatformElement {
                 grid-template-columns: minmax(0, 1fr);
                 gap: var(--space-2);
                 padding: 0 var(--space-2) var(--space-2);
+            }
+            @media (min-width: 380px) {
+                .apps-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
             }
 
             .app-card {
@@ -1140,162 +743,94 @@ export class PlatformUser extends PlatformElement {
                 border: 1px solid var(--border-subtle);
                 border-radius: var(--radius-lg);
                 background: var(--glass-solid-medium);
-                text-align: left;
                 cursor: pointer;
-                font-family: inherit;
-                font-weight: var(--font-medium);
-                color: var(--text-secondary);
+                color: var(--text-primary);
+                text-align: left;
                 transition: all var(--duration-fast);
             }
-
             .app-card:hover {
                 border-color: var(--border-default);
                 background: var(--glass-solid-strong);
-                color: var(--text-primary);
                 transform: translateY(-1px);
             }
-
             .app-card-header {
                 display: flex;
                 align-items: center;
                 justify-content: space-between;
-                width: 100%;
             }
-
-            .app-logo {
-                width: 20px;
-                height: 20px;
-                object-fit: contain;
-                display: block;
-            }
-
-            .app-go-icon {
-                color: var(--text-tertiary);
-            }
-
+            .app-logo { width: 20px; height: 20px; object-fit: contain; }
+            .app-go-icon { color: var(--text-tertiary); }
             .app-card-name {
                 font-size: var(--text-sm);
-                font-weight: var(--font-medium);
-                color: inherit;
+                font-weight: var(--font-semibold);
+                color: var(--text-primary);
             }
-
             .app-card-description {
                 font-size: var(--text-xs);
-                font-weight: var(--font-normal);
-                color: var(--text-tertiary);
+                color: var(--text-secondary);
                 line-height: 1.4;
             }
 
-            .app-card:hover .app-card-description {
-                color: var(--text-secondary);
+            .company-list {
+                background: var(--glass-solid-subtle);
+                margin: 0 var(--space-2) var(--space-2);
+                padding: var(--space-1) var(--space-2) var(--space-1) var(--space-3);
+                border-left: 2px solid var(--glass-border-medium);
+                border-radius: 0 var(--radius-md) var(--radius-md) 0;
+                display: flex;
+                flex-direction: column;
+                gap: var(--space-1);
             }
-
-            @media (min-width: 380px) {
-                .apps-grid {
-                    grid-template-columns: repeat(2, minmax(0, 1fr));
-                }
-            }
-
             .company-item {
                 display: flex;
-                align-items: center;
                 justify-content: space-between;
+                align-items: center;
                 padding: var(--space-2) var(--space-3);
-                background: var(--surface-color);
+                background: transparent;
                 border: 1px solid transparent;
                 border-radius: var(--radius-md);
                 cursor: pointer;
-                font-family: inherit;
                 font-size: var(--text-sm);
-                font-weight: var(--font-medium);
-                color: var(--text-secondary);
-                transition: all var(--duration-fast);
+                color: var(--text-primary);
             }
-
+            .company-item:hover {
+                background: var(--glass-solid-medium);
+                border-color: var(--glass-border-subtle);
+            }
+            .company-item.active {
+                background: var(--accent-subtle);
+                border-color: var(--accent);
+                color: var(--accent);
+                font-weight: var(--font-semibold);
+            }
             .company-item-name {
                 display: inline-flex;
                 align-items: center;
                 gap: var(--space-2);
                 min-width: 0;
             }
-
-            .company-item:hover {
-                background: var(--hover-color);
-                border-color: var(--border-color);
-            }
-
-            .company-item.active {
-                background: var(--accent-subtle);
-                border-color: var(--accent);
-                color: var(--accent);
-                font-weight: var(--font-medium);
-            }
-
-            .check-icon {
-                color: var(--accent);
-                display: flex;
-                align-items: center;
-            }
+            .check-icon { color: var(--accent); }
 
             .lang-row {
                 display: flex;
                 align-items: center;
-                gap: var(--space-2);
+                gap: var(--space-3);
                 padding: var(--space-2) var(--space-3);
-                width: 100%;
-                box-sizing: border-box;
             }
-
-            .lang-row-label {
-                flex: 1;
-                font-size: var(--text-sm);
-                font-weight: var(--font-medium);
-                color: var(--text-secondary);
-                min-width: 0;
-            }
-
-            .lang-switcher {
-                display: inline-flex;
-                align-items: center;
-                gap: 4px;
-                flex-shrink: 0;
-            }
-
+            .lang-switcher { display: inline-flex; align-items: center; gap: 2px; }
             .lang-option {
-                padding: 4px 6px;
+                padding: 2px 8px;
                 background: transparent;
                 border: none;
+                color: var(--text-tertiary);
                 cursor: pointer;
-                font-size: var(--text-xs);
-                font-family: inherit;
-                font-weight: var(--font-medium);
-                color: var(--text-tertiary);
-                transition: color var(--duration-fast);
+                border-radius: var(--radius-sm);
+                font-size: var(--text-sm);
             }
-
-            .lang-option.active {
-                color: var(--text-secondary);
-                font-weight: var(--font-medium);
-            }
-
-            .lang-option:hover {
-                color: var(--accent);
-            }
-
-            .lang-separator {
-                color: var(--text-tertiary);
-                opacity: 0.5;
-                user-select: none;
-            }
-
-            .menu-divider {
-                height: 1px;
-                background: var(--glass-border-subtle);
-                margin: var(--space-1) 0;
-            }
-        `
+            .lang-option.active { color: var(--accent); font-weight: var(--font-semibold); }
+            .lang-separator { color: var(--text-tertiary); }
+        `,
     ];
 }
 
 customElements.define('platform-user', PlatformUser);
-

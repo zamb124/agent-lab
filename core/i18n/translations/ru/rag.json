@@ -1,158 +1,100 @@
 {
-  "title": "RAG Dashboard",
-  "nav": {
-    "dashboard": "Дашборд",
-    "back_to_platform": "Назад к платформе"
+  "routes": {
+    "namespaces": "Пространства",
+    "namespace_detail": "Пространство",
+    "search": "Поиск",
+    "settings": "Настройки"
   },
   "sidebar": {
-    "provider": "Провайдер",
-    "namespaces": "Неймспейсы",
-    "search_namespaces": "Поиск неймспейсов...",
-    "local": "ЛОКАЛЬНО",
-    "cloud": "ОБЛАКО"
-  },
-  "header": {
-    "search_placeholder": "Поиск по всем документам...",
-    "new_namespace": "Новый неймспейс",
-    "theme_toggle": "Переключить тему"
-  },
-  "loading": {
-    "default": "Загрузка...",
-    "namespaces": "Загрузка неймспейсов...",
-    "namespace": "Загрузка неймспейса...",
-    "documents": "Загрузка документов...",
-    "searching": "Поиск...",
-    "uploading": "Загрузка..."
-  },
-  "empty": {
-    "namespaces": "Неймспейсов пока нет",
-    "namespaces_description": "Создайте первый неймспейс для начала работы",
-    "documents": "Документов пока нет",
-    "documents_description": "Загрузите первый документ в этот неймспейс"
-  },
-  "errors": {
-    "load_namespaces": "Не удалось загрузить неймспейсы",
-    "load_documents": "Не удалось загрузить документы",
-    "create_namespace": "Не удалось создать неймспейс",
-    "delete_namespace": "Не удалось удалить неймспейс",
-    "upload_document": "Не удалось загрузить документ",
-    "delete_document": "Не удалось удалить документ",
-    "download_document": "Не удалось скачать документ",
-    "search_failed": "Поиск не удался",
-    "connection": "Проверьте подключение и попробуйте снова"
-  },
-  "namespace": {
-    "documents": "документов",
-    "delete_confirm": "Вы уверены, что хотите удалить этот неймспейс и все его документы?"
-  },
-  "document": {
-    "delete_confirm": "Вы уверены, что хотите удалить этот документ?",
-    "status": {
-      "ready": "готов",
-      "processing": "обработка",
-      "error": "ошибка"
-    }
-  },
-  "modals": {
-    "create_namespace": {
-      "title": "Создать неймспейс",
-      "name_label": "Название",
-      "name_placeholder": "my-namespace",
-      "name_hint": "Уникальное имя для namespace (латиница, цифры, дефисы)",
-      "description_label": "Описание",
-      "description_placeholder": "Опишите назначение namespace...",
-      "cancel": "Отмена",
-      "create": "Создать",
-      "creating": "Создание..."
-    },
-    "upload_document": {
-      "title": "Загрузить документ",
-      "drag_drop": "Перетащите файлы сюда",
-      "or": "или",
-      "browse": "Выбрать файлы",
-      "cancel": "Отмена",
-      "upload": "Загрузить"
-    },
-    "search_results": {
-      "title": "Результаты поиска",
-      "no_results": "Ничего не найдено",
-      "no_results_description": "Попробуйте другой поисковый запрос",
-      "match": "совпадение"
-    }
-  },
-  "actions": {
-    "upload": "Загрузить",
-    "download": "Скачать",
-    "delete": "Удалить",
-    "back": "Назад",
-    "create_namespace": "Создать неймспейс",
-    "upload_document": "Загрузить документ"
-  },
-  "notifications": {
-    "namespace_created": "Неймспейс создан",
-    "namespace_deleted": "Неймспейс удален",
-    "document_uploaded": "документ(ов) успешно загружено",
-    "document_upload_failed": "документ(ов) не удалось загрузить",
-    "document_deleted": "Документ удален",
-    "enter_namespace_name": "Введите название неймспейса",
-    "select_namespace_first": "Сначала выберите неймспейс",
-    "document_uploaded_named": "Документ «{{name}}» успешно загружен",
-    "namespace_created_with_name": "Namespace «{{name}}» создан"
-  },
-  "namespace_detail": {
-    "not_found": "Namespace не найден",
-    "open_menu": "Открыть меню",
-    "documents_count": "{{count}} документов",
-    "upload_document": "Загрузить документ",
-    "loading_documents": "Загрузка документов...",
-    "uploading_short": "Загрузка...",
-    "uploading_document": "Загрузка документа...",
-    "drop_here": "Перетащите файл сюда",
-    "drop_or_choose": "или нажмите для выбора файла",
-    "supported_formats": "Поддерживаемые форматы: PDF, DOCX, DOC, XLSX, PPTX, HTML, TXT, MD, RTF, CSV, изображения",
-    "created_label": "Создан:",
-    "pages_count": "{{count}} страниц",
-    "delete_title": "Удалить"
+    "title": "RAG Service",
+    "menu_namespaces": "Неймспейсы",
+    "menu_search": "Поиск",
+    "menu_settings": "Настройки",
+    "provider_label": "Провайдер",
+    "providers_loading": "Загрузка провайдеров..."
   },
   "namespace_list": {
-    "header_title": "Namespaces",
+    "header_title": "Неймспейсы",
     "header_subtitle": "Управление неймспейсами документов",
+    "create_button": "Создать неймспейс",
     "loading": "Загрузка неймспейсов...",
-    "create_button": "Создать namespace"
+    "empty_title": "Неймспейсов пока нет",
+    "empty_hint": "Создайте первый неймспейс для индексации документов.",
+    "card_documents_label": "документов"
+  },
+  "namespace_detail": {
+    "not_found": "Неймспейс не найден",
+    "open_menu": "Открыть меню",
+    "back": "Назад",
+    "documents_count": "{{count}} документов",
+    "upload_button": "Загрузить документ",
+    "uploading_short": "Загрузка...",
+    "loading_documents": "Загрузка документов...",
+    "drop_here": "Перетащите файл сюда",
+    "drop_or_choose": "или нажмите для выбора файла",
+    "uploading_document": "Загрузка документа...",
+    "created_at_label": "Создан",
+    "pages_count": "{{count}} стр.",
+    "delete_button_title": "Удалить",
+    "delete_confirm": "Удалить документ?"
   },
   "search_view": {
-    "fill_all_fields": "Заполните все поля",
-    "title": "Поиск",
-    "subtitle": "Поиск по документам в namespaces",
-    "label_namespace": "Namespace",
-    "select_namespace": "Выберите namespace",
+    "header_title": "Поиск",
+    "header_subtitle": "Семантический поиск по документам namespace",
+    "label_namespace": "Неймспейс",
+    "select_namespace": "Выберите неймспейс",
     "label_limit": "Результатов",
     "label_query": "Запрос",
     "query_placeholder": "Введите поисковый запрос...",
+    "find_button": "Найти",
     "searching": "Поиск...",
-    "find": "Найти",
-    "document_fallback": "Документ",
-    "page_meta": "Стр. {{page}}",
-    "empty_no_results": "Нет результатов",
-    "empty_hint": "Введите запрос для поиска"
+    "fill_all_fields": "Заполните все поля",
+    "empty_no_results_title": "Нет результатов",
+    "empty_hint": "Введите запрос для поиска",
+    "result_document_fallback": "Документ",
+    "result_page_meta": "Стр. {{page}}"
   },
   "settings_view": {
-    "title": "Настройки",
-    "subtitle": "Конфигурация RAG Service",
-    "current_provider": "Текущий провайдер",
-    "current_provider_desc": "Активный RAG провайдер для хранения документов",
-    "usage": "Использование",
-    "usage_desc": "Текущее использование ресурсов",
-    "pages": "Страницы",
-    "queries": "Запросы",
+    "header_title": "Настройки",
+    "header_subtitle": "Конфигурация RAG-сервиса",
+    "providers_section": "Провайдеры",
+    "providers_section_desc": "Активный backend для хранения векторов и поиска",
+    "providers_loading": "Загрузка провайдеров...",
+    "providers_default_badge": "по умолчанию",
+    "providers_active_badge": "активен",
+    "providers_switch_button": "Использовать",
     "about_title": "О RAG Service",
-    "about_text": "Retrieval Augmented Generation (RAG) позволяет использовать ваши документы для улучшения ответов AI. Документы разбиваются на части, векторизуются и сохраняются для быстрого семантического поиска."
+    "about_text": "Retrieval Augmented Generation: документы разбиваются на чанки, векторизуются и сохраняются для семантического поиска по корпоративным данным."
+  },
+  "namespace_create_modal": {
+    "header": "Создать неймспейс",
+    "label_name": "Название",
+    "name_placeholder": "my-namespace",
+    "name_hint": "Латиница, цифры, дефис; до 64 символов",
+    "label_description": "Описание",
+    "description_placeholder": "Опишите назначение неймспейса...",
+    "submit": "Создать",
+    "submitting": "Создание...",
+    "cancel": "Отмена"
+  },
+  "form": {
+    "namespace_name_required": "Введите корректное имя неймспейса"
+  },
+  "toast": {
+    "namespace_created": "Неймспейс создан",
+    "namespace_create_failed": "Не удалось создать неймспейс",
+    "namespace_deleted": "Неймспейс удалён",
+    "namespace_delete_failed": "Не удалось удалить неймспейс",
+    "document_uploaded": "Документ принят в обработку",
+    "document_upload_failed": "Не удалось загрузить документ",
+    "document_deleted": "Документ удалён",
+    "document_delete_failed": "Не удалось удалить документ",
+    "document_processed": "Документ «{{name}}» проиндексирован",
+    "document_process_failed": "Индексация «{{name}}» завершилась с ошибкой",
+    "text_ingested": "Текст проиндексирован",
+    "text_ingest_failed": "Не удалось проиндексировать текст",
+    "search_failed": "Поиск не выполнен",
+    "provider_switched": "Провайдер переключён",
+    "provider_switch_failed": "Не удалось переключить провайдер"
   }
 }
-
-
-
-
-
-
-

@@ -1262,8 +1262,16 @@ class CalendarService:
         start_at: datetime,
         end_at: datetime,
     ) -> list[CalendarEvent]:
-        notes_response = await self._service_client.get("crm", "/crm/api/v1/entities", params={"entity_type": "note", "limit": 200})
-        tasks_response = await self._service_client.get("crm", "/crm/api/v1/entities", params={"entity_type": "task", "limit": 200})
+        notes_response = await self._service_client.post(
+            "crm",
+            "/crm/api/v1/entities/query",
+            json={"entity_type": "note", "limit": 200, "search_mode": "hybrid"},
+        )
+        tasks_response = await self._service_client.post(
+            "crm",
+            "/crm/api/v1/entities/query",
+            json={"entity_type": "task", "limit": 200, "search_mode": "hybrid"},
+        )
         notes_items = notes_response.get("items", []) if isinstance(notes_response, dict) else []
         tasks_items = tasks_response.get("items", []) if isinstance(tasks_response, dict) else []
         events: list[CalendarEvent] = []

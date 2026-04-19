@@ -97,16 +97,21 @@ class TestSagaRollback:
         auth_headers_system,
     ):
         """
-        Удаление note удаляет только эксклюзивно связанный подграф.
+        Удаление note удаляет только подграф, созданный самой заметкой.
+
+        Контракт каскадного удаления (`_collect_exclusive_related_entities_for_note`):
+        каскадно удаляются только сущности с `source_entity_id == note_id` —
+        то есть созданные AI-анализом этой заметки. Сущности, созданные
+        отдельно через `POST /crm/api/v1/entities/` и связанные руками,
+        НИКОГДА не удаляются вместе с заметкой, даже если связь только с ней.
 
         Сценарий:
-        note -> exclusive_a
+        note -> exclusive_a (создан вручную, source_entity_id = None)
         note -> shared_a -> keeper
 
         Ожидание:
-        - note и exclusive_a удаляются
-        - shared_a и keeper сохраняются
-        - связь shared_a <-> keeper сохраняется
+        - удаляется только note и связи note->exclusive_a, note->shared_a;
+        - exclusive_a, shared_a, keeper и связь shared_a->keeper остаются.
         """
         note_resp = await crm_client.post(
             "/crm/api/v1/entities/",
@@ -187,7 +192,7 @@ class TestSagaRollback:
         assert note_get_resp.status_code == 404
 
         exclusive_a_get_resp = await crm_client.get(f"/crm/api/v1/entities/{exclusive_a_id}", headers=auth_headers_system)
-        assert exclusive_a_get_resp.status_code == 404
+        assert exclusive_a_get_resp.status_code == 200
 
         shared_a_get_resp = await crm_client.get(f"/crm/api/v1/entities/{shared_a_id}", headers=auth_headers_system)
         assert shared_a_get_resp.status_code == 200

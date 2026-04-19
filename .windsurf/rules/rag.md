@@ -36,29 +36,30 @@ apps/rag/
 │   └── search.py            # Семантический поиск
 ├── services/
 │   └── rag_worker_client.py # Клиент для TaskIQ workers
-└── ui/                      # Micro-frontend (Lit 3 + Zustand)
+└── ui/                      # Micro-frontend (Lit 3 + EventBus + factories)
     ├── index.html
     ├── index.js
     ├── app/
-    │   └── rag-app.js       # Главный компонент
+    │   └── rag-app.js                # PlatformApp; static factories, router
     ├── components/
-    │   ├── provider-selector.js
+    │   ├── rag-sidebar.js
+    │   ├── namespace-card.js
     │   ├── provider-badge.js
-    │   └── namespace-card.js
-    ├── features/
-    │   ├── sidebar.js
-    │   ├── namespace-list.js
-    │   ├── namespace-detail.js
-    │   ├── search-view.js
-    │   └── settings-view.js
+    │   └── provider-selector.js
+    ├── pages/
+    │   ├── namespaces-page.js
+    │   ├── namespace-page.js
+    │   ├── search-page.js
+    │   └── settings-page.js
     ├── modals/
-    │   └── namespace-create-modal.js
-    ├── services/
-    │   └── rag-api.service.js
-    ├── store/
-    │   └── rag.store.js     # Zustand Store
-    └── styles/
-        └── rag.css
+    │   └── namespace-create-modal.js  # PlatformFormModal, modalKind='rag.namespace_create'
+    └── events/
+        └── resources/                  # фабрики 'rag/<entity>'
+            ├── providers.resource.js
+            ├── namespaces.resource.js
+            ├── documents.resource.js
+            ├── document-status.resource.js
+            └── search.resource.js
 
 core/rag/
 ├── base_provider.py         # Абстрактный BaseRAGProvider
@@ -637,38 +638,40 @@ class AttachmentService:
         await self.entity_service.update_entity(entity_id, entity)
 ```
 
-## UI (Lit 3 + Zustand)
+## UI (Lit 3 + EventBus + factories)
 
-**Store:** `apps/rag/ui/store/rag.store.js`
-```javascript
-export const useRagStore = create((set, get) => ({
-    providers: [],
-    currentProvider: null,
-    namespaces: [],
-    currentNamespace: null,
-    documents: [],
-    searchResults: [],
-    
-    // Actions
-    loadProviders: async () => { ... },
-    switchProvider: async (providerName) => { ... },
-    loadNamespaces: async () => { ... },
-    createNamespace: async (name, description) => { ... },
-    uploadDocument: async (file, metadata) => { ... },
-    searchDocuments: async (query, topK) => { ... },
-}));
-```
+UI работает по канону `frontend.mdc` + `ui_factories.mdc` +
+`ui_events.mdc` + `ui_components.mdc`. Сервис включён в
+`FACTORY_CANON_SERVICES` в `scripts/check_ui_canon.sh` и
+`scripts/check_command_rest_mirror.py`.
 
-**Components:** Lit 3 Web Components
-- `<rag-app>` - главный компонент
-- `<provider-selector>` - выбор провайдера
-- `<namespace-card>` - карточка namespace
-- `<sidebar-component>` - боковое меню
+**Domain state:** только в фабриках `apps/rag/ui/events/resources/*.resource.js`,
+регистрируются через `RagApp.static factories`. Реестр имён:
+`rag/providers`, `rag/provider_switch`, `rag/namespaces`,
+`rag/namespace_create_form`, `rag/documents`, `rag/document_upload`,
+`rag/document_remove`, `rag/document_ingest_text`,
+`rag/document_status`, `rag/search`.
 
-**Роутинг:** На основе `window.location.hash`
-```javascript
-// #/ - список namespaces
-// #/namespace/{id} - детали namespace
-// #/search - поиск по всем namespaces
-// #/settings - настройки
-```
+**Components:** все наследуют `PlatformElement` / `PlatformPage` /
+`PlatformFormModal`:
+- `<rag-app>` — `PlatformApp` (`static defaultI18nNamespace='rag'`)
+- `<rag-sidebar>` — навигация
+- `<namespace-card>` — карточка namespace, клик → `navigate('namespace_detail', { namespaceId })`
+- `<provider-badge>` — активный провайдер в sidebar
+- `<provider-selector>` — выбор провайдера на `/rag/settings`
+
+**Modal kinds:**
+- `rag.namespace_create` (`PlatformFormModal`, `useForm('rag/namespace_create_form')`)
+
+Открытие — `this.openModal('rag.namespace_create')`; закрытие после
+сабмита — `closeAfterSave()`.
+
+**Роутинг:** через core `createRouterEffect({ baseUrl: '/rag', routes })`
+в `RagApp.getServiceEffects()`. Маршруты:
+- `namespaces` → `/rag`
+- `namespace_detail` → `/rag/namespaces/:namespaceId`
+- `search` → `/rag/search`
+- `settings` → `/rag/settings`
+
+Переходы — `this.navigate('<routeKey>', params?)`. Хеш-роутинг и
+`CustomEvent('navigate', ...)` запрещены.

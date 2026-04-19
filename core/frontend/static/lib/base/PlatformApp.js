@@ -1,25 +1,43 @@
 /**
- * PlatformApp - Базовый класс для всех приложений платформы
+ * PlatformApp — канонический Event Sourcing корень приложения.
+ *
+ * Подклассы переопределяют:
+ *   - getBaseUrl()        — префикс сервиса для URL
+ *   - getRoutes()         — массив { key, path, parent?, title? }
+ *   - getServiceSlices()  — { [name]: { reducer, initial } } (для не-фабричных slices)
+ *   - getServiceEffects() — массив effect-функций (для не-фабричных effects)
+ *   - renderRoute(routeKey, params) — что рисуем для каждого маршрута
+ *   - rendersUnauthenticated() — true для landing/login (по умолчанию false)
+ *
+ * Декларативные статики:
+ *   - static factories = []           — список фабрик ресурсов/операций сервиса.
+ *     При boot'е PlatformApp вызывает registerFactory(f) и через collectFactories
+ *     собирает их slices/effects, мерджа с тем, что вернули getServiceSlices()
+ *     и getServiceEffects().
+ *   - static defaultI18nNamespace     — namespace по умолчанию для this.t(...)
+ *     во всех компонентах сервиса. Приземляется через setDefaultI18nNamespace.
  */
+
 import { html, css } from 'lit';
 import { PlatformElement } from '../platform-element/index.js';
-import { ServiceRegistry } from '../services/ServiceRegistry.js';
-import { AppEvents } from '../utils/types.js';
+import { bootstrapPlatformBus, completeBootstrap, getPlatformBus, hasPlatformBus } from '../events/index.js';
+import { CoreEvents } from '../events/contract.js';
+import { translate } from '../events/effects/i18n.effect.js';
+import { CoreAuthEvents } from '../events/effects/auth.effect.js';
 import { redirectToLogin } from '../utils/auth-redirect.js';
 import { nextModalLayerZIndex } from '../utils/modal-z-stack.js';
 import { serviceIdFromBaseUrl, setLastVisitedService } from '../utils/last-visited-service.js';
-import { i18nDefaultNamespaceForBaseUrl } from '../../services/i18n/i18n-default-namespace.js';
+import { registerFactory } from '../events/factory-registry.js';
+import { collectFactories } from '../events/factories/register.js';
+import { setDefaultI18nNamespace } from '../utils/i18n-namespace.js';
 
-// PWA Install Banner для iOS/Android
 import '../components/pwa-install-banner.js';
 import '../components/glass-toast.js';
 import '../components/platform-shell-page.js';
+import '../components/platform-modal-stack.js';
+import '../components/platform-user-chip.js';
+import '../components/platform-user-info-modal.js';
 
-/**
- * Общий рендер 404 / 500 shell для любого наследника PlatformApp.
- * Вынесен в функцию, чтобы подклассы не полагались на lookup this._renderShellPages
- * (в части окружений имя может пересекаться с полями Lit).
- */
 export function renderPlatformAppShell(app) {
     if (app._fatalShell === 'server-error') {
         return html`
@@ -44,301 +62,183 @@ export class PlatformApp extends PlatformElement {
         PlatformElement.styles,
         css`
             .loading-container {
-                display: flex;
-                flex-direction: column;
-                align-items: center;
-                justify-content: center;
-                min-height: var(--app-vh, 100vh);
-                padding: 40px;
+                display: flex; flex-direction: column; align-items: center; justify-content: center;
+                min-height: var(--app-vh, 100vh); padding: 40px;
             }
-            
             .loading-spinner {
-                width: 48px;
-                height: 48px;
+                width: 48px; height: 48px;
                 border: 4px solid var(--glass-border-medium);
                 border-top-color: var(--accent);
                 border-radius: 50%;
                 animation: loading-spin 1s linear infinite;
                 margin-bottom: 24px;
             }
-            
-            .loading-text {
-                font-size: 16px;
-                color: var(--text-muted);
-            }
-            
-            @keyframes loading-spin {
-                to { transform: rotate(360deg); }
-            }
-        `
+            .loading-text { font-size: 16px; color: var(--text-muted); }
+            @keyframes loading-spin { to { transform: rotate(360deg); } }
+        `,
     ];
-    
+
     static properties = {
-        _servicesInitialized: { state: true },
-        _authChecked: { state: true },
-        _isAuthenticated: { state: true },
-        _routeNotFound: { state: true },
+        _bootstrapped: { state: true },
+        _fatalShell:   { state: true },
+        _routeNotFound:{ state: true },
         _notFoundHomeHref: { state: true },
-        _fatalShell: { state: true },
     };
 
     constructor() {
         super();
-        this.router = null;
-        this._servicesInitialized = false;
-        this._authChecked = false;
-        this._isAuthenticated = false;
+        const ctor = this.constructor;
+        if (typeof ctor.defaultI18nNamespace === 'string' && ctor.defaultI18nNamespace.length > 0) {
+            setDefaultI18nNamespace(ctor.defaultI18nNamespace);
+        }
+        const factories = Array.isArray(ctor.factories) ? ctor.factories : [];
+        const factorySlices = {};
+        const factoryEffects = [];
+        if (factories.length > 0) {
+            for (const factory of factories) {
+                registerFactory(factory);
+            }
+            const collected = collectFactories(factories);
+            Object.assign(factorySlices, collected.slices);
+            factoryEffects.push(...collected.effects);
+        }
+        const serviceSlices = this.getServiceSlices();
+        const mergedSlices = { ...factorySlices };
+        for (const [key, slice] of Object.entries(serviceSlices || {})) {
+            if (mergedSlices[key]) {
+                throw new Error(`PlatformApp: sliceKey "${key}" collision between factory and getServiceSlices()`);
+            }
+            mergedSlices[key] = slice;
+        }
+        const mergedEffects = [...factoryEffects, ...(this.getServiceEffects() || [])];
+        // Bus поднимается в конструкторе до того как Lit активирует controllers.
+        // Это инвариант: ни один SelectController, созданный в полях подкласса,
+        // не должен встретить отсутствующий bus в hostConnected.
+        if (!hasPlatformBus()) {
+            bootstrapPlatformBus({
+                baseUrl: this.getBaseUrl(),
+                routes: this.getRoutes(),
+                slices: mergedSlices,
+                effects: mergedEffects,
+                devMode: typeof location !== 'undefined' && /[?&]platform_devtools=1\b/.test(location.search),
+            });
+        }
+        this._bootstrapped = true;
+        this._userLoadDispatched = false;
+        this._fatalShell = null;
         this._routeNotFound = false;
         this._notFoundHomeHref = '/';
-        this._fatalShell = null;
-        /** @private Слушатель window toast-show: один раз на экземпляр, до await initServices */
-        this._toastListenerAttached = false;
-        this._handleToast = this._handleToast.bind(this);
-        this._pushAuthListenerAttached = false;
-        this._onAuthChangeForPush = this._onAuthChangeForPush.bind(this);
+        this._renderedToastIds = new Set();
+
+        this._toastsSelect = this.select((s) => s.notify.toasts);
+        this._authSelect = this.select((s) => ({ status: s.auth.status, user: s.auth.user }));
+        this._routerSelect = this.select((s) => ({
+            routeKey: s.router.routeKey,
+            params: s.router.params,
+            notFound: s.router.notFound,
+        }));
     }
 
-    _handleToast(e) {
-        const detail = e.detail || {};
-        const type = detail.type ?? 'info';
-        const message = detail.message ?? '';
-        const duration = detail.duration ?? 3000;
-        if (!message) {
-            return;
-        }
-        const toast = document.createElement('glass-toast');
-        toast.type = type;
-        toast.message = message;
-        toast.duration = duration;
-        toast.style.zIndex = String(nextModalLayerZIndex());
-        document.body.appendChild(toast);
-    }
+    getBaseUrl() { return ''; }
+    getRoutes() { return []; }
+    getServiceSlices() { return {}; }
+    getServiceEffects() { return []; }
+    rendersUnauthenticated() { return false; }
 
-    /**
-     * Store для приложения. Переопределяется в наследниках.
-     */
-    setupStore() {
-        return null;
-    }
-
-    /**
-     * Базовый URL сервиса. Переопределяется в наследниках.
-     */
-    getBaseUrl() {
-        return '';
-    }
-
-    /**
-     * Инициализация сервисов. Переопределяется в наследниках.
-     */
-    async initServices() {
-        const store = this.setupStore();
-        if (store) {
-            window.__PLATFORM_STORE__ = store;
-        }
-        
-        await ServiceRegistry.registerCore(this.getBaseUrl());
-        const i18nNs = i18nDefaultNamespaceForBaseUrl(this.getBaseUrl());
-        if (i18nNs.length > 0) {
-            ServiceRegistry.get('i18n').setDefaultNamespace(i18nNs);
-        }
-    }
-
-    /**
-     * Настройка Router. Переопределяется в наследниках.
-     * @returns {Object|null} Конфигурация Router { routes: [...], baseUrl, store }
-     */
-    setupRouter() {
-        return null;
-    }
-
-    /**
-     * Проверка авторизации. Переопределяется в наследниках.
-     */
-    async checkAuth() {
-        return true;
-    }
-
-    /**
-     * До checkAuth: можно пропустить стандартный вход (например, показать 404 без редиректа).
-     * Возвращает null или объект { skip, authenticated, _routeNotFound?, _notFoundHomeHref?, _fatalShell? }.
-     */
-    async _preAuthCheck() {
-        return null;
-    }
-
-    _isFatalServerError(err) {
-        if (!err) {
-            return false;
-        }
-        if (err.code === 'AUTH_SERVER_ERROR') {
-            return true;
-        }
-        const msg = String(err.message || '');
-        return msg.includes('HTTP 500');
-    }
-
-    /**
-     * Редирект на страницу авторизации
-     */
-    redirectToAuth() {
-        redirectToLogin();
-    }
-
-    _renderShellPages() {
-        return renderPlatformAppShell(this);
-    }
-
-    _recordLastVisitedServiceFromApp() {
-        const id = serviceIdFromBaseUrl(this.getBaseUrl());
-        if (id) {
-            setLastVisitedService(id);
-        }
-    }
-
-    _maybeRegisterPushSubscriptions() {
-        if (!this._isAuthenticated || !ServiceRegistry.isInitialized || !ServiceRegistry.has('pwa')) {
-            return;
-        }
-        queueMicrotask(() => {
-            ServiceRegistry.get('pwa')
-                .ensurePushRegistration()
-                .catch((err) => {
-                    console.error('[PlatformApp] ensurePushRegistration:', err);
-                });
-        });
-    }
-
-    _onAuthChangeForPush(ev) {
-        if (ev.detail?.isAuthenticated) {
-            this._maybeRegisterPushSubscriptions();
-        }
+    renderRoute(routeKey, params) {
+        return html`<slot></slot>`;
     }
 
     async connectedCallback() {
-        try {
-            if (!this._toastListenerAttached) {
-                window.addEventListener(AppEvents.TOAST_SHOW, this._handleToast);
-                this._toastListenerAttached = true;
-            }
+        super.connectedCallback();
+        if (this._userLoadDispatched) return;
+        this._userLoadDispatched = true;
+        this.dispatch(CoreAuthEvents.USER_LOAD_REQUESTED, null);
+        completeBootstrap();
+    }
 
-            if (!this._servicesInitialized) {
-                await this.initServices();
-                this._servicesInitialized = true;
-            }
+    updated(changed) {
+        if (super.updated) super.updated(changed);
+        this._renderToasts();
+        this._handleAuthSideEffects();
+    }
 
-            super.connectedCallback();
-
-            if (!this._authChecked) {
-                const pre = await this._preAuthCheck();
-                if (pre && pre.skip) {
-                    this._routeNotFound = !!pre._routeNotFound;
-                    this._notFoundHomeHref = pre._notFoundHomeHref || '/';
-                    if (pre._fatalShell) {
-                        this._fatalShell = pre._fatalShell;
-                    }
-                    this._isAuthenticated = pre.authenticated === true;
-                    this._authChecked = true;
-                    return;
-                }
-
-                try {
-                    this._isAuthenticated = await this.checkAuth();
-                } catch (authErr) {
-                    if (this._isFatalServerError(authErr)) {
-                        this._fatalShell = 'server-error';
-                        this._isAuthenticated = false;
-                        this._authChecked = true;
-                        return;
-                    }
-                    throw authErr;
-                }
-
-                this._authChecked = true;
-
-                if (!this._isAuthenticated) {
-                    this.redirectToAuth();
-                    return;
-                }
-
-                this._recordLastVisitedServiceFromApp();
-                this._maybeRegisterPushSubscriptions();
-                if (!this._pushAuthListenerAttached) {
-                    window.addEventListener(AppEvents.AUTH_CHANGE, this._onAuthChangeForPush);
-                    this._pushAuthListenerAttached = true;
-                }
-            }
-
-            const routerConfig = this.setupRouter();
-            if (routerConfig) {
-                const { Router } = await import('../router/Router.js');
-                this.router = new Router(this, {
-                    baseUrl: this.getBaseUrl(),
-                    store: this.setupStore() || null,
-                });
-                
-                if (routerConfig.routes) {
-                    this.router.registerRoutes(routerConfig.routes);
-                }
-                
-                this.router.start();
-                window.__PLATFORM_ROUTER__ = this.router;
-            }
-        } catch (err) {
-            console.error('[PlatformApp] Ошибка инициализации:', err);
-            if (this._isFatalServerError(err)) {
-                this._fatalShell = 'server-error';
-                this._servicesInitialized = true;
-                this._authChecked = true;
-                this._isAuthenticated = false;
-                return;
-            }
-            this.redirectToAuth();
+    _renderToasts() {
+        const toasts = this._toastsSelect ? this._toastsSelect.value || [] : [];
+        for (const t of toasts) {
+            if (this._renderedToastIds.has(t.id)) continue;
+            this._renderedToastIds.add(t.id);
+            const el = document.createElement('glass-toast');
+            el.type = t.type;
+            el.message = this._resolveToastMessage(t);
+            el.duration = t.duration;
+            el.style.zIndex = String(nextModalLayerZIndex());
+            el.addEventListener('close', () => {
+                this.dispatch(CoreEvents.UI_TOAST_DISMISS, { id: t.id });
+            });
+            document.body.appendChild(el);
         }
     }
 
-    disconnectedCallback() {
-        if (this._pushAuthListenerAttached) {
-            window.removeEventListener(AppEvents.AUTH_CHANGE, this._onAuthChangeForPush);
-            this._pushAuthListenerAttached = false;
+    _resolveToastMessage(t) {
+        if (!t.i18n_key) return t.message || '';
+        const bus = hasPlatformBus() ? getPlatformBus() : null;
+        const i18nState = bus ? bus.getState().i18n : null;
+        if (!i18nState) return t.message || t.i18n_key;
+        const [nsOrKey, ...rest] = t.i18n_key.split(':');
+        const key = rest.length > 0 ? rest.join(':') : nsOrKey;
+        const namespace = rest.length > 0 ? nsOrKey : undefined;
+        return translate(i18nState, key, t.i18n_vars || undefined, namespace);
+    }
+
+    _handleAuthSideEffects() {
+        const auth = this._authSelect ? this._authSelect.value : null;
+        if (!auth) return;
+        if (auth.status === 'authenticated' && auth.user) {
+            const id = serviceIdFromBaseUrl(this.getBaseUrl());
+            if (id) setLastVisitedService(id);
         }
-        if (this._toastListenerAttached) {
-            window.removeEventListener(AppEvents.TOAST_SHOW, this._handleToast);
-            this._toastListenerAttached = false;
-        }
-        super.disconnectedCallback();
-        if (this.router) {
-            this.router.stop();
+        if (auth.status === 'unauthenticated' && !this.rendersUnauthenticated()) {
+            redirectToLogin();
         }
     }
 
     render() {
         const shell = renderPlatformAppShell(this);
-        if (shell !== null) {
-            return shell;
-        }
+        if (shell !== null) return shell;
 
-        if (!this._servicesInitialized || !this._authChecked) {
-            return html`<div>Loading...</div>`;
-        }
+        const auth = this._authSelect ? this._authSelect.value : null;
+        const route = this._routerSelect ? this._routerSelect.value : null;
 
-        if (!this._isAuthenticated) {
-            return html`<div>Redirecting to auth...</div>`;
-        }
-
-        // Если есть роутер - он сам отрендерит нужную страницу
-        if (this.router) {
+        if (!auth || auth.status === 'unknown' || auth.status === 'validating') {
             return html`
-                ${this.router.render()}
-                <pwa-install-banner></pwa-install-banner>
+                <div class="loading-container">
+                    <div class="loading-spinner"></div>
+                    <div class="loading-text">${this.t('common.loading') || 'Loading...'}</div>
+                </div>
             `;
         }
+        if (auth.status === 'unauthenticated' && !this.rendersUnauthenticated()) {
+            return html`<div>Redirecting...</div>`;
+        }
+        if (auth.status === 'error') {
+            return html`<platform-shell-page kind="server-error"></platform-shell-page>`;
+        }
 
-        // По умолчанию пустой контент - наследники переопределяют
+        if (route && route.notFound) {
+            return html`<platform-shell-page kind="not-found" .homeHref=${this._notFoundHomeHref}></platform-shell-page>`;
+        }
+
+        const routeKey = route ? route.routeKey : null;
+        const params = route ? route.params || {} : {};
         return html`
-            <slot></slot>
+            ${this.renderRoute(routeKey, params)}
             <pwa-install-banner></pwa-install-banner>
+            <platform-modal-stack></platform-modal-stack>
         `;
     }
 }
 
+export function platformBus() {
+    return getPlatformBus();
+}

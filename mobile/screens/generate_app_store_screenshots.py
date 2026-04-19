@@ -1,9 +1,13 @@
 #!/usr/bin/env python3
 """
-Генерация PNG фиксированных размеров для App Store Connect из исходников.
+Генерация PNG фиксированных размеров для App Store Connect и Google Play из исходников.
 
-Исходники: mobile/screens/source/ (iPhone + iPad), mobile/screens/source_watch/ (Watch),
-mobile/screens/source_mac/ (Mac, опционально).
+Исходники:
+- mobile/screens/source/        — iPhone + iPad (App Store) и Phone (Google Play по умолчанию)
+- mobile/screens/source_watch/  — Apple Watch
+- mobile/screens/source_mac/    — Mac App Store
+- mobile/screens/source_play/   — отдельный набор для Google Play (если нужен), иначе используется source/
+
 Результат: mobile/screens/generated/<имя_набора>/01.png, 02.png, ...
 """
 
@@ -46,7 +50,20 @@ MAC_TARGETS: list[tuple[int, int, str]] = [
     (2880, 1800, "mac_2880x1800"),
 ]
 
+# Google Play Console — Phone (минимум 320 px по короткой стороне), 7" Tablet, 10" Tablet.
+# Минимум 2 скриншота, максимум 8 на тип. Соотношение 16:9 / 9:16 для phone.
+PLAY_TARGETS: list[tuple[int, int, str]] = [
+    (1080, 1920, "play_phone_1080x1920"),
+    (1920, 1080, "play_phone_1920x1080"),
+    (1200, 1920, "play_tablet7_1200x1920"),
+    (1920, 1200, "play_tablet7_1920x1200"),
+    (1600, 2560, "play_tablet10_1600x2560"),
+    (2560, 1600, "play_tablet10_2560x1600"),
+]
+
 ASC_SCREENSHOT_MAX = 10
+PLAY_SCREENSHOT_MAX = 8
+PLAY_SCREENSHOT_MIN = 2
 
 
 def _list_images(folder: Path) -> list[Path]:
@@ -108,13 +125,22 @@ def _generate_for_targets(
     targets: list[tuple[int, int, str]],
     out_root: Path,
     label: str,
+    *,
+    max_per_slot: int = ASC_SCREENSHOT_MAX,
+    min_per_slot: int | None = None,
 ) -> None:
     if len(sources) == 0:
         return
-    if len(sources) > ASC_SCREENSHOT_MAX:
+    if min_per_slot is not None and len(sources) < min_per_slot:
         print(
-            f"Предупреждение ({label}): файлов {len(sources)} — в App Store Connect "
-            f"обычно не больше {ASC_SCREENSHOT_MAX} скриншотов на слот.",
+            f"Предупреждение ({label}): файлов {len(sources)} — для этого магазина "
+            f"требуется минимум {min_per_slot} на тип.",
+            file=sys.stderr,
+        )
+    if len(sources) > max_per_slot:
+        print(
+            f"Предупреждение ({label}): файлов {len(sources)} — обычно не больше "
+            f"{max_per_slot} скриншотов на слот.",
             file=sys.stderr,
         )
     for width, height, folder_name in targets:
@@ -151,6 +177,12 @@ def main() -> None:
         help="Папка с исходниками для Mac (по умолчанию: ./source_mac)",
     )
     parser.add_argument(
+        "--source-play",
+        type=Path,
+        default=script_dir / "source_play",
+        help="Папка с исходниками для Google Play (по умолчанию: ./source_play; пусто — берётся ./source)",
+    )
+    parser.add_argument(
         "--out",
         type=Path,
         default=script_dir / "generated",
@@ -161,6 +193,7 @@ def main() -> None:
     source = args.source.resolve()
     source_watch = args.source_watch.resolve()
     source_mac = args.source_mac.resolve()
+    source_play = args.source_play.resolve()
     out_root = args.out.resolve()
 
     phone_tablet = _list_images(source)
@@ -191,11 +224,29 @@ def main() -> None:
             file=sys.stderr,
         )
 
+    play_list = _list_images(source_play)
+    if len(play_list) == 0:
+        play_list = phone_tablet
+        print(
+            "Play: в source_play нет картинок — для Google Play используются те же файлы, "
+            "что и для iPhone/iPad. "
+            f"Отдельные кадры для Play: положите PNG в {source_play} и запустите снова.",
+            file=sys.stderr,
+        )
+
     out_root.mkdir(parents=True, exist_ok=True)
 
     _generate_for_targets(phone_tablet, PHONE_TABLET_TARGETS, out_root, "iPhone/iPad")
     _generate_for_targets(watch_list, WATCH_TARGETS, out_root, "Watch")
     _generate_for_targets(mac_list, MAC_TARGETS, out_root, "Mac")
+    _generate_for_targets(
+        play_list,
+        PLAY_TARGETS,
+        out_root,
+        "Google Play",
+        max_per_slot=PLAY_SCREENSHOT_MAX,
+        min_per_slot=PLAY_SCREENSHOT_MIN,
+    )
 
     print(f"Готово. Выход: {out_root}")
 

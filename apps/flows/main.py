@@ -10,7 +10,6 @@ from core.config.testing import is_testing
 from fastapi import FastAPI, Request, HTTPException
 from fastapi.responses import RedirectResponse, HTMLResponse
 from fastapi.staticfiles import StaticFiles
-from fastapi.templating import Jinja2Templates
 from starlette.middleware.sessions import SessionMiddleware
 
 from core.app import create_service_app
@@ -67,7 +66,10 @@ async def _build_scheduler_auth_context(container: object, trace_id: str, sessio
 
 async def on_startup(app: FastAPI, container, settings: FlowSettings):
     """Логика при старте сервиса flows."""
-    # Регистрируем handler для resume flow после OAuth (core/api/integrations.py)
+    from apps.flows.src.realtime import register_flows_ws_commands
+
+    register_flows_ws_commands()
+
     from apps.flows.src.tasks.flow_tasks import process_flow_task
     from core.api.integrations import set_flow_resume_handler
 
@@ -287,63 +289,43 @@ if ui_path.exists():
     app.mount("/flows/static", StaticFiles(directory=ui_path), name="ui_static")
 
 
+_INDEX_HTML = (ui_path / "index.html").read_text(encoding="utf-8") if ui_path.exists() else ""
+
+
 @app.get("/")
 async def root():
-    """Редирект на UI"""
-    return RedirectResponse(url="/flows/example_react", status_code=302)
+    """Корневой запрос — редирект на SPA."""
+    return RedirectResponse(url="/flows", status_code=302)
 
 
 @app.get("/ui")
-@app.get("/ui/{flow_id:path}")
-async def old_ui_redirect(flow_id: str = "example_react"):
-    """Редирект со старых путей /ui на /flows/{flow_id}"""
-    return RedirectResponse(url=f"/flows/{flow_id}", status_code=301)
+@app.get("/ui/{path:path}")
+async def old_ui_redirect():
+    """Редирект со старых путей /ui на новый /flows."""
+    return RedirectResponse(url="/flows", status_code=301)
 
 
 @app.get("/flows/ui")
-@app.get("/flows/ui/{flow_id:path}")
-async def old_flows_ui_redirect(flow_id: str = "example_react"):
-    """Редирект со старых путей /flows/ui на /flows/{flow_id}"""
-    return RedirectResponse(url=f"/flows/{flow_id}", status_code=301)
+@app.get("/flows/ui/{path:path}")
+async def old_flows_ui_redirect():
+    """Редирект со старых путей /flows/ui на /flows."""
+    return RedirectResponse(url="/flows", status_code=301)
 
 
-@app.get("/flows/operator", response_class=HTMLResponse)
-@app.get("/flows/operator/", response_class=HTMLResponse)
-async def ui_operator_workbench(request: Request):
-    """Рабочее место оператора (очереди и задачи)."""
-    ui_templates = Jinja2Templates(directory=ui_path)
-    base_url = f"{request.base_url.scheme}://{request.base_url.netloc}"
-    return ui_templates.TemplateResponse(
-        request,
-        "index.html",
-        {
-            "flow_id": "operator",
-            "flow_name": "operator",
-            "base_url": base_url,
-        },
-    )
+_API_LIKE_PREFIXES = ("api/", "static/", "ws/")
 
 
 @app.get("/flows", response_class=HTMLResponse)
 @app.get("/flows/", response_class=HTMLResponse)
+@app.get("/flows/operator", response_class=HTMLResponse)
+@app.get("/flows/operator/", response_class=HTMLResponse)
 @app.get("/flows/{flow_id}", response_class=HTMLResponse)
-async def ui_flow(request: Request, flow_id: str = "example_react"):
-    """SPA редактора и просмотра flow."""
-    # Пропускаем API пути
-    if flow_id.startswith("api/") or flow_id.startswith("static/"):
+@app.get("/flows/{flow_id}/{rest:path}", response_class=HTMLResponse)
+async def ui_spa(flow_id: str = "", rest: str = ""):
+    """SPA: маршруты flow_chat / flow_editor / operator / list."""
+    if flow_id and flow_id.split("/")[0] in [p.rstrip("/") for p in _API_LIKE_PREFIXES]:
         raise HTTPException(status_code=404, detail="Not found")
-    
-    ui_templates = Jinja2Templates(directory=ui_path)
-    base_url = f"{request.base_url.scheme}://{request.base_url.netloc}"
-    return ui_templates.TemplateResponse(
-        request,
-        "index.html",
-        {
-            "flow_id": flow_id,
-            "flow_name": flow_id,
-            "base_url": base_url,
-        },
-    )
+    return HTMLResponse(content=_INDEX_HTML)
 
 
 if __name__ == "__main__":

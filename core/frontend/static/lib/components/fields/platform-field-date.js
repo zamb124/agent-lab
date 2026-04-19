@@ -58,7 +58,7 @@ export class PlatformFieldDate extends PlatformElement {
             const formatted = this._formatDisplay(this.value);
             return formatted
                 ? html`<span class="view-value">${formatted}</span>`
-                : html`<span class="view-value empty">${this.i18n.t('platform_field.empty_value', {}, 'platform')}</span>`;
+                : html`<span class="view-value empty">${(this.t('platform_field.empty_value') || 'platform_field.empty_value')}</span>`;
         }
 
         const pickerMode = this.datetime ? 'datetime' : 'date';

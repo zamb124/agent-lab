@@ -5,6 +5,7 @@
  */
 import { html, css } from 'lit';
 import { PlatformElement } from '../../platform-element/index.js';
+import { CoreEvents } from '../../events/contract.js';
 import { sidebarHostStyles, sidebarStyles } from '../../styles/shared/sidebar.styles.js';
 import '../platform-icon.js';
 import '../platform-deployment-version.js';
@@ -45,7 +46,6 @@ export class PlatformSidebar extends PlatformElement {
         this._isMobile = false;
         this._resizeObserver = null;
         this._boundKeyHandler = this._handleKeyDown.bind(this);
-        this._boundOpenHandler = this._handleGlobalOpen.bind(this);
     }
 
     connectedCallback() {
@@ -53,22 +53,25 @@ export class PlatformSidebar extends PlatformElement {
         this._checkMobile();
         this._setupResizeObserver();
         document.addEventListener('keydown', this._boundKeyHandler);
-        // Слушаем глобальное событие открытия сайдбара от platform-island
-        window.addEventListener('platform-sidebar-open', this._boundOpenHandler);
+        // Подписка на глобальные команды открытия/закрытия сайдбара через bus.
+        this.useEvent(CoreEvents.UI_SIDEBAR_OPEN_REQUESTED, () => {
+            if (this._isMobile && !this.mobileOpen) {
+                this.mobileOpen = true;
+                this._notifyMobileChange(true);
+            }
+        });
+        this.useEvent(CoreEvents.UI_SIDEBAR_CLOSE_REQUESTED, () => {
+            if (this.mobileOpen) {
+                this.mobileOpen = false;
+                this._notifyMobileChange(false);
+            }
+        });
     }
 
     disconnectedCallback() {
         super.disconnectedCallback();
         this._resizeObserver?.disconnect();
         document.removeEventListener('keydown', this._boundKeyHandler);
-        window.removeEventListener('platform-sidebar-open', this._boundOpenHandler);
-    }
-
-    _handleGlobalOpen() {
-        if (this._isMobile) {
-            this.mobileOpen = true;
-            this._notifyMobileChange(true);
-        }
     }
 
     updated(changedProps) {
@@ -106,8 +109,9 @@ export class PlatformSidebar extends PlatformElement {
 
     toggleCollapse() {
         if (this._isMobile) return;
-        
+
         this.collapsed = !this.collapsed;
+        this.dispatch(CoreEvents.UI_SIDEBAR_COLLAPSE_CHANGED, { collapsed: this.collapsed });
         this.emit('collapse-change', { collapsed: this.collapsed });
     }
 
@@ -124,11 +128,8 @@ export class PlatformSidebar extends PlatformElement {
     }
 
     _notifyMobileChange(open) {
+        this.dispatch(CoreEvents.UI_SIDEBAR_MOBILE_CHANGED, { open });
         this.emit('mobile-change', { open });
-        // Глобальное событие для platform-sidebar-trigger
-        window.dispatchEvent(new CustomEvent('platform-sidebar-mobile-change', {
-            detail: { open },
-        }));
     }
 
     _handleBackdropClick() {
@@ -140,8 +141,8 @@ export class PlatformSidebar extends PlatformElement {
             return '';
         }
         return this.collapsed
-            ? this.i18n.t('sidebar.expand', {}, 'shell')
-            : this.i18n.t('sidebar.collapse', {}, 'shell');
+            ? (this.t('sidebar.expand') || 'Expand')
+            : (this.t('sidebar.collapse') || 'Collapse');
     }
 
     _renderCollapseControl() {

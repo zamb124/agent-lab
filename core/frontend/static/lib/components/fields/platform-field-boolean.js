@@ -47,11 +47,11 @@ export class PlatformFieldBoolean extends PlatformElement {
     render() {
         if (this.mode === 'view') {
             if (this.value == null) {
-                return html`<span class="view-value empty">${this.i18n.t('platform_field.empty_value', {}, 'platform')}</span>`;
+                return html`<span class="view-value empty">${(this.t('platform_field.empty_value') || 'platform_field.empty_value')}</span>`;
             }
             const label = this.value
-                ? this.i18n.t('platform_field.boolean_true', {}, 'platform')
-                : this.i18n.t('platform_field.boolean_false', {}, 'platform');
+                ? (this.t('platform_field.boolean_true') || 'platform_field.boolean_true')
+                : (this.t('platform_field.boolean_false') || 'platform_field.boolean_false');
             const cls = this.value ? 'view-true' : 'view-false';
             return html`<span class="view-value ${cls}">${label}</span>`;
         }
