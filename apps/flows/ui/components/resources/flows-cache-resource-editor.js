@@ -1,5 +1,9 @@
 /**
- * flows-cache-resource-editor — ресурс cache (TTL).
+ * flows-cache-resource-editor — ресурс cache.
+ *
+ * Поля точно по `CacheResourceConfig`:
+ *   - namespace (str, required)
+ *   - ttl (int, default 3600 сек)
  */
 
 import { html, css } from 'lit';
@@ -13,16 +17,19 @@ export class FlowsCacheResourceEditor extends PlatformElement {
     };
 
     static styles = [
+        PlatformElement.styles,
         css`
-            .field { display: flex; flex-direction: column; gap: var(--space-1); margin-bottom: var(--space-3); padding: 0 var(--space-3); }
-            .field input {
+            .body { padding: 0 var(--space-3); }
+            .field { display: flex; flex-direction: column; gap: var(--space-1); margin-bottom: var(--space-2); }
+            label { font-size: var(--text-sm); color: var(--text-secondary); }
+            input {
                 padding: var(--space-2);
                 border-radius: var(--radius-md);
                 border: 1px solid var(--glass-border-subtle);
                 background: var(--glass-solid-subtle);
                 color: var(--text-primary); font: inherit;
+                width: 100%; box-sizing: border-box;
             }
-            label { font-size: var(--text-sm); color: var(--text-secondary); }
         `,
     ];
 
@@ -32,12 +39,15 @@ export class FlowsCacheResourceEditor extends PlatformElement {
         this.resource = null;
     }
 
-    _emitConfig(config) {
-        this.emit('change', { resourceId: this.resourceId, patch: { config: { ...(this.resource?.config || {}), ...config } } });
+    _emitConfig(patch) {
+        const base = this.resource && typeof this.resource.config === 'object' ? this.resource.config : {};
+        this.emit('change', { resourceId: this.resourceId, patch: { config: { ...base, ...patch } } });
     }
 
     render() {
-        const cfg = this.resource?.config || {};
+        const cfg = this.resource && typeof this.resource.config === 'object' ? this.resource.config : {};
+        const namespace = typeof cfg.namespace === 'string' ? cfg.namespace : '';
+        const ttl = typeof cfg.ttl === 'number' ? cfg.ttl : 3600;
         return html`
             <flows-base-resource-editor
                 .resourceId=${this.resourceId}
@@ -45,22 +55,16 @@ export class FlowsCacheResourceEditor extends PlatformElement {
                 .resourceType=${'cache'}
                 @change=${(e) => this.emit('change', e.detail)}
             >
-                <div slot="settings">
+                <div slot="settings" class="body">
                     <div class="field">
-                        <label>${this.t('cache_resource_editor.field_ttl_seconds')}</label>
-                        <input
-                            type="number" min="0" step="1"
-                            .value=${String(cfg.ttl_seconds || 3600)}
-                            @input=${(e) => this._emitConfig({ ttl_seconds: parseInt(e.target.value || '0', 10) })}
-                        />
+                        <label>${this.t('cache_resource_editor.namespace')}</label>
+                        <input type="text" .value=${namespace}
+                            @input=${(e) => this._emitConfig({ namespace: e.target.value })} />
                     </div>
                     <div class="field">
-                        <label>${this.t('cache_resource_editor.field_namespace')}</label>
-                        <input
-                            type="text"
-                            .value=${cfg.namespace || ''}
-                            @input=${(e) => this._emitConfig({ namespace: e.target.value })}
-                        />
+                        <label>${this.t('cache_resource_editor.ttl')}</label>
+                        <input type="number" min="0" step="1" .value=${String(ttl)}
+                            @input=${(e) => this._emitConfig({ ttl: parseInt(e.target.value, 10) || 0 })} />
                     </div>
                 </div>
             </flows-base-resource-editor>

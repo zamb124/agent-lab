@@ -245,7 +245,31 @@
     "field_model": "Model",
     "field_model_pick": "— pick —",
     "field_temperature": "Temperature",
-    "field_max_tokens": "Max tokens"
+    "field_max_tokens": "Max tokens",
+    "provider": "Provider",
+    "model": "Model",
+    "temperature": "Temperature",
+    "max_tokens": "Max tokens",
+    "api_key": "API key",
+    "base_url": "Base URL",
+    "top_p": "Top-P",
+    "top_k": "Top-K",
+    "frequency_penalty": "Frequency penalty",
+    "presence_penalty": "Presence penalty",
+    "seed": "Seed",
+    "reasoning_effort": "Reasoning effort",
+    "extra_request_body": "Extra request body (JSON)",
+    "advanced": "Advanced"
+  },
+  "prompt_editor": {
+    "var_hint": "Use @var:KEY to insert flow variables"
+  },
+  "tag_input": {
+    "remove": "Remove tag",
+    "placeholder": "Add tag…"
+  },
+  "args_schema_form": {
+    "empty": "Args schema is empty"
   },
   "llm_mocks_editor": {
     "empty": "No mocks defined",
@@ -258,62 +282,175 @@
     "field_tools": "Tools",
     "field_parameters_schema": "Parameters schema (JSON)",
     "field_mocks": "Mocks",
-    "action_add_tool": "Add tool"
+    "action_add_tool": "Add tool",
+    "section_prompt": "Prompt",
+    "section_llm": "LLM config",
+    "section_messages_filter": "Messages filter",
+    "section_structured": "Structured output",
+    "section_react": "ReAct loop",
+    "section_tools": "Tools",
+    "messages_filter_all": "All messages",
+    "messages_filter_own": "Own only",
+    "messages_filter_custom": "Selected nodes",
+    "structured_output": "Enable structured output",
+    "output_schema": "Output JSON schema",
+    "react_loop_mode": "Loop mode",
+    "react_max_iterations": "Max iterations",
+    "react_strict": "Strict mode (reminder when exit_tool not used)",
+    "react_exit_tool": "Exit tool",
+    "react_reminder": "Reminder message",
+    "tools_add_library": "From library",
+    "tools_add_create": "Create new",
+    "tools_create_code": "Code tool",
+    "tools_create_llm": "LLM-as-tool",
+    "tools_create_api": "External API",
+    "tools_create_subflow": "Subflow"
   },
   "code_node_editor": {
     "field_code": "Code (Python)",
-    "field_parameters_schema": "Parameters schema (JSON)"
+    "field_parameters_schema": "Parameters schema (JSON)",
+    "section_code": "Code",
+    "mode_inline": "Inline",
+    "mode_function": "Function reference",
+    "args_schema": "Args schema",
+    "schema_form": "Form",
+    "schema_json": "JSON",
+    "docs": "Documentation"
   },
   "channel_node_editor": {
-    "field_channel_type": "Channel type"
+    "field_channel_type": "Channel type",
+    "channel": "Channel",
+    "action": "Action",
+    "channel_config": "Channel config",
+    "telegram_bot_token": "Bot token",
+    "telegram_parse_mode": "Parse mode",
+    "email_smtp_host": "SMTP host",
+    "email_smtp_port": "SMTP port",
+    "email_from": "From (email)",
+    "email_password": "Password",
+    "webhook_url": "URL",
+    "webhook_method": "Method",
+    "webhook_headers": "Headers (JSON)",
+    "provider_json": "Provider config (JSON)"
   },
   "flow_node_editor": {
     "field_flow_id": "Flow",
     "field_flow_pick": "pick a flow",
-    "field_skill_id": "Skill"
+    "field_skill_id": "Skill",
+    "flow_id": "Flow",
+    "skill_id": "Skill",
+    "from_list": "From list",
+    "custom_id": "Custom ID",
+    "custom_id_hint": "Enter flow_id manually"
   },
   "mcp_node_editor": {
     "field_server": "MCP server",
     "field_server_pick": "pick a server",
-    "field_tool": "Tool"
+    "field_tool": "Tool",
+    "server_id": "MCP server",
+    "tool_name": "Tool",
+    "headers": "Headers (JSON)",
+    "sync_server": "Sync",
+    "args_preview": "Tool args preview"
   },
   "external_api_editor": {
     "field_method": "HTTP method",
     "field_url": "URL",
     "field_headers": "Headers (JSON)",
-    "field_body": "Body (JSON)"
+    "field_body": "Body (JSON)",
+    "name": "Name",
+    "description": "Description",
+    "url": "URL",
+    "method": "Method",
+    "timeout": "Timeout (sec)",
+    "headers": "Headers (JSON)",
+    "auth_headers": "Auth headers (JSON)",
+    "parameters": "Request parameters",
+    "parameter_name": "Name",
+    "parameter_location": "Location",
+    "parameter_type": "Type",
+    "parameter_required": "Req.",
+    "parameter_default": "Default",
+    "parameter_add": "+ Parameter",
+    "parameter_remove": "Remove parameter",
+    "location_body": "body",
+    "location_query": "query",
+    "location_path": "path",
+    "location_header": "header",
+    "response_mapping": "Response → state mapping"
   },
   "remote_flow_editor": {
     "field_url": "URL",
     "field_skill_id": "Skill",
-    "field_auth_headers": "Auth headers (JSON)"
+    "field_auth_headers": "Auth headers (JSON)",
+    "mode_url": "Direct URL",
+    "mode_id": "Registry flow_id",
+    "url": "URL",
+    "flow_id": "Flow ID",
+    "skill_id": "Skill",
+    "auth_headers": "Auth headers (JSON)"
   },
   "base_resource_editor": {
-    "field_description": "Description"
+    "field_description": "Description",
+    "tags": "Tags"
   },
   "secret_resource_editor": {
-    "field_value": "Value"
+    "field_value": "Value",
+    "key": "Secret name",
+    "hint": "Used as @var:KEY in @var:resolver"
   },
   "code_resource_editor": {
-    "field_code": "Code (Python)"
+    "field_code": "Code (Python)",
+    "language": "Language",
+    "code": "Code",
+    "docs": "Documentation"
   },
   "http_resource_editor": {
     "field_base_url": "Base URL",
-    "field_default_headers": "Default headers (JSON)"
+    "field_default_headers": "Default headers (JSON)",
+    "base_url": "Base URL",
+    "headers": "Headers (JSON)",
+    "timeout": "Timeout (sec)",
+    "auth_type": "Auth type",
+    "auth_value": "Token value",
+    "auth_none": "—",
+    "auth_bearer": "Bearer",
+    "auth_basic": "Basic",
+    "auth_api_key": "API key"
   },
   "files_resource_editor": {
-    "field_patterns": "Patterns (one per line)"
+    "field_patterns": "Patterns (one per line)",
+    "bucket": "Bucket",
+    "prefix": "Path prefix",
+    "endpoint_url": "Endpoint URL",
+    "access_key_id": "Access key ID",
+    "secret_access_key": "Secret access key",
+    "region": "Region"
   },
   "prompt_resource_editor": {
-    "field_template": "Jinja template"
+    "field_template": "Jinja template",
+    "template": "Template",
+    "variables": "Variables (JSON)",
+    "render_button": "Render preview",
+    "render_preview": "Render preview"
   },
   "rag_resource_editor": {
     "field_namespace": "RAG namespace",
-    "field_top_k": "Top K"
+    "field_top_k": "Top K",
+    "namespace": "Namespace",
+    "provider": "Provider",
+    "default_top_k": "Default top K",
+    "search_options": "Search options (JSON)",
+    "index_profile_config": "Index profile (JSON)",
+    "provider_pgvector": "pgvector",
+    "provider_qdrant": "qdrant",
+    "provider_pinecone": "pinecone"
   },
   "cache_resource_editor": {
     "field_ttl_seconds": "TTL (seconds)",
-    "field_namespace": "Namespace"
+    "field_namespace": "Namespace",
+    "namespace": "Namespace",
+    "ttl": "TTL (sec)"
   },
   "breakpoint_manager": {
     "title": "Breakpoints",
@@ -361,7 +498,42 @@
   },
   "property_panel": {
     "select_node": "Select a node to edit",
-    "select_resource": "Select a resource to edit"
+    "select_resource": "Select a resource to edit",
+    "action_delete_resource": "Delete resource",
+    "rename_node_id_title": "Rename node ID",
+    "rename_node_id_confirm": "Rename",
+    "delete_node_title": "Delete node",
+    "delete_node_confirm": "Delete"
+  },
+  "base_node_editor": {
+    "name": "Name",
+    "description": "Description",
+    "description_hint": "Brief description of node's role",
+    "tags": "Tags",
+    "incoming_policy": "Incoming policy",
+    "incoming_policy_any": "Any",
+    "incoming_policy_all": "All",
+    "rename_id": "Rename ID",
+    "rename_save": "Save",
+    "rename_cancel": "Cancel",
+    "rename_invalid": "ID may contain only ASCII letters, digits and _",
+    "rename_collision": "ID already exists",
+    "files_section": "Attached files",
+    "files_empty": "No files",
+    "files_remove": "Remove file",
+    "resources_section": "Attached resources",
+    "resources_empty": "No resources",
+    "resources_add_pick": "+ Attach resource…",
+    "resources_remove": "Remove resource",
+    "action_duplicate": "Duplicate",
+    "action_delete": "Delete",
+    "action_validate": "Validate",
+    "validate_ok": "Node is valid",
+    "validate_failed": "Validation errors",
+    "tab_settings": "Settings",
+    "tab_input": "Input",
+    "tab_output": "Output",
+    "tab_test": "Test"
   },
   "state_mapping_editor": {
     "empty": "No mappings",
@@ -465,7 +637,14 @@
     "user_message_label": "User-facing text (fallback)",
     "handoff_mode_label": "Mode",
     "handoff_mode_single_reply": "Single reply",
-    "handoff_mode_takeover": "Dialog takeover"
+    "handoff_mode_takeover": "Dialog takeover",
+    "queue_slug": "Operator queue",
+    "queue_picker": "Search queue…",
+    "handoff_mode": "Handoff mode",
+    "single_reply": "Single reply",
+    "takeover": "Dialog takeover",
+    "task_title": "Task title",
+    "user_message": "User message"
   },
   "execution_panel": {
     "placeholder": "Test message for the flow",
@@ -477,5 +656,102 @@
     "base": "Base Flow",
     "add": "Skill",
     "delete": "Delete skill"
+  },
+  "canvas": {
+    "context_menu": {
+      "open_properties": "Open properties",
+      "toggle_entry": "Set as entry node",
+      "toggle_breakpoint": "Toggle breakpoint",
+      "duplicate": "Duplicate",
+      "delete": "Delete",
+      "edit_condition": "Edit edge condition",
+      "delete_edge": "Delete connection",
+      "add_node": "Add node",
+      "add_sticky": "Add sticky note",
+      "fit_view": "Fit to view",
+      "reset_zoom": "Reset zoom",
+      "select_all": "Select all",
+      "show_shortcuts": "Keyboard shortcuts",
+      "advanced_incoming_policy": "Incoming policy"
+    },
+    "toolbar": {
+      "zoom_in": "Zoom in",
+      "zoom_out": "Zoom out",
+      "zoom_100": "Reset zoom (100%)",
+      "zoom_fit": "Fit to view",
+      "tool_select": "Select",
+      "tool_pan": "Pan",
+      "tool_add": "Add node",
+      "undo": "Undo",
+      "redo": "Redo",
+      "toggle_variables": "Variables",
+      "toggle_breakpoints": "Breakpoints",
+      "toggle_guides": "Smart guides",
+      "help": "Keyboard shortcuts"
+    },
+    "state": {
+      "running": "Running",
+      "completed": "Completed",
+      "error": "Error",
+      "breakpoint": "Breakpoint",
+      "inherited": "Inherited",
+      "entry": "Entry node"
+    },
+    "smart_guides": {
+      "enabled": "Smart guides on",
+      "disabled": "Smart guides off"
+    },
+    "hotkeys": {
+      "title": "Keyboard shortcuts",
+      "space_drag": "Pan the canvas",
+      "select_all": "Select all nodes",
+      "duplicate": "Duplicate selection",
+      "delete": "Delete selection",
+      "rename": "Open properties",
+      "clear_selection": "Clear selection",
+      "arrows": "Move selection by 10 px",
+      "sticky_note": "Add sticky note",
+      "box_select": "Box selection",
+      "zoom": "Zoom"
+    },
+    "help": {
+      "title": "Canvas help",
+      "section_shortcuts": "Keyboard shortcuts",
+      "section_features": "Features",
+      "feature_smart_guides_title": "Smart guides",
+      "feature_smart_guides_hint": "Nodes auto-align while you drag them around.",
+      "feature_minimap_title": "Minimap",
+      "feature_minimap_hint": "Quick navigation across a large flow in the bottom-right corner.",
+      "feature_sticky_title": "Canvas sticky notes",
+      "feature_sticky_hint": "Shift+S drops a yellow note with free-form text.",
+      "feature_drop_resource_title": "Drag-and-drop resources",
+      "feature_drop_resource_hint": "You can drag both nodes and resources from the sidebar onto the canvas.",
+      "action_close": "Close"
+    },
+    "sticky_note": {
+      "placeholder": "Note text…",
+      "delete": "Delete note"
+    },
+    "minimap": {
+      "expand": "Open minimap",
+      "collapse": "Collapse minimap"
+    },
+    "toast": {
+      "bulk_delete_success": "Nodes deleted",
+      "bulk_delete_error": "Failed to delete nodes"
+    }
+  },
+  "floating_panel": {
+    "expand": "Expand",
+    "collapse": "Collapse",
+    "close": "Close"
+  },
+  "toast": {
+    "resource_created": "Resource created",
+    "resource_create_error": "Failed to create resource",
+    "resource_removed": "Resource removed",
+    "resource_remove_error": "Failed to remove resource",
+    "resource_updated": "Resource updated",
+    "resource_update_error": "Failed to update resource"
   }
 }

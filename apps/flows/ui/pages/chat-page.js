@@ -286,10 +286,10 @@ export class ChatPage extends PlatformPage {
                 </div>
                 <div class="chat-actions">
                     <button type="button" class="action-btn" title=${this.t('platform_chat.btn_sessions')} @click=${this._openSessions}>
-                        <platform-icon name="history" size="16"></platform-icon>
+                        <platform-icon name="clipboard" size="16"></platform-icon>
                     </button>
                     <button type="button" class="action-btn" title=${this.t('platform_chat.btn_traces')} @click=${this._openTracing}>
-                        <platform-icon name="activity" size="16"></platform-icon>
+                        <platform-icon name="chart" size="16"></platform-icon>
                     </button>
                     <button type="button" class="action-btn" title=${this.t('platform_chat.btn_editor')} @click=${this._openEditor}>
                         <platform-icon name="edit" size="16"></platform-icon>

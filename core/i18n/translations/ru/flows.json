@@ -245,7 +245,31 @@
     "field_model": "Модель",
     "field_model_pick": "— выберите —",
     "field_temperature": "Температура",
-    "field_max_tokens": "Max tokens"
+    "field_max_tokens": "Max tokens",
+    "provider": "Провайдер",
+    "model": "Модель",
+    "temperature": "Температура",
+    "max_tokens": "Max tokens",
+    "api_key": "API ключ",
+    "base_url": "Base URL",
+    "top_p": "Top-P",
+    "top_k": "Top-K",
+    "frequency_penalty": "Frequency penalty",
+    "presence_penalty": "Presence penalty",
+    "seed": "Seed",
+    "reasoning_effort": "Reasoning effort",
+    "extra_request_body": "Дополнительные поля запроса (JSON)",
+    "advanced": "Дополнительно"
+  },
+  "prompt_editor": {
+    "var_hint": "Используйте @var:KEY для подстановки переменных flow"
+  },
+  "tag_input": {
+    "remove": "Удалить тег",
+    "placeholder": "Добавить тег…"
+  },
+  "args_schema_form": {
+    "empty": "Схема аргументов пуста"
   },
   "llm_mocks_editor": {
     "empty": "Моки не заданы",
@@ -258,62 +282,175 @@
     "field_tools": "Tools",
     "field_parameters_schema": "Parameters schema (JSON)",
     "field_mocks": "Mocks",
-    "action_add_tool": "Добавить tool"
+    "action_add_tool": "Добавить tool",
+    "section_prompt": "Промпт",
+    "section_llm": "LLM конфигурация",
+    "section_messages_filter": "Фильтр сообщений",
+    "section_structured": "Структурированный вывод",
+    "section_react": "ReAct цикл",
+    "section_tools": "Инструменты",
+    "messages_filter_all": "Весь лог",
+    "messages_filter_own": "Только свои",
+    "messages_filter_custom": "Выбранные ноды",
+    "structured_output": "Включить structured output",
+    "output_schema": "Output JSON Schema",
+    "react_loop_mode": "Режим выхода",
+    "react_max_iterations": "Макс итераций",
+    "react_strict": "Строгий режим (reminder при отсутствии exit_tool)",
+    "react_exit_tool": "Exit tool",
+    "react_reminder": "Reminder сообщение",
+    "tools_add_library": "Из библиотеки",
+    "tools_add_create": "Создать новый",
+    "tools_create_code": "Code-tool",
+    "tools_create_llm": "LLM-as-tool",
+    "tools_create_api": "External API",
+    "tools_create_subflow": "Subflow"
   },
   "code_node_editor": {
     "field_code": "Код (Python)",
-    "field_parameters_schema": "Parameters schema (JSON)"
+    "field_parameters_schema": "Parameters schema (JSON)",
+    "section_code": "Код",
+    "mode_inline": "Inline",
+    "mode_function": "Function reference",
+    "args_schema": "Схема аргументов",
+    "schema_form": "Форма",
+    "schema_json": "JSON",
+    "docs": "Документация"
   },
   "channel_node_editor": {
-    "field_channel_type": "Тип канала"
+    "field_channel_type": "Тип канала",
+    "channel": "Канал",
+    "action": "Действие",
+    "channel_config": "Параметры канала",
+    "telegram_bot_token": "Bot token",
+    "telegram_parse_mode": "Parse mode",
+    "email_smtp_host": "SMTP host",
+    "email_smtp_port": "SMTP port",
+    "email_from": "От (email)",
+    "email_password": "Пароль",
+    "webhook_url": "URL",
+    "webhook_method": "Метод",
+    "webhook_headers": "Заголовки (JSON)",
+    "provider_json": "Конфигурация провайдера (JSON)"
   },
   "flow_node_editor": {
     "field_flow_id": "Flow",
     "field_flow_pick": "выберите flow",
-    "field_skill_id": "Skill"
+    "field_skill_id": "Skill",
+    "flow_id": "Flow",
+    "skill_id": "Skill",
+    "from_list": "Из списка",
+    "custom_id": "Свой ID",
+    "custom_id_hint": "Введите flow_id вручную"
   },
   "mcp_node_editor": {
     "field_server": "MCP сервер",
     "field_server_pick": "выберите сервер",
-    "field_tool": "Tool"
+    "field_tool": "Tool",
+    "server_id": "MCP сервер",
+    "tool_name": "Tool",
+    "headers": "Заголовки (JSON)",
+    "sync_server": "Синхр.",
+    "args_preview": "Превью аргументов tool"
   },
   "external_api_editor": {
     "field_method": "HTTP метод",
     "field_url": "URL",
     "field_headers": "Headers (JSON)",
-    "field_body": "Body (JSON)"
+    "field_body": "Body (JSON)",
+    "name": "Название",
+    "description": "Описание",
+    "url": "URL",
+    "method": "Метод",
+    "timeout": "Таймаут (сек)",
+    "headers": "Заголовки (JSON)",
+    "auth_headers": "Заголовки авторизации (JSON)",
+    "parameters": "Параметры запроса",
+    "parameter_name": "Имя",
+    "parameter_location": "Место",
+    "parameter_type": "Тип",
+    "parameter_required": "Обяз.",
+    "parameter_default": "По умолчанию",
+    "parameter_add": "+ Параметр",
+    "parameter_remove": "Удалить параметр",
+    "location_body": "body",
+    "location_query": "query",
+    "location_path": "path",
+    "location_header": "header",
+    "response_mapping": "Маппинг ответа на state"
   },
   "remote_flow_editor": {
     "field_url": "URL",
     "field_skill_id": "Skill",
-    "field_auth_headers": "Auth headers (JSON)"
+    "field_auth_headers": "Auth headers (JSON)",
+    "mode_url": "Прямой URL",
+    "mode_id": "Реестровый flow_id",
+    "url": "URL",
+    "flow_id": "Flow ID",
+    "skill_id": "Skill",
+    "auth_headers": "Auth headers (JSON)"
   },
   "base_resource_editor": {
-    "field_description": "Описание"
+    "field_description": "Описание",
+    "tags": "Теги"
   },
   "secret_resource_editor": {
-    "field_value": "Значение"
+    "field_value": "Значение",
+    "key": "Имя секрета",
+    "hint": "Используется как @var:KEY в @var:resolver"
   },
   "code_resource_editor": {
-    "field_code": "Код (Python)"
+    "field_code": "Код (Python)",
+    "language": "Язык",
+    "code": "Код",
+    "docs": "Документация"
   },
   "http_resource_editor": {
     "field_base_url": "Base URL",
-    "field_default_headers": "Default headers (JSON)"
+    "field_default_headers": "Default headers (JSON)",
+    "base_url": "Base URL",
+    "headers": "Заголовки (JSON)",
+    "timeout": "Таймаут (сек)",
+    "auth_type": "Тип авторизации",
+    "auth_value": "Значение токена",
+    "auth_none": "—",
+    "auth_bearer": "Bearer",
+    "auth_basic": "Basic",
+    "auth_api_key": "API key"
   },
   "files_resource_editor": {
-    "field_patterns": "Паттерны (по одному на строку)"
+    "field_patterns": "Паттерны (по одному на строку)",
+    "bucket": "Bucket",
+    "prefix": "Префикс пути",
+    "endpoint_url": "Endpoint URL",
+    "access_key_id": "Access key ID",
+    "secret_access_key": "Secret access key",
+    "region": "Регион"
   },
   "prompt_resource_editor": {
-    "field_template": "Jinja-шаблон"
+    "field_template": "Jinja-шаблон",
+    "template": "Шаблон",
+    "variables": "Переменные (JSON)",
+    "render_button": "Рендер превью",
+    "render_preview": "Превью рендера"
   },
   "rag_resource_editor": {
     "field_namespace": "RAG namespace",
-    "field_top_k": "Top K"
+    "field_top_k": "Top K",
+    "namespace": "Namespace",
+    "provider": "Провайдер",
+    "default_top_k": "Top K по умолчанию",
+    "search_options": "Параметры поиска (JSON)",
+    "index_profile_config": "Профиль индексации (JSON)",
+    "provider_pgvector": "pgvector",
+    "provider_qdrant": "qdrant",
+    "provider_pinecone": "pinecone"
   },
   "cache_resource_editor": {
     "field_ttl_seconds": "TTL (сек)",
-    "field_namespace": "Namespace"
+    "field_namespace": "Namespace",
+    "namespace": "Namespace",
+    "ttl": "TTL (сек)"
   },
   "breakpoint_manager": {
     "title": "Брейкпоинты",
@@ -361,7 +498,42 @@
   },
   "property_panel": {
     "select_node": "Выберите ноду для редактирования",
-    "select_resource": "Выберите ресурс для редактирования"
+    "select_resource": "Выберите ресурс для редактирования",
+    "action_delete_resource": "Удалить ресурс",
+    "rename_node_id_title": "Переименовать ID ноды",
+    "rename_node_id_confirm": "Переименовать",
+    "delete_node_title": "Удалить ноду",
+    "delete_node_confirm": "Удалить"
+  },
+  "base_node_editor": {
+    "name": "Имя",
+    "description": "Описание",
+    "description_hint": "Краткое описание роли ноды",
+    "tags": "Теги",
+    "incoming_policy": "Входящая политика",
+    "incoming_policy_any": "Любое (any)",
+    "incoming_policy_all": "Все (all)",
+    "rename_id": "Переименовать ID",
+    "rename_save": "Сохранить",
+    "rename_cancel": "Отмена",
+    "rename_invalid": "ID может содержать только латиницу, цифры и _",
+    "rename_collision": "ID уже существует",
+    "files_section": "Прикреплённые файлы",
+    "files_empty": "Нет файлов",
+    "files_remove": "Удалить файл",
+    "resources_section": "Прикреплённые ресурсы",
+    "resources_empty": "Нет ресурсов",
+    "resources_add_pick": "+ Прикрепить ресурс…",
+    "resources_remove": "Удалить ресурс",
+    "action_duplicate": "Дублировать",
+    "action_delete": "Удалить",
+    "action_validate": "Валидировать",
+    "validate_ok": "Нода валидна",
+    "validate_failed": "Ошибки валидации",
+    "tab_settings": "Настройки",
+    "tab_input": "Вход",
+    "tab_output": "Выход",
+    "tab_test": "Тест"
   },
   "state_mapping_editor": {
     "empty": "Нет маппингов",
@@ -465,7 +637,14 @@
     "user_message_label": "Текст для пользователя (fallback)",
     "handoff_mode_label": "Режим",
     "handoff_mode_single_reply": "Один ответ",
-    "handoff_mode_takeover": "Перехват диалога"
+    "handoff_mode_takeover": "Перехват диалога",
+    "queue_slug": "Очередь оператора",
+    "queue_picker": "Поиск очереди…",
+    "handoff_mode": "Режим передачи",
+    "single_reply": "Один ответ",
+    "takeover": "Перехват диалога",
+    "task_title": "Заголовок задачи",
+    "user_message": "Сообщение пользователю"
   },
   "execution_panel": {
     "placeholder": "Тестовое сообщение для flow",
@@ -477,5 +656,102 @@
     "base": "Base Flow",
     "add": "Skill",
     "delete": "Удалить skill"
+  },
+  "canvas": {
+    "context_menu": {
+      "open_properties": "Открыть свойства",
+      "toggle_entry": "Сделать стартовой",
+      "toggle_breakpoint": "Брейкпоинт",
+      "duplicate": "Дублировать",
+      "delete": "Удалить",
+      "edit_condition": "Условие перехода",
+      "delete_edge": "Удалить связь",
+      "add_node": "Добавить ноду",
+      "add_sticky": "Добавить заметку",
+      "fit_view": "Уместить всё",
+      "reset_zoom": "Сбросить масштаб",
+      "select_all": "Выделить всё",
+      "show_shortcuts": "Горячие клавиши",
+      "advanced_incoming_policy": "Политика входящих рёбер"
+    },
+    "toolbar": {
+      "zoom_in": "Приблизить",
+      "zoom_out": "Отдалить",
+      "zoom_100": "Сбросить масштаб (100%)",
+      "zoom_fit": "Уместить всё",
+      "tool_select": "Выделение",
+      "tool_pan": "Панорама",
+      "tool_add": "Добавить ноду",
+      "undo": "Отменить",
+      "redo": "Повторить",
+      "toggle_variables": "Переменные",
+      "toggle_breakpoints": "Брейкпоинты",
+      "toggle_guides": "Направляющие",
+      "help": "Горячие клавиши"
+    },
+    "state": {
+      "running": "Выполняется",
+      "completed": "Завершено",
+      "error": "Ошибка",
+      "breakpoint": "Брейкпоинт",
+      "inherited": "Унаследовано",
+      "entry": "Стартовая нода"
+    },
+    "smart_guides": {
+      "enabled": "Направляющие включены",
+      "disabled": "Направляющие выключены"
+    },
+    "hotkeys": {
+      "title": "Горячие клавиши",
+      "space_drag": "Панорамирование канваса",
+      "select_all": "Выделить всё",
+      "duplicate": "Дублировать выделение",
+      "delete": "Удалить выделение",
+      "rename": "Открыть свойства",
+      "clear_selection": "Снять выделение",
+      "arrows": "Сдвинуть выделение на 10 px",
+      "sticky_note": "Добавить заметку",
+      "box_select": "Прямоугольное выделение",
+      "zoom": "Зум"
+    },
+    "help": {
+      "title": "Справка по канвасу",
+      "section_shortcuts": "Горячие клавиши",
+      "section_features": "Возможности",
+      "feature_smart_guides_title": "Умные направляющие",
+      "feature_smart_guides_hint": "Ноды выравниваются автоматически при перетаскивании.",
+      "feature_minimap_title": "Мини-карта",
+      "feature_minimap_hint": "Быстрая навигация по большому графу справа снизу.",
+      "feature_sticky_title": "Заметки на канвасе",
+      "feature_sticky_hint": "Shift+S добавляет жёлтый стикер с произвольным текстом.",
+      "feature_drop_resource_title": "Перетаскивание ресурсов",
+      "feature_drop_resource_hint": "Из сайдбара можно бросать на канвас и ноды, и ресурсы.",
+      "action_close": "Закрыть"
+    },
+    "sticky_note": {
+      "placeholder": "Текст заметки…",
+      "delete": "Удалить заметку"
+    },
+    "minimap": {
+      "expand": "Открыть мини-карту",
+      "collapse": "Свернуть мини-карту"
+    },
+    "toast": {
+      "bulk_delete_success": "Ноды удалены",
+      "bulk_delete_error": "Не удалось удалить ноды"
+    }
+  },
+  "floating_panel": {
+    "expand": "Развернуть",
+    "collapse": "Свернуть",
+    "close": "Закрыть"
+  },
+  "toast": {
+    "resource_created": "Ресурс создан",
+    "resource_create_error": "Не удалось создать ресурс",
+    "resource_removed": "Ресурс удалён",
+    "resource_remove_error": "Не удалось удалить ресурс",
+    "resource_updated": "Ресурс обновлён",
+    "resource_update_error": "Не удалось обновить ресурс"
   }
 }

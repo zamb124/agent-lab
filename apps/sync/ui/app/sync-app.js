@@ -12,10 +12,9 @@
  */
 
 import { html, css } from 'lit';
-import { PlatformApp, renderPlatformAppShell } from '@platform/lib/base/PlatformApp.js';
+import { PlatformApp } from '@platform/lib/base/PlatformApp.js';
 import { CoreEvents } from '@platform/lib/events/index.js';
 import { createRouterEffect } from '@platform/lib/events/effects/router.effect.js';
-import '@platform/lib/components/app-loader.js';
 import '@platform/lib/components/layout/platform-island.js';
 import '@platform/lib/components/platform-shell-page.js';
 
@@ -217,17 +216,6 @@ export class SyncApp extends PlatformApp {
         }
     }
 
-    render() {
-        const shell = renderPlatformAppShell(this);
-        if (shell !== null) return shell;
-        if (!this._servicesInitialized || !this._authChecked) {
-            return html`<app-loader></app-loader>`;
-        }
-        if (!this._isAuthenticated) {
-            return html`<app-loader></app-loader>`;
-        }
-        return super.render();
-    }
 }
 
 customElements.define('sync-app', SyncApp);

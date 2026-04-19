@@ -432,6 +432,9 @@ class FlowResponse(BaseModel):
     # Ресурсы агента
     resources: Dict[str, Any] = {}
 
+    # UI-метаданные (sticky_notes и пр.)
+    metadata: Dict[str, Any] = {}
+
     # manual | api | file (bundle в репозитории)
     source: str = "manual"
 
@@ -858,6 +861,7 @@ async def get_flow(
             url=_generate_flow_url(flow_cfg.flow_id, flow_cfg.type, getattr(flow_cfg, 'url', None)),
             triggers=triggers_response,
             resources=flow_cfg.resources or {},
+            metadata=getattr(flow_cfg, "metadata", None) or {},
             source=getattr(flow_cfg, "source", None) or "manual",
             has_bundle_update=bundle_update,
         )
@@ -955,6 +959,7 @@ async def update_flow(
         source=existing.source,
         triggers=triggers,
         resources=resources,
+        metadata=getattr(existing, "metadata", None) or {},
     )
 
     await container.flow_repository.set(flow_config)
@@ -997,8 +1002,137 @@ async def update_flow(
         url=_generate_flow_url(flow_config.flow_id, flow_config.type, getattr(flow_config, 'url', None)),
         triggers=triggers_response,
         resources=flow_config.resources or {},
+        metadata=getattr(flow_config, "metadata", None) or {},
         source=flow_config.source,
     )
+
+
+class BulkDeleteNodesRequest(BaseModel):
+    """Запрос на массовое удаление нод с отчисткой связанных рёбер."""
+
+    node_ids: List[str]
+
+
+class BulkDeleteNodesResponse(BaseModel):
+    """Результат массового удаления."""
+
+    flow_id: str
+    deleted_node_ids: List[str]
+    deleted_edge_count: int
+
+
+@router.post("/{flow_id}/nodes/bulk_delete", response_model=BulkDeleteNodesResponse)
+async def bulk_delete_nodes(
+    flow_id: str,
+    request: BulkDeleteNodesRequest,
+    container: ContainerDep,
+) -> BulkDeleteNodesResponse:
+    """Удаляет несколько нод из flow вместе со связанными рёбрами."""
+    if not request.node_ids:
+        raise HTTPException(status_code=400, detail="node_ids is required")
+
+    existing = await container.flow_repository.get(flow_id)
+    if existing is None:
+        raise HTTPException(status_code=404, detail="Flow not found")
+
+    target_ids = set(request.node_ids)
+    deleted_ids: List[str] = []
+    new_nodes: Dict[str, Any] = {}
+    for node_id, node_value in (existing.nodes or {}).items():
+        if node_id in target_ids:
+            deleted_ids.append(node_id)
+            continue
+        new_nodes[node_id] = node_value
+
+    new_edges: List[Edge] = []
+    deleted_edge_count = 0
+    for edge in existing.edges or []:
+        if edge.from_node in target_ids or edge.to_node in target_ids:
+            deleted_edge_count += 1
+            continue
+        new_edges.append(edge)
+
+    new_entry = existing.entry if existing.entry not in target_ids else None
+
+    flow_config = FlowConfig(
+        flow_id=existing.flow_id,
+        name=existing.name,
+        description=existing.description,
+        type=existing.type or FlowType.LOCAL,
+        entry=new_entry,
+        nodes=new_nodes,
+        edges=new_edges,
+        variables=existing.variables or {},
+        tags=existing.tags or [],
+        skills=existing.skills or {},
+        evaluation=existing.evaluation,
+        source=existing.source,
+        triggers=existing.triggers or {},
+        resources=existing.resources or {},
+    )
+    await container.flow_repository.set(flow_config)
+
+    ctx = get_context()
+    if ctx and ctx.user and ctx.user.user_id:
+        await publish_ui_event_to_user(
+            user_id=ctx.user.user_id,
+            type="flows/flow/updated",
+            payload={"flow_id": flow_id, "version": flow_config.version or ""},
+        )
+
+    return BulkDeleteNodesResponse(
+        flow_id=flow_id,
+        deleted_node_ids=deleted_ids,
+        deleted_edge_count=deleted_edge_count,
+    )
+
+
+class FlowMetadataRequest(BaseModel):
+    """PATCH-обновление flow.config.metadata (sticky_notes, etc.)."""
+
+    sticky_notes: Optional[List[Dict[str, Any]]] = None
+
+
+class FlowMetadataResponse(BaseModel):
+    flow_id: str
+    metadata: Dict[str, Any]
+
+
+@router.patch("/{flow_id}/metadata", response_model=FlowMetadataResponse)
+async def update_flow_metadata(
+    flow_id: str,
+    request: FlowMetadataRequest,
+    container: ContainerDep,
+) -> FlowMetadataResponse:
+    """Обновляет метаданные flow (sticky_notes и пр.) без полной перезаписи."""
+    existing = await container.flow_repository.get(flow_id)
+    if existing is None:
+        raise HTTPException(status_code=404, detail="Flow not found")
+
+    metadata: Dict[str, Any] = dict(getattr(existing, "metadata", None) or {})
+    if request.sticky_notes is not None:
+        metadata["sticky_notes"] = request.sticky_notes
+
+    flow_config = FlowConfig(
+        flow_id=existing.flow_id,
+        name=existing.name,
+        description=existing.description,
+        type=existing.type or FlowType.LOCAL,
+        entry=existing.entry,
+        nodes=existing.nodes or {},
+        edges=existing.edges or [],
+        variables=existing.variables or {},
+        tags=existing.tags or [],
+        skills=existing.skills or {},
+        evaluation=existing.evaluation,
+        source=existing.source,
+        triggers=existing.triggers or {},
+        resources=existing.resources or {},
+        metadata=metadata,
+    )
+    await container.flow_repository.set(flow_config)
+
+    return FlowMetadataResponse(flow_id=flow_id, metadata=metadata)
 
 
 @router.delete("/{flow_id}")

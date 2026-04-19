@@ -1009,10 +1009,11 @@ export class CRMDailyNotesPage extends PlatformPage {
             this.openModal('crm.ai_analysis', { noteId: note.entity_id });
             return;
         }
-        const ns = this._currentNamespace();
-        const payload = { note_id: note.entity_id };
-        if (typeof ns === 'string' && ns.length > 0) payload.namespace = ns;
-        this._analyze.run(payload);
+        if (this._isAnalyzingNote(note)) {
+            this.openModal('crm.ai_analysis', { noteId: note.entity_id });
+            return;
+        }
+        this._analyze.run({ note_id: note.entity_id });
         this.openModal('crm.ai_analysis', { noteId: note.entity_id });
     }
 

@@ -21,12 +21,25 @@ from apps.crm.models.api import (
     TaskCreatedEntitiesResponse,
     TaskResponse,
 )
+from apps.crm.services.task_service import ActiveTaskExistsError
 
 router = APIRouter(prefix="/tasks", tags=["Tasks"])
 
 
 def _to_response(row) -> TaskResponse:
     return TaskResponse.model_validate(row)
+
+
+def _active_task_conflict(exc: ActiveTaskExistsError) -> HTTPException:
+    return HTTPException(
+        status_code=409,
+        detail={
+            "code": "active_task_exists",
+            "message": str(exc),
+            "task_type": exc.task_type,
+            "task_id": exc.existing_task_id,
+        },
+    )
 
 
 @router.post("/knowledge-import", status_code=202, response_model=TaskResponse)
@@ -46,6 +59,8 @@ async def start_knowledge_import(
             split_by_headings=body.split_by_headings,
             chunk_max_chars=body.chunk_max_chars,
         )
+    except ActiveTaskExistsError as exc:
+        raise _active_task_conflict(exc) from exc
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     return _to_response(row)
@@ -90,6 +105,8 @@ async def start_note_analyze(
             mode=body.mode,
             config=config,
         )
+    except ActiveTaskExistsError as exc:
+        raise _active_task_conflict(exc) from exc
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     return _to_response(row)
@@ -98,7 +115,7 @@ async def start_note_analyze(
 @router.get("", response_model=OffsetPage[TaskResponse])
 async def list_tasks(
     container: ContainerDep,
-    namespace: str = Query(..., description="Фильтр по пространству"),
+    namespace: Optional[str] = Query(None, description="Фильтр по пространству; пусто = все пространства компании"),
     task_type: Optional[str] = Query(None, description="Фильтр по типу задачи"),
     note_id: Optional[str] = Query(None, description="Фильтр по note_id внутри data (только note_analyze)"),
     limit: int = Query(50, ge=1, le=200),
@@ -173,6 +190,8 @@ async def start_daily_summary(
             date_str=body.date_str,
             reason=body.reason,
         )
+    except ActiveTaskExistsError as exc:
+        raise _active_task_conflict(exc) from exc
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     return _to_response(row)
@@ -191,6 +210,8 @@ async def start_period_summary(
             date_to=body.date_to,
             reason=body.reason,
         )
+    except ActiveTaskExistsError as exc:
+        raise _active_task_conflict(exc) from exc
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     return _to_response(row)
@@ -203,6 +224,8 @@ async def retry_task(task_id: str, container: ContainerDep) -> TaskResponse:
         row = await container.task_service.retry_task(task_id)
     except LookupError:
         raise HTTPException(status_code=404, detail="Задача не найдена") from None
+    except ActiveTaskExistsError as exc:
+        raise _active_task_conflict(exc) from exc
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     return _to_response(row)

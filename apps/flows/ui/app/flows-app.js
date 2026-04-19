@@ -41,7 +41,7 @@ import { chatResource, chatSendOp, chatCancelOp } from '../events/resources/chat
 import { operatorQueuesResource, operatorQueueAddMemberOp, operatorQueueRemoveMemberOp,
          operatorTasksListOp, operatorTaskGetOp, operatorTaskClaimOp,
          operatorTaskPostMessageOp, operatorTaskCompleteOp } from '../events/resources/operator.resource.js';
-import { editorResource } from '../events/resources/editor.resource.js';
+import { editorResource, editorBulkDeleteOp, stickyNoteUpsertOp } from '../events/resources/editor.resource.js';
 
 const FLOWS_ROUTES = [
     { key: 'list',                path: '' },
@@ -117,6 +117,8 @@ export class FlowsApp extends PlatformApp {
         operatorTaskPostMessageOp,
         operatorTaskCompleteOp,
         editorResource,
+        editorBulkDeleteOp,
+        stickyNoteUpsertOp,
     ];
 
     static styles = [

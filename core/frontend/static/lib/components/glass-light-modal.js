@@ -92,6 +92,9 @@ export class PlatformLightModal extends PlatformElement {
     connectedCallback() {
         super.connectedCallback();
         injectLightModalStyles();
+        if (this.localName !== 'platform-light-modal' && this.localName !== 'glass-light-modal') {
+            this.setAttribute('extends-platform-light-modal', '');
+        }
         this._handleKeyDown = this._handleKeyDown.bind(this);
         document.addEventListener('keydown', this._handleKeyDown);
     }

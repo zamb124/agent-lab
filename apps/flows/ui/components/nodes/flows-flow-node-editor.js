@@ -1,8 +1,12 @@
 /**
- * flows-flow-node-editor — flow_node (вложенный flow).
+ * flows-flow-node-editor — редактор вложенного flow (FlowNode).
+ *
+ * Поля точно по `FlowNode` (apps/flows/src/runtime/nodes.py):
+ *   - flow_id (combobox: список доступных flows + ручной ввод)
+ *   - skill_id (default 'default')
  */
 
-import { html } from 'lit';
+import { html, css } from 'lit';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
 import './flows-base-node-editor.js';
 
@@ -12,7 +16,40 @@ export class FlowsFlowNodeEditor extends PlatformElement {
         flowId: { type: String },
         skillId: { type: String },
         nodeConfig: { type: Object },
+        nodeType: { type: String },
+        flowVariables: { type: Object },
+        graphNodes: { type: Array },
+        previewExecutionState: { type: Object },
+        _showCustom: { state: true },
     };
+
+    static styles = [
+        PlatformElement.styles,
+        css`
+            :host { display: block; }
+            .field { display: flex; flex-direction: column; gap: var(--space-1); margin-bottom: var(--space-3); }
+            label { font-size: var(--text-sm); color: var(--text-secondary); }
+            input, select {
+                padding: var(--space-2);
+                border-radius: var(--radius-md);
+                border: 1px solid var(--glass-border-subtle);
+                background: var(--glass-solid-subtle);
+                color: var(--text-primary); font: inherit;
+                width: 100%; box-sizing: border-box;
+            }
+            .toggle button {
+                padding: 4px 12px;
+                background: var(--glass-solid-subtle);
+                color: var(--text-secondary);
+                border: 1px solid var(--glass-border-subtle);
+                border-radius: var(--radius-full);
+                font-size: var(--text-xs);
+                cursor: pointer;
+            }
+            .toggle button[active] { background: var(--accent-subtle); color: var(--accent); border-color: var(--accent-subtle); }
+            .row { display: flex; gap: var(--space-2); margin-bottom: var(--space-2); }
+        `,
+    ];
 
     constructor() {
         super();
@@ -20,44 +57,73 @@ export class FlowsFlowNodeEditor extends PlatformElement {
         this.flowId = '';
         this.skillId = '';
         this.nodeConfig = null;
+        this.nodeType = 'flow';
+        this.flowVariables = null;
+        this.graphNodes = null;
+        this.previewExecutionState = null;
+        this._showCustom = false;
         this._flows = this.useResource('flows/flows', { autoload: true });
     }
 
-    _onConfigChange(field, value) {
-        const cfg = { ...(this.nodeConfig?.config || {}), [field]: value };
-        this.emit('change', { nodeId: this.nodeId, patch: { config: cfg } });
+    _emitPatch(patch) {
+        this.emit('change', { nodeId: this.nodeId, patch });
+    }
+
+    _onFlowId(e) {
+        this._emitPatch({ flow_id: e.target.value });
+    }
+
+    _onSkillId(e) {
+        this._emitPatch({ skill_id: e.target.value });
     }
 
     render() {
-        const cfg = this.nodeConfig?.config || {};
-        const flows = (this._flows.items || []).filter((f) => f && f.flow_id !== this.flowId);
+        const cfg = this.nodeConfig || {};
+        const flowId = typeof cfg.flow_id === 'string' ? cfg.flow_id : '';
+        const skillId = typeof cfg.skill_id === 'string' ? cfg.skill_id : 'default';
+        const flows = Array.isArray(this._flows.items) ? this._flows.items.filter((f) => f && f.flow_id !== this.flowId) : [];
+        const isInList = flows.some((f) => f.flow_id === flowId);
+        const useCustom = this._showCustom || (flowId && !isInList);
         return html`
             <flows-base-node-editor
                 .nodeId=${this.nodeId}
                 .flowId=${this.flowId}
                 .skillId=${this.skillId}
                 .nodeConfig=${this.nodeConfig}
-                .nodeType=${'flow_node'}
+                .nodeType=${this.nodeType || 'flow'}
+                .flowVariables=${this.flowVariables}
+                .graphNodes=${this.graphNodes}
+                .previewExecutionState=${this.previewExecutionState}
                 @change=${(e) => this.emit('change', e.detail)}
+                @rename-node=${(e) => this.emit('rename-node', e.detail)}
+                @delete-node=${(e) => this.emit('delete-node', e.detail)}
+                @duplicate-node=${(e) => this.emit('duplicate-node', e.detail)}
             >
                 <div slot="settings">
-                    <label>${this.t('flow_node_editor.field_flow_id')}</label>
-                    <select
-                        style="display:block;width:100%;padding:var(--space-2);margin-bottom:var(--space-3);"
-                        .value=${cfg.flow_id || ''}
-                        @change=${(e) => this._onConfigChange('flow_id', e.target.value)}
-                    >
-                        <option value="">— ${this.t('flow_node_editor.field_flow_pick')} —</option>
-                        ${flows.map((f) => html`<option value=${f.flow_id}>${f.name || f.flow_id}</option>`)}
-                    </select>
-                    <label>${this.t('flow_node_editor.field_skill_id')}</label>
-                    <input
-                        type="text"
-                        style="display:block;width:100%;padding:var(--space-2);"
-                        .value=${cfg.skill_id || ''}
-                        placeholder="base"
-                        @input=${(e) => this._onConfigChange('skill_id', e.target.value)}
-                    />
+                    <div class="field">
+                        <label>${this.t('flow_node_editor.flow_id')}</label>
+                        <div class="row toggle">
+                            <button ?active=${!useCustom} @click=${() => { this._showCustom = false; }}>
+                                ${this.t('flow_node_editor.from_list')}
+                            </button>
+                            <button ?active=${useCustom} @click=${() => { this._showCustom = true; }}>
+                                ${this.t('flow_node_editor.custom_id')}
+                            </button>
+                        </div>
+                        ${useCustom ? html`
+                            <input type="text" placeholder=${this.t('flow_node_editor.custom_id_hint')}
+                                .value=${flowId} @input=${this._onFlowId} />
+                        ` : html`
+                            <select .value=${flowId} @change=${this._onFlowId}>
+                                <option value="">—</option>
+                                ${flows.map((f) => html`<option value=${f.flow_id} ?selected=${f.flow_id === flowId}>${f.name || f.flow_id}</option>`)}
+                            </select>
+                        `}
+                    </div>
+                    <div class="field">
+                        <label>${this.t('flow_node_editor.skill_id')}</label>
+                        <input type="text" placeholder="default" .value=${skillId} @input=${this._onSkillId} />
+                    </div>
                 </div>
             </flows-base-node-editor>
         `;

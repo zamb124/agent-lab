@@ -47,6 +47,14 @@ CHAT_EVENT_BREAKPOINT = f"{CHAT_EVENT_PREFIX}/breakpoint"
 CHAT_EVENT_INPUT_REQUIRED = f"{CHAT_EVENT_PREFIX}/input_required"
 CHAT_EVENT_TASK_STARTED = f"{CHAT_EVENT_PREFIX}/task_started"
 
+# Push-события для визуального редактора flow.
+RUN_EVENT_FLOW_STARTED = "flows/run/flow_started"
+RUN_EVENT_FLOW_DONE = "flows/run/flow_done"
+RUN_EVENT_NODE_STARTED = "flows/run/node_started"
+RUN_EVENT_NODE_COMPLETED = "flows/run/node_completed"
+RUN_EVENT_NODE_FAILED = "flows/run/node_failed"
+BREAKPOINT_EVENT_HIT = "flows/breakpoint/hit"
+
 
 def _extract_text_parts(parts: Optional[list[Any]]) -> str:
     if not parts:
@@ -112,6 +120,17 @@ def _normalize_message(message: Optional[Message]) -> Optional[dict[str, Any]]:
     return message.model_dump(by_alias=True, exclude_none=True)
 
 
+def _node_event_payload(parts: Optional[list[Any]]) -> Optional[dict[str, Any]]:
+    """Достаёт DataPart c node_id/node_type/result_preview/error из артефакта."""
+    if not parts:
+        return None
+    for part in parts:
+        data = getattr(part, "data", None)
+        if isinstance(data, dict) and isinstance(data.get("node_id"), str):
+            return data
+    return None
+
+
 async def _emit_artifact_update(
     user_id: str,
     event: TaskArtifactUpdateEvent,
@@ -123,6 +142,26 @@ async def _emit_artifact_update(
     name = getattr(artifact, "name", None) if artifact is not None else None
     text = _extract_text_parts(getattr(artifact, "parts", None) if artifact else None)
     base_payload: dict[str, Any] = {"task_id": task_id, "artifact_name": name}
+
+    # Маппинг artifact'ов node_start_*/node_complete_*/node_error_* в push-события
+    # `flows/run/*` для визуального редактора (см. apps/flows/src/streaming/base.py).
+    if isinstance(name, str) and (name.startswith("node_start_") or name.startswith("node_complete_") or name.startswith("node_error_")):
+        node_data = _node_event_payload(getattr(artifact, "parts", None))
+        if node_data is not None:
+            run_payload = {
+                "task_id": task_id,
+                "node_id": node_data.get("node_id"),
+                "node_type": node_data.get("node_type"),
+            }
+            if name.startswith("node_start_"):
+                await _publish(user_id, RUN_EVENT_NODE_STARTED, run_payload, correlation_id=correlation_id)
+            elif name.startswith("node_complete_"):
+                run_payload["result_preview"] = node_data.get("result_preview", "")
+                await _publish(user_id, RUN_EVENT_NODE_COMPLETED, run_payload, correlation_id=correlation_id)
+            elif name.startswith("node_error_"):
+                run_payload["error"] = node_data.get("error", "")
+                await _publish(user_id, RUN_EVENT_NODE_FAILED, run_payload, correlation_id=correlation_id)
+        return
 
     if name == "operator_files":
         data_part = next(
@@ -219,6 +258,7 @@ async def _emit_status_update(
             {**base_payload, "content": _extract_text_parts(getattr(message, "parts", None))},
             correlation_id=correlation_id,
         )
+        await _publish(user_id, RUN_EVENT_FLOW_DONE, {"task_id": task_id, "state": state_str}, correlation_id=correlation_id)
         return
 
     if state_str in ("failed", "error"):
@@ -228,6 +268,7 @@ async def _emit_status_update(
             {**base_payload, "error": _extract_text_parts(getattr(message, "parts", None))},
             correlation_id=correlation_id,
         )
+        await _publish(user_id, RUN_EVENT_FLOW_DONE, {"task_id": task_id, "state": state_str}, correlation_id=correlation_id)
         return
 
     if state_str in ("input-required", "input_required"):
@@ -240,6 +281,14 @@ async def _emit_status_update(
                 {**base_payload, "breakpoint": breakpoint_data},
                 correlation_id=correlation_id,
             )
+            node_id = breakpoint_data.get("node_id")
+            if isinstance(node_id, str) and node_id:
+                await _publish(
+                    user_id,
+                    BREAKPOINT_EVENT_HIT,
+                    {"task_id": task_id, "node_id": node_id, "node_type": breakpoint_data.get("node_type")},
+                    correlation_id=correlation_id,
+                )
             return
         await _publish(
             user_id,
@@ -278,6 +327,12 @@ async def stream_to_user(
                     {"task_id": task_id},
                     correlation_id=correlation_id,
                 )
+                await _publish(
+                    user_id,
+                    RUN_EVENT_FLOW_STARTED,
+                    {"task_id": task_id},
+                    correlation_id=correlation_id,
+                )
 
             if isinstance(event, TaskArtifactUpdateEvent):
                 await _emit_artifact_update(
@@ -293,6 +348,12 @@ async def stream_to_user(
                     await _publish(
                         user_id,
                         CHAT_EVENT_TASK_STARTED,
+                        {"task_id": fallback_task_id},
+                        correlation_id=correlation_id,
+                    )
+                    await _publish(
+                        user_id,
+                        RUN_EVENT_FLOW_STARTED,
                         {"task_id": fallback_task_id},
                         correlation_id=correlation_id,
                     )
@@ -318,6 +379,7 @@ async def stream_to_user(
             },
             correlation_id=correlation_id,
         )
+        await _publish(user_id, RUN_EVENT_FLOW_DONE, {"task_id": fallback_task_id, "state": "cancelled"}, correlation_id=correlation_id)
         raise
     except Exception as exc:
         logger.exception("flows/chat stream failed for user=%s: %s", user_id, exc)
@@ -333,3 +395,4 @@ async def stream_to_user(
             },
             correlation_id=correlation_id,
         )
+        await _publish(user_id, RUN_EVENT_FLOW_DONE, {"task_id": fallback_task_id, "state": "failed"}, correlation_id=correlation_id)

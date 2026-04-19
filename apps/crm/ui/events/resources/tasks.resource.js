@@ -29,14 +29,14 @@ export const tasksResource = createResourceCollection({
     operations: ['list', 'get'],
     listQuery: (payload) => {
         if (!payload || typeof payload !== 'object') {
-            throw new Error('tasksResource.listQuery: payload required (namespace)');
-        }
-        if (typeof payload.namespace !== 'string' || payload.namespace.length === 0) {
-            throw new Error('tasksResource.listQuery: payload.namespace required');
+            throw new Error('tasksResource.listQuery: payload required (object)');
         }
         const limit = typeof payload.limit === 'number' ? payload.limit : 50;
         const offset = typeof payload.offset === 'number' ? payload.offset : 0;
-        const query = { namespace: payload.namespace, limit, offset };
+        const query = { limit, offset };
+        if (typeof payload.namespace === 'string' && payload.namespace.length > 0) {
+            query.namespace = payload.namespace;
+        }
         if (typeof payload.task_type === 'string' && payload.task_type.length > 0) {
             query.task_type = payload.task_type;
         }

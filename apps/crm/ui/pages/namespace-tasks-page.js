@@ -164,7 +164,7 @@ export class CRMNamespaceTasksPage extends PlatformPage {
             .filter-pill.active {
                 border-color: var(--accent);
                 color: var(--text-primary);
-                background: rgba(59, 130, 246, 0.18);
+                background: var(--accent-subtle);
             }
 
             .reload-btn {
@@ -256,12 +256,12 @@ export class CRMNamespaceTasksPage extends PlatformPage {
                 white-space: nowrap;
             }
 
-            .status.ok       { border-color: rgba(34, 197, 94, 0.5); color: #86efac; background: rgba(22, 101, 52, 0.25); }
-            .status.error    { border-color: rgba(244, 63, 94, 0.5); color: #fda4af; background: rgba(159, 18, 57, 0.25); }
-            .status.warn     { border-color: rgba(245, 158, 11, 0.5); color: #fcd34d; background: rgba(146, 64, 14, 0.25); }
+            .status.ok       { border-color: var(--success-border); color: var(--success); background: var(--success-bg); }
+            .status.error    { border-color: var(--error-border);   color: var(--error);   background: var(--error-bg); }
+            .status.warn     { border-color: var(--warning-border); color: var(--warning); background: var(--warning-bg); }
             .status.muted    { color: var(--text-tertiary); }
-            .status.progress { border-color: rgba(59, 130, 246, 0.5); color: #93c5fd; background: rgba(30, 58, 138, 0.25); }
-            .status.pending  { border-color: rgba(148, 163, 184, 0.5); color: #cbd5e1; background: rgba(51, 65, 85, 0.25); }
+            .status.progress { border-color: var(--info-border);    color: var(--info);    background: var(--info-bg); }
+            .status.pending  { border-color: var(--glass-border-strong); color: var(--text-secondary); background: var(--glass-solid-medium); }
 
             .progress-bar {
                 width: 100%;
@@ -310,9 +310,9 @@ export class CRMNamespaceTasksPage extends PlatformPage {
             }
 
             .action-btn.danger {
-                color: #fee2e2;
-                border-color: rgba(185, 28, 28, 0.5);
-                background: rgba(185, 28, 28, 0.18);
+                color: var(--error);
+                border-color: var(--error-border);
+                background: var(--error-bg);
             }
 
             .action-btn:disabled {
@@ -321,18 +321,11 @@ export class CRMNamespaceTasksPage extends PlatformPage {
             }
 
             .err {
-                color: #fda4af;
+                color: var(--error);
                 font-size: var(--text-xs);
                 margin-top: 4px;
                 white-space: pre-wrap;
                 word-break: break-word;
-            }
-
-            .ns-warning {
-                color: var(--text-secondary);
-                font-size: var(--text-sm);
-                text-align: center;
-                padding: var(--space-6) var(--space-3);
             }
 
             .live-dot {
@@ -340,8 +333,8 @@ export class CRMNamespaceTasksPage extends PlatformPage {
                 width: 8px;
                 height: 8px;
                 border-radius: 50%;
-                background: #4ade80;
-                box-shadow: 0 0 6px rgba(74, 222, 128, 0.7);
+                background: var(--success);
+                box-shadow: 0 0 6px var(--success-border);
                 animation: pulse 1.4s ease-in-out infinite;
             }
 
@@ -368,13 +361,13 @@ export class CRMNamespaceTasksPage extends PlatformPage {
         this._namespaceSel = this.select((s) => {
             const user = s.auth.user;
             if (!user || typeof user.company_id !== 'string') {
-                return null;
+                return '__all__';
             }
             const cid = user.company_id;
             const map = s.ui.namespace.selectionByCompany;
             const sel = map[cid];
             if (sel === 'all' || sel === undefined || sel === null) {
-                return null;
+                return '__all__';
             }
             return sel;
         });
@@ -404,13 +397,11 @@ export class CRMNamespaceTasksPage extends PlatformPage {
 
     _loadTasks() {
         const namespace = this._currentNamespace();
-        if (typeof namespace !== 'string' || namespace.length === 0) {
-            this._lastNamespace = null;
-            this._stopPolling();
-            return;
-        }
         this._lastNamespace = namespace;
-        const payload = { namespace, limit: 100, offset: 0 };
+        const payload = { limit: 100, offset: 0 };
+        if (typeof namespace === 'string' && namespace.length > 0 && namespace !== '__all__') {
+            payload.namespace = namespace;
+        }
         if (this._typeFilter.length > 0) {
             payload.task_type = this._typeFilter;
         }
@@ -549,11 +540,7 @@ export class CRMNamespaceTasksPage extends PlatformPage {
                 subtitle=${this.t('namespace_tasks_page.subtitle')}
             ></page-header>
             <div class="scroll">
-                ${typeof namespace !== 'string' || namespace.length === 0
-                    ? html`<div class="panel">
-                          <div class="ns-warning">${this.t('namespace_tasks_page.select_namespace_warning')}</div>
-                      </div>`
-                    : this._renderTasksPanel(tasks, loading, namespace)}
+                ${this._renderTasksPanel(tasks, loading, namespace)}
             </div>
         `;
     }
@@ -577,14 +564,16 @@ export class CRMNamespaceTasksPage extends PlatformPage {
                         ${this._polling
                             ? html`<span class="live-dot" title=${this.t('namespace_tasks_page.live_polling')}></span>`
                             : ''}
-                        <button
-                            type="button"
-                            class="reload-btn"
-                            @click=${() => this.openModal('crm.knowledge_import')}
-                        >
-                            <platform-icon name="cloud" size="14"></platform-icon>
-                            ${this.t('namespace_tasks_page.action_import')}
-                        </button>
+                        ${namespace !== '__all__' ? html`
+                            <button
+                                type="button"
+                                class="reload-btn"
+                                @click=${() => this.openModal('crm.knowledge_import')}
+                            >
+                                <platform-icon name="cloud" size="14"></platform-icon>
+                                ${this.t('namespace_tasks_page.action_import')}
+                            </button>
+                        ` : ''}
                         <button
                             type="button"
                             class="reload-btn"
@@ -599,7 +588,9 @@ export class CRMNamespaceTasksPage extends PlatformPage {
                     </div>
                 </div>
                 <div class="mono" style="color: var(--text-tertiary); font-size: var(--text-xs);">
-                    ${this.t('namespace_tasks_page.namespace_label', { namespace })}
+                    ${namespace === '__all__'
+                        ? this.t('namespace_tasks_page.namespace_label_all')
+                        : this.t('namespace_tasks_page.namespace_label', { namespace })}
                 </div>
                 ${tasks.length > 0
                     ? this._renderTable(tasks)

@@ -73,7 +73,15 @@ export class CRMAiAnalysisModal extends PlatformModal {
     static styles = [
         ...PlatformModal.styles,
         css`
-            :host { --modal-max-width: 1120px; }
+            :host { --modal-max-width: 1240px; }
+
+            .modal-title-gradient {
+                background: var(--crm-main-gradient);
+                -webkit-background-clip: text;
+                background-clip: text;
+                color: transparent;
+                font-weight: 700;
+            }
 
             .body {
                 display: grid;
@@ -93,7 +101,7 @@ export class CRMAiAnalysisModal extends PlatformModal {
                 border: 1px solid var(--crm-stroke);
                 border-radius: var(--radius-xl);
                 background: var(--crm-surface-muted);
-                padding: var(--space-3);
+                padding: var(--space-4);
             }
 
             .block.summary {
@@ -102,13 +110,17 @@ export class CRMAiAnalysisModal extends PlatformModal {
             }
 
             .block-title {
-                margin: 0 0 var(--space-2) 0;
+                margin: 0 0 var(--space-3) 0;
                 display: inline-flex;
                 align-items: center;
                 gap: var(--space-2);
                 font-size: var(--text-lg);
-                font-weight: 600;
+                font-weight: 700;
                 color: var(--text-primary);
+            }
+
+            .block-title platform-icon {
+                color: var(--accent);
             }
 
             .summary-text {
@@ -259,7 +271,7 @@ export class CRMAiAnalysisModal extends PlatformModal {
                 align-items: center;
             }
             .submit-error {
-                color: var(--color-danger);
+                color: var(--error);
                 font-size: var(--text-sm);
             }
 
@@ -279,11 +291,12 @@ export class CRMAiAnalysisModal extends PlatformModal {
                 color: var(--text-primary);
             }
             .btn-primary {
-                background: var(--accent);
-                border-color: var(--accent);
+                background: var(--crm-main-gradient);
+                border-color: transparent;
                 color: white;
+                font-weight: 600;
             }
-            .btn-primary:hover:not(:disabled) { filter: brightness(1.05); }
+            .btn-primary:hover:not(:disabled) { filter: brightness(1.08); }
             .btn:disabled { opacity: 0.5; cursor: not-allowed; }
 
             @media (max-width: 1024px) {
@@ -384,23 +397,15 @@ export class CRMAiAnalysisModal extends PlatformModal {
     _onAnalyze() {
         const entity = this._entity();
         if (entity === null) return;
-        const namespace = typeof entity.namespace === 'string' && entity.namespace.length > 0
-            ? entity.namespace
-            : 'default';
         this._analyzeOp.run({
             note_id: this.noteId,
             mode: 'analyze',
-            namespace,
         });
     }
 
     _onApply() {
         const draft = this._draft();
         if (draft === null) return;
-        const entity = this._entity();
-        const namespace = entity !== null && typeof entity.namespace === 'string' && entity.namespace.length > 0
-            ? entity.namespace
-            : 'default';
         if (this._hasPendingChanges()) {
             this._draftSaveOp.run({
                 note_id: this.noteId,
@@ -415,7 +420,6 @@ export class CRMAiAnalysisModal extends PlatformModal {
         this._analyzeOp.run({
             note_id: this.noteId,
             mode: 'apply',
-            namespace,
         });
     }
 
@@ -436,8 +440,8 @@ export class CRMAiAnalysisModal extends PlatformModal {
     renderHeader() {
         return html`
             <span style="display:inline-flex;align-items:center;gap:8px;">
-                <platform-icon name="sparkle" size="16"></platform-icon>
-                ${this.t('ai_analysis_modal.header_title')}
+                <platform-icon name="sparkle" size="18" style="color: var(--accent);"></platform-icon>
+                <span class="modal-title-gradient">${this.t('ai_analysis_modal.header_title')}</span>
             </span>
         `;
     }

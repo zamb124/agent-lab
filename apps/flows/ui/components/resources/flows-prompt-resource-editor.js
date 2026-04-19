@@ -1,10 +1,19 @@
 /**
  * flows-prompt-resource-editor — ресурс prompt (Jinja-шаблон).
+ *
+ * Поля точно по `PromptResourceConfig`:
+ *   - template (str, Jinja2)
+ *   - variables (dict<str, Any>)
+ *
+ * Кнопка Render preview → useOp('flows/prompt_render').
  */
 
 import { html, css } from 'lit';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
 import './flows-base-resource-editor.js';
+import '../editors/flows-json-field-editor.js';
+import '@platform/lib/components/glass-button.js';
+import '@platform/lib/components/platform-icon.js';
 
 export class FlowsPromptResourceEditor extends PlatformElement {
     static properties = {
@@ -13,16 +22,28 @@ export class FlowsPromptResourceEditor extends PlatformElement {
     };
 
     static styles = [
+        PlatformElement.styles,
         css`
-            .field { display: flex; flex-direction: column; gap: var(--space-1); margin-bottom: var(--space-3); padding: 0 var(--space-3); }
-            .field textarea {
-                padding: var(--space-2); min-height: 160px; resize: vertical;
+            .body { padding: 0 var(--space-3); }
+            .field { display: flex; flex-direction: column; gap: var(--space-1); margin-bottom: var(--space-3); }
+            label { font-size: var(--text-sm); color: var(--text-secondary); }
+            textarea {
+                padding: var(--space-2); min-height: 120px; resize: vertical;
                 border-radius: var(--radius-md);
                 border: 1px solid var(--glass-border-subtle);
                 background: var(--glass-solid-subtle);
                 color: var(--text-primary); font: inherit;
+                font-family: var(--font-mono, monospace);
             }
-            label { font-size: var(--text-sm); color: var(--text-secondary); }
+            .preview {
+                padding: var(--space-2);
+                background: var(--glass-solid-medium);
+                border-radius: var(--radius-md);
+                border: 1px solid var(--glass-border-subtle);
+                white-space: pre-wrap;
+                font-size: var(--text-sm);
+                color: var(--text-primary);
+            }
         `,
     ];
 
@@ -30,14 +51,24 @@ export class FlowsPromptResourceEditor extends PlatformElement {
         super();
         this.resourceId = '';
         this.resource = null;
+        this._render = this.useOp('flows/prompt_render');
     }
 
-    _emitConfig(config) {
-        this.emit('change', { resourceId: this.resourceId, patch: { config: { ...(this.resource?.config || {}), ...config } } });
+    _emitConfig(patch) {
+        const base = this.resource && typeof this.resource.config === 'object' ? this.resource.config : {};
+        this.emit('change', { resourceId: this.resourceId, patch: { config: { ...base, ...patch } } });
+    }
+
+    async _onRenderPreview(template, variables) {
+        await this._render.run({ template, variables });
     }
 
     render() {
-        const cfg = this.resource?.config || {};
+        const cfg = this.resource && typeof this.resource.config === 'object' ? this.resource.config : {};
+        const template = typeof cfg.template === 'string' ? cfg.template : '';
+        const variables = cfg.variables && typeof cfg.variables === 'object' ? cfg.variables : {};
+        const variablesJson = JSON.stringify(variables, null, 2);
+        const preview = this._render.lastResult?.rendered;
         return html`
             <flows-base-resource-editor
                 .resourceId=${this.resourceId}
@@ -45,14 +76,31 @@ export class FlowsPromptResourceEditor extends PlatformElement {
                 .resourceType=${'prompt'}
                 @change=${(e) => this.emit('change', e.detail)}
             >
-                <div slot="settings">
+                <div slot="settings" class="body">
                     <div class="field">
-                        <label>${this.t('prompt_resource_editor.field_template')}</label>
-                        <textarea
-                            .value=${cfg.template || ''}
-                            @input=${(e) => this._emitConfig({ template: e.target.value })}
-                        ></textarea>
+                        <label>${this.t('prompt_resource_editor.template')}</label>
+                        <textarea .value=${template}
+                            @input=${(e) => this._emitConfig({ template: e.target.value })}></textarea>
                     </div>
+                    <div class="field">
+                        <label>${this.t('prompt_resource_editor.variables')}</label>
+                        <flows-json-field-editor
+                            .value=${variablesJson}
+                            @change=${(e) => { if (e.detail && 'parsed' in e.detail) this._emitConfig({ variables: e.detail.parsed && typeof e.detail.parsed === 'object' ? e.detail.parsed : {} }); }}
+                        ></flows-json-field-editor>
+                    </div>
+                    <glass-button size="sm" variant="secondary"
+                        ?disabled=${this._render.busy}
+                        @click=${() => this._onRenderPreview(template, variables)}>
+                        <platform-icon name="play"></platform-icon>
+                        ${this.t('prompt_resource_editor.render_button')}
+                    </glass-button>
+                    ${preview ? html`
+                        <div class="field" style="margin-top: var(--space-2)">
+                            <label>${this.t('prompt_resource_editor.render_preview')}</label>
+                            <div class="preview">${preview}</div>
+                        </div>
+                    ` : ''}
                 </div>
             </flows-base-resource-editor>
         `;

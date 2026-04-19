@@ -3,20 +3,22 @@
  *
  * Layout (3 секции):
  *   left:  back / flow-name input / status-badge (Черновик|Опубликован)
- *   center: mode-toggle (Edit|Run|Reload-bundle)
- *   right: AI-кнопка / Код / Опубликовать (primary)
+ *   center: mode-toggle pill (edit | run | reload-bundle с update-индикатором)
+ *   right: AI / Code / Publish (primary)
  *
- * Источники:
+ * Источники state:
  *   - useOp('flows/editor').state.flowConfig — текущая модель flow.
- *   - useOp('flows/editor').state.isDirty / isSaving / mode (edit|run).
+ *   - useOp('flows/editor').state.{isDirty, isSaving, mode, publishedAt}.
+ *   - useOp('flows/editor').state.agentExecutionRunning — индикатор Run.
+ *   - useResource('flows/flows') — для обновления флага has_bundle_update.
  *
  * Mutations через ops:
- *   - flows/flow_update — публикация (PATCH с актуальным flowConfig + skillsData).
+ *   - flows/flow_update — публикация (PATCH с актуальным flowConfig + skillsData);
  *   - flows/flow_reload_from_bundle — переинициализация из bundle.
  *
  * Локальные UI-actions slice'а editor:
  *   - setMode({ mode: 'edit'|'run' })
- *   - setName({ name }) — переименование (isDirty=true)
+ *   - setName({ name }) — переименование (isDirty=true).
  */
 
 import { html, css } from 'lit';
@@ -46,22 +48,19 @@ export class FlowsEditorHeader extends PlatformElement {
             }
 
             /* LEFT */
-            .header-left {
-                display: flex; align-items: center; gap: var(--space-2);
-                min-width: 0;
-            }
-            .icon-only-btn {
-                width: 32px; height: 32px;
+            .header-left { display: flex; align-items: center; gap: var(--space-2); min-width: 0; }
+            .icon-btn {
+                width: 34px; height: 34px;
                 display: flex; align-items: center; justify-content: center;
-                border-radius: var(--radius-sm);
+                border-radius: var(--radius-md);
                 border: 1px solid var(--border-subtle);
                 background: var(--glass-solid-subtle);
                 color: var(--text-secondary);
                 cursor: pointer;
                 transition: all var(--duration-fast);
             }
-            .icon-only-btn:hover { background: var(--glass-solid-strong); color: var(--text-primary); }
-            .icon-only-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+            .icon-btn:hover { background: var(--glass-solid-strong); color: var(--text-primary); }
+            .icon-btn:disabled { opacity: 0.4; cursor: not-allowed; }
             .flow-name-input {
                 background: transparent;
                 border: 1px solid transparent;
@@ -70,15 +69,14 @@ export class FlowsEditorHeader extends PlatformElement {
                 font-weight: var(--font-semibold);
                 padding: 4px var(--space-2);
                 border-radius: var(--radius-sm);
-                min-width: 200px;
+                min-width: 220px;
                 font: inherit;
                 font-weight: var(--font-semibold);
             }
             .flow-name-input:hover { border-color: var(--border-subtle); }
             .flow-name-input:focus { outline: none; border-color: var(--accent); background: var(--glass-solid-subtle); }
             .status-badge {
-                display: inline-flex;
-                align-items: center;
+                display: inline-flex; align-items: center;
                 padding: 2px var(--space-2);
                 border-radius: var(--radius-full);
                 font-size: var(--text-xs);
@@ -100,20 +98,20 @@ export class FlowsEditorHeader extends PlatformElement {
                 border-color: var(--success-border);
             }
 
-            /* CENTER */
-            .header-center { display: flex; justify-content: center; }
-            .mode-toggle {
+            /* CENTER pill */
+            .header-center { display: flex; justify-content: center; gap: var(--space-2); }
+            .mode-pill {
                 display: inline-flex;
                 gap: 2px;
                 padding: 3px;
-                border-radius: var(--radius-md);
+                border-radius: var(--radius-full);
                 border: 1px solid var(--border-subtle);
                 background: var(--glass-solid-subtle);
             }
             .mode-btn {
-                width: 36px; height: 30px;
+                width: 36px; height: 32px;
                 display: flex; align-items: center; justify-content: center;
-                border-radius: var(--radius-sm);
+                border-radius: var(--radius-full);
                 border: none;
                 background: transparent;
                 color: var(--text-secondary);
@@ -121,14 +119,27 @@ export class FlowsEditorHeader extends PlatformElement {
                 transition: all var(--duration-fast);
             }
             .mode-btn:hover { background: var(--glass-solid-medium); color: var(--text-primary); }
-            .mode-btn[active] { background: var(--accent); color: var(--text-inverse); box-shadow: var(--glass-shadow-subtle); }
+            .mode-btn[active] {
+                background: var(--glass-solid-strong);
+                color: var(--accent);
+                box-shadow: var(--glass-shadow-subtle);
+            }
+            .reload-wrap { position: relative; display: inline-flex; }
+            .reload-dot {
+                position: absolute;
+                top: 2px; right: 2px;
+                width: 8px; height: 8px;
+                border-radius: 50%;
+                background: var(--warning);
+                box-shadow: 0 0 6px var(--warning);
+            }
 
             /* RIGHT */
             .header-right { display: flex; justify-content: flex-end; align-items: center; gap: var(--space-2); }
             .header-btn {
                 display: inline-flex; align-items: center; gap: var(--space-1);
-                padding: 6px var(--space-2);
-                border-radius: var(--radius-sm);
+                padding: 6px var(--space-3);
+                border-radius: var(--radius-md);
                 border: 1px solid var(--border-subtle);
                 background: var(--glass-solid-subtle);
                 color: var(--text-secondary);
@@ -137,15 +148,18 @@ export class FlowsEditorHeader extends PlatformElement {
                 transition: all var(--duration-fast);
             }
             .header-btn:hover { background: var(--glass-solid-strong); color: var(--text-primary); }
-            .header-btn.icon-btn { padding: 6px; }
+            .header-btn.icon-only { padding: 6px; width: 34px; height: 34px; justify-content: center; }
             .header-btn.primary {
                 background: var(--accent);
                 color: var(--text-inverse);
                 border-color: var(--accent);
                 font-weight: var(--font-medium);
-                padding: 6px var(--space-3);
             }
-            .header-btn.primary:hover { background: var(--accent-hover); border-color: var(--accent-hover); box-shadow: var(--accent-glow); }
+            .header-btn.primary:hover {
+                background: var(--accent-hover);
+                border-color: var(--accent-hover);
+                box-shadow: var(--accent-glow);
+            }
             .header-btn:disabled { opacity: 0.5; cursor: not-allowed; }
         `,
     ];
@@ -157,6 +171,7 @@ export class FlowsEditorHeader extends PlatformElement {
         this._editor = this.useOp('flows/editor');
         this._update = this.useOp('flows/flow_update');
         this._reload = this.useOp('flows/flow_reload_from_bundle');
+        this._flows = this.useResource('flows/flows');
     }
 
     _resolveStatusBadge(state) {
@@ -166,20 +181,11 @@ export class FlowsEditorHeader extends PlatformElement {
     }
 
     _onNameInput(e) {
-        const value = e.target.value;
-        if (typeof this._editor.setName === 'function') {
-            this._editor.setName({ name: value });
-            return;
-        }
-        this._editor.actions && this._editor.actions.setName && this._editor.actions.setName({ name: value });
+        this._editor.setName({ name: e.target.value });
     }
 
     _setMode(mode) {
-        if (typeof this._editor.setMode === 'function') {
-            this._editor.setMode({ mode });
-            return;
-        }
-        this._editor.actions && this._editor.actions.setMode && this._editor.actions.setMode({ mode });
+        this._editor.setMode({ mode });
     }
 
     _back() {
@@ -190,11 +196,11 @@ export class FlowsEditorHeader extends PlatformElement {
     async _save() {
         const state = this._editor.state;
         if (!state || !state.flowConfig || !this.flowId) return;
-        if (typeof this._editor.setSaving === 'function') this._editor.setSaving({ saving: true });
+        this._editor.setSaving({ saving: true });
         const body = { ...state.flowConfig, ...(state.skillsData || {}) };
         await this._update.run({ flow_id: this.flowId, body });
-        if (typeof this._editor.setSaving === 'function') this._editor.setSaving({ saving: false });
-        if (typeof this._editor.setDirty === 'function') this._editor.setDirty({ dirty: false });
+        this._editor.setSaving({ saving: false });
+        this._editor.setDirty({ dirty: false });
     }
 
     async _reloadBundle() {
@@ -203,12 +209,10 @@ export class FlowsEditorHeader extends PlatformElement {
     }
 
     _openCodeView() {
-        // UI-event: открытие code-view панели — обработчик решает (модалка/drawer).
         this.dispatch('flows/code_view/open_requested', { flowId: this.flowId, skillId: this.skillId });
     }
 
     _openLara() {
-        // UI-event: бесшовная интеграция Lara, обработчик настраивается отдельно.
         this.dispatch('flows/lara/open_requested', { flowId: this.flowId, skillId: this.skillId });
     }
 
@@ -218,10 +222,12 @@ export class FlowsEditorHeader extends PlatformElement {
         const mode = state.mode || 'edit';
         const saving = Boolean(state.isSaving);
         const status = this._resolveStatusBadge(state);
+        const flow = (this._flows.items || []).find((f) => f && f.flow_id === this.flowId);
+        const hasBundleUpdate = Boolean(flow && flow.has_bundle_update);
         return html`
             <div class="header-left">
-                <button class="icon-only-btn" type="button" title=${this.t('editor_header.back')} @click=${this._back}>
-                    <platform-icon name="arrow-left" size="18"></platform-icon>
+                <button class="icon-btn" type="button" title=${this.t('editor_header.back')} @click=${this._back}>
+                    <platform-icon name="arrow-left" size="16"></platform-icon>
                 </button>
                 <input
                     class="flow-name-input"
@@ -234,46 +240,32 @@ export class FlowsEditorHeader extends PlatformElement {
             </div>
 
             <div class="header-center">
-                <div class="mode-toggle">
-                    <button
-                        class="mode-btn"
-                        type="button"
-                        ?active=${mode === 'edit'}
-                        title=${this.t('editor_header.mode_edit')}
-                        @click=${() => this._setMode('edit')}
-                    >
-                        <platform-icon name="edit" size="16"></platform-icon>
+                <div class="mode-pill">
+                    <button class="mode-btn" type="button" ?active=${mode === 'edit'} title=${this.t('editor_header.mode_edit')} @click=${() => this._setMode('edit')}>
+                        <platform-icon name="edit" size="14"></platform-icon>
                     </button>
-                    <button
-                        class="mode-btn"
-                        type="button"
-                        ?active=${mode === 'run'}
-                        title=${this.t('editor_header.mode_run')}
-                        @click=${() => this._setMode('run')}
-                    >
-                        <platform-icon name="play" size="16"></platform-icon>
+                    <button class="mode-btn" type="button" ?active=${mode === 'run'} title=${this.t('editor_header.mode_run')} @click=${() => this._setMode('run')}>
+                        <platform-icon name="play" size="14"></platform-icon>
                     </button>
-                    <button
-                        class="mode-btn"
-                        type="button"
-                        title=${this.t('editor_header.reload_bundle')}
-                        @click=${this._reloadBundle}
-                    >
-                        <platform-icon name="refresh" size="16"></platform-icon>
+                </div>
+                <div class="reload-wrap">
+                    <button class="icon-btn" type="button" title=${this.t('editor_header.reload_bundle')} @click=${this._reloadBundle}>
+                        <platform-icon name="refresh" size="14"></platform-icon>
                     </button>
+                    ${hasBundleUpdate ? html`<span class="reload-dot"></span>` : ''}
                 </div>
             </div>
 
             <div class="header-right">
-                <button class="header-btn icon-btn" type="button" title=${this.t('editor_header.lara')} @click=${this._openLara}>
+                <button class="header-btn icon-only" type="button" title=${this.t('editor_header.lara')} @click=${this._openLara}>
                     <platform-icon name="ai" size="16"></platform-icon>
                 </button>
                 <button class="header-btn" type="button" @click=${this._openCodeView}>
-                    <platform-icon name="code" size="16"></platform-icon>
+                    <platform-icon name="code" size="14"></platform-icon>
                     ${this.t('editor_header.code')}
                 </button>
                 <button class="header-btn primary" type="button" ?disabled=${saving} @click=${this._save}>
-                    <platform-icon name="save" size="16"></platform-icon>
+                    <platform-icon name="save" size="14"></platform-icon>
                     ${saving ? this.t('editor_header.saving') : this.t('editor_header.publish')}
                 </button>
             </div>

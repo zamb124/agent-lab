@@ -1,21 +1,28 @@
 /**
  * flows-base-resource-editor — общая обёртка для редакторов ресурсов.
  *
- * Хранит общие поля (resource_id readonly, name, description, type badge)
- * и slot 'settings' для type-specific полей. Save → emit('change', { patch }).
+ * Поля точно по `ResourceDefinition` (apps/flows/src/models/resource.py):
+ *   - resource_id (read-only)
+ *   - type (badge)
+ *   - name
+ *   - description
+ *   - tags (через flows-tag-input)
+ *
+ * Slot 'settings' — type-specific поля (`config: dict`).
+ *
+ * Эмитит наружу `change { resourceId, patch }` — patch содержит изменённые
+ * top-level поля ресурса (name, description, tags) или config (от слота).
  */
 
 import { html, css } from 'lit';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
+import '../editors/flows-tag-input.js';
 
 export class FlowsBaseResourceEditor extends PlatformElement {
     static properties = {
         resourceId: { type: String },
         resource: { type: Object },
         resourceType: { type: String },
-        _name: { state: true },
-        _description: { state: true },
-        _hydrated: { state: true },
     };
 
     static styles = [
@@ -23,29 +30,47 @@ export class FlowsBaseResourceEditor extends PlatformElement {
         css`
             :host { display: block; padding: var(--space-3); color: var(--text-primary); }
             .header {
-                display: flex; align-items: center; gap: var(--space-2); margin-bottom: var(--space-3);
+                display: flex; flex-direction: column; gap: var(--space-2);
+                padding-bottom: var(--space-3);
+                border-bottom: 1px solid var(--border-subtle);
+                margin-bottom: var(--space-3);
             }
-            .header input {
-                flex: 1; padding: var(--space-2);
+            .row {
+                display: flex; align-items: center; gap: var(--space-2); flex-wrap: wrap;
+            }
+            input.name {
+                flex: 1; min-width: 0;
+                padding: var(--space-2);
                 border-radius: var(--radius-md);
                 border: 1px solid var(--glass-border-subtle);
                 background: var(--glass-solid-subtle);
                 color: var(--text-primary); font: inherit;
+                font-weight: var(--font-semibold);
             }
             .badge {
                 padding: 2px 8px; font-size: var(--text-xs);
-                border-radius: var(--radius-sm);
+                border-radius: var(--radius-full);
                 background: var(--accent-subtle); color: var(--accent);
+                white-space: nowrap;
             }
-            .field { display: flex; flex-direction: column; gap: var(--space-1); margin-bottom: var(--space-3); }
-            .field textarea {
-                padding: var(--space-2); min-height: 64px; resize: vertical;
+            .id {
+                padding: 2px 8px; font-size: var(--text-xs);
+                background: var(--glass-solid-medium);
+                border: 1px solid var(--glass-border-subtle);
+                border-radius: var(--radius-sm);
+                color: var(--text-secondary);
+                font-family: var(--font-mono, monospace);
+            }
+            .field { display: flex; flex-direction: column; gap: var(--space-1); }
+            .field label { font-size: var(--text-sm); color: var(--text-secondary); }
+            textarea {
+                width: 100%; box-sizing: border-box;
+                padding: var(--space-2); resize: vertical; min-height: 60px;
                 border-radius: var(--radius-md);
                 border: 1px solid var(--glass-border-subtle);
                 background: var(--glass-solid-subtle);
                 color: var(--text-primary); font: inherit;
             }
-            label { font-size: var(--text-sm); color: var(--text-secondary); }
         `,
     ];
 
@@ -54,19 +79,6 @@ export class FlowsBaseResourceEditor extends PlatformElement {
         this.resourceId = '';
         this.resource = null;
         this.resourceType = '';
-        this._name = '';
-        this._description = '';
-        this._hydrated = false;
-    }
-
-    updated(changed) {
-        super.updated?.(changed);
-        if (!this._hydrated && this.resource) {
-            this._name = this.resource.name || this.resourceId;
-            this._description = this.resource.description || '';
-            this.resourceType = this.resource.type || this.resourceType;
-            this._hydrated = true;
-        }
     }
 
     _emitPatch(patch) {
@@ -74,25 +86,45 @@ export class FlowsBaseResourceEditor extends PlatformElement {
     }
 
     _onName(e) {
-        this._name = e.target.value;
-        this._emitPatch({ name: this._name });
+        this._emitPatch({ name: e.target.value });
     }
 
     _onDescription(e) {
-        this._description = e.target.value;
-        this._emitPatch({ description: this._description });
+        this._emitPatch({ description: e.target.value });
+    }
+
+    _onTags(e) {
+        const tags = Array.isArray(e.detail?.tags) ? e.detail.tags : [];
+        this._emitPatch({ tags });
     }
 
     render() {
         if (!this.resource) return html`<div>${this.t('property_panel.select_resource')}</div>`;
+        const name = typeof this.resource.name === 'string' ? this.resource.name : this.resourceId;
+        const description = typeof this.resource.description === 'string' ? this.resource.description : '';
+        const tags = Array.isArray(this.resource.tags) ? this.resource.tags : [];
+        const type = this.resourceType || this.resource.type || '';
         return html`
             <div class="header">
-                <input type="text" .value=${this._name} @input=${this._onName} />
-                <span class="badge">${this.resourceType}</span>
-            </div>
-            <div class="field">
-                <label>${this.t('base_resource_editor.field_description')}</label>
-                <textarea .value=${this._description} @input=${this._onDescription}></textarea>
+                <div class="row">
+                    <input class="name" type="text" .value=${name} @input=${this._onName} />
+                    <span class="badge">${type}</span>
+                </div>
+                <div class="row">
+                    <span class="id">${this.resourceId}</span>
+                </div>
+                <div class="field">
+                    <label>${this.t('base_resource_editor.field_description')}</label>
+                    <textarea .value=${description} @input=${this._onDescription}></textarea>
+                </div>
+                <div class="field">
+                    <label>${this.t('base_resource_editor.tags')}</label>
+                    <flows-tag-input
+                        .tags=${tags}
+                        placeholder=${this.t('tag_input.placeholder')}
+                        @change=${this._onTags}
+                    ></flows-tag-input>
+                </div>
             </div>
             <slot name="settings"></slot>
         `;

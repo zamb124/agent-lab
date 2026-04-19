@@ -15,6 +15,7 @@
 import {
     createCursorList,
     createAsyncOp,
+    CoreEvents,
 } from '@platform/lib/events/index.js';
 import { httpRequest } from '@platform/lib/events/http.js';
 
@@ -138,8 +139,7 @@ export const entityCardsBulkOp = createAsyncOp({
 
 export const noteAnalyzeStartOp = createAsyncOp({
     name: 'crm/note_analyze_start',
-    successToastKey: 'crm:toast.note.analyze_started',
-    errorToastKey: 'crm:toast.note.analyze_start_failed',
+    silent: true,
     request: async ({ payload }) => {
         if (!payload || typeof payload.note_id !== 'string') {
             throw new Error('noteAnalyzeStartOp: payload.note_id required');
@@ -148,13 +148,33 @@ export const noteAnalyzeStartOp = createAsyncOp({
         if (typeof payload.mode === 'string' && payload.mode.length > 0) {
             body.mode = payload.mode;
         }
-        if (typeof payload.namespace === 'string') {
-            body.namespace = payload.namespace;
-        }
         return await httpRequest({
             method: 'POST',
             url: '/crm/api/v1/tasks/note-analyze',
             body,
         });
+    },
+    onSuccess: (ctx, _result, event) => {
+        ctx.dispatch(
+            CoreEvents.UI_TOAST_SHOW,
+            { type: 'success', i18n_key: 'crm:toast.note.analyze_started' },
+            { causation_id: event.id },
+        );
+    },
+    onFailure: (ctx, err, event) => {
+        const code = err && err.body && err.body.detail && err.body.detail.code;
+        if (err && err.status === 409 && code === 'active_task_exists') {
+            ctx.dispatch(
+                CoreEvents.UI_TOAST_SHOW,
+                { type: 'warning', i18n_key: 'crm:toast.note.analyze_already_running' },
+                { causation_id: event.id },
+            );
+            return;
+        }
+        ctx.dispatch(
+            CoreEvents.UI_TOAST_SHOW,
+            { type: 'error', i18n_key: 'crm:toast.note.analyze_start_failed' },
+            { causation_id: event.id },
+        );
     },
 });

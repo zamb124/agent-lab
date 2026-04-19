@@ -21,8 +21,17 @@ import { html, css } from 'lit';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
 import '@platform/lib/components/platform-icon.js';
 import '@platform/lib/components/glass-spinner.js';
+import { getNodeTypeMeta, getCategoryToken } from '../../constants/node-icons.js';
 
 const NODE_CATEGORY_ORDER = Object.freeze(['core', 'tools', 'integrations', 'channels']);
+
+const CATEGORY_TO_TOKEN_KEY = Object.freeze({
+    core: 'core',
+    tools: 'core',
+    integrations: 'integrations',
+    channels: 'flow',
+    resources: 'flow',
+});
 
 export class FlowsNodeTypesSidebar extends PlatformElement {
     static properties = {
@@ -265,15 +274,20 @@ export class FlowsNodeTypesSidebar extends PlatformElement {
         `;
     }
 
-    _renderCategory(titleKey, items, dragHandler) {
+    _renderCategory(titleKey, items, dragHandler, categoryKey) {
         if (items.length === 0) return '';
+        const categoryToken = getCategoryToken(CATEGORY_TO_TOKEN_KEY[categoryKey] || 'core');
         return html`
             <div class="category">
                 <div class="category-header">${this.t(titleKey)}</div>
                 <div class="category-items">
                     ${items.map((it) => {
-                        const color = typeof it.color === 'string' && it.color !== '' ? it.color : '#94a3b8';
-                        const bg = `${color}20`;
+                        const meta = getNodeTypeMeta(it.type);
+                        const iconName = meta.icon !== 'box' ? meta.icon : (it.icon || 'box');
+                        const tokenColor = getCategoryToken(meta.category) !== getCategoryToken('core') || categoryKey === 'core'
+                            ? getCategoryToken(meta.category)
+                            : categoryToken;
+                        const style = `background: color-mix(in oklab, ${tokenColor} 14%, transparent); color: ${tokenColor};`;
                         return html`
                             <div
                                 class="node-item"
@@ -281,8 +295,8 @@ export class FlowsNodeTypesSidebar extends PlatformElement {
                                 title=${it.description || it.name || it.type}
                                 @dragstart=${(e) => dragHandler.call(this, e, it.type)}
                             >
-                                <div class="node-icon" style=${`background:${bg};color:${color};`}>
-                                    <platform-icon name=${it.icon || 'box'} size="16"></platform-icon>
+                                <div class="node-icon" style=${style}>
+                                    <platform-icon name=${iconName} size="16"></platform-icon>
                                 </div>
                                 <div class="node-name">${it.name || it.type}</div>
                             </div>
@@ -313,9 +327,9 @@ export class FlowsNodeTypesSidebar extends PlatformElement {
         return html`
             ${this._renderTriggers()}
             ${this._renderSearch()}
-            ${NODE_CATEGORY_ORDER.map((cat) => this._renderCategory(this._categoryTitleKey(cat), grouped.get(cat) || [], this._onDragNodeType))}
+            ${NODE_CATEGORY_ORDER.map((cat) => this._renderCategory(this._categoryTitleKey(cat), grouped.get(cat) || [], this._onDragNodeType, cat))}
             ${filteredResources.length > 0 ? html`<div class="category-divider"></div>` : ''}
-            ${this._renderCategory('node_types_sidebar.category_resources', filteredResources, this._onDragResourceType)}
+            ${this._renderCategory('node_types_sidebar.category_resources', filteredResources, this._onDragResourceType, 'resources')}
             ${this._nodeTypesOp.busy && nodeTypes.length === 0
                 ? html`<div class="empty-row"><glass-spinner></glass-spinner></div>`
                 : ''}

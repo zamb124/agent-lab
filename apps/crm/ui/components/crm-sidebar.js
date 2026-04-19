@@ -42,7 +42,7 @@ const ORG_NAV = [
     { route: 'settings',           icon: 'settings', label_key: 'sidebar.nav.settings' },
 ];
 
-const SETTINGS_ALIASES = new Set(['settings', 'spaces', 'templates', 'namespace_imports', 'relationship_types']);
+const SETTINGS_ALIASES = new Set(['settings', 'spaces', 'templates', 'relationship_types']);
 
 export class CRMSidebar extends PlatformElement {
     static i18nNamespace = 'crm';

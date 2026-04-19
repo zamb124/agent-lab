@@ -39,6 +39,18 @@ ALL_NAMESPACES_TASK_KEY = "__all_namespaces__"
 KnowledgeImportMode = Literal["notes_only", "graph"]
 
 
+class ActiveTaskExistsError(ValueError):
+    """Бросается при попытке стартовать задачу, для которой уже есть активная (pending/running)."""
+
+    def __init__(self, task_type: str, existing_task_id: str) -> None:
+        super().__init__(
+            f"Задача типа '{task_type}' уже выполняется (task_id={existing_task_id}). "
+            "Дождитесь завершения или отмените текущую задачу."
+        )
+        self.task_type = task_type
+        self.existing_task_id = existing_task_id
+
+
 def _normalize_import_file_ids(
     source_file_id: Optional[str],
     source_file_ids: Optional[List[str]],
@@ -117,10 +129,7 @@ class TaskService:
             task_type, data_key_values, namespace, self._get_company_id()
         )
         if existing is not None:
-            raise ValueError(
-                f"Задача типа '{task_type}' уже выполняется (task_id={existing.task_id}). "
-                "Дождитесь завершения или отмените текущую задачу."
-            )
+            raise ActiveTaskExistsError(task_type, existing.task_id)
 
     # ── Knowledge Import ──────────────────────────────────────────────────────
 
@@ -322,26 +331,28 @@ class TaskService:
 
     async def list_tasks(
         self,
-        namespace: str,
+        namespace: Optional[str],
         *,
         task_type: Optional[str] = None,
         note_id: Optional[str] = None,
         limit: int = 50,
         offset: int = 0,
     ) -> List[CRMTask]:
+        ns = namespace.strip() if isinstance(namespace, str) and namespace.strip() else None
         return await self._task_repo.list_for_namespace(
-            namespace.strip(), task_type=task_type, note_id=note_id, limit=limit, offset=offset
+            ns, task_type=task_type, note_id=note_id, limit=limit, offset=offset
         )
 
     async def count_tasks(
         self,
-        namespace: str,
+        namespace: Optional[str],
         *,
         task_type: Optional[str] = None,
         note_id: Optional[str] = None,
     ) -> int:
+        ns = namespace.strip() if isinstance(namespace, str) and namespace.strip() else None
         return await self._task_repo.count_for_namespace(
-            namespace.strip(), task_type=task_type, note_id=note_id
+            ns, task_type=task_type, note_id=note_id
         )
 
     async def request_cancel(self, task_id: str) -> CRMTask:

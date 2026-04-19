@@ -1,4 +1,9 @@
 {
+  "notifications": {
+    "title": "Уведомления",
+    "dismiss_all": "Очистить все",
+    "empty": "Уведомлений пока нет"
+  },
   "menu": {
     "user_button_title": "Меню пользователя",
     "apps": "Apps",

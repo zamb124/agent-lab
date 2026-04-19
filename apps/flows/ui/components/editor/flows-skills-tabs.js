@@ -44,18 +44,20 @@ export class FlowsSkillsTabs extends PlatformElement {
             .tab-wrap {
                 display: inline-flex;
                 align-items: stretch;
-                border-radius: var(--radius-sm);
+                border-radius: var(--radius-full);
                 overflow: hidden;
                 border: 1px solid transparent;
-                transition: border-color var(--duration-fast);
+                background: transparent;
+                transition: all var(--duration-fast);
             }
-            .tab-wrap:hover { border-color: var(--border-subtle); }
+            .tab-wrap:hover { background: var(--glass-solid-medium); }
             .tab-wrap[active] {
-                border-color: var(--accent);
-                background: var(--accent-subtle);
+                background: var(--glass-solid-strong);
+                border-color: var(--glass-border-medium);
+                box-shadow: var(--glass-shadow-subtle);
             }
             .tab {
-                padding: 4px var(--space-2);
+                padding: 6px var(--space-3);
                 background: transparent;
                 border: none;
                 color: var(--text-secondary);
@@ -66,7 +68,7 @@ export class FlowsSkillsTabs extends PlatformElement {
             }
             .tab-wrap[active] .tab { color: var(--accent); }
             .tab-close {
-                width: 22px;
+                width: 24px;
                 display: flex; align-items: center; justify-content: center;
                 background: transparent;
                 border: none;
@@ -81,9 +83,9 @@ export class FlowsSkillsTabs extends PlatformElement {
                 display: inline-flex;
                 align-items: center;
                 gap: 4px;
-                padding: 4px var(--space-2);
-                border-radius: var(--radius-sm);
-                border: 1px dashed var(--border-default);
+                padding: 6px var(--space-3);
+                border-radius: var(--radius-full);
+                border: 1.5px dashed var(--border-default);
                 background: transparent;
                 color: var(--text-secondary);
                 font-size: var(--text-sm);

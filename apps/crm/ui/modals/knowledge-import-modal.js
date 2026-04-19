@@ -24,6 +24,7 @@
 import { html } from 'lit';
 import { PlatformLightModal } from '@platform/lib/components/glass-light-modal.js';
 import { registerModalKind } from '@platform/lib/utils/modal-registry.js';
+import { resolveFileIconKey } from '@platform/lib/utils/file-icons.js';
 import '@platform/lib/components/platform-icon.js';
 import '@platform/lib/components/platform-switch.js';
 
@@ -422,7 +423,11 @@ export class CRMKnowledgeImportModal extends PlatformLightModal {
                         <div class="ki-files-list">
                             ${this._files.map((f, idx) => html`
                                 <div class="ki-file-row">
-                                    <platform-icon name="doc" size="16"></platform-icon>
+                                    <platform-icon
+                                        file-icon
+                                        name=${resolveFileIconKey(f.original_name, f.content_type)}
+                                        size="24"
+                                    ></platform-icon>
                                     <span class="ki-file-name">${f.original_name}</span>
                                     <button
                                         type="button"

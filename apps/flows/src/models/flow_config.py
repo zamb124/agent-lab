@@ -502,6 +502,12 @@ class FlowConfig(StrictBaseModel):
         default=None,
         description="Поля доступные для редактирования в UI. None = все поля доступны"
     )
+
+    # Метаданные UI flow: sticky_notes на канвасе, дополнительные UX-данные.
+    metadata: Dict[str, Any] = Field(
+        default_factory=dict,
+        description="UI-метаданные flow (sticky_notes, viewBox preference, заметки)"
+    )
     
     @model_validator(mode="after")
     def validate_flow_type_fields(self) -> "FlowConfig":

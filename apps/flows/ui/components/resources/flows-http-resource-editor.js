@@ -1,11 +1,21 @@
 /**
- * flows-http-resource-editor — ресурс http (REST endpoint config).
+ * flows-http-resource-editor — ресурс http.
+ *
+ * Поля точно по `HTTPResourceConfig`:
+ *   - base_url (str)
+ *   - headers (dict<str, str>)
+ *   - timeout (int)
+ *   - auth_type ('none' | 'bearer' | 'basic' | 'api_key')
+ *   - auth_value (str)
  */
 
 import { html, css } from 'lit';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
 import './flows-base-resource-editor.js';
-import '../editors/flows-code-editor.js';
+import '../editors/flows-json-field-editor.js';
+import '../editors/flows-variable-input.js';
+
+const AUTH_TYPES = Object.freeze(['', 'bearer', 'basic', 'api_key']);
 
 export class FlowsHttpResourceEditor extends PlatformElement {
     static properties = {
@@ -14,16 +24,20 @@ export class FlowsHttpResourceEditor extends PlatformElement {
     };
 
     static styles = [
+        PlatformElement.styles,
         css`
-            .field { display: flex; flex-direction: column; gap: var(--space-1); margin-bottom: var(--space-3); padding: 0 var(--space-3); }
-            .field input {
+            .body { padding: 0 var(--space-3); }
+            .field { display: flex; flex-direction: column; gap: var(--space-1); margin-bottom: var(--space-2); }
+            label { font-size: var(--text-sm); color: var(--text-secondary); }
+            input, select {
                 padding: var(--space-2);
                 border-radius: var(--radius-md);
                 border: 1px solid var(--glass-border-subtle);
                 background: var(--glass-solid-subtle);
                 color: var(--text-primary); font: inherit;
+                width: 100%; box-sizing: border-box;
             }
-            label { font-size: var(--text-sm); color: var(--text-secondary); }
+            .grid { display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-2); }
         `,
     ];
 
@@ -33,12 +47,19 @@ export class FlowsHttpResourceEditor extends PlatformElement {
         this.resource = null;
     }
 
-    _emitConfig(config) {
-        this.emit('change', { resourceId: this.resourceId, patch: { config: { ...(this.resource?.config || {}), ...config } } });
+    _emitConfig(patch) {
+        const base = this.resource && typeof this.resource.config === 'object' ? this.resource.config : {};
+        this.emit('change', { resourceId: this.resourceId, patch: { config: { ...base, ...patch } } });
     }
 
     render() {
-        const cfg = this.resource?.config || {};
+        const cfg = this.resource && typeof this.resource.config === 'object' ? this.resource.config : {};
+        const baseUrl = typeof cfg.base_url === 'string' ? cfg.base_url : '';
+        const timeout = typeof cfg.timeout === 'number' ? cfg.timeout : 30;
+        const authType = typeof cfg.auth_type === 'string' ? cfg.auth_type : '';
+        const authValue = typeof cfg.auth_value === 'string' ? cfg.auth_value : '';
+        const headersJson = cfg.headers && typeof cfg.headers === 'object'
+            ? JSON.stringify(cfg.headers, null, 2) : '{}';
         return html`
             <flows-base-resource-editor
                 .resourceId=${this.resourceId}
@@ -46,26 +67,43 @@ export class FlowsHttpResourceEditor extends PlatformElement {
                 .resourceType=${'http'}
                 @change=${(e) => this.emit('change', e.detail)}
             >
-                <div slot="settings">
+                <div slot="settings" class="body">
                     <div class="field">
-                        <label>${this.t('http_resource_editor.field_base_url')}</label>
-                        <input
-                            type="url"
-                            .value=${cfg.base_url || ''}
-                            @input=${(e) => this._emitConfig({ base_url: e.target.value })}
-                        />
+                        <label>${this.t('http_resource_editor.base_url')}</label>
+                        <input type="url" placeholder="https://api.example.com"
+                            .value=${baseUrl}
+                            @input=${(e) => this._emitConfig({ base_url: e.target.value })} />
                     </div>
+                    <div class="grid">
+                        <div class="field">
+                            <label>${this.t('http_resource_editor.timeout')}</label>
+                            <input type="number" min="1" step="1"
+                                .value=${String(timeout)}
+                                @input=${(e) => this._emitConfig({ timeout: parseInt(e.target.value, 10) || 30 })} />
+                        </div>
+                        <div class="field">
+                            <label>${this.t('http_resource_editor.auth_type')}</label>
+                            <select .value=${authType}
+                                @change=${(e) => this._emitConfig({ auth_type: e.target.value || null })}>
+                                ${AUTH_TYPES.map((t) => html`<option value=${t} ?selected=${t === authType}>${t === '' ? this.t('http_resource_editor.auth_none') : this.t(`http_resource_editor.auth_${t}`)}</option>`)}
+                            </select>
+                        </div>
+                    </div>
+                    ${authType ? html`
+                        <div class="field">
+                            <label>${this.t('http_resource_editor.auth_value')}</label>
+                            <flows-variable-input
+                                .value=${authValue}
+                                @change=${(e) => this._emitConfig({ auth_value: e.detail?.value || '' })}
+                            ></flows-variable-input>
+                        </div>
+                    ` : ''}
                     <div class="field">
-                        <label>${this.t('http_resource_editor.field_default_headers')}</label>
-                        <flows-code-editor
-                            language="json"
-                            .value=${JSON.stringify(cfg.default_headers || {}, null, 2)}
-                            @change=${(e) => {
-                                try {
-                                    this._emitConfig({ default_headers: JSON.parse(e.detail?.value || '{}') });
-                                } catch { /* invalid */ }
-                            }}
-                        ></flows-code-editor>
+                        <label>${this.t('http_resource_editor.headers')}</label>
+                        <flows-json-field-editor
+                            .value=${headersJson}
+                            @change=${(e) => { if (e.detail && 'parsed' in e.detail) this._emitConfig({ headers: e.detail.parsed && typeof e.detail.parsed === 'object' ? e.detail.parsed : {} }); }}
+                        ></flows-json-field-editor>
                     </div>
                 </div>
             </flows-base-resource-editor>

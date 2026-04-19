@@ -112,7 +112,7 @@ class TaskRepository(BaseCRMRepository[CRMTask]):
 
     async def list_for_namespace(
         self,
-        namespace: str,
+        namespace: Optional[str],
         *,
         task_type: Optional[str] = None,
         note_id: Optional[str] = None,
@@ -122,10 +122,9 @@ class TaskRepository(BaseCRMRepository[CRMTask]):
     ) -> List[CRMTask]:
         cid = company_id or self._get_company_id()
         async with self._db.session() as session:
-            stmt = select(CRMTask).where(
-                CRMTask.company_id == cid,
-                CRMTask.namespace == namespace,
-            )
+            stmt = select(CRMTask).where(CRMTask.company_id == cid)
+            if namespace is not None:
+                stmt = stmt.where(CRMTask.namespace == namespace)
             if task_type is not None:
                 stmt = stmt.where(CRMTask.task_type == task_type)
             if note_id is not None:
@@ -136,7 +135,7 @@ class TaskRepository(BaseCRMRepository[CRMTask]):
 
     async def count_for_namespace(
         self,
-        namespace: str,
+        namespace: Optional[str],
         *,
         task_type: Optional[str] = None,
         note_id: Optional[str] = None,
@@ -144,10 +143,9 @@ class TaskRepository(BaseCRMRepository[CRMTask]):
     ) -> int:
         cid = company_id or self._get_company_id()
         async with self._db.session() as session:
-            stmt = select(func.count()).select_from(CRMTask).where(
-                CRMTask.company_id == cid,
-                CRMTask.namespace == namespace,
-            )
+            stmt = select(func.count()).select_from(CRMTask).where(CRMTask.company_id == cid)
+            if namespace is not None:
+                stmt = stmt.where(CRMTask.namespace == namespace)
             if task_type is not None:
                 stmt = stmt.where(CRMTask.task_type == task_type)
             if note_id is not None:

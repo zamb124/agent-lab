@@ -97,6 +97,14 @@ describe('flows/editor extraReducer', () => {
         expect(getState().flowsEditor.panelExpanded).toBe(false);
     });
 
+    it('panel_expanded принимает явный expanded', () => {
+        const { bus, getState } = build();
+        bus.dispatch('flows/editor/panel_expanded', { expanded: true });
+        expect(getState().flowsEditor.panelExpanded).toBe(true);
+        bus.dispatch('flows/editor/panel_expanded', { expanded: false });
+        expect(getState().flowsEditor.panelExpanded).toBe(false);
+    });
+
     it('dirty_set / saving_set', () => {
         const { bus, getState } = build();
         bus.dispatch('flows/editor/dirty_set', { dirty: true });
@@ -104,5 +112,196 @@ describe('flows/editor extraReducer', () => {
         const s = getState().flowsEditor;
         expect(s.isDirty).toBe(true);
         expect(s.isSaving).toBe(true);
+    });
+
+    it('flows/run/* мутируют running/completed/errored', () => {
+        const { bus, getState } = build();
+        bus.dispatch('flows/run/flow_started', { task_id: 't1' });
+        bus.dispatch('flows/run/node_started', { node_id: 'a', task_id: 't1' });
+        bus.dispatch('flows/run/node_started', { node_id: 'b', task_id: 't1' });
+        let s = getState().flowsEditor;
+        expect(s.runningNodeIds).toEqual(['a', 'b']);
+        expect(s.agentExecutionRunning).toBe(true);
+
+        bus.dispatch('flows/run/node_completed', { node_id: 'a', task_id: 't1' });
+        s = getState().flowsEditor;
+        expect(s.runningNodeIds).toEqual(['b']);
+        expect(s.completedNodeIds).toEqual(['a']);
+
+        bus.dispatch('flows/run/node_failed', { node_id: 'b', task_id: 't1', error: 'boom' });
+        s = getState().flowsEditor;
+        expect(s.runningNodeIds).toEqual([]);
+        expect(s.erroredNodes).toEqual({ b: 'boom' });
+
+        bus.dispatch('flows/run/flow_done', { task_id: 't1', state: 'completed' });
+        expect(getState().flowsEditor.agentExecutionRunning).toBe(false);
+    });
+
+    it('flows/breakpoint/hit и breakpoint_toggled', () => {
+        const { bus, getState } = build();
+        bus.dispatch('flows/editor/breakpoint_toggled', { nodeId: 'a' });
+        let s = getState().flowsEditor;
+        expect(s.breakpointNodeIds).toEqual(['a']);
+
+        bus.dispatch('flows/editor/breakpoint_toggled', { nodeId: 'b' });
+        bus.dispatch('flows/editor/breakpoint_toggled', { nodeId: 'a' });
+        s = getState().flowsEditor;
+        expect(s.breakpointNodeIds).toEqual(['b']);
+
+        bus.dispatch('flows/breakpoint/hit', { node_id: 'b', task_id: 't1' });
+        expect(getState().flowsEditor.breakpointHitNodeId).toBe('b');
+    });
+
+    it('multi_selection_changed синхронизирует selectedNodeId', () => {
+        const { bus, getState } = build();
+        bus.dispatch('flows/editor/multi_selection_changed', { nodeIds: ['a'] });
+        let s = getState().flowsEditor;
+        expect(s.multiSelection).toEqual(['a']);
+        expect(s.selectedNodeId).toBe('a');
+        expect(s.panelOpen).toBe(true);
+
+        bus.dispatch('flows/editor/multi_selection_changed', { nodeIds: ['a', 'b'] });
+        s = getState().flowsEditor;
+        expect(s.multiSelection).toEqual(['a', 'b']);
+        expect(s.selectedNodeId).toBeNull();
+        expect(s.panelOpen).toBe(false);
+    });
+
+    it('viewbox_changed обновляет viewBox', () => {
+        const { bus, getState } = build();
+        bus.dispatch('flows/editor/viewbox_changed', { viewBox: { x: 10, y: 20, w: 800, h: 600 } });
+        const s = getState().flowsEditor;
+        expect(s.viewBox).toEqual({ x: 10, y: 20, w: 800, h: 600 });
+    });
+
+    it('smart_guides_updated и smart_guides_toggled', () => {
+        const { bus, getState } = build();
+        bus.dispatch('flows/editor/smart_guides_updated', { guides: [{ axis: 'v', at: 100 }] });
+        expect(getState().flowsEditor.smartGuides.length).toBe(1);
+
+        bus.dispatch('flows/editor/smart_guides_toggled', null);
+        expect(getState().flowsEditor.smartGuidesEnabled).toBe(false);
+    });
+
+    it('sticky_note_added/updated/removed', () => {
+        const { bus, getState } = build();
+        bus.dispatch('flows/editor/sticky_note_added', { note: { id: 's1', x: 0, y: 0, width: 200, height: 140, text: 'hello' } });
+        expect(getState().flowsEditor.stickyNotes.length).toBe(1);
+
+        bus.dispatch('flows/editor/sticky_note_updated', { note: { id: 's1', text: 'updated' } });
+        expect(getState().flowsEditor.stickyNotes[0].text).toBe('updated');
+
+        bus.dispatch('flows/editor/sticky_note_removed', { id: 's1' });
+        expect(getState().flowsEditor.stickyNotes.length).toBe(0);
+    });
+
+    it('context_menu_opened/closed', () => {
+        const { bus, getState } = build();
+        bus.dispatch('flows/editor/context_menu_opened', { menu: { x: 100, y: 200, target: 'node', targetId: 'a' } });
+        expect(getState().flowsEditor.contextMenu).toEqual({ x: 100, y: 200, target: 'node', targetId: 'a' });
+
+        bus.dispatch('flows/editor/context_menu_closed', null);
+        expect(getState().flowsEditor.contextMenu).toBeNull();
+    });
+
+    it('node_id_changed переименовывает ноду + обновляет edges/entry/selection', () => {
+        const { bus, getState } = build();
+        bus.dispatch('flows/editor/flow_loaded', {
+            flow: {
+                flow_id: 'demo',
+                name: 'Demo',
+                nodes: { old: { type: 'code', name: 'A' }, b: { type: 'code', name: 'B' } },
+                edges: [
+                    { from_node: 'old', to_node: 'b' },
+                    { from_node: 'b', to_node: 'old' },
+                ],
+                entry: 'old',
+            },
+            skillId: 'base',
+        });
+        bus.dispatch('flows/editor/node_selected', { nodeId: 'old' });
+        bus.dispatch('flows/editor/breakpoint_toggled', { nodeId: 'old' });
+        bus.dispatch('flows/editor/node_id_changed', { oldId: 'old', newId: 'fresh' });
+        const s = getState().flowsEditor;
+        expect(s.skillsData.nodes.fresh).toBeDefined();
+        expect(s.skillsData.nodes.fresh.node_id).toBe('fresh');
+        expect(s.skillsData.nodes.old).toBeUndefined();
+        expect(s.skillsData.edges).toEqual([
+            { from_node: 'fresh', to_node: 'b' },
+            { from_node: 'b', to_node: 'fresh' },
+        ]);
+        expect(s.skillsData.entry).toBe('fresh');
+        expect(s.entryNodeId).toBe('fresh');
+        expect(s.selectedNodeId).toBe('fresh');
+        expect(s.multiSelection).toEqual(['fresh']);
+        expect(s.breakpointNodeIds).toEqual(['fresh']);
+        expect(s.isDirty).toBe(true);
+    });
+
+    it('node_id_changed игнорирует коллизию имён', () => {
+        const { bus, getState } = build();
+        bus.dispatch('flows/editor/flow_loaded', {
+            flow: {
+                flow_id: 'demo', name: 'Demo',
+                nodes: { a: { type: 'code' }, b: { type: 'code' } },
+                edges: [],
+            },
+            skillId: 'base',
+        });
+        bus.dispatch('flows/editor/node_id_changed', { oldId: 'a', newId: 'b' });
+        const s = getState().flowsEditor;
+        expect(s.skillsData.nodes.a).toBeDefined();
+        expect(s.skillsData.nodes.b).toBeDefined();
+    });
+
+    it('node_deleted удаляет ноду + edges + чистит selection/breakpoints', () => {
+        const { bus, getState } = build();
+        bus.dispatch('flows/editor/flow_loaded', {
+            flow: {
+                flow_id: 'demo', name: 'Demo',
+                nodes: { a: { type: 'code' }, b: { type: 'code' } },
+                edges: [
+                    { from_node: 'a', to_node: 'b' },
+                    { from_node: 'b', to_node: 'a' },
+                ],
+                entry: 'a',
+            },
+            skillId: 'base',
+        });
+        bus.dispatch('flows/editor/node_selected', { nodeId: 'a' });
+        bus.dispatch('flows/editor/breakpoint_toggled', { nodeId: 'a' });
+        bus.dispatch('flows/run/node_started', { node_id: 'a', task_id: 't1' });
+        bus.dispatch('flows/run/node_failed', { node_id: 'a', task_id: 't1', error: 'x' });
+        bus.dispatch('flows/editor/node_deleted', { nodeId: 'a' });
+        const s = getState().flowsEditor;
+        expect(s.skillsData.nodes.a).toBeUndefined();
+        expect(s.skillsData.nodes.b).toBeDefined();
+        expect(s.skillsData.edges).toEqual([]);
+        expect(s.skillsData.entry).toBeNull();
+        expect(s.entryNodeId).toBeNull();
+        expect(s.selectedNodeId).toBeNull();
+        expect(s.panelOpen).toBe(false);
+        expect(s.breakpointNodeIds).toEqual([]);
+        expect(s.runningNodeIds).toEqual([]);
+        expect(s.erroredNodes).toEqual({});
+        expect(s.isDirty).toBe(true);
+    });
+
+    it('flow_loaded подхватывает sticky_notes из flow.config.metadata', () => {
+        const { bus, getState } = build();
+        bus.dispatch('flows/editor/flow_loaded', {
+            flow: {
+                flow_id: 'demo',
+                name: 'Demo',
+                nodes: { a: { type: 'code' } },
+                edges: [],
+                entry: 'a',
+                metadata: { sticky_notes: [{ id: 'n1', x: 10, y: 10, width: 100, height: 80, text: 'hi' }] },
+            },
+            skillId: 'base',
+        });
+        const s = getState().flowsEditor;
+        expect(s.stickyNotes).toEqual([{ id: 'n1', x: 10, y: 10, width: 100, height: 80, text: 'hi' }]);
+        expect(s.entryNodeId).toBe('a');
     });
 });

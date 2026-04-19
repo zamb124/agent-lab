@@ -228,9 +228,10 @@
     },
     "namespace_tasks_page": {
         "title": "Namespace tasks",
-        "subtitle": "System TaskIQ jobs: knowledge imports, note analyses, daily and period summaries.",
+        "subtitle": "Namespace background jobs: knowledge imports, AI note analyses, daily and period summaries.",
         "select_namespace_warning": "Pick a specific namespace in the left selector to see tasks.",
         "namespace_label": "Namespace: {{namespace}}",
+        "namespace_label_all": "All company namespaces",
         "live_polling": "Polling for updates",
         "loading": "Loading...",
         "refresh": "Refresh",
@@ -810,6 +811,7 @@
             "updated": "Namespace updated"
         },
         "note": {
+            "analyze_already_running": "AI analysis for this note is already running",
             "analyze_start_failed": "Failed to start AI analysis",
             "analyze_started": "AI analysis started",
             "voice_failed": "Voice recognition failed",
