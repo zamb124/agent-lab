@@ -17,6 +17,8 @@ def parse_document_bytes(
 ) -> ParsedDocument:
     """bytes + имя файла → ParsedDocument в соответствии с движком профиля."""
     engine = parsing.engine
+    raise NotImplementedError("Не используется")
+
     if engine == "unstructured":
         return parse_unstructured_bytes(data, filename, languages=parsing.languages)
     if engine == "marker":

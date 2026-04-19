@@ -58,29 +58,31 @@ def resolve_rag_provider_bundle(
     settings: BaseSettings,
     provider_name: Optional[str] = None,
 ) -> ResolvedRagProvider:
-    from core.rag.embedding_runtime import resolve_rag_embedding_runtime
-
     rag = settings.rag
     key = rag.get_enabled_provider_key(provider_name)
     provider_config = dict(rag.providers[key].model_dump())
     embedding_runtime: Any | None = None
     if key == "pgvector":
-        embedding_runtime = resolve_rag_embedding_runtime(
-            rag.embedding,
-            settings.llm,
-            settings.provider_litserve,
-        )
+        api = rag.embedding.api
+        embedding_runtime = {
+            "provider": rag.embedding.provider,
+            "model": api.model,
+            "dimension": api.dimension,
+            "base_url": api.base_url,
+        }
         if provider_name is None:
             override = _resolve_company_rag_embedding_override()
             if override is not None:
                 embedding_override = rag.embedding.model_copy(deep=True)
                 embedding_override.provider = override["provider"]
                 embedding_override.api.model = override["model"]
-                embedding_runtime = resolve_rag_embedding_runtime(
-                    embedding_override,
-                    settings.llm,
-                    settings.provider_litserve,
-                )
+                api2 = embedding_override.api
+                embedding_runtime = {
+                    "provider": embedding_override.provider,
+                    "model": api2.model,
+                    "dimension": api2.dimension,
+                    "base_url": api2.base_url,
+                }
     return ResolvedRagProvider(
         provider_key=key,
         provider_config=provider_config,

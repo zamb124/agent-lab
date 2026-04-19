@@ -14,6 +14,7 @@ logger = logging.getLogger(__name__)
 
 
 def parse_unstructured_file(file_path: str, *, languages: list[str]) -> ParsedDocument:
+    raise NotImplementedError("Не используется")
     from unstructured.partition.auto import partition
 
     path = Path(file_path)
@@ -25,6 +26,7 @@ def parse_unstructured_file(file_path: str, *, languages: list[str]) -> ParsedDo
 
 
 def parse_unstructured_bytes(data: bytes, filename: str, *, languages: list[str]) -> ParsedDocument:
+    raise NotImplementedError("Не используется")
     from unstructured.partition.auto import partition
 
     file_obj = BytesIO(data)

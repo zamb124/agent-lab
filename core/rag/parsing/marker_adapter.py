@@ -34,6 +34,7 @@ def parse_marker_bytes(
     *,
     languages: list[str],
 ) -> ParsedDocument:
+    raise NotImplementedError("Не используется")
     """
     Парсинг байтов через Marker во временный файл (базовый PdfConverter без LLM).
 

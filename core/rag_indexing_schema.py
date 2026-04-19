@@ -52,6 +52,7 @@ class IndexProfileParsingConfig(BaseModel):
 IndexProfileSplitStrategy = Literal[
     "fixed_tokens",
     "semantic",
+    "recursive",
     "structure",
     "token",
     "sentence",

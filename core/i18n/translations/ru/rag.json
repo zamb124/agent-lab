@@ -1,4 +1,5 @@
 {
+<<<<<<< HEAD
     "sidebar": {
         "title": "RAG Service",
         "provider_label": "Провайдер",
@@ -6,6 +7,73 @@
         "menu_namespaces": "Неймспейсы",
         "menu_search": "Поиск",
         "menu_settings": "Настройки"
+=======
+  "title": "RAG Dashboard",
+  "nav": {
+    "dashboard": "Дашборд",
+    "back_to_platform": "Назад к платформе"
+  },
+  "sidebar": {
+    "provider": "Провайдер",
+    "namespaces": "Каталог",
+    "search_namespaces": "Поиск по каталогу...",
+    "local": "ЛОКАЛЬНО",
+    "cloud": "ОБЛАКО"
+  },
+  "header": {
+    "search_placeholder": "Поиск по всем документам...",
+    "new_namespace": "Новый неймспейс",
+    "theme_toggle": "Переключить тему"
+  },
+  "loading": {
+    "default": "Загрузка...",
+    "namespaces": "Загрузка неймспейсов...",
+    "namespace": "Загрузка неймспейса...",
+    "documents": "Загрузка документов...",
+    "searching": "Поиск...",
+    "uploading": "Загрузка..."
+  },
+  "empty": {
+    "namespaces": "Каталогов пока нет",
+    "namespaces_description": "Создайте первый namespace для начала работы",
+    "documents": "Документов пока нет",
+    "documents_description": "Загрузите первый документ в этот неймспейс"
+  },
+  "errors": {
+    "load_namespaces": "Не удалось загрузить неймспейсы",
+    "load_documents": "Не удалось загрузить документы",
+    "create_namespace": "Не удалось создать неймспейс",
+    "delete_namespace": "Не удалось удалить неймспейс",
+    "upload_document": "Не удалось загрузить документ",
+    "delete_document": "Не удалось удалить документ",
+    "download_document": "Не удалось скачать документ",
+    "search_failed": "Поиск не удался",
+    "connection": "Проверьте подключение и попробуйте снова"
+  },
+  "namespace": {
+    "documents": "документов",
+    "delete_confirm": "Вы уверены, что хотите удалить этот неймспейс и все его документы?"
+  },
+  "document": {
+    "delete_confirm": "Вы уверены, что хотите удалить этот документ?",
+    "status": {
+      "ready": "готов",
+      "processing": "обработка",
+      "error": "ошибка"
+    }
+  },
+  "modals": {
+    "create_namespace": {
+      "title": "Создать неймспейс",
+      "name_label": "Название",
+      "name_placeholder": "my-namespace",
+      "name_hint": "Уникальное имя для namespace (латиница, цифры, дефисы)",
+      "description_label": "Описание",
+      "description_placeholder": "Опишите назначение namespace...",
+      "cancel": "Отмена",
+      "create": "Создать",
+      "creating": "Создание..."
+>>>>>>> 088c9e99 (small override)
     },
     "namespace_list": {
         "header_title": "Неймспейсы",
@@ -85,4 +153,112 @@
         "provider_switched": "Провайдер переключён",
         "provider_switch_failed": "Не удалось переключить провайдер"
     }
+<<<<<<< HEAD
+=======
+  },
+  "actions": {
+    "upload": "Загрузить",
+    "download": "Скачать",
+    "delete": "Удалить",
+    "back": "Назад",
+    "create_namespace": "Создать неймспейс",
+    "upload_document": "Загрузить документ"
+  },
+  "notifications": {
+    "namespace_created": "Неймспейс создан",
+    "namespace_deleted": "Неймспейс удален",
+    "document_uploaded": "документ(ов) успешно загружено",
+    "document_upload_failed": "документ(ов) не удалось загрузить",
+    "document_deleted": "Документ удален",
+    "enter_namespace_name": "Введите название неймспейса",
+    "select_namespace_first": "Сначала выберите неймспейс",
+    "document_uploaded_named": "Документ «{{name}}» успешно загружен",
+    "namespace_created_with_name": "Namespace «{{name}}» создан"
+  },
+  "namespace_detail": {
+    "not_found": "Namespace не найден",
+    "open_menu": "Открыть меню",
+    "documents_count": "{{count}} документов",
+    "upload_document": "Загрузить документ",
+    "loading_documents": "Загрузка документов...",
+    "uploading_short": "Загрузка...",
+    "uploading_document": "Загрузка документа...",
+    "drop_here": "Перетащите файл сюда",
+    "drop_or_choose": "или нажмите для выбора файла",
+    "supported_formats": "Поддерживаемые форматы: PDF, DOCX, DOC, XLSX, PPTX, HTML, TXT, MD, RTF, CSV, изображения",
+    "split_panel_label": "Нарезка чанков",
+    "split_strategy_label": "Стратегия",
+    "split_chunk_size_label": "Chunk size",
+    "split_overlap_label": "Overlap",
+    "split_code_language_label": "Язык (code)",
+    "split_strategy_semantic": "Semantic + overlap",
+    "split_strategy_recursive": "Recursive",
+    "split_strategy_table": "Table",
+    "split_strategy_code": "Code",
+    "split_strategy_token": "Token",
+    "split_strategy_sentence": "Sentence",
+    "split_strategy_fast": "Fast",
+    "split_hint_semantic": "Рекомендуется для большинства документов: semantic держит тему, overlap добавляет контекст на границах.",
+    "split_hint_table": "Для таблиц: chunk_size — примерно количество строк в чанке; overlap обычно не нужен.",
+    "split_hint_code": "Для кода: выберите язык (или auto), чтобы не резать внутри функций/классов.",
+    "split_hint_recursive": "Для длинных структурированных документов: режет по заголовкам/абзацам/предложениям.",
+    "pending_title": "Файлы к загрузке ({{count}})",
+    "upload_all": "Индексировать всё",
+    "enqueue_one": "Индексировать",
+    "remove_one": "Убрать",
+    "pending_status_ready": "готово к загрузке",
+    "pending_status_uploading": "загружается…",
+    "pending_status_uploaded": "загружено (ожидает подтверждения)",
+    "pending_status_enqueuing": "ставим в очередь…",
+    "pending_status_pending": "в очереди…",
+    "pending_status_completed": "загружено",
+    "pending_status_failed": "ошибка",
+    "created_label": "Создан:",
+    "pages_count": "{{count}} страниц",
+    "delete_title": "Удалить"
+  },
+  "namespace_list": {
+    "header_title": "Каталог",
+    "header_subtitle": "Управление неймспейсами документов",
+    "loading": "Загрузка неймспейсов...",
+    "create_button": "Добавить namespace"
+  },
+  "search_view": {
+    "fill_all_fields": "Заполните все поля",
+    "title": "Поиск",
+    "subtitle": "Поиск по документам в namespaces",
+    "label_namespace": "Namespace",
+    "select_namespace": "Выберите namespace",
+    "label_limit": "Результатов",
+    "label_query": "Запрос",
+    "query_placeholder": "Введите поисковый запрос...",
+    "searching": "Поиск...",
+    "find": "Найти",
+    "document_fallback": "Документ",
+    "page_meta": "Стр. {{page}}",
+    "empty_no_results": "Нет результатов",
+    "empty_hint": "Введите запрос для поиска"
+  },
+  "settings_view": {
+    "title": "Настройки",
+    "subtitle": "Конфигурация RAG Service",
+    "current_provider": "Текущий провайдер",
+    "current_provider_desc": "Активный RAG провайдер для хранения документов",
+    "usage": "Использование",
+    "usage_desc": "Текущее использование ресурсов",
+    "pages": "Страницы",
+    "queries": "Запросы",
+    "about_title": "О RAG Service",
+    "about_text": "Retrieval Augmented Generation (RAG) позволяет использовать ваши документы для улучшения ответов AI. Документы разбиваются на части, векторизуются и сохраняются для быстрого семантического поиска.",
+    "split_strategies_title": "Рекомендации по нарезке чанков",
+    "split_semantic_title": "Semantic + overlap — сбалансированный вариант.",
+    "split_semantic_text": "Подходит для большинства документов (статьи, письма, заметки, политика, PDF-тексты). Семантическая нарезка держит тему внутри чанка, а overlap добавляет соседний контекст на границах, снижая потери качества при поиске.",
+    "split_table_title": "Table — для таблиц.",
+    "split_table_text": "Используйте, когда важна целостность строк/колонок (CSV/таблицы в Markdown/выгрузки). Это снижает риск разрезания таблицы посередине и улучшает точность извлечения табличных фактов.",
+    "split_code_title": "Code — для исходного кода.",
+    "split_code_text": "Лучший выбор для репозиториев и сниппетов: старается не резать внутри функций/классов и держит структуру кода в чанках. Выставляйте язык (или auto) для более стабильного результата.",
+    "split_recursive_title": "Recursive — для длинных структурированных документов.",
+    "split_recursive_text": "Хорошо работает на Markdown/документации/регламентах: режет по иерархии разделителей (заголовки → абзацы → предложения), сохраняя логическую структуру без лишней семантической “склейки”."
+  }
+>>>>>>> 088c9e99 (small override)
 }

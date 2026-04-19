@@ -11,10 +11,12 @@ from chonkie import (
     CodeChunker,
     FastChunker,
     RecursiveChunker,
+    SemanticChunker,
     SentenceChunker,
     TableChunker,
     TokenChunker,
 )
+from chonkie.refinery import OverlapRefinery
 
 from core.rag_indexing_schema import IndexProfileSplitConfig
 from core.rag.parsed_document import ParsedDocument
@@ -69,6 +71,20 @@ def split_parsed_document(parsed: ParsedDocument, split_config: IndexProfileSpli
         )
 
     if strategy == "semantic":
+        chunker = SemanticChunker(
+            tokenizer=_ENCODING_NAME,
+            chunk_size=split_config.chunk_size,
+        )
+        parts = chunker(raw)
+        if split_config.chunk_overlap <= 0:
+            return [c.text for c in parts]
+        refined = OverlapRefinery(
+            tokenizer=_ENCODING_NAME,
+            context_size=split_config.chunk_overlap,
+        )(parts)
+        return [c.text for c in refined]
+
+    if strategy == "recursive":
         chunker = RecursiveChunker(
             tokenizer=_ENCODING_NAME,
             chunk_size=split_config.chunk_size,
