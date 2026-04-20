@@ -474,11 +474,6 @@ AccessGrant(
 2. Все `Relationship` где entity участвует (source/target).
 3. Все `AccessGrant` для этой entity.
 
-### Демо-данные
-
-- Генератор: `scripts/generate_crm_sales_demo.py` → JSON с `schema_version=1`.
-- Импорт: `scripts/import_crm_sales_demo.py` — для каждой записи создаёт note + analyze + apply; параллельность `--concurrency`; нужны `CRM_API_TOKEN` + worker.
-
 ### Ключевые принципы
 
 1. **Company изоляция** — ВСЕГДА фильтр по `company_id` из контекста.

@@ -3,15 +3,18 @@
  * крупных карточек каналов и горизонтальная панель действий.
  *
  * Источники:
- *   useResource('sync/channels') — все каналы (фильтрация по filter-чипам).
- *   useResource('sync/spaces')   — список пространств для chip-фильтра.
+ *   useResource('sync/channels')   — все каналы.
+ *   useResource('sync/namespaces') — список платформенных namespace.
  *
  * Действия:
  *   - клик по карточке канала → navigate('channel', { channelId })
- *   - "Создать канал" → openModal('sync.channel_create', { spaceId })
- *   - "Создать встречу" → dispatch локального события для shell-page (создание
- *     adhoc-канала + auto invite); также реагирует sync-shell-page.
- *   - chip пространства → dispatch('sync/spaces/filter_toggled', { spaceId })
+ *   - "Создать канал" → openModal('sync.channel_create', { namespace })
+ *   - "Создать встречу" → dispatch('sync/calls/adhoc_create_requested') —
+ *     слушается sync-shell-page (создание adhoc-канала + auto invite).
+ *
+ * Активный namespace — `getPlatformNamespaceSidebarSelection(company_id)`
+ * (тот же глобальный селект, что и в CRM); фильтрация — по
+ * `channel.namespace`.
  *
  * Стили: только токены платформы (--accent-gradient, --glass-tint-*,
  * --border-*, --text-*, --radius-*); никаких хардкод-цветов.
@@ -148,7 +151,7 @@ export class SyncChannelPicker extends PlatformElement {
     constructor() {
         super();
         this._channels = this.useResource('sync/channels', { autoload: true });
-        this._spaces = this.useResource('sync/spaces', { autoload: true });
+        this._namespaces = this.useResource('sync/namespaces', { autoload: true });
         this._authSel = this.select((s) => s.auth && s.auth.user ? s.auth.user : null);
         this._uiNsSel = this.select((s) => s.ui.namespace);
     }
@@ -159,16 +162,16 @@ export class SyncChannelPicker extends PlatformElement {
         return getPlatformNamespaceSidebarSelection(user.company_id);
     }
 
-    _activeSpace() {
+    _activeNamespaceItem() {
         const activeNs = this._activeNamespace();
         if (activeNs === 'all') return null;
-        return this._spaces.items.find((s) => s.namespace === activeNs) || null;
+        return this._namespaces.items.find((ns) => ns.name === activeNs) || null;
     }
 
     _onCreateChannel() {
-        const space = this._activeSpace();
-        const spaceId = space ? space.id : null;
-        this.openModal('sync.channel_create', { spaceId });
+        const ns = this._activeNamespaceItem();
+        const namespace = ns ? ns.name : null;
+        this.openModal('sync.channel_create', { namespace });
     }
 
     _onAdhocCall() {
@@ -179,11 +182,7 @@ export class SyncChannelPicker extends PlatformElement {
         const activeNs = this._activeNamespace();
         const all = this._channels.items.filter((c) => c.type !== 'direct');
         if (activeNs === 'all') return all;
-        return all.filter((c) => {
-            if (typeof c.space_id !== 'string') return false;
-            const space = this._spaces.items.find((s) => s.id === c.space_id);
-            return Boolean(space && space.namespace === activeNs);
-        });
+        return all.filter((c) => typeof c.namespace === 'string' && c.namespace === activeNs);
     }
 
     _renderTileAvatar(channel) {
@@ -199,10 +198,13 @@ export class SyncChannelPicker extends PlatformElement {
     render() {
         const filtered = this._filteredChannels();
         const activeNs = this._activeNamespace();
-        const activeSpace = this._activeSpace();
+        const activeNsItem = this._activeNamespaceItem();
+        const headerTitle = activeNsItem
+            ? activeNsItem.name
+            : this.t('channel_picker.title');
         return html`
             <div class="header">
-                <h2>${activeSpace ? activeSpace.name : this.t('channel_picker.title')}</h2>
+                <h2>${headerTitle}</h2>
                 <div class="actions">
                     <platform-button variant="secondary" @click=${this._onAdhocCall}>
                         <platform-icon name="phone-plus" size="16"></platform-icon>
@@ -214,17 +216,11 @@ export class SyncChannelPicker extends PlatformElement {
                     </platform-button>
                 </div>
             </div>
-            ${activeNs !== 'all' && activeSpace === null ? html`
-                <div class="filters">
-                    <span class="filter active">${this.t('channel_picker.unknown_namespace', { namespace: activeNs })}</span>
-                </div>
-            ` : html`
-                <div class="filters">
-                    ${activeNs === 'all'
-                        ? html`<span class="filter active">${this.t('sidebar.all_namespaces')}</span>`
-                        : html`<span class="filter active">${activeSpace.name}</span>`}
-                </div>
-            `}
+            <div class="filters">
+                ${activeNs === 'all'
+                    ? html`<span class="filter active">${this.t('sidebar.all_namespaces')}</span>`
+                    : html`<span class="filter active">${activeNs}</span>`}
+            </div>
             ${filtered.length === 0 ? html`
                 <div class="empty">${this.t('channel_picker.empty')}</div>
             ` : html`

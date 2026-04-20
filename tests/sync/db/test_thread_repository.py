@@ -27,6 +27,7 @@ async def test_thread_list_by_channel_order(
     ch = SyncChannel(
         channel_id=channel_id,
         company_id=company_id,
+        namespace="default",
         type="topic",
         name="t",
         is_private=False,
@@ -114,6 +115,7 @@ async def test_thread_list_empty_channel(
     ch = SyncChannel(
         channel_id=empty_id,
         company_id=company_id,
+        namespace="default",
         type="topic",
         name="e",
         is_private=False,

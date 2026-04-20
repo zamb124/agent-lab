@@ -5,8 +5,9 @@
  * <sync-message-list>, <sync-message-composer>, <sync-thread-drawer>,
  * <sync-message-context-menu>.
  *
- * Mount-логика: при смене channelId — useOp('sync/messages').run({ channel_id })
- * + dispatch channels/channel_selected + mark_read для обнуления unread.
+ * Mount-логика: при смене channelId — `useOp('sync/messages').run({ channel_id })`
+ * + `useResource('sync/channels').selectChannel({ channelId })` (channel_selected)
+ * + `useOp('sync/channel_mark_read').run` для обнуления unread.
  */
 
 import { html, css } from 'lit';
@@ -64,7 +65,7 @@ export class SyncChannelPage extends PlatformPage {
         if (this.channelId && this._lastLoadedChannel !== this.channelId) {
             this._lastLoadedChannel = this.channelId;
             this._messages.run({ channel_id: this.channelId, limit: 50 });
-            this.dispatch('sync/channels/channel_selected', { channelId: this.channelId });
+            this._channels.selectChannel({ channelId: this.channelId });
             this._markRead.run({ channel_id: this.channelId });
         }
     }

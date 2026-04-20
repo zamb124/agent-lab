@@ -1,6 +1,6 @@
 """Внутренние helpers Sync.
 
-Это библиотека приватных функций (`_create_space`, `_send_message`, …),
+Это библиотека приватных функций (`_create_channel`, `_send_message`, …),
 которыми пользуются `op_*` из `apps/sync/realtime/operations.py`. Никаких
 веток `if cmd.type == ...` и никаких `CommandEnvelope` / `execute_command`
 здесь нет — единый pipeline команд живёт в `operations.py`.
@@ -22,7 +22,6 @@ from apps.sync.db.models import (
     SyncChannel,
     SyncGitResourceRef,
     SyncMessage,
-    SyncSpace,
     SyncThread,
 )
 from apps.sync.db.repositories.call_repository import CallRepository
@@ -30,7 +29,6 @@ from apps.sync.db.repositories.channel_repository import ChannelRepository
 from apps.sync.db.repositories.git_resource_ref_repository import GitResourceRefRepository
 from apps.sync.db.repositories.message_repository import MessageRepository
 from apps.sync.db.repositories.meeting_repository import CallRecordingRepository
-from apps.sync.db.repositories.space_repository import SpaceRepository
 from apps.sync.db.repositories.thread_repository import ThreadRepository
 from apps.sync.message_read_helpers import message_read_from_entity
 from apps.sync.models.channels import ChannelRead, ChannelType, ChannelUpdate
@@ -48,7 +46,6 @@ from apps.sync.models.messages import (
     TextPlainContent,
 )
 from apps.sync.models.meetings import CallRecordingRead
-from apps.sync.models.spaces import SpaceRead, SpaceUpdate
 from apps.sync.models.threads import ThreadRead
 from apps.sync.realtime.notification_tasks import (
     deliver_channel_message_notification,
@@ -131,7 +128,7 @@ def _recording_read_from_entity(recording: SyncCallRecording) -> CallRecordingRe
         recording_id=recording.recording_id,
         call_id=recording.call_id,
         channel_id=recording.channel_id,
-        space_id=recording.space_id,
+        namespace=recording.namespace,
         started_by_user_id=recording.started_by_user_id,
         status=recording.status,
         provider_job_id=recording.provider_job_id,
@@ -532,98 +529,6 @@ def _channel_read_entity(entity: SyncChannel) -> ChannelRead:
     return channel_read_entity_minimal(entity)
 
 
-async def _create_space(
-    body,
-    *,
-    actor_user_id: str,
-    company_id: str,
-    spaces: SpaceRepository,
-    namespaces: NamespaceRepository,
-) -> SpaceRead:
-    if await spaces.exists_for_namespace(body.namespace, company_id=company_id):
-        raise ValueError(
-            f"Namespace '{body.namespace}' уже привязан к другому пространству Sync.",
-        )
-    existing_ns = await namespaces.get(body.namespace)
-    if existing_ns is None:
-        await namespaces.set(
-            Namespace(
-                name=body.namespace,
-                company_id=company_id,
-                description=body.name,
-                is_default=False,
-            )
-        )
-    elif existing_ns.company_id != company_id:
-        raise PermissionError(
-            f"Namespace '{body.namespace}' принадлежит другой компании.",
-        )
-    space_id = uuid4().hex
-    entity = SyncSpace(
-        space_id=space_id,
-        company_id=company_id,
-        name=body.name,
-        description=body.description,
-        namespace=body.namespace,
-        created_at=datetime.now(tz=UTC),
-        created_by_user_id=actor_user_id,
-        transcribe_voice_messages=body.transcribe_voice_messages,
-        speech_to_chat_enabled=body.speech_to_chat_enabled,
-    )
-    await spaces.create(entity)
-    return SpaceRead(
-        id=space_id,
-        name=entity.name,
-        description=entity.description,
-        avatar_url=entity.avatar_url,
-        namespace=entity.namespace,
-        created_at=entity.created_at,
-        created_by_user_id=actor_user_id,
-        transcribe_voice_messages=entity.transcribe_voice_messages,
-        speech_to_chat_enabled=entity.speech_to_chat_enabled,
-    )
-
-
-async def _update_space(
-    space_id: str,
-    body: SpaceUpdate,
-    *,
-    actor_user_id: str,
-    company_id: str,
-    spaces: SpaceRepository,
-) -> SpaceRead:
-    data = body.model_dump(exclude_unset=True)
-    if not data:
-        raise ValueError("Нет полей для обновления пространства.")
-    entity = await spaces.get(space_id)
-    if entity is None:
-        raise ValueError(f"Пространство {space_id} не найдено.")
-    if entity.company_id != company_id:
-        raise PermissionError("Пространство принадлежит другой компании.")
-    if "name" in data:
-        entity.name = data["name"]
-    if "description" in data:
-        entity.description = data["description"]
-    if "avatar_url" in data:
-        entity.avatar_url = data["avatar_url"]
-    if "transcribe_voice_messages" in data:
-        entity.transcribe_voice_messages = data["transcribe_voice_messages"]
-    if "speech_to_chat_enabled" in data:
-        entity.speech_to_chat_enabled = data["speech_to_chat_enabled"]
-    await spaces.update(entity)
-    return SpaceRead(
-        id=entity.space_id,
-        name=entity.name,
-        description=entity.description,
-        avatar_url=entity.avatar_url,
-        namespace=entity.namespace,
-        created_at=entity.created_at,
-        created_by_user_id=entity.created_by_user_id,
-        transcribe_voice_messages=entity.transcribe_voice_messages,
-        speech_to_chat_enabled=entity.speech_to_chat_enabled,
-    )
-
-
 async def _update_channel(
     channel_id: str,
     body: ChannelUpdate,
@@ -665,17 +570,21 @@ async def _create_channel(
     actor_user_id: str,
     company_id: str,
     channels: ChannelRepository,
-    spaces: SpaceRepository,
+    namespaces: NamespaceRepository,
 ) -> ChannelRead:
+    """Создаёт канал, привязанный к платформенному `namespace`.
+
+    Дефолты STT (`transcribe_voice_messages`, `speech_to_chat_enabled`)
+    берутся из `Namespace.sync_settings`; на канале можно перекрыть точечно
+    через `body.transcribe_voice_messages` / `body.speech_to_chat_enabled`.
+    """
     if body.type == ChannelType.TOPIC:
-        if body.space_id is None:
-            raise ValueError("Для topic обязателен space_id.")
+        if body.namespace is None or body.namespace == "":
+            raise ValueError("Для topic обязателен namespace.")
         if body.name is None:
             raise ValueError("Для topic обязателен name.")
 
     if body.type == ChannelType.DIRECT:
-        if body.space_id is not None:
-            raise ValueError("Для direct не задают space_id.")
         mids = body.member_ids
         if mids is None or len(mids) != 1:
             raise ValueError("Для direct в member_ids должен быть ровно один собеседник.")
@@ -686,16 +595,23 @@ async def _create_channel(
         if body.name is None or body.name.strip() == "":
             raise ValueError("Для calendar_meeting обязателен name (заголовок встречи).")
 
-    transcribe_voice = False
-    speech_to_chat = False
-    if body.space_id is not None:
-        space_ent = await spaces.get(body.space_id)
-        if space_ent is None:
-            raise ValueError(f"Пространство {body.space_id} не найдено.")
-        if space_ent.company_id != company_id:
-            raise PermissionError("Пространство принадлежит другой компании.")
-        transcribe_voice = space_ent.transcribe_voice_messages
-        speech_to_chat = space_ent.speech_to_chat_enabled
+    namespace = body.namespace if body.namespace else "default"
+    ns_entity = await namespaces.get(namespace)
+    if ns_entity is None and namespace == "default":
+        ns_entity = Namespace(
+            name="default",
+            company_id=company_id,
+            description="Основное пространство",
+            is_default=True,
+        )
+        await namespaces.set(ns_entity)
+    if ns_entity is None:
+        raise ValueError(f"Namespace '{namespace}' не найден в платформенном реестре.")
+    if ns_entity.company_id != company_id:
+        raise PermissionError(f"Namespace '{namespace}' принадлежит другой компании.")
+    sync_defaults = ns_entity.sync_settings
+    transcribe_voice = bool(sync_defaults.transcribe_voice_messages) if sync_defaults else False
+    speech_to_chat = bool(sync_defaults.speech_to_chat_enabled) if sync_defaults else False
     if body.transcribe_voice_messages is not None:
         transcribe_voice = body.transcribe_voice_messages
     if body.speech_to_chat_enabled is not None:
@@ -705,7 +621,7 @@ async def _create_channel(
     entity = SyncChannel(
         channel_id=channel_id,
         company_id=company_id,
-        space_id=body.space_id,
+        namespace=namespace,
         type=body.type.value,
         name=body.name,
         is_private=body.is_private,

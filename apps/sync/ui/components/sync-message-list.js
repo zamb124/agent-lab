@@ -1,7 +1,8 @@
 /**
  * sync-message-list — лента сообщений канала.
  *
- * Источник: useResource('sync/messages').slice.byChannelId[channelId].
+ * Источник: slice `sync/messages_store.byChannelId[channelId]`
+ * (`select((s) => s.syncMessagesStore)`).
  * Группировка: по дням (sync-day-grouping helper) + по отправителю
  * (window 120s) — `position` прокидывается в каждый bubble.
  *
@@ -9,11 +10,11 @@
  * если пользователь не отскроллил вверх вручную.
  *
  * Infinite scroll up: при scrollTop <= 60 → useOp('sync/messages_load_older')
- * + dispatch HISTORY_OLDER_LOADED для merge в slice. Компенсация scroll.
+ * + slice action `loadedOlder` для merge в slice. Компенсация scroll.
  *
  * Скрытое API для родителя: scrollToMessageId(id, { flash }) — листает
  * до сообщения, при необходимости подгружает историю циклом, диспатчит
- * FLASH_REQUESTED.
+ * `flash` action slice'а.
  */
 
 import { html, css } from 'lit';
@@ -107,7 +108,8 @@ export class SyncMessageList extends PlatformElement {
         this.myUserId = '';
         this.channelType = '';
         this._channelMembers = [];
-        this._messagesSel = this.select((s) => s.syncMessages);
+        this._store = this.useSlice('sync/messages_store');
+        this._messagesStoreSel = this.select((s) => s.syncMessagesStore);
         this._channelsSel = this.select((s) => s.syncChannels);
         this._loadOlder = this.useOp('sync/messages_load_older');
         this._loadNewer = this.useOp('sync/messages_load_newer');
@@ -143,7 +145,7 @@ export class SyncMessageList extends PlatformElement {
     }
 
     _items() {
-        const slice = this._messagesSel.value;
+        const slice = this._messagesStoreSel.value;
         if (!slice || !slice.byChannelId) return [];
         const channelData = slice.byChannelId[this.channelId];
         if (!channelData || !Array.isArray(channelData.items)) return [];
@@ -164,7 +166,7 @@ export class SyncMessageList extends PlatformElement {
     }
 
     _channelData() {
-        const slice = this._messagesSel.value;
+        const slice = this._messagesStoreSel.value;
         if (!slice || !slice.byChannelId) return null;
         return slice.byChannelId[this.channelId];
     }
@@ -187,7 +189,7 @@ export class SyncMessageList extends PlatformElement {
         if (typeof oldestCursor !== 'string' || oldestCursor === '') return;
         const prevHeight = this._scrollEl.scrollHeight;
         const prevTop = this._scrollEl.scrollTop;
-        this.dispatch('sync/messages/history_older_started', { channelId: this.channelId });
+        this._store.startOlder({ channelId: this.channelId });
         await this._loadOlder.run({
             channel_id: this.channelId,
             limit: 50,
@@ -196,11 +198,17 @@ export class SyncMessageList extends PlatformElement {
         });
         const result = this._loadOlder.lastResult;
         if (!result || !Array.isArray(result.items)) return;
-        this.dispatch('sync/messages/history_older_loaded', {
+        const hasOlder = typeof result.has_older === 'boolean'
+            ? result.has_older
+            : (typeof result.prev_cursor === 'string' && result.prev_cursor !== '');
+        const oldestCursorNext = typeof result.oldest_cursor === 'string'
+            ? result.oldest_cursor
+            : (typeof result.prev_cursor === 'string' ? result.prev_cursor : null);
+        this._store.loadedOlder({
             channelId: this.channelId,
             items: result.items,
-            hasOlder: typeof result.has_older === 'boolean' ? result.has_older : false,
-            oldestCursor: typeof result.oldest_cursor === 'string' ? result.oldest_cursor : null,
+            hasOlder,
+            oldestCursor: oldestCursorNext,
         });
         await this.updateComplete;
         const newHeight = this._scrollEl.scrollHeight;
@@ -233,8 +241,8 @@ export class SyncMessageList extends PlatformElement {
             const el = this.renderRoot.querySelector(`sync-message-bubble[data-id="${CSS.escape(messageId)}"]`);
             if (el) {
                 el.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                this.dispatch('sync/messages/flash_requested', { messageId });
-                window.setTimeout(() => this.dispatch('sync/messages/flash_cleared', null), 1800);
+                this._store.flash({ messageId });
+                window.setTimeout(() => this._store.clearFlash(null), 1800);
                 return;
             }
             const channelData = this._channelData();

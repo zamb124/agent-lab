@@ -2,8 +2,8 @@
  * sync-selection-bar — отображается при chat_ui.selectionMode === true.
  *
  * Источник: useSlice('sync/chat_ui') (selectionMode + selectedMessageIds).
- * Действия: forward (открывает sync.forward), delete (массово useOp('sync/messages').remove),
- * cancel (clearSelection).
+ * Действия: forward (открывает sync.forward), delete (массово
+ * useOp('sync/messages_delete').run), cancel (clearSelection).
  */
 
 import { html, css } from 'lit';
@@ -53,7 +53,7 @@ export class SyncSelectionBar extends PlatformElement {
         super();
         this.channelId = '';
         this._chatUi = this.useSlice('sync/chat_ui');
-        this._messages = this.useOp('sync/messages');
+        this._delete = this.useOp('sync/messages_delete');
     }
 
     _onCancel() {
@@ -71,7 +71,7 @@ export class SyncSelectionBar extends PlatformElement {
         if (!Array.isArray(ids) || ids.length === 0) return;
         this._chatUi.startDeletion({ messageIds: ids });
         for (const messageId of ids) {
-            this._messages.remove({ channel_id: this.channelId, message_id: messageId });
+            this._delete.run({ channel_id: this.channelId, message_id: messageId });
         }
         this._chatUi.clearSelection(null);
     }

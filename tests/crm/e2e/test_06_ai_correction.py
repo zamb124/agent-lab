@@ -136,9 +136,9 @@ class TestAICorrection:
         rel_resp = await crm_client.post("/crm/api/v1/relationships/", json={
             "source_entity_id": entity1_id,
             "target_entity_id": entity2_id,
-            "relationship_type": "works_on"
+            "relationship_type": "related_to"
         }, headers=auth_headers_system)
-        assert rel_resp.status_code == 200
+        assert rel_resp.status_code == 200, rel_resp.text
         
         relationship = rel_resp.json()
         assert relationship["source_entity_id"] == entity1_id
@@ -179,7 +179,12 @@ class TestAICorrection:
         }, headers=auth_headers_system)
         note_id = note_resp.json()["entity_id"]
 
-        _, analyze_resp = await _analyze_note(crm_client, auth_headers_system, note_id)
+        # check_duplicates=False: тест ставит ровно 1 LLM-ответ для analyze;
+        # включённый dedup потребовал бы доп. ответов и зависит от состояния
+        # pgvector (загрязнения от соседних тестов).
+        _, analyze_resp = await _analyze_note(
+            crm_client, auth_headers_system, note_id, check_duplicates=False
+        )
         entities = analyze_resp.json()["entities"]
         
         incorrect_entity_id = None

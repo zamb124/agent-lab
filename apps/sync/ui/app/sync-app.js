@@ -17,11 +17,25 @@ import { CoreEvents } from '@platform/lib/events/index.js';
 import { createRouterEffect } from '@platform/lib/events/effects/router.effect.js';
 import '@platform/lib/components/layout/platform-island.js';
 
-import { spacesResource } from '../events/resources/spaces.resource.js';
-import { platformNamespacesResource } from '../events/resources/platform-namespaces.resource.js';
+import { namespacesResource, namespaceUpdateOp } from '../events/resources/namespaces.resource.js';
 import { channelsResource, channelMarkReadOp, channelTypingOp, channelAddMemberOp,
          channelMembersListOp, channelNotificationsUpdateOp } from '../events/resources/channels.resource.js';
-import { messagesResource, messagesLoadOlderOp, messagesLoadNewerOp } from '../events/resources/messages.resource.js';
+import {
+    messagesResource,
+    messagesLoadOlderOp,
+    messagesLoadNewerOp,
+    messagesSendOp,
+    messagesEditOp,
+    messagesDeleteOp,
+    messagesForwardOp,
+    messagesReactOp,
+    messagesPinOp,
+    messagesMarkReadOp,
+    messagesTranscribeAudioOp,
+    messagesTranscribeVideoOp,
+    messagesTranscribeCallOp,
+    messagesStoreSlice,
+} from '../events/resources/messages.resource.js';
 import { threadsResource } from '../events/resources/threads.resource.js';
 import { companyMembersResource, sharedChannelsOp } from '../events/resources/members.resource.js';
 import { presenceResource } from '../events/resources/presence.resource.js';
@@ -40,7 +54,6 @@ import { createSyncPersistEffect } from '../events/sync-persist.effect.js';
 const SYNC_ROUTES = [
     { key: 'shell',           path: '' },
     { key: 'channel',         path: 'c/:channelId' },
-    { key: 'space',           path: 'space/:spaceId' },
     { key: 'calls_scheduled', path: 'calls/scheduled' },
     { key: 'settings',        path: 'settings' },
     { key: 'call_join',       path: 'join/:linkToken' },
@@ -102,17 +115,17 @@ export class SyncApp extends PlatformApp {
     }
 
     _onWsConnected() {
-        // На первом connect пере-запрашиваем ws-фабрики Sync, чьи initial
-        // autoload-LIST_REQUESTED отлетели в `ws_disconnected` (фабрика
-        // диспатчится раньше, чем WS успевает подняться). На последующих
-        // reconnect то же самое: redis pub/sub не хранит историю.
-        this.dispatch(spacesResource.events.LIST_REQUESTED, null);
+        // Перезапрос ws-фабрик Sync на каждом connect (включая первый).
+        // Initial autoload-LIST_REQUESTED фабрик улетают раньше готовности
+        // WS и падают с `ws_disconnected`; redis pub/sub не хранит истории
+        // push-событий, поэтому при reconnect списки тоже надо обновить.
+        // namespaces — HTTP-ресурс, его LIST_REQUESTED шлёт `httpRequest`
+        // напрямую и не зависит от готовности WS, повторного триггера
+        // здесь не нужно.
         this.dispatch(channelsResource.events.LIST_REQUESTED, null);
-        if (this._wsEverConnected) {
-            const selectedChannelId = this._resolveSelectedChannelId();
-            if (selectedChannelId !== '') {
-                this.dispatch(messagesResource.events.REQUESTED, { channel_id: selectedChannelId, limit: 50 });
-            }
+        const selectedChannelId = this._resolveSelectedChannelId();
+        if (selectedChannelId !== '') {
+            this.dispatch(messagesResource.events.REQUESTED, { channel_id: selectedChannelId, limit: 50 });
         }
         this._wsEverConnected = true;
     }
@@ -150,8 +163,8 @@ export class SyncApp extends PlatformApp {
     }
 
     static factories = [
-        spacesResource,
-        platformNamespacesResource,
+        namespacesResource,
+        namespaceUpdateOp,
         channelsResource,
         channelMarkReadOp,
         channelTypingOp,
@@ -161,6 +174,17 @@ export class SyncApp extends PlatformApp {
         messagesResource,
         messagesLoadOlderOp,
         messagesLoadNewerOp,
+        messagesSendOp,
+        messagesEditOp,
+        messagesDeleteOp,
+        messagesForwardOp,
+        messagesReactOp,
+        messagesPinOp,
+        messagesMarkReadOp,
+        messagesTranscribeAudioOp,
+        messagesTranscribeVideoOp,
+        messagesTranscribeCallOp,
+        messagesStoreSlice,
         threadsResource,
         companyMembersResource,
         sharedChannelsOp,
@@ -266,8 +290,6 @@ export class SyncApp extends PlatformApp {
                 return html`<sync-shell-page></sync-shell-page>`;
             case 'channel':
                 return html`<sync-channel-page .channelId=${params.channelId}></sync-channel-page>`;
-            case 'space':
-                return html`<sync-space-page .spaceId=${params.spaceId}></sync-space-page>`;
             case 'calls_scheduled':
                 return html`<sync-calls-scheduled-page></sync-calls-scheduled-page>`;
             case 'settings':

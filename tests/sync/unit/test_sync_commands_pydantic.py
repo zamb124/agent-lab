@@ -13,29 +13,28 @@ from pydantic import ValidationError
 
 from apps.sync.realtime.operations import (
     CallsRecordingStartPayload,
+    ChannelsCreatePayload,
     ChannelsTypingPayload,
-    SpacesCreatePayload,
 )
 
 
-def test_spaces_create_payload_requires_body() -> None:
+def test_channels_create_payload_requires_body() -> None:
     """Без `body` payload не валидируется (zero-fallback canon)."""
     with pytest.raises(ValidationError):
-        SpacesCreatePayload.model_validate({})
+        ChannelsCreatePayload.model_validate({})
 
 
-def test_spaces_create_payload_requires_namespace() -> None:
-    """`namespace` обязателен — никаких back-compat slug-генераций."""
-    with pytest.raises(ValidationError):
-        SpacesCreatePayload.model_validate({"body": {"name": "S"}})
+def test_channels_create_payload_topic_requires_namespace_at_runtime() -> None:
+    """`namespace` для topic — обязательное поле канала (валидируется в `_create_channel`).
 
-
-def test_spaces_create_payload_valid() -> None:
-    p = SpacesCreatePayload.model_validate(
-        {"body": {"name": "S", "description": None, "namespace": "s"}}
+    Pydantic-уровень валидации `ChannelCreate` допускает опциональный
+    `namespace` (для DM/calendar_meeting); проверка обязательности для
+    topic — в бизнес-логике handler'а.
+    """
+    p = ChannelsCreatePayload.model_validate(
+        {"body": {"type": "topic", "name": "t", "namespace": "default"}}
     )
-    assert p.body.name == "S"
-    assert p.body.namespace == "s"
+    assert p.body.namespace == "default"
 
 
 def test_channels_typing_payload_valid() -> None:

@@ -8,10 +8,12 @@
 - Redis: `DATABASE__REDIS_URL` / `TASKS__BROKER_URL` как в корневом [`tests/conftest.py`](../conftest.py).
 - STT: без патча `STTClientFactory`. В корневом `tests/conftest.py`, [`tests/fixtures/services.py`](../fixtures/services.py) и env процесса **`sync_worker`** заданы `STT__PROVIDER=mock` и `STT__MOCK_TRANSCRIPT_TEXT` (см. [`tests/fixtures/workers.py`](../fixtures/workers.py)).
 
-Единственное явно разрешённое исключение для моков — внешний Web Push к FCM/APN
-(`@patch("core.push.service.webpush")` в [`test_sync_notification_delivery.py`](test_sync_notification_delivery.py)):
-без device tokens и VAPID-ключей в CI его нельзя вызвать «по-настоящему». Зафиксировано
-в [`.cursor/rules/testing.mdc`](../../.cursor/rules/testing.mdc).
+Запрещено:
+
+- `unittest.mock.*`, `AsyncMock`, `MagicMock`, `@patch` в любых тестах sync.
+- `monkeypatch` для подмены внутренностей. Подмена внешних настроек (например `s3.enabled`) — через `_temporary_settings` ([`integration/conftest.py`](integration/conftest.py)).
+
+Внешний Web Push (`webpush` к FCM/APN) проверяется в [`tests/core/push/test_push_service.py`](../core/push/test_push_service.py); в sync-тестах он не используется.
 
 Подробнее: `.cursor/rules/sync.mdc` (раздел «Тестирование»), `.cursor/rules/testing.mdc`.
 
@@ -47,14 +49,13 @@ TaskIQ остаётся ТОЛЬКО для heavy-операций (`sync_transc
 
 | Слой | Файлы | Что проверяется |
 |------|--------|-----------------|
-| Репозитории (база) | `db/test_*_repository.py` | Space, Channel, Message, Thread, File, GitResourceRef |
-| Репозитории (расширение) | `db/test_message_repository_extended.py`, `db/test_channel_repository_extended.py` | `get_by_id_for_company`, замена контента, удаление, реакции, `max_root_lane_sent_at`, `get_thread_root`, пагинация; `list_for_user` + `space_id`, `is_member`, `set_pinned_message_ids` |
-| Пространства | `db/test_space_repository.py` | В т.ч. `get_by_name` при одинаковом имени в разных компаниях |
+| Репозитории (база) | `db/test_*_repository.py` | Channel, Message, Thread, File, GitResourceRef |
+| Репозитории (расширение) | `db/test_message_repository_extended.py`, `db/test_channel_repository_extended.py` | `get_by_id_for_company`, замена контента, удаление, реакции, `max_root_lane_sent_at`, `get_thread_root`, пагинация; `list_for_user` + `namespace`, `is_member`, `set_pinned_message_ids` |
 | Хелперы чтения | `test_read_helpers_integration.py` | `channel_read_from_entity`, `message_read_from_entity` |
 | WS command-router | `realtime/test_command_router.py` | `register_sync_ws_commands()`: каждая запись `SYNC_OPERATIONS` зарегистрирована, `canonical_type` совпадает с ключом, `_requested` суффикс |
 | Presence hooks | `realtime/test_presence_hooks.py` | Connect/disconnect: online/offline в Redis presence |
 | Finalize recording | `realtime/test_finalize_recording_platform_file.py` | Регистрация platform `FileRecord` после записи звонка |
-| **WS=REST identity (49 op)** | `integration/test_ops_ws_rest_identical.py` | Каждая op из `SYNC_OPERATIONS` даёт одинаковый result через WS и REST |
+| **WS=REST identity** | `integration/test_ops_ws_rest_identical.py` | Каждая op из `SYNC_OPERATIONS` даёт одинаковый result через WS и REST |
 | **Zero-fallback red-tests** | `integration/test_ops_zero_fallback.py` | Missing field → `ws_invalid_payload`, no company → `ws_no_company`, not_found → 404/`not_found` |
 | **AST-сканер** | `integration/test_no_silent_except_in_ops.py` | Запрет `except Exception: pass`, `or default` фолбеков в `operations.py` |
 | **Push-events** | `integration/test_op_publish_realtime_events.py` | После op в `platform:ui_events` опубликован нужный фрейм с правильным `recipient_user_ids` |
@@ -63,15 +64,16 @@ TaskIQ остаётся ТОЛЬКО для heavy-операций (`sync_transc
 | **op_calls_*** | `integration/test_op_calls_lifecycle.py`, `_links.py` | invite/accept/hangup + recording; calendar links + join |
 | **op_threads_*** | `integration/test_op_threads.py` | Create/list/item, изоляция по company |
 | **op_git_resources_*** | `integration/test_op_git_resources.py` | upsert/get + изоляция |
-| **op_spaces_*** namespace | `integration/test_op_spaces_namespace_uniqueness.py` | namespace 1:1 с SyncSpace, конфликт между компаниями |
-| HTTP (smoke) | `api/test_sync_http.py` | Список/создание space, patch, каналы |
-| HTTP (матрица) | `api/test_sync_http_matrix.py` | 401, 403/404, цепочка сообщений + read |
+| HTTP (smoke) | `api/test_sync_http.py` | GET namespaces (default), PUT sync_settings, список каналов |
+| HTTP (матрица) | `api/test_sync_http_matrix.py` | 401, 403/404, цепочка сообщений + read, cursor пагинация |
 | HTTP (вложения) | `api/test_sync_messages_attachments.py` | Загрузка multipart + сообщение с file/* |
-| WebSocket | `api/test_sync_websocket.py` | `spaces.create` через WS, 403 без cookie, ошибка команды |
-| WebSocket (broadcast) | `api/test_sync_websocket_broadcast.py` | Два пользователя получают `message.created` |
+| WebSocket | `api/test_sync_websocket.py` | `channels.create` через WS, 403 без cookie, ошибка команды |
+| WebSocket (broadcast 2 клиента) | `api/test_sync_websocket_broadcast.py` | Два пользователя получают `message.created` |
+| **WS realtime E2E** | `api/test_sync_realtime_e2e.py` | 3-broadcast, reaction, reply, edit, delete, read_updated, forward, mention — все push-фреймы, без моков |
+| **История чата E2E** | `api/test_sync_history_e2e.py` | Свежий HTTP-клиент видит историю, before-cursor пагинация, исключение удалённых, edit + react в ленте |
+| **Skip-rules уведомлений** | `api/test_notification_skip_rules_e2e.py` | `notify/sync/sync_new_message_received` skip по WS-presence и по mute; mention доставляется даже при онлайне |
 | Голос / флаг канала | `api/test_channel_voice_transcribe_flag.py` | `transcribe_voice_messages` через **`sync_service` + sync_worker** |
 | STT REST + звонок | `api/test_transcribe_video_and_call_http.py` | `transcribe-video`, `transcribe-call` через worker |
-| Платформенные уведомления | `test_sync_notification_delivery.py` | `deliver_channel_message_notification`: presence/mute/payload, Redis `platform:notifications`, Web Push (с моком `webpush` — внешняя FCM) |
 | Файлы | `api/test_sync_files_upload.py`, `api/test_sync_files_negative.py` | Загрузка при S3; пустой файл 400; 503 при S3 disabled (через fixture-runtime, без `monkeypatch`) |
 | Маршруты | `test_route_config.py` | Публичные/защищённые пути AuthMiddleware |
 | Unit | `unit/test_sync_commands_pydantic.py` | Валидация Pydantic payload-моделей операций |

@@ -23,7 +23,6 @@ import './app/sync-app.js';
 
 import './pages/sync-shell-page.js';
 import './pages/sync-channel-page.js';
-import './pages/sync-space-page.js';
 import './pages/sync-calls-scheduled-page.js';
 import './pages/sync-settings-page.js';
 import './pages/sync-call-join-page.js';
@@ -41,8 +40,7 @@ import './components/sync-message-context-menu.js';
 import './components/sync-thread-drawer.js';
 import './components/sync-channel-picker.js';
 
-import './modals/sync-space-create-modal.js';
-import './modals/sync-space-edit-modal.js';
+import './modals/sync-namespace-modal.js';
 import './modals/sync-channel-create-modal.js';
 import './modals/sync-channel-edit-modal.js';
 import './modals/sync-channel-notifications-modal.js';

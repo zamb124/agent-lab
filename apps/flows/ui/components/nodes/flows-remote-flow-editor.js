@@ -11,6 +11,7 @@
 
 import { html, css } from 'lit';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
+import { asObject } from '../../_helpers/flows-resolvers.js';
 import './flows-base-node-editor.js';
 import '../editors/flows-json-field-editor.js';
 

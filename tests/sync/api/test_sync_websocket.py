@@ -14,27 +14,34 @@ import uuid
 
 import pytest
 
+from tests.sync.api._helpers import seed_namespace_via_repo
+
 
 @pytest.mark.asyncio
-async def test_ws_spaces_create_via_command_router(
+async def test_ws_channels_create_via_command_router(
     sync_service,
     sync_worker,
     sync_auth_token,
     sync_db_clean: None,
+    company_id: str,
     unique_id: str,
 ) -> None:
     import websockets
+
+    namespace = f"ns_{unique_id}_ws"
+    await seed_namespace_via_repo(company_id, namespace)
 
     uri = "ws://127.0.0.1:9005/sync/api/ws/notifications"
     request_id = uuid.uuid4().hex
     frame = {
         "request_id": request_id,
-        "type": "sync/spaces/create_requested",
+        "type": "sync/channels/create_requested",
         "payload": {
             "body": {
-                "name": "WsSpace",
-                "description": None,
-                "namespace": f"ws_{unique_id}",
+                "type": "topic",
+                "name": "WsTopic",
+                "namespace": namespace,
+                "is_private": False,
             }
         },
     }
@@ -51,8 +58,9 @@ async def test_ws_spaces_create_via_command_router(
                 reply = parsed
                 break
         assert reply is not None, "ожидался reply-фрейм с тем же request_id"
-        assert reply["type"] == "sync/spaces/create_succeeded"
-        assert reply["payload"]["name"] == "WsSpace"
+        assert reply["type"] == "sync/channels/create_succeeded"
+        assert reply["payload"]["name"] == "WsTopic"
+        assert reply["payload"]["namespace"] == namespace
 
 
 @pytest.mark.asyncio
@@ -82,8 +90,8 @@ async def test_ws_command_failed_when_target_missing(
     request_id = uuid.uuid4().hex
     frame = {
         "request_id": request_id,
-        "type": "sync/spaces/update_requested",
-        "payload": {"space_id": "missing_space_ws", "body": {"name": "X"}},
+        "type": "sync/channels/update_requested",
+        "payload": {"channel_id": "missing_channel_ws", "body": {"name": "X"}},
     }
     async with websockets.connect(
         uri,
@@ -98,7 +106,7 @@ async def test_ws_command_failed_when_target_missing(
                 reply = parsed
                 break
         assert reply is not None
-        assert reply["type"] == "sync/spaces/update_failed"
+        assert reply["type"] == "sync/channels/update_failed"
         assert "error_code" in reply["payload"]
 
 
@@ -108,32 +116,38 @@ async def test_ws_two_commands_sequential(
     sync_worker,
     sync_auth_token,
     sync_db_clean: None,
+    company_id: str,
     unique_id: str,
 ) -> None:
     import websockets
+
+    namespace = f"ns_{unique_id}_seq"
+    await seed_namespace_via_repo(company_id, namespace)
 
     uri = "ws://127.0.0.1:9005/sync/api/ws/notifications"
     id1 = uuid.uuid4().hex
     id2 = uuid.uuid4().hex
     f1 = {
         "request_id": id1,
-        "type": "sync/spaces/create_requested",
+        "type": "sync/channels/create_requested",
         "payload": {
             "body": {
+                "type": "topic",
                 "name": "WsA",
-                "description": None,
-                "namespace": f"wsa_{unique_id}",
+                "namespace": namespace,
+                "is_private": False,
             }
         },
     }
     f2 = {
         "request_id": id2,
-        "type": "sync/spaces/create_requested",
+        "type": "sync/channels/create_requested",
         "payload": {
             "body": {
+                "type": "topic",
                 "name": "WsB",
-                "description": None,
-                "namespace": f"wsb_{unique_id}",
+                "namespace": namespace,
+                "is_private": False,
             }
         },
     }
@@ -152,7 +166,7 @@ async def test_ws_two_commands_sequential(
                 got[rid] = parsed
             if len(got) == 2:
                 break
-        assert got[id1]["type"] == "sync/spaces/create_succeeded"
+        assert got[id1]["type"] == "sync/channels/create_succeeded"
         assert got[id1]["payload"]["name"] == "WsA"
-        assert got[id2]["type"] == "sync/spaces/create_succeeded"
+        assert got[id2]["type"] == "sync/channels/create_succeeded"
         assert got[id2]["payload"]["name"] == "WsB"

@@ -4,10 +4,12 @@ from __future__ import annotations
 
 import pytest
 
+from tests.sync.api._helpers import create_topic_channel_via_http
+
 
 @pytest.mark.asyncio
-async def test_http_spaces_unauthorized(sync_client, sync_db_clean: None) -> None:
-    r = await sync_client.get("/sync/api/v1/spaces/")
+async def test_http_namespaces_unauthorized(sync_client, sync_db_clean: None) -> None:
+    r = await sync_client.get("/sync/api/v1/namespaces")
     assert r.status_code == 401
 
 
@@ -24,17 +26,17 @@ async def test_http_messages_unauthorized(sync_client, sync_db_clean: None) -> N
 
 
 @pytest.mark.asyncio
-async def test_http_patch_space_not_found(
+async def test_http_put_namespace_not_found_returns_404(
     sync_client,
     sync_auth_headers,
     sync_db_clean: None,
 ) -> None:
-    with pytest.raises(ValueError, match="не найдено"):
-        await sync_client.patch(
-            "/sync/api/v1/spaces/nonexistent_space_id",
-            headers=sync_auth_headers,
-            json={"name": "X"},
-        )
+    r = await sync_client.put(
+        "/sync/api/v1/namespaces/nonexistent_ns",
+        headers=sync_auth_headers,
+        json={"sync_settings": None},
+    )
+    assert r.status_code == 404
 
 
 @pytest.mark.asyncio
@@ -56,27 +58,17 @@ async def test_http_channel_members_403_not_member(
     sync_auth_headers,
     sync_auth_headers_user2,
     sync_db_clean: None,
+    company_id: str,
     unique_id: str,
 ) -> None:
-    pr = await sync_client.post(
-        "/sync/api/v1/spaces/",
-        headers=sync_auth_headers,
-        json={"name": "M", "description": None, "namespace": f"m_{unique_id}"},
+    channel_id = await create_topic_channel_via_http(
+        sync_client,
+        sync_auth_headers,
+        company_id=company_id,
+        unique_id=unique_id,
+        suffix="m",
+        channel_name="general",
     )
-    assert pr.status_code == 201
-    space_id = pr.json()["id"]
-    cr = await sync_client.post(
-        "/sync/api/v1/channels/",
-        headers=sync_auth_headers,
-        json={
-            "space_id": space_id,
-            "type": "topic",
-            "name": "general",
-            "is_private": False,
-        },
-    )
-    assert cr.status_code == 201
-    channel_id = cr.json()["id"]
     r = await sync_client.get(
         f"/sync/api/v1/channels/{channel_id}/members",
         headers=sync_auth_headers_user2,
@@ -131,27 +123,17 @@ async def test_http_list_threads_and_messages(
     sync_client,
     sync_auth_headers,
     sync_db_clean: None,
+    company_id: str,
     unique_id: str,
 ) -> None:
-    pr = await sync_client.post(
-        "/sync/api/v1/spaces/",
-        headers=sync_auth_headers,
-        json={"name": "T", "description": None, "namespace": f"t_{unique_id}"},
+    channel_id = await create_topic_channel_via_http(
+        sync_client,
+        sync_auth_headers,
+        company_id=company_id,
+        unique_id=unique_id,
+        suffix="t",
+        channel_name="chan",
     )
-    assert pr.status_code == 201
-    space_id = pr.json()["id"]
-    cr = await sync_client.post(
-        "/sync/api/v1/channels/",
-        headers=sync_auth_headers,
-        json={
-            "space_id": space_id,
-            "type": "topic",
-            "name": "chan",
-            "is_private": False,
-        },
-    )
-    assert cr.status_code == 201
-    channel_id = cr.json()["id"]
     tr = await sync_client.get(
         f"/sync/api/v1/threads/?channel_id={channel_id}",
         headers=sync_auth_headers,
@@ -171,27 +153,17 @@ async def test_http_send_message_and_mark_read_flow(
     sync_client,
     sync_auth_headers,
     sync_db_clean: None,
+    company_id: str,
     unique_id: str,
 ) -> None:
-    pr = await sync_client.post(
-        "/sync/api/v1/spaces/",
-        headers=sync_auth_headers,
-        json={"name": "Msg", "description": None, "namespace": f"msg_{unique_id}"},
+    channel_id = await create_topic_channel_via_http(
+        sync_client,
+        sync_auth_headers,
+        company_id=company_id,
+        unique_id=unique_id,
+        suffix="msg",
+        channel_name="c",
     )
-    assert pr.status_code == 201
-    space_id = pr.json()["id"]
-    cr = await sync_client.post(
-        "/sync/api/v1/channels/",
-        headers=sync_auth_headers,
-        json={
-            "space_id": space_id,
-            "type": "topic",
-            "name": "c",
-            "is_private": False,
-        },
-    )
-    assert cr.status_code == 201
-    channel_id = cr.json()["id"]
     sr = await sync_client.post(
         f"/sync/api/v1/channels/{channel_id}/messages",
         headers=sync_auth_headers,
@@ -254,31 +226,17 @@ async def test_http_messages_default_limit_and_cursor_pagination(
     sync_client,
     sync_auth_headers,
     sync_db_clean: None,
+    company_id: str,
     unique_id: str,
 ) -> None:
-    pr = await sync_client.post(
-        "/sync/api/v1/spaces/",
-        headers=sync_auth_headers,
-        json={
-            "name": "Paginated",
-            "description": None,
-            "namespace": f"pag_{unique_id}",
-        },
+    channel_id = await create_topic_channel_via_http(
+        sync_client,
+        sync_auth_headers,
+        company_id=company_id,
+        unique_id=unique_id,
+        suffix="pag",
+        channel_name="paginated-channel",
     )
-    assert pr.status_code == 201
-    space_id = pr.json()["id"]
-    cr = await sync_client.post(
-        "/sync/api/v1/channels/",
-        headers=sync_auth_headers,
-        json={
-            "space_id": space_id,
-            "type": "topic",
-            "name": "paginated-channel",
-            "is_private": False,
-        },
-    )
-    assert cr.status_code == 201
-    channel_id = cr.json()["id"]
 
     for idx in range(25):
         sr = await sync_client.post(
@@ -325,31 +283,17 @@ async def test_http_messages_invalid_cursor_returns_400(
     sync_client,
     sync_auth_headers,
     sync_db_clean: None,
+    company_id: str,
     unique_id: str,
 ) -> None:
-    pr = await sync_client.post(
-        "/sync/api/v1/spaces/",
-        headers=sync_auth_headers,
-        json={
-            "name": "BadCursor",
-            "description": None,
-            "namespace": f"badcur_{unique_id}",
-        },
+    channel_id = await create_topic_channel_via_http(
+        sync_client,
+        sync_auth_headers,
+        company_id=company_id,
+        unique_id=unique_id,
+        suffix="badcur",
+        channel_name="bad-cursor-channel",
     )
-    assert pr.status_code == 201
-    space_id = pr.json()["id"]
-    cr = await sync_client.post(
-        "/sync/api/v1/channels/",
-        headers=sync_auth_headers,
-        json={
-            "space_id": space_id,
-            "type": "topic",
-            "name": "bad-cursor-channel",
-            "is_private": False,
-        },
-    )
-    assert cr.status_code == 201
-    channel_id = cr.json()["id"]
 
     response = await sync_client.get(
         f"/sync/api/v1/channels/{channel_id}/messages?before=not_base64",

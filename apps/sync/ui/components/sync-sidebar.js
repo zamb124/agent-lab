@@ -3,9 +3,16 @@
  *
  * Активное «пространство» выбирается тем же глобальным селектом
  * платформенного namespace, что и в CRM (`setPlatformNamespaceSelection` /
- * `getPlatformNamespaceSidebarSelection`). При выборе конкретного namespace
- * список каналов фильтруется (показываются только каналы space-а с этим
- * `namespace`); при выборе «Все» — видны все каналы и DM-участники.
+ * `getPlatformNamespaceSidebarSelection`). Источник списка namespace —
+ * фабрика `sync/namespaces` (autoload через `useResource`), напрямую
+ * читает `core/db/repositories/namespace_repository.py` через
+ * `GET /sync/api/v1/namespaces`. При выборе конкретного namespace список
+ * каналов фильтруется по `channel.namespace`; при «Все» — видны все
+ * каналы и DM-участники.
+ *
+ * Создание namespace — в CRM (`crm.namespace`-modal); sync редактирует
+ * только `Namespace.sync_settings` через карандаш на выбранном namespace
+ * (`sync.namespace_settings`).
  *
  * Slots `<platform-service-sidebar>`:
  *   - header: ad-hoc встреча, namespace selector, поиск.
@@ -213,15 +220,13 @@ export class SyncSidebar extends PlatformElement {
         super();
         this.collapsed = readShellSidebarCollapsed();
         this.mobileOpen = false;
-        this._spaces = this.useResource('sync/spaces', { autoload: true });
-        this._namespaces = this.useResource('sync/platform_namespaces', { autoload: true });
+        this._namespaces = this.useResource('sync/namespaces', { autoload: true });
         this._channels = this.useResource('sync/channels', { autoload: true });
         this._members = this.useResource('sync/company_members', { autoload: true });
         this._chatUi = this.useSlice('sync/chat_ui');
         this._callUi = this.useSlice('sync/call_ui');
         this._adhoc = this.useOp('sync/channel_create_adhoc_call');
         this._authSel = this.select((s) => s.auth && s.auth.user ? s.auth.user : null);
-        // Реактивно перерисовываемся при смене глобального namespace.
         this._uiNsSel = this.select((s) => s.ui.namespace);
     }
 
@@ -252,8 +257,7 @@ export class SyncSidebar extends PlatformElement {
     _channelMatchesNamespace(channel, activeNs) {
         if (activeNs === 'all') return true;
         if (channel.type === 'direct') return false;
-        const space = this._spaces.items.find((s) => s.id === channel.space_id);
-        return Boolean(space && space.namespace === activeNs);
+        return typeof channel.namespace === 'string' && channel.namespace === activeNs;
     }
 
     _unifiedChats() {
@@ -286,31 +290,10 @@ export class SyncSidebar extends PlatformElement {
         return members;
     }
 
-    _activeSpace() {
+    _activeNamespaceItem() {
         const activeNs = this._activeNamespace();
         if (activeNs === 'all') return null;
-        return this._spaces.items.find((s) => s.namespace === activeNs) || null;
-    }
-
-    _namespaceOptions() {
-        // Список платформенных namespaces (shared KV) + namespace'ы из sync-spaces,
-        // которые ещё не в shared list (на всякий случай). Label = `ns.name`
-        // (так же как в CRM-sidebar, без подмен на description/sync-space.name).
-        const seen = new Set();
-        const out = [];
-        for (const ns of this._namespaces.items) {
-            if (!ns || typeof ns.name !== 'string' || ns.name === '') continue;
-            if (seen.has(ns.name)) continue;
-            seen.add(ns.name);
-            out.push({ name: ns.name });
-        }
-        for (const sp of this._spaces.items) {
-            if (!sp || typeof sp.namespace !== 'string' || sp.namespace === '') continue;
-            if (seen.has(sp.namespace)) continue;
-            seen.add(sp.namespace);
-            out.push({ name: sp.namespace });
-        }
-        return out.sort((a, b) => a.name.localeCompare(b.name));
+        return this._namespaces.items.find((ns) => ns.name === activeNs) || null;
     }
 
     _onNamespaceChange(e) {
@@ -322,20 +305,16 @@ export class SyncSidebar extends PlatformElement {
         setPlatformNamespaceSelection(user.company_id, value === '' ? null : value);
     }
 
-    _onCreateSpace() {
-        this.openModal('sync.space_create', null);
-    }
-
-    _onEditActiveSpace() {
-        const space = this._activeSpace();
-        if (!space) return;
-        this.openModal('sync.space_edit', { spaceId: space.id });
+    _onEditActiveNamespace() {
+        const ns = this._activeNamespaceItem();
+        if (!ns) return;
+        this.openModal('sync.namespace_settings', { name: ns.name });
     }
 
     _onCreateChannel() {
-        const space = this._activeSpace();
-        const spaceId = space ? space.id : null;
-        this.openModal('sync.channel_create', { spaceId });
+        const ns = this._activeNamespaceItem();
+        const namespace = ns ? ns.name : null;
+        this.openModal('sync.channel_create', { namespace });
     }
 
     async _onAdhocCall() {
@@ -344,9 +323,9 @@ export class SyncSidebar extends PlatformElement {
         const dateStr = now.toLocaleDateString();
         const timeStr = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
         const name = this.t('chat_view.adhoc_meet_channel_name', { date: dateStr, time: timeStr });
-        const space = this._activeSpace();
+        const ns = this._activeNamespaceItem();
         const payload = { name, type: 'group' };
-        if (space !== null) payload.space_id = space.id;
+        if (ns !== null) payload.namespace = ns.name;
         const result = await this._adhoc.run(payload);
         const channelId = result && typeof result.id === 'string' ? result.id : null;
         if (channelId !== null) {
@@ -381,28 +360,20 @@ export class SyncSidebar extends PlatformElement {
                     <span class="ns-label">${this.t('sidebar.namespace_label')}</span>
                     <select class="ns-select" .value=${selectValue} @change=${this._onNamespaceChange}>
                         <option value="">${this.t('sidebar.all_namespaces')}</option>
-                        ${this._namespaceOptions().map((ns) => html`
+                        ${this._namespaces.items.map((ns) => html`
                             <option value=${ns.name} ?selected=${ns.name === selectValue}>${ns.name}</option>
                         `)}
                     </select>
-                    ${selectValue !== '' && this._activeSpace() !== null ? html`
+                    ${selectValue !== '' && this._activeNamespaceItem() !== null ? html`
                         <button
                             type="button"
                             class="ns-edit-btn"
-                            @click=${this._onEditActiveSpace}
-                            title=${this.t('sidebar.edit_space_tooltip')}
+                            @click=${this._onEditActiveNamespace}
+                            title=${this.t('sidebar.edit_namespace_tooltip')}
                         >
                             <platform-icon name="settings" size="14"></platform-icon>
                         </button>
                     ` : ''}
-                    <button
-                        type="button"
-                        class="ns-add-btn"
-                        @click=${this._onCreateSpace}
-                        title=${this.t('sidebar.create_space_tooltip')}
-                    >
-                        <platform-icon name="plus" size="14"></platform-icon>
-                    </button>
                 </div>
                 <div class="search-box">
                     <platform-icon name="search" size="14"></platform-icon>

@@ -1,11 +1,10 @@
 /**
  * sync-channel-create-modal — создание канала Sync.
  *
- * Пространство (namespace) выбирается ГЛОБАЛЬНО в sidebar; модалка просто
- * получает `spaceId` через prop из `_activeSpace()` и не дублирует выбор.
- * Если активный namespace ещё не имеет SyncSpace и тип = topic — создание
- * заблокировано с подсказкой выбрать namespace в sidebar (или создать
- * пространство Sync).
+ * Платформенный namespace выбирается ГЛОБАЛЬНО в sidebar; модалка получает
+ * `namespace` через prop из активного namespace (`sync-sidebar` /
+ * `sync-channel-picker`) и не дублирует выбор. Если namespace не выбран и
+ * тип = topic — создание заблокировано с подсказкой.
  */
 
 import { html, css } from 'lit';
@@ -19,7 +18,7 @@ export class SyncChannelCreateModal extends PlatformFormModal {
 
     static properties = {
         ...PlatformFormModal.properties,
-        spaceId: { type: String },
+        namespace: { type: String },
         adhocCall: { type: Boolean },
         _name: { state: true },
         _type: { state: true },
@@ -31,7 +30,7 @@ export class SyncChannelCreateModal extends PlatformFormModal {
 
     constructor() {
         super();
-        this.spaceId = '';
+        this.namespace = '';
         this.adhocCall = false;
         this._name = '';
         this._type = 'topic';
@@ -40,7 +39,7 @@ export class SyncChannelCreateModal extends PlatformFormModal {
 
     _isSubmittable() {
         if (this._name.trim().length === 0) return false;
-        if (this._type === 'topic' && (typeof this.spaceId !== 'string' || this.spaceId === '')) return false;
+        if (this._type === 'topic' && (typeof this.namespace !== 'string' || this.namespace === '')) return false;
         return true;
     }
 
@@ -49,8 +48,8 @@ export class SyncChannelCreateModal extends PlatformFormModal {
     }
 
     renderBody() {
-        const topicWithoutSpace = this._type === 'topic'
-            && (typeof this.spaceId !== 'string' || this.spaceId === '');
+        const topicWithoutNs = this._type === 'topic'
+            && (typeof this.namespace !== 'string' || this.namespace === '');
         return html`
             <div class="form-group">
                 <label class="form-label">${this.t('channel_modal.field_name')}</label>
@@ -73,9 +72,9 @@ export class SyncChannelCreateModal extends PlatformFormModal {
                     <option value="group">${this.t('channel_modal.type_group')}</option>
                 </select>
             </div>
-            ${topicWithoutSpace ? html`
+            ${topicWithoutNs ? html`
                 <div class="form-group">
-                    <div class="form-hint">${this.t('channel_settings.err_pick_space')}</div>
+                    <div class="form-hint">${this.t('channel_settings.err_pick_namespace')}</div>
                 </div>
             ` : ''}
         `;
@@ -96,7 +95,7 @@ export class SyncChannelCreateModal extends PlatformFormModal {
         if (!this._isSubmittable()) return;
         const name = this._name.trim();
         const body = { name, type: this._type };
-        if (this._type === 'topic') body.space_id = this.spaceId;
+        if (this._type === 'topic') body.namespace = this.namespace;
         this._channels.create(body);
         this.closeAfterSave();
     }

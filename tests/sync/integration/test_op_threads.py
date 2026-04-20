@@ -15,46 +15,36 @@ from apps.sync.models.messages import (
     MessageCreate,
     TextPlainContent,
 )
-from apps.sync.models.spaces import SpaceCreate
 from apps.sync.models.threads import ThreadCreate
 from apps.sync.realtime.operations import (
     ChannelsCreatePayload,
     MessagesSendPayload,
-    SpacesCreatePayload,
     ThreadsCreatePayload,
     ThreadsItemPayload,
     ThreadsListPayload,
     op_channels_create,
     op_messages_send,
-    op_spaces_create,
     op_threads_create,
     op_threads_item,
     op_threads_list,
 )
 from core.models.identity_models import User
 from core.websocket import WsCommandError
+from tests.sync.integration._helpers import seed_test_namespace
 
 
-async def _create_space_and_channel(
+async def _create_namespace_and_channel(
     op_user: User,
     op_container: SyncContainer,
     unique_id: str,
 ) -> str:
-    space = await op_spaces_create(
-        SpacesCreatePayload(
-            body=SpaceCreate(
-                name=f"ThSp {unique_id}", description=None, namespace=f"th_{unique_id}"
-            )
-        ),
-        user=op_user,
-        container=op_container,
-    )
+    namespace = await seed_test_namespace(op_user, op_container, unique_id, suffix="th")
     channel = await op_channels_create(
         ChannelsCreatePayload(
             body=ChannelCreate(
                 type=ChannelType.TOPIC,
                 name=f"ThCh {unique_id}",
-                space_id=space.id,
+                namespace=namespace,
                 is_private=False,
             )
         ),
@@ -96,7 +86,7 @@ async def test_op_threads_create_and_item(
     op_context: None,
     unique_id: str,
 ) -> None:
-    channel_id = await _create_space_and_channel(op_user, op_container, unique_id)
+    channel_id = await _create_namespace_and_channel(op_user, op_container, unique_id)
     root_id = await _send_root_message(op_user, op_container, channel_id, "root")
 
     thread = await op_threads_create(
@@ -125,7 +115,7 @@ async def test_op_threads_list_in_channel(
     op_context: None,
     unique_id: str,
 ) -> None:
-    channel_id = await _create_space_and_channel(op_user, op_container, unique_id)
+    channel_id = await _create_namespace_and_channel(op_user, op_container, unique_id)
     root1 = await _send_root_message(op_user, op_container, channel_id, "r1")
     root2 = await _send_root_message(op_user, op_container, channel_id, "r2")
     await op_threads_create(

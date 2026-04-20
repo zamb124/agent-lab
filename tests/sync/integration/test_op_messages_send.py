@@ -5,50 +5,24 @@ from __future__ import annotations
 import pytest
 
 from apps.sync.container import SyncContainer
-from apps.sync.models.channels import ChannelCreate, ChannelType
 from apps.sync.models.messages import (
     MessageContentModel,
     MessageContentType,
     MessageCreate,
     TextPlainContent,
 )
-from apps.sync.models.spaces import SpaceCreate
 from apps.sync.realtime.operations import (
-    ChannelsCreatePayload,
     MessagesSendPayload,
-    SpacesCreatePayload,
-    op_channels_create,
     op_messages_send,
-    op_spaces_create,
 )
 from core.models.identity_models import User
+from tests.sync.integration._helpers import create_test_topic_channel
 
 
 async def _setup_channel(
     op_user: User, op_container: SyncContainer, unique_id: str
 ) -> str:
-    space = await op_spaces_create(
-        SpacesCreatePayload(
-            body=SpaceCreate(
-                name=f"MsgSp {unique_id}", description=None, namespace=f"msg_{unique_id}"
-            )
-        ),
-        user=op_user,
-        container=op_container,
-    )
-    ch = await op_channels_create(
-        ChannelsCreatePayload(
-            body=ChannelCreate(
-                type=ChannelType.TOPIC,
-                name=f"MsgCh {unique_id}",
-                space_id=space.id,
-                is_private=False,
-            )
-        ),
-        user=op_user,
-        container=op_container,
-    )
-    return ch.id
+    return await create_test_topic_channel(op_user, op_container, unique_id, name_suffix="msg")
 
 
 @pytest.mark.asyncio

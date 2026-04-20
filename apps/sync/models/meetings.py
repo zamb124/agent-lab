@@ -14,7 +14,7 @@ class CallRecordingRead(BaseModel):
     recording_id: str
     call_id: str
     channel_id: str
-    space_id: str | None = None
+    namespace: str
     started_by_user_id: str | None = None
     status: RecordingStatus
     provider_job_id: str | None = None

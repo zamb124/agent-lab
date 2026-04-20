@@ -12,40 +12,30 @@ from apps.sync.models.messages import (
     MessageCreate,
     TextPlainContent,
 )
-from apps.sync.models.spaces import SpaceCreate
 from apps.sync.realtime.operations import (
     ChannelsCreatePayload,
     MessagesPinPayload,
     MessagesReactPayload,
     MessagesSendPayload,
-    SpacesCreatePayload,
     op_channels_create,
     op_messages_pin,
     op_messages_react,
     op_messages_send,
-    op_spaces_create,
 )
 from core.models.identity_models import User
+from tests.sync.integration._helpers import seed_test_namespace
 
 
 async def _setup_message(
     op_user: User, op_container: SyncContainer, unique_id: str
 ) -> tuple[str, str]:
-    space = await op_spaces_create(
-        SpacesCreatePayload(
-            body=SpaceCreate(
-                name=f"RPSp {unique_id}", description=None, namespace=f"rp_{unique_id}"
-            )
-        ),
-        user=op_user,
-        container=op_container,
-    )
+    namespace = await seed_test_namespace(op_user, op_container, unique_id, suffix="rp")
     ch = await op_channels_create(
         ChannelsCreatePayload(
             body=ChannelCreate(
                 type=ChannelType.TOPIC,
                 name=f"RPCh {unique_id}",
-                space_id=space.id,
+                namespace=namespace,
                 is_private=False,
             )
         ),

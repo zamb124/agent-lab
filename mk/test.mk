@@ -1,4 +1,4 @@
-.PHONY: test test-all test-up test-down test-cov test-cov-all test-cov-report test-browser test-unit test-ui test-ui-doc test-ui-components test-frontend-core test-frontend-core-canon test-frontend-core-unit test-frontend-core-browser
+.PHONY: test test-all test-up test-down test-reset test-cov test-cov-all test-cov-report test-browser test-unit test-ui test-ui-doc test-ui-components test-frontend-core test-frontend-core-canon test-frontend-core-unit test-frontend-core-browser
 
 WORKERS ?= 3
 PYTEST_COMMAND_TIMEOUT_SECONDS ?= 600
@@ -9,12 +9,18 @@ RUN_UI_IN_TEST ?= 0
 _PYTEST_IGNORE_UI := --ignore=tests/frontend/browser --ignore=tests/ui
 
 test-up:
-	docker-compose -f docker-compose-test.yaml up -d postgres-test redis-test minio-test onlyoffice-documentserver provider_litserve test-a2a-agent flows_worker_test scheduler_test rag_worker_test livekit-test livekit-egress-test livekit-cli-test
-	@echo "Ожидание готовности сервисов (postgres, redis, minio, onlyoffice, provider_litserve, test-a2a-agent, worker, scheduler, livekit, livekit-egress, livekit-cli)..."
+	docker-compose -f docker-compose-test.yaml up -d postgres-test redis-test minio-test onlyoffice-documentserver provider_litserve test-a2a-agent livekit-test livekit-egress-test livekit-cli-test
+	@echo "Ожидание готовности сервисов (postgres, redis, minio, onlyoffice, provider_litserve, test-a2a-agent, livekit, livekit-egress, livekit-cli)..."
 	@sleep 7
+	@echo "Сброс тестовой БД (TRUNCATE managed таблиц + Redis FLUSHDB)..."
+	@uv run python -m scripts.db_test_reset
+
+# Ручной сброс тестовой БД и Redis без поднятия контейнеров.
+test-reset:
+	@uv run python -m scripts.db_test_reset
 
 test-down:
-	docker-compose -f docker-compose-test.yaml stop postgres-test redis-test minio-test onlyoffice-documentserver provider_litserve test-a2a-agent flows_worker_test scheduler_test rag_worker_test livekit-test livekit-egress-test livekit-cli-test
+	docker-compose -f docker-compose-test.yaml stop postgres-test redis-test minio-test onlyoffice-documentserver provider_litserve test-a2a-agent livekit-test livekit-egress-test livekit-cli-test
 
 # Запуск unit/API тестов параллельно (без browser тестов)
 test-unit: test-up

@@ -69,26 +69,20 @@ async def test_transcribe_video_endpoint_marks_done_via_worker(
     sync_worker,
     sync_auth_headers,
     sync_db_clean: None,
+    company_id: str,
     unique_id: str,
 ) -> None:
     mp4 = _minimal_mp4_bytes()
+    from tests.sync.api._helpers import seed_namespace_via_repo
+
+    namespace = f"ns_{unique_id}_vid"
+    await seed_namespace_via_repo(company_id, namespace)
     async with AsyncClient(base_url="http://127.0.0.1:9005", timeout=120.0) as client:
-        pr = await client.post(
-            "/sync/api/v1/spaces/",
-            headers=sync_auth_headers,
-            json={
-                "name": "VideoTxSpace",
-                "description": None,
-                "namespace": f"vid_{unique_id}",
-            },
-        )
-        assert pr.status_code == 201
-        space_id = pr.json()["id"]
         cr = await client.post(
             "/sync/api/v1/channels/",
             headers=sync_auth_headers,
             json={
-                "space_id": space_id,
+                "namespace": namespace,
                 "type": "topic",
                 "name": "video_tx_ch",
                 "is_private": False,
@@ -188,23 +182,16 @@ async def test_transcribe_call_aggregate_includes_guest_line(
 
     guest_label = "ГостьАгрегат"
 
+    from tests.sync.api._helpers import seed_namespace_via_repo
+
+    namespace = f"ns_{unique_id}_callagg"
+    await seed_namespace_via_repo(company_id, namespace)
     async with AsyncClient(base_url="http://127.0.0.1:9005", timeout=120.0) as client:
-        pr = await client.post(
-            "/sync/api/v1/spaces/",
-            headers=sync_auth_headers,
-            json={
-                "name": "CallAggSpace",
-                "description": None,
-                "namespace": f"callagg_{unique_id}",
-            },
-        )
-        assert pr.status_code == 201
-        space_id = pr.json()["id"]
         cr = await client.post(
             "/sync/api/v1/channels/",
             headers=sync_auth_headers,
             json={
-                "space_id": space_id,
+                "namespace": namespace,
                 "type": "topic",
                 "name": "call_agg_ch",
                 "is_private": False,
@@ -302,11 +289,31 @@ async def test_transcribe_call_aggregate_includes_guest_line(
             call_id=call_id,
         )
         guest_user = User(user_id=guest_id, name=guest_id, active_company_id=company_id)
-        guest_message = await op_messages_send(
-            MessagesSendPayload(channel_id=channel_id, body=body_guest),
-            user=guest_user,
-            container=container,
+        from core.context import Context, clear_context, set_context
+        from core.models.i18n_models import Language
+        from core.models.identity_models import Company
+
+        set_context(
+            Context(
+                user=guest_user,
+                active_company=Company(
+                    company_id=company_id,
+                    name=f"Sync test {company_id}",
+                    owner_user_id=guest_user.user_id,
+                ),
+                user_companies=[],
+                channel="test",
+                language=Language.RU,
+            )
         )
+        try:
+            guest_message = await op_messages_send(
+                MessagesSendPayload(channel_id=channel_id, body=body_guest),
+                user=guest_user,
+                container=container,
+            )
+        finally:
+            clear_context()
         guest_message_id = guest_message.id
 
         deadline = time.monotonic() + 90.0

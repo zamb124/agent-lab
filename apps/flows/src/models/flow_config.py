@@ -437,6 +437,14 @@ class FlowConfig(StrictBaseModel):
         description="Переменные flow с метаданными. @var:key резолвятся из БД",
     )
 
+    metadata: Dict[str, Any] = Field(
+        default_factory=dict,
+        description=(
+            "UI-метаданные flow editor (sticky_notes, layout-подсказки и пр.). "
+            "Не влияет на исполнение; обновляется через PATCH /flows/{flow_id}/metadata."
+        ),
+    )
+
     @model_validator(mode="before")
     @classmethod
     def _normalize_variables(cls, data: Any) -> Any:

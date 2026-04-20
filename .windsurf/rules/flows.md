@@ -80,11 +80,11 @@ API `traces` (`task`, `session`, `trace_id`): дерево в `apps/flows/src/ap
 | mcp | MCPNode | MCP tools |
 | channel | ChannelNode | Отправка сообщений (Telegram, Webhook) |
 
-В `nodes[*].type` допускаются **только** значения из таблицы. Строк **`tool`** / **`function`** как типа ноды графа **нет**; при необходимости одноразово прогоняется миграция данных (`scripts/migrate_flows_contract.py`).
+В `nodes[*].type` допускаются **только** значения из таблицы. Строк **`tool`** / **`function`** как типа ноды графа **нет**.
 
 ## Evaluation (`flow.evaluation`)
 
-У шагов тест-кейса поля **`input.type`** и **`check.type`**: `text` | **`inline_code`** | `node` (и для check ещё `string`). Значение **`function`** в JSON — легаси: при чтении из БД **`FlowRepository`** вызывает **`normalize_flow_config_dict`** (как и скрипт **`scripts/migrate_flows_contract.py`**). Текст проверки без `def`/`async def` и с одной цепочкой идентификаторов через `.` трактуется как путь к checker → **`check.type`** становится **`string`**; иначе **`inline_code`**.
+У шагов тест-кейса поля **`input.type`** и **`check.type`**: `text` | **`inline_code`** | `node` (и для check ещё `string`). При чтении из БД **`FlowRepository`** применяет **`normalize_flow_config_dict`** (`apps/flows/src/services/flow_contract_normalize.py`) перед `FlowConfig.model_validate`: текст проверки без `def`/`async def` и с одной цепочкой идентификаторов через `.` трактуется как путь к checker → **`check.type`** становится **`string`**; иначе **`inline_code`**.
 
 ## Inline Python (`apps/flows/src/eval`)
 

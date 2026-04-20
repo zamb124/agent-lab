@@ -16,40 +16,42 @@ from apps.sync.models.messages import (
     MessageCreate,
     TextPlainContent,
 )
-from apps.sync.models.spaces import SpaceCreate
 from apps.sync.realtime.operations import (
     ChannelsCreatePayload,
     ChannelsTypingPayload,
     GitResourcesUpsertPayload,
     MessagesSendPayload,
-    SpacesCreatePayload,
     op_channels_create,
     op_channels_typing,
     op_git_resources_upsert,
     op_messages_send,
-    op_spaces_create,
 )
 from core.models.identity_models import User
+from tests.sync.integration._helpers import seed_test_namespace
 
 
-@pytest.mark.asyncio
-async def test_op_spaces_create_publishes_space_created(
+async def _create_topic_channel(
     op_user: User,
     op_container: SyncContainer,
-    op_context: None,
-    redis_pubsub_listener,
     unique_id: str,
-) -> None:
-    payload = SpacesCreatePayload(
-        body=SpaceCreate(
-            name=f"PubSp {unique_id}", description=None, namespace=f"pub_{unique_id}"
-        )
+    *,
+    suffix: str,
+    name: str,
+) -> str:
+    namespace = await seed_test_namespace(op_user, op_container, unique_id, suffix=suffix)
+    channel = await op_channels_create(
+        ChannelsCreatePayload(
+            body=ChannelCreate(
+                type=ChannelType.TOPIC,
+                name=name,
+                namespace=namespace,
+                is_private=False,
+            )
+        ),
+        user=op_user,
+        container=op_container,
     )
-    space = await op_spaces_create(payload, user=op_user, container=op_container)
-    events = await redis_pubsub_listener("sync/space/created", timeout=2.0)
-    assert any(
-        e.get("payload", {}).get("id") == space.id for e in events
-    ), f"sync/space/created для {space.id} не доехал в platform:ui_events; got={events}"
+    return channel.id
 
 
 @pytest.mark.asyncio
@@ -60,29 +62,11 @@ async def test_op_channels_create_publishes_channel_created(
     redis_pubsub_listener,
     unique_id: str,
 ) -> None:
-    space = await op_spaces_create(
-        SpacesCreatePayload(
-            body=SpaceCreate(
-                name=f"PubChSp {unique_id}", description=None, namespace=f"pubch_{unique_id}"
-            )
-        ),
-        user=op_user,
-        container=op_container,
-    )
-    channel = await op_channels_create(
-        ChannelsCreatePayload(
-            body=ChannelCreate(
-                type=ChannelType.TOPIC,
-                name=f"PubCh {unique_id}",
-                space_id=space.id,
-                is_private=False,
-            )
-        ),
-        user=op_user,
-        container=op_container,
+    channel_id = await _create_topic_channel(
+        op_user, op_container, unique_id, suffix="pubch", name=f"PubCh {unique_id}"
     )
     events = await redis_pubsub_listener("sync/channel/created", timeout=2.0)
-    assert any(e.get("payload", {}).get("id") == channel.id for e in events)
+    assert any(e.get("payload", {}).get("id") == channel_id for e in events)
 
 
 @pytest.mark.asyncio
@@ -93,30 +77,12 @@ async def test_op_messages_send_publishes_message_created(
     redis_pubsub_listener,
     unique_id: str,
 ) -> None:
-    space = await op_spaces_create(
-        SpacesCreatePayload(
-            body=SpaceCreate(
-                name=f"PubMsgSp {unique_id}", description=None, namespace=f"pubm_{unique_id}"
-            )
-        ),
-        user=op_user,
-        container=op_container,
-    )
-    channel = await op_channels_create(
-        ChannelsCreatePayload(
-            body=ChannelCreate(
-                type=ChannelType.TOPIC,
-                name=f"PubMsgCh {unique_id}",
-                space_id=space.id,
-                is_private=False,
-            )
-        ),
-        user=op_user,
-        container=op_container,
+    channel_id = await _create_topic_channel(
+        op_user, op_container, unique_id, suffix="pubm", name=f"PubMsgCh {unique_id}"
     )
     msg = await op_messages_send(
         MessagesSendPayload(
-            channel_id=channel.id,
+            channel_id=channel_id,
             body=MessageCreate(
                 contents=[
                     MessageContentModel(
@@ -142,35 +108,17 @@ async def test_op_channels_typing_publishes_channel_typing(
     redis_pubsub_listener,
     unique_id: str,
 ) -> None:
-    space = await op_spaces_create(
-        SpacesCreatePayload(
-            body=SpaceCreate(
-                name=f"PubTypSp {unique_id}", description=None, namespace=f"pubt_{unique_id}"
-            )
-        ),
-        user=op_user,
-        container=op_container,
-    )
-    channel = await op_channels_create(
-        ChannelsCreatePayload(
-            body=ChannelCreate(
-                type=ChannelType.TOPIC,
-                name=f"PubTypCh {unique_id}",
-                space_id=space.id,
-                is_private=False,
-            )
-        ),
-        user=op_user,
-        container=op_container,
+    channel_id = await _create_topic_channel(
+        op_user, op_container, unique_id, suffix="pubt", name=f"PubTypCh {unique_id}"
     )
     await op_channels_typing(
-        ChannelsTypingPayload(channel_id=channel.id, typing=True, thread_id=None),
+        ChannelsTypingPayload(channel_id=channel_id, typing=True, thread_id=None),
         user=op_user,
         container=op_container,
     )
     events = await redis_pubsub_listener("sync/channel/typing", timeout=2.0)
     assert any(
-        e.get("payload", {}).get("channel_id") == channel.id and e.get("payload", {}).get("typing") is True
+        e.get("payload", {}).get("channel_id") == channel_id and e.get("payload", {}).get("typing") is True
         for e in events
     )
 

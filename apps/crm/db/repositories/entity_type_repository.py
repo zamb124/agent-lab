@@ -45,7 +45,11 @@ class EntityTypeRepository(BaseCRMRepository[EntityType]):
                         EntityType.namespace_ids.contains(["*"]),
                     )
                 )
-            stmt = stmt.limit(limit).offset(offset)
+            stmt = (
+                stmt.order_by(EntityType.is_system.desc(), EntityType.type_id.asc())
+                .limit(limit)
+                .offset(offset)
+            )
             result = await session.execute(stmt)
             return list(result.scalars().all())
 

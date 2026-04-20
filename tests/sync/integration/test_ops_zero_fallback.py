@@ -19,25 +19,28 @@ from core.models.identity_models import User
 from core.websocket import WsCommandError
 
 # Операции, у которых ВСЕ поля Pydantic-payload — опциональные с дефолтами.
-# Они не могут «упасть» на `ws_invalid_payload` при пустом dict.
-_NO_REQUIRED_FIELDS_OPS: set[str] = {
-    "sync/spaces/list_requested",
-    "sync/channels/list_requested",
-    "sync/calls/turn_credentials_requested",
-    "sync/company_members/list_requested",
-    "sync/platform_namespaces/list_requested",
-}
+# Контракт «пустой payload → ws_invalid_payload» к ним неприменим: пустой
+# dict валиден, ValidationError не поднимается. Исключаем из параметризации,
+# а не пропускаем через skip.
+_NO_REQUIRED_FIELDS_OPS: frozenset[str] = frozenset(
+    {
+        "sync/channels/list_requested",
+        "sync/calls/turn_credentials_requested",
+        "sync/company_members/list_requested",
+    }
+)
 
 
-@pytest.mark.parametrize("canonical_type", sorted(SYNC_OPERATIONS.keys()))
+_OPS_WITH_REQUIRED_FIELDS: list[str] = sorted(
+    op for op in SYNC_OPERATIONS.keys() if op not in _NO_REQUIRED_FIELDS_OPS
+)
+
+
+@pytest.mark.parametrize("canonical_type", _OPS_WITH_REQUIRED_FIELDS)
 def test_op_missing_required_field_raises_ws_invalid_payload(
     canonical_type: str,
 ) -> None:
     """Пустой payload {} → ValidationError у Pydantic → WsCommandError("ws_invalid_payload")."""
-    if canonical_type in _NO_REQUIRED_FIELDS_OPS:
-        pytest.skip(
-            f"{canonical_type}: все поля Pydantic-payload опциональны (list-операция)."
-        )
     op = SYNC_OPERATIONS[canonical_type]
     with pytest.raises(WsCommandError) as exc_info:
         parse_payload(op.payload_model, {})

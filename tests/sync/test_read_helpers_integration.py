@@ -32,7 +32,7 @@ async def test_channel_read_direct_peer_without_user_repo(
     ch = SyncChannel(
         channel_id=ch_dir,
         company_id=company_id,
-        space_id=None,
+        namespace="default",
         type="direct",
         name=None,
         is_private=True,
@@ -77,7 +77,7 @@ async def test_channel_read_direct_peer_with_user_repository(
     ch = SyncChannel(
         channel_id=ch_dir2,
         company_id=company_id,
-        space_id=None,
+        namespace="default",
         type="direct",
         name=None,
         is_private=True,
@@ -111,7 +111,7 @@ async def test_channel_read_topic_no_peer_lane_summary(
     ch = SyncChannel(
         channel_id=ch_top,
         company_id=company_id,
-        space_id=None,
+        namespace="default",
         type="topic",
         name="General",
         is_private=False,

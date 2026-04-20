@@ -1,43 +1,58 @@
 /**
- * Sync Messages — двунаправленная курсорная пагинация (before/after) делает
- * `createCursorList` неподходящим. Используем `createAsyncOp` с
- * `extraInitial.byChannelId` slice'ом и `extraReducer` для push-событий.
+ * Sync Messages — фабрики команд + единый slice истории чатов.
  *
- * Все мутации — `transport: 'ws'` + REST-зеркало (`apps/sync/api/messages.py`).
+ * Канон `ui_factories.mdc`: одна `createAsyncOp` = одна WS-команда. Поэтому
+ * на каждую mutating-операцию (send/edit/delete/forward/react/pin/transcribe*)
+ * заведена отдельная фабрика с собственным `commandType` и REST-зеркалом.
+ * Загрузка ленты — `messagesResource` (двунаправленный курсор `before/after`,
+ * один и тот же `commandType: 'sync/messages/list_requested'`); подгрузка
+ * страниц — `messagesLoadOlderOp` / `messagesLoadNewerOp`.
  *
- * Slice (zero-fallback canon, см. `frontend.mdc`):
+ * Доменное состояние ленты (byChannelId, optimistic-pending, reply/edit
+ * режимы, контекстное меню, flash) живёт в slice-only фабрике
+ * `messagesStoreSlice` (`createSlice('sync/messages_store')`). Реагирует на:
+ *   - push-события сервера: `sync/message/created`, `sync/message/updated`,
+ *     `sync/message/deleted`, `sync/message/reaction_changed`,
+ *     `sync/message/status_changed`;
+ *   - локальные UI-события: `sync/messages_store/reply_mode_set`,
+ *     `sync/messages_store/edit_mode_set`,
+ *     `sync/messages_store/context_menu_requested`,
+ *     `sync/messages_store/context_menu_dismissed`,
+ *     `sync/messages_store/optimistic_added`,
+ *     `sync/messages_store/optimistic_failed`,
+ *     `sync/messages_store/flash_requested`,
+ *     `sync/messages_store/flash_cleared`,
+ *     `sync/messages_store/history_older_started`,
+ *     `sync/messages_store/history_newer_started`,
+ *     `sync/messages_store/history_older_loaded`,
+ *     `sync/messages_store/history_newer_loaded`;
+ *   - success загрузок: `sync/messages/succeeded` (первичная страница).
+ *
+ * Slice (zero-fallback canon, `frontend.mdc`):
  *   {
  *     byChannelId: { [channelId]: ChannelData },
  *     replyToMessageId: string | null,
  *     editMessageId: string | null,
  *     contextMenuTarget: { messageId, x, y } | null,
+ *     flashMessageId: string | null,
+ *     flashSeq: number,
  *   }
  *
- * `ChannelData` — гарантированная форма (через `_emptyChannelData()` +
- * `_normalizeMessage()`):
+ * `ChannelData` (через `_emptyChannelData()` + `_normalizeMessage()`):
  *   {
  *     items: Message[],
  *     pendingByLocalId: { [localId]: Message },
  *     loading: false,
+ *     loadingOlder: false,
+ *     loadingNewer: false,
  *     error: null,
  *     pagination: { hasOlder: false, oldestCursor: null, hasNewer: false, newestCursor: null },
  *   }
  *
- * `Message` после `_normalizeMessage`:
- *   contents: array (всегда), reactions: array (всегда), остальные поля как от сервера.
- *
- * Push-события (server -> client): 'sync/message/created',
- * 'sync/message/updated', 'sync/message/deleted',
- * 'sync/message/reaction_changed', 'sync/message/status_changed' —
- * обрабатываются в extraReducer, мутируют byChannelId.
- *
- * UI-события (client only):
- *   'sync/messages/reply_mode_set', 'sync/messages/edit_mode_set',
- *   'sync/messages/context_menu_requested', 'sync/messages/context_menu_dismissed',
- *   'sync/messages/optimistic_added', 'sync/messages/optimistic_failed'.
+ * `Message` после `_normalizeMessage`: `contents: array`, `reactions: array`.
  */
 
-import { createAsyncOp } from '@platform/lib/events/index.js';
+import { createAsyncOp, createSlice } from '@platform/lib/events/index.js';
 
 const EMPTY_CHANNEL_DATA = Object.freeze({
     items: Object.freeze([]),
@@ -86,6 +101,118 @@ export const messagesResource = createAsyncOp({
     silent: true,
     commandType: 'sync/messages/list_requested',
     restMirror: { method: 'GET', path: '/sync/api/v1/channels/:channel_id/messages' },
+});
+
+export const messagesLoadOlderOp = createAsyncOp({
+    name: 'sync/messages_load_older',
+    transport: 'ws',
+    wsTimeoutMs: 10_000,
+    silent: true,
+    commandType: 'sync/messages/list_requested',
+    restMirror: { method: 'GET', path: '/sync/api/v1/channels/:channel_id/messages' },
+});
+
+export const messagesLoadNewerOp = createAsyncOp({
+    name: 'sync/messages_load_newer',
+    transport: 'ws',
+    wsTimeoutMs: 10_000,
+    silent: true,
+    commandType: 'sync/messages/list_requested',
+    restMirror: { method: 'GET', path: '/sync/api/v1/channels/:channel_id/messages' },
+});
+
+export const messagesSendOp = createAsyncOp({
+    name: 'sync/messages_send',
+    transport: 'ws',
+    wsTimeoutMs: 10_000,
+    silent: true,
+    commandType: 'sync/messages/send_requested',
+    restMirror: { method: 'POST', path: '/sync/api/v1/channels/:channel_id/messages' },
+});
+
+export const messagesEditOp = createAsyncOp({
+    name: 'sync/messages_edit',
+    transport: 'ws',
+    wsTimeoutMs: 10_000,
+    silent: true,
+    commandType: 'sync/messages/edit_requested',
+    restMirror: { method: 'PATCH', path: '/sync/api/v1/channels/:channel_id/messages/:message_id' },
+});
+
+export const messagesDeleteOp = createAsyncOp({
+    name: 'sync/messages_delete',
+    transport: 'ws',
+    wsTimeoutMs: 10_000,
+    silent: true,
+    commandType: 'sync/messages/delete_requested',
+    restMirror: { method: 'DELETE', path: '/sync/api/v1/channels/:channel_id/messages/:message_id' },
+});
+
+export const messagesForwardOp = createAsyncOp({
+    name: 'sync/messages_forward',
+    transport: 'ws',
+    wsTimeoutMs: 10_000,
+    silent: true,
+    commandType: 'sync/messages/forward_requested',
+    restMirror: { method: 'POST', path: '/sync/api/v1/channels/:channel_id/messages/:message_id/forward' },
+});
+
+export const messagesReactOp = createAsyncOp({
+    name: 'sync/messages_react',
+    transport: 'ws',
+    wsTimeoutMs: 5_000,
+    silent: true,
+    commandType: 'sync/messages/react_requested',
+    restMirror: { method: 'POST', path: '/sync/api/v1/channels/:channel_id/messages/:message_id/react' },
+});
+
+export const messagesPinOp = createAsyncOp({
+    name: 'sync/messages_pin',
+    transport: 'ws',
+    wsTimeoutMs: 5_000,
+    silent: true,
+    commandType: 'sync/messages/pin_requested',
+    restMirror: { method: 'POST', path: '/sync/api/v1/channels/:channel_id/pins' },
+});
+
+export const messagesMarkReadOp = createAsyncOp({
+    name: 'sync/messages_mark_read',
+    transport: 'ws',
+    wsTimeoutMs: 5_000,
+    silent: true,
+    commandType: 'sync/messages/mark_read_requested',
+    restMirror: { method: 'POST', path: '/sync/api/v1/channels/:channel_id/messages/:message_id/read' },
+});
+
+export const messagesTranscribeAudioOp = createAsyncOp({
+    name: 'sync/messages_transcribe_audio',
+    transport: 'ws',
+    wsTimeoutMs: 10_000,
+    silent: true,
+    commandType: 'sync/messages/transcribe_audio_requested',
+    restMirror: { method: 'POST', path: '/sync/api/v1/channels/:channel_id/messages/:message_id/transcribe' },
+});
+
+export const messagesTranscribeVideoOp = createAsyncOp({
+    name: 'sync/messages_transcribe_video',
+    transport: 'ws',
+    wsTimeoutMs: 10_000,
+    silent: true,
+    commandType: 'sync/messages/transcribe_video_requested',
+    restMirror: { method: 'POST', path: '/sync/api/v1/channels/:channel_id/messages/:message_id/transcribe-video' },
+});
+
+export const messagesTranscribeCallOp = createAsyncOp({
+    name: 'sync/messages_transcribe_call',
+    transport: 'ws',
+    wsTimeoutMs: 10_000,
+    silent: true,
+    commandType: 'sync/messages/transcribe_call_requested',
+    restMirror: { method: 'POST', path: '/sync/api/v1/channels/:channel_id/calls/:call_id/transcribe' },
+});
+
+export const messagesStoreSlice = createSlice({
+    name: 'sync/messages_store',
     extraInitial: {
         byChannelId: Object.freeze({}),
         replyToMessageId: null,
@@ -95,23 +222,6 @@ export const messagesResource = createAsyncOp({
         flashSeq: 0,
     },
     extraEvents: {
-        SEND_REQUESTED: 'send_requested',
-        SEND_SUCCEEDED: 'send_succeeded',
-        SEND_FAILED: 'send_failed',
-        EDIT_REQUESTED: 'edit_requested',
-        EDIT_SUCCEEDED: 'edit_succeeded',
-        DELETE_REQUESTED: 'delete_requested',
-        DELETE_SUCCEEDED: 'delete_succeeded',
-        REACT_REQUESTED: 'react_requested',
-        REACT_SUCCEEDED: 'react_succeeded',
-        PIN_REQUESTED: 'pin_requested',
-        PIN_SUCCEEDED: 'pin_succeeded',
-        FORWARD_REQUESTED: 'forward_requested',
-        FORWARD_SUCCEEDED: 'forward_succeeded',
-        TRANSCRIBE_AUDIO_REQUESTED: 'transcribe_audio_requested',
-        TRANSCRIBE_VIDEO_REQUESTED: 'transcribe_video_requested',
-        TRANSCRIBE_CALL_REQUESTED: 'transcribe_call_requested',
-        MARK_READ_REQUESTED: 'mark_read_requested',
         REPLY_MODE_SET: 'reply_mode_set',
         EDIT_MODE_SET: 'edit_mode_set',
         CONTEXT_MENU_REQUESTED: 'context_menu_requested',
@@ -126,22 +236,18 @@ export const messagesResource = createAsyncOp({
         HISTORY_NEWER_LOADED: 'history_newer_loaded',
     },
     actions: {
-        send: 'send_requested',
-        edit: 'edit_requested',
-        remove: 'delete_requested',
-        react: 'react_requested',
-        pin: 'pin_requested',
-        forward: 'forward_requested',
-        transcribeAudio: 'transcribe_audio_requested',
-        transcribeVideo: 'transcribe_video_requested',
-        transcribeCall: 'transcribe_call_requested',
-        markRead: 'mark_read_requested',
         setReplyMode: 'reply_mode_set',
         setEditMode: 'edit_mode_set',
         showContextMenu: 'context_menu_requested',
         dismissContextMenu: 'context_menu_dismissed',
+        addOptimistic: 'optimistic_added',
+        failOptimistic: 'optimistic_failed',
         flash: 'flash_requested',
         clearFlash: 'flash_cleared',
+        startOlder: 'history_older_started',
+        startNewer: 'history_newer_started',
+        loadedOlder: 'history_older_loaded',
+        loadedNewer: 'history_newer_loaded',
     },
     extraReducer: (state, event) => {
         const updateChannel = (channelId, updater) => {
@@ -163,10 +269,18 @@ export const messagesResource = createAsyncOp({
                 const channelId = firstItem && typeof firstItem.channel_id === 'string' ? firstItem.channel_id : '';
                 if (channelId === '') return state;
                 const items = _normalizeMessages(result.items);
-                const hasOlder = typeof result.has_older === 'boolean' ? result.has_older : false;
-                const hasNewer = typeof result.has_newer === 'boolean' ? result.has_newer : false;
-                const oldestCursor = typeof result.oldest_cursor === 'string' ? result.oldest_cursor : null;
-                const newestCursor = typeof result.newest_cursor === 'string' ? result.newest_cursor : null;
+                const hasOlder = typeof result.has_older === 'boolean'
+                    ? result.has_older
+                    : (typeof result.prev_cursor === 'string' && result.prev_cursor !== '');
+                const hasNewer = typeof result.has_newer === 'boolean'
+                    ? result.has_newer
+                    : (typeof result.next_cursor === 'string' && result.next_cursor !== '');
+                const oldestCursor = typeof result.oldest_cursor === 'string'
+                    ? result.oldest_cursor
+                    : (typeof result.prev_cursor === 'string' ? result.prev_cursor : null);
+                const newestCursor = typeof result.newest_cursor === 'string'
+                    ? result.newest_cursor
+                    : (typeof result.next_cursor === 'string' ? result.next_cursor : null);
                 return updateChannel(channelId, (cur) => ({
                     ...cur,
                     items: Object.freeze(items),
@@ -178,7 +292,7 @@ export const messagesResource = createAsyncOp({
                     }),
                 }));
             }
-            case 'sync/messages/history_older_loaded': {
+            case 'sync/messages_store/history_older_loaded': {
                 const p = event.payload;
                 if (!p || typeof p.channelId !== 'string' || p.channelId === '') return state;
                 if (!Array.isArray(p.items)) return state;
@@ -198,7 +312,7 @@ export const messagesResource = createAsyncOp({
                     };
                 });
             }
-            case 'sync/messages/history_newer_loaded': {
+            case 'sync/messages_store/history_newer_loaded': {
                 const p = event.payload;
                 if (!p || typeof p.channelId !== 'string' || p.channelId === '') return state;
                 if (!Array.isArray(p.items)) return state;
@@ -218,12 +332,12 @@ export const messagesResource = createAsyncOp({
                     };
                 });
             }
-            case 'sync/messages/history_older_started': {
+            case 'sync/messages_store/history_older_started': {
                 const p = event.payload;
                 if (!p || typeof p.channelId !== 'string' || p.channelId === '') return state;
                 return updateChannel(p.channelId, (cur) => ({ ...cur, loadingOlder: true }));
             }
-            case 'sync/messages/history_newer_started': {
+            case 'sync/messages_store/history_newer_started': {
                 const p = event.payload;
                 if (!p || typeof p.channelId !== 'string' || p.channelId === '') return state;
                 return updateChannel(p.channelId, (cur) => ({ ...cur, loadingNewer: true }));
@@ -284,7 +398,7 @@ export const messagesResource = createAsyncOp({
                     return { ...cur, items: Object.freeze(items) };
                 });
             }
-            case 'sync/messages/reply_mode_set': {
+            case 'sync/messages_store/reply_mode_set': {
                 const messageId = event.payload && event.payload.messageId;
                 return {
                     ...state,
@@ -292,7 +406,7 @@ export const messagesResource = createAsyncOp({
                     editMessageId: null,
                 };
             }
-            case 'sync/messages/edit_mode_set': {
+            case 'sync/messages_store/edit_mode_set': {
                 const messageId = event.payload && event.payload.messageId;
                 return {
                     ...state,
@@ -300,7 +414,7 @@ export const messagesResource = createAsyncOp({
                     replyToMessageId: null,
                 };
             }
-            case 'sync/messages/context_menu_requested': {
+            case 'sync/messages_store/context_menu_requested': {
                 const p = event.payload;
                 if (!p || typeof p.messageId !== 'string') return state;
                 return {
@@ -312,10 +426,10 @@ export const messagesResource = createAsyncOp({
                     }),
                 };
             }
-            case 'sync/messages/context_menu_dismissed': {
+            case 'sync/messages_store/context_menu_dismissed': {
                 return { ...state, contextMenuTarget: null };
             }
-            case 'sync/messages/optimistic_added': {
+            case 'sync/messages_store/optimistic_added': {
                 const p = event.payload;
                 if (!p || typeof p.channelId !== 'string' || !p.item) return state;
                 const item = _normalizeMessage(p.item);
@@ -328,14 +442,14 @@ export const messagesResource = createAsyncOp({
                     }),
                 }));
             }
-            case 'sync/messages/flash_requested': {
+            case 'sync/messages_store/flash_requested': {
                 const p = event.payload;
                 if (!p || typeof p.messageId !== 'string' || p.messageId === '') return state;
                 return { ...state, flashMessageId: p.messageId, flashSeq: state.flashSeq + 1 };
             }
-            case 'sync/messages/flash_cleared':
+            case 'sync/messages_store/flash_cleared':
                 return { ...state, flashMessageId: null };
-            case 'sync/messages/optimistic_failed': {
+            case 'sync/messages_store/optimistic_failed': {
                 const p = event.payload;
                 if (!p || typeof p.channelId !== 'string' || typeof p.localId !== 'string') return state;
                 return updateChannel(p.channelId, (cur) => {
@@ -358,32 +472,6 @@ export const messagesResource = createAsyncOp({
                 return state;
         }
     },
-});
-
-/**
- * Двусторонняя пагинация: отдельные ops с уникальным `name` (и slice),
- * но с тем же canonical `commandType` (`sync/messages/list_requested`).
- *
- * Reducer `messagesResource` не читает их `succeeded` — компоненты после
- * успеха явно диспатчат `HISTORY_OLDER_LOADED` / `HISTORY_NEWER_LOADED`
- * с уже распакованным `result.items`.
- */
-export const messagesLoadOlderOp = createAsyncOp({
-    name: 'sync/messages_load_older',
-    transport: 'ws',
-    wsTimeoutMs: 10_000,
-    silent: true,
-    commandType: 'sync/messages/list_requested',
-    restMirror: { method: 'GET', path: '/sync/api/v1/channels/:channel_id/messages' },
-});
-
-export const messagesLoadNewerOp = createAsyncOp({
-    name: 'sync/messages_load_newer',
-    transport: 'ws',
-    wsTimeoutMs: 10_000,
-    silent: true,
-    commandType: 'sync/messages/list_requested',
-    restMirror: { method: 'GET', path: '/sync/api/v1/channels/:channel_id/messages' },
 });
 
 export { _getChannelData, _emptyChannelData };

@@ -23,7 +23,7 @@ class SyncContainer(BaseContainer):
 
     Добавляет Sync-специфичные:
     - SyncDatabase для реляционных данных
-    - Репозитории для spaces, channels, threads, messages, files, git
+    - Репозитории для channels, threads, messages, files, git
     """
 
     def __init__(self, db_url: str, shared_db_url: Optional[str] = None):
@@ -38,11 +38,6 @@ class SyncContainer(BaseContainer):
         return SyncDatabase(self._sync_db_url)
 
     # === Репозитории (sync_db - реляционные) ===
-
-    @lazy
-    def space_repository(self):
-        from apps.sync.db.repositories.space_repository import SpaceRepository
-        return SpaceRepository(db=self.sync_db)
 
     @lazy
     def channel_repository(self):

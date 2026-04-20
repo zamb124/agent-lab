@@ -8,16 +8,14 @@ from apps.sync.api.company import router as company_router
 from apps.sync.api.files_meta import router as files_meta_router
 from apps.sync.api.git import router as git_router
 from apps.sync.api.messages import router as messages_router
-from apps.sync.api.platform_namespaces import router as platform_namespaces_router
-from apps.sync.api.spaces import router as spaces_router
+from apps.sync.api.namespaces import router as namespaces_router
 from apps.sync.api.threads import router as threads_router
 
 
 def get_api_router() -> APIRouter:
     """Собирает API роутеры Sync (файловый роутер добавляется через create_service_app)."""
     api = APIRouter()
-    api.include_router(spaces_router, prefix="/spaces", tags=["spaces"])
-    api.include_router(platform_namespaces_router, prefix="/platform-namespaces", tags=["platform-namespaces"])
+    api.include_router(namespaces_router, prefix="/namespaces", tags=["namespaces"])
     api.include_router(company_router, prefix="/company", tags=["company"])
     api.include_router(channels_router, prefix="/channels", tags=["channels"])
     api.include_router(threads_router, prefix="/threads", tags=["threads"])

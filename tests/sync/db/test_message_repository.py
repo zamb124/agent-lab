@@ -27,6 +27,7 @@ async def test_message_create_and_list(
     ch = SyncChannel(
         channel_id=ch_msg,
         company_id=company_id,
+        namespace="default",
         type="topic",
         name="general",
         is_private=False,
@@ -83,6 +84,7 @@ async def test_message_list_by_thread(
     ch = SyncChannel(
         channel_id=ch_thr,
         company_id=company_id,
+        namespace="default",
         type="topic",
         name="test",
         is_private=False,
@@ -149,6 +151,7 @@ async def test_main_channel_feed_includes_reply_with_parent(
     ch = SyncChannel(
         channel_id=ch_main,
         company_id=company_id,
+        namespace="default",
         type="topic",
         name="main",
         is_private=False,
@@ -203,6 +206,7 @@ async def test_channel_lane_summaries_batch_unread_and_preview(
     ch = SyncChannel(
         channel_id=ch_lane,
         company_id=company_id,
+        namespace="default",
         type="topic",
         name="lane",
         is_private=False,
@@ -270,6 +274,7 @@ async def test_channel_lane_summaries_batch_mention_unread_count(
     ch = SyncChannel(
         channel_id=ch_men,
         company_id=company_id,
+        namespace="default",
         type="topic",
         name="mentions",
         is_private=False,

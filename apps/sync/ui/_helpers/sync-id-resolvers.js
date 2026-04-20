@@ -11,18 +11,6 @@
  */
 
 /**
- * Идентификатор пространства: `space_id` если строка, иначе `id`.
- * Возвращает пустую строку если оба поля отсутствуют (вызывающий обязан
- * проверить пустоту перед использованием как ключа).
- */
-export function resolveSpaceId(space) {
-    if (!space || typeof space !== 'object') return '';
-    if (typeof space.space_id === 'string' && space.space_id !== '') return space.space_id;
-    if (typeof space.id === 'string' && space.id !== '') return space.id;
-    return '';
-}
-
-/**
  * Отображаемое имя участника: `name` если непустая строка, иначе `user_id`.
  * Возвращает пустую строку если member null/undefined.
  */

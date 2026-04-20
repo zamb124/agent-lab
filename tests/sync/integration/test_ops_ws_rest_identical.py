@@ -70,7 +70,6 @@ _DEEP_INTEGRATION_OPS: set[str] = {
     "sync/channels/mark_read_requested",
     "sync/company_members/list_requested",
     "sync/shared_channels/list_requested",
-    "sync/platform_namespaces/list_requested",
 }
 
 
@@ -81,21 +80,6 @@ _DEEP_INTEGRATION_OPS: set[str] = {
 #   "ws_query" — параметры в URL query
 #   "no_body" — без тела
 _REST_MAPPING: dict[str, dict[str, Any]] = {
-    "sync/spaces/list_requested": {
-        "method": "GET",
-        "url": "/sync/api/v1/spaces/",
-        "payload_strategy": "ws_query",
-    },
-    "sync/spaces/create_requested": {
-        "method": "POST",
-        "url": "/sync/api/v1/spaces/",
-        "payload_strategy": "ws_body_field",
-    },
-    "sync/spaces/update_requested": {
-        "method": "PATCH",
-        "url": "/sync/api/v1/spaces/{space_id}",
-        "payload_strategy": "ws_body_field",
-    },
     "sync/channels/list_requested": {
         "method": "GET",
         "url": "/sync/api/v1/channels/",
@@ -117,7 +101,6 @@ _REST_MAPPING: dict[str, dict[str, Any]] = {
 _VOLATILE_TOP_KEYS = frozenset(
     {
         "id",
-        "space_id",
         "channel_id",
         "thread_id",
         "message_id",
@@ -147,6 +130,12 @@ _VOLATILE_TOP_KEYS = frozenset(
         "prev_cursor",
         "creator_avatar_url",
         "avatar_url",
+        # Поля, которые setup намеренно делает разными между WS и REST
+        # вызовами, чтобы обойти DB-уникальность (нельзя создать два канала
+        # с одним именем в одном namespace). Сравнение бизнес-логики идёт по
+        # структуре ответа и остальным полям, а не по строковым значениям.
+        "name",
+        "namespace",
     }
 )
 
@@ -242,43 +231,16 @@ async def _rest_call(
 # ---------------------------------------------------------------------------
 
 
-async def _setup_spaces_list(unique_id, **kwargs) -> tuple[dict[str, Any], dict[str, str]]:
-    return ({"limit": 5, "offset": 0}, {})
+async def _seed_namespace(company_id: str, unique_id: str, suffix: str) -> str:
+    """Создаёт namespace в shared `NamespaceRepository` для тестового канала.
 
+    Пишет напрямую в shared PostgreSQL `namespaces` через репозиторий
+    pytest-процесса. Sync-сервис на 9005 живёт в другом процессе, но
+    видит ту же запись (общая БД `platform_shared`).
+    """
+    from tests.sync.api._helpers import seed_namespace_via_repo
 
-async def _setup_spaces_create(unique_id, **kwargs) -> tuple[dict[str, Any], dict[str, str]]:
-    return (
-        {
-            "body": {
-                "name": f"Identity Space {unique_id}",
-                "description": None,
-                "namespace": f"identity_{unique_id}",
-            }
-        },
-        {},
-    )
-
-
-async def _setup_spaces_update(
-    unique_id, sync_service, sync_auth_headers, **kwargs
-) -> tuple[dict[str, Any], dict[str, str]]:
-    # Создаём space через REST, затем оба апдейта (ws + rest) меняют name.
-    async with AsyncClient(base_url="http://127.0.0.1:9005", timeout=30.0) as client:
-        resp = await client.post(
-            "/sync/api/v1/spaces/",
-            headers=sync_auth_headers,
-            json={
-                "name": f"ToUpdate {unique_id}",
-                "description": None,
-                "namespace": f"upd_{unique_id}",
-            },
-        )
-        assert resp.status_code == 201, resp.text
-        space_id = resp.json()["id"]
-    return (
-        {"space_id": space_id, "body": {"name": f"Updated {unique_id}"}},
-        {"space_id": space_id},
-    )
+    return await seed_namespace_via_repo(company_id, f"ns_{unique_id}_{suffix}")
 
 
 async def _setup_channels_list(unique_id, **kwargs) -> tuple[dict[str, Any], dict[str, str]]:
@@ -286,27 +248,15 @@ async def _setup_channels_list(unique_id, **kwargs) -> tuple[dict[str, Any], dic
 
 
 async def _setup_channels_create(
-    unique_id, sync_service, sync_auth_headers, **kwargs
+    unique_id, sync_service, sync_auth_headers, company_id, **kwargs
 ) -> tuple[dict[str, Any], dict[str, str]]:
-    # Channel типа topic требует space_id — создаём space.
-    async with AsyncClient(base_url="http://127.0.0.1:9005", timeout=30.0) as client:
-        sp = await client.post(
-            "/sync/api/v1/spaces/",
-            headers=sync_auth_headers,
-            json={
-                "name": f"ChSpace {unique_id}",
-                "description": None,
-                "namespace": f"ch_{unique_id}",
-            },
-        )
-        assert sp.status_code == 201, sp.text
-        space_id = sp.json()["id"]
+    namespace = await _seed_namespace(company_id, unique_id, "create")
     return (
         {
             "body": {
                 "type": "topic",
                 "name": f"Identity Channel {unique_id}",
-                "space_id": space_id,
+                "namespace": namespace,
                 "is_private": False,
             }
         },
@@ -315,27 +265,17 @@ async def _setup_channels_create(
 
 
 async def _setup_channels_update(
-    unique_id, sync_service, sync_auth_headers, **kwargs
+    unique_id, sync_service, sync_auth_headers, company_id, **kwargs
 ) -> tuple[dict[str, Any], dict[str, str]]:
+    namespace = await _seed_namespace(company_id, unique_id, "update")
     async with AsyncClient(base_url="http://127.0.0.1:9005", timeout=30.0) as client:
-        sp = await client.post(
-            "/sync/api/v1/spaces/",
-            headers=sync_auth_headers,
-            json={
-                "name": f"UpdSpace {unique_id}",
-                "description": None,
-                "namespace": f"updsp_{unique_id}",
-            },
-        )
-        assert sp.status_code == 201, sp.text
-        space_id = sp.json()["id"]
         ch = await client.post(
             "/sync/api/v1/channels/",
             headers=sync_auth_headers,
             json={
                 "type": "topic",
                 "name": f"ToUpdate {unique_id}",
-                "space_id": space_id,
+                "namespace": namespace,
                 "is_private": False,
             },
         )
@@ -348,9 +288,6 @@ async def _setup_channels_update(
 
 
 _SETUP_BY_OP: dict[str, Any] = {
-    "sync/spaces/list_requested": _setup_spaces_list,
-    "sync/spaces/create_requested": _setup_spaces_create,
-    "sync/spaces/update_requested": _setup_spaces_update,
     "sync/channels/list_requested": _setup_channels_list,
     "sync/channels/create_requested": _setup_channels_create,
     "sync/channels/update_requested": _setup_channels_update,
@@ -372,6 +309,7 @@ async def test_op_via_ws_and_rest_identical(
     sync_auth_token,
     sync_auth_headers,
     sync_db_clean: None,
+    company_id: str,
     unique_id: str,
 ) -> None:
     if canonical_type in _DEEP_INTEGRATION_OPS:
@@ -391,6 +329,7 @@ async def test_op_via_ws_and_rest_identical(
         unique_id=ws_unique,
         sync_service=sync_service,
         sync_auth_headers=sync_auth_headers,
+        company_id=company_id,
     )
     ws_reply = await _ws_call(
         sync_auth_token=sync_auth_token,
@@ -409,6 +348,7 @@ async def test_op_via_ws_and_rest_identical(
         unique_id=rest_unique,
         sync_service=sync_service,
         sync_auth_headers=sync_auth_headers,
+        company_id=company_id,
     )
     rest_result = await _rest_call(
         sync_auth_headers=sync_auth_headers,

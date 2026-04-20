@@ -75,18 +75,22 @@ class TestEntityTypes:
     @pytest.mark.asyncio
     async def test_template_hierarchy(self, crm_client, unique_id, auth_headers_system):
         """Иерархия типов: parent → child"""
+        type_id = f"workshop_{unique_id}"
         await crm_client.post("/crm/api/v1/entity-types/", json={
-            "type_id": f"workshop_{unique_id}",
+            "type_id": type_id,
             "parent_type_id": "note",
             "name": "Воркшоп",
             "prompt": "Воркшоп с практическими заданиями"
         }, headers=auth_headers_system)
-        
-        types_resp = await crm_client.get("/crm/api/v1/entity-types/", headers=auth_headers_system, params={"limit": 1000})
-        types = types_resp.json()["items"]
-        
-        workshop = next((t for t in types if t["type_id"] == f"workshop_{unique_id}"), None)
-        assert workshop is not None
+
+        # Атомарная проверка по ID — не зависит от пагинации общего списка
+        # (в test-БД может накопиться много type'ов из других прогонов).
+        resp = await crm_client.get(
+            f"/crm/api/v1/entity-types/{type_id}", headers=auth_headers_system
+        )
+        assert resp.status_code == 200, resp.text
+        workshop = resp.json()
+        assert workshop["type_id"] == type_id
         assert workshop["parent_type_id"] == "note"
     
     @pytest.mark.asyncio

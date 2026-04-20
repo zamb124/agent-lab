@@ -438,11 +438,6 @@ def taskiq_worker():
     При pytest-xdist используется filelock для синхронизации - 
     первый worker запускает TaskIQ worker, остальные ждут и переиспользуют его.
     """
-    # В Docker worker уже запущен
-    if os.environ.get("EXTERNAL_AGENT_TEST_URL"):
-        yield None
-        return
-    
     # Используем SessionWorkerManager для управления worker
     manager = SessionWorkerManager(
         name="TaskIQ",
@@ -487,11 +482,6 @@ def rag_worker():
     При pytest-xdist используется filelock для синхронизации - 
     первый worker запускает RAGWorker, остальные ждут и переиспользуют его.
     """
-    # В Docker worker уже запущен
-    if os.environ.get("EXTERNAL_AGENT_TEST_URL"):
-        yield None
-        return
-    
     # Один процесс: меньше гонок при нагрузочном прогоне и общей БД/S3.
     _clear_taskiq_stream("rag", "redis://localhost:63792/1")
 
@@ -532,10 +522,6 @@ def sync_worker():
     Логи процесса: stdout /tmp/sync_taskiq_worker_test.log, stderr /tmp/sync_taskiq_worker_test_err.log
     (line-buffered, PYTHONUNBUFFERED=1 у дочернего процесса).
     """
-    if os.environ.get("EXTERNAL_AGENT_TEST_URL"):
-        yield None
-        return
-
     manager = SessionWorkerManager(
         name="SyncTaskIQ",
         lock_file=_SYNC_WORKER_LOCK,
@@ -603,10 +589,6 @@ def crm_worker():
     """
     TaskIQ worker очереди crm (apps.crm_worker.worker:worker_app).
     """
-    if os.environ.get("EXTERNAL_AGENT_TEST_URL"):
-        yield None
-        return
-
     manager = SessionWorkerManager(
         name="CRMTaskIQ",
         lock_file=_CRM_WORKER_LOCK,
@@ -661,12 +643,7 @@ def taskiq_scheduler():
     scope="session" - scheduler запускается один раз на все тесты.
     """
     import tempfile
-    
-    # В Docker scheduler может быть отдельным контейнером
-    if os.environ.get("EXTERNAL_AGENT_TEST_URL"):
-        yield None
-        return
-    
+
     log_dir = tempfile.mkdtemp(prefix="taskiq_scheduler_")
     stdout_log = open(f"{log_dir}/stdout.log", "w")
     stderr_log = open(f"{log_dir}/stderr.log", "w")

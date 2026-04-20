@@ -60,7 +60,7 @@ async def channel_read_from_entity(
     )
     return ChannelRead(
         id=entity.channel_id,
-        space_id=entity.space_id,
+        namespace=entity.namespace,
         type=ChannelType(entity.type),
         name=entity.name,
         is_private=entity.is_private,
@@ -85,7 +85,7 @@ def channel_read_entity_minimal(entity: SyncChannel) -> ChannelRead:
     pids = entity.pinned_message_ids if isinstance(entity.pinned_message_ids, list) else []
     return ChannelRead(
         id=entity.channel_id,
-        space_id=entity.space_id,
+        namespace=entity.namespace,
         type=ChannelType(entity.type),
         name=entity.name,
         is_private=entity.is_private,

@@ -1,7 +1,7 @@
 """
 Нормализация JSON flow / node / tool под контракт без легаси type нод tool|function и tool_type.
 
-Скрипт миграции БД и чтение FlowRepository: перед FlowConfig.model_validate применяется normalize_flow_config_dict.
+FlowRepository вызывает normalize_flow_config_dict перед FlowConfig.model_validate.
 """
 
 from __future__ import annotations

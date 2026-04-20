@@ -13,7 +13,6 @@ from apps.sync.models.messages import (
     MessageEdit,
     TextPlainContent,
 )
-from apps.sync.models.spaces import SpaceCreate
 from apps.sync.realtime.operations import (
     ChannelsCreatePayload,
     MessagesDeletePayload,
@@ -21,37 +20,28 @@ from apps.sync.realtime.operations import (
     MessagesForwardPayload,
     MessagesListPayload,
     MessagesSendPayload,
-    SpacesCreatePayload,
     op_channels_create,
     op_messages_delete,
     op_messages_edit,
     op_messages_forward,
     op_messages_list,
     op_messages_send,
-    op_spaces_create,
 )
 from core.models.identity_models import User
 from core.websocket import WsCommandError
+from tests.sync.integration._helpers import seed_test_namespace
 
 
 async def _setup_two_channels(
     op_user: User, op_container: SyncContainer, unique_id: str
 ) -> tuple[str, str]:
-    space = await op_spaces_create(
-        SpacesCreatePayload(
-            body=SpaceCreate(
-                name=f"EDFSp {unique_id}", description=None, namespace=f"edf_{unique_id}"
-            )
-        ),
-        user=op_user,
-        container=op_container,
-    )
+    namespace = await seed_test_namespace(op_user, op_container, unique_id, suffix="edf")
     ch1 = await op_channels_create(
         ChannelsCreatePayload(
             body=ChannelCreate(
                 type=ChannelType.TOPIC,
                 name=f"From {unique_id}",
-                space_id=space.id,
+                namespace=namespace,
                 is_private=False,
             )
         ),
@@ -63,7 +53,7 @@ async def _setup_two_channels(
             body=ChannelCreate(
                 type=ChannelType.TOPIC,
                 name=f"To {unique_id}",
-                space_id=space.id,
+                namespace=namespace,
                 is_private=False,
             )
         ),

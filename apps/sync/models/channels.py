@@ -30,9 +30,8 @@ class ChannelRead(BaseModel):
     """Канал или чат (единая сущность)."""
 
     id: str = Field(description="Идентификатор канала.")
-    space_id: str | None = Field(
-        default=None,
-        description="Пространство, в котором живёт канал (для topic/group).",
+    namespace: str = Field(
+        description="Платформенный namespace, в котором живёт канал (1:1 c shared NamespaceRepository).",
     )
     type: ChannelType = Field(description="Тип канала.")
     name: str | None = Field(
@@ -93,9 +92,13 @@ class ChannelRead(BaseModel):
 class ChannelCreate(BaseModel):
     """Параметры для создания канала/чата."""
 
-    space_id: str | None = Field(
+    namespace: str | None = Field(
         default=None,
-        description="Пространство, если канал привязан к Space.",
+        description=(
+            "Платформенный namespace (1:1 с shared NamespaceRepository). "
+            "Для topic обязателен; для direct/calendar_meeting если опущен — "
+            "используется 'default'."
+        ),
     )
     type: ChannelType = Field(description="Тип создаваемого канала.")
     name: str | None = Field(
@@ -112,11 +115,17 @@ class ChannelCreate(BaseModel):
     )
     transcribe_voice_messages: bool | None = Field(
         default=None,
-        description="Если задано — перекрывает значение с пространства; иначе при space_id — как у space, без space — false.",
+        description=(
+            "Если задано — оверрайд над дефолтом из Namespace.sync_settings. "
+            "Иначе берётся `Namespace.sync_settings.transcribe_voice_messages` или false."
+        ),
     )
     speech_to_chat_enabled: bool | None = Field(
         default=None,
-        description="Если задано — перекрывает значение с пространства; иначе при space_id — как у space, без space — false.",
+        description=(
+            "Если задано — оверрайд над дефолтом из Namespace.sync_settings. "
+            "Иначе берётся `Namespace.sync_settings.speech_to_chat_enabled` или false."
+        ),
     )
 
 

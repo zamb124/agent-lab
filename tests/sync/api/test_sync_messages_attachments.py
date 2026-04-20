@@ -6,31 +6,20 @@ import io
 
 import pytest
 
+from tests.sync.api._helpers import create_topic_channel_via_http
 
-async def _create_topic_channel(sync_client, sync_auth_headers, unique_id: str) -> str:
-    pr = await sync_client.post(
-        "/sync/api/v1/spaces/",
-        headers=sync_auth_headers,
-        json={
-            "name": "AttachSpace",
-            "description": None,
-            "namespace": f"attach_{unique_id}",
-        },
+
+async def _create_topic_channel(
+    sync_client, sync_auth_headers, company_id: str, unique_id: str
+) -> str:
+    return await create_topic_channel_via_http(
+        sync_client,
+        sync_auth_headers,
+        company_id=company_id,
+        unique_id=unique_id,
+        suffix="attach",
+        channel_name="attach_chan",
     )
-    assert pr.status_code == 201
-    space_id = pr.json()["id"]
-    cr = await sync_client.post(
-        "/sync/api/v1/channels/",
-        headers=sync_auth_headers,
-        json={
-            "space_id": space_id,
-            "type": "topic",
-            "name": "attach_chan",
-            "is_private": False,
-        },
-    )
-    assert cr.status_code == 201
-    return cr.json()["id"]
 
 
 @pytest.mark.asyncio
@@ -38,9 +27,10 @@ async def test_http_send_message_file_document_list_round_trip(
     sync_client,
     sync_auth_headers,
     sync_db_clean: None,
+    company_id: str,
     unique_id: str,
 ) -> None:
-    channel_id = await _create_topic_channel(sync_client, sync_auth_headers, unique_id)
+    channel_id = await _create_topic_channel(sync_client, sync_auth_headers, company_id, unique_id)
 
     pdf_bytes = b"%PDF-1.4\n1 0 obj<<>>endobj\ntrailer<<>>\n%%EOF"
     up = await sync_client.post(
@@ -96,9 +86,10 @@ async def test_http_send_message_file_image_with_text_plain(
     sync_client,
     sync_auth_headers,
     sync_db_clean: None,
+    company_id: str,
     unique_id: str,
 ) -> None:
-    channel_id = await _create_topic_channel(sync_client, sync_auth_headers, unique_id)
+    channel_id = await _create_topic_channel(sync_client, sync_auth_headers, company_id, unique_id)
 
     jpeg_bytes = (
         b"\xff\xd8\xff\xe0\x00\x10JFIF\x00\x01\x01\x00\x00\x01\x00\x01\x00\x00"
@@ -164,9 +155,10 @@ async def test_http_send_message_two_file_attachments_one_message(
     sync_client,
     sync_auth_headers,
     sync_db_clean: None,
+    company_id: str,
     unique_id: str,
 ) -> None:
-    channel_id = await _create_topic_channel(sync_client, sync_auth_headers, unique_id)
+    channel_id = await _create_topic_channel(sync_client, sync_auth_headers, company_id, unique_id)
 
     up1 = await sync_client.post(
         "/sync/api/v1/files/",

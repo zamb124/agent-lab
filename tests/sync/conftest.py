@@ -53,9 +53,8 @@ from apps.sync.db.repositories.git_resource_ref_repository import GitResourceRef
 from apps.sync.db.repositories.message_repository import MessageRepository
 from apps.sync.db.repositories.meeting_repository import CallRecordingRepository
 from apps.sync.db.repositories.call_speech_egress_repository import CallSpeechEgressTrackRepository
-from apps.sync.db.repositories.space_repository import SpaceRepository
 from apps.sync.db.repositories.thread_repository import ThreadRepository
-from core.models.identity_models import Company, User
+from core.models.identity_models import Company, Namespace, User
 from core.utils.tokens import get_token_service
 
 _SYNC_REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -224,9 +223,27 @@ def company_id(unique_id: str) -> str:
     return f"test_company_{unique_id}"
 
 
-@pytest.fixture()
-def space_repo(sync_database: SyncDatabase) -> SpaceRepository:
-    return SpaceRepository(db=sync_database)
+@pytest_asyncio.fixture()
+async def sync_namespace(sync_auth_token: str, company_id: str, unique_id: str) -> str:
+    """Создаёт уникальный namespace в shared `NamespaceRepository` и возвращает его имя.
+
+    Sync-каналы привязываются к платформенному namespace (1:1); тесты,
+    создающие topic-канал, должны использовать этот namespace вместо
+    устаревшего `space_id`.
+    """
+    from apps.sync.container import get_sync_container
+
+    container = get_sync_container()
+    name = f"ns_{unique_id}"
+    await container.namespace_repository.set(
+        Namespace(
+            name=name,
+            company_id=company_id,
+            description=f"sync test namespace {unique_id}",
+            is_default=False,
+        )
+    )
+    return name
 
 
 @pytest.fixture()

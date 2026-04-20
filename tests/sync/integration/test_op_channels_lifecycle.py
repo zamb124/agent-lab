@@ -9,7 +9,6 @@ import pytest
 
 from apps.sync.container import SyncContainer
 from apps.sync.models.channels import ChannelCreate, ChannelType, ChannelUpdate
-from apps.sync.models.spaces import SpaceCreate
 from apps.sync.realtime.operations import (
     ChannelsAddMemberPayload,
     ChannelsCreatePayload,
@@ -18,7 +17,6 @@ from apps.sync.realtime.operations import (
     ChannelsMarkReadPayload,
     ChannelsTypingPayload,
     ChannelsUpdatePayload,
-    SpacesCreatePayload,
     op_channels_add_member,
     op_channels_create,
     op_channels_list,
@@ -26,10 +24,34 @@ from apps.sync.realtime.operations import (
     op_channels_mark_read,
     op_channels_typing,
     op_channels_update,
-    op_spaces_create,
 )
 from core.models.identity_models import User
 from core.websocket import WsCommandError
+from tests.sync.integration._helpers import seed_test_namespace
+
+
+async def _create_topic(
+    op_user: User,
+    op_container: SyncContainer,
+    unique_id: str,
+    *,
+    suffix: str,
+    name: str,
+) -> tuple[str, str]:
+    namespace = await seed_test_namespace(op_user, op_container, unique_id, suffix=suffix)
+    channel = await op_channels_create(
+        ChannelsCreatePayload(
+            body=ChannelCreate(
+                type=ChannelType.TOPIC,
+                name=name,
+                namespace=namespace,
+                is_private=False,
+            )
+        ),
+        user=op_user,
+        container=op_container,
+    )
+    return channel.id, namespace
 
 
 @pytest.mark.asyncio
@@ -39,36 +61,15 @@ async def test_op_channels_create_topic_and_list(
     op_context: None,
     unique_id: str,
 ) -> None:
-    space = await op_spaces_create(
-        SpacesCreatePayload(
-            body=SpaceCreate(
-                name=f"ChLifeSp {unique_id}", description=None, namespace=f"chl_{unique_id}"
-            )
-        ),
-        user=op_user,
-        container=op_container,
+    channel_id, namespace = await _create_topic(
+        op_user, op_container, unique_id, suffix="chl", name=f"Topic {unique_id}"
     )
-    channel = await op_channels_create(
-        ChannelsCreatePayload(
-            body=ChannelCreate(
-                type=ChannelType.TOPIC,
-                name=f"Topic {unique_id}",
-                space_id=space.id,
-                is_private=False,
-            )
-        ),
-        user=op_user,
-        container=op_container,
-    )
-    assert channel.type == ChannelType.TOPIC
-    assert channel.name == f"Topic {unique_id}"
-
     listing = await op_channels_list(
-        ChannelsListPayload(space_id=space.id, limit=10, offset=0),
+        ChannelsListPayload(namespace=namespace, limit=10, offset=0),
         user=op_user,
         container=op_container,
     )
-    assert any(c.id == channel.id for c in listing.items)
+    assert any(c.id == channel_id for c in listing.items)
 
 
 @pytest.mark.asyncio
@@ -80,12 +81,11 @@ async def test_op_channels_create_direct_with_peer(
     sync_auth_token_user2: str,
     unique_id: str,
 ) -> None:
-    _ = sync_auth_token_user2  # обеспечивает создание user2 в shared
+    _ = sync_auth_token_user2
     direct = await op_channels_create(
         ChannelsCreatePayload(
             body=ChannelCreate(
                 type=ChannelType.DIRECT,
-                space_id=None,
                 member_ids=[op_user2.user_id],
                 is_private=True,
             )
@@ -103,30 +103,12 @@ async def test_op_channels_update_renames_channel(
     op_context: None,
     unique_id: str,
 ) -> None:
-    space = await op_spaces_create(
-        SpacesCreatePayload(
-            body=SpaceCreate(
-                name=f"UpdChSp {unique_id}", description=None, namespace=f"upch_{unique_id}"
-            )
-        ),
-        user=op_user,
-        container=op_container,
-    )
-    channel = await op_channels_create(
-        ChannelsCreatePayload(
-            body=ChannelCreate(
-                type=ChannelType.TOPIC,
-                name=f"OldName {unique_id}",
-                space_id=space.id,
-                is_private=False,
-            )
-        ),
-        user=op_user,
-        container=op_container,
+    channel_id, _ = await _create_topic(
+        op_user, op_container, unique_id, suffix="upch", name=f"OldName {unique_id}"
     )
     updated = await op_channels_update(
         ChannelsUpdatePayload(
-            channel_id=channel.id,
+            channel_id=channel_id,
             body=ChannelUpdate(name=f"NewName {unique_id}"),
         ),
         user=op_user,
@@ -142,30 +124,11 @@ async def test_op_channels_mark_read_no_op_when_no_messages(
     op_context: None,
     unique_id: str,
 ) -> None:
-    space = await op_spaces_create(
-        SpacesCreatePayload(
-            body=SpaceCreate(
-                name=f"MRSp {unique_id}", description=None, namespace=f"mr_{unique_id}"
-            )
-        ),
-        user=op_user,
-        container=op_container,
+    channel_id, _ = await _create_topic(
+        op_user, op_container, unique_id, suffix="mr", name=f"MRCh {unique_id}"
     )
-    channel = await op_channels_create(
-        ChannelsCreatePayload(
-            body=ChannelCreate(
-                type=ChannelType.TOPIC,
-                name=f"MRCh {unique_id}",
-                space_id=space.id,
-                is_private=False,
-            )
-        ),
-        user=op_user,
-        container=op_container,
-    )
-    # Не должно бросать — пустой канал, mark_read ставит read_at = now.
     result = await op_channels_mark_read(
-        ChannelsMarkReadPayload(channel_id=channel.id),
+        ChannelsMarkReadPayload(channel_id=channel_id),
         user=op_user,
         container=op_container,
     )
@@ -182,31 +145,12 @@ async def test_op_channels_typing_requires_membership(
     unique_id: str,
 ) -> None:
     _ = sync_auth_token_user2
-    # user2 не в канале → forbidden.
-    space = await op_spaces_create(
-        SpacesCreatePayload(
-            body=SpaceCreate(
-                name=f"TypSp {unique_id}", description=None, namespace=f"typ_{unique_id}"
-            )
-        ),
-        user=op_user,
-        container=op_container,
-    )
-    channel = await op_channels_create(
-        ChannelsCreatePayload(
-            body=ChannelCreate(
-                type=ChannelType.TOPIC,
-                name=f"Typ {unique_id}",
-                space_id=space.id,
-                is_private=False,
-            )
-        ),
-        user=op_user,
-        container=op_container,
+    channel_id, _ = await _create_topic(
+        op_user, op_container, unique_id, suffix="typ", name=f"Typ {unique_id}"
     )
     with pytest.raises(WsCommandError) as exc_info:
         await op_channels_typing(
-            ChannelsTypingPayload(channel_id=channel.id, typing=True, thread_id=None),
+            ChannelsTypingPayload(channel_id=channel_id, typing=True, thread_id=None),
             user=op_user2,
             container=op_container,
         )
@@ -223,30 +167,12 @@ async def test_op_channels_add_member_then_list_members(
     unique_id: str,
 ) -> None:
     _ = sync_auth_token_user2
-    space = await op_spaces_create(
-        SpacesCreatePayload(
-            body=SpaceCreate(
-                name=f"AMSp {unique_id}", description=None, namespace=f"am_{unique_id}"
-            )
-        ),
-        user=op_user,
-        container=op_container,
-    )
-    channel = await op_channels_create(
-        ChannelsCreatePayload(
-            body=ChannelCreate(
-                type=ChannelType.TOPIC,
-                name=f"AMCh {unique_id}",
-                space_id=space.id,
-                is_private=False,
-            )
-        ),
-        user=op_user,
-        container=op_container,
+    channel_id, _ = await _create_topic(
+        op_user, op_container, unique_id, suffix="am", name=f"AMCh {unique_id}"
     )
     member = await op_channels_add_member(
         ChannelsAddMemberPayload(
-            channel_id=channel.id, user_id=op_user2.user_id, role="member"
+            channel_id=channel_id, user_id=op_user2.user_id, role="member"
         ),
         user=op_user,
         container=op_container,
@@ -254,7 +180,7 @@ async def test_op_channels_add_member_then_list_members(
     assert member.user_id == op_user2.user_id
 
     listing = await op_channels_list_members(
-        ChannelsListMembersPayload(channel_id=channel.id),
+        ChannelsListMembersPayload(channel_id=channel_id),
         user=op_user,
         container=op_container,
     )

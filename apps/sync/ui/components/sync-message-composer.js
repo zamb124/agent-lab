@@ -1,14 +1,18 @@
 /**
  * sync-message-composer — поле ввода с поддержкой:
- *   - reply mode (subscribe 'sync/messages/reply_mode_set')
- *   - edit mode (subscribe 'sync/messages/edit_mode_set')
+ *   - reply mode (subscribe 'sync/messages_store/reply_mode_set')
+ *   - edit mode (subscribe 'sync/messages_store/edit_mode_set')
  *   - file upload (drag-and-drop, paste, кнопка)
  *   - voice recording (MediaRecorder)
  *   - mention autocomplete (popup при '@')
  *   - typing notify (debounce 1500ms)
  *   - length limit SYNC_MESSAGE_TEXT_MAX_CHARS
  *
- * Все мутации — useOp('sync/messages').actions.send|edit (+ useOp('sync/file_upload')).
+ * Отправка/редактирование — отдельные `createAsyncOp` фабрики:
+ * `useOp('sync/messages_send')`, `useOp('sync/messages_edit')`.
+ * Локальный optimistic-state — slice `sync/messages_store`
+ * (`useSlice('sync/messages_store').addOptimistic / failOptimistic / setReplyMode / setEditMode`).
+ * Загрузка файла — `useOp('sync/file_upload')`.
  */
 
 import { html, css } from 'lit';
@@ -135,20 +139,22 @@ export class SyncMessageComposer extends PlatformElement {
         this._typingTimer = null;
         this._emojiOpen = false;
         this._mentionIndex = 0;
-        this._messages = this.useOp('sync/messages');
+        this._send = this.useOp('sync/messages_send');
+        this._edit = this.useOp('sync/messages_edit');
         this._upload = this.useOp('sync/file_upload');
         this._typing = this.useOp('sync/channel_typing');
         this._members = this.useResource('sync/company_members', { autoload: true });
-        this._messagesSel = this.select((s) => s.syncMessages);
+        this._store = this.useSlice('sync/messages_store');
+        this._messagesStoreSel = this.select((s) => s.syncMessagesStore);
         this._authSel = this.select((s) => s.auth && s.auth.user);
-        this.useEvent('sync/messages/reply_mode_set', () => this.requestUpdate());
-        this.useEvent('sync/messages/edit_mode_set', (event) => this._onEditMode(event));
+        this.useEvent('sync/messages_store/reply_mode_set', () => this.requestUpdate());
+        this.useEvent('sync/messages_store/edit_mode_set', (event) => this._onEditMode(event));
     }
 
     _onEditMode(event) {
         const messageId = event && event.payload && event.payload.messageId;
         if (typeof messageId !== 'string') return;
-        const slice = this._messagesSel.value;
+        const slice = this._messagesStoreSel.value;
         const channelData = slice && slice.byChannelId && slice.byChannelId[this.channelId];
         if (!channelData || !Array.isArray(channelData.items)) return;
         const message = channelData.items.find((m) => m.message_id === messageId);
@@ -309,7 +315,7 @@ export class SyncMessageComposer extends PlatformElement {
     }
 
     _replyMessage() {
-        const slice = this._messagesSel.value;
+        const slice = this._messagesStoreSel.value;
         const replyId = slice && slice.replyToMessageId;
         if (typeof replyId !== 'string' || replyId === '') return null;
         const channelData = slice && slice.byChannelId && slice.byChannelId[this.channelId];
@@ -319,14 +325,14 @@ export class SyncMessageComposer extends PlatformElement {
     }
 
     _editMessageId() {
-        const slice = this._messagesSel.value;
+        const slice = this._messagesStoreSel.value;
         if (!slice || typeof slice.editMessageId !== 'string') return null;
         return slice.editMessageId;
     }
 
     _cancelMode() {
-        this.dispatch('sync/messages/reply_mode_set', { messageId: null });
-        this.dispatch('sync/messages/edit_mode_set', { messageId: null });
+        this._store.setReplyMode({ messageId: null });
+        this._store.setEditMode({ messageId: null });
         this._draft = '';
     }
 
@@ -338,7 +344,7 @@ export class SyncMessageComposer extends PlatformElement {
 
         const editId = this._editMessageId();
         if (editId) {
-            this._messages.actions.edit({
+            await this._edit.run({
                 channel_id: this.channelId,
                 message_id: editId,
                 body: { contents: [{ type: 'text/plain', data: { text } }] },
@@ -366,7 +372,7 @@ export class SyncMessageComposer extends PlatformElement {
         if (reply) body.parent_message_id = reply.message_id;
 
         const me = this._authSel.value;
-        this.dispatch('sync/messages/optimistic_added', {
+        this._store.addOptimistic({
             channelId: this.channelId,
             item: {
                 local_id: localId,
@@ -380,12 +386,12 @@ export class SyncMessageComposer extends PlatformElement {
         });
 
         try {
-            await this._messages.actions.send({ channel_id: this.channelId, body });
+            await this._send.run({ channel_id: this.channelId, body });
         } catch (err) {
             const errorMessage = err && typeof err.message === 'string' && err.message !== ''
                 ? err.message
                 : this.t('composer.send_failed_default');
-            this.dispatch('sync/messages/optimistic_failed', {
+            this._store.failOptimistic({
                 channelId: this.channelId,
                 localId,
                 message: errorMessage,
@@ -394,7 +400,7 @@ export class SyncMessageComposer extends PlatformElement {
 
         this._draft = '';
         this._attachments = [];
-        if (reply) this.dispatch('sync/messages/reply_mode_set', { messageId: null });
+        if (reply) this._store.setReplyMode({ messageId: null });
     }
 
     render() {

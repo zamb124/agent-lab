@@ -1,9 +1,12 @@
 """
 Alembic env для sync БД.
 
-Управляет таблицами: sync_spaces, sync_channels, sync_channel_members,
-sync_threads, sync_messages, sync_message_contents, sync_message_files,
-sync_files, sync_git_resource_refs.
+Управляет таблицами: sync_channels, sync_channel_members, sync_threads,
+sync_messages, sync_message_contents, sync_message_files, sync_files,
+sync_git_resource_refs, sync_calls, sync_call_participants, sync_call_links,
+sync_call_recordings, sync_call_speech_egress_tracks. Привязка к
+платформенному `namespace` — строковое поле `sync_channels.namespace`
+(1:1 с shared `NamespaceRepository`); отдельной таблицы пространств нет.
 """
 
 import asyncio
@@ -19,9 +22,11 @@ from alembic import context
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 
 from apps.sync.db.models import (  # noqa: F401
-    Base, SyncSpace, SyncChannel, SyncChannelMember,
+    Base, SyncChannel, SyncChannelMember,
     SyncThread, SyncMessage, SyncMessageContent,
     SyncMessageFile, SyncFile, SyncGitResourceRef,
+    SyncCall, SyncCallParticipant, SyncCallLink, SyncCallRecording,
+    SyncCallSpeechEgressTrack,
 )
 
 config = context.config
@@ -33,9 +38,11 @@ if config.config_file_name is not None:
 target_metadata = Base.metadata
 
 MANAGED_TABLES = {
-    "sync_spaces", "sync_channels", "sync_channel_members",
+    "sync_channels", "sync_channel_members",
     "sync_threads", "sync_messages", "sync_message_contents",
     "sync_message_files", "sync_files", "sync_git_resource_refs",
+    "sync_calls", "sync_call_participants", "sync_call_links",
+    "sync_call_recordings", "sync_call_speech_egress_tracks",
 }
 
 

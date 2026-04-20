@@ -10,6 +10,8 @@ from urllib.parse import urlparse
 from uuid import uuid4
 
 import pytest
+
+from tests.sync.api._helpers import seed_namespace_via_repo
 from httpx import ASGITransport, AsyncClient
 
 from apps.sync.db.models import SyncCall
@@ -108,27 +110,19 @@ async def test_full_link_flow(
     sync_client,
     sync_auth_headers,
     sync_db_clean: None,
+    company_id: str,
     unique_id: str,
 ) -> None:
     """
-    Полный flow: создание space → channel → ссылка → публичное чтение info.
+    Полный flow: создание namespace → channel → ссылка → публичное чтение info.
     """
-    space_r = await sync_client.post(
-        "/sync/api/v1/spaces/",
-        headers=sync_auth_headers,
-        json={
-            "name": "CallTestSpace",
-            "description": None,
-            "namespace": f"call_{unique_id}",
-        },
-    )
-    assert space_r.status_code == 201
-    space_id = space_r.json()["id"]
+    namespace = f"ns_{unique_id}_call"
+    await seed_namespace_via_repo(company_id, namespace)
 
     ch_r = await sync_client.post(
         "/sync/api/v1/channels/",
         headers=sync_auth_headers,
-        json={"name": "CallTestChannel", "type": "topic", "space_id": space_id},
+        json={"name": "CallTestChannel", "type": "topic", "namespace": namespace},
     )
     assert ch_r.status_code == 201
     channel_id = ch_r.json()["id"]
@@ -161,6 +155,7 @@ async def test_join_link_flow_registered_and_guest(
     sync_client,
     sync_auth_headers,
     sync_db_clean: None,
+    company_id: str,
     unique_id: str,
 ) -> None:
     """
@@ -169,21 +164,13 @@ async def test_join_link_flow_registered_and_guest(
     Один space/channel/link создаётся один раз — оба входа переиспользуют
     одну LiveKit комнату. Умещается в 5s: одна пара TaskIQ-вызовов + LiveKit.
     """
-    space_r = await sync_client.post(
-        "/sync/api/v1/spaces/",
-        headers=sync_auth_headers,
-        json={
-            "name": "JoinFlowSpace",
-            "description": None,
-            "namespace": f"join_{unique_id}",
-        },
-    )
-    assert space_r.status_code == 201
+    namespace = f"ns_{unique_id}_join"
+    await seed_namespace_via_repo(company_id, namespace)
 
     ch_r = await sync_client.post(
         "/sync/api/v1/channels/",
         headers=sync_auth_headers,
-        json={"name": "JoinFlowChannel", "type": "topic", "space_id": space_r.json()["id"]},
+        json={"name": "JoinFlowChannel", "type": "topic", "namespace": namespace},
     )
     assert ch_r.status_code == 201
     channel_id = ch_r.json()["id"]
@@ -250,21 +237,13 @@ async def test_create_link_with_call_id_guest_joins_same_livekit_call(
     unique_id: str,
 ) -> None:
     """Ссылка с call_id (как из оверлея) — гость попадает в тот же звонок, без комнаты link-*."""
-    space_r = await sync_client.post(
-        "/sync/api/v1/spaces/",
-        headers=sync_auth_headers,
-        json={
-            "name": "LinkAttachSpace",
-            "description": None,
-            "namespace": f"linkatt_{unique_id}",
-        },
-    )
-    assert space_r.status_code == 201
+    namespace = f"ns_{unique_id}_linkatt"
+    await seed_namespace_via_repo(company_id, namespace)
 
     ch_r = await sync_client.post(
         "/sync/api/v1/channels/",
         headers=sync_auth_headers,
-        json={"name": "LinkAttachCh", "type": "topic", "space_id": space_r.json()["id"]},
+        json={"name": "LinkAttachCh", "type": "topic", "namespace": namespace},
     )
     assert ch_r.status_code == 201
     channel_id = ch_r.json()["id"]
@@ -317,27 +296,18 @@ async def test_create_link_call_id_wrong_channel_returns_400(
     company_id: str,
     unique_id: str,
 ) -> None:
-    space_r = await sync_client.post(
-        "/sync/api/v1/spaces/",
-        headers=sync_auth_headers,
-        json={
-            "name": "LinkWrongChSpace",
-            "description": None,
-            "namespace": f"linkwrong_{unique_id}",
-        },
-    )
-    assert space_r.status_code == 201
-    space_id = space_r.json()["id"]
+    namespace = f"ns_{unique_id}_linkwrong"
+    await seed_namespace_via_repo(company_id, namespace)
 
     ch1 = await sync_client.post(
         "/sync/api/v1/channels/",
         headers=sync_auth_headers,
-        json={"name": "ChOne", "type": "topic", "space_id": space_id},
+        json={"name": "ChOne", "type": "topic", "namespace": namespace},
     )
     ch2 = await sync_client.post(
         "/sync/api/v1/channels/",
         headers=sync_auth_headers,
-        json={"name": "ChTwo", "type": "topic", "space_id": space_id},
+        json={"name": "ChTwo", "type": "topic", "namespace": namespace},
     )
     assert ch1.status_code == 201 and ch2.status_code == 201
     channel_a = ch1.json()["id"]
@@ -372,23 +342,16 @@ async def test_short_join_url_redirects_to_sync_join(
     frontend_app,
     sync_auth_headers,
     sync_db_clean: None,
+    company_id: str,
     unique_id: str,
 ) -> None:
     """GET /l/{code} на frontend (shared БД) отдаёт 303 на /sync/join/{link_token}."""
-    space_r = await sync_client.post(
-        "/sync/api/v1/spaces/",
-        headers=sync_auth_headers,
-        json={
-            "name": "ShortLinkSpace",
-            "description": None,
-            "namespace": f"short_{unique_id}",
-        },
-    )
-    assert space_r.status_code == 201
+    namespace = f"ns_{unique_id}_short"
+    await seed_namespace_via_repo(company_id, namespace)
     ch_r = await sync_client.post(
         "/sync/api/v1/channels/",
         headers=sync_auth_headers,
-        json={"name": "ShortLinkCh", "type": "topic", "space_id": space_r.json()["id"]},
+        json={"name": "ShortLinkCh", "type": "topic", "namespace": namespace},
     )
     assert ch_r.status_code == 201
     link_r = await sync_client.post(

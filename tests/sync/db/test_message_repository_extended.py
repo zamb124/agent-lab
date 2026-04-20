@@ -26,6 +26,7 @@ async def test_get_by_id_for_company(
     ch = SyncChannel(
         channel_id=ch_g,
         company_id=company_id,
+        namespace="default",
         type="topic",
         name="t",
         is_private=False,
@@ -65,6 +66,7 @@ async def test_replace_contents_soft_delete_reactions_max_sent(
     ch = SyncChannel(
         channel_id=ch_r,
         company_id=company_id,
+        namespace="default",
         type="topic",
         name="t",
         is_private=False,
@@ -127,6 +129,7 @@ async def test_get_thread_root_chain(
     ch = SyncChannel(
         channel_id=ch_trt,
         company_id=company_id,
+        namespace="default",
         type="topic",
         name="t",
         is_private=False,
@@ -191,6 +194,7 @@ async def test_list_by_channel_pagination(
     ch = SyncChannel(
         channel_id=ch_pg,
         company_id=company_id,
+        namespace="default",
         type="topic",
         name="t",
         is_private=False,

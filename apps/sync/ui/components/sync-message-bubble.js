@@ -10,14 +10,14 @@
  * определяется родителем (sync-message-list). Аватар и имя показываются
  * только в position='first'|'single' и только для чужих сообщений.
  *
- * Контекстное меню: правая кнопка / long-press 450ms на touch — диспатчит
- * messagesResource.events.CONTEXT_MENU_REQUESTED. Сама модалка — отдельный
+ * Контекстное меню: правая кнопка / long-press 450ms на touch — action
+ * `showContextMenu` slice'а `sync/messages_store`. Сама модалка — отдельный
  * компонент `<sync-message-context-menu>`.
  *
  * Selection mode: chat_ui.selectionMode=true → показ чекбокса, клик
  * переключает выделение через chat_ui.toggleMessageSelection.
  *
- * Flash: messages.flashMessageId/flashSeq → анимация подсветки.
+ * Flash: syncMessagesStore.flashMessageId/flashSeq → анимация подсветки.
  * Deletion: chat_ui.deletingMessageIds.includes(message_id) → fade-out.
  */
 
@@ -324,10 +324,14 @@ export class SyncMessageBubble extends PlatformElement {
         this.channelType = '';
         this.position = 'single';
         this.members = [];
-        this._messages = this.useOp('sync/messages');
+        this._store = this.useSlice('sync/messages_store');
+        this._react = this.useOp('sync/messages_react');
+        this._transcribeAudio = this.useOp('sync/messages_transcribe_audio');
+        this._transcribeVideo = this.useOp('sync/messages_transcribe_video');
+        this._transcribeCall = this.useOp('sync/messages_transcribe_call');
         this._callAccept = this.useOp('sync/calls_accept');
         this._chatUi = this.useSlice('sync/chat_ui');
-        this._messagesSlice = this.select((s) => s.syncMessages);
+        this._messagesStoreSel = this.select((s) => s.syncMessagesStore);
         this._channelsSel = this.select((s) => s.syncChannels);
         this._longPressTimer = null;
         this._longPressTriggered = false;
@@ -345,7 +349,7 @@ export class SyncMessageBubble extends PlatformElement {
         const selectionMode = !!(slice && slice.selectionMode === true);
         this.toggleAttribute('data-selection', selectionMode);
         const messageId = this.message && this.message.message_id;
-        const flashId = this._messagesSlice.value && this._messagesSlice.value.flashMessageId;
+        const flashId = this._messagesStoreSel.value && this._messagesStoreSel.value.flashMessageId;
         this.toggleAttribute('data-flash', !!(messageId && flashId === messageId));
         const deleting = !!(slice && Array.isArray(slice.deletingMessageIds)
             && messageId && slice.deletingMessageIds.includes(messageId));
@@ -376,7 +380,7 @@ export class SyncMessageBubble extends PlatformElement {
     _showContextMenu(x, y) {
         const messageId = this.message && this.message.message_id;
         if (typeof messageId !== 'string') return;
-        this._messages.actions.showContextMenu({
+        this._store.showContextMenu({
             messageId,
             x: typeof x === 'number' ? x : 0,
             y: typeof y === 'number' ? y : 0,
@@ -410,7 +414,7 @@ export class SyncMessageBubble extends PlatformElement {
 
     _onReaction(emoji) {
         if (!this.message || typeof emoji !== 'string' || emoji === '') return;
-        this._messages.actions.react({
+        this._react.run({
             channel_id: this.message.channel_id,
             message_id: this.message.message_id,
             emoji,
@@ -419,7 +423,7 @@ export class SyncMessageBubble extends PlatformElement {
 
     _onTranscribeAudio() {
         if (!this.message) return;
-        this._messages.actions.transcribeAudio({
+        this._transcribeAudio.run({
             channel_id: this.message.channel_id,
             message_id: this.message.message_id,
         });
@@ -427,7 +431,7 @@ export class SyncMessageBubble extends PlatformElement {
 
     _onTranscribeVideo() {
         if (!this.message) return;
-        this._messages.actions.transcribeVideo({
+        this._transcribeVideo.run({
             channel_id: this.message.channel_id,
             message_id: this.message.message_id,
         });
@@ -435,7 +439,7 @@ export class SyncMessageBubble extends PlatformElement {
 
     _onTranscribeCall(callId) {
         if (typeof callId !== 'string' || callId === '') return;
-        this._messages.actions.transcribeCall({
+        this._transcribeCall.run({
             channel_id: this.message.channel_id,
             message_id: this.message.message_id,
             call_id: callId,

@@ -331,6 +331,21 @@ class NamespaceCRMSettings(BaseModel):
     )
 
 
+class NamespaceSyncSettings(BaseModel):
+    """Настройки Sync для namespace (поведение каналов и звонков пространства)."""
+
+    transcribe_voice_messages: bool = Field(
+        default=False,
+        title="Авто-расшифровка голосовых",
+        description="Автоматически отправлять голосовые сообщения на STT после загрузки",
+    )
+    speech_to_chat_enabled: bool = Field(
+        default=False,
+        title="Речь звонка в ленту",
+        description="Постить расшифрованные сегменты речи звонка как сообщения в ленту канала",
+    )
+
+
 class Namespace(BaseModel):
     """
     Namespace (изолированная область данных).
@@ -362,6 +377,11 @@ class Namespace(BaseModel):
         default=None,
         title="Настройки CRM",
         description="Опционально: UI заметок и значения по умолчанию",
+    )
+    sync_settings: Optional[NamespaceSyncSettings] = Field(
+        default=None,
+        title="Настройки Sync",
+        description="Опционально: дефолты транскрипции и речи в ленту для каналов пространства",
     )
     created_at: datetime = Field(
         default_factory=lambda: datetime.now(timezone.utc),

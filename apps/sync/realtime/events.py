@@ -13,13 +13,11 @@ from apps.sync.models.common import UserBrief
 from apps.sync.models.git import GitResourceRefRead
 from apps.sync.models.messages import MessageRead, MessageStatus
 from apps.sync.models.meetings import CallRecordingRead
-from apps.sync.models.spaces import SpaceRead
 from apps.sync.models.threads import ThreadRead
 from core.calls.models import SignalType
 
 
 EventType = Literal[
-    "sync/space/created",
     "sync/channel/created",
     "sync/channel/member_added",
     "sync/channel/read_updated",
@@ -69,16 +67,6 @@ class RealtimeEvent(BaseModel):
 class MessageStatusChangedPayload(BaseModel):
     message_id: str
     status: MessageStatus
-
-
-def event_space_created(space: SpaceRead, *, company_id: str) -> RealtimeEvent:
-    return RealtimeEvent(
-        type="sync/space/created",
-        channel_id=None,
-        payload=space.model_dump(mode="json"),
-        company_id=company_id,
-        recipient_user_ids=None,
-    )
 
 
 def event_channel_created(

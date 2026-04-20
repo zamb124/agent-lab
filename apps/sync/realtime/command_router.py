@@ -64,10 +64,6 @@ from apps.sync.realtime.operations import (
     op_messages_transcribe_audio,
     op_messages_transcribe_call,
     op_messages_transcribe_video,
-    op_platform_namespaces_list,
-    op_spaces_create,
-    op_spaces_list,
-    op_spaces_update,
     op_threads_create,
     op_threads_item,
     op_threads_list,
@@ -114,10 +110,6 @@ from apps.sync.realtime.operations import (
     MessagesTranscribeAudioPayload,
     MessagesTranscribeCallPayload,
     MessagesTranscribeVideoPayload,
-    PlatformNamespacesListPayload,
-    SpacesCreatePayload,
-    SpacesListPayload,
-    SpacesUpdatePayload,
     ThreadsCreatePayload,
     ThreadsItemPayload,
     ThreadsListPayload,
@@ -130,22 +122,6 @@ logger = get_logger(__name__)
 
 
 SYNC_OPERATIONS: dict[str, Operation] = {
-    # spaces
-    "sync/spaces/list_requested": Operation(
-        canonical_type="sync/spaces/list_requested",
-        payload_model=SpacesListPayload,
-        fn=op_spaces_list,
-    ),
-    "sync/spaces/create_requested": Operation(
-        canonical_type="sync/spaces/create_requested",
-        payload_model=SpacesCreatePayload,
-        fn=op_spaces_create,
-    ),
-    "sync/spaces/update_requested": Operation(
-        canonical_type="sync/spaces/update_requested",
-        payload_model=SpacesUpdatePayload,
-        fn=op_spaces_update,
-    ),
     # channels
     "sync/channels/list_requested": Operation(
         canonical_type="sync/channels/list_requested",
@@ -372,12 +348,6 @@ SYNC_OPERATIONS: dict[str, Operation] = {
         canonical_type="sync/shared_channels/list_requested",
         payload_model=CompanySharedChannelsListPayload,
         fn=op_company_shared_channels_list,
-    ),
-    # platform namespaces
-    "sync/platform_namespaces/list_requested": Operation(
-        canonical_type="sync/platform_namespaces/list_requested",
-        payload_model=PlatformNamespacesListPayload,
-        fn=op_platform_namespaces_list,
     ),
     # files (метаданные после REST upload)
     "sync/files/upload_completed_requested": Operation(

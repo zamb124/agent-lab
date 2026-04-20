@@ -236,7 +236,7 @@ def _recording_read_from_entity(recording: SyncCallRecording) -> CallRecordingRe
         recording_id=recording.recording_id,
         call_id=recording.call_id,
         channel_id=recording.channel_id,
-        space_id=recording.space_id,
+        namespace=recording.namespace,
         started_by_user_id=recording.started_by_user_id,
         status=recording.status,  # type: ignore[arg-type]
         provider_job_id=recording.provider_job_id,

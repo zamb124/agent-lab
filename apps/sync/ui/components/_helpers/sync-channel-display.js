@@ -6,7 +6,7 @@
  * (см. `frontend.mdc` — zero-fallback canon).
  */
 
-import { resolveChannelTitle, resolveDisplayName, resolveSpaceId } from '../../_helpers/sync-id-resolvers.js';
+import { resolveChannelTitle, resolveDisplayName } from '../../_helpers/sync-id-resolvers.js';
 
 /**
  * Заголовок канала. Тонкая обёртка над `resolveChannelTitle` для
@@ -17,22 +17,16 @@ export function channelDisplayTitle(channel) {
 }
 
 /**
- * Метка справа от канала в sidebar (имя пространства / Личный / Встреча).
+ * Метка справа от канала в sidebar (namespace / Личный / Встреча).
  */
-export function channelRowMetaLabel(channel, spacesById, t) {
+export function channelRowMetaLabel(channel, t) {
     if (!channel) return '';
     if (channel.type === 'direct') return t('sidebar.meta_direct');
     if (channel.type === 'calendar_meeting') return t('sidebar.meta_meeting');
-    if (typeof channel.space_id === 'string' && channel.space_id !== '') {
-        const space = spacesById && spacesById[channel.space_id];
-        if (space && typeof space.name === 'string' && space.name !== '') {
-            return space.name;
-        }
+    if (typeof channel.namespace === 'string' && channel.namespace !== '') {
+        return channel.namespace;
     }
-    if (typeof channel.space_id !== 'string' || channel.space_id === '') {
-        return t('sidebar.meta_group');
-    }
-    return '';
+    return t('sidebar.meta_group');
 }
 
 /**
@@ -77,4 +71,4 @@ export function buildChatSubtitle({ channel, typingByChannel, presenceByUserId, 
     return '';
 }
 
-export { resolveChannelTitle, resolveDisplayName, resolveSpaceId };
+export { resolveChannelTitle, resolveDisplayName };

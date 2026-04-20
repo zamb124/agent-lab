@@ -19,43 +19,21 @@ from sqlalchemy.dialects.postgresql import JSONB
 from core.db.models import Base
 
 
-class SyncSpace(Base):
-    """Пространства, объединяющие каналы."""
-
-    __tablename__ = "sync_spaces"
-
-    space_id: Mapped[str] = mapped_column(String(64), primary_key=True)
-    company_id: Mapped[str] = mapped_column(String(100), nullable=False, index=True)
-    name: Mapped[str] = mapped_column(String(255), nullable=False)
-    description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
-    avatar_url: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
-    namespace: Mapped[str] = mapped_column(String(100), nullable=False)
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
-    )
-    created_by_user_id: Mapped[str] = mapped_column(String(64), nullable=False)
-    transcribe_voice_messages: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
-    speech_to_chat_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
-
-    __table_args__ = (
-        Index("ix_sync_spaces_company", "company_id"),
-        Index("idx_sync_spaces_company_namespace", "company_id", "namespace", unique=True),
-    )
-
-    def __repr__(self) -> str:
-        return f"<SyncSpace(space_id='{self.space_id}', name='{self.name}', company='{self.company_id}')>"
-
-
 class SyncChannel(Base):
-    """Каналы/чаты (direct, group, topic)."""
+    """Каналы/чаты (direct, group, topic).
+
+    Привязка к платформенному namespace — строковое поле `namespace`
+    (`apps/crm/api/namespaces.py` создаёт/удаляет, sync читает через
+    `NamespaceRepository`). Дефолты транскрипции (`transcribe_voice_messages`,
+    `speech_to_chat_enabled`) живут в `Namespace.sync_settings`; на канале
+    оставлены оверрайды для редких случаев точечной настройки.
+    """
 
     __tablename__ = "sync_channels"
 
     channel_id: Mapped[str] = mapped_column(String(64), primary_key=True)
     company_id: Mapped[str] = mapped_column(String(100), nullable=False, index=True)
-    space_id: Mapped[Optional[str]] = mapped_column(
-        String(64), ForeignKey("sync_spaces.space_id"), nullable=True
-    )
+    namespace: Mapped[str] = mapped_column(String(100), nullable=False)
     type: Mapped[str] = mapped_column(String(32), nullable=False)
     name: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     is_private: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
@@ -70,7 +48,7 @@ class SyncChannel(Base):
 
     __table_args__ = (
         Index("ix_sync_channels_company", "company_id"),
-        Index("ix_sync_channels_space", "space_id"),
+        Index("ix_sync_channels_company_namespace", "company_id", "namespace"),
     )
 
     def __repr__(self) -> str:
@@ -412,9 +390,7 @@ class SyncCallRecording(Base):
     channel_id: Mapped[str] = mapped_column(
         String(64), ForeignKey("sync_channels.channel_id", ondelete="CASCADE"), nullable=False
     )
-    space_id: Mapped[Optional[str]] = mapped_column(
-        String(64), ForeignKey("sync_spaces.space_id", ondelete="SET NULL"), nullable=True
-    )
+    namespace: Mapped[str] = mapped_column(String(100), nullable=False)
     status: Mapped[str] = mapped_column(String(24), nullable=False, default="requested")
     started_by_user_id: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
     provider_job_id: Mapped[Optional[str]] = mapped_column(String(128), nullable=True)
@@ -433,6 +409,7 @@ class SyncCallRecording(Base):
         Index("ix_sync_call_recordings_call", "call_id"),
         Index("ix_sync_call_recordings_channel", "channel_id"),
         Index("ix_sync_call_recordings_status", "status"),
+        Index("ix_sync_call_recordings_company_namespace", "company_id", "namespace"),
     )
 
     def __repr__(self) -> str:

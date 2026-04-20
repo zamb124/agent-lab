@@ -27,19 +27,19 @@ class ChannelRepository(BaseSyncRepository[SyncChannel]):
     def id_field(self) -> str:
         return "channel_id"
 
-    async def list_by_space(
+    async def list_by_namespace(
         self,
-        space_id: str,
+        namespace: str,
         limit: int = 100,
         offset: int = 0,
         company_id: Optional[str] = None,
     ) -> List[SyncChannel]:
-        """Каналы в пространстве."""
+        """Каналы в namespace."""
         cid = company_id or self._get_company_id()
         async with self._db.session() as session:
             stmt = (
                 select(SyncChannel)
-                .where(SyncChannel.company_id == cid, SyncChannel.space_id == space_id)
+                .where(SyncChannel.company_id == cid, SyncChannel.namespace == namespace)
                 .order_by(SyncChannel.name.asc())
                 .limit(limit)
                 .offset(offset)
@@ -51,7 +51,7 @@ class ChannelRepository(BaseSyncRepository[SyncChannel]):
         self,
         user_id: str,
         *,
-        space_id: Optional[str] = None,
+        namespace: Optional[str] = None,
         limit: int = 100,
         offset: int = 0,
         company_id: Optional[str] = None,
@@ -71,8 +71,8 @@ class ChannelRepository(BaseSyncRepository[SyncChannel]):
                     SyncChannelMember.user_id == user_id,
                 )
             )
-            if space_id is not None:
-                stmt = stmt.where(SyncChannel.space_id == space_id)
+            if namespace is not None:
+                stmt = stmt.where(SyncChannel.namespace == namespace)
             stmt = (
                 stmt.order_by(
                     SyncChannel.type.asc(),

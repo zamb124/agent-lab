@@ -44,13 +44,13 @@ class _TypingBody(BaseModel):
 @router.get("/", response_model=OffsetPage[ChannelRead])
 async def list_channels(
     container: ContainerDep,
-    space_id: str | None = None,
+    namespace: str | None = None,
     limit: int = Query(50, ge=1, le=200),
     offset: int = Query(0, ge=0),
 ) -> OffsetPage[ChannelRead]:
     user = get_context().user
     result = await op_channels_list(
-        ChannelsListPayload(space_id=space_id, limit=limit, offset=offset),
+        ChannelsListPayload(namespace=namespace, limit=limit, offset=offset),
         user=user,
         container=container,
     )

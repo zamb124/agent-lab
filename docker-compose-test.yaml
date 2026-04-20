@@ -130,94 +130,11 @@ services:
     networks:
       - test-net
 
-  flows_worker_test:
-    platform: "linux/amd64"
-    build:
-      context: .
-      dockerfile: Dockerfile.test
-      target: default
-    container_name: agentlab_flows_worker_test
-    depends_on:
-      redis-test:
-        condition: service_healthy
-      postgres-test:
-        condition: service_healthy
-    environment:
-      - DATABASE__SHARED_URL=postgresql+asyncpg://platform_user:admin@postgres-test:5432/platform_shared
-      - DATABASE__FLOWS_URL=postgresql+asyncpg://platform_user:admin@postgres-test:5432/platform_agents
-      - DATABASE__CRM_URL=postgresql+asyncpg://platform_user:admin@postgres-test:5432/platform_crm
-      - DATABASE__SYNC_URL=postgresql+asyncpg://platform_user:admin@postgres-test:5432/platform_sync
-      - DATABASE__RAG_URL=postgresql+asyncpg://platform_user:admin@postgres-test:5432/platform_rag
-      - DATABASE__OFFICE_URL=postgresql+asyncpg://platform_user:admin@postgres-test:5432/platform_office
-      - DATABASE__TRACING_URL=postgresql+asyncpg://platform_user:admin@postgres-test:5432/platform_tracing
-      - DATABASE__REDIS_URL=redis://redis-test:6379/0
-      - TASKS__BROKER_URL=redis://redis-test:6379/1
-      - TESTING=true
-      - AUTH__PERMISSIONS_ENABLED=false
-      - STT__PROVIDER=mock
-      - STT__MOCK_TRANSCRIPT_TEXT=Тестовая транскрипция docker worker
-      - PROVIDER_LITSERVE__API__BASE_URL=http://provider_litserve:8014/v1
-    command: ["python", "-m", "taskiq", "worker", "apps.flows_worker.worker:worker_app", "--workers", "2"]
-    restart: "no"
-    networks:
-      - test-net
-
-  scheduler_test:
-    platform: "linux/amd64"
-    build:
-      context: .
-      dockerfile: Dockerfile.test
-      target: default
-    container_name: agentlab_scheduler_test
-    depends_on:
-      redis-test:
-        condition: service_healthy
-      postgres-test:
-        condition: service_healthy
-    environment:
-      - DATABASE__SHARED_URL=postgresql+asyncpg://platform_user:admin@postgres-test:5432/platform_shared
-      - DATABASE__FLOWS_URL=postgresql+asyncpg://platform_user:admin@postgres-test:5432/platform_agents
-      - DATABASE__CRM_URL=postgresql+asyncpg://platform_user:admin@postgres-test:5432/platform_crm
-      - DATABASE__SYNC_URL=postgresql+asyncpg://platform_user:admin@postgres-test:5432/platform_sync
-      - DATABASE__RAG_URL=postgresql+asyncpg://platform_user:admin@postgres-test:5432/platform_rag
-      - DATABASE__OFFICE_URL=postgresql+asyncpg://platform_user:admin@postgres-test:5432/platform_office
-      - DATABASE__TRACING_URL=postgresql+asyncpg://platform_user:admin@postgres-test:5432/platform_tracing
-      - DATABASE__REDIS_URL=redis://redis-test:6379/0
-      - TASKS__BROKER_URL=redis://redis-test:6379/1
-      - TESTING=true
-      - AUTH__PERMISSIONS_ENABLED=false
-      - PROVIDER_LITSERVE__API__BASE_URL=http://provider_litserve:8014/v1
-    command: ["python", "-m", "taskiq", "scheduler", "apps.scheduler.scheduler:scheduler"]
-    restart: "no"
-    networks:
-      - test-net
-
-  rag_worker_test:
-    platform: "linux/amd64"
-    build:
-      context: .
-      dockerfile: Dockerfile.test
-      target: rag-worker
-    container_name: agentlab_rag_worker_test
-    depends_on:
-      redis-test:
-        condition: service_healthy
-      postgres-test:
-        condition: service_healthy
-    environment:
-      - DATABASE__SHARED_URL=postgresql+asyncpg://platform_user:admin@postgres-test:5432/platform_shared
-      - DATABASE__RAG_URL=postgresql+asyncpg://platform_user:admin@postgres-test:5432/platform_rag
-      - DATABASE__OFFICE_URL=postgresql+asyncpg://platform_user:admin@postgres-test:5432/platform_office
-      - DATABASE__TRACING_URL=postgresql+asyncpg://platform_user:admin@postgres-test:5432/platform_tracing
-      - DATABASE__REDIS_URL=redis://redis-test:6379/0
-      - TASKS__BROKER_URL=redis://redis-test:6379/1
-      - TESTING=true
-      - AUTH__PERMISSIONS_ENABLED=false
-      - PROVIDER_LITSERVE__API__BASE_URL=http://provider_litserve:8014/v1
-    command: ["taskiq", "worker", "apps.rag_worker.worker:worker_app", "--workers", "1"]
-    restart: "no"
-    networks:
-      - test-net
+  # TaskIQ воркеры (flows_worker, rag_worker, scheduler, sync_worker, crm_worker,
+  # idle_worker) запускаются ТОЛЬКО локальным subprocess из tests/fixtures/workers.py
+  # (или изнутри tests_runner). Контейнеры в test-compose «запекают» код в образ
+  # и приводят к double-consumer гонке на общей Redis-очереди при изменениях
+  # моделей/handler'ов. Канон — один источник правды: текущий рабочий код.
 
   tests_runner:
     platform: "linux/amd64"
@@ -235,12 +152,6 @@ services:
         condition: service_healthy
       test-a2a-agent:
         condition: service_healthy
-      flows_worker_test:
-        condition: service_started
-      scheduler_test:
-        condition: service_started
-      rag_worker_test:
-        condition: service_started
       provider_litserve:
         condition: service_healthy
       livekit-test:

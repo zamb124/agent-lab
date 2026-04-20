@@ -39,7 +39,7 @@ from apps.crm.db.models import (
 )
 # Sync models
 from apps.sync.db.models import (
-    SyncSpace, SyncChannel, SyncChannelMember,
+     SyncChannel, SyncChannelMember,
     SyncThread, SyncMessage, SyncMessageContent,
     SyncMessageFile, SyncFile, SyncGitResourceRef,
 )

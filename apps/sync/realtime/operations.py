@@ -81,7 +81,6 @@ from apps.sync.models.messages import (
     TextPlainContent,
 )
 from apps.sync.models.meetings import CallRecordingRead
-from apps.sync.models.spaces import SpaceCreate, SpaceRead, SpaceUpdate
 from apps.sync.models.threads import ThreadCreate, ThreadRead, ThreadRow
 from apps.sync.realtime.call_handlers import (
     _call_read_from_entities,
@@ -108,7 +107,6 @@ from apps.sync.realtime.events import (
     event_message_reaction_changed,
     event_message_status_changed,
     event_message_updated,
-    event_space_created,
     event_thread_created,
 )
 from apps.sync.realtime.handlers import (
@@ -116,7 +114,6 @@ from apps.sync.realtime.handlers import (
     _channel_read_entity,
     _channel_recipient_user_ids,
     _create_channel,
-    _create_space,
     _create_thread,
     _enqueue_channel_message_notifications,
     _ensure_actor_may_send_to_channel,
@@ -130,7 +127,6 @@ from apps.sync.realtime.handlers import (
     _set_video_transcription_state,
     _stop_and_finalize_recording,
     _update_channel,
-    _update_space,
     _upsert_git_resource,
 )
 from apps.sync.realtime.publish_events import publish_realtime_events
@@ -268,103 +264,12 @@ def _decode_message_cursor(cursor: str) -> tuple[datetime, str]:
 
 
 # ===========================================================================
-# Spaces
-# ===========================================================================
-
-
-class SpacesListPayload(BaseModel):
-    limit: int = Field(default=200, ge=1, le=1000)
-    offset: int = Field(default=0, ge=0)
-
-
-class SpacesListResult(BaseModel):
-    items: list[SpaceRead]
-    total: int
-    limit: int
-    offset: int
-
-
-class SpacesCreatePayload(BaseModel):
-    body: SpaceCreate
-
-
-class SpacesUpdatePayload(BaseModel):
-    space_id: str = Field(min_length=1)
-    body: SpaceUpdate
-
-
-async def op_spaces_list(
-    payload: SpacesListPayload,
-    *,
-    user: User,
-    container: SyncContainer,
-) -> SpacesListResult:
-    company_id = resolve_company_id(user)
-    spaces, total = await asyncio.gather(
-        container.space_repository.list(
-            limit=payload.limit, offset=payload.offset, company_id=company_id
-        ),
-        container.space_repository.count(company_id=company_id),
-    )
-    items = [
-        SpaceRead(
-            id=s.space_id,
-            name=s.name,
-            description=s.description,
-            avatar_url=s.avatar_url,
-            namespace=s.namespace,
-            created_at=s.created_at,
-            created_by_user_id=s.created_by_user_id,
-            transcribe_voice_messages=s.transcribe_voice_messages,
-            speech_to_chat_enabled=s.speech_to_chat_enabled,
-        )
-        for s in spaces
-    ]
-    return SpacesListResult(items=items, total=total, limit=payload.limit, offset=payload.offset)
-
-
-async def op_spaces_create(
-    payload: SpacesCreatePayload,
-    *,
-    user: User,
-    container: SyncContainer,
-) -> SpaceRead:
-    company_id = resolve_company_id(user)
-    space = await _create_space(
-        payload.body,
-        actor_user_id=user.user_id,
-        company_id=company_id,
-        spaces=container.space_repository,
-        namespaces=container.namespace_repository,
-    )
-    await publish_realtime_events([event_space_created(space, company_id=company_id)])
-    return space
-
-
-async def op_spaces_update(
-    payload: SpacesUpdatePayload,
-    *,
-    user: User,
-    container: SyncContainer,
-) -> SpaceRead:
-    company_id = resolve_company_id(user)
-    space = await _update_space(
-        payload.space_id,
-        payload.body,
-        actor_user_id=user.user_id,
-        company_id=company_id,
-        spaces=container.space_repository,
-    )
-    return space
-
-
-# ===========================================================================
 # Channels
 # ===========================================================================
 
 
 class ChannelsListPayload(BaseModel):
-    space_id: str | None = Field(default=None)
+    namespace: str | None = Field(default=None)
     limit: int = Field(default=50, ge=1, le=200)
     offset: int = Field(default=0, ge=0)
 
@@ -445,7 +350,7 @@ async def op_channels_list(
     company_id = resolve_company_id(user)
     channels = await container.channel_repository.list_for_user(
         user.user_id,
-        space_id=payload.space_id,
+        namespace=payload.namespace,
         limit=payload.limit,
         offset=payload.offset,
         company_id=company_id,
@@ -485,7 +390,7 @@ async def op_channels_create(
         actor_user_id=user.user_id,
         company_id=company_id,
         channels=container.channel_repository,
-        spaces=container.space_repository,
+        namespaces=container.namespace_repository,
     )
     recipients = await _channel_recipient_user_ids(
         container.channel_repository, channel.id, company_id
@@ -1868,7 +1773,7 @@ async def op_calls_recording_start(
         call_id=call.call_id,
         company_id=company_id,
         channel_id=call.channel_id,
-        space_id=channel_entity.space_id,
+        namespace=channel_entity.namespace,
         status="recording",
         started_by_user_id=user.user_id,
         provider_job_id=provider_job_id,
@@ -1879,7 +1784,7 @@ async def op_calls_recording_start(
         recording_id=recording.recording_id,
         call_id=recording.call_id,
         channel_id=recording.channel_id,
-        space_id=recording.space_id,
+        namespace=recording.namespace,
         started_by_user_id=recording.started_by_user_id,
         status=recording.status,
         provider_job_id=recording.provider_job_id,
@@ -2186,7 +2091,7 @@ async def op_calls_recordings_list(
             recording_id=r.recording_id,
             call_id=r.call_id,
             channel_id=r.channel_id,
-            space_id=r.space_id,
+            namespace=r.namespace,
             started_by_user_id=r.started_by_user_id,
             status=r.status,
             provider_job_id=r.provider_job_id,
@@ -2320,7 +2225,7 @@ async def op_calls_links_create(
         ch = SyncChannel(
             channel_id=channel_id,
             company_id=company_id,
-            space_id=None,
+            namespace="default",
             type=CHANNEL_TYPE_CALENDAR_MEETING,
             name=body.scheduled_title.strip(),
             is_private=False,
@@ -2705,7 +2610,7 @@ async def op_company_shared_channels_list(
     if payload.peer_user_id == user.user_id:
         channels = await container.channel_repository.list_for_user(
             user.user_id,
-            space_id=None,
+            namespace=None,
             limit=payload.limit,
             offset=payload.offset,
             company_id=company_id,
@@ -2739,53 +2644,6 @@ async def op_company_shared_channels_list(
         )
     return CompanySharedChannelsListResult(
         items=items, total=len(items), limit=payload.limit, offset=payload.offset
-    )
-
-
-# ===========================================================================
-# Platform namespaces (read через shared KV)
-# ===========================================================================
-
-
-class PlatformNamespacesListPayload(BaseModel):
-    limit: int = Field(default=200, ge=1, le=1000)
-    offset: int = Field(default=0, ge=0)
-
-
-class PlatformNamespaceItem(BaseModel):
-    name: str
-    description: str
-    is_default: bool
-
-
-class PlatformNamespacesListResult(BaseModel):
-    items: list[PlatformNamespaceItem]
-    total: int
-    limit: int
-    offset: int
-
-
-async def op_platform_namespaces_list(
-    payload: PlatformNamespacesListPayload,
-    *,
-    user: User,
-    container: SyncContainer,
-) -> PlatformNamespacesListResult:
-    _ = resolve_company_id(user)
-    namespaces = await container.namespace_repository.list(
-        limit=payload.limit, offset=payload.offset
-    )
-    total = await container.namespace_repository.count_all()
-    items = [
-        PlatformNamespaceItem(
-            name=ns.name,
-            description=ns.description,
-            is_default=ns.is_default,
-        )
-        for ns in namespaces
-    ]
-    return PlatformNamespacesListResult(
-        items=items, total=total, limit=payload.limit, offset=payload.offset
     )
 
 

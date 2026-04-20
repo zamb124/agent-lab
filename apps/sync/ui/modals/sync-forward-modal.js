@@ -3,7 +3,7 @@
  *
  * Открывается через chat_ui.openForward({ message }) или openModal напрямую.
  * Список — все каналы, кроме исключаемого. Подтверждение —
- * useOp('sync/messages').forward для каждого выбранного канала.
+ * useOp('sync/messages_forward').run для каждой пары (target, message).
  */
 
 import { html, css } from 'lit';
@@ -52,7 +52,7 @@ export class SyncForwardModal extends PlatformModal {
         this._selectedIds = [];
         this._query = '';
         this._channels = this.useResource('sync/channels');
-        this._messages = this.useOp('sync/messages');
+        this._forward = this.useOp('sync/messages_forward');
         this._chatUi = this.useSlice('sync/chat_ui');
     }
 
@@ -92,10 +92,10 @@ export class SyncForwardModal extends PlatformModal {
         const sourceChannelId = this._excludeId();
         for (const targetChannelId of this._selectedIds) {
             for (const messageId of messageIds) {
-                this._messages.actions.forward({
-                    source_channel_id: sourceChannelId,
-                    target_channel_id: targetChannelId,
+                this._forward.run({
+                    from_channel_id: sourceChannelId,
                     message_id: messageId,
+                    to_channel_id: targetChannelId,
                 });
             }
         }

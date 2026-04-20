@@ -6,11 +6,10 @@ from datetime import UTC, datetime
 
 import pytest
 
-from apps.sync.db.models import SyncCall, SyncCallSpeechEgressTrack, SyncChannel, SyncSpace
+from apps.sync.db.models import SyncCall, SyncCallSpeechEgressTrack, SyncChannel
 from apps.sync.db.repositories.call_repository import CallRepository
 from apps.sync.db.repositories.call_speech_egress_repository import CallSpeechEgressTrackRepository
 from apps.sync.db.repositories.channel_repository import ChannelRepository
-from apps.sync.db.repositories.space_repository import SpaceRepository
 from apps.sync.models.channels import ChannelType
 
 
@@ -18,27 +17,16 @@ from apps.sync.models.channels import ChannelType
 async def test_speech_egress_crud_and_list(
     sync_db_clean: None,
     company_id: str,
-    space_repo: SpaceRepository,
     channel_repo: ChannelRepository,
     call_repo: CallRepository,
     speech_egress_repo: CallSpeechEgressTrackRepository,
     unique_id: str,
 ) -> None:
     actor = f"u_{unique_id}"
-    space = SyncSpace(
-        space_id=f"sp_{unique_id}",
-        company_id=company_id,
-        name="S",
-        description=None,
-        namespace=f"ns_{unique_id}_egress",
-        created_at=datetime.now(tz=UTC),
-        created_by_user_id=actor,
-    )
-    await space_repo.create(space)
     channel = SyncChannel(
         channel_id=f"ch_{unique_id}",
         company_id=company_id,
-        space_id=space.space_id,
+        namespace=f"ns_{unique_id}_egress",
         type=ChannelType.TOPIC.value,
         name="c",
         is_private=False,

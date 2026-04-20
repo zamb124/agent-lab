@@ -129,7 +129,7 @@ services:
   #     - dev-net
 
   # RAGWorker опционален - можно запустить локально для дебага:
-  # DATABASE__SHARED_URL=postgresql://platform_user:admin@localhost:54321/platform_shared DATABASE__RAG_URL=postgresql://platform_user:admin@localhost:54321/platform_rag TASKS__BROKER_URL=redis://localhost:63791/1 uv run python scripts/run_rag_worker.py
+  # DATABASE__SHARED_URL=postgresql://platform_user:admin@localhost:54321/platform_shared DATABASE__RAG_URL=postgresql://platform_user:admin@localhost:54321/platform_rag TASKS__BROKER_URL=redis://localhost:63791/1 uv run python scripts/run.py rag_worker
   # rag_worker:
   #   build:
   #     context: .

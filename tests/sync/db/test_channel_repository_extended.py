@@ -6,36 +6,24 @@ from datetime import UTC, datetime
 
 import pytest
 
-from apps.sync.db.models import SyncChannel, SyncSpace
+from apps.sync.db.models import SyncChannel
 from apps.sync.db.repositories.channel_repository import ChannelRepository
-from apps.sync.db.repositories.space_repository import SpaceRepository
 
 
 @pytest.mark.asyncio
-async def test_list_by_space_and_list_for_user_with_space_filter(
-    space_repo: SpaceRepository,
+async def test_list_by_namespace_and_list_for_user_with_namespace_filter(
     channel_repo: ChannelRepository,
     sync_db_clean: None,
     company_id: str,
     unique_id: str,
 ) -> None:
-    sp_l = f"{unique_id}_sp_l"
+    namespace = f"ns_{unique_id}_l"
     ch1 = f"{unique_id}_ch_1"
     ch2 = f"{unique_id}_ch_2"
-    sp = SyncSpace(
-        space_id=sp_l,
-        company_id=company_id,
-        name="S",
-        description=None,
-        namespace=f"ns_{unique_id}_l",
-        created_at=datetime.now(tz=UTC),
-        created_by_user_id="u1",
-    )
-    await space_repo.create(sp)
     ch1_obj = SyncChannel(
         channel_id=ch1,
         company_id=company_id,
-        space_id=sp_l,
+        namespace=namespace,
         type="topic",
         name="a",
         is_private=False,
@@ -45,7 +33,7 @@ async def test_list_by_space_and_list_for_user_with_space_filter(
     ch2_obj = SyncChannel(
         channel_id=ch2,
         company_id=company_id,
-        space_id=sp_l,
+        namespace=namespace,
         type="topic",
         name="b",
         is_private=False,
@@ -57,10 +45,10 @@ async def test_list_by_space_and_list_for_user_with_space_filter(
     await channel_repo.upsert_member(ch1, "alice", "member", company_id=company_id)
     await channel_repo.upsert_member(ch2, "alice", "member", company_id=company_id)
 
-    by_space = await channel_repo.list_by_space(sp_l, company_id=company_id)
-    assert {c.channel_id for c in by_space} == {ch1, ch2}
+    by_ns = await channel_repo.list_by_namespace(namespace, company_id=company_id)
+    assert {c.channel_id for c in by_ns} == {ch1, ch2}
 
-    for_user = await channel_repo.list_for_user("alice", space_id=sp_l, company_id=company_id)
+    for_user = await channel_repo.list_for_user("alice", namespace=namespace, company_id=company_id)
     assert {c.channel_id for c in for_user} == {ch1, ch2}
 
 
@@ -75,7 +63,7 @@ async def test_is_member_and_get_member_role_explicit_company(
     ch = SyncChannel(
         channel_id=ch_m,
         company_id=company_id,
-        space_id=None,
+        namespace="default",
         type="group",
         name="g",
         is_private=False,
@@ -100,7 +88,7 @@ async def test_set_member_last_read_at_errors(
     ch = SyncChannel(
         channel_id=ch_lr,
         company_id=company_id,
-        space_id=None,
+        namespace="default",
         type="group",
         name="g",
         is_private=False,
@@ -126,7 +114,7 @@ async def test_set_pinned_message_ids(
     ch = SyncChannel(
         channel_id=ch_pin,
         company_id=company_id,
-        space_id=None,
+        namespace="default",
         type="group",
         name="g",
         is_private=False,
@@ -151,7 +139,7 @@ async def test_list_member_user_ids(
     ch = SyncChannel(
         channel_id=ch_mem,
         company_id=company_id,
-        space_id=None,
+        namespace="default",
         type="group",
         name="g",
         is_private=False,

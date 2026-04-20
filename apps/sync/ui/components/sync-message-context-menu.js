@@ -1,17 +1,18 @@
 /**
  * sync-message-context-menu — ПКМ / long-press меню сообщения.
  *
- * Источник состояния: slice 'syncMessages.contextMenuTarget' (фабрика
- * заполняется при dispatch 'sync/messages/context_menu_requested', очищается
- * 'sync/messages/context_menu_dismissed'). Всплытие вне меню/Esc → dismiss.
+ * Источник состояния: slice 'syncMessagesStore.contextMenuTarget'
+ * (фабрика заполняется через action `showContextMenu` slice'а
+ * `sync/messages_store`, очищается `dismissContextMenu`). Всплытие вне
+ * меню/Esc → dismiss.
  *
  * Действия:
- *   - reply  → 'sync/messages/reply_mode_set' { messageId }
- *   - edit   → 'sync/messages/edit_mode_set' { messageId } (только своё)
- *   - delete → useOp('sync/messages').actions.remove(...)
- *   - react  → встроенный picker эмодзи
+ *   - reply  → action `setReplyMode` slice'а `sync/messages_store`
+ *   - edit   → action `setEditMode` slice'а `sync/messages_store` (только своё)
+ *   - delete → useOp('sync/messages_delete').run(...)
+ *   - react  → useOp('sync/messages_react').run(...)
  *   - copy   → this.copyToClipboard(text, ...)
- *   - pin    → useOp('sync/messages').actions.pin(...)
+ *   - pin    → useOp('sync/messages_pin').run(...)
  *   - thread → useResource('sync/threads').create(...)
  */
 
@@ -70,9 +71,12 @@ export class SyncMessageContextMenu extends PlatformElement {
     constructor() {
         super();
         this.channelId = '';
-        this._messages = this.useOp('sync/messages');
+        this._messagesStore = this.useSlice('sync/messages_store');
+        this._delete = this.useOp('sync/messages_delete');
+        this._react = this.useOp('sync/messages_react');
+        this._pin = this.useOp('sync/messages_pin');
         this._threads = this.useResource('sync/threads');
-        this._messagesSel = this.select((s) => s.syncMessages);
+        this._messagesStoreSel = this.select((s) => s.syncMessagesStore);
         this._authSel = this.select((s) => s.auth && s.auth.user);
         this._boundOnDocClick = (e) => this._onDocumentClick(e);
         this._boundOnKey = (e) => this._onKey(e);
@@ -91,14 +95,14 @@ export class SyncMessageContextMenu extends PlatformElement {
     }
 
     _currentTarget() {
-        const slice = this._messagesSel.value;
+        const slice = this._messagesStoreSel.value;
         return slice && slice.contextMenuTarget;
     }
 
     _currentMessage() {
         const target = this._currentTarget();
         if (!target) return null;
-        const slice = this._messagesSel.value;
+        const slice = this._messagesStoreSel.value;
         const channelData = slice && slice.byChannelId && slice.byChannelId[this.channelId];
         if (!channelData || !Array.isArray(channelData.items)) return null;
         const found = channelData.items.find((m) => m.message_id === target.messageId);
@@ -106,7 +110,7 @@ export class SyncMessageContextMenu extends PlatformElement {
     }
 
     _dismiss() {
-        this.dispatch('sync/messages/context_menu_dismissed', null);
+        this._messagesStore.dismissContextMenu(null);
     }
 
     _onDocumentClick(e) {
@@ -123,21 +127,21 @@ export class SyncMessageContextMenu extends PlatformElement {
     _onReply() {
         const t = this._currentTarget();
         if (!t) return;
-        this.dispatch('sync/messages/reply_mode_set', { messageId: t.messageId });
+        this._messagesStore.setReplyMode({ messageId: t.messageId });
         this._dismiss();
     }
 
     _onEdit() {
         const t = this._currentTarget();
         if (!t) return;
-        this.dispatch('sync/messages/edit_mode_set', { messageId: t.messageId });
+        this._messagesStore.setEditMode({ messageId: t.messageId });
         this._dismiss();
     }
 
     _onDelete() {
         const t = this._currentTarget();
         if (!t) return;
-        this._messages.actions.remove({
+        this._delete.run({
             channel_id: this.channelId,
             message_id: t.messageId,
         });
@@ -147,7 +151,7 @@ export class SyncMessageContextMenu extends PlatformElement {
     _onReact(emoji) {
         const t = this._currentTarget();
         if (!t) return;
-        this._messages.actions.react({
+        this._react.run({
             channel_id: this.channelId,
             message_id: t.messageId,
             emoji,
@@ -158,7 +162,7 @@ export class SyncMessageContextMenu extends PlatformElement {
     _onPin() {
         const t = this._currentTarget();
         if (!t) return;
-        this._messages.actions.pin({
+        this._pin.run({
             channel_id: this.channelId,
             message_id: t.messageId,
             action: 'add',
