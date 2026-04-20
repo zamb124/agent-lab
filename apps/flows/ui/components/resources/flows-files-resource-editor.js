@@ -81,25 +81,25 @@ export class FlowsFilesResourceEditor extends PlatformElement {
                     <div class="field">
                         <label>${this.t('files_resource_editor.endpoint_url')}</label>
                         <input type="url" placeholder="https://s3.amazonaws.com" .value=${endpoint}
-                            @input=${(e) => this._emitConfig({ endpoint_url: e.target.value || null })} />
+                            @input=${(e) => this._emitConfig({ endpoint_url: e.target.value.length > 0 ? e.target.value : null })} />
                     </div>
                     <div class="grid">
                         <div class="field">
                             <label>${this.t('files_resource_editor.access_key_id')}</label>
                             <input type="text" .value=${accessKey}
-                                @input=${(e) => this._emitConfig({ access_key_id: e.target.value || null })} />
+                                @input=${(e) => this._emitConfig({ access_key_id: e.target.value.length > 0 ? e.target.value : null })} />
                         </div>
                         <div class="field">
                             <label>${this.t('files_resource_editor.region')}</label>
                             <input type="text" .value=${region}
-                                @input=${(e) => this._emitConfig({ region: e.target.value || 'us-east-1' })} />
+                                @input=${(e) => this._emitConfig({ region: e.target.value.length > 0 ? e.target.value : 'us-east-1' })} />
                         </div>
                     </div>
                     <div class="field">
                         <label>${this.t('files_resource_editor.secret_access_key')}</label>
                         <flows-variable-input
                             .value=${secretKey}
-                            @change=${(e) => this._emitConfig({ secret_access_key: e.detail?.value || null })}
+                            @change=${(e) => { const v = e.detail?.value; this._emitConfig({ secret_access_key: typeof v === 'string' && v.length > 0 ? v : null }); }}
                         ></flows-variable-input>
                     </div>
                 </div>

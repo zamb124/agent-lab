@@ -45,11 +45,16 @@ class ExternalAgentStatus(str, Enum):
 
 class FlowVariableConfig(StrictBaseModel):
     """
-    Конфигурация переменной агента с метаданными.
-    
+    Конфигурация переменной flow с метаданными.
+
+    Контракт значения {value, secret} симметричен company-уровню
+    (`core.db.repositories.variable_repository.Variable`). При выполнении flow
+    переменная по тому же ключу перекрывает company-переменную.
+
     Формат:
     {
       "value": "@var:key",
+      "secret": false,
       "public": true,
       "title": "API Key",
       "description": "Ключ для доступа к API",
@@ -58,6 +63,7 @@ class FlowVariableConfig(StrictBaseModel):
     """
 
     value: Any = Field(..., description="Значение переменной")
+    secret: bool = Field(default=False, description="Скрывать значение в UI (симметрично company Variable.secret)")
     public: bool = Field(default=False, description="Публичная переменная для agent-card (A2A)")
     title: Optional[str] = Field(default=None, description="Заголовок переменной")
     description: Optional[str] = Field(default=None, description="Описание переменной")
@@ -70,13 +76,21 @@ class Edge(StrictBaseModel):
 
     condition - выражение для проверки (опционально).
     Если condition не указан - безусловный переход.
+
+    Допустимые форматы condition:
+      - строка: legacy-выражение `"<variable> <op> <value>"` (например, `route == 'order'`);
+      - объект `{"type": "simple", "variable": str, "operator": str, "value": Any}`;
+      - объект `{"type": "python", "code": str}` — функция `def check(state) -> bool`.
     """
 
     from_node: str = Field(..., alias="from", description="ID исходной ноды")
     to_node: Optional[str] = Field(..., alias="to", description="ID целевой ноды (null = конец)")
-    condition: Optional[str] = Field(
+    condition: Optional[Union[str, Dict[str, Any]]] = Field(
         default=None,
-        description="Условие перехода. Примеры: 'validation.valid == true', 'stage == \"done\"'",
+        description=(
+            "Условие перехода. Строка legacy-выражения, объект simple "
+            "({type, variable, operator, value}) или python ({type, code})."
+        ),
     )
     contributes_to_join: bool = Field(
         default=True,

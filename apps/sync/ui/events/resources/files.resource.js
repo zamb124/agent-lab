@@ -1,13 +1,9 @@
 /**
  * Sync Files — загрузка файлов в чат.
  *
- * REST-only (`transport: 'http'`): multipart upload не помещается в WS-фрейм
- * (бинарные данные, размеры до сотен МБ). Файл загружается в S3 через
- * `POST /sync/api/v1/files/`, затем `file_id` подставляется в content-блок
- * следующего сообщения.
- *
- * `request` использует FormData; httpRequest в `core/.../events/http.js`
- * детектит FormData и не подставляет Content-Type (браузер сам).
+ * Загрузка бинарного потока — REST-only (multipart, до сотен МБ). После
+ * upload UI шлёт WS-команду `sync/files/upload_completed_requested` чтобы
+ * получить каноничные метаданные файла.
  */
 
 import { createAsyncOp } from '@platform/lib/events/index.js';
@@ -33,4 +29,13 @@ export const fileUploadOp = createAsyncOp({
             body: formData,
         });
     },
+});
+
+export const fileUploadCompletedOp = createAsyncOp({
+    name: 'sync/file_upload_completed',
+    transport: 'ws',
+    wsTimeoutMs: 5_000,
+    silent: true,
+    commandType: 'sync/files/upload_completed_requested',
+    restMirror: { method: 'POST', path: '/sync/api/v1/files/upload-completed' },
 });

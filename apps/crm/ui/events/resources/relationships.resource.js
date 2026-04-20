@@ -55,6 +55,7 @@ export const relationshipsListResource = createCursorList({
 export const relationshipShortestPathOp = createAsyncOp({
     name: 'crm/relationship_shortest_path',
     silent: true,
+    restMirror: { method: 'GET', path: '/crm/api/v1/relationships/path/' },
     request: async ({ payload }) => {
         if (!payload || typeof payload.from_id !== 'string' || typeof payload.to_id !== 'string') {
             throw new Error('relationshipShortestPathOp: { from_id, to_id } required');

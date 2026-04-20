@@ -113,37 +113,44 @@ export class FrontendCreateEmbedModal extends PlatformFormModal {
         if (changed.has('embedConfig') && this.embedConfig && !this._populated) {
             this._populated = true;
             const c = this.embedConfig;
-            this._name = c.name || '';
-            this._flowId = c.flow_id || '';
-            this._skillId = c.skill_id || 'default';
-            this._theme = c.theme || 'dark';
-            this._position = c.position || 'bottom-right';
-            this._interfaceLocale = c.interface_locale || 'auto';
-            this._allowedOrigins = (c.allowed_origins || []).join('\n');
+            const _str = (v, def) => (typeof v === 'string' && v !== '' ? v : def);
+            this._name = _str(c.name, '');
+            this._flowId = _str(c.flow_id, '');
+            this._skillId = _str(c.skill_id, 'default');
+            this._theme = _str(c.theme, 'dark');
+            this._position = _str(c.position, 'bottom-right');
+            this._interfaceLocale = _str(c.interface_locale, 'auto');
+            this._allowedOrigins = Array.isArray(c.allowed_origins) ? c.allowed_origins.join('\n') : '';
             this._showLauncher = c.show_launcher !== false;
             this._branding = c.branding !== false;
-            this._primaryColor = c.primary_color || '#6366f1';
-            this._assistantTitle = c.assistant_title || '';
-            this._greetingMessage = c.greeting_message || '';
-            this._placeholder = c.placeholder || '';
+            this._primaryColor = _str(c.primary_color, '#6366f1');
+            this._assistantTitle = _str(c.assistant_title, '');
+            this._greetingMessage = _str(c.greeting_message, '');
+            this._placeholder = _str(c.placeholder, '');
         }
     }
 
     _flows() {
         const r = this._catalog.lastResult;
-        return (r && r.flows) || [];
+        if (!r || !Array.isArray(r.flows)) return [];
+        return r.flows;
     }
 
     _selectedFlow() {
-        return this._flows().find((f) => f.flow_id === this._flowId) || null;
+        const found = this._flows().find((f) => f.flow_id === this._flowId);
+        return found ? found : null;
     }
 
     _flowSkills() {
         const flow = this._selectedFlow();
         if (!flow) return [];
-        const skills = flow.skills || {};
+        const skills = flow.skills;
         if (Array.isArray(skills)) return skills.map((s) => ({ id: s, name: s }));
-        return Object.entries(skills).map(([id, v]) => ({ id, name: (v && v.name) || id }));
+        if (!skills || typeof skills !== 'object') return [];
+        return Object.entries(skills).map(([id, v]) => ({
+            id,
+            name: (v && typeof v.name === 'string' && v.name !== '') ? v.name : id,
+        }));
     }
 
     _skillSelectorEnabled() {
@@ -244,7 +251,7 @@ export class FrontendCreateEmbedModal extends PlatformFormModal {
                                     <option value="">${this.t('embed_create_modal.flow_placeholder')}</option>
                                     ${flows.map((f) => html`
                                         <option value=${f.flow_id} ?selected=${this._flowId === f.flow_id}>
-                                            ${f.name || f.flow_id}
+                                            ${typeof f.name === 'string' && f.name !== '' ? f.name : f.flow_id}
                                         </option>
                                     `)}
                                 </select>

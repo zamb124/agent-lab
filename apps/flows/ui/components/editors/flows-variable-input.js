@@ -6,6 +6,7 @@
 
 import { html, css } from 'lit';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
+import { asArray, asString } from '../../_helpers/flows-resolvers.js';
 
 export class FlowsVariableInput extends PlatformElement {
     static properties = {
@@ -51,13 +52,13 @@ export class FlowsVariableInput extends PlatformElement {
     }
 
     _onInput(e) {
-        const v = e.target.value || '';
+        const v = asString(e.target.value);
         this.value = v;
         this.emit('change', { value: v });
         const last = v.match(/@var:([A-Za-z0-9_]*)$/);
         if (last) {
             const prefix = last[1].toLowerCase();
-            const items = (this._variables.items || [])
+            const items = asArray(this._variables.items)
                 .filter((it) => it && typeof it.key === 'string' && it.key.toLowerCase().startsWith(prefix))
                 .slice(0, 8);
             this._suggestions = items;

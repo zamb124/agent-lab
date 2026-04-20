@@ -251,8 +251,8 @@ export class FrontendTracingPage extends PlatformPage {
                                 ? html`<div class="suggest-empty">${this.t('tracing_page.empty')}</div>`
                                 : items.map((it) => html`
                                     <div class="suggest-item"
-                                        @mousedown=${(e) => { e.preventDefault(); this._selectSuggest(field, it.value || it); }}>
-                                        ${it.label || it.value || it}
+                                        @mousedown=${(e) => { e.preventDefault(); this._selectSuggest(field, typeof it === 'string' ? it : it.value); }}>
+                                        ${typeof it === 'string' ? it : (typeof it.label === 'string' && it.label !== '' ? it.label : it.value)}
                                     </div>
                                 `))}
                     </div>
@@ -329,7 +329,7 @@ export class FrontendTracingPage extends PlatformPage {
                     ${node.duration_ms != null ? html` · ${node.duration_ms} ms` : null}
                 </div>
             </div>
-            ${(node.children || []).map((c) => this._renderSpan(c, depth + 1))}
+            ${Array.isArray(node.children) ? node.children.map((c) => this._renderSpan(c, depth + 1)) : ''}
         `;
     }
 

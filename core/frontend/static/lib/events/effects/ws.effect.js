@@ -22,8 +22,15 @@
  *     `_pending`) обрабатываются как push-события (с предупреждением в
  *     консоли при невалидном `type`).
  *
- * No-fallback: если WS не подключён или истёк timeout, request падает с
- * `WsTransportError`. На HTTP не переключается.
+ * No-fallback: если истёк timeout — request падает с `WsTransportError`
+ * (`ws_timeout`). На HTTP не переключается.
+ *
+ * Pre-connect queue: если `request()` вызван до `WS_CONNECTED` (типичный
+ * случай — autoload фабрики до завершения `AUTH_USER_LOADED → _open`),
+ * фрейм откладывается в `_preConnectQueue` и отправляется сразу после
+ * `onopen`. Если соединение не установилось за `PRE_CONNECT_MAX_WAIT_MS`
+ * (5 секунд) — request падает с `ws_timeout`. После явного `_close()`
+ * (logout) очередь сбрасывается с `ws_disconnected`.
  */
 
 import { CoreEvents, assertEventType } from '../contract.js';
@@ -41,6 +48,8 @@ let _baseUrl = null;
 let _ctxRef = null;
 let _requestSeq = 0;
 const _pending = new Map();
+const _preConnectQueue = [];
+const PRE_CONNECT_MAX_WAIT_MS = 5_000;
 
 export class WsTransportError extends Error {
     constructor(message, code) {
@@ -85,7 +94,7 @@ function _open() {
     _attempt += 1;
     _ctxRef.dispatch(CoreEvents.WS_CONNECT_REQUESTED, { url: _wsUrl() }, { source: 'system' });
     _socket = new WebSocket(_wsUrl());
-    _socket.onopen = () => {
+    const onOpen = () => {
         _attempt = 0;
         _ctxRef.dispatch(CoreEvents.WS_CONNECTED, { url: _wsUrl() }, { source: 'ws' });
         if (_pingTimer) clearInterval(_pingTimer);
@@ -94,7 +103,9 @@ function _open() {
                 try { _socket.send('ping'); } catch { /* ignored */ }
             }
         }, 25_000);
+        _flushPreConnectQueue();
     };
+    _socket.onopen = onOpen;
     _socket.onmessage = (msg) => _onFrame(msg);
     _socket.onerror = (err) => {
         console.warn('[ws.effect] error', err);
@@ -107,6 +118,11 @@ function _open() {
             _scheduleReconnect();
         }
     };
+    if (_socket.readyState === WebSocket.OPEN) {
+        // MockWebSocket в тестах открывается синхронно в конструкторе и не
+        // вызывает onopen после присваивания handler. Дёргаем вручную.
+        onOpen();
+    }
 }
 
 function _close() {
@@ -119,6 +135,7 @@ function _close() {
     _socket = null;
     _attempt = 0;
     _rejectAllPending(new WsTransportError('WebSocket closed', 'ws_disconnected'));
+    _rejectAllPreConnect(new WsTransportError('WebSocket closed', 'ws_disconnected'));
 }
 
 function _rejectAllPending(error) {
@@ -127,6 +144,56 @@ function _rejectAllPending(error) {
         entry.reject(error);
     }
     _pending.clear();
+}
+
+function _flushPreConnectQueue() {
+    while (_preConnectQueue.length > 0) {
+        const queued = _preConnectQueue.shift();
+        clearTimeout(queued.preTimeoutHandle);
+        _sendFrameNow(queued);
+    }
+}
+
+function _rejectAllPreConnect(error) {
+    while (_preConnectQueue.length > 0) {
+        const queued = _preConnectQueue.shift();
+        clearTimeout(queued.preTimeoutHandle);
+        queued.reject(error);
+    }
+}
+
+function _sendFrameNow(queued) {
+    if (!_socket || _socket.readyState !== WebSocket.OPEN) {
+        queued.reject(new WsTransportError('WebSocket is not connected', 'ws_disconnected'));
+        return;
+    }
+    const requestId = _generateRequestId();
+    const frame = {
+        request_id: requestId,
+        type: queued.type,
+        payload: queued.payload,
+    };
+    const timeoutHandle = setTimeout(() => {
+        if (_pending.has(requestId)) {
+            _pending.delete(requestId);
+            queued.reject(new WsTransportError(`WS command "${queued.type}" timed out after ${queued.timeoutMs}ms`, 'ws_timeout'));
+        }
+    }, queued.timeoutMs);
+    _pending.set(requestId, {
+        resolve: queued.resolve,
+        reject: queued.reject,
+        timeoutHandle,
+        expectedSucceeded: queued.expectedSucceeded,
+        expectedFailed: queued.expectedFailed,
+        causationEventId: queued.causationEventId,
+    });
+    try {
+        _socket.send(JSON.stringify(frame));
+    } catch (err) {
+        _pending.delete(requestId);
+        clearTimeout(timeoutHandle);
+        queued.reject(new WsTransportError(`WS send failed: ${err && err.message ? err.message : String(err)}`, 'ws_send_failed'));
+    }
 }
 
 function _onFrame(msg) {
@@ -236,37 +303,42 @@ export const platformWs = {
         assertEventType(opts.expectedFailed);
 
         return new Promise((resolve, reject) => {
-            if (!this.isOpen()) {
-                reject(new WsTransportError('WebSocket is not connected', 'ws_disconnected'));
-                return;
-            }
-            const requestId = _generateRequestId();
-            const frame = {
-                request_id: requestId,
+            const queued = {
                 type: opts.type,
                 payload: opts.payload === undefined ? null : opts.payload,
-            };
-            const timeoutHandle = setTimeout(() => {
-                if (_pending.has(requestId)) {
-                    _pending.delete(requestId);
-                    reject(new WsTransportError(`WS command "${opts.type}" timed out after ${opts.timeoutMs}ms`, 'ws_timeout'));
-                }
-            }, opts.timeoutMs);
-            _pending.set(requestId, {
-                resolve,
-                reject,
-                timeoutHandle,
+                timeoutMs: opts.timeoutMs,
                 expectedSucceeded: opts.expectedSucceeded,
                 expectedFailed: opts.expectedFailed,
                 causationEventId: opts.causationEventId || null,
-            });
-            try {
-                _socket.send(JSON.stringify(frame));
-            } catch (err) {
-                _pending.delete(requestId);
-                clearTimeout(timeoutHandle);
-                reject(new WsTransportError(`WS send failed: ${err && err.message ? err.message : String(err)}`, 'ws_send_failed'));
+                resolve,
+                reject,
+                preTimeoutHandle: null,
+            };
+
+            if (this.isOpen()) {
+                _sendFrameNow(queued);
+                return;
             }
+
+            if (_intentionalClose) {
+                reject(new WsTransportError('WebSocket is closed (logged out)', 'ws_disconnected'));
+                return;
+            }
+
+            // Соединения ещё нет (initial autoload до AUTH_USER_LOADED или
+            // мгновенный reconnect). Откладываем фрейм до onopen, но не
+            // дольше PRE_CONNECT_MAX_WAIT_MS — иначе ws_timeout.
+            queued.preTimeoutHandle = setTimeout(() => {
+                const idx = _preConnectQueue.indexOf(queued);
+                if (idx >= 0) {
+                    _preConnectQueue.splice(idx, 1);
+                    queued.reject(new WsTransportError(
+                        `WS command "${opts.type}" timed out waiting for connection (${PRE_CONNECT_MAX_WAIT_MS}ms)`,
+                        'ws_timeout',
+                    ));
+                }
+            }, PRE_CONNECT_MAX_WAIT_MS);
+            _preConnectQueue.push(queued);
         });
     },
 };
@@ -307,4 +379,5 @@ export function _resetPlatformWsForTests() {
     _ctxRef = null;
     _requestSeq = 0;
     _pending.clear();
+    _preConnectQueue.length = 0;
 }

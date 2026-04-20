@@ -22,6 +22,7 @@ import { PlatformElement } from '@platform/lib/platform-element/index.js';
 import '@platform/lib/components/platform-icon.js';
 import '@platform/lib/components/glass-spinner.js';
 import { getNodeTypeMeta, getCategoryToken } from '../../constants/node-icons.js';
+import { asArray, asString } from '../../_helpers/flows-resolvers.js';
 
 const NODE_CATEGORY_ORDER = Object.freeze(['core', 'tools', 'integrations', 'channels']);
 
@@ -54,7 +55,7 @@ export class FlowsNodeTypesSidebar extends PlatformElement {
                 overflow-y: auto;
             }
 
-            /* Триггеры */
+            /* Triggers */
             .triggers-section {
                 display: flex; flex-direction: column; gap: var(--space-2);
                 padding: 0 var(--space-2);
@@ -128,7 +129,7 @@ export class FlowsNodeTypesSidebar extends PlatformElement {
                 box-shadow: 0 0 0 2px var(--accent-subtle);
             }
 
-            /* Категории */
+            /* Categories */
             .category {
                 display: flex;
                 flex-direction: column;
@@ -154,7 +155,7 @@ export class FlowsNodeTypesSidebar extends PlatformElement {
                 gap: 2px;
             }
 
-            /* Карточка типа */
+            /* Node type card */
             .node-item {
                 display: flex; align-items: center; gap: var(--space-2);
                 padding: var(--space-2);
@@ -209,7 +210,7 @@ export class FlowsNodeTypesSidebar extends PlatformElement {
 
     _matchQuery(text) {
         if (this._query.length === 0) return true;
-        return String(text || '').toLowerCase().includes(this._query.toLowerCase());
+        return asString(text).toLowerCase().includes(this._query.toLowerCase());
     }
 
     _filterItems(items) {
@@ -276,14 +277,15 @@ export class FlowsNodeTypesSidebar extends PlatformElement {
 
     _renderCategory(titleKey, items, dragHandler, categoryKey) {
         if (items.length === 0) return '';
-        const categoryToken = getCategoryToken(CATEGORY_TO_TOKEN_KEY[categoryKey] || 'core');
+        const tokenKey = CATEGORY_TO_TOKEN_KEY[categoryKey];
+        const categoryToken = getCategoryToken(typeof tokenKey === 'string' && tokenKey.length > 0 ? tokenKey : 'core');
         return html`
             <div class="category">
                 <div class="category-header">${this.t(titleKey)}</div>
                 <div class="category-items">
                     ${items.map((it) => {
                         const meta = getNodeTypeMeta(it.type);
-                        const iconName = meta.icon !== 'box' ? meta.icon : (it.icon || 'box');
+                        const iconName = meta.icon !== 'box' ? meta.icon : (typeof it.icon === 'string' && it.icon.length > 0 ? it.icon : 'box');
                         const tokenColor = getCategoryToken(meta.category) !== getCategoryToken('core') || categoryKey === 'core'
                             ? getCategoryToken(meta.category)
                             : categoryToken;
@@ -327,7 +329,7 @@ export class FlowsNodeTypesSidebar extends PlatformElement {
         return html`
             ${this._renderTriggers()}
             ${this._renderSearch()}
-            ${NODE_CATEGORY_ORDER.map((cat) => this._renderCategory(this._categoryTitleKey(cat), grouped.get(cat) || [], this._onDragNodeType, cat))}
+            ${NODE_CATEGORY_ORDER.map((cat) => this._renderCategory(this._categoryTitleKey(cat), asArray(grouped.get(cat)), this._onDragNodeType, cat))}
             ${filteredResources.length > 0 ? html`<div class="category-divider"></div>` : ''}
             ${this._renderCategory('node_types_sidebar.category_resources', filteredResources, this._onDragResourceType, 'resources')}
             ${this._nodeTypesOp.busy && nodeTypes.length === 0

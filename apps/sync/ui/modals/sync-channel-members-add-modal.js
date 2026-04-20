@@ -8,6 +8,7 @@ import { registerModalKind } from '@platform/lib/utils/modal-registry.js';
 import { resolveDisplayName } from '../_helpers/sync-id-resolvers.js';
 import '@platform/lib/components/platform-button.js';
 import '@platform/lib/components/platform-user-chip.js';
+import '@platform/lib/components/platform-icon.js';
 
 export class SyncChannelMembersAddModal extends PlatformFormModal {
     static modalKind = 'sync.channel_members_add';
@@ -23,11 +24,14 @@ export class SyncChannelMembersAddModal extends PlatformFormModal {
     static styles = [
         ...(PlatformFormModal.styles ? [PlatformFormModal.styles] : []),
         css`
-            input { padding: var(--space-2); border-radius: var(--radius-md); border: 1px solid var(--glass-border); background: var(--glass-solid); color: var(--text-primary); width: 100%; margin-bottom: var(--space-2); }
-            .members { max-height: 300px; overflow-y: auto; }
-            .member { display: flex; align-items: center; gap: var(--space-2); padding: var(--space-2); cursor: pointer; border-radius: var(--radius-sm); }
-            .member:hover { background: var(--glass-hover); }
-            .member.selected { background: var(--glass-active, var(--accent)); color: white; }
+            .members {
+                max-height: 320px;
+                overflow-y: auto;
+                margin-top: var(--space-3);
+                display: flex;
+                flex-direction: column;
+                gap: var(--space-2);
+            }
         `,
     ];
 
@@ -45,7 +49,7 @@ export class SyncChannelMembersAddModal extends PlatformFormModal {
         if (next.has(userId)) next.delete(userId);
         else next.add(userId);
         this._selected = next;
-        this.markDirty();
+        this.isDirty = true;
     }
 
     _filteredMembers() {
@@ -59,19 +63,27 @@ export class SyncChannelMembersAddModal extends PlatformFormModal {
     renderBody() {
         const filtered = this._filteredMembers();
         return html`
-            <input
-                type="text"
-                placeholder=${this.t('channel_members_add.search_placeholder')}
-                .value=${this._query}
-                @input=${(e) => { this._query = e.target.value; }}
-            />
+            <div class="form-group">
+                <input
+                    class="form-input"
+                    type="text"
+                    placeholder=${this.t('channel_members_add.search_placeholder')}
+                    .value=${this._query}
+                    @input=${(e) => { this._query = e.target.value; }}
+                />
+            </div>
             <div class="members">
                 ${filtered.map((m) => html`
                     <div
-                        class=${this._selected.has(m.user_id) ? 'member selected' : 'member'}
+                        class=${this._selected.has(m.user_id) ? 'form-item selected' : 'form-item'}
                         @click=${() => this._toggleMember(m.user_id)}
                     >
-                        <platform-user-chip user-id=${m.user_id} size="sm" ?interactive=${false}></platform-user-chip>
+                        <div class="form-checkbox">
+                            ${this._selected.has(m.user_id) ? html`<platform-icon name="check" size="12"></platform-icon>` : ''}
+                        </div>
+                        <div class="form-item-content">
+                            <platform-user-chip user-id=${m.user_id} size="sm" ?interactive=${false}></platform-user-chip>
+                        </div>
                     </div>
                 `)}
             </div>
@@ -80,10 +92,12 @@ export class SyncChannelMembersAddModal extends PlatformFormModal {
 
     renderFooter() {
         return html`
-            <platform-button @click=${() => this.close()}>${this.t('channel_members_add.action_cancel')}</platform-button>
-            <platform-button variant="primary" @click=${this._onSubmit} ?disabled=${this._selected.size === 0}>
-                ${this.t('channel_members_add.action_add', { count: this._selected.size })}
-            </platform-button>
+            <div class="form-actions">
+                <platform-button variant="secondary" @click=${() => this.close()}>${this.t('channel_members_add.action_cancel')}</platform-button>
+                <platform-button variant="primary" @click=${this._onSubmit} ?disabled=${this._selected.size === 0}>
+                    ${this.t('channel_members_add.action_add', { count: this._selected.size })}
+                </platform-button>
+            </div>
         `;
     }
 

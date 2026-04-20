@@ -49,6 +49,14 @@ import {
 
 const VALID_OPERATIONS = new Set(['list', 'get', 'create', 'update', 'remove']);
 const MUTATING_OPERATIONS = new Set(['create', 'update', 'remove']);
+const _REQUESTED_SUFFIX = '_requested';
+
+function _deriveCommandReplyType(commandType, replySuffix) {
+    if (typeof commandType !== 'string' || !commandType.endsWith(_REQUESTED_SUFFIX)) {
+        throw new Error(`createResourceCollection: commandType must end with "_requested", got "${commandType}"`);
+    }
+    return commandType.slice(0, -_REQUESTED_SUFFIX.length) + replySuffix;
+}
 
 const INITIAL_SLICE = freeze({
     items: freeze([]),
@@ -337,14 +345,19 @@ export function createResourceCollection(options) {
 
     async function _doRequest(opSpec, event, ctx) {
         if (transport === 'ws') {
+            // Backend canonical reply типы выводятся из commandType (`<...>_requested`):
+            //   succeeded -> `<...>_succeeded`, failed -> `<...>_failed`.
+            // Внутренние события фабрики (`events.LIST_LOADED`, `events.CREATED`, ...) —
+            // отдельное имя, на которое подписан reducer; диспатчится после успешного
+            // получения reply (см. effect-ветки ниже).
             return transportRequest({
                 transport: 'ws',
                 commandType: opSpec.commandType,
                 payload: opSpec.wsPayload,
                 wsTimeoutMs,
                 causationEventId: event.id,
-                expectedSucceeded: opSpec.succeeded,
-                expectedFailed: opSpec.failed,
+                expectedSucceeded: _deriveCommandReplyType(opSpec.commandType, '_succeeded'),
+                expectedFailed: _deriveCommandReplyType(opSpec.commandType, '_failed'),
             });
         }
         const headers = requestHeaders

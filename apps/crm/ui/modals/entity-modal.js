@@ -807,7 +807,7 @@ export class CRMEntityModal extends PlatformFormModal {
                     ${this._entityData.namespace}
                 </span>
                 <span class="badge">
-                    <platform-icon name="hash" size="12"></platform-icon>
+                    <platform-icon name="tag" size="12"></platform-icon>
                     ${this._entityData.entity_id}
                 </span>
             </div>

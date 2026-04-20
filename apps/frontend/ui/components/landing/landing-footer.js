@@ -192,7 +192,7 @@ export class LandingFooter extends PlatformElement {
     }
 
     _legalUrl(pathname) {
-        const lang = (this.bus.getState().i18n.locale || 'ru');
+        const lang = this.bus.getState().i18n.locale;
         if (lang === 'ru') {
             return `${pathname}?lang=ru`;
         }
@@ -203,7 +203,7 @@ export class LandingFooter extends PlatformElement {
     }
 
     render() {
-        const t = (key, params) => (this.t(key, params ?? {}) || key);
+        const t = (key, params) => this.t(key, params);
         const year = new Date().getFullYear();
         return html`
             <footer class="footer-container">

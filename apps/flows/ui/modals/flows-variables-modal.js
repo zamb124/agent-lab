@@ -1,47 +1,171 @@
 /**
- * flows-variables-modal — таблица переменных company-уровня.
+ * flows-variables-modal — единая модалка переменных.
  *
- * Источник — useResource('flows/variables') (autoload). Создание/редактирование
- * через `flows.variable_editor`. Удаление через core platformConfirm + remove.
+ * Контракт переменной симметричен на обоих уровнях: { key, value, secret }.
+ *
+ * Scope:
+ *   - 'company' — глобальные переменные company-уровня. Источник: useResource('flows/variables').
+ *   - 'flow'    — переменные конкретного flow. Источник: state.skillsData.variables
+ *                 (черновик editor'а). Финальная фиксация — общим Save в editor-header.
+ *
+ * Во flow-режиме рядом со «своими» переменными показываются глобальные
+ * company-переменные (read-only, бейдж company): любой flow может ссылаться
+ * на них через @var:name; при совпадении ключа flow-переменная перекрывает
+ * company при выполнении.
  */
 
 import { html, css } from 'lit';
-import { PlatformLightModal } from '@platform/lib/components/glass-light-modal.js';
+import { PlatformModal } from '@platform/lib/components/glass-modal.js';
 import { registerModalKind } from '@platform/lib/utils/modal-registry.js';
 import { platformConfirm } from '@platform/lib/components/platform-confirm-modal.js';
 import './flows-variable-editor-modal.js';
 import '@platform/lib/components/platform-button.js';
 import '@platform/lib/components/platform-icon.js';
 import '@platform/lib/components/glass-spinner.js';
+import { isPlainObject } from '../_helpers/flows-resolvers.js';
 
-export class FlowsVariablesModal extends PlatformLightModal {
+const SCOPE_COMPANY = 'company';
+const SCOPE_FLOW = 'flow';
+
+function _normalizeFlowVar(raw) {
+    if (raw === null || raw === undefined) {
+        return { value: '', secret: false };
+    }
+    if (typeof raw === 'object' && !Array.isArray(raw) && 'value' in raw) {
+        return {
+            value: raw.value,
+            secret: Boolean(raw.secret),
+        };
+    }
+    return { value: raw, secret: false };
+}
+
+function _stringifyVarValue(value, secret) {
+    if (secret) return '***';
+    if (value === null || value === undefined) return '';
+    if (typeof value === 'string') return value;
+    return JSON.stringify(value);
+}
+
+export class FlowsVariablesModal extends PlatformModal {
     static modalKind = 'flows.variables';
     static i18nNamespace = 'flows';
 
+    static properties = {
+        ...PlatformModal.properties,
+        scope: { type: String },
+        flowId: { type: String },
+    };
+
+    static styles = [
+        ...PlatformModal.styles,
+        css`
+            .flows-vars-section { margin-bottom: var(--space-4); }
+            .flows-vars-section:last-child { margin-bottom: 0; }
+            .flows-vars-section-title {
+                font-size: var(--text-sm);
+                color: var(--text-tertiary);
+                text-transform: uppercase;
+                letter-spacing: 0.05em;
+                margin: 0 0 var(--space-2) 0;
+            }
+            .flows-vars-hint {
+                padding: var(--space-2) var(--space-3);
+                margin-bottom: var(--space-3);
+                background: var(--accent-subtle, var(--info-bg));
+                border: 1px dashed var(--accent, var(--info));
+                border-radius: var(--radius-sm);
+                color: var(--text-secondary);
+                font-size: var(--text-sm);
+                line-height: 1.4;
+            }
+            .flows-vars-table { width: 100%; border-collapse: collapse; color: var(--text-secondary); }
+            .flows-vars-table th, .flows-vars-table td { padding: var(--space-2); text-align: left; border-bottom: 1px solid var(--border-subtle); vertical-align: middle; }
+            .flows-vars-table th { color: var(--text-tertiary); font-size: var(--text-xs); text-transform: uppercase; letter-spacing: 0.05em; font-weight: var(--font-medium); }
+            .flows-vars-table td.actions { width: 1%; white-space: nowrap; text-align: right; }
+            .flows-vars-empty { padding: var(--space-4); text-align: center; color: var(--text-tertiary); }
+            .flows-vars-badge {
+                font-size: var(--text-xs);
+                padding: 2px 6px;
+                border: 1px solid var(--border-subtle);
+                border-radius: var(--radius-sm);
+                color: var(--text-tertiary);
+            }
+            .flows-vars-badge.flow { color: var(--accent); border-color: var(--accent); }
+            .flows-vars-badge.company { color: var(--info, var(--accent)); border-color: var(--info, var(--accent)); }
+        `,
+    ];
+
     constructor() {
         super();
-        this._variables = this.useResource('flows/variables', { autoload: true });
+        this.size = 'lg';
+        this.scope = SCOPE_COMPANY;
+        this.flowId = '';
+        this._companyVars = this.useResource('flows/variables', { autoload: true });
+        this._editor = this.useOp('flows/editor');
     }
 
-    connectedCallback() {
-        super.connectedCallback();
+    updated(changed) {
+        super.updated?.(changed);
+        if (changed.has('scope') && this.scope !== SCOPE_COMPANY && this.scope !== SCOPE_FLOW) {
+            throw new Error(`flows-variables-modal: invalid scope "${this.scope}"`);
+        }
+        if (this.scope === SCOPE_FLOW && !this.flowId) {
+            throw new Error('flows-variables-modal: flowId required for scope="flow"');
+        }
+    }
+
+    _flowVariablesEntries() {
+        const state = this._editor.state;
+        const skills = isPlainObject(state.skillsData) ? state.skillsData : null;
+        const skillVars = skills !== null && isPlainObject(skills.variables) ? skills.variables : {};
+        return Object.entries(skillVars).map(([key, raw]) => ({
+            key,
+            ...(_normalizeFlowVar(raw)),
+            scope: SCOPE_FLOW,
+        }));
+    }
+
+    _companyVariablesEntries() {
+        const items = this._companyVars.items;
+        return items.map((item) => ({
+            key: item.key,
+            value: item.value,
+            secret: Boolean(item.secret),
+            system: Boolean(item.system),
+            scope: SCOPE_COMPANY,
+        }));
     }
 
     _create() {
-        this.openModal('flows.variable_editor', {});
-    }
-
-    _edit(variable) {
         this.openModal('flows.variable_editor', {
-            variableKey: variable.key,
-            variableValue: typeof variable.value === 'string' ? variable.value : '',
-            variableSecret: Boolean(variable.secret),
+            scope: this.scope,
+            flowId: this.flowId,
         });
     }
 
-    async _delete(variable) {
+    _editFlow(entry) {
+        this.openModal('flows.variable_editor', {
+            scope: SCOPE_FLOW,
+            flowId: this.flowId,
+            variableKey: entry.key,
+            variableValue: typeof entry.value === 'string' ? entry.value : JSON.stringify(entry.value),
+            variableSecret: entry.secret,
+        });
+    }
+
+    _editCompany(entry) {
+        this.openModal('flows.variable_editor', {
+            scope: SCOPE_COMPANY,
+            variableKey: entry.key,
+            variableValue: typeof entry.value === 'string' ? entry.value : JSON.stringify(entry.value),
+            variableSecret: entry.secret,
+        });
+    }
+
+    async _deleteCompany(entry) {
         const ok = await platformConfirm(
-            this.t('variables_modal.delete_message', { key: variable.key }),
+            this.t('variables_modal.delete_message', { key: entry.key }),
             {
                 title: this.t('variables_modal.delete_title'),
                 variant: 'danger',
@@ -51,75 +175,128 @@ export class FlowsVariablesModal extends PlatformLightModal {
             },
         );
         if (!ok) return;
-        await this._variables.remove(variable.key);
+        await this._companyVars.remove(entry.key);
     }
 
-    _renderRows() {
-        const items = this._variables.items || [];
-        if (this._variables.loading && items.length === 0) {
-            return html`<div class="flows-vars-empty"><glass-spinner></glass-spinner></div>`;
-        }
-        if (items.length === 0) {
-            return html`<div class="flows-vars-empty">${this.t('variables_modal.empty')}</div>`;
-        }
-        return items.map((v) => html`
+    async _deleteFlow(entry) {
+        const ok = await platformConfirm(
+            this.t('variables_modal.delete_message', { key: entry.key }),
+            {
+                title: this.t('variables_modal.delete_title'),
+                variant: 'danger',
+                confirmVariant: 'danger',
+                confirmText: this.t('variables_modal.action_delete'),
+                cancelText: this.t('variables_modal.action_cancel'),
+            },
+        );
+        if (!ok) return;
+        const state = this._editor.state;
+        const skillsData = state.skillsData;
+        const nextVars = { ...skillsData.variables };
+        delete nextVars[entry.key];
+        this._editor.updateSkillsData({ data: { ...skillsData, variables: nextVars } });
+        this._editor.setDirty({ dirty: true });
+        this.toast('flows:toast.variable_applied', { type: 'success' });
+    }
+
+    _renderRow(entry, scope) {
+        const isFlow = scope === SCOPE_FLOW;
+        const isCompanyEditable = scope === SCOPE_COMPANY && !entry.system;
+        return html`
             <tr>
-                <td><code>${v.key}</code></td>
-                <td>${v.secret ? html`<em>${this.t('variables_modal.value_secret')}</em>` : (v.value ?? '')}</td>
+                <td><code>${entry.key}</code></td>
+                <td>${entry.secret
+                    ? html`<em>${this.t('variables_modal.value_secret')}</em>`
+                    : _stringifyVarValue(entry.value, false)}</td>
                 <td>
-                    ${v.system
-                        ? html`<span class="flows-vars-badge">${this.t('variables_modal.badge_system')}</span>`
-                        : html`
-                            <platform-button @click=${() => this._edit(v)}>
+                    ${isFlow
+                        ? html`<span class="flows-vars-badge flow">${this.t('variables_modal.badge_flow')}</span>`
+                        : entry.system
+                            ? html`<span class="flows-vars-badge">${this.t('variables_modal.badge_system')}</span>`
+                            : html`<span class="flows-vars-badge company">${this.t('variables_modal.badge_company')}</span>`}
+                </td>
+                <td class="actions">
+                    ${isFlow
+                        ? html`
+                            <platform-button @click=${() => this._editFlow(entry)}>
                                 <platform-icon name="edit" size="14"></platform-icon>
                             </platform-button>
-                            <platform-button danger @click=${() => this._delete(v)}>
+                            <platform-button danger @click=${() => this._deleteFlow(entry)}>
                                 <platform-icon name="trash" size="14"></platform-icon>
                             </platform-button>
-                        `}
+                        `
+                        : isCompanyEditable
+                            ? html`
+                                <platform-button @click=${() => this._editCompany(entry)}>
+                                    <platform-icon name="edit" size="14"></platform-icon>
+                                </platform-button>
+                                <platform-button danger @click=${() => this._deleteCompany(entry)}>
+                                    <platform-icon name="trash" size="14"></platform-icon>
+                                </platform-button>
+                            `
+                            : html``}
                 </td>
             </tr>
-        `);
+        `;
     }
 
-    render() {
+    _renderTable(rows, scope, emptyKey) {
+        if (rows.length === 0) {
+            return html`<div class="flows-vars-empty">${this.t(emptyKey)}</div>`;
+        }
         return html`
-            <div class="light-modal-backdrop" @click=${this._onBackdropClick}></div>
-            <div class="light-modal-container flows-vars-shell">
-                <style>
-                    .flows-vars-shell { padding: var(--space-4); gap: var(--space-3); }
-                    .flows-vars-header { display: flex; align-items: center; justify-content: space-between; }
-                    .flows-vars-header h2 { margin: 0; color: var(--text-primary); }
-                    .flows-vars-table { width: 100%; border-collapse: collapse; color: var(--text-secondary); }
-                    .flows-vars-table th, .flows-vars-table td { padding: var(--space-2); text-align: left; border-bottom: 1px solid var(--border-subtle); }
-                    .flows-vars-table th { color: var(--text-tertiary); font-size: var(--text-xs); text-transform: uppercase; letter-spacing: 0.05em; }
-                    .flows-vars-empty { padding: var(--space-6); text-align: center; color: var(--text-tertiary); }
-                    .flows-vars-badge { font-size: var(--text-xs); color: var(--text-tertiary); padding: 2px 6px; border: 1px solid var(--border-subtle); border-radius: var(--radius-sm); }
-                </style>
-                <div class="flows-vars-header">
-                    <h2>${this.t('variables_modal.title')}</h2>
-                    <div>
-                        <platform-button variant="primary" @click=${this._create}>
-                            <platform-icon name="plus" size="14"></platform-icon>
-                            ${this.t('variables_modal.action_create')}
-                        </platform-button>
-                        <platform-button @click=${() => this.close()}>
-                            <platform-icon name="close" size="14"></platform-icon>
-                        </platform-button>
-                    </div>
-                </div>
-                <table class="flows-vars-table">
-                    <thead>
-                        <tr>
-                            <th>${this.t('variables_modal.col_key')}</th>
-                            <th>${this.t('variables_modal.col_value')}</th>
-                            <th>${this.t('variables_modal.col_actions')}</th>
-                        </tr>
-                    </thead>
-                    <tbody>${this._renderRows()}</tbody>
-                </table>
-            </div>
+            <table class="flows-vars-table">
+                <thead>
+                    <tr>
+                        <th>${this.t('variables_modal.col_key')}</th>
+                        <th>${this.t('variables_modal.col_value')}</th>
+                        <th>${this.t('variables_modal.col_scope')}</th>
+                        <th>${this.t('variables_modal.col_actions')}</th>
+                    </tr>
+                </thead>
+                <tbody>${rows.map((entry) => this._renderRow(entry, scope))}</tbody>
+            </table>
         `;
+    }
+
+    renderHeader() {
+        return this.scope === SCOPE_FLOW
+            ? this.t('variables_modal.title_flow')
+            : this.t('variables_modal.title_company');
+    }
+
+    renderHeaderActions() {
+        return html`
+            <platform-button variant="primary" @click=${() => this._create()}>
+                <platform-icon name="plus" size="14"></platform-icon>
+                ${this.t('variables_modal.action_create')}
+            </platform-button>
+        `;
+    }
+
+    renderBody() {
+        if (this.scope === SCOPE_FLOW) {
+            const flowRows = this._flowVariablesEntries();
+            const companyRows = this._companyVariablesEntries();
+            return html`
+                <div class="flows-vars-hint">${this.t('variables_modal.hint_flow_overrides_company')}</div>
+                <section class="flows-vars-section">
+                    <h3 class="flows-vars-section-title">${this.t('variables_modal.section_flow')}</h3>
+                    ${this._renderTable(flowRows, SCOPE_FLOW, 'variables_modal.empty_flow')}
+                </section>
+                <section class="flows-vars-section">
+                    <h3 class="flows-vars-section-title">${this.t('variables_modal.section_company')}</h3>
+                    ${this._companyVars.loading && companyRows.length === 0
+                        ? html`<glass-spinner></glass-spinner>`
+                        : this._renderTable(companyRows, SCOPE_COMPANY, 'variables_modal.empty_company')}
+                </section>
+            `;
+        }
+        const companyRows = this._companyVariablesEntries();
+        if (this._companyVars.loading && companyRows.length === 0) {
+            return html`<glass-spinner></glass-spinner>`;
+        }
+        return this._renderTable(companyRows, SCOPE_COMPANY, 'variables_modal.empty_company');
     }
 }
 

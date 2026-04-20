@@ -1,10 +1,14 @@
 /**
  * Office BFF требует заголовок `X-Platform-Namespace` на все запросы под
- * `/documents/api/v1`. Источник правды о выборе namespace — `state.ui.namespace`
- * (см. core `reducers/ui.js`); для http-слоя удобнее читать через
- * `getActivePlatformNamespaceName(companyId)` — одинаковая семантика, и при
- * старте до инициализации bus (когда фабрика уже регистрируется, а
- * пользователь ещё не загружен) утилита сама падает в значение `default`.
+ * `/documents/api/v1`. Каталоги и документы жёстко привязаны к namespace,
+ * режим «все пространства» в Документах запрещён — `office-sidebar`
+ * автоматически выбирает первый namespace, если выбора ещё нет.
+ *
+ * Источник правды о выборе — `state.ui.namespace`; для http-слоя читаем
+ * через `getActivePlatformNamespaceName(companyId)`. Утилита возвращает
+ * `default` только в bootstrap-окне (между регистрацией фабрики и
+ * автоселектом sidebar) — backend всё равно валидирует, что namespace
+ * реально существует в активной компании (`_require_explicit_namespace`).
  *
  * Применение в фабрике:
  *

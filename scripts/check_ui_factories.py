@@ -42,7 +42,13 @@ FACTORY_KINDS = (
     "createCursorList",
     "createFacets",
     "createForm",
+    "createSlice",
 )
+
+# Для `createSlice` проверяется дополнительно наличие `extraInitial`
+# (минимум один ключ) и `extraReducer` (обязателен). `transport` / `request`
+# /  `restMirror` у slice-фабрик запрещены — у них нет транспорта.
+SLICE_ONLY_FORBIDDEN_FIELDS = ("transport", "request", "restMirror", "wsTimeoutMs")
 
 CALL_RE = re.compile(
     r"\b(?P<kind>" + "|".join(FACTORY_KINDS) + r")\s*\(\s*\{",
@@ -120,10 +126,15 @@ def _flatten(obj, prefix: str, out: set[str]) -> None:
             _flatten(value, f"{prefix}.{idx}" if prefix else str(idx), out)
 
 
+EXTRA_INITIAL_RE = re.compile(r"\bextraInitial\s*:\s*\{", re.M)
+EXTRA_REDUCER_RE = re.compile(r"\bextraReducer\s*:\s*(?:function|\()", re.M)
+
+
 def _parse_factories(path: Path) -> list[dict]:
     """Возвращает список фабрик из файла с метаданными для lint.
 
-    Каждая запись: {kind, name, baseUrl, idField, ops, toasts: [(key, line)]}
+    Каждая запись: {kind, name, baseUrl, idField, ops, toasts, has_extra_initial,
+    has_extra_reducer, forbidden_fields: [str]}.
     """
     text = path.read_text(encoding="utf-8")
     factories: list[dict] = []
@@ -141,6 +152,9 @@ def _parse_factories(path: Path) -> list[dict]:
             "idField": None,
             "ops": [],
             "toasts": [],
+            "has_extra_initial": False,
+            "has_extra_reducer": False,
+            "forbidden_fields": [],
         }
         for inner in STR_FIELD_RE.finditer(block):
             key, value = inner.group("key"), inner.group("value")
@@ -162,6 +176,13 @@ def _parse_factories(path: Path) -> list[dict]:
                 for tok in ops_raw.split(",")
                 if tok.strip().strip("'\"")
             ]
+        if EXTRA_INITIAL_RE.search(block):
+            rec["has_extra_initial"] = True
+        if EXTRA_REDUCER_RE.search(block):
+            rec["has_extra_reducer"] = True
+        for forbidden in SLICE_ONLY_FORBIDDEN_FIELDS:
+            if re.search(rf"\b{re.escape(forbidden)}\s*:", block):
+                rec["forbidden_fields"].append(forbidden)
         factories.append(rec)
     return factories
 
@@ -241,10 +262,17 @@ def main() -> int:
                     )
                 else:
                     expected = f"/{svc_name}/api"
-                    # office сервисный процесс — публичный путь `/documents`
-                    # (см. office.mdc: server.name=documents, slug onlyoffice
-                    # зарезервирован под Document Server).
-                    extra_allowed = ("/documents/api",) if svc_name == "office" else ()
+                    # Сервисные процессы могут монтироваться под публичным
+                    # путём, отличным от имени каталога `apps/<svc>/`:
+                    #   - `apps/office`  -> `/documents/...` (см. office.mdc).
+                    #   - `apps/provider_litserve` -> `/litserve/...`
+                    #     (короткое имя для UI/REST, см. main.py UI_PREFIX).
+                    if svc_name == "office":
+                        extra_allowed = ("/documents/api",)
+                    elif svc_name == "provider_litserve":
+                        extra_allowed = ("/litserve/api",)
+                    else:
+                        extra_allowed = ()
                     if not (
                         base_url.startswith(expected)
                         or base_url.startswith("/api/")
@@ -260,6 +288,22 @@ def main() -> int:
                 errors.append(
                     f"{prefix}: operations={sorted(needs_id)} требуют поле idField"
                 )
+
+            if kind == "createSlice":
+                if not rec["has_extra_initial"]:
+                    errors.append(
+                        f"{prefix}: createSlice требует extraInitial "
+                        f"(минимум один ключ, задающий каноничную форму slice)"
+                    )
+                if not rec["has_extra_reducer"]:
+                    errors.append(
+                        f"{prefix}: createSlice требует extraReducer (pure reducer)"
+                    )
+                if rec["forbidden_fields"]:
+                    errors.append(
+                        f"{prefix}: createSlice не поддерживает "
+                        f"{rec['forbidden_fields']} — у slice нет транспорта"
+                    )
 
             for toast_key in rec["toasts"]:
                 if ":" not in toast_key:

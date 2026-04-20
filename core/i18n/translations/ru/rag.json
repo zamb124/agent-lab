@@ -1,100 +1,85 @@
 {
-  "routes": {
-    "namespaces": "Пространства",
-    "namespace_detail": "Пространство",
-    "search": "Поиск",
-    "settings": "Настройки"
-  },
-  "sidebar": {
-    "title": "RAG Service",
-    "menu_namespaces": "Неймспейсы",
-    "menu_search": "Поиск",
-    "menu_settings": "Настройки",
-    "provider_label": "Провайдер",
-    "providers_loading": "Загрузка провайдеров..."
-  },
-  "namespace_list": {
-    "header_title": "Неймспейсы",
-    "header_subtitle": "Управление неймспейсами документов",
-    "create_button": "Создать неймспейс",
-    "loading": "Загрузка неймспейсов...",
-    "empty_title": "Неймспейсов пока нет",
-    "empty_hint": "Создайте первый неймспейс для индексации документов.",
-    "card_documents_label": "документов"
-  },
-  "namespace_detail": {
-    "not_found": "Неймспейс не найден",
-    "open_menu": "Открыть меню",
-    "back": "Назад",
-    "documents_count": "{{count}} документов",
-    "upload_button": "Загрузить документ",
-    "uploading_short": "Загрузка...",
-    "loading_documents": "Загрузка документов...",
-    "drop_here": "Перетащите файл сюда",
-    "drop_or_choose": "или нажмите для выбора файла",
-    "uploading_document": "Загрузка документа...",
-    "created_at_label": "Создан",
-    "pages_count": "{{count}} стр.",
-    "delete_button_title": "Удалить",
-    "delete_confirm": "Удалить документ?"
-  },
-  "search_view": {
-    "header_title": "Поиск",
-    "header_subtitle": "Семантический поиск по документам namespace",
-    "label_namespace": "Неймспейс",
-    "select_namespace": "Выберите неймспейс",
-    "label_limit": "Результатов",
-    "label_query": "Запрос",
-    "query_placeholder": "Введите поисковый запрос...",
-    "find_button": "Найти",
-    "searching": "Поиск...",
-    "fill_all_fields": "Заполните все поля",
-    "empty_no_results_title": "Нет результатов",
-    "empty_hint": "Введите запрос для поиска",
-    "result_document_fallback": "Документ",
-    "result_page_meta": "Стр. {{page}}"
-  },
-  "settings_view": {
-    "header_title": "Настройки",
-    "header_subtitle": "Конфигурация RAG-сервиса",
-    "providers_section": "Провайдеры",
-    "providers_section_desc": "Активный backend для хранения векторов и поиска",
-    "providers_loading": "Загрузка провайдеров...",
-    "providers_default_badge": "по умолчанию",
-    "providers_active_badge": "активен",
-    "providers_switch_button": "Использовать",
-    "about_title": "О RAG Service",
-    "about_text": "Retrieval Augmented Generation: документы разбиваются на чанки, векторизуются и сохраняются для семантического поиска по корпоративным данным."
-  },
-  "namespace_create_modal": {
-    "header": "Создать неймспейс",
-    "label_name": "Название",
-    "name_placeholder": "my-namespace",
-    "name_hint": "Латиница, цифры, дефис; до 64 символов",
-    "label_description": "Описание",
-    "description_placeholder": "Опишите назначение неймспейса...",
-    "submit": "Создать",
-    "submitting": "Создание...",
-    "cancel": "Отмена"
-  },
-  "form": {
-    "namespace_name_required": "Введите корректное имя неймспейса"
-  },
-  "toast": {
-    "namespace_created": "Неймспейс создан",
-    "namespace_create_failed": "Не удалось создать неймспейс",
-    "namespace_deleted": "Неймспейс удалён",
-    "namespace_delete_failed": "Не удалось удалить неймспейс",
-    "document_uploaded": "Документ принят в обработку",
-    "document_upload_failed": "Не удалось загрузить документ",
-    "document_deleted": "Документ удалён",
-    "document_delete_failed": "Не удалось удалить документ",
-    "document_processed": "Документ «{{name}}» проиндексирован",
-    "document_process_failed": "Индексация «{{name}}» завершилась с ошибкой",
-    "text_ingested": "Текст проиндексирован",
-    "text_ingest_failed": "Не удалось проиндексировать текст",
-    "search_failed": "Поиск не выполнен",
-    "provider_switched": "Провайдер переключён",
-    "provider_switch_failed": "Не удалось переключить провайдер"
-  }
+    "sidebar": {
+        "title": "RAG Service",
+        "provider_label": "Провайдер",
+        "providers_loading": "Загрузка провайдеров..."
+    },
+    "namespace_list": {
+        "header_title": "Неймспейсы",
+        "header_subtitle": "Управление неймспейсами документов",
+        "create_button": "Создать неймспейс",
+        "loading": "Загрузка неймспейсов...",
+        "empty_title": "Неймспейсов пока нет",
+        "empty_hint": "Создайте первый неймспейс для индексации документов."
+    },
+    "namespace_detail": {
+        "not_found": "Неймспейс не найден",
+        "back": "Назад",
+        "documents_count": "{{count}} документов",
+        "upload_button": "Загрузить документ",
+        "uploading_short": "Загрузка...",
+        "loading_documents": "Загрузка документов...",
+        "drop_here": "Перетащите файл сюда",
+        "drop_or_choose": "или нажмите для выбора файла",
+        "uploading_document": "Загрузка документа...",
+        "created_at_label": "Создан",
+        "pages_count": "{{count}} стр.",
+        "delete_button_title": "Удалить",
+        "delete_confirm": "Удалить документ?"
+    },
+    "search_view": {
+        "header_title": "Поиск",
+        "header_subtitle": "Семантический поиск по документам namespace",
+        "label_namespace": "Неймспейс",
+        "select_namespace": "Выберите неймспейс",
+        "label_limit": "Результатов",
+        "label_query": "Запрос",
+        "query_placeholder": "Введите поисковый запрос...",
+        "find_button": "Найти",
+        "searching": "Поиск...",
+        "empty_no_results_title": "Нет результатов",
+        "empty_hint": "Введите запрос для поиска",
+        "result_document_fallback": "Документ",
+        "result_page_meta": "Стр. {{page}}"
+    },
+    "settings_view": {
+        "header_title": "Настройки",
+        "header_subtitle": "Конфигурация RAG-сервиса",
+        "providers_section": "Провайдеры",
+        "providers_section_desc": "Активный backend для хранения векторов и поиска",
+        "providers_loading": "Загрузка провайдеров...",
+        "providers_default_badge": "по умолчанию",
+        "providers_active_badge": "активен",
+        "providers_switch_button": "Использовать",
+        "about_title": "О RAG Service",
+        "about_text": "Retrieval Augmented Generation: документы разбиваются на чанки, векторизуются и сохраняются для семантического поиска по корпоративным данным."
+    },
+    "namespace_create_modal": {
+        "header": "Создать неймспейс",
+        "label_name": "Название",
+        "name_placeholder": "my-namespace",
+        "name_hint": "Латиница, цифры, дефис; до 64 символов",
+        "label_description": "Описание",
+        "description_placeholder": "Опишите назначение неймспейса...",
+        "submit": "Создать",
+        "submitting": "Создание...",
+        "cancel": "Отмена"
+    },
+    "toast": {
+        "namespace_created": "Неймспейс создан",
+        "namespace_create_failed": "Не удалось создать неймспейс",
+        "namespace_deleted": "Неймспейс удалён",
+        "namespace_delete_failed": "Не удалось удалить неймспейс",
+        "document_uploaded": "Документ принят в обработку",
+        "document_upload_failed": "Не удалось загрузить документ",
+        "document_deleted": "Документ удалён",
+        "document_delete_failed": "Не удалось удалить документ",
+        "document_processed": "Документ «{{name}}» проиндексирован",
+        "document_process_failed": "Индексация «{{name}}» завершилась с ошибкой",
+        "text_ingested": "Текст проиндексирован",
+        "text_ingest_failed": "Не удалось проиндексировать текст",
+        "search_failed": "Поиск не выполнен",
+        "provider_switched": "Провайдер переключён",
+        "provider_switch_failed": "Не удалось переключить провайдер"
+    }
 }

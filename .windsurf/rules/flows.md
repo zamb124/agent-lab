@@ -15,7 +15,7 @@ globs:
 
 - Тексты интерфейса редактора и embed — только через **`this.i18n.t('группа.ключ')`** при дефолтном namespace **`flows`** (URL `/flows`, см. `i18nDefaultNamespaceForBaseUrl`).
 - Файлы переводов: **`core/i18n/translations/ru/flows.json`** и **`en/flows.json`** — ключи **парно**, проверка **`make check-i18n`**.
-- Соглашение по ключам: **`snake_case`**, верхний уровень = зона экрана или фичи (`editor`, `llm_node`, `state_modal`, `skills_tabs`, `variables_panel`, `node_modal`, …). Общие слова вне flows (Отмена, Сохранить, …) — **`this.i18n.t('cancel', {}, 'common')`** и т.п. из **`common.json`**.
+- Соглашение по ключам: **`snake_case`**, верхний уровень = зона экрана или фичи (`editor`, `llm_node`, `state_modal`, `skills_tabs`, `variables_modal`, `node_modal`, …). Общие слова вне flows (Отмена, Сохранить, …) — **`this.i18n.t('cancel', {}, 'common')`** и т.п. из **`common.json`**.
 - Хардкод кириллицы в **`apps/flows/ui/**/*.js`** — ориентир для выноса в JSON; то же правило сканирования: **`uv run python scripts/report_ui_i18n_gaps.py --app flows`**. Полный список без фильтра комментариев: **`scripts/report_ui_cyrillic.sh`**.
 - Сообщения **`console.*` и технические комментарии** в коде — на **английском** (без ключей i18n), чтобы не раздувать бандл и не дублировать переводы для отладки.
 

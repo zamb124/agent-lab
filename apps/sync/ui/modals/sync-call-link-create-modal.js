@@ -21,11 +21,6 @@ export class SyncCallLinkCreateModal extends PlatformFormModal {
 
     static styles = [
         ...(PlatformFormModal.styles ? [PlatformFormModal.styles] : []),
-        css`
-            .field { display: flex; flex-direction: column; gap: var(--space-1); margin-bottom: var(--space-3); }
-            input { padding: var(--space-2); border-radius: var(--radius-md); border: 1px solid var(--glass-border); background: var(--glass-solid); color: var(--text-primary); }
-            label { font-size: var(--text-sm); }
-        `,
     ];
 
     constructor() {
@@ -41,27 +36,46 @@ export class SyncCallLinkCreateModal extends PlatformFormModal {
 
     renderBody() {
         return html`
-            <div class="field">
-                <label>${this.t('call_link.field_title')}</label>
-                <input type="text" .value=${this._title} @input=${(e) => { this._title = e.target.value; this.markDirty(); }} />
+            <div class="form-group">
+                <label class="form-label">${this.t('call_link.field_title')}</label>
+                <input
+                    class="form-input"
+                    type="text"
+                    .value=${this._title}
+                    @input=${(e) => { this._title = e.target.value; this.isDirty = true; }}
+                />
             </div>
-            <div class="field">
-                <label>${this.t('call_link.field_scheduled_at')}</label>
-                <input type="datetime-local" .value=${this._scheduledAt} @input=${(e) => { this._scheduledAt = e.target.value; this.markDirty(); }} />
+            <div class="form-group">
+                <label class="form-label">${this.t('call_link.field_scheduled_at')}</label>
+                <input
+                    class="form-input"
+                    type="datetime-local"
+                    .value=${this._scheduledAt}
+                    @input=${(e) => { this._scheduledAt = e.target.value; this.isDirty = true; }}
+                />
             </div>
-            <div class="field">
-                <label>${this.t('call_link.field_duration')}</label>
-                <input type="number" min="5" max="480" .value=${this._durationMinutes} @input=${(e) => { const parsed = parseInt(e.target.value, 10); this._durationMinutes = Number.isFinite(parsed) && parsed > 0 ? parsed : 30; this.markDirty(); }} />
+            <div class="form-group">
+                <label class="form-label">${this.t('call_link.field_duration')}</label>
+                <input
+                    class="form-input"
+                    type="number"
+                    min="5"
+                    max="480"
+                    .value=${this._durationMinutes}
+                    @input=${(e) => { const parsed = parseInt(e.target.value, 10); this._durationMinutes = Number.isFinite(parsed) && parsed > 0 ? parsed : 30; this.isDirty = true; }}
+                />
             </div>
         `;
     }
 
     renderFooter() {
         return html`
-            <platform-button @click=${() => this.close()}>${this.t('call_link.action_cancel')}</platform-button>
-            <platform-button variant="primary" @click=${this._onSubmit} ?disabled=${this._title.trim().length === 0}>
-                ${this.t('call_link.action_create')}
-            </platform-button>
+            <div class="form-actions">
+                <platform-button variant="secondary" @click=${() => this.close()}>${this.t('call_link.action_cancel')}</platform-button>
+                <platform-button variant="primary" @click=${this._onSubmit} ?disabled=${this._title.trim().length === 0}>
+                    ${this.t('call_link.action_create')}
+                </platform-button>
+            </div>
         `;
     }
 

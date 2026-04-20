@@ -6,30 +6,38 @@
  */
 
 import { html, css } from 'lit';
-import { PlatformLightModal } from '@platform/lib/components/glass-light-modal.js';
+import { PlatformModal } from '@platform/lib/components/glass-modal.js';
 import { registerModalKind } from '@platform/lib/utils/modal-registry.js';
 import { platformConfirm } from '@platform/lib/components/platform-confirm-modal.js';
 import '@platform/lib/components/platform-button.js';
 import '@platform/lib/components/platform-icon.js';
 import '@platform/lib/components/glass-spinner.js';
+import { asArray, asString } from '../_helpers/flows-resolvers.js';
 
-export class FlowsSessionsModal extends PlatformLightModal {
+export class FlowsSessionsModal extends PlatformModal {
     static modalKind = 'flows.sessions';
     static i18nNamespace = 'flows';
 
     static properties = {
-        ...PlatformLightModal.properties,
+        ...PlatformModal.properties,
         flowId: { type: String },
     };
 
+    static styles = [
+        ...PlatformModal.styles,
+        css`
+            .flows-sessions-table { width: 100%; border-collapse: collapse; color: var(--text-secondary); }
+            .flows-sessions-table th, .flows-sessions-table td { padding: var(--space-2); text-align: left; border-bottom: 1px solid var(--border-subtle); }
+            .flows-sessions-table th { color: var(--text-tertiary); font-size: var(--text-xs); text-transform: uppercase; letter-spacing: 0.05em; }
+            .flows-sessions-empty { text-align: center; color: var(--text-tertiary); padding: var(--space-6); }
+        `,
+    ];
+
     constructor() {
         super();
+        this.size = 'xl';
         this.flowId = '';
         this._sessions = this.useResource('flows/sessions');
-    }
-
-    connectedCallback() {
-        super.connectedCallback();
     }
 
     updated(changed) {
@@ -64,18 +72,18 @@ export class FlowsSessionsModal extends PlatformLightModal {
     }
 
     _renderRows() {
-        const items = this._sessions.items || [];
+        const items = asArray(this._sessions.items);
         if (this._sessions.loading && items.length === 0) {
-            return html`<tr><td colspan="3"><glass-spinner></glass-spinner></td></tr>`;
+            return html`<tr><td colspan="4"><glass-spinner></glass-spinner></td></tr>`;
         }
         if (items.length === 0) {
-            return html`<tr><td colspan="3" class="flows-sessions-empty">${this.t('sessions_modal.empty')}</td></tr>`;
+            return html`<tr><td colspan="4" class="flows-sessions-empty">${this.t('sessions_modal.empty')}</td></tr>`;
         }
         return items.map((s) => html`
             <tr>
                 <td><code>${s.session_id || s.id}</code></td>
-                <td>${s.flow_id || ''}</td>
-                <td>${s.last_message_at || s.updated_at || ''}</td>
+                <td>${asString(s.flow_id)}</td>
+                <td>${typeof s.last_message_at === 'string' && s.last_message_at.length > 0 ? s.last_message_at : asString(s.updated_at)}</td>
                 <td>
                     <platform-button @click=${() => this._open(s)}>${this.t('sessions_modal.continue_title')}</platform-button>
                     <platform-button danger @click=${() => this._delete(s)}>
@@ -86,37 +94,23 @@ export class FlowsSessionsModal extends PlatformLightModal {
         `);
     }
 
-    render() {
+    renderHeader() {
+        return this.t('sessions_modal.modal_title');
+    }
+
+    renderBody() {
         return html`
-            <div class="light-modal-backdrop" @click=${this._onBackdropClick}></div>
-            <div class="light-modal-container flows-sessions-shell">
-                <style>
-                    .flows-sessions-shell { padding: var(--space-4); gap: var(--space-3); }
-                    .flows-sessions-header { display: flex; align-items: center; justify-content: space-between; }
-                    .flows-sessions-header h2 { margin: 0; color: var(--text-primary); }
-                    .flows-sessions-table { width: 100%; border-collapse: collapse; color: var(--text-secondary); }
-                    .flows-sessions-table th, .flows-sessions-table td { padding: var(--space-2); text-align: left; border-bottom: 1px solid var(--border-subtle); }
-                    .flows-sessions-table th { color: var(--text-tertiary); font-size: var(--text-xs); text-transform: uppercase; letter-spacing: 0.05em; }
-                    .flows-sessions-empty { text-align: center; color: var(--text-tertiary); padding: var(--space-6); }
-                </style>
-                <div class="flows-sessions-header">
-                    <h2>${this.t('sessions_modal.modal_title')}</h2>
-                    <platform-button @click=${() => this.close()}>
-                        <platform-icon name="close" size="14"></platform-icon>
-                    </platform-button>
-                </div>
-                <table class="flows-sessions-table">
-                    <thead>
-                        <tr>
-                            <th>${this.t('sessions_modal.col_session')}</th>
-                            <th>${this.t('sessions_modal.col_flow')}</th>
-                            <th>${this.t('sessions_modal.col_last')}</th>
-                            <th>${this.t('sessions_modal.col_actions')}</th>
-                        </tr>
-                    </thead>
-                    <tbody>${this._renderRows()}</tbody>
-                </table>
-            </div>
+            <table class="flows-sessions-table">
+                <thead>
+                    <tr>
+                        <th>${this.t('sessions_modal.col_session')}</th>
+                        <th>${this.t('sessions_modal.col_flow')}</th>
+                        <th>${this.t('sessions_modal.col_last')}</th>
+                        <th>${this.t('sessions_modal.col_actions')}</th>
+                    </tr>
+                </thead>
+                <tbody>${this._renderRows()}</tbody>
+            </table>
         `;
     }
 }

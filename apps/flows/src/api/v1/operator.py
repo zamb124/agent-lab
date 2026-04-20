@@ -258,7 +258,7 @@ async def add_queue_member(
     if not await _caller_may_mutate_queue(company_id, user_id, queue_id, repo):
         raise HTTPException(status_code=403, detail="Нет доступа к очереди")
     mid = await repo.add_member(queue_id, body.user_id.strip(), role=body.role.strip())
-    await publish_operator_tasks_refresh(container.redis_client, repo, queue_id)
+    await publish_operator_tasks_refresh(repo, queue_id)
     return {"member_id": mid}
 
 
@@ -276,7 +276,7 @@ async def remove_queue_member(
     if not await _caller_may_mutate_queue(company_id, user_id, queue_id, repo):
         raise HTTPException(status_code=403, detail="Нет доступа к очереди")
     await repo.remove_member(queue_id, member_user_id)
-    await publish_operator_tasks_refresh(container.redis_client, repo, queue_id)
+    await publish_operator_tasks_refresh(repo, queue_id)
 
 
 @router.get("/tasks", response_model=OffsetPage[OperatorTaskOut])
@@ -370,7 +370,7 @@ async def patch_operator_task(
         raise HTTPException(status_code=400, detail="Неизвестный статус задачи")
     queue_id = task.queue_id
     await repo.update_task_fields(company_id, task_id, status=body.status)
-    await publish_operator_tasks_refresh(container.redis_client, repo, queue_id)
+    await publish_operator_tasks_refresh(repo, queue_id)
     updated = await repo.get_task(company_id, task_id)
     if updated is None:
         raise HTTPException(status_code=500, detail="Задача не найдена после обновления")

@@ -22,6 +22,7 @@ async def test_space_crud(
         company_id=company_id,
         name="Space One",
         description="desc",
+        namespace=f"ns_{unique_id}_one",
         created_at=datetime.now(tz=UTC),
         created_by_user_id="user_1",
     )
@@ -38,6 +39,7 @@ async def test_space_crud(
         company_id=company_id,
         name="Space Two",
         description=None,
+        namespace=f"ns_{unique_id}_two",
         created_at=datetime.now(tz=UTC),
         created_by_user_id="user_2",
     )
@@ -61,6 +63,7 @@ async def test_space_get_by_name(
         space_id=sn,
         company_id=company_id,
         name="Unique Name",
+        namespace=f"ns_{unique_id}_named",
         created_at=datetime.now(tz=UTC),
         created_by_user_id="user_1",
     )
@@ -85,6 +88,7 @@ async def test_space_company_isolation(
         space_id=f"{unique_id}_space_a",
         company_id=company_a,
         name="Space A",
+        namespace=f"ns_{unique_id}_a",
         created_at=datetime.now(tz=UTC),
         created_by_user_id="user_1",
     )
@@ -92,6 +96,7 @@ async def test_space_company_isolation(
         space_id=f"{unique_id}_space_b",
         company_id=company_b,
         name="Space B",
+        namespace=f"ns_{unique_id}_b",
         created_at=datetime.now(tz=UTC),
         created_by_user_id="user_1",
     )
@@ -122,6 +127,7 @@ async def test_get_by_name_same_name_different_companies(
                 space_id=sid,
                 company_id=cid,
                 name="SharedName",
+                namespace=f"ns_{sid}",
                 created_at=datetime.now(tz=UTC),
                 created_by_user_id="u1",
             )

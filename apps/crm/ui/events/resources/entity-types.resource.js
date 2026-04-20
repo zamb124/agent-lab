@@ -45,6 +45,7 @@ export const entityTypeUpdateOp = createAsyncOp({
     name: 'crm/entity_type_update',
     successToastKey: 'crm:toast.entity_type.updated',
     errorToastKey: 'crm:toast.entity_type.update_failed',
+    restMirror: { method: 'PUT', path: '/crm/api/v1/entity-types/:type_id' },
     request: async ({ payload }) => {
         if (!payload || typeof payload.type_id !== 'string' || !payload.body) {
             throw new Error('entityTypeUpdateOp: { type_id, body } required');
@@ -61,6 +62,7 @@ export const entityTypePublicFieldsOp = createAsyncOp({
     name: 'crm/entity_type_public_fields',
     successToastKey: 'crm:toast.entity_type.public_fields_updated',
     errorToastKey: 'crm:toast.entity_type.public_fields_update_failed',
+    restMirror: { method: 'PUT', path: '/crm/api/v1/entity-types/:type_id/public-fields' },
     request: async ({ payload }) => {
         if (!payload || typeof payload.type_id !== 'string' || !Array.isArray(payload.fields)) {
             throw new Error('entityTypePublicFieldsOp: { type_id, fields } required');

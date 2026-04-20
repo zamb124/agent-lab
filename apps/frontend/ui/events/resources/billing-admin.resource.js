@@ -51,15 +51,16 @@ const PAGE_SIZE = 50;
 export const companiesOverviewLoadOp = createAsyncOp({
     name: 'frontend/admin_billing_companies',
     silent: true,
+    restMirror: { method: 'GET', path: '/frontend/api/platform-billing/companies-billing-overview' },
     request: async ({ payload }) => {
-        const offset = (payload && payload.offset) || 0;
+        const offset = typeof payload?.offset === 'number' ? payload.offset : 0;
         const append = !!(payload && payload.append);
         const data = await httpRequest({
             method: 'GET',
             url: `${BASE_BILLING}/companies-billing-overview`,
             query: { limit: PAGE_SIZE, offset },
         });
-        return { items: data.items || [], has_more: !!data.has_more, offset, append };
+        return { items: Array.isArray(data.items) ? data.items : [], has_more: !!data.has_more, offset, append };
     },
     extraInitial: {
         items: [],
@@ -72,12 +73,17 @@ export const companiesOverviewLoadOp = createAsyncOp({
     },
     extraReducer: (state, event, events) => {
         if (event.type === events.SUCCEEDED) {
-            const r = (event.payload && event.payload.result) || {};
-            const next = r.append ? [...(state.items || []), ...r.items] : r.items;
+            const r = event.payload && typeof event.payload === 'object' && event.payload.result
+                ? event.payload.result
+                : null;
+            if (!r || typeof r !== 'object') return state;
+            const items = Array.isArray(r.items) ? r.items : [];
+            const next = r.append ? [...state.items, ...items] : items;
+            const baseOffset = typeof r.offset === 'number' ? r.offset : 0;
             return {
                 ...state,
                 items: next,
-                offset: (r.offset || 0) + (r.items ? r.items.length : 0),
+                offset: baseOffset + items.length,
                 hasMore: !!r.has_more,
                 terminal: null,
             };
@@ -102,6 +108,7 @@ export const companiesOverviewLoadOp = createAsyncOp({
 export const companyResolveOp = createAsyncOp({
     name: 'frontend/admin_billing_company_resolve',
     silent: true,
+    restMirror: { method: 'GET', path: '/frontend/api/platform-billing/company-resolve' },
     request: async ({ payload }) => {
         const q = payload && payload.q;
         if (!q) throw new Error('company_resolve: q required');
@@ -119,6 +126,7 @@ export const companyResolveOp = createAsyncOp({
 export const pricesGlobalLoadOp = createAsyncOp({
     name: 'frontend/admin_billing_prices_global_load',
     silent: true,
+    restMirror: { method: 'GET', path: '/frontend/api/platform-billing/prices' },
     request: async () => await httpRequest({
         method: 'GET',
         url: `${BASE_BILLING}/prices`,
@@ -132,10 +140,11 @@ export const pricesGlobalUpdateOp = createAsyncOp({
     name: 'frontend/admin_billing_prices_global_update',
     successToastKey: 'frontend:platform_billing_page.saved_ok',
     errorToastKey: 'frontend:platform_billing_page.prices_save_failed',
+    restMirror: { method: 'PUT', path: '/frontend/api/platform-billing/prices' },
     request: async ({ payload }) => await httpRequest({
         method: 'PUT',
         url: `${BASE_BILLING}/prices`,
-        body: payload || {},
+        body: payload && typeof payload === 'object' ? payload : {},
     }),
     onSuccess: (ctx) => {
         ctx.dispatch(pricesGlobalLoadOp.events.REQUESTED, null, { source: 'local' });
@@ -145,6 +154,7 @@ export const pricesGlobalUpdateOp = createAsyncOp({
 export const companyPricesLoadOp = createAsyncOp({
     name: 'frontend/admin_billing_company_prices_load',
     silent: true,
+    restMirror: { method: 'GET', path: '/frontend/api/platform-billing/prices/company/:company_id' },
     request: async ({ payload }) => {
         const id = payload && payload.company_id;
         if (!id) throw new Error('company_prices_load: company_id required');
@@ -162,13 +172,14 @@ export const companyPricesUpdateOp = createAsyncOp({
     name: 'frontend/admin_billing_company_prices_update',
     successToastKey: 'frontend:platform_billing_page.saved_ok',
     errorToastKey: 'frontend:platform_billing_page.prices_save_failed',
+    restMirror: { method: 'PUT', path: '/frontend/api/platform-billing/prices/company/:company_id' },
     request: async ({ payload }) => {
         const id = payload && payload.company_id;
         if (!id) throw new Error('company_prices_update: company_id required');
         return await httpRequest({
             method: 'PUT',
             url: `${BASE_BILLING}/prices/company/${encodeURIComponent(id)}`,
-            body: payload.body || {},
+            body: payload.body && typeof payload.body === 'object' ? payload.body : {},
         });
     },
     onSuccess: (ctx, _result, event) => {
@@ -180,6 +191,7 @@ export const companyPricesUpdateOp = createAsyncOp({
 export const settlementRulesLoadOp = createAsyncOp({
     name: 'frontend/admin_billing_rules_load',
     silent: true,
+    restMirror: { method: 'GET', path: '/frontend/api/platform-billing/settlement-rules/:company_id' },
     request: async ({ payload }) => {
         const id = payload && payload.company_id;
         if (!id) throw new Error('settlement_rules_load: company_id required');
@@ -197,13 +209,14 @@ export const settlementRulesUpdateOp = createAsyncOp({
     name: 'frontend/admin_billing_rules_update',
     successToastKey: 'frontend:platform_billing_page.saved_ok',
     errorToastKey: 'frontend:platform_billing_page.rules_save_failed',
+    restMirror: { method: 'PUT', path: '/frontend/api/platform-billing/settlement-rules/:company_id' },
     request: async ({ payload }) => {
         const id = payload && payload.company_id;
         if (!id) throw new Error('settlement_rules_update: company_id required');
         return await httpRequest({
             method: 'PUT',
             url: `${BASE_BILLING}/settlement-rules/${encodeURIComponent(id)}`,
-            body: payload.body || {},
+            body: payload.body && typeof payload.body === 'object' ? payload.body : {},
         });
     },
     onSuccess: (ctx, _result, event) => {
@@ -215,6 +228,7 @@ export const settlementRulesUpdateOp = createAsyncOp({
 export const defaultSettlementRulesLoadOp = createAsyncOp({
     name: 'frontend/admin_billing_rules_default_load',
     silent: true,
+    restMirror: { method: 'GET', path: '/frontend/api/platform-billing/default-settlement-rules' },
     request: async () => await httpRequest({
         method: 'GET',
         url: `${BASE_BILLING}/default-settlement-rules`,
@@ -229,10 +243,11 @@ const USAGE_REPORT_LIMIT = 200;
 export const usageReportLoadOp = createAsyncOp({
     name: 'frontend/admin_billing_usage_load',
     silent: true,
+    restMirror: { method: 'GET', path: '/frontend/api/platform-billing/usage-report' },
     request: async ({ payload }) => {
-        const filters = (payload && payload.filters) || {};
-        const offset = (payload && payload.offset) || 0;
-        const limit = (payload && payload.limit) || USAGE_REPORT_LIMIT;
+        const filters = payload && typeof payload.filters === 'object' && payload.filters !== null ? payload.filters : {};
+        const offset = typeof payload?.offset === 'number' ? payload.offset : 0;
+        const limit = typeof payload?.limit === 'number' ? payload.limit : USAGE_REPORT_LIMIT;
         const query = { limit, offset };
         if (filters.company_id)    query.company_id = filters.company_id;
         if (filters.usage_type)    query.usage_type = filters.usage_type;
@@ -244,7 +259,7 @@ export const usageReportLoadOp = createAsyncOp({
             url: `${BASE_BILLING}/usage-report`,
             query,
         });
-        return { items: data.items || [], offset, limit, filters };
+        return { items: Array.isArray(data.items) ? data.items : [], offset, limit, filters };
     },
     extraInitial: {
         items: [],
@@ -254,13 +269,16 @@ export const usageReportLoadOp = createAsyncOp({
     },
     extraReducer: (state, event, events) => {
         if (event.type === events.SUCCEEDED) {
-            const r = (event.payload && event.payload.result) || {};
+            const r = event.payload && typeof event.payload === 'object' && event.payload.result
+                ? event.payload.result
+                : null;
+            if (!r || typeof r !== 'object') return state;
             return {
                 ...state,
-                items: r.items || [],
-                offset: r.offset || 0,
-                limit: r.limit || USAGE_REPORT_LIMIT,
-                filters: r.filters || {},
+                items: Array.isArray(r.items) ? r.items : [],
+                offset: typeof r.offset === 'number' ? r.offset : 0,
+                limit: typeof r.limit === 'number' ? r.limit : USAGE_REPORT_LIMIT,
+                filters: r.filters && typeof r.filters === 'object' ? r.filters : {},
             };
         }
         return state;
@@ -287,6 +305,7 @@ export const systemAccessEnterOp = createAsyncOp({
     name: 'frontend/admin_system_access_enter',
     successToastKey: 'frontend:platform_billing_page.saved_ok',
     errorToastKey: 'frontend:platform_billing_page.system_access_user_context_invalid',
+    restMirror: { method: 'POST', path: '/frontend/api/companies/:company_id/system-access' },
     request: async ({ payload }) => {
         const id = payload && payload.company_id;
         const role = payload && payload.role;
@@ -307,6 +326,7 @@ export const systemAccessLeaveOp = createAsyncOp({
     name: 'frontend/admin_system_access_leave',
     successToastKey: 'frontend:platform_billing_page.system_access_leave_success',
     errorToastKey: 'frontend:platform_billing_page.system_access_user_context_invalid',
+    restMirror: { method: 'DELETE', path: '/frontend/api/companies/:company_id/system-access' },
     request: async ({ payload }) => {
         const id = payload && payload.company_id;
         if (!id) throw new Error('system_access_leave: company_id required');

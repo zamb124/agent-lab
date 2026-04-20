@@ -11,11 +11,15 @@
  *   - 'manage-members' → openModal('office.catalog_members')
  *   - 'edit'           → openModal('office.catalog_edit')
  *   - 'delete'         → confirm + useResource('office/catalogs').remove
+ *
+ * Реакция на смену namespace: `useEvent(UI_DOCUMENTS_RELOAD_REQUESTED)` —
+ * перезагружаем список каталогов; новый namespace полностью перерисует grid.
  */
 
 import { html, css } from 'lit';
 import { PlatformPage } from '@platform/lib/base/PlatformPage.js';
 import { buttonStyles } from '@platform/lib/styles/shared/button.styles.js';
+import { CoreEvents } from '@platform/lib/events/contract.js';
 import '@platform/lib/components/platform-icon.js';
 import '@platform/lib/components/platform-breadcrumbs.js';
 import '../components/office-catalog-card.js';
@@ -73,6 +77,11 @@ export class OfficeDocumentsCatalogsPage extends PlatformPage {
         this._catalogs = this.useResource('office/catalogs', { autoload: true });
         this._documents = this.useOp('office/documents');
         this._focusHandled = false;
+    }
+
+    connectedCallback() {
+        super.connectedCallback();
+        this.useEvent(CoreEvents.UI_DOCUMENTS_RELOAD_REQUESTED, () => this._catalogs.load());
     }
 
     updated(changed) {

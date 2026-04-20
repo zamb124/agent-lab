@@ -2007,6 +2007,19 @@ class EntityService:
         created_relationship_ids = [rid for rid in rel_results if rid is not None]
 
         attrs = dict(note.attributes or {})
+        note_draft = draft.note
+        if note_draft is not None and isinstance(note_draft.description, str):
+            summary_text = note_draft.description.strip()
+            if summary_text:
+                attrs["ai_summary"] = summary_text
+                attrs["ai_summary_generated_at"] = datetime.now(timezone.utc).isoformat()
+                entity_names = [
+                    e.name
+                    for e in (draft.entities or [])
+                    if isinstance(getattr(e, "name", None), str) and e.name.strip()
+                ]
+                if entity_names:
+                    attrs["ai_summary_entities"] = entity_names[:8]
         if "ai_analysis_draft" in attrs:
             del attrs["ai_analysis_draft"]
         attrs["ai_analysis_applied_at"] = datetime.now(timezone.utc).isoformat()

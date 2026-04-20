@@ -1,14 +1,35 @@
+/**
+ * LitserveApp — корневой компонент сервиса provider_litserve.
+ *
+ * Полностью event-driven canon: домен описан фабриками в
+ * `events/resources/*.resource.js` и регистрируется через `static factories`.
+ * Маршрутизация — через core router.effect; SPA сервится по `/litserve`.
+ *
+ * Маршруты:
+ *   /litserve            -> models
+ */
+
 import { html, css } from 'lit';
-import { PlatformApp, renderPlatformAppShell } from '@platform/lib/base/PlatformApp.js';
-import { LitserveModelsService } from '../services/litserve-models.service.js';
-import { LitserveStore } from '../store/litserve.store.js';
+import { PlatformApp } from '@platform/lib/base/PlatformApp.js';
+import { createRouterEffect } from '@platform/lib/events/effects/router.effect.js';
+
+import { litserveModelsResource, litserveModelRetryOp } from '../events/resources/models.resource.js';
+
 import '@platform/lib/components/layout/platform-island.js';
+import '../components/litserve-sidebar.js';
+import '../pages/litserve-models-page.js';
+
+const LITSERVE_ROUTES = [
+    { key: 'models', path: '' },
+];
 
 export class LitserveApp extends PlatformApp {
-    static properties = {
-        ...PlatformApp.properties,
-        _currentView: { state: true },
-    };
+    static defaultI18nNamespace = 'litserve';
+
+    static factories = [
+        litserveModelsResource,
+        litserveModelRetryOp,
+    ];
 
     static styles = [
         PlatformApp.styles,
@@ -21,94 +42,57 @@ export class LitserveApp extends PlatformApp {
                 overflow: hidden;
                 background: var(--bg-gradient);
             }
-
             .sidebar {
                 height: var(--app-vh, 100vh);
                 flex-shrink: 0;
-                overflow: visible;
                 background: transparent;
             }
-
             .main {
                 flex: 1;
+                min-width: 0;
                 height: var(--app-vh, 100vh);
-                overflow-y: auto;
                 display: flex;
+                flex-direction: column;
                 padding: var(--space-4);
+                overflow: hidden;
             }
-
             platform-island {
                 flex: 1;
-                min-height: calc(var(--app-vh, 100vh) - 2rem);
+                min-height: 0;
+                min-width: 0;
             }
-
             @media (max-width: 767px) {
-                .sidebar {
-                    position: absolute;
-                    width: 0;
-                    height: 0;
-                    overflow: visible;
-                }
-
-                .main {
-                    padding: 0;
-                }
+                .main { padding: 0; }
+                .sidebar { position: absolute; width: 0; height: 0; overflow: visible; }
             }
         `,
     ];
 
-    setupStore() {
-        return LitserveStore;
+    getBaseUrl() { return '/litserve'; }
+
+    getRoutes() { return []; }
+
+    getServiceEffects() {
+        return [
+            createRouterEffect({ baseUrl: '/litserve', routes: LITSERVE_ROUTES }),
+        ];
     }
 
-    getBaseUrl() {
-        return '/litserve';
-    }
-
-    async initServices() {
-        await super.initServices();
-        this.services.register('litserveModels', new LitserveModelsService('/litserve/api'));
-        this._unsubscribe = LitserveStore.subscribe((state) => {
-            this._currentView = state.ui.currentView;
-        });
-        this._currentView = LitserveStore.state.ui.currentView;
-    }
-
-    disconnectedCallback() {
-        super.disconnectedCallback?.();
-        this._unsubscribe?.();
-    }
-
-    async checkAuth() {
-        const ok = await this.auth.validateToken();
-        return !!ok;
-    }
-
-    _renderContent() {
-        if (this._currentView === 'models') {
-            return html`<litserve-models-page></litserve-models-page>`;
+    renderRoute(routeKey) {
+        const _key = routeKey === 'models' || !routeKey ? 'models' : routeKey;
+        let content;
+        switch (_key) {
+            case 'models':
+                content = html`<litserve-models-page></litserve-models-page>`;
+                break;
+            default:
+                content = html`<litserve-models-page></litserve-models-page>`;
+                break;
         }
-        return html`<litserve-models-page></litserve-models-page>`;
-    }
-
-    render() {
-        const shell = renderPlatformAppShell(this);
-        if (shell !== null) {
-            return shell;
-        }
-
-        if (!this._servicesInitialized || !this._authChecked) {
-            return html`<app-loader></app-loader>`;
-        }
-
         return html`
-            <div class="sidebar">
-                <litserve-sidebar></litserve-sidebar>
-            </div>
+            <div class="sidebar"><litserve-sidebar></litserve-sidebar></div>
             <div class="main">
-                <platform-island>
-                    ${this._renderContent()}
-                </platform-island>
+                <platform-island>${content}</platform-island>
             </div>
         `;
     }

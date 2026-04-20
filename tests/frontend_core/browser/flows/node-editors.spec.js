@@ -15,6 +15,7 @@ import { resourcesBundleResource, resourceUpdateOp } from '../../../../apps/flow
 import { fileUploadOp } from '../../../../apps/flows/ui/events/resources/files.resource.js';
 import { flowValidateOp, flowsResource } from '../../../../apps/flows/ui/events/resources/flows.resource.js';
 import { modelsListOp } from '../../../../apps/flows/ui/events/resources/models.resource.js';
+import { providersListOp } from '../../../../apps/flows/ui/events/resources/providers.resource.js';
 import {
     codeCompletionsOp, codeDocumentationOp, codeTemplatesOp,
     codeEditorStateOp, codeSourceOp, codeFlowFunctionsOp,
@@ -41,6 +42,7 @@ const FACTORIES = [
     fileUploadOp,
     flowValidateOp, flowsResource,
     modelsListOp,
+    providersListOp,
     codeCompletionsOp, codeDocumentationOp, codeTemplatesOp, codeEditorStateOp,
     codeSourceOp, codeFlowFunctionsOp, codeToolSourceOp, codeParseSignatureOp,
     codeValidateOp, codeExecuteOp,
@@ -70,8 +72,10 @@ describe('node editors — top-level NodeConfig contract', () => {
         await elementUpdated(el);
         const base = el.shadowRoot.querySelector('flows-base-node-editor');
         expect(base).to.not.be.null;
-        const details = base.querySelectorAll('details');
-        expect(details.length).to.be.greaterThanOrEqual(5);
+        const blocks = base.querySelectorAll('section.block');
+        expect(blocks.length).to.be.greaterThanOrEqual(5);
+        const detailsLeftover = base.querySelectorAll('details');
+        expect(detailsLeftover.length).to.equal(0);
     });
 
     it('flows-llm-node-editor structured_output скрывает react секцию', async () => {
@@ -83,8 +87,8 @@ describe('node editors — top-level NodeConfig contract', () => {
         `);
         await elementUpdated(el);
         const base = el.shadowRoot.querySelector('flows-base-node-editor');
-        const summaries = Array.from(base.querySelectorAll('summary')).map((s) => s.textContent);
-        expect(summaries.length).to.be.lessThanOrEqual(5);
+        const titles = Array.from(base.querySelectorAll('section.block .block-title')).map((s) => s.textContent);
+        expect(titles.length).to.be.lessThanOrEqual(5);
     });
 
     it('flows-code-node-editor — toggle inline ↔ function', async () => {
@@ -209,5 +213,31 @@ describe('node editors — top-level NodeConfig contract', () => {
         await elementUpdated(el);
         el._commitRenameId();
         expect(renamed).to.deep.equal({ oldId: 'a', newId: 'a_renamed' });
+    });
+
+    it('flows-base-node-editor — compact: одна колонка без panel-layout', async () => {
+        const node = { node_id: 'a', type: 'code', name: 'A' };
+        const el = await fixture(html`
+            <flows-base-node-editor .nodeId=${'a'} .flowId=${'demo'} .skillId=${'base'}
+                .nodeConfig=${node} .nodeType=${'code'}>
+            </flows-base-node-editor>
+        `);
+        await elementUpdated(el);
+        expect(el.shadowRoot.querySelector('.compact')).to.not.be.null;
+        expect(el.shadowRoot.querySelector('.panel-layout')).to.be.null;
+    });
+
+    it('flows-base-node-editor — expanded: master-detail layout', async () => {
+        const node = { node_id: 'a', type: 'code', name: 'A' };
+        const el = await fixture(html`
+            <flows-base-node-editor .nodeId=${'a'} .flowId=${'demo'} .skillId=${'base'}
+                .nodeConfig=${node} .nodeType=${'code'} ?expanded=${true}>
+            </flows-base-node-editor>
+        `);
+        await elementUpdated(el);
+        expect(el.shadowRoot.querySelector('.panel-layout')).to.not.be.null;
+        expect(el.shadowRoot.querySelector('.panel-sidebar')).to.not.be.null;
+        expect(el.shadowRoot.querySelector('.panel-main')).to.not.be.null;
+        expect(el.shadowRoot.querySelector('.compact')).to.be.null;
     });
 });

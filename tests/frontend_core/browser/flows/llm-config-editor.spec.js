@@ -7,6 +7,7 @@ import { resetPlatformState, bootstrapTestBus } from '../helpers/reset.js';
 import { registerFactory, collectFactories } from '@platform/lib/events/index.js';
 import { modelsListOp } from '../../../../apps/flows/ui/events/resources/models.resource.js';
 import { codeCompletionsOp } from '../../../../apps/flows/ui/events/resources/code.resource.js';
+import { providersListOp } from '../../../../apps/flows/ui/events/resources/providers.resource.js';
 import '../../../../apps/flows/ui/components/editors/flows-llm-config-editor.js';
 
 describe('flows-llm-config-editor', () => {
@@ -14,7 +15,8 @@ describe('flows-llm-config-editor', () => {
         resetPlatformState();
         registerFactory(modelsListOp);
         registerFactory(codeCompletionsOp);
-        const collected = collectFactories([modelsListOp, codeCompletionsOp]);
+        registerFactory(providersListOp);
+        const collected = collectFactories([modelsListOp, codeCompletionsOp, providersListOp]);
         bootstrapTestBus({ slices: collected.slices });
     });
     afterEach(() => fixtureCleanup());

@@ -224,7 +224,7 @@ export class FrontendBillingAdminPage extends PlatformPage {
 
     _selectCompanyFromFacet(item) {
         this._companyId = item.value;
-        this._companyQuery = item.label || item.value;
+        this._companyQuery = typeof item.label === 'string' && item.label !== '' ? item.label : item.value;
         this._facetOpen = false;
         this._companyPrices.run({ company_id: item.value });
         this._rules.run({ company_id: item.value });
@@ -279,7 +279,7 @@ export class FrontendBillingAdminPage extends PlatformPage {
                             ${items.map((it) => html`
                                 <div class="suggest-item"
                                     @mousedown=${(e) => { e.preventDefault(); this._selectCompanyFromFacet(it); }}>
-                                    ${it.label || it.value}
+                                    ${typeof it.label === 'string' && it.label !== '' ? it.label : it.value}
                                 </div>
                             `)}
                         </div>
@@ -302,7 +302,8 @@ export class FrontendBillingAdminPage extends PlatformPage {
         const result = this._companyResolve.lastResult;
         if (result && result.company_id && result.company_id !== this._companyId) {
             this._companyId = result.company_id;
-            this._companyQuery = result.name ? `${result.name} (${result.subdomain || result.company_id})` : result.company_id;
+            const subdomain = typeof result.subdomain === 'string' && result.subdomain !== '' ? result.subdomain : result.company_id;
+            this._companyQuery = result.name ? `${result.name} (${subdomain})` : result.company_id;
             this._companyPrices.run({ company_id: result.company_id });
             this._rules.run({ company_id: result.company_id });
         }
@@ -311,7 +312,7 @@ export class FrontendBillingAdminPage extends PlatformPage {
     _renderCompaniesTab() {
         const records = this._companies.state.items;
         const hasMore = !!(this._companies.state && this._companies.state.hasMore);
-        const offset = (this._companies.state && this._companies.state.offset) || 0;
+        const offset = this._companies.state.offset;
         const busy = this._companies.busy;
         const forbidden = this._renderForbiddenOrUnavailable();
         if (forbidden) return forbidden;
@@ -536,7 +537,8 @@ export class FrontendBillingAdminPage extends PlatformPage {
     }
 
     _saveRules() {
-        const text = (this._rulesDraft || '').trim();
+        const draft = typeof this._rulesDraft === 'string' ? this._rulesDraft : '';
+        const text = draft.trim();
         if (!text) return;
         const body = JSON.parse(text);
         this._rulesSave.run({ company_id: this._companyId, body });
@@ -579,7 +581,7 @@ export class FrontendBillingAdminPage extends PlatformPage {
                             : items.map((it) => html`
                                 <div class="suggest-item"
                                     @mousedown=${(e) => { e.preventDefault(); this._selectUsageFacet(field, it.value); }}>
-                                    ${it.label || it.value}
+                                    ${typeof it.label === 'string' && it.label !== '' ? it.label : it.value}
                                 </div>
                             `)}
                     </div>
@@ -600,8 +602,8 @@ export class FrontendBillingAdminPage extends PlatformPage {
     }
 
     _renderUsageTab() {
-        const offset = (this._usage.state && this._usage.state.offset) || 0;
-        const limit = (this._usage.state && this._usage.state.limit) || 200;
+        const offset = this._usage.state.offset;
+        const limit = this._usage.state.limit;
         const items = this._usage.state.items;
         return html`
             <section>

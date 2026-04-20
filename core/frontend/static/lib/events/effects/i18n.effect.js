@@ -78,8 +78,7 @@ export function createI18nEffect({ baseUrl } = {}) {
  *      ищет тот же путь внутри него: bundle[namespace][a][b][c].
  *   3. Если `defaultNamespace` задан в state.i18n и в bundle есть `bundle[defaultNamespace]` —
  *      ищет тот же путь внутри него: bundle[defaultNamespace][a][b][c].
- *      Это позволяет сервисам писать короткие ключи `t('console_sidebar.dashboard')`
- *      без префикса собственного namespace.
+ *      Короткие ключи вроде console_sidebar.dashboard резолвятся внутри defaultNamespace сервиса.
  *
  * Если ничего не найдено — возвращается сам key (видно в UI и в скане i18n).
  */

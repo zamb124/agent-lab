@@ -4,6 +4,7 @@
 import { html, css } from 'lit';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
 import '@platform/lib/components/platform-icon.js';
+import { asString } from '../../_helpers/flows-resolvers.js';
 
 export class ChatInput extends PlatformElement {
     static styles = [
@@ -299,7 +300,7 @@ export class ChatInput extends PlatformElement {
     }
 
     _onFilesSelected(e) {
-        const files = Array.from(e.target.files || []);
+        const files = e.target.files ? Array.from(e.target.files) : [];
         
         for (const file of files) {
             if (this._validateFile(file)) {
@@ -428,7 +429,7 @@ export class ChatInput extends PlatformElement {
                 ` : html`
                     <platform-icon
                         file-icon
-                        name=${resolveFileIconKey(file.name || '', file.type || '')}
+                        name=${resolveFileIconKey(asString(file.name), asString(file.type))}
                         size="24"
                     ></platform-icon>
                 `}

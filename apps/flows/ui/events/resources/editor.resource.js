@@ -29,12 +29,184 @@ function _withId(list, id) {
     return [...list, id];
 }
 
+const _DEEP_MERGE_EXCLUDE = new Set(['node_id', 'tool_id', 'flow_id']);
+
+function _isPlainObject(value) {
+    return value !== null && typeof value === 'object' && !Array.isArray(value);
+}
+
+function _deepClone(value) {
+    if (value === null || typeof value !== 'object') return value;
+    if (Array.isArray(value)) return value.map(_deepClone);
+    const out = {};
+    for (const [k, v] of Object.entries(value)) out[k] = _deepClone(v);
+    return out;
+}
+
+function _deepMerge(base, override) {
+    if (!_isPlainObject(base)) return _deepClone(override);
+    if (!_isPlainObject(override)) return _deepClone(base);
+    const result = _deepClone(base);
+    for (const [key, value] of Object.entries(override)) {
+        if (_DEEP_MERGE_EXCLUDE.has(key)) continue;
+        if (value === null || value === undefined) continue;
+        if (_isPlainObject(result[key]) && _isPlainObject(value)) {
+            result[key] = _deepMerge(result[key], value);
+        } else {
+            result[key] = _deepClone(value);
+        }
+    }
+    return result;
+}
+
+function _resolveFlowMetadata(flow) {
+    if (flow.config && typeof flow.config === 'object'
+            && flow.config.metadata && typeof flow.config.metadata === 'object') {
+        return flow.config.metadata;
+    }
+    if (flow.metadata && typeof flow.metadata === 'object') {
+        return flow.metadata;
+    }
+    return {};
+}
+
+function _edgeNodeId(edge, primary, alt) {
+    if (typeof edge[primary] === 'string' && edge[primary].length > 0) return edge[primary];
+    if (typeof edge[alt] === 'string' && edge[alt].length > 0) return edge[alt];
+    return '';
+}
+
+function _edgeKey(edge) {
+    if (!edge || typeof edge !== 'object') return '';
+    const from = _edgeNodeId(edge, 'from_node', 'from');
+    const to = _edgeNodeId(edge, 'to_node', 'to');
+    return `${from}->${to}`;
+}
+
+function _modeOf(skill, field, defaultMode) {
+    if (!skill || typeof skill !== 'object') return defaultMode;
+    const raw = skill[field];
+    if (raw === 'merge' || raw === 'replace') return raw;
+    return defaultMode;
+}
+
+function _buildEffectiveSkillData(flow, skillId) {
+    const baseNodes = _isPlainObject(flow.nodes) ? flow.nodes : {};
+    const baseEdges = Array.isArray(flow.edges) ? flow.edges : [];
+    const baseVars = _isPlainObject(flow.variables) ? flow.variables : {};
+    const baseEntry = typeof flow.entry === 'string' ? flow.entry : null;
+    const resources = _isPlainObject(flow.resources) ? flow.resources : {};
+
+    const isBase = !skillId || skillId === 'base';
+    const skill = !isBase && _isPlainObject(flow.skills) && _isPlainObject(flow.skills[skillId])
+        ? flow.skills[skillId]
+        : null;
+
+    if (!skill) {
+        return {
+            skillsData: {
+                nodes: _deepClone(baseNodes),
+                edges: baseEdges.map(_deepClone),
+                entry: baseEntry,
+                variables: _deepClone(baseVars),
+                resources: _deepClone(resources),
+            },
+            inheritedNodeIds: [],
+            inheritedEdgeKeys: [],
+            entryNodeId: baseEntry,
+        };
+    }
+
+    const nodesMode = _modeOf(skill, 'nodes_mode', 'replace');
+    const edgesMode = _modeOf(skill, 'edges_mode', 'replace');
+    const variablesMode = _modeOf(skill, 'variables_mode', 'merge');
+
+    const skillNodes = _isPlainObject(skill.nodes) ? skill.nodes : null;
+    const skillEdges = Array.isArray(skill.edges) ? skill.edges : null;
+    const skillVars = _isPlainObject(skill.variables) ? skill.variables : null;
+
+    let effectiveNodes;
+    let inheritedNodeIds;
+    if (skillNodes === null) {
+        effectiveNodes = _deepClone(baseNodes);
+        inheritedNodeIds = Object.keys(baseNodes);
+    } else if (nodesMode === 'merge') {
+        effectiveNodes = {};
+        for (const [id, node] of Object.entries(baseNodes)) {
+            effectiveNodes[id] = _isPlainObject(skillNodes[id])
+                ? _deepMerge(node, skillNodes[id])
+                : _deepClone(node);
+        }
+        for (const [id, node] of Object.entries(skillNodes)) {
+            if (!(id in effectiveNodes)) effectiveNodes[id] = _deepClone(node);
+        }
+        inheritedNodeIds = Object.keys(baseNodes).filter((id) => !(id in skillNodes));
+    } else {
+        effectiveNodes = _deepClone(skillNodes);
+        inheritedNodeIds = [];
+    }
+
+    let effectiveEdges;
+    let inheritedEdgeKeys;
+    if (skillEdges === null) {
+        effectiveEdges = baseEdges.map(_deepClone);
+        inheritedEdgeKeys = baseEdges.map(_edgeKey);
+    } else if (edgesMode === 'merge') {
+        const skillEdgePairs = new Set(skillEdges.map(_edgeKey));
+        const inheritedBase = baseEdges.filter((e) => !skillEdgePairs.has(_edgeKey(e)));
+        effectiveEdges = [...inheritedBase.map(_deepClone), ...skillEdges.map(_deepClone)];
+        inheritedEdgeKeys = inheritedBase.map(_edgeKey);
+    } else {
+        effectiveEdges = skillEdges.map(_deepClone);
+        inheritedEdgeKeys = [];
+    }
+
+    let effectiveVars;
+    if (skillVars === null) {
+        effectiveVars = _deepClone(baseVars);
+    } else if (variablesMode === 'merge') {
+        effectiveVars = { ..._deepClone(baseVars), ..._deepClone(skillVars) };
+    } else {
+        effectiveVars = _deepClone(skillVars);
+    }
+
+    const effectiveEntry = typeof skill.entry === 'string' && skill.entry.length > 0
+        ? skill.entry
+        : baseEntry;
+
+    return {
+        skillsData: {
+            nodes: effectiveNodes,
+            edges: effectiveEdges,
+            entry: effectiveEntry,
+            variables: effectiveVars,
+            resources: _deepClone(resources),
+        },
+        inheritedNodeIds,
+        inheritedEdgeKeys,
+        entryNodeId: effectiveEntry,
+    };
+}
+
+function _stableStringify(value) {
+    if (value === null || typeof value !== 'object') return JSON.stringify(value);
+    if (Array.isArray(value)) return `[${value.map(_stableStringify).join(',')}]`;
+    const keys = Object.keys(value).sort();
+    return `{${keys.map((k) => `${JSON.stringify(k)}:${_stableStringify(value[k])}`).join(',')}}`;
+}
+
 export const editorResource = createAsyncOp({
     name: 'flows/editor',
     silent: true,
     transport: 'http',
+    // UI-only фабрика: held state редактора flows, без реальных HTTP-вызовов
+    // (см. ниже extraInitial и расширенный extraReducer). `.run()` запрещён;
+    // данные мутируются через actions (loadFlow / setSkill / setActiveTool / ...).
+    // restMirror с `service: 'ui-only'` явно декларирует отсутствие REST-зеркала
+    // — CI пропускает проверку и не даёт WARN в strict.
+    restMirror: { method: 'GET', path: '/__ui_only__/flows/editor', service: 'ui-only' },
     request: async () => {
-        throw new Error('flows/editor — UI-only фабрика; .run() не вызывается');
+        throw new Error('flows/editor: UI-only factory; .run() is not supported');
     },
     extraInitial: {
         flowId: null,
@@ -47,7 +219,6 @@ export const editorResource = createAsyncOp({
         panelExpanded: false,
         executionPanelOpen: false,
         agentExecutionRunning: false,
-        variablesPanelOpen: false,
         activeTool: 'select',
         previewExecutionState: null,
         mode: 'edit',
@@ -65,6 +236,7 @@ export const editorResource = createAsyncOp({
         breakpointHitNodeId: null,
         entryNodeId: null,
         inheritedNodeIds: [],
+        inheritedEdgeKeys: [],
         multiSelection: [],
         viewBox: { ...DEFAULT_VIEWBOX },
         smartGuides: [],
@@ -81,7 +253,6 @@ export const editorResource = createAsyncOp({
         PANEL_CLOSED: 'panel_closed',
         PANEL_EXPANDED: 'panel_expanded',
         EXECUTION_PANEL_SET: 'execution_panel_set',
-        VARIABLES_PANEL_TOGGLED: 'variables_panel_toggled',
         AGENT_EXECUTION_SET: 'agent_execution_set',
         ACTIVE_TOOL_SET: 'active_tool_set',
         MODE_SET: 'mode_set',
@@ -117,7 +288,6 @@ export const editorResource = createAsyncOp({
         closePanel: 'panel_closed',
         togglePanelExpanded: 'panel_expanded',
         setExecutionPanelOpen: 'execution_panel_set',
-        toggleVariablesPanel: 'variables_panel_toggled',
         setAgentExecutionRunning: 'agent_execution_set',
         setActiveTool: 'active_tool_set',
         setMode: 'mode_set',
@@ -146,27 +316,24 @@ export const editorResource = createAsyncOp({
     },
     extraReducer: (state, event) => {
         const t = event.type;
-        const p = event.payload || {};
+        const p = event.payload && typeof event.payload === 'object' ? event.payload : {};
 
         if (t === 'flows/editor/flow_loaded') {
             const flow = p.flow;
             if (!flow || typeof flow !== 'object') return state;
-            const skillsData = {
-                nodes: flow.nodes || {},
-                edges: flow.edges || [],
-                entry: flow.entry || null,
-                variables: flow.variables || {},
-                resources: flow.resources || {},
-            };
-            const meta = (flow.config && flow.config.metadata) || flow.metadata || {};
+            const requestedSkillId = typeof p.skillId === 'string' ? p.skillId : null;
+            const effective = _buildEffectiveSkillData(flow, requestedSkillId);
+            const meta = _resolveFlowMetadata(flow);
             const stickyNotes = Array.isArray(meta.sticky_notes) ? meta.sticky_notes : [];
             return {
                 ...state,
                 flowId: typeof flow.flow_id === 'string' ? flow.flow_id : state.flowId,
                 flowConfig: flow,
-                skillsData,
-                currentSkillId: typeof p.skillId === 'string' ? p.skillId : null,
-                previewExecutionState: p.previewExecutionState || null,
+                skillsData: effective.skillsData,
+                currentSkillId: requestedSkillId,
+                inheritedNodeIds: effective.inheritedNodeIds,
+                inheritedEdgeKeys: effective.inheritedEdgeKeys,
+                previewExecutionState: p.previewExecutionState && typeof p.previewExecutionState === 'object' ? p.previewExecutionState : null,
                 agentExecutionRunning: false,
                 isDirty: false,
                 historyStack: [],
@@ -177,7 +344,7 @@ export const editorResource = createAsyncOp({
                 completedNodeIds: [],
                 erroredNodes: {},
                 breakpointHitNodeId: null,
-                entryNodeId: typeof flow.entry === 'string' ? flow.entry : null,
+                entryNodeId: effective.entryNodeId,
                 multiSelection: [],
                 stickyNotes,
             };
@@ -190,7 +357,31 @@ export const editorResource = createAsyncOp({
         if (t === 'flows/editor/skills_data_updated') {
             const data = p.data;
             if (!data || typeof data !== 'object') return state;
-            return { ...state, skillsData: data };
+            const prev = state.skillsData && typeof state.skillsData === 'object' ? state.skillsData : { nodes: {}, edges: [] };
+            const prevNodes = _isPlainObject(prev.nodes) ? prev.nodes : {};
+            const nextNodes = _isPlainObject(data.nodes) ? data.nodes : {};
+            const inheritedNodeIds = (Array.isArray(state.inheritedNodeIds) ? state.inheritedNodeIds : []).filter((id) => {
+                if (!(id in nextNodes)) return false;
+                return _stableStringify(prevNodes[id]) === _stableStringify(nextNodes[id]);
+            });
+            const prevEdges = Array.isArray(prev.edges) ? prev.edges : [];
+            const nextEdges = Array.isArray(data.edges) ? data.edges : [];
+            const prevEdgeByKey = new Map(prevEdges.map((e) => [_edgeKey(e), e]));
+            const nextEdgeByKey = new Map(nextEdges.map((e) => [_edgeKey(e), e]));
+            const inheritedEdgeKeys = (Array.isArray(state.inheritedEdgeKeys) ? state.inheritedEdgeKeys : []).filter((key) => {
+                if (!nextEdgeByKey.has(key)) return false;
+                return _stableStringify(prevEdgeByKey.get(key)) === _stableStringify(nextEdgeByKey.get(key));
+            });
+            const nextEntry = typeof data.entry === 'string' && data.entry.length > 0
+                ? data.entry
+                : null;
+            return {
+                ...state,
+                skillsData: data,
+                entryNodeId: nextEntry,
+                inheritedNodeIds,
+                inheritedEdgeKeys,
+            };
         }
 
         if (t === 'flows/editor/node_selected') {
@@ -228,10 +419,6 @@ export const editorResource = createAsyncOp({
 
         if (t === 'flows/editor/execution_panel_set') {
             return { ...state, executionPanelOpen: Boolean(p.open) };
-        }
-
-        if (t === 'flows/editor/variables_panel_toggled') {
-            return { ...state, variablesPanelOpen: !state.variablesPanelOpen };
         }
 
         if (t === 'flows/editor/agent_execution_set') {
@@ -280,7 +467,7 @@ export const editorResource = createAsyncOp({
         }
 
         if (t === 'flows/editor/preview_state_set') {
-            return { ...state, previewExecutionState: p.snapshot || null };
+            return { ...state, previewExecutionState: p.snapshot && typeof p.snapshot === 'object' ? p.snapshot : null };
         }
 
         if (t === 'flows/editor/history_pushed') {
@@ -363,7 +550,7 @@ export const editorResource = createAsyncOp({
         if (t === 'flows/editor/context_menu_opened') {
             const menu = p.menu;
             if (!menu || typeof menu !== 'object') return state;
-            return { ...state, contextMenu: { x: menu.x, y: menu.y, target: menu.target, targetId: menu.targetId || null } };
+            return { ...state, contextMenu: { x: menu.x, y: menu.y, target: menu.target, targetId: typeof menu.targetId === 'string' ? menu.targetId : null } };
         }
 
         if (t === 'flows/editor/context_menu_closed') {
@@ -498,6 +685,7 @@ export const editorResource = createAsyncOp({
         if (t === 'flows/editor/node_deleted') {
             const nodeId = p.nodeId;
             if (typeof nodeId !== 'string' || nodeId.length === 0) return state;
+            if ((Array.isArray(state.inheritedNodeIds) ? state.inheritedNodeIds : []).includes(nodeId)) return state;
             const data = state.skillsData;
             if (!data || typeof data !== 'object') return state;
             const nodes = data.nodes && typeof data.nodes === 'object' ? data.nodes : {};

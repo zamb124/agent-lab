@@ -14,6 +14,7 @@ import { PlatformElement } from '@platform/lib/platform-element/index.js';
 import './flows-base-resource-editor.js';
 import '../editors/flows-json-field-editor.js';
 import '../editors/flows-variable-input.js';
+import { asString } from '../../_helpers/flows-resolvers.js';
 
 const AUTH_TYPES = Object.freeze(['', 'bearer', 'basic', 'api_key']);
 
@@ -79,12 +80,15 @@ export class FlowsHttpResourceEditor extends PlatformElement {
                             <label>${this.t('http_resource_editor.timeout')}</label>
                             <input type="number" min="1" step="1"
                                 .value=${String(timeout)}
-                                @input=${(e) => this._emitConfig({ timeout: parseInt(e.target.value, 10) || 30 })} />
+                                @input=${(e) => {
+                                    const v = parseInt(e.target.value, 10);
+                                    this._emitConfig({ timeout: Number.isFinite(v) && v > 0 ? v : 30 });
+                                }} />
                         </div>
                         <div class="field">
                             <label>${this.t('http_resource_editor.auth_type')}</label>
                             <select .value=${authType}
-                                @change=${(e) => this._emitConfig({ auth_type: e.target.value || null })}>
+                                @change=${(e) => this._emitConfig({ auth_type: e.target.value.length > 0 ? e.target.value : null })}>
                                 ${AUTH_TYPES.map((t) => html`<option value=${t} ?selected=${t === authType}>${t === '' ? this.t('http_resource_editor.auth_none') : this.t(`http_resource_editor.auth_${t}`)}</option>`)}
                             </select>
                         </div>
@@ -94,7 +98,7 @@ export class FlowsHttpResourceEditor extends PlatformElement {
                             <label>${this.t('http_resource_editor.auth_value')}</label>
                             <flows-variable-input
                                 .value=${authValue}
-                                @change=${(e) => this._emitConfig({ auth_value: e.detail?.value || '' })}
+                                @change=${(e) => this._emitConfig({ auth_value: asString(e.detail?.value) })}
                             ></flows-variable-input>
                         </div>
                     ` : ''}

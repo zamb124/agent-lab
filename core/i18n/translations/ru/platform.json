@@ -1,102 +1,111 @@
 {
-  "notifications": {
-    "title": "Уведомления",
-    "dismiss_all": "Очистить все",
-    "empty": "Уведомлений пока нет"
-  },
-  "menu": {
-    "user_button_title": "Меню пользователя",
-    "apps": "Apps",
-    "profile": "Профиль",
-    "calendar": "Календарь",
-    "documentation": "Документация",
-    "theme_light": "Светлая тема",
-    "theme_dark": "Тёмная тема",
-    "logout": "Выйти",
-    "language": "Язык",
-    "user_fallback": "Пользователь"
-  },
-  "apps": {
-    "flows": {
-      "name": "Flows",
-      "description": "Собирайте сценарии ИИ из графов и навыков, подключайте внешние системы — от идеи до запуска без лишней разработки"
+    "notifications": {
+        "title": "Уведомления",
+        "dismiss_all": "Очистить все",
+        "empty": "Уведомлений пока нет"
     },
-    "crm": {
-      "name": "NetWorkle",
-      "description": "CRM и граф знаний: контакты, связи и контекст сделок в одной сети, чтобы ничего не терялось между командами"
+    "menu": {
+        "user_button_title": "Меню пользователя",
+        "apps": "Apps",
+        "profile": "Профиль",
+        "calendar": "Календарь",
+        "documentation": "Документация",
+        "theme_light": "Светлая тема",
+        "theme_dark": "Тёмная тема",
+        "logout": "Выйти",
+        "language": "Язык",
+        "user_fallback": "Пользователь"
     },
-    "rag": {
-      "name": "RAG",
-      "description": "База знаний компании: загрузка документов, семантический поиск и ответы для ИИ строго по вашим материалам"
+    "apps": {
+        "flows": {
+            "name": "Flows",
+            "description": "Собирайте сценарии ИИ из графов и навыков, подключайте внешние системы — от идеи до запуска без лишней разработки"
+        },
+        "crm": {
+            "name": "NetWorkle",
+            "description": "CRM и граф знаний: контакты, связи и контекст сделок в одной сети, чтобы ничего не терялось между командами"
+        },
+        "rag": {
+            "name": "RAG",
+            "description": "База знаний компании: загрузка документов, семантический поиск и ответы для ИИ строго по вашим материалам"
+        },
+        "sync": {
+            "name": "Sync",
+            "description": "Командный хаб для разработки: чат, Git и звонки рядом с репозиториями — быстрее согласовывать и внедрять"
+        },
+        "documents": {
+            "name": "Документы",
+            "description": "Совместное редактирование Office-файлов: список привязок, редактор в iframe, изоляция по namespace, секреты только на BFF"
+        },
+        "frontend": {
+            "name": "Console",
+            "description": "Единая точка входа: компания, биллинг и быстрый доступ ко всем продуктам платформы"
+        }
     },
-    "sync": {
-      "name": "Sync",
-      "description": "Командный хаб для разработки: чат, Git и звонки рядом с репозиториями — быстрее согласовывать и внедрять"
+    "file_preview_modal": {
+        "title": "Текст из файла",
+        "loading": "Чтение файла…",
+        "truncated_hint": "Показан фрагмент; при импорте на сервере обрабатывается полный файл.",
+        "cancel": "Отмена",
+        "confirm": "Продолжить",
+        "error_no_file": "Не выбран файл",
+        "error_bad_response": "Некорректный ответ сервера"
     },
-    "documents": {
-      "name": "Документы",
-      "description": "Совместное редактирование Office-файлов: список привязок, редактор в iframe, изоляция по namespace, секреты только на BFF"
+    "company": {
+        "create_title": "Создание компании",
+        "create_subtitle": "Для начала работы создайте компанию",
+        "name_label": "Название компании",
+        "name_placeholder": "Моя компания",
+        "slug_label": "Адрес компании",
+        "slug_hint": "Только латинские буквы, цифры и дефис",
+        "slug_min": "Минимум 3 символа",
+        "slug_taken": "Этот адрес уже занят",
+        "slug_check_error": "Ошибка проверки доступности",
+        "error_name_required": "Введите название компании",
+        "error_slug_invalid": "Введите корректный адрес компании",
+        "error_slug_taken": "Адрес компании уже занят",
+        "error_create": "Не удалось создать компанию",
+        "creating": "Создание...",
+        "submit": "Создать"
     },
-    "frontend": {
-      "name": "Console",
-      "description": "Единая точка входа: компания, биллинг и быстрый доступ ко всем продуктам платформы"
+    "platform_field": {
+        "empty_value": "Не задано",
+        "boolean_true": "Да",
+        "boolean_false": "Нет",
+        "array_placeholder": "Введите значение и нажмите Enter",
+        "object_placeholder": "JSON объект"
+    },
+    "user_chip": {
+        "unknown": "Неизвестный пользователь",
+        "you": "Вы"
+    },
+    "user_info_modal": {
+        "header": "Профиль пользователя",
+        "roles_label": "Роли",
+        "joined_at": "В команде с",
+        "action_write_sync": "Написать в Sync",
+        "action_open_team": "Открыть в Команде",
+        "action_copy_id": "Скопировать ID",
+        "action_save": "Сохранить",
+        "action_cancel": "Отмена",
+        "action_logout": "Выйти из аккаунта",
+        "action_save_roles": "Сохранить роли",
+        "field_first_name": "Имя",
+        "field_last_name": "Фамилия",
+        "field_name": "Отображаемое имя",
+        "field_email": "Email",
+        "field_email_locked": "Email нельзя изменить",
+        "field_bio": "О себе",
+        "field_language": "Язык интерфейса",
+        "lang_ru": "Русский",
+        "lang_en": "English",
+        "section_roles": "Роли в команде",
+        "role_owner": "Владелец",
+        "role_admin": "Администратор",
+        "role_developer": "Разработчик",
+        "role_viewer": "Наблюдатель",
+        "role_owner_locked": "Нельзя снять у владельца компании",
+        "error_name_required": "Введите имя",
+        "error_role_required": "Нужна хотя бы одна роль"
     }
-  },
-  "file_preview_modal": {
-    "title": "Текст из файла",
-    "loading": "Чтение файла…",
-    "truncated_hint": "Показан фрагмент; при импорте на сервере обрабатывается полный файл.",
-    "cancel": "Отмена",
-    "confirm": "Продолжить",
-    "error_no_file": "Не выбран файл",
-    "error_bad_response": "Некорректный ответ сервера"
-  },
-  "company": {
-    "switched": "Компания изменена",
-    "switch_error": "Ошибка смены компании: {{message}}",
-    "subdomain_missing": "Не найден subdomain для выбранной компании"
-  },
-  "platform_field": {
-    "empty_value": "Не задано",
-    "boolean_true": "Да",
-    "boolean_false": "Нет",
-    "array_placeholder": "Введите значение и нажмите Enter",
-    "object_placeholder": "JSON объект"
-  },
-  "user_chip": {
-    "unknown": "Неизвестный пользователь",
-    "you": "Вы"
-  },
-  "user_info_modal": {
-    "header": "Профиль пользователя",
-    "roles_label": "Роли",
-    "joined_at": "В команде с",
-    "action_write_sync": "Написать в Sync",
-    "action_open_team": "Открыть в Команде",
-    "action_copy_id": "Скопировать ID",
-    "action_save": "Сохранить",
-    "action_cancel": "Отмена",
-    "action_logout": "Выйти из аккаунта",
-    "action_save_roles": "Сохранить роли",
-    "field_first_name": "Имя",
-    "field_last_name": "Фамилия",
-    "field_name": "Отображаемое имя",
-    "field_email": "Email",
-    "field_email_locked": "Email нельзя изменить",
-    "field_bio": "О себе",
-    "field_language": "Язык интерфейса",
-    "lang_ru": "Русский",
-    "lang_en": "English",
-    "section_roles": "Роли в команде",
-    "role_owner": "Владелец",
-    "role_admin": "Администратор",
-    "role_developer": "Разработчик",
-    "role_viewer": "Наблюдатель",
-    "role_owner_locked": "Нельзя снять у владельца компании",
-    "toast_copied": "ID пользователя скопирован",
-    "toast_copy_failed": "Не удалось скопировать ID",
-    "toast_profile_saved": "Профиль сохранён",
-    "error_name_required": "Введите имя",
-    "error_role_required": "Нужна хотя бы одна роль"
-  }
 }

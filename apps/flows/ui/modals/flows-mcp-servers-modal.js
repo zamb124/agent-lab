@@ -6,38 +6,48 @@
  */
 
 import { html, css } from 'lit';
-import { PlatformLightModal } from '@platform/lib/components/glass-light-modal.js';
+import { PlatformModal } from '@platform/lib/components/glass-modal.js';
 import { registerModalKind } from '@platform/lib/utils/modal-registry.js';
 import { platformConfirm } from '@platform/lib/components/platform-confirm-modal.js';
 import '@platform/lib/components/platform-button.js';
 import '@platform/lib/components/platform-icon.js';
 import '@platform/lib/components/glass-spinner.js';
+import { asArray, asString } from '../_helpers/flows-resolvers.js';
 
 const SERVER_ID_PATTERN = /^[a-zA-Z][a-zA-Z0-9_-]{1,63}$/;
 const TRANSPORT_TYPES = Object.freeze(['http', 'sse']);
 
-export class FlowsMcpServersModal extends PlatformLightModal {
+export class FlowsMcpServersModal extends PlatformModal {
     static modalKind = 'flows.mcp_servers';
     static i18nNamespace = 'flows';
 
     static properties = {
-        ...PlatformLightModal.properties,
+        ...PlatformModal.properties,
         _editing: { state: true },
         _form: { state: true },
     };
 
+    static styles = [
+        ...PlatformModal.styles,
+        css`
+            .mcp-form { display: flex; flex-direction: column; gap: var(--space-2); padding: var(--space-3); border: 1px solid var(--border-subtle); border-radius: var(--radius-md); margin-bottom: var(--space-3); }
+            .mcp-row { display: flex; gap: var(--space-2); }
+            .mcp-form input, .mcp-form select { flex: 1; padding: var(--space-2); border-radius: var(--radius-sm); border: 1px solid var(--glass-border-subtle); background: var(--glass-solid-subtle); color: var(--text-primary); font: inherit; }
+            .mcp-table { width: 100%; border-collapse: collapse; color: var(--text-secondary); }
+            .mcp-table th, .mcp-table td { padding: var(--space-2); text-align: left; border-bottom: 1px solid var(--border-subtle); }
+            .mcp-empty { text-align: center; color: var(--text-tertiary); padding: var(--space-4); }
+        `,
+    ];
+
     constructor() {
         super();
+        this.size = 'xl';
         this._editing = null;
         this._form = { server_id: '', name: '', url: '', transport_type: 'http', description: '' };
         this._servers = this.useResource('flows/mcp_servers', { autoload: true });
         this._update = this.useOp('flows/mcp_server_update');
         this._syncOp = this.useOp('flows/mcp_server_sync');
         this._testOp = this.useOp('flows/mcp_server_test');
-    }
-
-    connectedCallback() {
-        super.connectedCallback();
     }
 
     _resetForm() {
@@ -51,8 +61,8 @@ export class FlowsMcpServersModal extends PlatformLightModal {
             server_id: s.server_id,
             name: s.name,
             url: s.url,
-            transport_type: s.transport_type || 'http',
-            description: s.description || '',
+            transport_type: typeof s.transport_type === 'string' && s.transport_type.length > 0 ? s.transport_type : 'http',
+            description: asString(s.description),
         };
     }
 
@@ -157,7 +167,7 @@ export class FlowsMcpServersModal extends PlatformLightModal {
     }
 
     _renderRows() {
-        const items = this._servers.items || [];
+        const items = asArray(this._servers.items);
         if (this._servers.loading && items.length === 0) {
             return html`<tr><td colspan="5"><glass-spinner></glass-spinner></td></tr>`;
         }
@@ -169,7 +179,7 @@ export class FlowsMcpServersModal extends PlatformLightModal {
                 <td><code>${s.server_id}</code></td>
                 <td>${s.name}</td>
                 <td>${s.transport_type}</td>
-                <td>${s.cached_tools?.length || 0}</td>
+                <td>${Array.isArray(s.cached_tools) ? s.cached_tools.length : 0}</td>
                 <td>
                     <platform-button @click=${() => this._sync(s)}>${this.t('mcp_servers_modal.action_sync')}</platform-button>
                     <platform-button @click=${() => this._test(s)}>${this.t('mcp_servers_modal.action_test')}</platform-button>
@@ -182,41 +192,25 @@ export class FlowsMcpServersModal extends PlatformLightModal {
         `);
     }
 
-    render() {
+    renderHeader() {
+        return this.t('mcp_servers_modal.title');
+    }
+
+    renderBody() {
         return html`
-            <div class="light-modal-backdrop" @click=${this._onBackdropClick}></div>
-            <div class="light-modal-container mcp-shell">
-                <style>
-                    .mcp-shell { padding: var(--space-4); gap: var(--space-3); }
-                    .mcp-header { display: flex; align-items: center; justify-content: space-between; }
-                    .mcp-header h2 { margin: 0; color: var(--text-primary); }
-                    .mcp-form { display: flex; flex-direction: column; gap: var(--space-2); padding: var(--space-3); border: 1px solid var(--border-subtle); border-radius: var(--radius-md); margin-bottom: var(--space-3); }
-                    .mcp-row { display: flex; gap: var(--space-2); }
-                    .mcp-form input, .mcp-form select { flex: 1; padding: var(--space-2); border-radius: var(--radius-sm); border: 1px solid var(--glass-border-subtle); background: var(--glass-solid-subtle); color: var(--text-primary); font: inherit; }
-                    .mcp-table { width: 100%; border-collapse: collapse; color: var(--text-secondary); }
-                    .mcp-table th, .mcp-table td { padding: var(--space-2); text-align: left; border-bottom: 1px solid var(--border-subtle); }
-                    .mcp-empty { text-align: center; color: var(--text-tertiary); padding: var(--space-4); }
-                </style>
-                <div class="mcp-header">
-                    <h2>${this.t('mcp_servers_modal.title')}</h2>
-                    <platform-button @click=${() => this.close()}>
-                        <platform-icon name="close" size="14"></platform-icon>
-                    </platform-button>
-                </div>
-                ${this._renderForm()}
-                <table class="mcp-table">
-                    <thead>
-                        <tr>
-                            <th>${this.t('mcp_servers_modal.col_id')}</th>
-                            <th>${this.t('mcp_servers_modal.col_name')}</th>
-                            <th>${this.t('mcp_servers_modal.col_transport')}</th>
-                            <th>${this.t('mcp_servers_modal.col_tools')}</th>
-                            <th>${this.t('mcp_servers_modal.col_actions')}</th>
-                        </tr>
-                    </thead>
-                    <tbody>${this._renderRows()}</tbody>
-                </table>
-            </div>
+            ${this._renderForm()}
+            <table class="mcp-table">
+                <thead>
+                    <tr>
+                        <th>${this.t('mcp_servers_modal.col_id')}</th>
+                        <th>${this.t('mcp_servers_modal.col_name')}</th>
+                        <th>${this.t('mcp_servers_modal.col_transport')}</th>
+                        <th>${this.t('mcp_servers_modal.col_tools')}</th>
+                        <th>${this.t('mcp_servers_modal.col_actions')}</th>
+                    </tr>
+                </thead>
+                <tbody>${this._renderRows()}</tbody>
+            </table>
         `;
     }
 }

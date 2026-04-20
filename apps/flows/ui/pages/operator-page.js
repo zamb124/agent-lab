@@ -28,6 +28,7 @@ import '@platform/lib/components/glass-button.js';
 import '@platform/lib/components/glass-input.js';
 import '@platform/lib/components/glass-spinner.js';
 import '@platform/lib/components/platform-icon.js';
+import { asArray, asString, isPlainObject } from '../_helpers/flows-resolvers.js';
 
 const STATUSES = Object.freeze(['open', 'claimed', 'user_dialog', 'awaiting_agent', 'completed', 'cancelled']);
 const OPERATOR_ROLES = new Set(['admin', 'owner']);
@@ -36,8 +37,10 @@ const QUEUE_SLUG_PATTERN = /^[a-z][a-z0-9_]{1,63}$/;
 
 function userIsAdmin(user, activeCompanyId) {
     if (!user || typeof activeCompanyId !== 'string') return false;
-    const companies = user.companies || user.raw?.companies;
-    if (!companies || typeof companies !== 'object') return false;
+    const directCompanies = isPlainObject(user.companies) ? user.companies : null;
+    const rawCompanies = isPlainObject(user.raw) && isPlainObject(user.raw.companies) ? user.raw.companies : null;
+    const companies = directCompanies !== null ? directCompanies : rawCompanies;
+    if (!companies) return false;
     const raw = companies[activeCompanyId];
     if (!raw) return false;
     const list = Array.isArray(raw) ? raw : [raw];
@@ -188,11 +191,17 @@ export class OperatorPage extends PlatformPage {
         this._addMember = this.useOp('flows/operator_queue_add_member');
         this._removeMember = this.useOp('flows/operator_queue_remove_member');
         this._upload = this.useOp('flows/file_upload');
-        this._authSel = this.select((s) => ({
-            user: s.auth?.user || null,
-            companyId: s.companies?.activeId || null,
-        }));
-        this._themeSel = this.select((s) => s.theme?.mode || 'dark');
+        this._authSel = this.select((s) => {
+            const user = isPlainObject(s.auth) && isPlainObject(s.auth.user) ? s.auth.user : null;
+            const companyId = isPlainObject(s.companies) && typeof s.companies.activeId === 'string'
+                ? s.companies.activeId
+                : null;
+            return { user, companyId };
+        });
+        this._themeSel = this.select((s) => {
+            const mode = isPlainObject(s.theme) ? s.theme.mode : null;
+            return mode === 'light' ? 'light' : 'dark';
+        });
         this.useEvent(OPERATOR_PUSH_EVENT, () => this._refreshTasks());
     }
 
@@ -256,7 +265,7 @@ export class OperatorPage extends PlatformPage {
     }
 
     async _onFilesSelected(event) {
-        const files = Array.from(event.target.files || []);
+        const files = event.target.files ? Array.from(event.target.files) : [];
         if (files.length === 0) return;
         const uploaded = [];
         for (const file of files) {
@@ -297,7 +306,7 @@ export class OperatorPage extends PlatformPage {
         if (!this._selectedTaskId) return;
         await this._complete.run({
             task_id: this._selectedTaskId,
-            resolution: text || this.t('operator.default_resolution'),
+            resolution: text.length > 0 ? text : this.t('operator.default_resolution'),
             file_ids: this._pendingFiles.map((f) => f.file_id),
         });
         this._composerDraft = '';
@@ -306,7 +315,7 @@ export class OperatorPage extends PlatformPage {
     }
 
     _renderQueues() {
-        const items = this._queues.items || [];
+        const items = asArray(this._queues.items);
         const me = this._authSel.value;
         const isAdmin = userIsAdmin(me.user, me.companyId);
         return html`
@@ -368,9 +377,17 @@ export class OperatorPage extends PlatformPage {
                             ?active=${this._selectedTaskId === task.id}
                             @click=${() => this._selectTask(task.id)}
                         >
-                            <div class="task-card-title">${task.handoff_title || task.flow_display_name || task.id}</div>
-                            <div class="task-card-meta">${task.handoff_message_preview || ''}</div>
-                            <div class="task-card-meta"><code>${task.flow_id}</code> / ${task.skill_id || 'base'}</div>
+                            <div class="task-card-title">${
+                                typeof task.handoff_title === 'string' && task.handoff_title.length > 0
+                                    ? task.handoff_title
+                                    : (typeof task.flow_display_name === 'string' && task.flow_display_name.length > 0
+                                        ? task.flow_display_name
+                                        : task.id)
+                            }</div>
+                            <div class="task-card-meta">${asString(task.handoff_message_preview)}</div>
+                            <div class="task-card-meta"><code>${task.flow_id}</code> / ${
+                                typeof task.skill_id === 'string' && task.skill_id.length > 0 ? task.skill_id : 'base'
+                            }</div>
                         </div>
                     `)}
             </div>
@@ -378,17 +395,20 @@ export class OperatorPage extends PlatformPage {
     }
 
     _detailHandoffMode(detail) {
-        const meta = detail?.task?.metadata || detail?.metadata || {};
+        const taskMeta = isPlainObject(detail?.task) && isPlainObject(detail.task.metadata) ? detail.task.metadata : null;
+        const directMeta = isPlainObject(detail?.metadata) ? detail.metadata : null;
+        const meta = taskMeta !== null ? taskMeta : (directMeta !== null ? directMeta : {});
         const mode = meta.handoff_mode;
         return mode === 'takeover' ? 'takeover' : 'single_reply';
     }
 
     _renderDialog(detail) {
-        const history = (detail?.dialog_messages || [])
+        const dialogMessages = isPlainObject(detail) && Array.isArray(detail.dialog_messages) ? detail.dialog_messages : [];
+        const history = dialogMessages
             .filter((m) => (m.role === 'user' || m.role === 'agent'))
             .map((m) => ({
                 role: m.role,
-                text: (m.parts || []).filter((p) => p.kind === 'text' && p.text).map((p) => p.text).join('\n'),
+                text: asArray(m.parts).filter((p) => p.kind === 'text' && p.text).map((p) => p.text).join('\n'),
             }))
             .filter((e) => e.text.trim());
         const log = Array.isArray(detail?.dialog_log) ? detail.dialog_log : [];
@@ -414,7 +434,7 @@ export class OperatorPage extends PlatformPage {
                         <div class="dialog-entry dialog-entry--${entry.role}">
                             <span class="dialog-role">${entry.role === 'operator' ? this.t('operator.role_operator') : this.t('operator.role_user')}</span>
                             <span>${entry.text}</span>
-                            ${(entry.file_ids || []).map((fid) => html`
+                            ${asArray(entry.file_ids).map((fid) => html`
                                 <a href="/flows/api/v1/files/download/${fid}" target="_blank" rel="noopener">
                                     ${this.t('operator.download_file')}
                                 </a>
@@ -458,7 +478,7 @@ export class OperatorPage extends PlatformPage {
                     placeholder=${mode === 'takeover'
                         ? this.t('operator.placeholder_composer')
                         : this.t('operator.placeholder_single_reply')}
-                    @input=${(e) => { this._composerDraft = e.target.value || ''; }}
+                    @input=${(e) => { this._composerDraft = asString(e.target.value); }}
                     @keydown=${(e) => {
                         if (e.key === 'Enter' && !e.shiftKey) {
                             e.preventDefault();
@@ -488,7 +508,11 @@ export class OperatorPage extends PlatformPage {
             return html`<div class="empty">${this.t('operator.no_detail')}</div>`;
         }
         return html`
-            <div class="panel-title">${detail.task?.handoff_title || detail.task?.id}</div>
+            <div class="panel-title">${
+                isPlainObject(detail.task) && typeof detail.task.handoff_title === 'string' && detail.task.handoff_title.length > 0
+                    ? detail.task.handoff_title
+                    : (isPlainObject(detail.task) ? detail.task.id : '')
+            }</div>
             ${this._renderDialog(detail)}
             <div class="composer">${this._renderComposer(detail)}</div>
         `;

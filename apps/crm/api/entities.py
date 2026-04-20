@@ -82,6 +82,7 @@ async def create_entity(
             namespace=data.namespace,
             attributes=data.attributes,
             tags=data.tags,
+            attachment_ids=data.attachment_ids,
             user_id=data.user_id,
             note_date=data.note_date,
             due_date=data.due_date,

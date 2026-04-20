@@ -1,71 +1,60 @@
 /**
  * Sync Spaces — пространства Sync.
  *
+ * Каждый Sync Space жёстко 1:1 связан с платформенным namespace
+ * (shared KV `namespaces`). UI-выбор «активного пространства» хранится в
+ * общем срезе `state.ui.namespace.selectionByCompany` (см. CRM-sidebar +
+ * `setPlatformNamespaceSelection`); локального `selectedSpaceId` или
+ * фильтра-чипов в этом slice больше нет.
+ *
  * `transport: 'ws'` — все мутации идут через single platform WS
  * (`/sync/api/ws/notifications`) с автоматическим request-reply ack.
  * REST-зеркало живёт в `apps/sync/api/spaces.py` для CLI/SDK/гостей.
- *
- * Slice расширен UI-state: `selectedSpaceId` (текущий выбор) и
- * `sidebarSpaceFilterIds` (multi-select фильтр в sidebar; пустой массив =
- * все topic-каналы). Persist через core storage-effect (см. PR3).
  */
 
 import { createResourceCollection } from '@platform/lib/events/index.js';
-import { resolveSpaceId } from '../../_helpers/sync-id-resolvers.js';
+
+function _normalizeSpace(item) {
+    if (!item || typeof item !== 'object') return item;
+    const namespace = typeof item.namespace === 'string' ? item.namespace : '';
+    const description = typeof item.description === 'string' ? item.description : null;
+    const avatarUrl = typeof item.avatar_url === 'string' ? item.avatar_url : null;
+    return Object.freeze({
+        ...item,
+        namespace,
+        description,
+        avatar_url: avatarUrl,
+        transcribe_voice_messages: item.transcribe_voice_messages === true,
+        speech_to_chat_enabled: item.speech_to_chat_enabled === true,
+    });
+}
 
 export const spacesResource = createResourceCollection({
     name: 'sync/spaces',
     baseUrl: '/sync/api/v1/spaces',
-    idField: 'space_id',
+    idField: 'id',
     operations: ['list', 'create', 'update'],
     transport: 'ws',
     wsTimeoutMs: 5_000,
+    // restMirror.update — реальный path FastAPI
+    // (`@router.patch("/{space_id}")` в `apps/sync/api/spaces.py`).
+    restMirror: {
+        update: { method: 'PATCH', path: '/sync/api/v1/spaces/:space_id' },
+    },
     toastKeys: {
         create: 'sync:spaces.toast_created',
         create_error: 'sync:spaces.err_create',
         update: 'sync:spaces.toast_updated',
         update_error: 'sync:spaces.err_update',
     },
-    extraInitial: {
-        selectedSpaceId: null,
-        sidebarSpaceFilterIds: Object.freeze([]),
-    },
-    extraEvents: {
-        SELECTED: 'space_selected',
-        FILTER_TOGGLED: 'filter_toggled',
-        FILTER_RESET: 'filter_reset',
-    },
-    actions: {
-        selectSpace: 'space_selected',
-        toggleFilter: 'filter_toggled',
-        resetFilter: 'filter_reset',
-    },
+    mapItem: _normalizeSpace,
     extraReducer: (state, event) => {
         if (event.type === 'sync/space/created') {
-            const item = event.payload;
-            if (!item || typeof item !== 'object') return state;
-            const id = resolveSpaceId(item);
-            if (id === '') return state;
-            const existing = state.items.findIndex((x) => resolveSpaceId(x) === id);
-            const items = existing === -1 ? [...state.items, item] : state.items;
-            return { ...state, items: Object.freeze(items) };
-        }
-        if (event.type === 'sync/spaces/space_selected') {
-            const p = event.payload;
-            const spaceId = p && typeof p.spaceId === 'string' ? p.spaceId : null;
-            return { ...state, selectedSpaceId: spaceId };
-        }
-        if (event.type === 'sync/spaces/filter_toggled') {
-            const p = event.payload;
-            if (!p || typeof p.spaceId !== 'string') return state;
-            const cur = state.sidebarSpaceFilterIds;
-            const next = cur.includes(p.spaceId)
-                ? cur.filter((x) => x !== p.spaceId)
-                : [...cur, p.spaceId];
-            return { ...state, sidebarSpaceFilterIds: Object.freeze(next) };
-        }
-        if (event.type === 'sync/spaces/filter_reset') {
-            return { ...state, sidebarSpaceFilterIds: Object.freeze([]) };
+            const raw = event.payload;
+            if (!raw || typeof raw !== 'object' || typeof raw.id !== 'string') return state;
+            if (state.items.some((x) => x.id === raw.id)) return state;
+            const item = _normalizeSpace(raw);
+            return { ...state, items: Object.freeze([...state.items, item]) };
         }
         return state;
     },

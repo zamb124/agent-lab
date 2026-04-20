@@ -142,7 +142,10 @@ export class SyncCallOverlayModal extends PlatformModal {
             try {
                 this._room.disconnect();
             } catch (err) {
-                console.warn('[sync-call-overlay] LiveKit disconnect failed:', err);
+                this.toast('call_overlay_modal.toast_disconnect_failed', {
+                    type: 'error',
+                    vars: { error: String(err && err.message ? err.message : err) },
+                });
             }
             this._room = null;
         }

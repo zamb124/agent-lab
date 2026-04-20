@@ -9,6 +9,11 @@
  *
  * silent: ошибка попадает в slice.error через FAILED-событие фабрики,
  * карточка покажет «—» без поломки всей страницы.
+ *
+ * restMirror с `service: '<target>'` — это cross-service вызов из frontend
+ * в другой сервис. Скрипт `check_command_rest_mirror.py` распознаёт
+ * `service:` и не верифицирует path против локальных routes frontend (и не
+ * даёт WARN/ERROR в strict).
  */
 
 import { createAsyncOp } from '@platform/lib/events/index.js';
@@ -17,6 +22,7 @@ import { httpRequest } from '@platform/lib/events/http.js';
 export const dashboardFlowsCountOp = createAsyncOp({
     name: 'frontend/dashboard_flows_count',
     silent: true,
+    restMirror: { method: 'GET', path: '/flows/api/v1/flows/', service: 'flows' },
     request: async () => {
         const data = await httpRequest({
             method: 'GET',
@@ -29,6 +35,7 @@ export const dashboardFlowsCountOp = createAsyncOp({
 export const dashboardCrmNamespacesCountOp = createAsyncOp({
     name: 'frontend/dashboard_crm_namespaces_count',
     silent: true,
+    restMirror: { method: 'GET', path: '/crm/api/v1/namespaces', service: 'crm' },
     request: async () => {
         const data = await httpRequest({
             method: 'GET',
@@ -41,6 +48,7 @@ export const dashboardCrmNamespacesCountOp = createAsyncOp({
 export const dashboardRagNamespacesCountOp = createAsyncOp({
     name: 'frontend/dashboard_rag_namespaces_count',
     silent: true,
+    restMirror: { method: 'GET', path: '/rag/api/v1/namespaces', service: 'rag' },
     request: async () => {
         const data = await httpRequest({
             method: 'GET',
@@ -53,6 +61,7 @@ export const dashboardRagNamespacesCountOp = createAsyncOp({
 export const dashboardSyncSpacesCountOp = createAsyncOp({
     name: 'frontend/dashboard_sync_spaces_count',
     silent: true,
+    restMirror: { method: 'GET', path: '/sync/api/v1/spaces/', service: 'sync' },
     request: async () => {
         const data = await httpRequest({
             method: 'GET',
@@ -65,6 +74,7 @@ export const dashboardSyncSpacesCountOp = createAsyncOp({
 export const dashboardDocumentsFilesCountOp = createAsyncOp({
     name: 'frontend/dashboard_documents_files_count',
     silent: true,
+    restMirror: { method: 'GET', path: '/documents/api/v1/catalogs', service: 'office' },
     request: async () => {
         const data = await httpRequest({
             method: 'GET',

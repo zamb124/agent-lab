@@ -37,6 +37,7 @@ export const templateUpdateOp = createAsyncOp({
     name: 'crm/template_update',
     successToastKey: 'crm:toast.template.updated',
     errorToastKey: 'crm:toast.template.update_failed',
+    restMirror: { method: 'PUT', path: '/crm/api/v1/namespaces/templates/:template_id' },
     request: async ({ payload }) => {
         if (!payload || typeof payload.template_id !== 'string' || !payload.body) {
             throw new Error('templateUpdateOp: { template_id, body } required');
@@ -52,6 +53,7 @@ export const templateUpdateOp = createAsyncOp({
 export const templateSchemaOptionsOp = createAsyncOp({
     name: 'crm/template_schema_options',
     silent: true,
+    restMirror: { method: 'GET', path: '/crm/api/v1/namespaces/templates/schema/options' },
     request: async () => {
         return await httpRequest({
             method: 'GET',
@@ -64,6 +66,7 @@ export const templateTypeUpsertOp = createAsyncOp({
     name: 'crm/template_type_upsert',
     successToastKey: 'crm:toast.template_type.upserted',
     errorToastKey: 'crm:toast.template_type.upsert_failed',
+    restMirror: { method: 'POST', path: '/crm/api/v1/namespaces/templates/:template_id/types' },
     request: async ({ payload }) => {
         if (!payload || typeof payload.template_id !== 'string' || !payload.body) {
             throw new Error('templateTypeUpsertOp: { template_id, body } required');
@@ -80,6 +83,7 @@ export const templateTypeDeleteOp = createAsyncOp({
     name: 'crm/template_type_delete',
     successToastKey: 'crm:toast.template_type.removed',
     errorToastKey: 'crm:toast.template_type.remove_failed',
+    restMirror: { method: 'DELETE', path: '/crm/api/v1/namespaces/templates/:template_id/types/:type_id' },
     request: async ({ payload }) => {
         if (!payload || typeof payload.template_id !== 'string' || typeof payload.type_id !== 'string') {
             throw new Error('templateTypeDeleteOp: { template_id, type_id } required');

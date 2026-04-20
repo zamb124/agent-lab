@@ -9,7 +9,8 @@ Cross-check ключей переводов: код ↔ JSON-бандлы.
      каждый файл = namespace в корневом бандле.
   3. Сообщает:
         --mode missing : ключи, которые код использует, но в бандле их нет.
-        --mode unused  : ключи, которые лежат в бандле, но код их не дёргает.
+        --mode unused  : ключи, которые лежат в бандле, но код их не дёргает
+                         (динамика/toasts и др. — scripts/i18n_unused_scan_exclusions.py).
         --mode all     : и то, и другое (по умолчанию).
   4. Динамические ключи (`t(\\`prefix.${var}\\`)`, `t('a' + suffix)`) пропускаются
      и попадают в счётчик skipped — ручной ревью.
@@ -46,6 +47,25 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
+_SCRIPTS = Path(__file__).resolve().parent
+
+
+def _unused_scan_excluded(fullkey: str) -> bool:
+    import importlib.util
+
+    name = "_i18n_unused_scan_exclusions"
+    mod = sys.modules.get(name)
+    if mod is None:
+        path = _SCRIPTS / "i18n_unused_scan_exclusions.py"
+        spec = importlib.util.spec_from_file_location(name, path)
+        if spec is None or spec.loader is None:
+            raise RuntimeError("check_i18n_keys: cannot load i18n_unused_scan_exclusions.py")
+        mod = importlib.util.module_from_spec(spec)
+        sys.modules[name] = mod
+        spec.loader.exec_module(mod)
+    return mod.terminal_key_excluded_from_unused_report(fullkey)
+
+
 APPS = ROOT / "apps"
 CORE_LIB = ROOT / "core" / "frontend" / "static" / "lib"
 TRANSLATIONS = ROOT / "core" / "i18n" / "translations"
@@ -354,9 +374,35 @@ def find_unused(used: set[str], indexes: dict[str, BundleIndex]) -> dict[str, se
             segments = fullkey.split(".")
             if any(s in DYNAMIC_LIST_HINTS for s in segments):
                 continue
+            if _unused_scan_excluded(fullkey):
+                continue
             unused.add(fullkey)
         result[locale] = unused
     return result
+
+
+def collect_scan(only_app: str | None) -> tuple[dict[str, BundleIndex], list[Usage], Stats]:
+    """Загрузка бандлов и скан JS для cross-check (используется clean_i18n_unused)."""
+    indexes = {loc: load_bundles(loc) for loc in LOCALES}
+    available_ns = set()
+    for idx in indexes.values():
+        available_ns |= discover_service_namespaces(idx)
+
+    files = list_js_files(only_app)
+    stats = Stats()
+    all_usages: list[Usage] = []
+    for f in files:
+        stats.files_scanned += 1
+        all_usages.extend(scan_file(f, available_ns, stats))
+    return indexes, all_usages, stats
+
+
+def common_unused_terminal_keys(all_usages: list[Usage], indexes: dict[str, BundleIndex]) -> set[str]:
+    used = used_terminal_keys(all_usages)
+    unused_per_locale = find_unused(used, indexes)
+    if not LOCALES:
+        return set()
+    return set.intersection(*(unused_per_locale[l] for l in LOCALES))
 
 
 def main() -> int:
@@ -367,17 +413,8 @@ def main() -> int:
     parser.add_argument("--show-skipped", action="store_true", help="показать счётчик dynamic")
     args = parser.parse_args()
 
-    indexes = {loc: load_bundles(loc) for loc in LOCALES}
-    available_ns = set()
-    for idx in indexes.values():
-        available_ns |= discover_service_namespaces(idx)
-
-    files = list_js_files(args.app if args.app != "all" else None)
-    stats = Stats()
-    all_usages: list[Usage] = []
-    for f in files:
-        stats.files_scanned += 1
-        all_usages.extend(scan_file(f, available_ns, stats))
+    only = None if args.app == "all" else args.app
+    indexes, all_usages, stats = collect_scan(only)
 
     print(f"check_i18n_keys: файлов отсканировано {stats.files_scanned}, "
           f"вызовов t(): {stats.calls_total} (статических {stats.calls_static}, динамических {stats.calls_dynamic})")
@@ -406,8 +443,7 @@ def main() -> int:
         used = used_terminal_keys(all_usages)
         unused_per_locale = find_unused(used, indexes)
         print("")
-        # пересечение по локалям — самое надёжное (точно нигде не используется)
-        common = set.intersection(*(unused_per_locale[l] for l in LOCALES)) if LOCALES else set()
+        common = common_unused_terminal_keys(all_usages, indexes)
         print(f"== UNUSED (есть в ru И en, но код не дёргает): {len(common)} ==")
         for k in sorted(common):
             print(f"  {k}")

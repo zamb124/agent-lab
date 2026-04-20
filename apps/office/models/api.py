@@ -7,6 +7,8 @@ from typing import List, Literal, Self
 
 from pydantic import BaseModel, Field, model_validator
 
+from core.pagination import ListResponse
+
 
 class OfficeDocumentItem(BaseModel):
     binding_id: str
@@ -20,8 +22,7 @@ class OfficeDocumentItem(BaseModel):
     created_by_avatar_url: str | None = None
 
 
-class OfficeDocumentListResponse(BaseModel):
-    items: List[OfficeDocumentItem]
+OfficeDocumentListResponse = ListResponse[OfficeDocumentItem]
 
 
 class OfficeDocumentCreateResponse(BaseModel):
@@ -128,8 +129,7 @@ class OfficeCatalogListItem(BaseModel):
     is_public: bool
 
 
-class OfficeCatalogListResponse(BaseModel):
-    items: List[OfficeCatalogListItem]
+OfficeCatalogListResponse = ListResponse[OfficeCatalogListItem]
 
 
 class OfficeCatalogDetailResponse(BaseModel):

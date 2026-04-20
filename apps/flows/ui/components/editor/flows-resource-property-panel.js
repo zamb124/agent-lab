@@ -21,6 +21,7 @@ import '../resources/flows-files-resource-editor.js';
 import '../resources/flows-prompt-resource-editor.js';
 import '../resources/flows-rag-resource-editor.js';
 import '../resources/flows-cache-resource-editor.js';
+import { asObject, asString, isPlainObject } from '../../_helpers/flows-resolvers.js';
 
 const SAVE_DEBOUNCE_MS = 400;
 
@@ -72,7 +73,7 @@ export class FlowsResourcePropertyPanel extends PlatformElement {
     }
 
     _onChange(e) {
-        const { resourceId, patch } = e.detail || {};
+        const { resourceId, patch } = isPlainObject(e.detail) ? e.detail : {};
         if (!resourceId || !patch || typeof patch !== 'object') return;
         const items = Array.isArray(this._resources.items) ? this._resources.items : [];
         const item = items.find((r) => r && r.resource_id === resourceId);
@@ -117,12 +118,12 @@ export class FlowsResourcePropertyPanel extends PlatformElement {
                     @change=${onChange}></flows-cache-resource-editor>`;
             default:
                 return html`<flows-base-resource-editor .resourceId=${id} .resource=${resource}
-                    .resourceType=${resource.type || ''} @change=${onChange}></flows-base-resource-editor>`;
+                    .resourceType=${asString(resource.type)} @change=${onChange}></flows-base-resource-editor>`;
         }
     }
 
     render() {
-        const state = this._editor.state || {};
+        const state = asObject(this._editor.state);
         const resourceId = state.selectedResourceId;
         if (!resourceId) {
             return html`<div style="padding: var(--space-3); color: var(--text-tertiary)">${this.t('property_panel.select_resource')}</div>`;

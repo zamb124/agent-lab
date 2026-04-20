@@ -121,7 +121,20 @@ export class ResourceController {
  *
  *   const ctl = new OpController(this, acceptInviteOp);
  *   ctl.busy, ctl.error, ctl.lastResult
- *   ctl.run(payload)
+ *   const result = await ctl.run(payload);
+ *
+ * `run(payload)` возвращает Promise, который ВСЕГДА резолвится:
+ *   - SUCCEEDED → resolve(result) (значение из `event.payload.result`).
+ *   - FAILED    → resolve(null), ошибка кладётся в `state.error` slice.
+ *
+ * Это явный контракт: caller, которому важна обработка ошибки, проверяет
+ * `ctl.error` после `await ctl.run(...)` (или подписывается на slice).
+ * Никакого fallback к успеху — null result отличим от реального result.
+ * Спасает fire-and-forget вызовы (`this._typing.run(...)` без await/catch)
+ * от unhandled promise rejection.
+ *
+ * Привязка REQUESTED → SUCCEEDED/FAILED делается по `causation_id`
+ * (фабрика всегда выставляет его в effect'е).
  */
 export class OpController {
     constructor(host, op) {
@@ -139,11 +152,38 @@ export class OpController {
     get lastResult() { return this.state.lastResult; }
 
     run(payload) {
-        return this.bus.dispatch(
+        const okType = this.op.events.SUCCEEDED;
+        const failType = this.op.events.FAILED;
+        const requested = this.bus.dispatch(
             this.op.events.REQUESTED,
             payload === undefined ? null : payload,
             { source: 'local' },
         );
+        if (!requested || typeof requested.id !== 'string') {
+            throw new Error(`OpController(${this.op.name}).run: dispatch returned no event with id`);
+        }
+        const requestedId = requested.id;
+        return new Promise((resolve) => {
+            let unsubOk = null;
+            let unsubFail = null;
+            const cleanup = () => {
+                if (typeof unsubOk === 'function') unsubOk();
+                if (typeof unsubFail === 'function') unsubFail();
+            };
+            unsubOk = this.bus.subscribeType(okType, (event) => {
+                if (!event.meta || event.meta.causation_id !== requestedId) return;
+                cleanup();
+                const out = event.payload && Object.prototype.hasOwnProperty.call(event.payload, 'result')
+                    ? event.payload.result
+                    : null;
+                resolve(out);
+            });
+            unsubFail = this.bus.subscribeType(failType, (event) => {
+                if (!event.meta || event.meta.causation_id !== requestedId) return;
+                cleanup();
+                resolve(null);
+            });
+        });
     }
 }
 

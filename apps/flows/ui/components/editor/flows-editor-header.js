@@ -24,6 +24,7 @@
 import { html, css } from 'lit';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
 import '@platform/lib/components/platform-icon.js';
+import { asArray, asObject, asString, isPlainObject, getEdgeEndpoints } from '../../_helpers/flows-resolvers.js';
 
 export class FlowsEditorHeader extends PlatformElement {
     static properties = {
@@ -124,7 +125,7 @@ export class FlowsEditorHeader extends PlatformElement {
                 color: var(--accent);
                 box-shadow: var(--glass-shadow-subtle);
             }
-            .reload-wrap { position: relative; display: inline-flex; }
+            .mode-btn.reload { position: relative; }
             .reload-dot {
                 position: absolute;
                 top: 2px; right: 2px;
@@ -186,6 +187,7 @@ export class FlowsEditorHeader extends PlatformElement {
 
     _setMode(mode) {
         this._editor.setMode({ mode });
+        this._editor.setExecutionPanelOpen({ open: mode === 'run' });
     }
 
     _back() {
@@ -197,7 +199,42 @@ export class FlowsEditorHeader extends PlatformElement {
         const state = this._editor.state;
         if (!state || !state.flowConfig || !this.flowId) return;
         this._editor.setSaving({ saving: true });
-        const body = { ...state.flowConfig, ...(state.skillsData || {}) };
+        const data = isPlainObject(state.skillsData) ? state.skillsData : {};
+        const skillId = state.currentSkillId;
+        const isBase = !skillId || skillId === 'base';
+        const body = { ...state.flowConfig };
+        if (isBase) {
+            body.nodes = data.nodes;
+            body.edges = data.edges;
+            body.entry = data.entry;
+            body.variables = data.variables;
+            body.resources = data.resources;
+        } else {
+            const existingSkills = body.skills && typeof body.skills === 'object' ? body.skills : {};
+            const existingSkill = isPlainObject(existingSkills[skillId]) ? existingSkills[skillId] : { name: skillId };
+            const inheritedNodeIds = asArray(state.inheritedNodeIds);
+            const inheritedEdgeKeys = asArray(state.inheritedEdgeKeys);
+            const ownNodes = {};
+            for (const [id, node] of Object.entries(isPlainObject(data.nodes) ? data.nodes : {})) {
+                if (!inheritedNodeIds.includes(id)) ownNodes[id] = node;
+            }
+            const ownEdges = asArray(data.edges).filter((edge) => {
+                const { from, to } = getEdgeEndpoints(edge);
+                const key = `${from}->${to}`;
+                return !inheritedEdgeKeys.includes(key);
+            });
+            body.skills = {
+                ...existingSkills,
+                [skillId]: {
+                    ...existingSkill,
+                    nodes: ownNodes,
+                    edges: ownEdges,
+                    entry: data.entry,
+                    variables: data.variables,
+                },
+            };
+            body.resources = data.resources;
+        }
         await this._update.run({ flow_id: this.flowId, body });
         this._editor.setSaving({ saving: false });
         this._editor.setDirty({ dirty: false });
@@ -217,12 +254,19 @@ export class FlowsEditorHeader extends PlatformElement {
     }
 
     render() {
-        const state = this._editor.state || {};
-        const flowName = (state.flowConfig && state.flowConfig.name) || this.flowId || '';
-        const mode = state.mode || 'edit';
+        const state = asObject(this._editor.state);
+        let flowName;
+        if (isPlainObject(state.flowConfig) && typeof state.flowConfig.name === 'string' && state.flowConfig.name.length > 0) {
+            flowName = state.flowConfig.name;
+        } else if (typeof this.flowId === 'string' && this.flowId.length > 0) {
+            flowName = this.flowId;
+        } else {
+            flowName = '';
+        }
+        const mode = typeof state.mode === 'string' && state.mode.length > 0 ? state.mode : 'edit';
         const saving = Boolean(state.isSaving);
         const status = this._resolveStatusBadge(state);
-        const flow = (this._flows.items || []).find((f) => f && f.flow_id === this.flowId);
+        const flow = asArray(this._flows.items).find((f) => f && f.flow_id === this.flowId);
         const hasBundleUpdate = Boolean(flow && flow.has_bundle_update);
         return html`
             <div class="header-left">
@@ -247,12 +291,10 @@ export class FlowsEditorHeader extends PlatformElement {
                     <button class="mode-btn" type="button" ?active=${mode === 'run'} title=${this.t('editor_header.mode_run')} @click=${() => this._setMode('run')}>
                         <platform-icon name="play" size="14"></platform-icon>
                     </button>
-                </div>
-                <div class="reload-wrap">
-                    <button class="icon-btn" type="button" title=${this.t('editor_header.reload_bundle')} @click=${this._reloadBundle}>
+                    <button class="mode-btn reload" type="button" title=${this.t('editor_header.reload_bundle')} @click=${this._reloadBundle}>
                         <platform-icon name="refresh" size="14"></platform-icon>
+                        ${hasBundleUpdate ? html`<span class="reload-dot"></span>` : ''}
                     </button>
-                    ${hasBundleUpdate ? html`<span class="reload-dot"></span>` : ''}
                 </div>
             </div>
 

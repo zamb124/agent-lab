@@ -30,7 +30,9 @@ async def test_deliver_offline_push_skips_apns_in_webpush_path(vapid_keys, uniqu
     apns_sub.keys = {"device_token": "b" * 64}
     apns_sub.platform = "ios_native"
 
-    with patch("core.push.delivery.PushSubscriptionRepository") as RepoCls:
+    with patch("core.push.delivery.PushSubscriptionRepository") as RepoCls, patch(
+        "core.push.delivery.get_apns_push_service", return_value=None
+    ):
         repo = RepoCls.return_value
         repo.get_user_subscriptions = AsyncMock(return_value=[web_sub, apns_sub])
         repo.delete_by_endpoint = AsyncMock()

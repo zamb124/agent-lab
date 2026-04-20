@@ -18,6 +18,7 @@ class EntityCreate(BaseModel):
     description: Optional[str] = None
     attributes: Optional[Dict[str, Any]] = None
     tags: Optional[List[str]] = None
+    attachment_ids: Optional[List[str]] = None
     user_id: Optional[str] = None
 
     voice_entity_id: Optional[str] = Field(
@@ -42,6 +43,7 @@ class EntityUpdate(BaseModel):
     status: Optional[str] = None
     attributes: Optional[Dict[str, Any]] = None
     tags: Optional[List[str]] = None
+    attachment_ids: Optional[List[str]] = None
 
     voice_entity_id: Optional[str] = None
     context_entity_id: Optional[str] = None

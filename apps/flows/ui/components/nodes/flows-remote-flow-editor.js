@@ -24,12 +24,13 @@ export class FlowsRemoteFlowEditor extends PlatformElement {
         flowVariables: { type: Object },
         graphNodes: { type: Array },
         previewExecutionState: { type: Object },
+        expanded: { type: Boolean, reflect: true },
     };
 
     static styles = [
         PlatformElement.styles,
         css`
-            :host { display: block; }
+            :host { display: block; height: 100%; min-height: 0; }
             .field { display: flex; flex-direction: column; gap: var(--space-1); margin-bottom: var(--space-3); }
             label { font-size: var(--text-sm); color: var(--text-secondary); }
             input {
@@ -64,6 +65,7 @@ export class FlowsRemoteFlowEditor extends PlatformElement {
         this.flowVariables = null;
         this.graphNodes = null;
         this.previewExecutionState = null;
+        this.expanded = false;
     }
 
     _emitPatch(patch) {
@@ -71,7 +73,7 @@ export class FlowsRemoteFlowEditor extends PlatformElement {
     }
 
     _mode() {
-        const cfg = this.nodeConfig || {};
+        const cfg = asObject(this.nodeConfig);
         if (typeof cfg.url === 'string' && cfg.url.length > 0) return 'url';
         if (typeof cfg.flow_id === 'string' && cfg.flow_id.length > 0) return 'flow_id';
         return 'url';
@@ -102,7 +104,7 @@ export class FlowsRemoteFlowEditor extends PlatformElement {
     }
 
     render() {
-        const cfg = this.nodeConfig || {};
+        const cfg = asObject(this.nodeConfig);
         const mode = this._mode();
         const url = typeof cfg.url === 'string' ? cfg.url : '';
         const flowIdValue = typeof cfg.flow_id === 'string' ? cfg.flow_id : '';
@@ -115,14 +117,11 @@ export class FlowsRemoteFlowEditor extends PlatformElement {
                 .flowId=${this.flowId}
                 .skillId=${this.skillId}
                 .nodeConfig=${this.nodeConfig}
-                .nodeType=${this.nodeType || 'remote_flow'}
+                .nodeType=${typeof this.nodeType === 'string' && this.nodeType.length > 0 ? this.nodeType : 'remote_flow'}
                 .flowVariables=${this.flowVariables}
                 .graphNodes=${this.graphNodes}
                 .previewExecutionState=${this.previewExecutionState}
-                @change=${(e) => this.emit('change', e.detail)}
-                @rename-node=${(e) => this.emit('rename-node', e.detail)}
-                @delete-node=${(e) => this.emit('delete-node', e.detail)}
-                @duplicate-node=${(e) => this.emit('duplicate-node', e.detail)}
+                ?expanded=${this.expanded}
             >
                 <div slot="settings">
                     <div class="row toggle">

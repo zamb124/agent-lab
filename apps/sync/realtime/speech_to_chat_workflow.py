@@ -26,8 +26,8 @@ from apps.sync.models.messages import (
     MessageContentType,
     MessageCreate,
 )
-from apps.sync.realtime.command_dispatch import dispatch_sync_command
-from apps.sync.realtime.commands import CommandEnvelope, MessagesSendPayload
+from apps.sync.realtime.operations import MessagesSendPayload, op_messages_send
+from core.models.identity_models import User
 from core.calls.livekit_client import LiveKitClient
 from core.config import get_settings
 from core.files.audio_probe import probe_audio_duration_ms_from_bytes
@@ -406,14 +406,12 @@ async def _post_segment_file_as_message(
         call_id=call_id,
     )
     send_payload = MessagesSendPayload(channel_id=row.channel_id, body=body)
-    cmd = CommandEnvelope(
-        id=uuid4().hex,
-        type="messages.send",
-        actor_user_id=row.participant_identity,
-        company_id=row.company_id,
-        payload=send_payload.model_dump(mode="json"),
+    user = User(
+        user_id=row.participant_identity,
+        name=row.participant_identity,
+        active_company_id=row.company_id,
     )
-    await dispatch_sync_command(cmd)
+    await op_messages_send(send_payload, user=user, container=get_sync_container())
 
 
 async def process_new_files_for_egress_row(

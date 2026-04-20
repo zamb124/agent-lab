@@ -25,6 +25,7 @@ import { httpRequest } from '@platform/lib/events/http.js';
 export const entityGrantsListOp = createAsyncOp({
     name: 'crm/entity_grants_list',
     silent: true,
+    restMirror: { method: 'GET', path: '/crm/api/v1/entities/:entity_id/grants' },
     request: async ({ payload }) => {
         if (!payload || typeof payload.entity_id !== 'string') {
             throw new Error('entityGrantsListOp: payload.entity_id required');
@@ -40,6 +41,7 @@ export const entityGrantCreateOp = createAsyncOp({
     name: 'crm/entity_grant_create',
     successToastKey: 'crm:toast.grant.created',
     errorToastKey: 'crm:toast.grant.create_failed',
+    restMirror: { method: 'POST', path: '/crm/api/v1/entities/:entity_id/grants/public' },
     request: async ({ payload }) => {
         if (!payload || typeof payload.entity_id !== 'string' || typeof payload.subject !== 'string') {
             throw new Error('entityGrantCreateOp: { entity_id, subject, body? } required');
@@ -56,6 +58,7 @@ export const entityGrantCreateOp = createAsyncOp({
 export const namespaceGrantsListOp = createAsyncOp({
     name: 'crm/namespace_grants_list',
     silent: true,
+    restMirror: { method: 'GET', path: '/crm/api/v1/namespaces/:namespace/grants' },
     request: async ({ payload }) => {
         if (!payload || typeof payload.namespace !== 'string') {
             throw new Error('namespaceGrantsListOp: payload.namespace required');
@@ -71,6 +74,7 @@ export const namespaceGrantCreateOp = createAsyncOp({
     name: 'crm/namespace_grant_create',
     successToastKey: 'crm:toast.grant.created',
     errorToastKey: 'crm:toast.grant.create_failed',
+    restMirror: { method: 'POST', path: '/crm/api/v1/namespaces/:namespace/grants/public' },
     request: async ({ payload }) => {
         if (!payload || typeof payload.namespace !== 'string' || typeof payload.subject !== 'string') {
             throw new Error('namespaceGrantCreateOp: { namespace, subject, body? } required');
@@ -88,6 +92,7 @@ export const grantRevokeOp = createAsyncOp({
     name: 'crm/grant_revoke',
     successToastKey: 'crm:toast.grant.revoked',
     errorToastKey: 'crm:toast.grant.revoke_failed',
+    restMirror: { method: 'DELETE', path: '/crm/api/v1/grants/:grant_id' },
     request: async ({ payload }) => {
         if (!payload || typeof payload.grant_id !== 'string') {
             throw new Error('grantRevokeOp: payload.grant_id required');

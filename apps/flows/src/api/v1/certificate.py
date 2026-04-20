@@ -14,7 +14,7 @@ router = APIRouter(tags=["certificate"])
 logger = get_logger(__name__)
 
 
-@router.get("")
+@router.get("/")
 async def download_certificate(container: ContainerDep):
     """
     Скачать SSL сертификат для установки в браузер.

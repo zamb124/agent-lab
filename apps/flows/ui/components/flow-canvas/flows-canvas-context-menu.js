@@ -53,7 +53,9 @@ export class FlowsCanvasContextMenu extends PlatformElement {
         PlatformElement.styles,
         css`
             :host {
-                position: absolute;
+                position: fixed;
+                left: 0;
+                top: 0;
                 z-index: 50;
                 min-width: 220px;
                 padding: var(--space-1) 0;
@@ -89,6 +91,32 @@ export class FlowsCanvasContextMenu extends PlatformElement {
         this.y = 0;
         this.target = 'background';
         this.targetId = '';
+        this._onDocPointerDown = this._onDocPointerDown.bind(this);
+        this._onDocKeyDown = this._onDocKeyDown.bind(this);
+    }
+
+    connectedCallback() {
+        super.connectedCallback();
+        document.addEventListener('pointerdown', this._onDocPointerDown, true);
+        document.addEventListener('contextmenu', this._onDocPointerDown, true);
+        document.addEventListener('keydown', this._onDocKeyDown, true);
+    }
+
+    disconnectedCallback() {
+        document.removeEventListener('pointerdown', this._onDocPointerDown, true);
+        document.removeEventListener('contextmenu', this._onDocPointerDown, true);
+        document.removeEventListener('keydown', this._onDocKeyDown, true);
+        super.disconnectedCallback();
+    }
+
+    _onDocPointerDown(e) {
+        const path = typeof e.composedPath === 'function' ? e.composedPath() : [];
+        if (path.includes(this)) return;
+        this.emit('close');
+    }
+
+    _onDocKeyDown(e) {
+        if (e.key === 'Escape') this.emit('close');
     }
 
     _items() {
@@ -107,10 +135,17 @@ export class FlowsCanvasContextMenu extends PlatformElement {
         this.emit('close');
     }
 
-    connectedCallback() {
-        super.connectedCallback();
-        this.style.left = `${this.x}px`;
-        this.style.top = `${this.y}px`;
+    updated() {
+        const rect = this.getBoundingClientRect();
+        const w = rect.width || this.offsetWidth || 220;
+        const h = rect.height || this.offsetHeight || 0;
+        const margin = 8;
+        const maxX = Math.max(margin, window.innerWidth - w - margin);
+        const maxY = Math.max(margin, window.innerHeight - h - margin);
+        const left = Math.min(Math.max(this.x, margin), maxX);
+        const top = Math.min(Math.max(this.y, margin), maxY);
+        this.style.left = `${left}px`;
+        this.style.top = `${top}px`;
     }
 
     render() {

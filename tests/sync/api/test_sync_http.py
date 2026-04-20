@@ -21,11 +21,16 @@ async def test_http_create_space_taskiq(
     sync_client,
     sync_auth_headers,
     sync_db_clean: None,
+    unique_id: str,
 ) -> None:
     r = await sync_client.post(
         "/sync/api/v1/spaces/",
         headers=sync_auth_headers,
-        json={"name": "HttpSpace", "description": None},
+        json={
+            "name": "HttpSpace",
+            "description": None,
+            "namespace": f"http_{unique_id}",
+        },
     )
     assert r.status_code == 201
     data = r.json()
@@ -37,11 +42,16 @@ async def test_http_patch_space_dispatch(
     sync_client,
     sync_auth_headers,
     sync_db_clean: None,
+    unique_id: str,
 ) -> None:
     pr = await sync_client.post(
         "/sync/api/v1/spaces/",
         headers=sync_auth_headers,
-        json={"name": "ToPatch", "description": None},
+        json={
+            "name": "ToPatch",
+            "description": None,
+            "namespace": f"patch_{unique_id}",
+        },
     )
     assert pr.status_code == 201
     space_id = pr.json()["id"]

@@ -21,6 +21,7 @@ async def test_ws_spaces_create_via_command_router(
     sync_worker,
     sync_auth_token,
     sync_db_clean: None,
+    unique_id: str,
 ) -> None:
     import websockets
 
@@ -29,7 +30,13 @@ async def test_ws_spaces_create_via_command_router(
     frame = {
         "request_id": request_id,
         "type": "sync/spaces/create_requested",
-        "payload": {"body": {"name": "WsSpace", "description": None}},
+        "payload": {
+            "body": {
+                "name": "WsSpace",
+                "description": None,
+                "namespace": f"ws_{unique_id}",
+            }
+        },
     }
     async with websockets.connect(
         uri,
@@ -101,16 +108,35 @@ async def test_ws_two_commands_sequential(
     sync_worker,
     sync_auth_token,
     sync_db_clean: None,
+    unique_id: str,
 ) -> None:
     import websockets
 
     uri = "ws://127.0.0.1:9005/sync/api/ws/notifications"
     id1 = uuid.uuid4().hex
     id2 = uuid.uuid4().hex
-    f1 = {"request_id": id1, "type": "sync/spaces/create_requested",
-          "payload": {"body": {"name": "WsA", "description": None}}}
-    f2 = {"request_id": id2, "type": "sync/spaces/create_requested",
-          "payload": {"body": {"name": "WsB", "description": None}}}
+    f1 = {
+        "request_id": id1,
+        "type": "sync/spaces/create_requested",
+        "payload": {
+            "body": {
+                "name": "WsA",
+                "description": None,
+                "namespace": f"wsa_{unique_id}",
+            }
+        },
+    }
+    f2 = {
+        "request_id": id2,
+        "type": "sync/spaces/create_requested",
+        "payload": {
+            "body": {
+                "name": "WsB",
+                "description": None,
+                "namespace": f"wsb_{unique_id}",
+            }
+        },
+    }
     async with websockets.connect(
         uri,
         additional_headers=[("Cookie", f"auth_token={sync_auth_token}")],

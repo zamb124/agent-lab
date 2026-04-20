@@ -238,6 +238,26 @@ class LLMModelsService:
         return [m.model_id for m in models]
 
     @staticmethod
+    def get_configured_providers() -> List[str]:
+        """Список реально настроенных LLM-провайдеров из conf.json.
+
+        Провайдер считается настроенным, если в `settings.llm.<provider>` присутствует
+        api_key (для openai/openrouter/bothub) либо если для provider_litserve
+        задан base_url. Тот же критерий используется в `sync_all_providers`.
+        """
+        settings = get_settings()
+        providers: List[str] = []
+        if settings.llm.openai and settings.llm.openai.api_key:
+            providers.append("openai")
+        if settings.llm.openrouter and settings.llm.openrouter.api_key:
+            providers.append("openrouter")
+        if settings.llm.bothub and settings.llm.bothub.api_key:
+            providers.append("bothub")
+        if settings.provider_litserve.api.base_url:
+            providers.append("provider_litserve")
+        return providers
+
+    @staticmethod
     def _is_compatible_background_schedule(task: PlatformScheduledTask, interval: int) -> bool:
         if task.target_service != _LLM_SYNC_TARGET_SERVICE:
             return False

@@ -7,6 +7,11 @@
  * `UI_NAMESPACE_SELECT_REQUESTED`, ui.effect персистит). Кнопка "+" открывает
  * модалку `office.namespace_create`.
  *
+ * В сервисе Документы режим «все пространства» запрещён: каталоги и документы
+ * жёстко привязаны к конкретному namespace. Если выбора ещё нет (или он
+ * сохранён как `all`), sidebar автоматически выбирает первый namespace из
+ * загруженного списка через `setPlatformNamespaceSelection`.
+ *
  * Меню навигирует через `this.navigate(routeKey)` → core router.effect.
  * Активный пункт — по `state.router.routeKey`. В режиме editor (route
  * `document_editor`) NS-select disabled и появляется кнопка «назад».
@@ -175,7 +180,10 @@ export class OfficeSidebar extends PlatformElement {
         }
     }
 
-    _routeKey() { return this._routeSel.value || 'documents_list'; }
+    _routeKey() {
+        const v = this._routeSel.value;
+        return typeof v === 'string' && v !== '' ? v : 'documents_list';
+    }
     _isList() { return this._routeKey() === 'documents_list'; }
     _isCatalogs() { return this._routeKey() === 'documents_catalogs'; }
     _isEditor() { return this._routeKey() === 'document_editor'; }
@@ -199,8 +207,19 @@ export class OfficeSidebar extends PlatformElement {
     _onNamespaceChange(e) {
         const cid = this._companyId();
         if (!cid) return;
-        setPlatformNamespaceSelection(cid, e.target.value.trim());
+        const name = e.target.value.trim();
+        if (!name) return;
+        setPlatformNamespaceSelection(cid, name);
         this._documents.clearFilter(null);
+    }
+
+    _ensureExplicitNamespace(items, sidebarSel, companyId) {
+        if (!companyId) return;
+        if (sidebarSel !== 'all') return;
+        if (!Array.isArray(items) || items.length === 0) return;
+        const first = items[0];
+        if (!first || typeof first.name !== 'string' || first.name.length === 0) return;
+        setPlatformNamespaceSelection(companyId, first.name);
     }
 
     _openCreateNamespaceModal() {
@@ -235,12 +254,14 @@ export class OfficeSidebar extends PlatformElement {
         const items = this._namespaces.items;
         const companyId = this._companyId();
         const sidebarSel = getPlatformNamespaceSidebarSelection(companyId);
+        this._ensureExplicitNamespace(items, sidebarSel, companyId);
         const isEditor = this._isEditor();
         const integrationConfigured = this._integration.lastResult
             ? Boolean(this._integration.lastResult.configured)
             : true;
         const actionsDisabled = !integrationConfigured || !this._activeCatalogId();
         const refreshDisabled = !this._documents.state.loadedCatalogIds.length;
+        const noNamespaces = items.length === 0;
         return html`
             <platform-service-sidebar
                 logo-src="/static/core/assets/service_logos/documents_logo.svg"
@@ -254,12 +275,14 @@ export class OfficeSidebar extends PlatformElement {
                     <div class="namespace-selector" data-hide-collapsed>
                         <span class="namespace-label">${this.t('sidebar.namespace_label')}</span>
                         <select
-                            ?disabled=${!companyId || isEditor}
+                            ?disabled=${!companyId || isEditor || noNamespaces}
                             @change=${this._onNamespaceChange}
                         >
-                            <option value="" ?selected=${sidebarSel === 'all'}>
-                                ${this.t('sidebar.all_namespaces')}
-                            </option>
+                            ${noNamespaces ? html`
+                                <option value="" selected disabled>
+                                    ${this.t('sidebar.namespace_empty_placeholder')}
+                                </option>
+                            ` : ''}
                             ${items.map((ns) => html`
                                 <option value=${ns.name} ?selected=${sidebarSel !== 'all' && ns.name === sidebarSel}>
                                     ${ns.name}

@@ -18,6 +18,7 @@ export const acceptInviteOp = createAsyncOp({
     name: 'frontend/invite_accept',
     successToastKey: 'frontend:join_page.toast_accepted',
     errorToastKey: 'frontend:join_page.toast_failed',
+    restMirror: { method: 'POST', path: '/frontend/api/invites/accept' },
     request: async ({ payload }) => {
         const shortCode = payload && payload.short_code;
         if (!shortCode) throw new Error('invite_accept: short_code required');

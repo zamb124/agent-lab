@@ -10,6 +10,7 @@
 import { html, css } from 'lit';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
 import './flows-code-editor.js';
+import { asString } from '../../_helpers/flows-resolvers.js';
 
 export class FlowsJsonFieldEditor extends PlatformElement {
     static properties = {
@@ -41,7 +42,7 @@ export class FlowsJsonFieldEditor extends PlatformElement {
     }
 
     _onChange(e) {
-        const value = e.detail?.value || '';
+        const value = asString(e.detail?.value);
         try {
             const parsed = value.trim().length === 0 ? null : JSON.parse(value);
             this._invalid = false;

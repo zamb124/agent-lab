@@ -92,7 +92,10 @@ export class FlowsRagResourceEditor extends PlatformElement {
                         <div class="field">
                             <label>${this.t('rag_resource_editor.default_top_k')}</label>
                             <input type="number" min="1" step="1" .value=${String(topK)}
-                                @input=${(e) => this._emitConfig({ default_top_k: parseInt(e.target.value, 10) || 5 })} />
+                                @input=${(e) => {
+                                    const v = parseInt(e.target.value, 10);
+                                    this._emitConfig({ default_top_k: Number.isFinite(v) && v > 0 ? v : 5 });
+                                }} />
                         </div>
                     </div>
                     <details>

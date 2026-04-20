@@ -19,6 +19,7 @@
 
 import { html, css } from 'lit';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
+import { asObject, asString, isPlainObject } from '../../_helpers/flows-resolvers.js';
 
 const CODEMIRROR_URL = '/static/core/assets/codemirror/codemirror-bundle.js';
 
@@ -78,7 +79,7 @@ export class FlowsCodeEditor extends PlatformElement {
         this._languageCompartment = null;
         this._themeCompartment = null;
         this._completionsOp = this.useOp('flows/code_completions');
-        this._themeSel = this.select((s) => s.theme?.mode || 'dark');
+        this._themeSel = this.select((s) => isPlainObject(s.theme) && s.theme.mode === 'light' ? 'light' : 'dark');
     }
 
     connectedCallback() {
@@ -101,7 +102,7 @@ export class FlowsCodeEditor extends PlatformElement {
             const current = this._editorView.state.doc.toString();
             if (current !== this.value) {
                 this._editorView.dispatch({
-                    changes: { from: 0, to: current.length, insert: this.value || '' },
+                    changes: { from: 0, to: current.length, insert: asString(this.value) },
                 });
             }
         }
@@ -159,7 +160,7 @@ export class FlowsCodeEditor extends PlatformElement {
         ];
         this._editorView = new cm.EditorView({
             state: cm.EditorState.create({
-                doc: this.value || '',
+                doc: asString(this.value),
                 extensions,
             }),
             parent: host,
@@ -176,7 +177,7 @@ export class FlowsCodeEditor extends PlatformElement {
 
     _buildLanguageExtension() {
         if (!this._cm) return [];
-        const lang = this.language || 'text';
+        const lang = typeof this.language === 'string' && this.language.length > 0 ? this.language : 'text';
         if (lang === 'python' && this._cm.python) return this._cm.python();
         if (lang === 'json' && this._cm.json) return this._cm.json();
         return [];
@@ -184,8 +185,8 @@ export class FlowsCodeEditor extends PlatformElement {
 
     _buildThemeExtension() {
         if (!this._cm) return [];
-        const isDark = (this._themeSel.value || 'dark') === 'dark';
-        if (isDark) return this._cm.oneDark || [];
+        const isDark = this._themeSel.value !== 'light';
+        if (isDark) return this._cm.oneDark ? this._cm.oneDark : [];
         return this._cm.syntaxHighlighting(this._cm.defaultHighlightStyle, { fallback: true });
     }
 
@@ -198,17 +199,21 @@ export class FlowsCodeEditor extends PlatformElement {
         const result = await this._completionsOp.run({
             code,
             cursor,
-            ...(this.completionContext || {}),
+            ...asObject(this.completionContext),
         });
         const items = Array.isArray(result?.items) ? result.items : Array.isArray(result) ? result : [];
         if (items.length === 0) return null;
         return {
             from: word.from,
             options: items.map((it) => ({
-                label: typeof it === 'string' ? it : it.label || it.text || '',
+                label: typeof it === 'string'
+                    ? it
+                    : (typeof it.label === 'string' && it.label.length > 0
+                        ? it.label
+                        : asString(it.text)),
                 type: typeof it === 'object' && it.type ? it.type : 'variable',
-                detail: typeof it === 'object' ? it.detail || '' : '',
-                info: typeof it === 'object' ? it.info || '' : '',
+                detail: typeof it === 'object' ? asString(it.detail) : '',
+                info: typeof it === 'object' ? asString(it.info) : '',
             })),
         };
     }

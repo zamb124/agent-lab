@@ -57,11 +57,76 @@ describe('platformWs.request: contract', () => {
         expect(() => platformWs.request({ type: 'BadName', timeoutMs: 100, expectedSucceeded: 'a/b/c', expectedFailed: 'a/b/d' })).toThrow();
     });
 
-    it('reject если WS не открыт', async () => {
+    it('до connect фрейм откладывается и reject ws_timeout если соединение не появилось', async () => {
+        const promise = platformWs.request({
+            type: 'svc/cmd/requested', payload: null, timeoutMs: 100,
+            expectedSucceeded: 'svc/cmd/succeeded', expectedFailed: 'svc/cmd/failed',
+        });
+        const expectation = expect(promise).rejects.toMatchObject({ code: 'ws_timeout' });
+        await vi.advanceTimersByTimeAsync(5_001);
+        await expectation;
+    });
+
+    it('после AUTH_LOGGED_OUT pre-connect reject как ws_disconnected', async () => {
+        const dispatched = [];
+        const effect = createPlatformWsEffect({ baseUrl: '/svc' });
+        const ctx = buildCtx(() => ({}), dispatched);
+        await effect(ev(CoreEvents.AUTH_USER_LOADED), ctx);
+        await effect(ev(CoreEvents.AUTH_LOGGED_OUT), ctx);
         await expect(platformWs.request({
             type: 'svc/cmd/requested', payload: null, timeoutMs: 100,
             expectedSucceeded: 'svc/cmd/succeeded', expectedFailed: 'svc/cmd/failed',
-        })).rejects.toThrow(/not connected/);
+        })).rejects.toMatchObject({ code: 'ws_disconnected' });
+    });
+});
+
+describe('platformWs.request: pre-connect queue', () => {
+    it('фрейм отправленный до AUTH_USER_LOADED уходит сразу после onopen', async () => {
+        const dispatched = [];
+        const effect = createPlatformWsEffect({ baseUrl: '/svc' });
+        const ctx = buildCtx(() => ({}), dispatched);
+
+        const promise = platformWs.request({
+            type: 'svc/cmd/requested', payload: { x: 1 }, timeoutMs: 1000,
+            expectedSucceeded: 'svc/cmd/succeeded', expectedFailed: 'svc/cmd/failed',
+        });
+        await effect(ev(CoreEvents.AUTH_USER_LOADED), ctx);
+
+        const ws = wsHandle.latest();
+        expect(ws.sent).toHaveLength(1);
+        const sent = JSON.parse(ws.sent[0]);
+        expect(sent.type).toBe('svc/cmd/requested');
+        expect(sent.payload).toEqual({ x: 1 });
+        ws.serverFrame({ request_id: sent.request_id, type: 'svc/cmd/succeeded', payload: { ok: true } });
+        await expect(promise).resolves.toEqual({ ok: true });
+    });
+
+    it('несколько pre-connect фреймов отправляются в порядке очереди', async () => {
+        const dispatched = [];
+        const effect = createPlatformWsEffect({ baseUrl: '/svc' });
+        const ctx = buildCtx(() => ({}), dispatched);
+
+        const p1 = platformWs.request({
+            type: 'svc/cmd/requested', payload: { i: 1 }, timeoutMs: 1000,
+            expectedSucceeded: 'svc/cmd/succeeded', expectedFailed: 'svc/cmd/failed',
+        });
+        const p2 = platformWs.request({
+            type: 'svc/cmd/requested', payload: { i: 2 }, timeoutMs: 1000,
+            expectedSucceeded: 'svc/cmd/succeeded', expectedFailed: 'svc/cmd/failed',
+        });
+        await effect(ev(CoreEvents.AUTH_USER_LOADED), ctx);
+
+        const ws = wsHandle.latest();
+        expect(ws.sent).toHaveLength(2);
+        const sent1 = JSON.parse(ws.sent[0]);
+        const sent2 = JSON.parse(ws.sent[1]);
+        expect(sent1.payload).toEqual({ i: 1 });
+        expect(sent2.payload).toEqual({ i: 2 });
+
+        ws.serverFrame({ request_id: sent1.request_id, type: 'svc/cmd/succeeded', payload: { n: 1 } });
+        ws.serverFrame({ request_id: sent2.request_id, type: 'svc/cmd/succeeded', payload: { n: 2 } });
+        await expect(p1).resolves.toEqual({ n: 1 });
+        await expect(p2).resolves.toEqual({ n: 2 });
     });
 });
 

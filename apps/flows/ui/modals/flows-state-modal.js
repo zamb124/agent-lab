@@ -5,24 +5,32 @@
  */
 
 import { html, css } from 'lit';
-import { PlatformLightModal } from '@platform/lib/components/glass-light-modal.js';
+import { PlatformModal } from '@platform/lib/components/glass-modal.js';
 import { registerModalKind } from '@platform/lib/utils/modal-registry.js';
 import '@platform/lib/components/platform-button.js';
 import '@platform/lib/components/platform-icon.js';
 import '@platform/lib/components/glass-spinner.js';
 import '../components/editors/flows-code-editor.js';
 
-export class FlowsStateModal extends PlatformLightModal {
+export class FlowsStateModal extends PlatformModal {
     static modalKind = 'flows.state';
     static i18nNamespace = 'flows';
 
     static properties = {
-        ...PlatformLightModal.properties,
+        ...PlatformModal.properties,
         sessionId: { type: String },
     };
 
+    static styles = [
+        ...PlatformModal.styles,
+        css`
+            flows-code-editor { display: block; height: 100%; min-height: 50vh; }
+        `,
+    ];
+
     constructor() {
         super();
+        this.size = 'full';
         this.sessionId = '';
         this._stateOp = this.useOp('flows/session_state');
     }
@@ -34,28 +42,17 @@ export class FlowsStateModal extends PlatformLightModal {
         }
     }
 
-    render() {
+    renderHeader() {
+        return this.t('state_modal.modal_title');
+    }
+
+    renderBody() {
         const result = this._stateOp.lastResult;
         const json = result ? JSON.stringify(result, null, 2) : '';
-        return html`
-            <div class="light-modal-backdrop" @click=${this._onBackdropClick}></div>
-            <div class="light-modal-container state-shell">
-                <style>
-                    .state-shell { padding: var(--space-4); gap: var(--space-3); height: 90vh; }
-                    .state-header { display: flex; align-items: center; justify-content: space-between; }
-                    flows-code-editor { flex: 1; min-height: 0; }
-                </style>
-                <div class="state-header">
-                    <h2>${this.t('state_modal.modal_title')}</h2>
-                    <platform-button @click=${() => this.close()}>
-                        <platform-icon name="close" size="14"></platform-icon>
-                    </platform-button>
-                </div>
-                ${this._stateOp.busy && !result
-                    ? html`<glass-spinner></glass-spinner>`
-                    : html`<flows-code-editor language="json" readonly .value=${json}></flows-code-editor>`}
-            </div>
-        `;
+        if (this._stateOp.busy && !result) {
+            return html`<glass-spinner></glass-spinner>`;
+        }
+        return html`<flows-code-editor language="json" readonly .value=${json}></flows-code-editor>`;
     }
 }
 

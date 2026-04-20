@@ -1,14 +1,19 @@
-"""API роутер для тредов (Threads)."""
+"""REST-зеркала команд threads. Тонкие обвязки над `op_threads_*`."""
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, Query
 
-from core.pagination import OffsetPage
 from apps.sync.dependencies import ContainerDep
-from apps.sync.models.threads import ThreadRead, ThreadCreate, ThreadRow
-from apps.sync.realtime.commands import CommandEnvelope
-from apps.sync.realtime.tasks import handle_command
-from core.config import get_settings
+from apps.sync.models.threads import ThreadCreate, ThreadRead, ThreadRow
+from apps.sync.realtime.operations import (
+    ThreadsCreatePayload,
+    ThreadsItemPayload,
+    ThreadsListPayload,
+    op_threads_create,
+    op_threads_item,
+    op_threads_list,
+)
 from core.context import get_context
+from core.pagination import OffsetPage
 
 router = APIRouter()
 
@@ -20,58 +25,31 @@ async def list_threads(
     limit: int = Query(50, ge=1, le=200),
     offset: int = Query(0, ge=0),
 ) -> OffsetPage[ThreadRow]:
-    """Список тредов в канале."""
-    context = get_context()
-    threads = await container.thread_repository.list_by_channel(
-        channel_id, limit=limit,
-        company_id=context.active_company.company_id,
+    user = get_context().user
+    result = await op_threads_list(
+        ThreadsListPayload(channel_id=channel_id, limit=limit, offset=offset),
+        user=user,
+        container=container,
     )
-    items = [
-        ThreadRow(
-            id=t.thread_id,
-            channel_id=t.channel_id,
-            root_message_id=t.root_message_id,
-            title=t.title,
-            created_at=t.created_at,
-            created_by_user_id=t.created_by_user_id,
-        )
-        for t in threads
-    ]
-    return OffsetPage[ThreadRow](items=items, total=len(items), limit=limit, offset=offset)
-
-
-@router.post("/", status_code=201)
-async def create_thread(container: ContainerDep, channel_id: str, body: ThreadCreate) -> ThreadRead:
-    """Создание треда через TaskIQ."""
-    _ = container
-    context = get_context()
-    cmd = CommandEnvelope(
-        id=__import__("uuid").uuid4().hex,
-        actor_user_id=context.user.user_id,
-        company_id=context.active_company.company_id,
-        type="threads.create",
-        payload={"body": body.model_dump()},
+    return OffsetPage[ThreadRow](
+        items=result.items, total=result.total, limit=result.limit, offset=result.offset
     )
-    task = await handle_command.kiq(cmd.model_dump())
-    res = await task.wait_result(
-        timeout=get_settings().sync_taskiq_wait_result_timeout_seconds,
+
+
+@router.post("/", status_code=201, response_model=ThreadRead)
+async def create_thread(
+    container: ContainerDep, channel_id: str, body: ThreadCreate
+) -> ThreadRead:
+    _ = channel_id
+    user = get_context().user
+    return await op_threads_create(
+        ThreadsCreatePayload(body=body), user=user, container=container
     )
-    if res.is_err:
-        raise RuntimeError(f"Command failed: {res.error}")
-    return ThreadRead.model_validate(res.return_value["result"])
 
 
-@router.get("/{thread_id}")
+@router.get("/{thread_id}", response_model=ThreadRow)
 async def get_thread(thread_id: str, container: ContainerDep) -> ThreadRow:
-    """Получение треда по ID."""
-    thread = await container.thread_repository.get(thread_id)
-    if thread is None:
-        raise HTTPException(status_code=404, detail="Thread not found")
-    return ThreadRow(
-        id=thread.thread_id,
-        channel_id=thread.channel_id,
-        root_message_id=thread.root_message_id,
-        title=thread.title,
-        created_at=thread.created_at,
-        created_by_user_id=thread.created_by_user_id,
+    user = get_context().user
+    return await op_threads_item(
+        ThreadsItemPayload(thread_id=thread_id), user=user, container=container
     )

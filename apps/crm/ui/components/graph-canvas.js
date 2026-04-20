@@ -74,7 +74,6 @@ export class CRMGraphCanvas extends PlatformElement {
         this._hoveredNodeId = '';
         this._lastClickNodeId = '';
         this._lastClickTimestamp = 0;
-        this._themeChangeHandler = null;
     }
 
     render() {
@@ -85,8 +84,7 @@ export class CRMGraphCanvas extends PlatformElement {
         this._assertOfflineVendorSetup();
         this._initGraph();
         this._syncGraph();
-        this._themeChangeHandler = () => this._applyThemeToCanvas();
-        window.addEventListener('theme-change', this._themeChangeHandler);
+        this._themeSelect = this.select((s) => s.theme && s.theme.name);
         const canvasEl = this.renderRoot?.querySelector('#graph-canvas');
         if (canvasEl) {
             canvasEl.addEventListener('contextmenu', (event) => {
@@ -117,14 +115,18 @@ export class CRMGraphCanvas extends PlatformElement {
         if (changedProperties.has('incidentWeightSubtitleFn') && this._graphInstance) {
             this._graphInstance.nodeThreeObject(this._graphInstance.nodeThreeObject());
         }
+        const themeName = this._themeSelect ? this._themeSelect.value : null;
+        if (this._lastAppliedTheme !== themeName) {
+            this._lastAppliedTheme = themeName;
+            if (this._graphInstance) {
+                this._applyThemeToCanvas();
+            }
+        }
     }
 
     disconnectedCallback() {
         super.disconnectedCallback();
-        if (this._themeChangeHandler) {
-            window.removeEventListener('theme-change', this._themeChangeHandler);
-            this._themeChangeHandler = null;
-        }
+        this._themeSelect = null;
         if (this._resizeObserver) {
             this._resizeObserver.disconnect();
             this._resizeObserver = null;

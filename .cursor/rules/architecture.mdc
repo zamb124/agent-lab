@@ -25,6 +25,31 @@ scheduler — текущим и будущим.
 - **Тесты API**: можно покрывать без WS-инфры.
 - **Отладка**: `curl` против любой команды — полный аналог WS-вызова.
 
+### Sync = 100% WS+REST симметрия (эталонная реализация)
+
+Sync реализует канон полностью:
+
+- **Один реестр операций** — `apps/sync/realtime/command_router.py::SYNC_OPERATIONS`
+  (`{canonical_type → Operation(payload_model, fn)}`). Один handler — оба
+  транспорта.
+- **Бизнес-функции** — `apps/sync/realtime/operations.py` (`async def
+  op_<entity>_<verb>(payload, *, user, container) -> Result`). Используют
+  helpers из `apps/sync/realtime/handlers.py` (чистые функции уровня
+  репозитория).
+- **WS-обвязка** — `_make_ws_handler(op)` валидирует payload через Pydantic
+  и зовёт `op.fn(...)`. `WsCommandError` → `*_failed`-фрейм.
+- **REST-обвязка** — каждый route в `apps/sync/api/**` собирает Pydantic
+  payload и зовёт ту же `op.fn(...)`. `WsCommandError` маппится в
+  `HTTPException` через единый `@app.exception_handler` в
+  `apps/sync/main.py`.
+- **TaskIQ** оставлен ТОЛЬКО для `messages.transcribe_audio/video/call`
+  (heavy STT-задачи). Все остальные mutating-команды — in-process через
+  `op_*`.
+- Удалены: `apps/sync/realtime/command_dispatch.py`,
+  `apps/sync/realtime/read_handlers.py`, `CommandEnvelope`,
+  `execute_command`, `handle_command.kiq`, `_normalize_command_payload` /
+  `_slug_from_name` workarounds.
+
 ### Контракт `restMirror` у фабрики
 
 Каждая фабрика (`createAsyncOp` / `createResourceCollection` /

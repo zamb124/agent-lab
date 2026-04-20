@@ -65,13 +65,14 @@ export class OfficeDocumentRenameModal extends PlatformFormModal {
         if (!this._seeded && typeof this.bindingId === 'string' && this.bindingId.length > 0) {
             this._form.openForm({
                 binding_id: this.bindingId,
-                title: this.currentTitle || '',
+                title: typeof this.currentTitle === 'string' ? this.currentTitle : '',
                 catalog_ids: Array.isArray(this.catalogIds) ? this.catalogIds : [],
             });
             this._seeded = true;
         }
         const draft = this._form.draft;
-        this.isDirty = typeof draft.title === 'string' && draft.title.trim() !== (this.currentTitle || '').trim();
+        const curr = typeof this.currentTitle === 'string' ? this.currentTitle : '';
+        this.isDirty = typeof draft.title === 'string' && draft.title.trim() !== curr.trim();
     }
 
     _onTitleInput(e) { this._form.setField('title', e.target.value); }

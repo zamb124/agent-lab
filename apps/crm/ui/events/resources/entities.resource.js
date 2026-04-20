@@ -50,6 +50,7 @@ export const entitiesResource = createResourceCollection({
 export const entityCardOp = createAsyncOp({
     name: 'crm/entity_card',
     silent: true,
+    restMirror: { method: 'GET', path: '/crm/api/v1/entities/:entity_id/card' },
     request: async ({ payload }) => {
         if (!payload || typeof payload.entity_id !== 'string' || payload.entity_id.length === 0) {
             throw new Error('entityCardOp: payload.entity_id required');
@@ -65,6 +66,7 @@ export const entityUpdateOp = createAsyncOp({
     name: 'crm/entity_update',
     successToastKey: 'crm:toast.entity.updated',
     errorToastKey: 'crm:toast.entity.update_failed',
+    restMirror: { method: 'PUT', path: '/crm/api/v1/entities/:entity_id' },
     request: async ({ payload }) => {
         if (!payload || typeof payload.id !== 'string' || !payload.body) {
             throw new Error('entityUpdateOp: { id, body } required');
@@ -105,6 +107,7 @@ export const entitiesListResource = createCursorList({
     baseUrl: '/crm/api/v1/entities/query',
     pageSize: 50,
     httpMethod: 'POST',
+    restMirror: { method: 'POST', path: '/crm/api/v1/entities/query' },
     buildQuery: (filters) => {
         if (!filters || typeof filters !== 'object') {
             throw new Error('entitiesListResource.buildQuery: filters required');
@@ -139,6 +142,7 @@ export const entityMergeOp = createAsyncOp({
     name: 'crm/entity_merge',
     successToastKey: 'crm:toast.entity.merged',
     errorToastKey: 'crm:toast.entity.merge_failed',
+    restMirror: { method: 'POST', path: '/crm/api/v1/entities/merge' },
     request: async ({ payload }) => {
         if (!payload || typeof payload !== 'object') {
             throw new Error('entityMergeOp: payload required');
@@ -155,6 +159,7 @@ export const entityBulkDeleteOp = createAsyncOp({
     name: 'crm/entity_bulk_delete',
     successToastKey: 'crm:toast.entity.bulk_deleted',
     errorToastKey: 'crm:toast.entity.bulk_delete_failed',
+    restMirror: { method: 'POST', path: '/crm/api/v1/entities/bulk-delete' },
     request: async ({ payload }) => {
         if (!payload || !Array.isArray(payload.entity_ids) || payload.entity_ids.length === 0) {
             throw new Error('entityBulkDeleteOp: payload.entity_ids (non-empty) required');
@@ -171,6 +176,7 @@ export const entityBulkUpdateOp = createAsyncOp({
     name: 'crm/entity_bulk_update',
     successToastKey: 'crm:toast.entity.bulk_updated',
     errorToastKey: 'crm:toast.entity.bulk_update_failed',
+    restMirror: { method: 'PUT', path: '/crm/api/v1/entities/bulk' },
     request: async ({ payload }) => {
         if (!payload || !Array.isArray(payload.items) || payload.items.length === 0) {
             throw new Error('entityBulkUpdateOp: payload.items (non-empty) required');
@@ -186,6 +192,7 @@ export const entityBulkUpdateOp = createAsyncOp({
 export const entitiesLookupOp = createAsyncOp({
     name: 'crm/entities_lookup',
     silent: true,
+    restMirror: { method: 'POST', path: '/crm/api/v1/entities/query' },
     request: async ({ payload }) => {
         if (!payload || typeof payload !== 'object') {
             throw new Error('entitiesLookupOp: payload required');
@@ -214,6 +221,7 @@ export const entitiesLookupOp = createAsyncOp({
 export const entitySearchOp = createAsyncOp({
     name: 'crm/entity_search',
     silent: true,
+    restMirror: { method: 'POST', path: '/crm/api/v1/entities/query' },
     request: async ({ payload }) => {
         if (!payload || typeof payload.q !== 'string' || payload.q.length === 0) {
             throw new Error('entitySearchOp: payload.q required');
@@ -234,6 +242,7 @@ export const entitySearchOp = createAsyncOp({
 export const entityAggregateOp = createAsyncOp({
     name: 'crm/entity_aggregate',
     silent: true,
+    restMirror: { method: 'GET', path: '/crm/api/v1/entities/aggregate' },
     request: async ({ payload }) => {
         if (!payload || typeof payload !== 'object') {
             throw new Error('entityAggregateOp: payload required');

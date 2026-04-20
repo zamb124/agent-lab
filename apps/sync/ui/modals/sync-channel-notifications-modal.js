@@ -6,6 +6,7 @@ import { html, css } from 'lit';
 import { PlatformFormModal } from '@platform/lib/components/glass-form-modal.js';
 import { registerModalKind } from '@platform/lib/utils/modal-registry.js';
 import '@platform/lib/components/platform-button.js';
+import '@platform/lib/components/platform-icon.js';
 
 export class SyncChannelNotificationsModal extends PlatformFormModal {
     static modalKind = 'sync.channel_notifications';
@@ -20,9 +21,6 @@ export class SyncChannelNotificationsModal extends PlatformFormModal {
 
     static styles = [
         ...(PlatformFormModal.styles ? [PlatformFormModal.styles] : []),
-        css`
-            .toggle { display: flex; align-items: center; gap: var(--space-2); margin: var(--space-3) 0; }
-        `,
     ];
 
     constructor() {
@@ -49,17 +47,26 @@ export class SyncChannelNotificationsModal extends PlatformFormModal {
 
     renderBody() {
         return html`
-            <div class="toggle">
-                <input type="checkbox" id="mute" .checked=${this._muted} @change=${(e) => { this._muted = e.target.checked; this.markDirty(); }} />
-                <label for="mute">${this.t('channel_notifications.field_muted')}</label>
+            <div
+                class=${this._muted ? 'form-item selected' : 'form-item'}
+                @click=${() => { this._muted = !this._muted; this.isDirty = true; }}
+            >
+                <div class="form-checkbox">
+                    ${this._muted ? html`<platform-icon name="check" size="12"></platform-icon>` : ''}
+                </div>
+                <div class="form-item-content">
+                    <div class="form-item-title">${this.t('channel_notifications.field_muted')}</div>
+                </div>
             </div>
         `;
     }
 
     renderFooter() {
         return html`
-            <platform-button @click=${() => this.close()}>${this.t('channel_notifications.action_cancel')}</platform-button>
-            <platform-button variant="primary" @click=${this._onSubmit}>${this.t('channel_notifications.action_save')}</platform-button>
+            <div class="form-actions">
+                <platform-button variant="secondary" @click=${() => this.close()}>${this.t('channel_notifications.action_cancel')}</platform-button>
+                <platform-button variant="primary" @click=${this._onSubmit}>${this.t('channel_notifications.action_save')}</platform-button>
+            </div>
         `;
     }
 

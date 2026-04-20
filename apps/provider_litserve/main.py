@@ -62,21 +62,22 @@ class ProviderLitserveModelCreateRequest(BaseModel):
     api_model_id: str
 
 
+def _serialize_model(model) -> dict[str, Any]:
+    return {
+        "model_id": model.model_id,
+        "kind": model.kind,
+        "hf_model_id": model.hf_model_id,
+        "api_model_id": model.api_model_id,
+        "status": model.status,
+        "error": model.error,
+        "created_at": model.created_at,
+        "updated_at": model.updated_at,
+    }
+
+
 def _model_to_payload() -> list[dict[str, Any]]:
     cfg = get_provider_litserve_settings().provider_litserve.infra
-    return [
-        {
-            "model_id": model.model_id,
-            "kind": model.kind,
-            "hf_model_id": model.hf_model_id,
-            "api_model_id": model.api_model_id,
-            "status": model.status,
-            "error": model.error,
-            "created_at": model.created_at,
-            "updated_at": model.updated_at,
-        }
-        for model in list_models(cfg)
-    ]
+    return [_serialize_model(model) for model in list_models(cfg)]
 
 
 def _system_auth_dependency(request: Request) -> None:
@@ -257,7 +258,7 @@ def _register_ui_routes(app: FastAPI) -> None:
 
 
 def _register_model_management_api(app: FastAPI) -> None:
-    router = APIRouter(prefix=UI_API_PREFIX, tags=["litserve-models"])
+    router = APIRouter(prefix="/litserve/api", tags=["litserve-models"])
     deps = [Depends(_system_auth_dependency)]
 
     @router.get("/models", dependencies=deps)
@@ -274,19 +275,19 @@ def _register_model_management_api(app: FastAPI) -> None:
             api_model_id=payload.api_model_id,
         )
         background.add_task(_download_model_weights, model.model_id)
-        return {"items": _model_to_payload()}
+        return _serialize_model(model)
 
     @router.post("/models/{model_id}/retry", dependencies=deps)
     def retry_download(model_id: str, background: BackgroundTasks) -> dict[str, Any]:
         cfg = get_provider_litserve_settings().provider_litserve.infra
         mark_model_status(cfg, model_id=model_id, status="pending", error=None)
         background.add_task(_download_model_weights, model_id)
-        return {"items": _model_to_payload()}
+        return _serialize_model(get_model(cfg, model_id=model_id))
 
     @router.delete("/models/{model_id}", dependencies=deps)
     def delete_registry_model(model_id: str, background: BackgroundTasks) -> dict[str, Any]:
         background.add_task(_delete_model_weights, model_id)
-        return {"items": _model_to_payload()}
+        return {"model_id": model_id}
 
     app.include_router(router)
 

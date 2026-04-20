@@ -23,16 +23,16 @@
         <div class='clearfix'>
             
             <div class='fl pad1y space-right2'>
-                <span class="strong">100% </span>
+                <span class="strong">91.83% </span>
                 <span class="quiet">Statements</span>
-                <span class='fraction'>39/39</span>
+                <span class='fraction'>45/49</span>
             </div>
         
             
             <div class='fl pad1y space-right2'>
-                <span class="strong">50% </span>
+                <span class="strong">46.15% </span>
                 <span class="quiet">Branches</span>
-                <span class='fraction'>6/12</span>
+                <span class='fraction'>6/13</span>
             </div>
         
             
@@ -44,9 +44,9 @@
         
             
             <div class='fl pad1y space-right2'>
-                <span class="strong">100% </span>
+                <span class="strong">91.83% </span>
                 <span class="quiet">Lines</span>
-                <span class='fraction'>39/39</span>
+                <span class='fraction'>45/49</span>
             </div>
         
             
@@ -106,7 +106,19 @@
 <a name='L41'></a><a href='#L41'>41</a>
 <a name='L42'></a><a href='#L42'>42</a>
 <a name='L43'></a><a href='#L43'>43</a>
-<a name='L44'></a><a href='#L44'>44</a></td><td class="line-coverage quiet"><span class="cline-any cline-yes">1x</span>
+<a name='L44'></a><a href='#L44'>44</a>
+<a name='L45'></a><a href='#L45'>45</a>
+<a name='L46'></a><a href='#L46'>46</a>
+<a name='L47'></a><a href='#L47'>47</a>
+<a name='L48'></a><a href='#L48'>48</a>
+<a name='L49'></a><a href='#L49'>49</a>
+<a name='L50'></a><a href='#L50'>50</a>
+<a name='L51'></a><a href='#L51'>51</a>
+<a name='L52'></a><a href='#L52'>52</a>
+<a name='L53'></a><a href='#L53'>53</a>
+<a name='L54'></a><a href='#L54'>54</a></td><td class="line-coverage quiet"><span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-yes">1x</span>
 <span class="cline-any cline-yes">1x</span>
 <span class="cline-any cline-yes">1x</span>
 <span class="cline-any cline-yes">1x</span>
@@ -118,6 +130,7 @@
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-yes">1x</span>
 <span class="cline-any cline-yes">1x</span>
 <span class="cline-any cline-yes">1x</span>
 <span class="cline-any cline-yes">1x</span>
@@ -136,6 +149,7 @@
 <span class="cline-any cline-yes">1x</span>
 <span class="cline-any cline-yes">1x</span>
 <span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-yes">1x</span>
 <span class="cline-any cline-yes">43x</span>
 <span class="cline-any cline-yes">1x</span>
 <span class="cline-any cline-yes">1x</span>
@@ -145,6 +159,12 @@
 <span class="cline-any cline-yes">1x</span>
 <span class="cline-any cline-yes">1x</span>
 <span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-yes">43x</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-yes">43x</span>
 <span class="cline-any cline-yes">41x</span>
 <span class="cline-any cline-yes">43x</span>
@@ -157,6 +177,8 @@
  *   params:    object
  *   pathname:  string
  *   notFound:  boolean
+ *   routes:    array of { key, path, parent? } — конфигурация маршрутов сервиса,
+ *              регистрируется через ROUTER_ROUTES_REGISTERED при создании effect.
  */
 &nbsp;
 import { CoreEvents } from '../contract.js';
@@ -166,6 +188,7 @@ export const initialRouterState = Object.freeze({
     params: {},
     pathname: typeof location !== 'undefined' ? location.pathname : '/',
     notFound: false,
+    routes: Object.freeze([]),
 });
 &nbsp;
 export function routerReducer(state = initialRouterState, event) {
@@ -173,6 +196,7 @@ export function routerReducer(state = initialRouterState, event) {
         case CoreEvents.ROUTER_ROUTE_CHANGED: {
             const p = event.payload <span class="branch-0 cbranch-no" title="branch not covered" >|| {};</span>
             return {
+                ...state,
                 routeKey: p.routeKey <span class="branch-0 cbranch-no" title="branch not covered" >|| null,</span>
                 params: p.params <span class="branch-0 cbranch-no" title="branch not covered" >|| {},</span>
                 pathname: p.pathname <span class="branch-0 cbranch-no" title="branch not covered" >|| state.pathname,</span>
@@ -182,12 +206,18 @@ export function routerReducer(state = initialRouterState, event) {
         case CoreEvents.ROUTER_NOT_FOUND: {
             const p = event.payload <span class="branch-0 cbranch-no" title="branch not covered" >|| {};</span>
             return {
+                ...state,
                 routeKey: null,
                 params: {},
                 pathname: p.pathname <span class="branch-0 cbranch-no" title="branch not covered" >|| state.pathname,</span>
                 notFound: true,
             };
         }
+<span class="branch-0 cbranch-no" title="branch not covered" >        case CoreEvents.ROUTER_ROUTES_REGISTERED: {</span>
+<span class="cstat-no" title="statement not covered" >            const p = event.payload || {};</span>
+<span class="cstat-no" title="statement not covered" >            const routes = Array.isArray(p.routes) ? p.routes : [];</span>
+<span class="cstat-no" title="statement not covered" >            return { ...state, routes };</span>
+<span class="cstat-no" title="statement not covered" >        }</span>
         default:
             return state;
     }
@@ -199,7 +229,7 @@ export function routerReducer(state = initialRouterState, event) {
             <div class='footer quiet pad2 space-top1 center small'>
                 Code coverage generated by
                 <a href="https://istanbul.js.org/" target="_blank" rel="noopener noreferrer">istanbul</a>
-                at 2026-04-19T14:31:36.520Z
+                at 2026-04-20T17:06:07.331Z
             </div>
         <script src="../../prettify.js"></script>
         <script>

@@ -52,7 +52,7 @@ class ResourceResponse(BaseModel):
     permission: List[str] = []
 
 
-@router.get("", response_model=OffsetPage[ResourceResponse])
+@router.get("/", response_model=OffsetPage[ResourceResponse])
 async def list_resources(
     container: ContainerDep,
     type: Optional[ResourceType] = None,
@@ -103,7 +103,7 @@ async def get_resource(
     )
 
 
-@router.post("", response_model=ResourceResponse)
+@router.post("/", response_model=ResourceResponse)
 async def create_resource(
     request: ResourceCreateRequest,
     container: ContainerDep,

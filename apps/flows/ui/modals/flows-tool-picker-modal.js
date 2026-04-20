@@ -6,23 +6,43 @@
  */
 
 import { html, css } from 'lit';
-import { PlatformLightModal } from '@platform/lib/components/glass-light-modal.js';
+import { PlatformModal } from '@platform/lib/components/glass-modal.js';
 import { registerModalKind } from '@platform/lib/utils/modal-registry.js';
 import '@platform/lib/components/platform-button.js';
 import '@platform/lib/components/platform-icon.js';
 import '@platform/lib/components/glass-spinner.js';
+import { asArray } from '../_helpers/flows-resolvers.js';
 
-export class FlowsToolPickerModal extends PlatformLightModal {
+export class FlowsToolPickerModal extends PlatformModal {
     static modalKind = 'flows.tool_picker';
     static i18nNamespace = 'flows';
 
     static properties = {
-        ...PlatformLightModal.properties,
+        ...PlatformModal.properties,
         onPick: { type: Object, attribute: false },
     };
 
+    static styles = [
+        ...PlatformModal.styles,
+        css`
+            .picker-row {
+                display: flex; gap: var(--space-2); align-items: center;
+                padding: var(--space-2);
+                border-radius: var(--radius-md);
+                border: 1px solid var(--border-subtle);
+                background: var(--glass-solid-subtle);
+                cursor: pointer; margin-bottom: var(--space-1);
+            }
+            .picker-row:hover { background: var(--glass-solid-medium); }
+            .picker-name { font-weight: var(--font-medium); }
+            .picker-id { font-size: var(--text-xs); color: var(--text-tertiary); }
+            .picker-empty { padding: var(--space-4); text-align: center; color: var(--text-tertiary); }
+        `,
+    ];
+
     constructor() {
         super();
+        this.size = 'lg';
         this.onPick = null;
         this._tools = this.useResource('flows/tools', { autoload: true });
     }
@@ -32,45 +52,27 @@ export class FlowsToolPickerModal extends PlatformLightModal {
         this.close();
     }
 
-    render() {
-        const items = this._tools.items || [];
+    renderHeader() {
+        return this.t('tool_picker_modal.title');
+    }
+
+    renderBody() {
+        const items = asArray(this._tools.items);
+        if (this._tools.loading && items.length === 0) {
+            return html`<glass-spinner></glass-spinner>`;
+        }
+        if (items.length === 0) {
+            return html`<div class="picker-empty">${this.t('tool_picker_modal.empty')}</div>`;
+        }
         return html`
-            <div class="light-modal-backdrop" @click=${this._onBackdropClick}></div>
-            <div class="light-modal-container picker-shell">
-                <style>
-                    .picker-shell { padding: var(--space-4); gap: var(--space-3); }
-                    .picker-header { display: flex; align-items: center; justify-content: space-between; }
-                    .picker-row {
-                        display: flex; gap: var(--space-2); align-items: center;
-                        padding: var(--space-2);
-                        border-radius: var(--radius-md);
-                        border: 1px solid var(--border-subtle);
-                        background: var(--glass-solid-subtle);
-                        cursor: pointer; margin-bottom: var(--space-1);
-                    }
-                    .picker-row:hover { background: var(--glass-solid-medium); }
-                    .picker-name { font-weight: var(--font-medium); }
-                    .picker-id { font-size: var(--text-xs); color: var(--text-tertiary); }
-                </style>
-                <div class="picker-header">
-                    <h2>${this.t('tool_picker_modal.title')}</h2>
-                    <platform-button @click=${() => this.close()}>
-                        <platform-icon name="close" size="14"></platform-icon>
-                    </platform-button>
+            ${items.map((t) => html`
+                <div class="picker-row" @click=${() => this._pick(t)}>
+                    <div>
+                        <div class="picker-name">${typeof t.name === 'string' && t.name.length > 0 ? t.name : t.tool_id}</div>
+                        <div class="picker-id">${t.tool_id}</div>
+                    </div>
                 </div>
-                ${this._tools.loading && items.length === 0
-                    ? html`<glass-spinner></glass-spinner>`
-                    : items.length === 0
-                        ? html`<div>${this.t('tool_picker_modal.empty')}</div>`
-                        : items.map((t) => html`
-                            <div class="picker-row" @click=${() => this._pick(t)}>
-                                <div>
-                                    <div class="picker-name">${t.name || t.tool_id}</div>
-                                    <div class="picker-id">${t.tool_id}</div>
-                                </div>
-                            </div>
-                        `)}
-            </div>
+            `)}
         `;
     }
 }

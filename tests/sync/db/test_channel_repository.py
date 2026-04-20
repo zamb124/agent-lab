@@ -27,6 +27,7 @@ async def test_channel_crud(
         space_id=space_ch,
         company_id=company_id,
         name="Space",
+        namespace=f"ns_{unique_id}_crud",
         created_at=datetime.now(tz=UTC),
         created_by_user_id="user_1",
     )
@@ -82,6 +83,7 @@ async def test_channel_members(
         space_id=space_mbr,
         company_id=company_id,
         name="Space",
+        namespace=f"ns_{unique_id}_mbr",
         created_at=datetime.now(tz=UTC),
         created_by_user_id="user_1",
     )
@@ -124,6 +126,7 @@ async def test_list_for_user_filters_by_membership(
         space_id=space_u,
         company_id=company_id,
         name="S",
+        namespace=f"ns_{unique_id}_u",
         created_at=datetime.now(tz=UTC),
         created_by_user_id="alice",
     )

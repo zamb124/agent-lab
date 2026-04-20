@@ -1,4 +1,4 @@
-"""Контекст компании для execute_command (is_member через get_context)."""
+"""Контекст компании для op_* (membership и `resolve_company_id` через `get_context`)."""
 
 from __future__ import annotations
 

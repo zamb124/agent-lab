@@ -2,11 +2,11 @@
  * flows-canvas-help-modal — справка по горячим клавишам и UX-фишкам канваса.
  *
  * Показывает таблицу keyboard shortcuts (canvas.hotkeys.*) и пояснения
- * фишек: drag, multi-select, pan, sticky notes, minimap, smart guides.
+ * фишек: drag, multi-select, pan, sticky notes, smart guides.
  */
 
 import { html, css } from 'lit';
-import { PlatformLightModal } from '@platform/lib/components/glass-light-modal.js';
+import { PlatformModal } from '@platform/lib/components/glass-modal.js';
 import { registerModalKind } from '@platform/lib/utils/modal-registry.js';
 import '@platform/lib/components/platform-button.js';
 
@@ -23,16 +23,13 @@ const SHORTCUTS = Object.freeze([
     { keys: 'Ctrl + Wheel',   labelKey: 'canvas.hotkeys.zoom' },
 ]);
 
-export class FlowsCanvasHelpModal extends PlatformLightModal {
+export class FlowsCanvasHelpModal extends PlatformModal {
     static modalKind = 'flows.canvas_help';
     static i18nNamespace = 'flows';
 
     static styles = [
-        ...(PlatformLightModal.styles ? [PlatformLightModal.styles] : []),
+        ...PlatformModal.styles,
         css`
-            :host {
-                --modal-width: min(560px, calc(100vw - 32px));
-            }
             .help-section { display: flex; flex-direction: column; gap: var(--space-2); padding: var(--space-3); }
             .section-title {
                 font-size: var(--text-sm);
@@ -69,8 +66,13 @@ export class FlowsCanvasHelpModal extends PlatformLightModal {
         `,
     ];
 
+    constructor() {
+        super();
+        this.size = 'lg';
+    }
+
     renderHeader() {
-        return html`<h3>${this.t('canvas.help.title')}</h3>`;
+        return this.t('canvas.help.title');
     }
 
     renderBody() {
@@ -89,10 +91,6 @@ export class FlowsCanvasHelpModal extends PlatformLightModal {
                 <div class="feature">
                     <span class="feature-title">${this.t('canvas.help.feature_smart_guides_title')}</span>
                     <span class="feature-hint">${this.t('canvas.help.feature_smart_guides_hint')}</span>
-                </div>
-                <div class="feature">
-                    <span class="feature-title">${this.t('canvas.help.feature_minimap_title')}</span>
-                    <span class="feature-hint">${this.t('canvas.help.feature_minimap_hint')}</span>
                 </div>
                 <div class="feature">
                     <span class="feature-title">${this.t('canvas.help.feature_sticky_title')}</span>

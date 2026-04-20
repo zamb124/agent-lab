@@ -26,18 +26,24 @@ describe('flows-floating-panel', () => {
         expect(slot).to.not.be.null;
     });
 
-    it('expand toggle меняет атрибут expanded и эмитит expand-change', async () => {
+    it('expand toggle эмитит expand-change; parent выставляет expanded', async () => {
+        // flows-floating-panel — controlled-компонент: state.panelExpanded
+        // живёт у parent (см. flow-editor-page), который слушает expand-change
+        // и снова кладёт ?expanded=... обратно в проп. Тест эмулирует это.
         const el = await fixture(html`
             <flows-floating-panel header-icon="code" header-title="X"></flows-floating-panel>
         `);
         let lastDetail = null;
-        el.addEventListener('expand-change', (e) => { lastDetail = e.detail; });
+        el.addEventListener('expand-change', (e) => {
+            lastDetail = e.detail;
+            el.expanded = e.detail.expanded;
+        });
         const expandBtn = el.shadowRoot.querySelector('.panel-btn.expand');
         expandBtn.click();
         await elementUpdated(el);
+        expect(lastDetail).to.deep.equal({ expanded: true });
         expect(el.expanded).to.equal(true);
         expect(el.hasAttribute('expanded')).to.equal(true);
-        expect(lastDetail).to.deep.equal({ expanded: true });
     });
 
     it('close-кнопка эмитит close', async () => {

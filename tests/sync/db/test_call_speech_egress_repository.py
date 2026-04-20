@@ -30,6 +30,7 @@ async def test_speech_egress_crud_and_list(
         company_id=company_id,
         name="S",
         description=None,
+        namespace=f"ns_{unique_id}_egress",
         created_at=datetime.now(tz=UTC),
         created_by_user_id=actor,
     )

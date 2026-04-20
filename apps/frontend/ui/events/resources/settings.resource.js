@@ -18,6 +18,7 @@ const BASE = '/frontend/api/settings';
 export const settingsLoadOp = createAsyncOp({
     name: 'frontend/settings_load',
     silent: true,
+    restMirror: { method: 'GET', path: '/frontend/api/settings/company' },
     request: async () => await httpRequest({
         method: 'GET',
         url: `${BASE}/company`,
@@ -28,10 +29,11 @@ export const settingsUpdateOp = createAsyncOp({
     name: 'frontend/settings_update',
     successToastKey: 'frontend:settings_page.toast_saved',
     errorToastKey: 'frontend:settings_page.err_save_failed',
+    restMirror: { method: 'PATCH', path: '/frontend/api/settings/company' },
     request: async ({ payload }) => await httpRequest({
         method: 'PATCH',
         url: `${BASE}/company`,
-        body: payload || {},
+        body: payload && typeof payload === 'object' ? payload : {},
     }),
     onSuccess: (ctx) => {
         ctx.dispatch(settingsLoadOp.events.REQUESTED, null, { source: 'local' });

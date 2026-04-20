@@ -17,7 +17,7 @@
  * событие `crm/task/updated` (если backend публикует) и на UI_NAMESPACE_CHANGED.
  *
  * Wizard knowledge-import живёт отдельной модалкой `crm.knowledge_import`
- * (PlatformLightModal). Открывается кнопкой в toolbar страницы (только при
+ * (PlatformModal). Открывается кнопкой в toolbar страницы (только при
  * выбранном конкретном namespace).
  */
 

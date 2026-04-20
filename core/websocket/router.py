@@ -25,7 +25,11 @@ from typing import Any
 
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 
+from core.context import clear_context, set_context
 from core.logging import get_logger
+from core.models.context_models import Context
+from core.models.i18n_models import Language
+from core.models.identity_models import User
 from core.websocket.auth import get_user_from_websocket
 from core.websocket.command_router import (
     WsCommandError,
@@ -35,6 +39,32 @@ from core.websocket.command_router import (
 from core.websocket.manager import notification_manager
 
 logger = get_logger(__name__)
+
+
+async def _build_ws_context(websocket: WebSocket, user: User) -> Context:
+    """Собирает платформенный Context по активной компании пользователя.
+
+    Репозитории Sync/CRM/RAG и NamespaceRepository читают `active_company`
+    из `get_context()`. Без установки контекста для WS-команд операции,
+    зависящие от company-изоляции (shared storage с `is_global=False`),
+    падают с `ValueError`. Контракт такой же, как у AuthMiddleware для REST.
+    """
+    container = websocket.app.state.container
+    company = None
+    user_companies = []
+    active_company_id = user.active_company_id
+    if isinstance(active_company_id, str) and active_company_id:
+        company = await container.company_repository.get(active_company_id)
+        if company is not None:
+            user_companies = [company]
+    return Context(
+        user=user,
+        active_company=company,
+        user_companies=user_companies,
+        channel="ws",
+        language=Language.RU,
+        container=container,
+    )
 
 router = APIRouter()
 
@@ -64,6 +94,8 @@ async def _handle_command_frame(websocket: WebSocket, frame: dict[str, Any], use
             ensure_ascii=False,
         ))
         return
+    context = await _build_ws_context(websocket, user)
+    set_context(context)
     try:
         reply_type, reply_payload = await dispatch_ws_command(command_type, payload, user)
     except WsCommandError as err:
@@ -73,6 +105,8 @@ async def _handle_command_frame(websocket: WebSocket, frame: dict[str, Any], use
         logger.exception("WS command %s crashed for user=%s", command_type, user.user_id)
         reply_type = derive_failed_type(command_type)
         reply_payload = {"error_code": "ws_internal_error", "error_detail": str(exc)}
+    finally:
+        clear_context()
     await websocket.send_text(json.dumps(
         {"request_id": request_id, "type": reply_type, "payload": reply_payload},
         ensure_ascii=False,

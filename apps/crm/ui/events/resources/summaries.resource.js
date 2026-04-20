@@ -27,6 +27,7 @@ function _normalizeNamespace(value) {
 export const dailySummaryOp = createAsyncOp({
     name: 'crm/daily_summary',
     silent: true,
+    restMirror: { method: 'POST', path: '/crm/api/v1/entities/daily-summary' },
     request: async ({ payload }) => {
         if (!payload || typeof payload.date !== 'string' || payload.date.length === 0) {
             throw new Error('dailySummaryOp: payload.date required');
@@ -55,6 +56,7 @@ export const dailySummaryOp = createAsyncOp({
 export const periodSummaryOp = createAsyncOp({
     name: 'crm/period_summary',
     silent: true,
+    restMirror: { method: 'POST', path: '/crm/api/v1/entities/period-summary' },
     request: async ({ payload }) => {
         if (!payload || typeof payload.date_from !== 'string' || typeof payload.date_to !== 'string') {
             throw new Error('periodSummaryOp: { date_from, date_to } required');

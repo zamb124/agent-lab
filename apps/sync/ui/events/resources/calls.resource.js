@@ -1,78 +1,53 @@
 /**
  * Sync Calls — звонки, ссылки, токены, запись.
  *
- * Транспорт смешанный по природе:
- *   - HTTP: token, status, turn, recordings list, scheduled links —
- *     нужны до подключения к LiveKit или из гостевой страницы.
- *   - WS: invite/accept/decline/hangup/recording.start/stop/admin.transfer/
- *     signal — низкая latency, ack-required. Каждая фабрика задаёт явный
- *     `commandType` под канон `sync/calls/<verb>_requested` (имя фабрики
- *     — `sync/calls_<verb>` для уникальности slice).
+ * Все операции через WS (single canonical path), кроме UI-state в
+ * `createSlice('sync/call_ui')`. Каждая фабрика задаёт явный `commandType`
+ * — каноничный backend-handler в `apps/sync/realtime/command_router.py`.
  *
- * UI-state звонков (`activeCall`, `incomingCall`, `recordingStatus`,
- * `overlayMinimized`, `activeCallChannels`) — в `createSlice('sync/call_ui')`,
- * без HTTP/WS, реакция на push-события `sync/call/*` через `extraReducer`.
- *
- * REST-зеркала живут в `apps/sync/api/calls.py`.
+ * REST-зеркала живут в `apps/sync/api/calls.py` и вызывают те же `op_*`.
  */
 
-import { createAsyncOp, createResourceCollection, createSlice } from '@platform/lib/events/index.js';
+import { createAsyncOp, createSlice } from '@platform/lib/events/index.js';
 
 // ============================================================================
-// HTTP-операции (read-only / preflight для LiveKit)
+// Read-операции звонков
 // ============================================================================
 
 export const callTokenOp = createAsyncOp({
     name: 'sync/call_token',
-    transport: 'http',
+    transport: 'ws',
+    wsTimeoutMs: 5_000,
     silent: true,
+    commandType: 'sync/calls/token_requested',
     restMirror: { method: 'GET', path: '/sync/api/v1/calls/:call_id/token' },
-    request: async ({ payload }) => {
-        const { httpRequest } = await import('@platform/lib/events/http.js');
-        return httpRequest({
-            method: 'GET',
-            url: `/sync/api/v1/calls/${encodeURIComponent(payload.call_id)}/token`,
-        });
-    },
 });
 
 export const callStatusOp = createAsyncOp({
     name: 'sync/call_status',
-    transport: 'http',
+    transport: 'ws',
+    wsTimeoutMs: 5_000,
     silent: true,
+    commandType: 'sync/calls/get_requested',
     restMirror: { method: 'GET', path: '/sync/api/v1/calls/:call_id' },
-    request: async ({ payload }) => {
-        const { httpRequest } = await import('@platform/lib/events/http.js');
-        return httpRequest({
-            method: 'GET',
-            url: `/sync/api/v1/calls/${encodeURIComponent(payload.call_id)}`,
-        });
-    },
 });
 
 export const callTurnOp = createAsyncOp({
     name: 'sync/call_turn',
-    transport: 'http',
+    transport: 'ws',
+    wsTimeoutMs: 5_000,
     silent: true,
+    commandType: 'sync/calls/turn_credentials_requested',
     restMirror: { method: 'GET', path: '/sync/api/v1/calls/turn-credentials' },
-    request: async () => {
-        const { httpRequest } = await import('@platform/lib/events/http.js');
-        return httpRequest({ method: 'GET', url: '/sync/api/v1/calls/turn-credentials' });
-    },
 });
 
 export const callRecordingsListOp = createAsyncOp({
     name: 'sync/call_recordings_list',
-    transport: 'http',
+    transport: 'ws',
+    wsTimeoutMs: 5_000,
     silent: true,
+    commandType: 'sync/calls/recordings_list_requested',
     restMirror: { method: 'GET', path: '/sync/api/v1/calls/:call_id/recordings' },
-    request: async ({ payload }) => {
-        const { httpRequest } = await import('@platform/lib/events/http.js');
-        return httpRequest({
-            method: 'GET',
-            url: `/sync/api/v1/calls/${encodeURIComponent(payload.call_id)}/recordings`,
-        });
-    },
 });
 
 // ============================================================================
@@ -153,64 +128,63 @@ export const callSignalOp = createAsyncOp({
 });
 
 // ============================================================================
-// Гостевые scheduled links (HTTP)
+// Ad-hoc встреча: создать канал и сразу пригласить себя в звонок.
+// На backend нет отдельного REST/WS-эндпоинта для adhoc — используем
+// канонический `sync/channels/create_requested` через WS (тот же commandType,
+// что и обычное создание канала из `channelsResource`). Имя фабрики уникальное
+// для отдельного slice, чтобы не пересекаться с CRUD-resource'ом.
 // ============================================================================
 
-export const callLinksScheduledResource = createResourceCollection({
+export const channelCreateAdhocCallOp = createAsyncOp({
+    name: 'sync/channel_create_adhoc_call',
+    transport: 'ws',
+    wsTimeoutMs: 8_000,
+    silent: true,
+    commandType: 'sync/channels/create_requested',
+    restMirror: { method: 'POST', path: '/sync/api/v1/channels/' },
+});
+
+// ============================================================================
+// Календарные ссылки на звонки
+// ============================================================================
+
+export const callLinksScheduledOp = createAsyncOp({
     name: 'sync/call_links_scheduled',
-    baseUrl: '/sync/api/v1/calls/links',
-    idField: 'link_token',
-    operations: ['list'],
-    transport: 'http',
-    listQuery: ({ from_time, to_time }) => ({ from_time, to_time }),
-    buildItemUrl: (id) => `/sync/api/v1/calls/links/${encodeURIComponent(id)}`,
-    restMirror: {
-        list: { method: 'GET', path: '/sync/api/v1/calls/links/scheduled' },
-    },
+    transport: 'ws',
+    wsTimeoutMs: 5_000,
+    silent: true,
+    commandType: 'sync/calls/links_list_requested',
+    restMirror: { method: 'GET', path: '/sync/api/v1/calls/links/scheduled' },
 });
 
 export const callLinkCreateOp = createAsyncOp({
     name: 'sync/call_link_create',
-    transport: 'http',
+    transport: 'ws',
+    wsTimeoutMs: 5_000,
     successToastKey: 'sync:calls.toast_link_created',
     errorToastKey: 'sync:calls.err_link_create',
+    commandType: 'sync/calls/links_create_requested',
     restMirror: { method: 'POST', path: '/sync/api/v1/calls/links' },
-    request: async ({ payload }) => {
-        const { httpRequest } = await import('@platform/lib/events/http.js');
-        return httpRequest({ method: 'POST', url: '/sync/api/v1/calls/links', body: payload });
-    },
 });
 
 export const callLinkUpdateOp = createAsyncOp({
     name: 'sync/call_link_update',
-    transport: 'http',
+    transport: 'ws',
+    wsTimeoutMs: 5_000,
     successToastKey: 'sync:calls.toast_link_updated',
     errorToastKey: 'sync:calls.err_link_update',
+    commandType: 'sync/calls/links_update_requested',
     restMirror: { method: 'PATCH', path: '/sync/api/v1/calls/links/:link_token' },
-    request: async ({ payload }) => {
-        const { httpRequest } = await import('@platform/lib/events/http.js');
-        const { link_token, ...body } = payload;
-        return httpRequest({
-            method: 'PATCH',
-            url: `/sync/api/v1/calls/links/${encodeURIComponent(link_token)}`,
-            body,
-        });
-    },
 });
 
 export const callLinkRemoveOp = createAsyncOp({
     name: 'sync/call_link_remove',
-    transport: 'http',
+    transport: 'ws',
+    wsTimeoutMs: 5_000,
     successToastKey: 'sync:calls.toast_link_removed',
     errorToastKey: 'sync:calls.err_link_remove',
+    commandType: 'sync/calls/links_remove_requested',
     restMirror: { method: 'DELETE', path: '/sync/api/v1/calls/links/:link_token' },
-    request: async ({ payload }) => {
-        const { httpRequest } = await import('@platform/lib/events/http.js');
-        return httpRequest({
-            method: 'DELETE',
-            url: `/sync/api/v1/calls/links/${encodeURIComponent(payload.link_token)}`,
-        });
-    },
 });
 
 // ============================================================================
@@ -364,30 +338,18 @@ export const callUiResource = createSlice({
 
 export const callJoinInfoOp = createAsyncOp({
     name: 'sync/call_join_info',
-    transport: 'http',
+    transport: 'ws',
+    wsTimeoutMs: 5_000,
     silent: true,
+    commandType: 'sync/calls/join_info_requested',
     restMirror: { method: 'GET', path: '/sync/api/v1/calls/join/:link_token' },
-    request: async ({ payload }) => {
-        const { httpRequest } = await import('@platform/lib/events/http.js');
-        return httpRequest({
-            method: 'GET',
-            url: `/sync/api/v1/calls/join/${encodeURIComponent(payload.link_token)}`,
-        });
-    },
 });
 
 export const callJoinAcceptOp = createAsyncOp({
     name: 'sync/call_join_accept',
-    transport: 'http',
+    transport: 'ws',
+    wsTimeoutMs: 5_000,
     silent: true,
+    commandType: 'sync/calls/join_accept_requested',
     restMirror: { method: 'POST', path: '/sync/api/v1/calls/join/:link_token' },
-    request: async ({ payload }) => {
-        const { httpRequest } = await import('@platform/lib/events/http.js');
-        const { link_token, ...body } = payload;
-        return httpRequest({
-            method: 'POST',
-            url: `/sync/api/v1/calls/join/${encodeURIComponent(link_token)}`,
-            body,
-        });
-    },
 });

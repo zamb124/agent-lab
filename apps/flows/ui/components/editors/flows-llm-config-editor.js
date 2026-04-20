@@ -21,10 +21,7 @@
 import { html, css } from 'lit';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
 import './flows-json-field-editor.js';
-
-const PROVIDERS = Object.freeze([
-    'openai', 'anthropic', 'openrouter', 'bothub', 'ya', 'sber', 'provider_litserve', 'mock',
-]);
+import { asString } from '../../_helpers/flows-resolvers.js';
 
 const REASONING_LEVELS = Object.freeze(['', 'none', 'minimal', 'low', 'medium', 'high', 'xhigh']);
 
@@ -37,43 +34,75 @@ export class FlowsLlmConfigEditor extends PlatformElement {
     static styles = [
         PlatformElement.styles,
         css`
-            :host { display: block; }
+            :host {
+                display: block;
+                container-type: inline-size;
+            }
             .grid {
                 display: grid;
-                grid-template-columns: 1fr 1fr;
-                gap: var(--space-2);
+                grid-template-columns: repeat(2, minmax(0, 1fr));
+                column-gap: var(--space-3);
+                row-gap: var(--space-3);
             }
-            .field { display: flex; flex-direction: column; gap: var(--space-1); }
+            @container (max-width: 420px) {
+                .grid {
+                    grid-template-columns: minmax(0, 1fr);
+                }
+            }
+            .field {
+                display: flex;
+                flex-direction: column;
+                gap: 4px;
+                min-width: 0;
+            }
             .full { grid-column: 1 / -1; }
-            label { font-size: var(--text-sm); color: var(--text-secondary); }
+            label {
+                font-size: var(--text-xs);
+                color: var(--text-secondary);
+                line-height: 1.2;
+            }
             input, select {
-                padding: var(--space-2);
-                border-radius: var(--radius-md);
+                padding: 4px var(--space-2);
+                font-size: var(--text-sm);
+                line-height: 1.2;
+                height: 28px;
+                border-radius: var(--radius-sm);
                 border: 1px solid var(--glass-border-subtle);
                 background: var(--glass-solid-subtle);
-                color: var(--text-primary); font: inherit;
-                width: 100%; box-sizing: border-box;
+                color: var(--text-primary);
+                font-family: inherit;
+                width: 100%;
+                min-width: 0;
+                box-sizing: border-box;
+            }
+            input::placeholder {
+                color: var(--text-tertiary);
+                opacity: 0.7;
+            }
+            input:focus, select:focus {
+                outline: none;
+                border-color: var(--accent);
             }
             details {
-                margin-top: var(--space-3);
-                padding: var(--space-2) var(--space-3);
+                margin-top: var(--space-2);
+                padding: var(--space-2);
                 border: 1px solid var(--glass-border-subtle);
-                border-radius: var(--radius-md);
+                border-radius: var(--radius-sm);
                 background: var(--glass-solid-subtle);
             }
             summary {
                 cursor: pointer;
-                font-size: var(--text-sm);
+                font-size: var(--text-xs);
                 color: var(--text-secondary);
                 user-select: none;
-                padding: var(--space-1) 0;
+                padding: 2px 0;
             }
             details[open] summary {
                 color: var(--text-primary);
                 margin-bottom: var(--space-2);
             }
             .extra {
-                margin-top: var(--space-2);
+                margin-top: var(--space-1);
             }
         `,
     ];
@@ -83,7 +112,17 @@ export class FlowsLlmConfigEditor extends PlatformElement {
         this.config = null;
         this._showAdvanced = false;
         this._models = this.useOp('flows/models_list');
+        this._providers = this.useOp('flows/providers_list');
         this._loadedProvider = null;
+        this._providersLoaded = false;
+    }
+
+    connectedCallback() {
+        super.connectedCallback();
+        if (!this._providersLoaded) {
+            this._providersLoaded = true;
+            void this._providers.run(null);
+        }
     }
 
     updated(changed) {
@@ -158,6 +197,13 @@ export class FlowsLlmConfigEditor extends PlatformElement {
         return [];
     }
 
+    _providersList() {
+        const result = this._providers.lastResult;
+        if (Array.isArray(result?.items)) return result.items;
+        if (Array.isArray(result)) return result;
+        return [];
+    }
+
     render() {
         const provider = this._readString('provider');
         const model = this._readString('model');
@@ -169,6 +215,7 @@ export class FlowsLlmConfigEditor extends PlatformElement {
             ? JSON.stringify(cfg.extra_request_body, null, 2)
             : '{}';
         const models = this._modelsList();
+        const providers = this._providersList();
         return html`
             <div class="grid">
                 <div class="field">
@@ -178,7 +225,7 @@ export class FlowsLlmConfigEditor extends PlatformElement {
                         @change=${(e) => this._onString('provider', e.target.value)}
                     >
                         <option value="">—</option>
-                        ${PROVIDERS.map((p) => html`<option value=${p} ?selected=${provider === p}>${p}</option>`)}
+                        ${providers.map((p) => html`<option value=${p} ?selected=${provider === p}>${p}</option>`)}
                     </select>
                 </div>
                 <div class="field">
@@ -190,13 +237,18 @@ export class FlowsLlmConfigEditor extends PlatformElement {
                           >
                             <option value="">—</option>
                             ${models.map((m) => {
-                                const value = typeof m === 'string' ? m : (m.value || m.id || '');
-                                const label = typeof m === 'string' ? m : (m.label || m.value || m.id);
+                                const value = typeof m === 'string' ? m : asString(typeof m.value === 'string' && m.value.length > 0 ? m.value : m.id);
+                                let label;
+                                if (typeof m === 'string') label = m;
+                                else if (typeof m.label === 'string' && m.label.length > 0) label = m.label;
+                                else if (typeof m.value === 'string' && m.value.length > 0) label = m.value;
+                                else label = m.id;
                                 return html`<option value=${value} ?selected=${value === model}>${label}</option>`;
                             })}
                           </select>`
                         : html`<input
                             type="text"
+                            placeholder=${this.t('llm_config_editor.placeholder_model')}
                             .value=${model}
                             @input=${(e) => this._onString('model', e.target.value)}
                           />`}
@@ -205,6 +257,7 @@ export class FlowsLlmConfigEditor extends PlatformElement {
                     <label>${this.t('llm_config_editor.temperature')}</label>
                     <input
                         type="number" min="0" max="2" step="0.1"
+                        placeholder=${this.t('llm_config_editor.placeholder_temperature')}
                         .value=${this._readNumberOrEmpty('temperature')}
                         @input=${(e) => this._onNumber('temperature', e.target.value)}
                     />
@@ -213,6 +266,7 @@ export class FlowsLlmConfigEditor extends PlatformElement {
                     <label>${this.t('llm_config_editor.max_tokens')}</label>
                     <input
                         type="number" min="0" step="1"
+                        placeholder=${this.t('llm_config_editor.placeholder_max_tokens')}
                         .value=${this._readNumberOrEmpty('max_tokens')}
                         @input=${(e) => this._onNumber('max_tokens', e.target.value, true)}
                     />
@@ -245,6 +299,7 @@ export class FlowsLlmConfigEditor extends PlatformElement {
                         <label>${this.t('llm_config_editor.top_p')}</label>
                         <input
                             type="number" min="0" max="1" step="0.05"
+                            placeholder=${this.t('llm_config_editor.placeholder_top_p')}
                             .value=${this._readNumberOrEmpty('top_p')}
                             @input=${(e) => this._onNumber('top_p', e.target.value)}
                         />
@@ -253,6 +308,7 @@ export class FlowsLlmConfigEditor extends PlatformElement {
                         <label>${this.t('llm_config_editor.top_k')}</label>
                         <input
                             type="number" min="0" step="1"
+                            placeholder=${this.t('llm_config_editor.placeholder_top_k')}
                             .value=${this._readNumberOrEmpty('top_k')}
                             @input=${(e) => this._onNumber('top_k', e.target.value, true)}
                         />
@@ -261,6 +317,7 @@ export class FlowsLlmConfigEditor extends PlatformElement {
                         <label>${this.t('llm_config_editor.frequency_penalty')}</label>
                         <input
                             type="number" min="-2" max="2" step="0.1"
+                            placeholder=${this.t('llm_config_editor.placeholder_frequency_penalty')}
                             .value=${this._readNumberOrEmpty('frequency_penalty')}
                             @input=${(e) => this._onNumber('frequency_penalty', e.target.value)}
                         />
@@ -269,6 +326,7 @@ export class FlowsLlmConfigEditor extends PlatformElement {
                         <label>${this.t('llm_config_editor.presence_penalty')}</label>
                         <input
                             type="number" min="-2" max="2" step="0.1"
+                            placeholder=${this.t('llm_config_editor.placeholder_presence_penalty')}
                             .value=${this._readNumberOrEmpty('presence_penalty')}
                             @input=${(e) => this._onNumber('presence_penalty', e.target.value)}
                         />
@@ -277,6 +335,7 @@ export class FlowsLlmConfigEditor extends PlatformElement {
                         <label>${this.t('llm_config_editor.seed')}</label>
                         <input
                             type="number" step="1"
+                            placeholder=${this.t('llm_config_editor.placeholder_seed')}
                             .value=${this._readNumberOrEmpty('seed')}
                             @input=${(e) => this._onNumber('seed', e.target.value, true)}
                         />

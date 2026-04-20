@@ -1,11 +1,8 @@
-"""API роутер для каналов (Channels)."""
+"""REST-зеркала команд channels. Тонкие обвязки над `op_channels_*`."""
 
-import asyncio
-import uuid
+from fastapi import APIRouter, Query
+from pydantic import BaseModel
 
-from fastapi import APIRouter, HTTPException, Query
-
-from apps.sync.channel_read_helpers import channel_read_from_entity
 from apps.sync.dependencies import ContainerDep
 from apps.sync.models.channels import (
     ChannelCreate,
@@ -15,16 +12,33 @@ from apps.sync.models.channels import (
     ChannelRead,
     ChannelUpdate,
 )
-from apps.sync.realtime.command_dispatch import dispatch_sync_command
-from apps.sync.realtime.commands import CommandEnvelope
-from apps.sync.realtime.events import event_channel_member_added
-from apps.sync.realtime.publish_events import publish_realtime_events
-from apps.sync.realtime.tasks import handle_command
-from core.config import get_settings
-from core.pagination import OffsetPage, ListResponse
+from apps.sync.realtime.operations import (
+    ChannelsAddMemberPayload,
+    ChannelsCreatePayload,
+    ChannelsListMembersPayload,
+    ChannelsListPayload,
+    ChannelsMarkReadPayload,
+    ChannelsNotificationSettingsUpdatePayload,
+    ChannelsTypingPayload,
+    ChannelsUpdatePayload,
+    op_channels_add_member,
+    op_channels_create,
+    op_channels_list,
+    op_channels_list_members,
+    op_channels_mark_read,
+    op_channels_notification_settings_update,
+    op_channels_typing,
+    op_channels_update,
+)
 from core.context import get_context
+from core.pagination import ListResponse, OffsetPage
 
 router = APIRouter()
+
+
+class _TypingBody(BaseModel):
+    typing: bool
+    thread_id: str | None = None
 
 
 @router.get("/", response_model=OffsetPage[ChannelRead])
@@ -34,55 +48,35 @@ async def list_channels(
     limit: int = Query(50, ge=1, le=200),
     offset: int = Query(0, ge=0),
 ) -> OffsetPage[ChannelRead]:
-    """Список каналов текущего пользователя (членство). Опционально фильтр по space_id."""
-    context = get_context()
-    company_id = context.active_company.company_id
-    viewer_id = context.user.user_id
-    channels = await container.channel_repository.list_for_user(
-        viewer_id,
-        space_id=space_id,
-        limit=limit,
-        offset=offset,
-        company_id=company_id,
+    user = get_context().user
+    result = await op_channels_list(
+        ChannelsListPayload(space_id=space_id, limit=limit, offset=offset),
+        user=user,
+        container=container,
     )
-    channel_ids = [c.channel_id for c in channels]
-    summaries = await container.message_repository.channel_lane_summaries_batch(
-        company_id=company_id,
-        channel_ids=channel_ids,
-        viewer_user_id=viewer_id,
+    return OffsetPage[ChannelRead](
+        items=result.items, total=result.total, limit=result.limit, offset=result.offset
     )
-    out: list[ChannelRead] = []
-    for c in channels:
-        summ = summaries[c.channel_id]
-        out.append(
-            await channel_read_from_entity(
-                c,
-                viewer_user_id=viewer_id,
-                channel_repository=container.channel_repository,
-                user_repository=container.user_repository,
-                company_id=company_id,
-                lane_summary=summ,
-            )
-        )
-    return OffsetPage[ChannelRead](items=out, total=len(out), limit=limit, offset=offset)
 
 
-@router.patch("/{channel_id}")
-async def update_channel(container: ContainerDep, channel_id: str, body: ChannelUpdate) -> ChannelRead:
-    """Обновление канала (команда в процессе API)."""
-    _ = container
-    context = get_context()
-    cmd = CommandEnvelope(
-        id=uuid.uuid4().hex,
-        actor_user_id=context.user.user_id,
-        company_id=context.active_company.company_id,
-        type="channels.update",
-        payload={"channel_id": channel_id, "body": body.model_dump(exclude_unset=True)},
+@router.post("/", status_code=201, response_model=ChannelRead)
+async def create_channel(container: ContainerDep, body: ChannelCreate) -> ChannelRead:
+    user = get_context().user
+    return await op_channels_create(
+        ChannelsCreatePayload(body=body), user=user, container=container
     )
-    out = await dispatch_sync_command(cmd)
-    if not out.get("ok"):
-        raise RuntimeError(f"Command failed: {out.get('error_detail')}")
-    return ChannelRead.model_validate(out["result"])
+
+
+@router.patch("/{channel_id}", response_model=ChannelRead)
+async def update_channel(
+    container: ContainerDep, channel_id: str, body: ChannelUpdate
+) -> ChannelRead:
+    user = get_context().user
+    return await op_channels_update(
+        ChannelsUpdatePayload(channel_id=channel_id, body=body),
+        user=user,
+        container=container,
+    )
 
 
 @router.patch("/{channel_id}/notification-settings", response_model=ChannelRead)
@@ -91,142 +85,62 @@ async def patch_channel_notification_settings(
     body: ChannelNotificationSettingsUpdate,
     container: ContainerDep,
 ) -> ChannelRead:
-    """Мьют платформенных уведомлений о сообщениях для текущего пользователя в канале."""
-    context = get_context()
-    company_id = context.active_company.company_id
-    viewer_id = context.user.user_id
-    ch = await container.channel_repository.get(channel_id)
-    if ch is None or ch.company_id != company_id:
-        raise HTTPException(status_code=404, detail="Канал не найден.")
-    if not await container.channel_repository.is_member(channel_id, viewer_id, company_id=company_id):
-        raise HTTPException(status_code=403, detail="Нет доступа к каналу.")
-    await container.channel_repository.set_member_notifications_muted(
-        channel_id,
-        viewer_id,
-        body.notifications_muted,
-        company_id=company_id,
-    )
-    summaries = await container.message_repository.channel_lane_summaries_batch(
-        company_id=company_id,
-        channel_ids=[channel_id],
-        viewer_user_id=viewer_id,
-    )
-    return await channel_read_from_entity(
-        ch,
-        viewer_user_id=viewer_id,
-        channel_repository=container.channel_repository,
-        user_repository=container.user_repository,
-        company_id=company_id,
-        lane_summary=summaries[channel_id],
+    user = get_context().user
+    return await op_channels_notification_settings_update(
+        ChannelsNotificationSettingsUpdatePayload(
+            channel_id=channel_id, notifications_muted=body.notifications_muted
+        ),
+        user=user,
+        container=container,
     )
 
 
 @router.post("/{channel_id}/read", status_code=204)
 async def mark_channel_read(container: ContainerDep, channel_id: str) -> None:
-    """Отмечает основную ленту канала прочитанной для текущего пользователя."""
-    _ = container
-    context = get_context()
-    cmd = CommandEnvelope(
-        id=uuid.uuid4().hex,
-        actor_user_id=context.user.user_id,
-        company_id=context.active_company.company_id,
-        type="channels.mark_read",
-        payload={"channel_id": channel_id},
+    user = get_context().user
+    await op_channels_mark_read(
+        ChannelsMarkReadPayload(channel_id=channel_id),
+        user=user,
+        container=container,
     )
-    body = await dispatch_sync_command(cmd)
-    if not body.get("ok"):
-        raise RuntimeError(f"Command failed: {body.get('error_detail')}")
-
-
-class _TypingBody(__import__("pydantic").BaseModel):
-    typing: bool
-    thread_id: str | None = None
 
 
 @router.post("/{channel_id}/typing", status_code=204)
-async def typing_channel(container: ContainerDep, channel_id: str, body: _TypingBody) -> None:
-    """REST-зеркало команды `sync/channels/typing_requested`.
-
-    Эфемерное событие — публикуется напрямую через `dispatch_sync_command`
-    (без TaskIQ). Возвращает 204.
-    """
-    _ = container
-    context = get_context()
-    cmd = CommandEnvelope(
-        id=uuid.uuid4().hex,
-        actor_user_id=context.user.user_id,
-        company_id=context.active_company.company_id,
-        type="channels.typing",
-        payload={"channel_id": channel_id, "typing": body.typing, "thread_id": body.thread_id},
+async def typing_channel(
+    container: ContainerDep, channel_id: str, body: _TypingBody
+) -> None:
+    user = get_context().user
+    await op_channels_typing(
+        ChannelsTypingPayload(
+            channel_id=channel_id, typing=body.typing, thread_id=body.thread_id
+        ),
+        user=user,
+        container=container,
     )
-    result = await dispatch_sync_command(cmd)
-    if not result.get("ok"):
-        raise RuntimeError(f"Command failed: {result.get('error_detail')}")
-
-
-@router.post("/", status_code=201)
-async def create_channel(container: ContainerDep, body: ChannelCreate) -> ChannelRead:
-    """Создание канала через TaskIQ."""
-    _ = container
-    context = get_context()
-    cmd = CommandEnvelope(
-        id=__import__("uuid").uuid4().hex,
-        actor_user_id=context.user.user_id,
-        company_id=context.active_company.company_id,
-        type="channels.create",
-        payload={"body": body.model_dump()},
-    )
-    task = await handle_command.kiq(cmd.model_dump())
-    res = await task.wait_result(
-        timeout=get_settings().sync_taskiq_wait_result_timeout_seconds,
-    )
-    if res.is_err:
-        raise RuntimeError(f"Command failed: {res.error}")
-    return ChannelRead.model_validate(res.return_value["result"])
 
 
 @router.get("/{channel_id}/members", response_model=ListResponse[ChannelMemberRead])
-async def list_channel_members(channel_id: str, container: ContainerDep) -> ListResponse[ChannelMemberRead]:
-    """Участники канала (только для состоящих в канале)."""
-    context = get_context()
-    company_id = context.active_company.company_id
-    viewer_id = context.user.user_id
-    ch = await container.channel_repository.get(channel_id)
-    if ch is None or ch.company_id != company_id:
-        raise HTTPException(status_code=404, detail="Канал не найден.")
-    if not await container.channel_repository.is_member(channel_id, viewer_id, company_id=company_id):
-        raise HTTPException(status_code=403, detail="Нет доступа к каналу.")
-    rows = await container.channel_repository.list_member_rows(channel_id, company_id=company_id)
-    return ListResponse[ChannelMemberRead](items=[ChannelMemberRead(user_id=uid, role=role) for uid, role in rows])
+async def list_channel_members(
+    channel_id: str, container: ContainerDep
+) -> ListResponse[ChannelMemberRead]:
+    user = get_context().user
+    result = await op_channels_list_members(
+        ChannelsListMembersPayload(channel_id=channel_id),
+        user=user,
+        container=container,
+    )
+    return ListResponse[ChannelMemberRead](items=result.items)
 
 
-@router.post("/{channel_id}/members", status_code=201)
-async def add_member(channel_id: str, body: ChannelMemberAdd, container: ContainerDep) -> ChannelMemberRead:
-    """Добавление участника в канал (только участники канала)."""
-    context = get_context()
-    company_id = context.active_company.company_id
-    viewer_id = context.user.user_id
-    ch = await container.channel_repository.get(channel_id)
-    if ch is None or ch.company_id != company_id:
-        raise HTTPException(status_code=404, detail="Канал не найден.")
-    if not await container.channel_repository.is_member(channel_id, viewer_id, company_id=company_id):
-        raise HTTPException(status_code=403, detail="Нет доступа к каналу.")
-    await container.channel_repository.upsert_member(
-        channel_id, body.user_id, body.role,
-        company_id=company_id,
+@router.post("/{channel_id}/members", status_code=201, response_model=ChannelMemberRead)
+async def add_member(
+    channel_id: str, body: ChannelMemberAdd, container: ContainerDep
+) -> ChannelMemberRead:
+    user = get_context().user
+    return await op_channels_add_member(
+        ChannelsAddMemberPayload(
+            channel_id=channel_id, user_id=body.user_id, role=body.role
+        ),
+        user=user,
+        container=container,
     )
-    member_recipients = await container.channel_repository.list_member_user_ids(
-        channel_id,
-        company_id=company_id,
-    )
-    await publish_realtime_events(
-        [
-            event_channel_member_added(
-                channel_id,
-                body.user_id,
-                company_id=company_id,
-                recipient_user_ids=member_recipients,
-            ),
-        ],
-    )
-    return ChannelMemberRead(user_id=body.user_id, role=body.role)

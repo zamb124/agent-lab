@@ -15,6 +15,7 @@ import { httpRequest } from '@platform/lib/events/http.js';
 export const fileUploadOp = createAsyncOp({
     name: 'crm/file_upload',
     silent: true,
+    restMirror: { method: 'POST', path: '/crm/api/v1/files/' },
     request: async ({ payload }) => {
         if (!payload || !(payload.file instanceof File)) {
             throw new Error('fileUploadOp: { file: File } required');

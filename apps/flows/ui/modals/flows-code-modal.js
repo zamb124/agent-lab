@@ -3,55 +3,51 @@
  */
 
 import { html, css } from 'lit';
-import { PlatformLightModal } from '@platform/lib/components/glass-light-modal.js';
+import { PlatformModal } from '@platform/lib/components/glass-modal.js';
 import { registerModalKind } from '@platform/lib/utils/modal-registry.js';
 import '@platform/lib/components/platform-button.js';
 import '@platform/lib/components/platform-icon.js';
 import '../components/editors/flows-code-editor.js';
 
-export class FlowsCodeModal extends PlatformLightModal {
+export class FlowsCodeModal extends PlatformModal {
     static modalKind = 'flows.code';
     static i18nNamespace = 'flows';
 
     static properties = {
-        ...PlatformLightModal.properties,
+        ...PlatformModal.properties,
         title: { type: String },
         code: { type: String },
         language: { type: String },
         readonly: { type: Boolean },
     };
 
+    static styles = [
+        ...PlatformModal.styles,
+        css`
+            flows-code-editor { display: block; height: 100%; min-height: 50vh; }
+        `,
+    ];
+
     constructor() {
         super();
+        this.size = 'full';
         this.title = '';
         this.code = '';
         this.language = 'python';
         this.readonly = true;
     }
 
-    render() {
+    renderHeader() {
+        return this.title || this.t('code_modal.title');
+    }
+
+    renderBody() {
         return html`
-            <div class="light-modal-backdrop" @click=${this._onBackdropClick}></div>
-            <div class="light-modal-container code-modal-shell">
-                <style>
-                    .code-modal-shell { padding: var(--space-4); gap: var(--space-3); height: 90vh; }
-                    .code-modal-shell .header {
-                        display: flex; align-items: center; justify-content: space-between;
-                    }
-                    .code-modal-shell flows-code-editor { flex: 1; min-height: 0; }
-                </style>
-                <div class="header">
-                    <h2>${this.title || this.t('code_modal.title')}</h2>
-                    <platform-button @click=${() => this.close()}>
-                        <platform-icon name="close" size="14"></platform-icon>
-                    </platform-button>
-                </div>
-                <flows-code-editor
-                    .language=${this.language}
-                    .value=${this.code}
-                    ?readonly=${this.readonly}
-                ></flows-code-editor>
-            </div>
+            <flows-code-editor
+                .language=${this.language}
+                .value=${this.code}
+                ?readonly=${this.readonly}
+            ></flows-code-editor>
         `;
     }
 }

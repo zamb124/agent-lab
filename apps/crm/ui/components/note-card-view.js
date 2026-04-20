@@ -4,7 +4,7 @@
  *
  *   - `view` (default): read-only представление с markdown, AI-summary,
  *     related entities, relationships, attachments. Шапка выдаёт три
- *     действия: edit / graph / delete (через emit).
+ *     действия: attachments / graph / edit / delete (через emit и ops).
  *   - `edit`: inline-форма поверх той же сущности — title, описание (с
  *     голосовым вводом), дата, теги, аплоад вложений. На сохранение шлёт
  *     `entitiesResource.create` (для note === null) или
@@ -38,14 +38,19 @@ import { PlatformElement } from '@platform/lib/platform-element/index.js';
 import '@platform/lib/components/platform-icon.js';
 import '@platform/lib/components/glass-card.js';
 import '@platform/lib/components/glass-spinner.js';
+import './entity-hover-preview.js';
 
 const ENTITIES_NAME = 'crm/entities';
 const ENTITY_UPDATE_OP = 'crm/entity_update';
 const FILE_UPLOAD_OP = 'crm/file_upload';
+const ATTACHMENT_UPLOAD_OP = 'crm/attachment_upload';
+const ATTACHMENT_DELETE_OP = 'crm/attachment_delete';
 const VOICE_OP = 'crm/note_voice_input';
 const ENTITY_SEARCH_OP = 'crm/entity_search';
+let NOTE_ATTACHMENT_INPUT_SEQ = 0;
 
 const MENTION_REGEX = /@\[([^\]]+)\]\(([^)]+)\)/g;
+const ENTITY_LINK_REGEX = /\[([^\]]+)\]\(entity:([^)]+)\)/g;
 
 const NOTE_DATE_FORMAT = new Intl.DateTimeFormat('ru-RU', {
     day: '2-digit',
@@ -74,7 +79,11 @@ const MENTION_PLACEHOLDER_OPEN = '\u0001MENTION\u0002';
 const MENTION_PLACEHOLDER_CLOSE = '\u0001/MENTION\u0002';
 
 function _replaceMentionsWithPlaceholder(text) {
-    return text.replace(MENTION_REGEX, (_match, name, id) => {
+    const withMentionTokens = text.replace(MENTION_REGEX, (_match, name, id) => {
+        const normalizedId = typeof id === 'string' && id.startsWith('entity:') ? id.slice('entity:'.length) : id;
+        return `${MENTION_PLACEHOLDER_OPEN}${normalizedId}\u0001${name}${MENTION_PLACEHOLDER_CLOSE}`;
+    });
+    return withMentionTokens.replace(ENTITY_LINK_REGEX, (_match, name, id) => {
         return `${MENTION_PLACEHOLDER_OPEN}${id}\u0001${name}${MENTION_PLACEHOLDER_CLOSE}`;
     });
 }
@@ -86,7 +95,8 @@ function _restoreMentionsHtml(html) {
     return html.replace(re, (_m, id, name) => {
         const safeId = escapeHtml(id);
         const safeName = escapeHtml(name);
-        return `<span class="mention-chip" data-entity-id="${safeId}">@${safeName}</span>`;
+        const label = safeName.startsWith('@') ? safeName : `@${safeName}`;
+        return `<span class="mention-chip" data-entity-id="${safeId}">${label}</span>`;
     });
 }
 
@@ -113,6 +123,52 @@ function formatBytes(value) {
         return `${(value / 1024).toFixed(1)} KB`;
     }
     return `${(value / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+function _getFileExtension(filename) {
+    if (typeof filename !== 'string') {
+        return '';
+    }
+    const trimmed = filename.trim().toLowerCase();
+    const dotIndex = trimmed.lastIndexOf('.');
+    if (dotIndex <= 0 || dotIndex === trimmed.length - 1) {
+        return '';
+    }
+    return trimmed.slice(dotIndex + 1);
+}
+
+function _resolveAttachmentIconName(filename, contentType) {
+    const ext = _getFileExtension(filename);
+    const mime = typeof contentType === 'string' ? contentType.toLowerCase() : '';
+    if (mime.startsWith('image/') || ['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg', 'bmp', 'heic'].includes(ext)) {
+        return 'image';
+    }
+    if (mime.startsWith('audio/') || ['mp3', 'wav', 'ogg', 'm4a', 'flac', 'aac'].includes(ext)) {
+        return 'microphone';
+    }
+    if (mime.startsWith('video/') || ['mp4', 'mov', 'avi', 'mkv', 'webm'].includes(ext)) {
+        return 'play';
+    }
+    if (['xls', 'xlsx', 'csv'].includes(ext)) {
+        return 'chart';
+    }
+    if (['zip', 'rar', '7z', 'tar', 'gz'].includes(ext)) {
+        return 'box';
+    }
+    if (mime === 'application/pdf' || ext === 'pdf') {
+        return 'doc-detail';
+    }
+    if ([
+        'doc', 'docx', 'txt', 'rtf', 'md', 'odt', 'ppt', 'pptx',
+    ].includes(ext)) {
+        return 'text-fields';
+    }
+    if ([
+        'json', 'xml', 'yaml', 'yml', 'py', 'js', 'ts', 'tsx', 'jsx', 'html', 'css', 'sql',
+    ].includes(ext)) {
+        return 'code';
+    }
+    return 'paperclip';
 }
 
 function _hasGetUserMediaApi() {
@@ -156,6 +212,11 @@ export class CRMNoteCardView extends PlatformElement {
         relationshipTypes: { attribute: false },
         mode: { type: String },
         defaultNamespace: { type: String },
+        aiAnalyzing: { type: Boolean, attribute: 'ai-analyzing' },
+        aiStatusText: { type: String, attribute: 'ai-status-text' },
+        aiProgressPct: { type: Number, attribute: 'ai-progress-pct' },
+        aiProgressStage: { type: String, attribute: 'ai-progress-stage' },
+        aiProgressStatus: { type: String, attribute: 'ai-progress-status' },
         _editName: { state: true },
         _editDescription: { state: true },
         _editDate: { state: true },
@@ -168,6 +229,11 @@ export class CRMNoteCardView extends PlatformElement {
         _mentionQuery: { state: true },
         _mentionResults: { state: true },
         _mentionLoading: { state: true },
+        _mentionHoverEntityId: { state: true },
+        _mentionHoverAnchorRect: { state: true },
+        _mentionPreviewOpen: { state: true },
+        _attachmentsPopoverOpen: { state: true },
+        _attachmentsPopoverMode: { state: true },
     };
 
     static styles = [
@@ -271,7 +337,116 @@ export class CRMNoteCardView extends PlatformElement {
                 flex-shrink: 0;
                 align-items: center;
             }
-
+            .attachments-menu {
+                position: relative;
+            }
+            .attachments-badge {
+                position: absolute;
+                right: -2px;
+                top: -2px;
+                min-width: 18px;
+                height: 18px;
+                border-radius: 999px;
+                background: var(--accent);
+                color: #fff;
+                font-size: 11px;
+                line-height: 18px;
+                text-align: center;
+                padding: 0 5px;
+                box-sizing: border-box;
+                border: 1px solid var(--crm-surface-elevated, var(--glass-solid-strong));
+                font-weight: 600;
+            }
+            .attachments-popover {
+                position: absolute;
+                top: calc(100% + 8px);
+                right: 0;
+                width: min(420px, 80vw);
+                max-height: 360px;
+                overflow: auto;
+                z-index: 40;
+                background: var(--crm-surface-elevated, var(--glass-solid-strong));
+                border: 1px solid var(--crm-stroke);
+                border-radius: var(--radius-lg);
+                box-shadow: var(--glass-shadow-medium);
+                padding: var(--space-2);
+                display: flex;
+                flex-direction: column;
+                gap: var(--space-1);
+            }
+            .attachments-popover-row {
+                display: grid;
+                grid-template-columns: auto minmax(0, 1fr) auto;
+                align-items: center;
+                gap: var(--space-2);
+                padding: 8px;
+                border-radius: var(--radius-md);
+                background: transparent;
+            }
+            .attachments-popover-row:hover {
+                background: var(--crm-note-action-bg);
+            }
+            .attachments-popover-info {
+                min-width: 0;
+            }
+            .attachments-popover-name {
+                margin: 0;
+                font-size: 14px;
+                line-height: 18px;
+                color: var(--text-primary);
+                white-space: nowrap;
+                overflow: hidden;
+                text-overflow: ellipsis;
+            }
+            .attachments-popover-meta {
+                margin: 0;
+                font-size: 12px;
+                line-height: 16px;
+                color: var(--crm-note-text-muted);
+                white-space: nowrap;
+                overflow: hidden;
+                text-overflow: ellipsis;
+            }
+            .attachments-popover-actions {
+                display: inline-flex;
+                align-items: center;
+                gap: 4px;
+            }
+            .attachment-action-btn {
+                width: 28px;
+                height: 28px;
+                display: inline-flex;
+                align-items: center;
+                justify-content: center;
+                border: none;
+                border-radius: var(--radius-full);
+                background: transparent;
+                color: var(--crm-note-text-muted);
+                cursor: pointer;
+                text-decoration: none;
+            }
+            .attachment-action-btn:hover {
+                background: var(--crm-note-action-bg-hover);
+                color: var(--text-primary);
+            }
+            .attachments-popover-empty {
+                padding: 10px 12px;
+                color: var(--crm-note-text-muted);
+                font-size: 13px;
+                line-height: 16px;
+            }
+            .visually-hidden-file-input {
+                position: absolute;
+                width: 1px;
+                height: 1px;
+                padding: 0;
+                margin: -1px;
+                overflow: hidden;
+                clip: rect(0, 0, 0, 0);
+                border: 0;
+                opacity: 0;
+                pointer-events: none;
+            }
             /* round buttons (44x44) */
             .round-btn {
                 width: 44px;
@@ -386,13 +561,17 @@ export class CRMNoteCardView extends PlatformElement {
                 padding: 2px 8px;
                 margin: 0 2px;
                 background: var(--crm-note-related-violet-bg);
-                color: var(--text-primary);
+                color: var(--accent);
                 border-radius: var(--radius-full);
                 font-size: 0.95em;
                 cursor: pointer;
-                transition: filter var(--duration-fast);
+                font-weight: 700;
+                transition: filter var(--duration-fast), transform var(--duration-fast), background var(--duration-fast);
             }
-            .mention-chip:hover { filter: brightness(0.95); }
+            .mention-chip:hover {
+                background: rgba(153, 166, 249, 0.28);
+                transform: translateY(-1px);
+            }
 
             .empty-text {
                 font-size: 16px;
@@ -458,6 +637,53 @@ export class CRMNoteCardView extends PlatformElement {
                 line-height: 20px;
                 color: var(--text-primary);
                 white-space: pre-wrap;
+            }
+            .summary-status {
+                margin: 0;
+                font-size: 14px;
+                line-height: 18px;
+                color: var(--text-secondary);
+            }
+            .summary-status.analyzing {
+                animation: summaryPulse 1.25s ease-in-out infinite;
+            }
+            .summary-refresh-icon.spinning {
+                animation: summarySpin 1s linear infinite;
+            }
+            .summary-progress {
+                margin: 0;
+                display: flex;
+                flex-direction: column;
+                gap: var(--space-1);
+            }
+            .summary-progress-head {
+                display: flex;
+                align-items: center;
+                justify-content: space-between;
+                gap: var(--space-2);
+            }
+            .summary-progress-stage {
+                color: var(--text-secondary);
+                font-size: var(--text-xs);
+            }
+            .summary-progress-pct {
+                color: var(--text-tertiary);
+                font-size: var(--text-xs);
+                font-weight: var(--font-medium);
+            }
+            .summary-progress-line {
+                width: 100%;
+                height: 6px;
+                border-radius: var(--radius-full);
+                border: 1px solid var(--glass-border-subtle);
+                background: var(--glass-solid-subtle);
+                overflow: hidden;
+            }
+            .summary-progress-line > span {
+                display: block;
+                height: 100%;
+                background: var(--accent);
+                transition: width var(--duration-fast);
             }
             .summary-tags {
                 display: flex;
@@ -632,6 +858,49 @@ export class CRMNoteCardView extends PlatformElement {
                 color: var(--crm-note-text-muted);
             }
 
+            .panel-empty {
+                font-size: 14px;
+                line-height: 18px;
+                color: var(--crm-note-text-muted);
+            }
+
+            .relationships-list {
+                display: flex;
+                flex-direction: column;
+                gap: var(--space-3);
+            }
+
+            .relationship-card {
+                background: var(--crm-note-related-violet-bg);
+            }
+
+            .relationship-icon {
+                width: 52px;
+                height: 52px;
+            }
+
+            .relationship-meta {
+                margin: 0;
+                display: inline-flex;
+                align-items: center;
+                gap: 8px;
+                flex-wrap: wrap;
+                font-size: 12px;
+                line-height: 16px;
+                color: var(--crm-note-text-muted);
+            }
+
+            .relationship-type {
+                display: inline-flex;
+                align-items: center;
+                padding: 2px 8px;
+                border-radius: var(--radius-full);
+                background: var(--crm-note-action-bg);
+                color: var(--text-primary);
+                font-size: 11px;
+                font-weight: 600;
+            }
+
             /* ================== EDIT inputs ================== */
             .edit-field {
                 display: flex;
@@ -748,52 +1017,12 @@ export class CRMNoteCardView extends PlatformElement {
             }
             .tag-input::placeholder { color: var(--crm-note-text-muted); }
 
-            .attachments-edit {
-                display: flex;
-                flex-direction: column;
-                gap: var(--space-2);
-            }
-            .attachment-edit-row {
-                display: flex;
-                align-items: center;
-                gap: var(--space-2);
-                padding: 8px 12px;
-                background: var(--crm-note-input-bg);
-                border-radius: var(--radius-md);
-                font-size: 16px;
-                line-height: 20px;
-            }
-            .attachment-edit-row .name { flex: 1; min-width: 0; }
-            .attachment-edit-row .icon-btn {
-                width: 24px;
-                height: 24px;
-                border: none;
-                background: transparent;
-                color: var(--crm-note-text-muted);
-                cursor: pointer;
-                border-radius: var(--radius-full);
-                display: inline-flex;
-                align-items: center;
-                justify-content: center;
-            }
-            .attachment-edit-row .icon-btn:hover { color: var(--text-primary); }
+            /* legacy inline attachments block is disabled: attachments live in header popover */
+            .attachments-edit,
+            .attachment-edit-row,
             .upload-btn {
-                align-self: flex-start;
-                display: inline-flex;
-                align-items: center;
-                gap: 8px;
-                padding: 8px 16px;
-                height: 44px;
-                background: var(--crm-note-action-bg);
-                border: none;
-                border-radius: var(--radius-full);
-                color: var(--text-primary);
-                font-size: 16px;
-                line-height: 20px;
-                font-family: inherit;
-                cursor: pointer;
+                display: none !important;
             }
-            .upload-btn:hover { background: var(--crm-note-action-bg-hover); }
 
             .form-error {
                 padding: 10px 16px;
@@ -837,6 +1066,16 @@ export class CRMNoteCardView extends PlatformElement {
                 color: var(--crm-note-text-muted);
                 font-size: 13px;
             }
+
+            @keyframes summarySpin {
+                from { transform: rotate(0deg); }
+                to { transform: rotate(360deg); }
+            }
+
+            @keyframes summaryPulse {
+                0%, 100% { opacity: 0.55; }
+                50% { opacity: 1; }
+            }
         `,
     ];
 
@@ -847,6 +1086,11 @@ export class CRMNoteCardView extends PlatformElement {
         this.relationshipTypes = [];
         this.mode = 'view';
         this.defaultNamespace = '';
+        this.aiAnalyzing = false;
+        this.aiStatusText = '';
+        this.aiProgressPct = 0;
+        this.aiProgressStage = '';
+        this.aiProgressStatus = '';
 
         this._editName = '';
         this._editDescription = '';
@@ -864,16 +1108,29 @@ export class CRMNoteCardView extends PlatformElement {
         this._mentionQuery = '';
         this._mentionResults = [];
         this._mentionLoading = false;
+        this._mentionHoverEntityId = '';
+        this._mentionHoverAnchorRect = null;
+        this._mentionPreviewOpen = false;
         this._mentionedEntityIds = new Set();
         this._mentionTriggerIndex = -1;
         this._mentionDebounce = null;
         this._mentionRequestId = null;
+        this._mentionPreviewCloseTimer = null;
+        this._mentionPreviewPinned = false;
+        this._attachmentsPopoverOpen = false;
+        this._attachmentsPopoverMode = '';
+        this._attachmentsPopoverCloseTimer = null;
+        NOTE_ATTACHMENT_INPUT_SEQ += 1;
+        this._attachmentInputId = `crm-note-attachment-input-${NOTE_ATTACHMENT_INPUT_SEQ}`;
 
         this._entities = this.useResource(ENTITIES_NAME);
         this._updateOp = this.useOp(ENTITY_UPDATE_OP);
         this._fileUpload = this.useOp(FILE_UPLOAD_OP);
+        this._attachmentUpload = this.useOp(ATTACHMENT_UPLOAD_OP);
+        this._attachmentDelete = this.useOp(ATTACHMENT_DELETE_OP);
         this._voice = this.useOp(VOICE_OP);
         this._entitySearch = this.useOp(ENTITY_SEARCH_OP);
+        this._uploadTargetMode = 'edit';
     }
 
     connectedCallback() {
@@ -911,12 +1168,20 @@ export class CRMNoteCardView extends PlatformElement {
         this.useEvent(this._fileUpload.op.events.SUCCEEDED, (event) => {
             const result = event && event.payload && event.payload.result;
             if (!result || typeof result.file_id !== 'string') return;
+            const uploadedSize = typeof result.file_size === 'number'
+                ? result.file_size
+                : (typeof result.size_bytes === 'number' ? result.size_bytes : 0);
+            const uploadedUrl = typeof result.url === 'string' && result.url.length > 0
+                ? result.url
+                : (typeof result.download_url === 'string' ? result.download_url : '');
             this._editAttachmentIds = [...this._editAttachmentIds, result.file_id];
             this._editAttachmentsMeta = {
                 ...this._editAttachmentsMeta,
                 [result.file_id]: {
                     name: result.original_name || result.file_id,
-                    size: result.size_bytes,
+                    size: uploadedSize,
+                    content_type: result.content_type,
+                    download_url: uploadedUrl,
                 },
             };
         });
@@ -961,6 +1226,14 @@ export class CRMNoteCardView extends PlatformElement {
         if (this._mentionDebounce !== null) {
             clearTimeout(this._mentionDebounce);
             this._mentionDebounce = null;
+        }
+        if (this._mentionPreviewCloseTimer !== null) {
+            clearTimeout(this._mentionPreviewCloseTimer);
+            this._mentionPreviewCloseTimer = null;
+        }
+        if (this._attachmentsPopoverCloseTimer !== null) {
+            clearTimeout(this._attachmentsPopoverCloseTimer);
+            this._attachmentsPopoverCloseTimer = null;
         }
         super.disconnectedCallback();
     }
@@ -1116,14 +1389,127 @@ export class CRMNoteCardView extends PlatformElement {
         this.emit('entity-open', { entityId });
     }
 
+    _openMentionPreview(chip) {
+        const entityId = chip.getAttribute('data-entity-id');
+        if (typeof entityId !== 'string' || entityId.length === 0) {
+            return;
+        }
+        if (this._mentionPreviewCloseTimer !== null) {
+            clearTimeout(this._mentionPreviewCloseTimer);
+            this._mentionPreviewCloseTimer = null;
+        }
+        const rect = chip.getBoundingClientRect();
+        this._mentionHoverEntityId = entityId;
+        this._mentionHoverAnchorRect = {
+            left: rect.left,
+            top: rect.top,
+            width: rect.width,
+            height: rect.height,
+        };
+        this._mentionPreviewOpen = true;
+    }
+
+    _closeMentionPreviewNow() {
+        if (this._mentionPreviewCloseTimer !== null) {
+            clearTimeout(this._mentionPreviewCloseTimer);
+            this._mentionPreviewCloseTimer = null;
+        }
+        this._mentionPreviewOpen = false;
+        this._mentionHoverEntityId = '';
+        this._mentionHoverAnchorRect = null;
+        this._mentionPreviewPinned = false;
+    }
+
+    _scheduleMentionPreviewClose() {
+        if (this._mentionPreviewPinned) {
+            return;
+        }
+        if (this._mentionPreviewCloseTimer !== null) {
+            clearTimeout(this._mentionPreviewCloseTimer);
+        }
+        this._mentionPreviewCloseTimer = window.setTimeout(() => {
+            this._mentionPreviewCloseTimer = null;
+            if (!this._mentionPreviewPinned) {
+                this._closeMentionPreviewNow();
+            }
+        }, 120);
+    }
+
+    _closestMentionChipFromTarget(target) {
+        if (target === null || target === undefined) {
+            return null;
+        }
+        const el = target instanceof Element
+            ? target
+            : (target instanceof Node ? target.parentElement : null);
+        if (el === null || typeof el.closest !== 'function') {
+            return null;
+        }
+        return el.closest('.mention-chip');
+    }
+
+    _onMarkdownMouseMove(event) {
+        const chip = this._closestMentionChipFromTarget(event.target);
+        if (chip === null) {
+            return;
+        }
+        this._openMentionPreview(chip);
+    }
+
+    _onMarkdownMouseLeave(event) {
+        const relatedTarget = event ? event.relatedTarget : null;
+        if (relatedTarget instanceof Node && this.renderRoot.contains(relatedTarget)) {
+            const inPreview = relatedTarget.closest && relatedTarget.closest('crm-entity-hover-preview');
+            if (inPreview) {
+                return;
+            }
+        }
+        this._scheduleMentionPreviewClose();
+    }
+
+    _onPreviewEnter() {
+        this._mentionPreviewPinned = true;
+        if (this._mentionPreviewCloseTimer !== null) {
+            clearTimeout(this._mentionPreviewCloseTimer);
+            this._mentionPreviewCloseTimer = null;
+        }
+    }
+
+    _onPreviewLeave() {
+        this._mentionPreviewPinned = false;
+        this._scheduleMentionPreviewClose();
+    }
+
+    _onPreviewOpen(event) {
+        const entityId = event.detail && typeof event.detail.entityId === 'string'
+            ? event.detail.entityId
+            : this._mentionHoverEntityId;
+        this._closeMentionPreviewNow();
+        this._emitEntityOpen(entityId);
+    }
+
     _onMarkdownClick(event) {
         const target = event.target;
-        if (target === null || typeof target.closest !== 'function') return;
-        const chip = target.closest('.mention-chip');
+        const targetElement = target instanceof Element
+            ? target
+            : (target instanceof Node ? target.parentElement : null);
+        if (targetElement === null) return;
+        const entityLink = targetElement.closest('a[href^="entity:"]');
+        if (entityLink !== null) {
+            const href = entityLink.getAttribute('href');
+            if (typeof href === 'string' && href.startsWith('entity:') && href.length > 'entity:'.length) {
+                event.preventDefault();
+                this._closeMentionPreviewNow();
+                this._emitEntityOpen(href.slice('entity:'.length));
+                return;
+            }
+        }
+        const chip = targetElement.closest('.mention-chip');
         if (chip === null) return;
         const entityId = chip.getAttribute('data-entity-id');
         if (typeof entityId !== 'string' || entityId.length === 0) return;
         event.preventDefault();
+        this._closeMentionPreviewNow();
         this._emitEntityOpen(entityId);
     }
 
@@ -1308,21 +1694,294 @@ export class CRMNoteCardView extends PlatformElement {
         this._editTags = this._editTags.filter((t) => t !== tag);
     }
 
-    _onUploadClick() {
-        const input = this.renderRoot.querySelector('input[type=file]');
-        if (input !== null) input.click();
+    _onUploadClick(mode = 'edit') {
+        if (mode !== 'view' && mode !== 'edit') {
+            throw new Error('CRMNoteCardView._onUploadClick: mode must be "view" or "edit"');
+        }
+        this._uploadTargetMode = mode;
+        const input = this.renderRoot.querySelector('[data-role="note-attachment-input"]');
+        if (!(input instanceof HTMLInputElement)) {
+            throw new Error('CRMNoteCardView._onUploadClick: attachment input not found');
+        }
+        input.click();
+    }
+
+    _onAttachmentTriggerKeydown(event) {
+        if (event.key !== 'Enter' && event.key !== ' ') {
+            return;
+        }
+        event.preventDefault();
+        this._onUploadClick('edit');
     }
     _onUploadFiles(e) {
         const fileList = e.target.files;
         if (fileList === null) return;
         const files = Array.from(fileList);
-        for (const file of files) {
-            this._fileUpload.run({ file });
+        const targetMode = this._uploadTargetMode;
+        if (targetMode === 'view') {
+            if (!this.note || typeof this.note.entity_id !== 'string' || this.note.entity_id.length === 0) {
+                throw new Error('CRMNoteCardView._onUploadFiles: note.entity_id required for view upload');
+            }
+            for (const file of files) {
+                this._attachmentUpload.run({
+                    entity_id: this.note.entity_id,
+                    file,
+                });
+            }
+        } else {
+            for (const file of files) {
+                this._fileUpload.run({ file });
+            }
         }
+        this._uploadTargetMode = 'edit';
         e.target.value = '';
     }
     _onRemoveAttachment(fileId) {
         this._editAttachmentIds = this._editAttachmentIds.filter((id) => id !== fileId);
+    }
+
+    _viewAttachments() {
+        const attachments = Array.isArray(this.card?.attachments) ? this.card.attachments : [];
+        return attachments.map((item) => {
+            const attachmentId = typeof item.document_id === 'string' ? item.document_id : '';
+            const filename = typeof item.filename === 'string' && item.filename.length > 0
+                ? item.filename
+                : attachmentId;
+            const metadata = item && typeof item.metadata === 'object' && item.metadata !== null
+                ? item.metadata
+                : {};
+            const contentType = typeof metadata.content_type === 'string' ? metadata.content_type : '';
+            const sizeBytes = typeof item.size_bytes === 'number'
+                ? item.size_bytes
+                : (typeof metadata.size_bytes === 'number'
+                    ? metadata.size_bytes
+                    : (typeof metadata.file_size === 'number' ? metadata.file_size : 0));
+            const downloadUrl = typeof item.download_url === 'string' && item.download_url.length > 0
+                ? item.download_url
+                : (typeof item.url === 'string' ? item.url : '');
+            return {
+                id: attachmentId,
+                filename,
+                sizeBytes,
+                status: typeof item.status === 'string' ? item.status : '',
+                downloadUrl,
+                contentType,
+                canDelete: attachmentId.length > 0,
+            };
+        });
+    }
+
+    _editAttachments() {
+        const viewMap = new Map();
+        for (const item of this._viewAttachments()) {
+            if (item.id.length > 0) {
+                viewMap.set(item.id, item);
+            }
+        }
+        return this._editAttachmentIds.map((fileId) => {
+            const localMeta = this._editAttachmentsMeta[fileId];
+            const cardItem = viewMap.get(fileId);
+            const filename = localMeta && typeof localMeta.name === 'string' && localMeta.name.length > 0
+                ? localMeta.name
+                : (cardItem ? cardItem.filename : fileId);
+            const localSize = localMeta && typeof localMeta.size === 'number'
+                ? localMeta.size
+                : (localMeta && typeof localMeta.file_size === 'number' ? localMeta.file_size : 0);
+            const sizeBytes = localSize > 0
+                ? localSize
+                : (cardItem ? cardItem.sizeBytes : 0);
+            const contentType = localMeta && typeof localMeta.content_type === 'string'
+                ? localMeta.content_type
+                : (cardItem ? cardItem.contentType : '');
+            const downloadUrl = localMeta && typeof localMeta.download_url === 'string'
+                ? localMeta.download_url
+                : (cardItem ? cardItem.downloadUrl : '');
+            return {
+                id: fileId,
+                filename,
+                sizeBytes,
+                status: cardItem ? cardItem.status : '',
+                downloadUrl,
+                contentType,
+                canDelete: true,
+            };
+        });
+    }
+
+    _attachmentItemsForMode(mode) {
+        if (mode === 'edit') {
+            return this._editAttachments();
+        }
+        return this._viewAttachments();
+    }
+
+    _openAttachmentsPopover(mode) {
+        this._cancelAttachmentsPopoverClose();
+        this._attachmentsPopoverMode = mode;
+        this._attachmentsPopoverOpen = true;
+    }
+
+    _closeAttachmentsPopover() {
+        this._cancelAttachmentsPopoverClose();
+        this._attachmentsPopoverOpen = false;
+        this._attachmentsPopoverMode = '';
+    }
+
+    _scheduleAttachmentsPopoverClose() {
+        this._cancelAttachmentsPopoverClose();
+        this._attachmentsPopoverCloseTimer = setTimeout(() => {
+            this._attachmentsPopoverCloseTimer = null;
+            this._closeAttachmentsPopover();
+        }, 140);
+    }
+
+    _cancelAttachmentsPopoverClose() {
+        if (this._attachmentsPopoverCloseTimer === null) {
+            return;
+        }
+        clearTimeout(this._attachmentsPopoverCloseTimer);
+        this._attachmentsPopoverCloseTimer = null;
+    }
+
+    _onAttachmentsFocusOut(event) {
+        const next = event.relatedTarget;
+        if (next instanceof Node && event.currentTarget.contains(next)) {
+            return;
+        }
+        this._closeAttachmentsPopover();
+    }
+
+    _onDeleteViewAttachment(attachmentId) {
+        if (!this.note || typeof this.note.entity_id !== 'string' || this.note.entity_id.length === 0) {
+            throw new Error('CRMNoteCardView._onDeleteViewAttachment: note entity_id required');
+        }
+        if (typeof attachmentId !== 'string' || attachmentId.length === 0) {
+            throw new Error('CRMNoteCardView._onDeleteViewAttachment: attachmentId required');
+        }
+        this._attachmentDelete.run({
+            entity_id: this.note.entity_id,
+            attachment_id: attachmentId,
+        });
+    }
+
+    _onDeleteEditAttachment(attachmentId) {
+        if (typeof attachmentId !== 'string' || attachmentId.length === 0) {
+            throw new Error('CRMNoteCardView._onDeleteEditAttachment: attachmentId required');
+        }
+        this._editAttachmentIds = this._editAttachmentIds.filter((id) => id !== attachmentId);
+    }
+
+    _renderAttachmentsHeaderButton(mode) {
+        const count = this._attachmentItemsForMode(mode).length;
+        const editMode = mode === 'edit';
+        const isOpen = this._attachmentsPopoverOpen && this._attachmentsPopoverMode === mode;
+        const buttonTitle = editMode ? this.t('note_edit.attachment_add') : this.t('note_view.action_attachments');
+        const handleClick = () => {
+            this._onUploadClick(mode);
+            if (isOpen) {
+                this._closeAttachmentsPopover();
+                return;
+            }
+            this._openAttachmentsPopover(mode);
+        };
+        return html`
+            <div
+                class="attachments-menu"
+                @mouseenter=${() => this._openAttachmentsPopover(mode)}
+                @mouseleave=${() => this._scheduleAttachmentsPopoverClose()}
+                @focusin=${() => this._openAttachmentsPopover(mode)}
+                @focusout=${this._onAttachmentsFocusOut}
+            >
+                ${editMode
+                    ? html`
+                        <label
+                            class="round-btn"
+                            title=${buttonTitle}
+                            for=${this._attachmentInputId}
+                            tabindex="0"
+                            @click=${handleClick}
+                            @keydown=${this._onAttachmentTriggerKeydown}
+                        >
+                            <platform-icon name="paperclip" size="20"></platform-icon>
+                            <span class="attachments-badge">${count}</span>
+                        </label>
+                    `
+                    : html`
+                        <button
+                            type="button"
+                            class="round-btn"
+                            title=${buttonTitle}
+                            aria-haspopup="menu"
+                            aria-expanded=${String(isOpen)}
+                            @click=${handleClick}
+                        >
+                            <platform-icon name="paperclip" size="20"></platform-icon>
+                            <span class="attachments-badge">${count}</span>
+                        </button>
+                    `}
+                ${isOpen ? this._renderAttachmentsPopover(mode) : nothing}
+            </div>
+        `;
+    }
+
+    _renderAttachmentsPopover(mode) {
+        const items = this._attachmentItemsForMode(mode);
+        return html`
+            <div
+                class="attachments-popover"
+                role="menu"
+                @mouseenter=${() => this._cancelAttachmentsPopoverClose()}
+                @mouseleave=${() => this._scheduleAttachmentsPopoverClose()}
+            >
+                ${items.length === 0
+                    ? html`<div class="attachments-popover-empty">${this.t('note_view.attachments_empty_popover')}</div>`
+                    : items.map((item) => {
+                        const iconName = _resolveAttachmentIconName(item.filename, item.contentType);
+                        const metaParts = [];
+                        const bytes = formatBytes(item.sizeBytes);
+                        if (bytes.length > 0) metaParts.push(bytes);
+                        if (item.status.length > 0) metaParts.push(item.status);
+                        const metaText = metaParts.join(' · ');
+                        return html`
+                            <div class="attachments-popover-row">
+                                <platform-icon name=${iconName} size="16"></platform-icon>
+                                <div class="attachments-popover-info">
+                                    <p class="attachments-popover-name">${item.filename}</p>
+                                    <p class="attachments-popover-meta">${metaText}</p>
+                                </div>
+                                <div class="attachments-popover-actions">
+                                    ${item.downloadUrl.length > 0 ? html`
+                                        <a
+                                            class="attachment-action-btn"
+                                            href=${item.downloadUrl}
+                                            target="_blank"
+                                            rel="noopener noreferrer"
+                                            download=${item.filename}
+                                            title=${this.t('note_view.download')}
+                                        >
+                                            <platform-icon name="import" size="14"></platform-icon>
+                                        </a>
+                                    ` : nothing}
+                                    ${item.canDelete ? html`
+                                        <button
+                                            type="button"
+                                            class="attachment-action-btn"
+                                            title=${mode === 'edit'
+                                                ? this.t('note_edit.attachment_remove')
+                                                : this.t('note_view.attachment_remove')}
+                                            @click=${() => mode === 'edit'
+                                                ? this._onDeleteEditAttachment(item.id)
+                                                : this._onDeleteViewAttachment(item.id)}
+                                        >
+                                            <platform-icon name="trash" size="14"></platform-icon>
+                                        </button>
+                                    ` : nothing}
+                                </div>
+                            </div>
+                        `;
+                    })}
+            </div>
+        `;
     }
 
     async _onVoiceToggle() {
@@ -1410,12 +2069,6 @@ export class CRMNoteCardView extends PlatformElement {
 
     _onCancelEdit() {
         this.emit('cancel');
-    }
-
-    _attachmentLabel(fileId) {
-        const meta = this._editAttachmentsMeta[fileId];
-        if (meta && typeof meta.name === 'string' && meta.name.length > 0) return meta.name;
-        return fileId;
     }
 
     _renderRelatedEntities() {
@@ -1534,31 +2187,36 @@ export class CRMNoteCardView extends PlatformElement {
             return html`<div class="panel-empty">${this.t('note_view.no_relationships')}</div>`;
         }
         return html`
-            ${relationships.map((rel) => {
-                const sourceId = rel.source_entity_id;
-                const targetId = rel.target_entity_id;
-                const isOutgoing = sourceId === noteId;
-                const otherId = isOutgoing ? targetId : sourceId;
-                const otherLabel = this._entityLabelById(otherId);
-                const arrow = isOutgoing ? '→' : '←';
-                return html`
-                    <div class="relationship-row">
-                        <p class="relationship-name">${this._relationshipTypeLabel(rel.relationship_type)}</p>
-                        <div class="relationship-line">
-                            <span>${this.t('note_view.this_note')}</span>
-                            <span class="relationship-arrow">${arrow}</span>
-                            <button
-                                type="button"
-                                class="entity-row"
-                                style="padding: 2px 6px; width: auto; background: transparent;"
-                                @click=${() => this._emitEntityOpen(otherId)}
-                            >
-                                <span class="entity-name">${otherLabel}</span>
-                            </button>
-                        </div>
-                    </div>
-                `;
-            })}
+            <div class="relationships-list">
+                ${relationships.map((rel) => {
+                    const sourceId = rel.source_entity_id;
+                    const targetId = rel.target_entity_id;
+                    const isOutgoing = sourceId === noteId;
+                    const otherId = isOutgoing ? targetId : sourceId;
+                    const otherLabel = this._entityLabelById(otherId);
+                    const direction = isOutgoing
+                        ? `${this.t('note_view.this_note')} →`
+                        : `${this.t('note_view.this_note')} ←`;
+                    return html`
+                        <button
+                            type="button"
+                            class="related-card relationship-card"
+                            @click=${() => this._emitEntityOpen(otherId)}
+                        >
+                            <span class="related-icon relationship-icon">
+                                <platform-icon name="circular-connection" size="24"></platform-icon>
+                            </span>
+                            <span class="related-body">
+                                <p class="related-name">${otherLabel}</p>
+                                <p class="relationship-meta">
+                                    <span class="relationship-type">${this._relationshipTypeLabel(rel.relationship_type)}</span>
+                                    <span>${direction}</span>
+                                </p>
+                            </span>
+                        </button>
+                    `;
+                })}
+            </div>
         `;
     }
 
@@ -1576,10 +2234,13 @@ export class CRMNoteCardView extends PlatformElement {
                 const downloadUrl = typeof att.download_url === 'string' && att.download_url.length > 0
                     ? att.download_url
                     : '';
+                const metadata = att && typeof att.metadata === 'object' && att.metadata !== null ? att.metadata : {};
+                const contentType = typeof metadata.content_type === 'string' ? metadata.content_type : '';
+                const iconName = _resolveAttachmentIconName(filename, contentType);
                 return html`
                     <div class="attachment-row">
                         <span class="attachment-icon">
-                            <platform-icon name="folder" size="16"></platform-icon>
+                            <platform-icon name=${iconName} size="16"></platform-icon>
                         </span>
                         <span class="attachment-info">
                             <p class="attachment-name">${filename}</p>
@@ -1595,7 +2256,7 @@ export class CRMNoteCardView extends PlatformElement {
                                 rel="noopener noreferrer"
                                 download=${filename}
                             >
-                                <platform-icon name="download" size="14"></platform-icon>
+                                <platform-icon name="import" size="14"></platform-icon>
                                 ${this.t('note_view.download')}
                             </a>
                         ` : nothing}
@@ -1639,6 +2300,7 @@ export class CRMNoteCardView extends PlatformElement {
                                 : ''}
                         </div>
                         <div class="header-actions">
+                            ${this._renderAttachmentsHeaderButton('view')}
                             <button
                                 type="button"
                                 class="round-btn"
@@ -1667,7 +2329,16 @@ export class CRMNoteCardView extends PlatformElement {
                         </div>
                     </header>
                     ${description.length > 0
-                        ? html`<article class="markdown" @click=${this._onMarkdownClick}>${unsafeHTML(renderMarkdownToHtml(description))}</article>`
+                        ? html`
+                            <article
+                                class="markdown"
+                                @click=${this._onMarkdownClick}
+                                @mousemove=${this._onMarkdownMouseMove}
+                                @mouseleave=${this._onMarkdownMouseLeave}
+                            >
+                                ${unsafeHTML(renderMarkdownToHtml(description))}
+                            </article>
+                        `
                         : html`<p class="empty-text">${this.t('note_view.no_description')}</p>`}
                 </section>
 
@@ -1675,36 +2346,73 @@ export class CRMNoteCardView extends PlatformElement {
                     ${this._renderSummaryCard(summaryText, summaryTime, summaryEntities)}
                     ${this._renderTasksCard(tasks)}
                     ${this._renderRelatedSection()}
+                    ${this._renderRelationshipsSection()}
                     ${this._renderAttachmentsSection()}
                 </aside>
             </div>
+            ${this._renderAttachmentInput()}
+            <crm-entity-hover-preview
+                ?preview-open=${this._mentionPreviewOpen}
+                .entityId=${this._mentionHoverEntityId}
+                .anchorRect=${this._mentionHoverAnchorRect}
+                @preview-enter=${this._onPreviewEnter}
+                @preview-leave=${this._onPreviewLeave}
+                @open=${this._onPreviewOpen}
+            ></crm-entity-hover-preview>
         `;
     }
 
     _renderSummaryCard(summaryText, summaryTime, summaryEntities) {
+        const stage = typeof this.aiProgressStage === 'string' ? this.aiProgressStage : '';
+        const status = typeof this.aiProgressStatus === 'string' ? this.aiProgressStatus : '';
+        const progressPctRaw = typeof this.aiProgressPct === 'number' ? this.aiProgressPct : 0;
+        const progressPct = Math.max(0, Math.min(100, progressPctRaw));
+        const stageOrStatus = stage.length > 0
+            ? stage
+            : (status.length > 0 ? status : this.t('note_view.summary_progress_stage_fallback'));
         return html`
             <section class="card summary-card">
                 <div class="card-header">
                     <h3 class="card-title">
-                        <platform-icon name="ai" size="20"></platform-icon>
+                        <platform-icon name="ai" size="20" colored></platform-icon>
                         ${this.t('note_view.summary_title')}
                     </h3>
                     <button
                         type="button"
                         class="round-btn"
                         title=${this.t('note_view.summary_refresh')}
+                        ?disabled=${this.aiAnalyzing}
                         @click=${() => this.emit('refresh-summary')}
                         style="width: 36px; height: 36px;"
                     >
-                        <platform-icon name="refresh" size="16"></platform-icon>
+                        <platform-icon
+                            class=${`summary-refresh-icon ${this.aiAnalyzing ? 'spinning' : ''}`}
+                            name="refresh"
+                            size="16"
+                        ></platform-icon>
                     </button>
                 </div>
                 ${summaryTime
                     ? html`<p class="summary-meta">${this.t('note_view.summary_generated_at', { time: summaryTime })}</p>`
                     : ''}
-                ${summaryText.length > 0
+                ${this.aiAnalyzing
+                    ? html`<p class="summary-status analyzing">${this.aiStatusText}</p>`
+                    : summaryText.length > 0
                     ? html`<p class="summary-text">${summaryText}</p>`
                     : html`<p class="summary-text" style="color: var(--crm-note-text-muted);">${this.t('note_view.no_summary')}</p>`}
+                ${this.aiAnalyzing
+                    ? html`
+                        <div class="summary-progress">
+                            <div class="summary-progress-head">
+                                <span class="summary-progress-stage">${stageOrStatus}</span>
+                                <span class="summary-progress-pct">${progressPct}%</span>
+                            </div>
+                            <div class="summary-progress-line">
+                                <span style="width:${progressPct}%;"></span>
+                            </div>
+                        </div>
+                    `
+                    : nothing}
                 ${summaryEntities.length > 0 ? html`
                     <div class="summary-tags">
                         ${summaryEntities.map((tag, idx) => {
@@ -1781,6 +2489,15 @@ export class CRMNoteCardView extends PlatformElement {
         `;
     }
 
+    _renderRelationshipsSection() {
+        return html`
+            <section>
+                <h3 class="card-title" style="margin-bottom: var(--space-4);">${this.t('note_view.relationships')}</h3>
+                ${this._renderRelationships()}
+            </section>
+        `;
+    }
+
     _renderAttachmentsSection() {
         const attachments = Array.isArray(this.card?.attachments) ? this.card.attachments : [];
         if (attachments.length === 0) return '';
@@ -1789,6 +2506,19 @@ export class CRMNoteCardView extends PlatformElement {
                 <h3 class="card-title" style="margin-bottom: var(--space-4);">${this.t('note_view.attachments')}</h3>
                 ${this._renderAttachments()}
             </section>
+        `;
+    }
+
+    _renderAttachmentInput() {
+        return html`
+            <input
+                id=${this._attachmentInputId}
+                type="file"
+                multiple
+                class="visually-hidden-file-input"
+                data-role="note-attachment-input"
+                @change=${this._onUploadFiles}
+            />
         `;
     }
 
@@ -1811,6 +2541,7 @@ export class CRMNoteCardView extends PlatformElement {
                             />
                         </div>
                         <div class="header-actions">
+                            ${this._renderAttachmentsHeaderButton('edit')}
                             <button
                                 type="button"
                                 class="round-btn"
@@ -1897,37 +2628,7 @@ export class CRMNoteCardView extends PlatformElement {
                         </div>
                     </div>
 
-                    <div class="edit-field">
-                        <label class="edit-label">${this.t('note_edit.field_attachments')}</label>
-                        <div class="attachments-edit">
-                            ${this._editAttachmentIds.map((fileId) => html`
-                                <div class="attachment-edit-row">
-                                    <platform-icon name="paperclip" size="14"></platform-icon>
-                                    <span class="name">${this._attachmentLabel(fileId)}</span>
-                                    <button
-                                        type="button"
-                                        class="icon-btn"
-                                        title=${this.t('note_edit.attachment_remove')}
-                                        @click=${() => this._onRemoveAttachment(fileId)}
-                                    >
-                                        <platform-icon name="close" size="12"></platform-icon>
-                                    </button>
-                                </div>
-                            `)}
-                            <button type="button" class="upload-btn" @click=${() => this._onUploadClick()}>
-                                <platform-icon name="cloud" size="14"></platform-icon>
-                                ${uploading
-                                    ? this.t('note_edit.attachment_uploading')
-                                    : this.t('note_edit.attachment_add')}
-                            </button>
-                            <input
-                                type="file"
-                                multiple
-                                style="display: none;"
-                                @change=${this._onUploadFiles}
-                            />
-                        </div>
-                    </div>
+                    ${this._renderAttachmentInput()}
 
                     ${this._formError.length > 0
                         ? html`<div class="form-error">${this._formError}</div>`

@@ -7,6 +7,7 @@ import { PlatformFormModal } from '@platform/lib/components/glass-form-modal.js'
 import { registerModalKind } from '@platform/lib/utils/modal-registry.js';
 import '@platform/lib/components/platform-button.js';
 import '../components/editors/flows-code-editor.js';
+import { asString } from '../_helpers/flows-resolvers.js';
 
 const TOOL_ID_PATTERN = /^[a-z][a-z0-9_]*$/;
 
@@ -68,7 +69,7 @@ export class FlowsToolCreateModal extends PlatformFormModal {
                 <flows-code-editor
                     language="python"
                     .value=${this._code}
-                    @change=${(e) => { this._code = e.detail?.value || ''; this.isDirty = true; }}
+                    @change=${(e) => { this._code = asString(e.detail?.value); this.isDirty = true; }}
                 ></flows-code-editor>
             </div>
             <div class="field">
@@ -76,7 +77,7 @@ export class FlowsToolCreateModal extends PlatformFormModal {
                 <flows-code-editor
                     language="json"
                     .value=${this._schemaJson}
-                    @change=${(e) => { this._schemaJson = e.detail?.value || '{}'; this.isDirty = true; }}
+                    @change=${(e) => { const v = asString(e.detail?.value); this._schemaJson = v.length > 0 ? v : '{}'; this.isDirty = true; }}
                 ></flows-code-editor>
             </div>
         `;
@@ -93,8 +94,17 @@ export class FlowsToolCreateModal extends PlatformFormModal {
     }
 
     _save() {
-        let parameters_schema = {};
-        try { parameters_schema = JSON.parse(this._schemaJson); } catch { /* ignore */ }
+        let parameters_schema;
+        try {
+            parameters_schema = JSON.parse(this._schemaJson);
+        } catch (err) {
+            this.toast('flows:tool_create_modal.toast_schema_invalid', { type: 'error' });
+            return;
+        }
+        if (!parameters_schema || typeof parameters_schema !== 'object' || Array.isArray(parameters_schema)) {
+            this.toast('flows:tool_create_modal.toast_schema_invalid', { type: 'error' });
+            return;
+        }
         this._tools.create({
             tool_id: this._toolId.trim(),
             name: this._name.trim(),

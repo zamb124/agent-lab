@@ -32,6 +32,18 @@ import { getNodeTypeMeta, getCategoryToken } from '../../constants/node-icons.js
 import { renderEdgeLabel } from './flows-edge-label.js';
 import './flows-canvas-context-menu.js';
 import './flows-sticky-note.js';
+import {
+    asNumber,
+    asString,
+    asArray,
+    asObject,
+    isPlainObject,
+    getSkillsData,
+    getSkillsNodes,
+    getSkillsEdges,
+    getEdgeEndpoints,
+    colorOrDefault,
+} from '../../_helpers/flows-resolvers.js';
 
 const NODE_W = 200;
 const NODE_H = 72;
@@ -41,6 +53,7 @@ const SNAP_THRESHOLD = 4;
 const GRID_STEP = 24;
 const STICKY_W = 200;
 const STICKY_H = 140;
+const STICKY_COLLAPSED_H = 32;
 
 function genId(prefix) {
     return `${prefix}_${Math.random().toString(36).slice(2, 9)}`;
@@ -74,10 +87,9 @@ export class FlowsFlowCanvas extends PlatformElement {
             svg.canvas-host {
                 width: 100%; height: 100%;
                 user-select: none;
-                cursor: default;
-                background: var(--bg-secondary, var(--bg-primary));
+                cursor: grab;
+                background: var(--bg-elevated);
             }
-            svg.canvas-host[data-tool="pan"] { cursor: grab; }
             svg.canvas-host[data-pan-active] { cursor: grabbing; }
 
             .grid-pattern path {
@@ -87,7 +99,11 @@ export class FlowsFlowCanvas extends PlatformElement {
 
             /* Node */
             g.node { transition: opacity 150ms; }
-            g.node[data-inherited] { opacity: 0.7; }
+            g.node[data-inherited] { opacity: 0.85; }
+            g.node[data-inherited] .node-card {
+                stroke: var(--border-default, var(--border-subtle));
+                stroke-dasharray: 5 4;
+            }
             g.node .node-card {
                 fill: var(--glass-solid-strong);
                 stroke: var(--border-subtle);
@@ -162,9 +178,6 @@ export class FlowsFlowCanvas extends PlatformElement {
             }
 
             /* Badges */
-            .badge-entry {
-                fill: var(--accent);
-            }
             .badge-bp-circle {
                 fill: var(--warning);
                 stroke: var(--bg-primary);
@@ -172,6 +185,25 @@ export class FlowsFlowCanvas extends PlatformElement {
             }
             .badge-inherited {
                 fill: var(--text-tertiary);
+            }
+
+            /* Fan-in badge on input port (>=2 incoming edges) */
+            .badge-fanin-bg {
+                fill: var(--accent);
+                stroke: var(--bg-primary);
+                stroke-width: 2;
+                cursor: pointer;
+                transition: filter 120ms;
+            }
+            .badge-fanin-bg[data-policy="all"] {
+                fill: var(--accent-hover);
+            }
+            .badge-fanin-bg:hover {
+                filter: drop-shadow(0 2px 6px rgba(0, 0, 0, 0.25));
+            }
+            .badge-fanin-icon {
+                fill: var(--bg-primary);
+                pointer-events: none;
             }
 
             /* Ports */
@@ -191,8 +223,19 @@ export class FlowsFlowCanvas extends PlatformElement {
                 fill: none;
                 stroke: var(--text-tertiary);
                 stroke-width: 2;
-                cursor: pointer;
+                pointer-events: none;
                 transition: stroke 0.12s, stroke-width 0.12s;
+            }
+            .edge-hit {
+                fill: none;
+                stroke: transparent;
+                stroke-width: 18;
+                cursor: pointer;
+                pointer-events: stroke;
+            }
+            .edge-group:hover .edge {
+                stroke: var(--accent);
+                stroke-width: 3;
             }
             .edge:hover, .edge[data-hover] {
                 stroke: var(--accent);
@@ -202,15 +245,32 @@ export class FlowsFlowCanvas extends PlatformElement {
                 stroke: var(--accent);
                 stroke-width: 3;
             }
-            .edge-end-marker {
-                fill: var(--text-tertiary);
+            .edge.inherited {
+                stroke-dasharray: 6 4;
                 opacity: 0.6;
             }
-            .edge-end-text {
-                font-size: 10px;
-                font-family: var(--font-mono);
+            .edge-end-marker {
                 fill: var(--text-tertiary);
+                opacity: 0.7;
+            }
+            .edge-end-text {
+                font-size: 12px;
+                font-weight: 700;
+                font-family: var(--font-mono);
+                fill: var(--bg-primary);
                 pointer-events: none;
+            }
+            .edge-start-marker {
+                fill: var(--accent);
+                opacity: 0.95;
+            }
+            .edge-start-text {
+                font-size: 10px;
+                font-weight: 700;
+                font-family: var(--font-mono);
+                fill: var(--bg-primary);
+                pointer-events: none;
+                letter-spacing: -0.3px;
             }
             .edge-temp {
                 fill: none;
@@ -254,6 +314,27 @@ export class FlowsFlowCanvas extends PlatformElement {
 
             /* Sticky note layer */
             .sticky-host { width: 100%; height: 100%; }
+
+            /* Sticky → node attach line */
+            .sticky-attach-line {
+                fill: none;
+                stroke: var(--accent-secondary);
+                stroke-width: 1.5;
+                stroke-dasharray: 4 3;
+                opacity: 0.65;
+                pointer-events: none;
+            }
+
+            /* Link mode: highlight all nodes as clickable */
+            svg.canvas-host[data-link-mode] g.node .node-card {
+                stroke: var(--accent);
+                stroke-dasharray: 4 3;
+            }
+            svg.canvas-host[data-link-mode] g.node:hover .node-card {
+                stroke: var(--accent-hover);
+                filter: drop-shadow(0 0 12px var(--accent));
+            }
+            svg.canvas-host[data-link-mode] { cursor: crosshair; }
         `,
     ];
 
@@ -273,6 +354,9 @@ export class FlowsFlowCanvas extends PlatformElement {
         this._onDocKeyDown = this._onDocKeyDown.bind(this);
         this._onDocKeyUp = this._onDocKeyUp.bind(this);
         this._stickyResize = null;
+        this._stickyLinkMode = null;
+        this._pointerDownAt = null;
+        this._pointerMoved = false;
     }
 
     connectedCallback() {
@@ -287,15 +371,19 @@ export class FlowsFlowCanvas extends PlatformElement {
         super.disconnectedCallback();
     }
 
-    _state() { return this._editor.state || {}; }
-    _skillsData() { return this._state().skillsData || { nodes: {}, edges: [] }; }
-    _nodes() { return this._skillsData().nodes || {}; }
-    _edges() { return Array.isArray(this._skillsData().edges) ? this._skillsData().edges : []; }
-    _viewBox() { return this._state().viewBox || { x: 0, y: 0, w: 1600, h: 1000 }; }
+    _state() { return asObject(this._editor.state); }
+    _skillsData() { return getSkillsData(this._state()); }
+    _nodes() { return getSkillsNodes(this._state()); }
+    _edges() { return getSkillsEdges(this._state()); }
+    _viewBox() {
+        const vb = this._state().viewBox;
+        return isPlainObject(vb) ? vb : { x: 0, y: 0, w: 1600, h: 1000 };
+    }
 
     _portCoords(node, side) {
-        const x = side === 'in' ? Number(node.pos_x) || 0 : (Number(node.pos_x) || 0) + NODE_W;
-        const y = (Number(node.pos_y) || 0) + NODE_H / 2;
+        const px = asNumber(node.pos_x);
+        const x = side === 'in' ? px : px + NODE_W;
+        const y = asNumber(node.pos_y) + NODE_H / 2;
         return { x, y };
     }
 
@@ -312,8 +400,14 @@ export class FlowsFlowCanvas extends PlatformElement {
 
     /* ===== Document hotkeys ===== */
     _onDocKeyDown(e) {
-        const tag = (e.target && e.target.tagName) || '';
-        const isEditable = tag === 'INPUT' || tag === 'TEXTAREA' || (e.target && e.target.isContentEditable);
+        const path = typeof e.composedPath === 'function' ? e.composedPath() : [];
+        const isEditable = path.some((el) => {
+            if (!(el instanceof HTMLElement)) return false;
+            const tag = el.tagName;
+            if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return true;
+            if (el.isContentEditable) return true;
+            return false;
+        });
         if (isEditable) return;
         if (e.code === 'Space') {
             this._spacePressed = true;
@@ -321,6 +415,8 @@ export class FlowsFlowCanvas extends PlatformElement {
         }
         const cmd = e.metaKey || e.ctrlKey;
         if ((e.key === 'Delete' || e.key === 'Backspace')) {
+            const hasSelection = Boolean(this._state().selectedNodeId) || asArray(this._state().multiSelection).length > 0;
+            if (!hasSelection) return;
             e.preventDefault();
             this._deleteSelection();
             return;
@@ -355,6 +451,12 @@ export class FlowsFlowCanvas extends PlatformElement {
         }
         if (e.key === 'Escape') {
             e.preventDefault();
+            if (this._stickyLinkMode) {
+                this._stickyLinkMode = null;
+                this.toast('flows:canvas.sticky_note.link_mode_cancelled', { type: 'info' });
+                this.requestUpdate();
+                return;
+            }
             this._editor.setMultiSelection({ nodeIds: [] });
             this._editor.closePanel({});
             return;
@@ -376,19 +478,27 @@ export class FlowsFlowCanvas extends PlatformElement {
 
     /* ===== Hotkey actions ===== */
     _deleteSelection() {
-        const ids = this._state().multiSelection || [];
+        const ids = asArray(this._state().multiSelection);
         const single = this._state().selectedNodeId;
         const targetIds = ids.length > 0 ? ids : (single ? [single] : []);
         if (targetIds.length === 0) return;
         if (!this.flowId) return;
-        void this._bulkDelete.run({ flow_id: this.flowId, node_ids: targetIds });
+        const inheritedIds = asArray(this._state().inheritedNodeIds);
+        const deletableIds = targetIds.filter((id) => !inheritedIds.includes(id));
+        if (deletableIds.length === 0) {
+            this.toast('flows:toast.cant_delete_inherited', { type: 'warning' });
+            return;
+        }
+        if (deletableIds.length < targetIds.length) {
+            this.toast('flows:toast.cant_delete_inherited', { type: 'warning' });
+        }
+        void this._bulkDelete.run({ flow_id: this.flowId, node_ids: deletableIds });
         const data = this._skillsData();
-        const newNodes = { ...(data.nodes || {}) };
-        for (const id of targetIds) delete newNodes[id];
-        const newEdges = (data.edges || []).filter((e) => {
-            const from = e.from_node || e.from;
-            const to = e.to_node || e.to;
-            return !targetIds.includes(from) && !targetIds.includes(to);
+        const newNodes = { ...asObject(data.nodes) };
+        for (const id of deletableIds) delete newNodes[id];
+        const newEdges = asArray(data.edges).filter((edge) => {
+            const { from, to } = getEdgeEndpoints(edge);
+            return !deletableIds.includes(from) && !deletableIds.includes(to);
         });
         const next = { ...data, nodes: newNodes, edges: newEdges };
         this._editor.updateSkillsData({ data: next });
@@ -404,12 +514,12 @@ export class FlowsFlowCanvas extends PlatformElement {
     }
 
     _duplicateSelection() {
-        const ids = this._state().multiSelection || [];
+        const ids = asArray(this._state().multiSelection);
         const single = this._state().selectedNodeId;
         const targetIds = ids.length > 0 ? ids : (single ? [single] : []);
         if (targetIds.length === 0) return;
         const data = this._skillsData();
-        const nodes = { ...(data.nodes || {}) };
+        const nodes = { ...asObject(data.nodes) };
         const newIds = [];
         for (const id of targetIds) {
             const orig = nodes[id];
@@ -417,8 +527,8 @@ export class FlowsFlowCanvas extends PlatformElement {
             const copyId = genId('n');
             nodes[copyId] = {
                 ...orig,
-                pos_x: (Number(orig.pos_x) || 0) + 30,
-                pos_y: (Number(orig.pos_y) || 0) + 30,
+                pos_x: asNumber(orig.pos_x) + 30,
+                pos_y: asNumber(orig.pos_y) + 30,
             };
             newIds.push(copyId);
         }
@@ -430,17 +540,21 @@ export class FlowsFlowCanvas extends PlatformElement {
     }
 
     _moveSelectionByArrow(key) {
-        const ids = this._state().multiSelection || [];
+        const ids = asArray(this._state().multiSelection);
         const single = this._state().selectedNodeId;
         const targetIds = ids.length > 0 ? ids : (single ? [single] : []);
         if (targetIds.length === 0) return;
         const dx = key === 'ArrowLeft' ? -10 : key === 'ArrowRight' ? 10 : 0;
         const dy = key === 'ArrowUp' ? -10 : key === 'ArrowDown' ? 10 : 0;
         const data = this._skillsData();
-        const nodes = { ...(data.nodes || {}) };
+        const nodes = { ...asObject(data.nodes) };
         for (const id of targetIds) {
             if (!nodes[id]) continue;
-            nodes[id] = { ...nodes[id], pos_x: (Number(nodes[id].pos_x) || 0) + dx, pos_y: (Number(nodes[id].pos_y) || 0) + dy };
+            nodes[id] = {
+                ...nodes[id],
+                pos_x: asNumber(nodes[id].pos_x) + dx,
+                pos_y: asNumber(nodes[id].pos_y) + dy,
+            };
         }
         const next = { ...data, nodes };
         this._editor.updateSkillsData({ data: next });
@@ -458,7 +572,7 @@ export class FlowsFlowCanvas extends PlatformElement {
             color_token: 'warning_bg',
         };
         this._editor.addStickyNote({ note });
-        this._persistStickyNotes([...(this._state().stickyNotes || []), note]);
+        this._persistStickyNotes([...asArray(this._state().stickyNotes), note]);
     }
 
     _persistStickyNotes(notes) {
@@ -481,24 +595,25 @@ export class FlowsFlowCanvas extends PlatformElement {
 
     /* ===== Pointer events ===== */
     _onPointerDownNode(e, nodeId) {
+        this._pointerDownAt = { x: e.clientX, y: e.clientY, button: e.button };
+        this._pointerMoved = false;
         if (e.button !== 0) return;
         e.stopPropagation();
-        const isMulti = this._state().multiSelection.includes(nodeId);
-        if (e.shiftKey) {
-            const ids = this._state().multiSelection;
-            const next = ids.includes(nodeId) ? ids.filter((x) => x !== nodeId) : [...ids, nodeId];
-            this._editor.setMultiSelection({ nodeIds: next });
-        } else if (!isMulti) {
-            this._editor.selectNode({ nodeId });
+        if (this._stickyLinkMode) {
+            const linkNoteId = this._stickyLinkMode.noteId;
+            this._attachStickyToNode(linkNoteId, nodeId);
+            return;
         }
         const node = this._nodes()[nodeId];
         if (!node) return;
         const nodes = this._nodes();
-        const draggedIds = this._state().multiSelection.length > 0 ? this._state().multiSelection : [nodeId];
+        const currentMulti = asArray(this._state().multiSelection);
+        const isInMulti = currentMulti.includes(nodeId);
+        const draggedIds = isInMulti && currentMulti.length > 0 ? currentMulti : [nodeId];
         const offsets = {};
         for (const id of draggedIds) {
             if (!nodes[id]) continue;
-            offsets[id] = { x: Number(nodes[id].pos_x) || 0, y: Number(nodes[id].pos_y) || 0 };
+            offsets[id] = { x: asNumber(nodes[id].pos_x), y: asNumber(nodes[id].pos_y) };
         }
         this._drag = {
             type: 'node',
@@ -506,11 +621,14 @@ export class FlowsFlowCanvas extends PlatformElement {
             ids: draggedIds,
             offsets,
             startX: e.clientX, startY: e.clientY,
+            shiftKey: e.shiftKey,
         };
         this.renderRoot.querySelector('svg.canvas-host').setPointerCapture(e.pointerId);
     }
 
     _onPointerDownPort(e, nodeId, side) {
+        this._pointerDownAt = { x: e.clientX, y: e.clientY, button: e.button };
+        this._pointerMoved = false;
         if (e.button !== 0 || side !== 'out') return;
         e.stopPropagation();
         const node = this._nodes()[nodeId];
@@ -521,26 +639,28 @@ export class FlowsFlowCanvas extends PlatformElement {
     }
 
     _onPointerDownBackground(e) {
-        if (e.button === 1 || (e.button === 0 && (this._spacePressed || this._state().activeTool === 'pan'))) {
-            e.preventDefault();
-            const vb = this._viewBox();
-            this._pan = { startClientX: e.clientX, startClientY: e.clientY, origVB: { ...vb } };
-            this.renderRoot.querySelector('svg.canvas-host').setPointerCapture(e.pointerId);
-            return;
-        }
+        this._pointerDownAt = { x: e.clientX, y: e.clientY, button: e.button };
+        this._pointerMoved = false;
         if (e.button === 0 && e.shiftKey) {
             const local = this._localPoint(e.clientX, e.clientY);
             this._selectionRect = { x0: local.x, y0: local.y, x1: local.x, y1: local.y };
             this.renderRoot.querySelector('svg.canvas-host').setPointerCapture(e.pointerId);
             return;
         }
-        if (e.button === 0) {
-            this._editor.setMultiSelection({ nodeIds: [] });
-            this._editor.closePanel({});
+        if (e.button === 0 || e.button === 1) {
+            e.preventDefault();
+            const vb = this._viewBox();
+            this._pan = { startClientX: e.clientX, startClientY: e.clientY, origVB: { ...vb } };
+            this.renderRoot.querySelector('svg.canvas-host').setPointerCapture(e.pointerId);
         }
     }
 
     _onPointerMove(e) {
+        if (this._pointerDownAt && !this._pointerMoved) {
+            const dx = e.clientX - this._pointerDownAt.x;
+            const dy = e.clientY - this._pointerDownAt.y;
+            if (dx * dx + dy * dy > 16) this._pointerMoved = true;
+        }
         if (this._pan) {
             const vb = this._pan.origVB;
             const svgEl = this.renderRoot.querySelector('svg.canvas-host');
@@ -558,7 +678,7 @@ export class FlowsFlowCanvas extends PlatformElement {
             const dx = local.x - startLocal.x;
             const dy = local.y - startLocal.y;
             const data = this._skillsData();
-            const nodes = { ...(data.nodes || {}) };
+            const nodes = { ...asObject(data.nodes) };
             const guides = [];
             for (const id of this._drag.ids) {
                 const orig = this._drag.offsets[id];
@@ -576,6 +696,19 @@ export class FlowsFlowCanvas extends PlatformElement {
             this._editor.setSmartGuides({ guides });
             return;
         }
+        if (this._drag?.type === 'sticky') {
+            const local = this._localPoint(e.clientX, e.clientY);
+            const startLocal = this._localPoint(this._drag.startX, this._drag.startY);
+            const dx = local.x - startLocal.x;
+            const dy = local.y - startLocal.y;
+            const next = asArray(this._state().stickyNotes).map((n) => n.id === this._drag.noteId
+                ? { ...n, x: this._drag.origX + dx, y: this._drag.origY + dy }
+                : n);
+            const moved = next.find((n) => n.id === this._drag.noteId);
+            if (moved) this._editor.updateStickyNote({ note: moved });
+            this._drag.lastNotes = next;
+            return;
+        }
         if (this._connection) {
             const local = this._localPoint(e.clientX, e.clientY);
             this._connection = { ...this._connection, x2: local.x, y2: local.y };
@@ -591,7 +724,7 @@ export class FlowsFlowCanvas extends PlatformElement {
             const startLocal = this._localPoint(this._stickyResize.startClientX, this._stickyResize.startClientY);
             const dx = local.x - startLocal.x;
             const dy = local.y - startLocal.y;
-            const notes = (this._state().stickyNotes || []).map((n) => n.id === this._stickyResize.noteId
+            const notes = asArray(this._state().stickyNotes).map((n) => n.id === this._stickyResize.noteId
                 ? { ...n, width: Math.max(80, this._stickyResize.origW + dx), height: Math.max(60, this._stickyResize.origH + dy) }
                 : n);
             this._editor.updateStickyNote({ note: notes.find((n) => n.id === this._stickyResize.noteId) });
@@ -601,14 +734,45 @@ export class FlowsFlowCanvas extends PlatformElement {
 
     _onPointerUp(e) {
         if (this._pan) {
+            const wasClick = !this._pointerMoved && this._pan.origVB && this._pointerDownAt?.button === 0;
             this._pan = null;
+            if (wasClick) {
+                this._editor.setMultiSelection({ nodeIds: [] });
+                this._editor.closePanel({});
+            }
+            this._pointerDownAt = null;
+            return;
+        }
+        if (this._drag?.type === 'sticky') {
+            const drag = this._drag;
+            this._drag = null;
+            if (this._pointerMoved) {
+                const notes = Array.isArray(drag.lastNotes) ? drag.lastNotes : asArray(this._state().stickyNotes);
+                this._persistStickyNotes(notes);
+            }
+            this._pointerDownAt = null;
             return;
         }
         if (this._drag?.type === 'node') {
-            this._editor.pushHistory({ snapshot: { ...this._skillsData() } });
-            this._editor.setDirty({ dirty: true });
-            this._editor.setSmartGuides({ guides: [] });
+            const drag = this._drag;
             this._drag = null;
+            this._editor.setSmartGuides({ guides: [] });
+            if (this._pointerMoved) {
+                this._editor.pushHistory({ snapshot: { ...this._skillsData() } });
+                this._editor.setDirty({ dirty: true });
+            } else {
+                const nodeId = drag.primaryId;
+                const currentMulti = asArray(this._state().multiSelection);
+                if (drag.shiftKey) {
+                    const next = currentMulti.includes(nodeId)
+                        ? currentMulti.filter((x) => x !== nodeId)
+                        : [...currentMulti, nodeId];
+                    this._editor.setMultiSelection({ nodeIds: next });
+                } else {
+                    this._editor.selectNode({ nodeId });
+                }
+            }
+            this._pointerDownAt = null;
             return;
         }
         if (this._connection) {
@@ -617,13 +781,14 @@ export class FlowsFlowCanvas extends PlatformElement {
             const targetSide = target?.dataset?.portSide;
             if (targetNodeId && targetSide === 'in' && targetNodeId !== this._connection.fromNode) {
                 const data = this._skillsData();
-                const edges = [...(data.edges || []), { from_node: this._connection.fromNode, to_node: targetNodeId }];
+                const edges = [...asArray(data.edges), { from_node: this._connection.fromNode, to_node: targetNodeId }];
                 const next = { ...data, edges };
                 this._editor.updateSkillsData({ data: next });
                 this._editor.pushHistory({ snapshot: next });
                 this._editor.setDirty({ dirty: true });
             }
             this._connection = null;
+            this._pointerDownAt = null;
             return;
         }
         if (this._selectionRect) {
@@ -635,21 +800,25 @@ export class FlowsFlowCanvas extends PlatformElement {
             const ids = [];
             const nodes = this._nodes();
             for (const [id, node] of Object.entries(nodes)) {
-                const nx = Number(node.pos_x) || 0;
-                const ny = Number(node.pos_y) || 0;
+                const nx = asNumber(node.pos_x);
+                const ny = asNumber(node.pos_y);
                 if (nx + NODE_W >= minX && nx <= maxX && ny + NODE_H >= minY && ny <= maxY) {
                     ids.push(id);
                 }
             }
             this._editor.setMultiSelection({ nodeIds: ids });
             this._selectionRect = null;
+            this._pointerDownAt = null;
             return;
         }
         if (this._stickyResize) {
-            const notes = this._stickyResize.lastNotes || this._state().stickyNotes;
+            const notes = Array.isArray(this._stickyResize.lastNotes)
+                ? this._stickyResize.lastNotes
+                : asArray(this._state().stickyNotes);
             this._persistStickyNotes(notes);
             this._stickyResize = null;
         }
+        this._pointerDownAt = null;
     }
 
     /* ===== Smart guides snap ===== */
@@ -663,8 +832,8 @@ export class FlowsFlowCanvas extends PlatformElement {
         const cy = y + NODE_H / 2;
         for (const [id, node] of Object.entries(nodes)) {
             if (id === draggedId) continue;
-            const nx = Number(node.pos_x) || 0;
-            const ny = Number(node.pos_y) || 0;
+            const nx = asNumber(node.pos_x);
+            const ny = asNumber(node.pos_y);
             const ncx = nx + NODE_W / 2;
             const ncy = ny + NODE_H / 2;
             const nright = nx + NODE_W;
@@ -683,11 +852,13 @@ export class FlowsFlowCanvas extends PlatformElement {
     _onContextMenu(e, target, targetId) {
         e.preventDefault();
         e.stopPropagation();
-        this._editor.openContextMenu({ menu: { x: e.clientX, y: e.clientY, target, targetId: targetId || '' } });
+        if (this._drag || this._connection || this._pan || this._selectionRect || this._stickyResize) return;
+        if (this._pointerMoved) return;
+        this._editor.openContextMenu({ menu: { x: e.clientX, y: e.clientY, target, targetId: asString(targetId) } });
     }
 
     _onContextMenuAction(e) {
-        const detail = e.detail || {};
+        const detail = isPlainObject(e.detail) ? e.detail : {};
         const kind = detail.kind;
         const target = detail.target;
         const targetId = detail.targetId;
@@ -714,7 +885,7 @@ export class FlowsFlowCanvas extends PlatformElement {
             const edgeIndex = Number(targetId);
             if (kind === 'edit_condition') { this.openModal('flows.edge_condition', { edgeIndex }); return; }
             if (kind === 'delete_edge') {
-                const edges = (data.edges || []).filter((_, i) => i !== edgeIndex);
+                const edges = asArray(data.edges).filter((_, i) => i !== edgeIndex);
                 const next = { ...data, edges };
                 this._editor.updateSkillsData({ data: next });
                 this._editor.pushHistory({ snapshot: next });
@@ -740,8 +911,8 @@ export class FlowsFlowCanvas extends PlatformElement {
         if (nodes.length === 0) return;
         let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
         for (const n of nodes) {
-            const x = Number(n.pos_x) || 0;
-            const y = Number(n.pos_y) || 0;
+            const x = asNumber(n.pos_x);
+            const y = asNumber(n.pos_y);
             if (x < minX) minX = x;
             if (y < minY) minY = y;
             if (x + NODE_W > maxX) maxX = x + NODE_W;
@@ -751,7 +922,7 @@ export class FlowsFlowCanvas extends PlatformElement {
         this._editor.setViewBox({ viewBox: { x: minX - pad, y: minY - pad, w: (maxX - minX) + pad * 2, h: (maxY - minY) + pad * 2 } });
     }
 
-    /* ===== DnD создание ===== */
+    /* ===== Drag-and-drop create ===== */
     _onDragOver(e) {
         const types = e.dataTransfer.types;
         if (types.includes('application/x-flow-node-type') || types.includes('application/x-flow-resource-type')) {
@@ -776,7 +947,7 @@ export class FlowsFlowCanvas extends PlatformElement {
                 pos_y: local.y - NODE_H / 2,
                 config: {},
             };
-            const nodes = { ...(data.nodes || {}), [id]: newNode };
+            const nodes = { ...asObject(data.nodes), [id]: newNode };
             const next = { ...data, nodes };
             this._editor.updateSkillsData({ data: next });
             this._editor.pushHistory({ snapshot: next });
@@ -786,7 +957,7 @@ export class FlowsFlowCanvas extends PlatformElement {
         }
         if (resourceType) {
             const id = genId('r');
-            const resources = { ...(data.resources || {}), [id]: { type: resourceType, name: resourceType, config: {} } };
+            const resources = { ...asObject(data.resources), [id]: { type: resourceType, name: resourceType, config: {} } };
             const next = { ...data, resources };
             this._editor.updateSkillsData({ data: next });
             this._editor.pushHistory({ snapshot: next });
@@ -799,7 +970,7 @@ export class FlowsFlowCanvas extends PlatformElement {
     _onStickyChange(e) {
         const detail = e.detail;
         if (!detail || !detail.noteId) return;
-        const notes = (this._state().stickyNotes || []).map((n) => n.id === detail.noteId ? { ...n, text: detail.text } : n);
+        const notes = asArray(this._state().stickyNotes).map((n) => n.id === detail.noteId ? { ...n, text: detail.text } : n);
         this._editor.updateStickyNote({ note: notes.find((n) => n.id === detail.noteId) });
         this._persistStickyNotes(notes);
     }
@@ -808,7 +979,7 @@ export class FlowsFlowCanvas extends PlatformElement {
         const noteId = e.detail?.noteId;
         if (!noteId) return;
         this._editor.removeStickyNote({ id: noteId });
-        const notes = (this._state().stickyNotes || []).filter((n) => n.id !== noteId);
+        const notes = asArray(this._state().stickyNotes).filter((n) => n.id !== noteId);
         this._persistStickyNotes(notes);
     }
 
@@ -822,38 +993,141 @@ export class FlowsFlowCanvas extends PlatformElement {
             origW: note.width,
             origH: note.height,
         };
-        this.renderRoot.querySelector('svg.canvas-host').setPointerCapture(0);
+        const svg = this.renderRoot.querySelector('svg.canvas-host');
+        if (svg && typeof detail.pointerId === 'number') {
+            try {
+                svg.setPointerCapture(detail.pointerId);
+            } catch (err) {
+                // pointer мог уже быть отпущен — продолжаем без capture, pointermove/up на window это переживут
+            }
+        }
     }
 
     _onStickyDragStart(e, note) {
-        if (e.button !== 0) return;
-        e.stopPropagation();
+        const detail = e.detail;
+        if (!detail) return;
         this._drag = {
             type: 'sticky',
-            noteId: note.id,
-            startX: e.clientX, startY: e.clientY,
-            origX: note.x, origY: note.y,
+            noteId: detail.noteId,
+            startX: detail.x,
+            startY: detail.y,
+            origX: asNumber(note.x),
+            origY: asNumber(note.y),
         };
-        this.renderRoot.querySelector('svg.canvas-host').setPointerCapture(e.pointerId);
+        this._pointerDownAt = { x: detail.x, y: detail.y, button: 0 };
+        this._pointerMoved = false;
+        const svg = this.renderRoot.querySelector('svg.canvas-host');
+        if (svg && typeof detail.pointerId === 'number') {
+            try { svg.setPointerCapture(detail.pointerId); } catch (err) { /* pointer already released */ }
+        }
+    }
+
+    _onStickyCollapseToggle(e) {
+        const detail = e.detail;
+        if (!detail || !detail.noteId) return;
+        const notes = asArray(this._state().stickyNotes).map((n) => n.id === detail.noteId
+            ? { ...n, collapsed: Boolean(detail.collapsed) }
+            : n);
+        const updated = notes.find((n) => n.id === detail.noteId);
+        if (updated) this._editor.updateStickyNote({ note: updated });
+        this._persistStickyNotes(notes);
+    }
+
+    _onStickyLinkToggle(e) {
+        const detail = e.detail;
+        if (!detail || !detail.noteId) return;
+        if (detail.isLinked) {
+            const notes = asArray(this._state().stickyNotes).map((n) => n.id === detail.noteId
+                ? { ...n, attached_node_id: null }
+                : n);
+            const updated = notes.find((n) => n.id === detail.noteId);
+            if (updated) this._editor.updateStickyNote({ note: updated });
+            this._persistStickyNotes(notes);
+            this._stickyLinkMode = null;
+            this.requestUpdate();
+            return;
+        }
+        if (this._stickyLinkMode?.noteId === detail.noteId) {
+            this._stickyLinkMode = null;
+            this.toast('flows:canvas.sticky_note.link_mode_cancelled', { type: 'info' });
+        } else {
+            this._stickyLinkMode = { noteId: detail.noteId };
+            this.toast('flows:canvas.sticky_note.link_mode_hint', { type: 'info' });
+        }
+        this.requestUpdate();
+    }
+
+    _attachStickyToNode(noteId, nodeId) {
+        const notes = asArray(this._state().stickyNotes).map((n) => n.id === noteId
+            ? { ...n, attached_node_id: nodeId }
+            : n);
+        const updated = notes.find((n) => n.id === noteId);
+        if (updated) this._editor.updateStickyNote({ note: updated });
+        this._persistStickyNotes(notes);
+        this._stickyLinkMode = null;
+        this.requestUpdate();
     }
 
     /* ===== Render ===== */
-    _renderNode(id, node) {
-        const x = Number(node.pos_x) || 0;
-        const y = Number(node.pos_y) || 0;
+    _renderFanInBadge(id, node) {
+        const policy = node.incoming_policy === 'all' ? 'all' : 'any';
+        const cy = NODE_H / 2;
+        const r = 11;
+        const iconSize = 14;
+        const scale = iconSize / 24;
+        const tx = -iconSize / 2;
+        const ty = cy - iconSize / 2;
+        const iconAny = svg`
+            <g class="badge-fanin-icon" transform=${`translate(${tx}, ${ty}) scale(${scale})`}>
+                <path d="m4 13h16a1 1 0 0 0 0-2h-16a1 1 0 0 0 0 2z"></path>
+                <path d="m20 5h-16a1 1 0 0 0 0 2h16a1 1 0 0 0 0-2z"></path>
+                <path d="m4 19h16a1 1 0 0 0 0-2h-16a1 1 0 0 0 0 2z"></path>
+            </g>
+        `;
+        const iconAll = svg`
+            <g class="badge-fanin-icon" transform=${`translate(${tx}, ${ty}) scale(${scale})`}>
+                <path d="m20 14.3c1.2 0 2.3-1 2.3-2.3s-1-2.3-2.3-2.3-2.3 1-2.3 2.3 1.1 2.3 2.3 2.3z"></path>
+                <path d="m20 6.3c1.2 0 2.3-1 2.3-2.3s-1-2.3-2.3-2.3-2.3 1-2.3 2.3 1.1 2.3 2.3 2.3z"></path>
+                <path d="m20 22.3c1.2 0 2.3-1 2.3-2.3s-1-2.3-2.3-2.3-2.3 1-2.3 2.3 1.1 2.3 2.3 2.3z"></path>
+                <path d="m4 14.3c1.2 0 2.3-1 2.3-2.3s-1.1-2.2-2.3-2.2-2.3 1-2.3 2.3 1.1 2.2 2.3 2.2z"></path>
+                <path d="m19 12.8c.4 0 .8-.3.8-.8s-.3-.8-.8-.8h-7.3v-4.2c0-1.6.7-2.3 2.3-2.3h5c.4 0 .8-.3.8-.8s-.4-.6-.8-.6h-5c-2.4 0-3.8 1.3-3.8 3.8v4.3h-5.2c-.4 0-.8.3-.8.8s.3.8.8.8h5.3v4c0 2.4 1.3 3.8 3.8 3.8h5c.4 0 .8-.3.8-.8s-.3-.8-.8-.8h-5c-1.6 0-2.3-.7-2.3-2.3v-4.3h7.2z"></path>
+            </g>
+        `;
+        return svg`
+            <g
+                @dblclick=${(e) => this._onFanInDblClick(e, id)}
+                @pointerdown=${(e) => e.stopPropagation()}
+                @contextmenu=${(e) => this._onContextMenu(e, 'node', id)}
+            >
+                <circle
+                    class="badge-fanin-bg"
+                    cx="0" cy=${cy} r=${r}
+                    data-node-id=${id}
+                    data-port-side="in"
+                    data-policy=${policy}
+                ></circle>
+                ${policy === 'all' ? iconAll : iconAny}
+            </g>
+        `;
+    }
+
+    _renderNode(id, node, inDegree) {
+        const x = asNumber(node.pos_x);
+        const y = asNumber(node.pos_y);
         const meta = getNodeTypeMeta(node.type);
         const state = this._state();
+        const multi = asArray(state.multiSelection);
         const isSelected = state.selectedNodeId === id;
-        const isMulti = (state.multiSelection || []).includes(id) && (state.multiSelection || []).length > 1;
-        const isEntry = state.entryNodeId === id || (state.skillsData && state.skillsData.entry === id);
-        const hasBp = (state.breakpointNodeIds || []).includes(id);
+        const isMulti = multi.includes(id) && multi.length > 1;
+        const hasBp = asArray(state.breakpointNodeIds).includes(id);
         const isBpHit = state.breakpointHitNodeId === id;
         let runtimeState = null;
         if (isBpHit) runtimeState = 'breakpoint-hit';
-        else if ((state.runningNodeIds || []).includes(id)) runtimeState = 'running';
-        else if (state.erroredNodes && state.erroredNodes[id]) runtimeState = 'error';
-        else if ((state.completedNodeIds || []).includes(id)) runtimeState = 'completed';
-        const isInherited = (state.inheritedNodeIds || []).includes(id);
+        else if (asArray(state.runningNodeIds).includes(id)) runtimeState = 'running';
+        else if (isPlainObject(state.erroredNodes) && state.erroredNodes[id]) runtimeState = 'error';
+        else if (asArray(state.completedNodeIds).includes(id)) runtimeState = 'completed';
+        const isInherited = asArray(state.inheritedNodeIds).includes(id);
+        const showFanIn = inDegree >= 2;
 
         return svg`
             <g
@@ -862,7 +1136,7 @@ export class FlowsFlowCanvas extends PlatformElement {
                 ?data-selected=${isSelected}
                 ?data-multi-selected=${isMulti}
                 ?data-inherited=${isInherited}
-                data-state=${runtimeState || ''}
+                data-state=${asString(runtimeState)}
                 @pointerdown=${(e) => this._onPointerDownNode(e, id)}
                 @contextmenu=${(e) => this._onContextMenu(e, 'node', id)}
                 @dblclick=${() => this._editor.selectNode({ nodeId: id })}
@@ -874,19 +1148,22 @@ export class FlowsFlowCanvas extends PlatformElement {
                             <platform-icon name=${meta.icon} size="18"></platform-icon>
                         </div>
                         <div class="node-meta">
-                            <div class="node-name">${node.name || id}</div>
-                            <div class="node-type">${node.type || ''}</div>
+                            <div class="node-name">${typeof node.name === 'string' && node.name.length > 0 ? node.name : id}</div>
+                            <div class="node-type">${asString(node.type)}</div>
                         </div>
                     </div>
                 </foreignObject>
-                ${isEntry ? svg`<polygon class="badge-entry" points="0,0 14,0 0,14"></polygon>` : ''}
                 ${hasBp ? svg`<circle class="badge-bp-circle" cx=${NODE_W - 8} cy="8" r="5"></circle>` : ''}
                 ${isInherited ? svg`<text class="badge-inherited" x="6" y=${NODE_H - 6} font-size="10">↑</text>` : ''}
-                <circle
-                    class="port in"
-                    cx="0" cy=${NODE_H / 2} r=${PORT_R}
-                    data-node-id=${id} data-port-side="in"
-                ></circle>
+                ${showFanIn
+                    ? this._renderFanInBadge(id, node)
+                    : svg`
+                        <circle
+                            class="port in"
+                            cx="0" cy=${NODE_H / 2} r=${PORT_R}
+                            data-node-id=${id} data-port-side="in"
+                        ></circle>
+                    `}
                 <circle
                     class="port"
                     cx=${NODE_W} cy=${NODE_H / 2} r=${PORT_R}
@@ -897,26 +1174,40 @@ export class FlowsFlowCanvas extends PlatformElement {
         `;
     }
 
+    _onFanInDblClick(e, nodeId) {
+        e.preventDefault();
+        e.stopPropagation();
+        this.openModal('flows.incoming_policy', { nodeId });
+    }
+
     _renderEdge(edge, i, nodes) {
-        const fromId = edge.from_node || edge.from;
-        const toId = edge.to_node || edge.to;
+        const { from: fromId, to: toId } = getEdgeEndpoints(edge);
         const fromNode = nodes[fromId];
         const toNode = nodes[toId];
         if (!fromNode || !toNode) return svg``;
         const start = this._portCoords(fromNode, 'out');
         const end = this._portCoords(toNode, 'in');
-        const condition = edge.condition || '';
+        const condition = edge.condition === undefined ? null : edge.condition;
+        const hasCondition = condition !== null && condition !== '' && !(typeof condition === 'object' && condition !== null && Object.keys(condition).length === 0);
         const mid = midpoint(start.x, start.y, end.x, end.y);
+        const editorState = this._state();
+        const inheritedKeys = Array.isArray(editorState.inheritedEdgeKeys) ? editorState.inheritedEdgeKeys : [];
+        const edgeKey = `${fromId}->${toId}`;
+        const isInherited = inheritedKeys.includes(edgeKey);
+        const edgeClass = isInherited ? 'edge inherited' : 'edge';
+        const d = pathFor(start.x, start.y, end.x, end.y);
         return svg`
             <g class="edge-group">
                 <path
-                    class="edge"
-                    d=${pathFor(start.x, start.y, end.x, end.y)}
+                    class="edge-hit"
+                    d=${d}
                     @contextmenu=${(e) => this._onContextMenu(e, 'edge', String(i))}
+                    @dblclick=${(e) => this._onEdgeDblClick(e, toId)}
                     @pointerenter=${() => { this._hoverEdgeIndex = i; }}
                     @pointerleave=${() => { this._hoverEdgeIndex = -1; }}
                 ></path>
-                ${condition ? renderEdgeLabel({
+                <path class=${edgeClass} d=${d}></path>
+                ${hasCondition ? renderEdgeLabel({
                     edgeId: i,
                     x: mid.x,
                     y: mid.y,
@@ -927,21 +1218,45 @@ export class FlowsFlowCanvas extends PlatformElement {
         `;
     }
 
+    _onEdgeDblClick(e, nodeId) {
+        e.preventDefault();
+        e.stopPropagation();
+        if (typeof nodeId !== 'string' || nodeId.length === 0) return;
+        this.openModal('flows.incoming_policy', { nodeId });
+    }
+
     _renderVirtualEnd(node) {
         const start = this._portCoords(node, 'out');
-        const endX = start.x + 60;
-        const endY = start.y;
+        const markerR = 18;
+        const gap = 24;
+        const cx = start.x + gap + markerR;
+        const cy = start.y;
         return svg`
             <g class="edge-group">
-                <path class="edge" d=${pathFor(start.x, start.y, endX, endY)}></path>
-                <circle class="edge-end-marker" cx=${endX + 8} cy=${endY} r="8"></circle>
-                <text class="edge-end-text" x=${endX + 8} y=${endY + 3} text-anchor="middle">END</text>
+                <path class="edge" d=${pathFor(start.x, start.y, cx - markerR, cy)}></path>
+                <circle class="edge-end-marker" cx=${cx} cy=${cy} r=${markerR}></circle>
+                <text class="edge-end-text" x=${cx} y=${cy + 4} text-anchor="middle">END</text>
+            </g>
+        `;
+    }
+
+    _renderVirtualStart(node) {
+        const end = this._portCoords(node, 'in');
+        const markerR = 18;
+        const gap = 24;
+        const cx = end.x - gap - markerR;
+        const cy = end.y;
+        return svg`
+            <g class="edge-group">
+                <circle class="edge-start-marker" cx=${cx} cy=${cy} r=${markerR}></circle>
+                <text class="edge-start-text" x=${cx} y=${cy + 4} text-anchor="middle">START</text>
+                <path class="edge" d=${pathFor(cx + markerR, cy, end.x, end.y)}></path>
             </g>
         `;
     }
 
     _renderSmartGuides() {
-        const guides = this._state().smartGuides || [];
+        const guides = asArray(this._state().smartGuides);
         const vb = this._viewBox();
         return guides.map((g, i) => g.axis === 'v'
             ? svg`<line class="smart-guide" x1=${g.at} y1=${vb.y} x2=${g.at} y2=${vb.y + vb.h}></line>`
@@ -949,26 +1264,62 @@ export class FlowsFlowCanvas extends PlatformElement {
     }
 
     _renderStickyNotes() {
-        const notes = this._state().stickyNotes || [];
-        return notes.map((note) => svg`
-            <foreignObject
-                x=${note.x} y=${note.y}
-                width=${note.width || STICKY_W} height=${note.height || STICKY_H}
-                @pointerdown=${(e) => this._onStickyDragStart(e, note)}
-            >
-                <flows-sticky-note
-                    xmlns="http://www.w3.org/1999/xhtml"
-                    note-id=${note.id}
-                    .text=${note.text || ''}
-                    color-token=${note.color_token || 'warning_bg'}
-                    .width=${note.width || STICKY_W}
-                    .height=${note.height || STICKY_H}
-                    @change=${this._onStickyChange}
-                    @remove=${this._onStickyRemove}
-                    @resize-start=${(e) => this._onStickyResizeStart(e, note)}
-                ></flows-sticky-note>
-            </foreignObject>
-        `);
+        const notes = asArray(this._state().stickyNotes);
+        const linkPendingId = typeof this._stickyLinkMode?.noteId === 'string' ? this._stickyLinkMode.noteId : '';
+        return notes.map((note) => {
+            const collapsed = Boolean(note.collapsed);
+            const wRaw = Number(note.width);
+            const w = Number.isFinite(wRaw) && wRaw > 0 ? wRaw : STICKY_W;
+            const hRaw = Number(note.height);
+            const h = collapsed ? STICKY_COLLAPSED_H : (Number.isFinite(hRaw) && hRaw > 0 ? hRaw : STICKY_H);
+            const attached = typeof note.attached_node_id === 'string' ? note.attached_node_id : '';
+            return svg`
+                <foreignObject x=${note.x} y=${note.y} width=${w} height=${h}>
+                    <flows-sticky-note
+                        xmlns="http://www.w3.org/1999/xhtml"
+                        note-id=${note.id}
+                        .text=${asString(note.text)}
+                        color-token=${colorOrDefault(note.color_token, 'warning_bg')}
+                        .width=${w}
+                        .height=${h}
+                        ?collapsed=${collapsed}
+                        attached-node-id=${attached}
+                        ?link-pending=${linkPendingId === note.id}
+                        @drag-start=${(e) => this._onStickyDragStart(e, note)}
+                        @change=${this._onStickyChange}
+                        @collapse-toggle=${this._onStickyCollapseToggle}
+                        @link-toggle=${this._onStickyLinkToggle}
+                        @remove=${this._onStickyRemove}
+                        @resize-start=${(e) => this._onStickyResizeStart(e, note)}
+                    ></flows-sticky-note>
+                </foreignObject>
+            `;
+        });
+    }
+
+    _renderStickyAttachLines() {
+        const notes = asArray(this._state().stickyNotes);
+        const nodes = this._nodes();
+        const out = [];
+        for (const note of notes) {
+            const nodeId = typeof note.attached_node_id === 'string' ? note.attached_node_id : '';
+            if (!nodeId) continue;
+            const node = nodes[nodeId];
+            if (!node) continue;
+            const collapsed = Boolean(note.collapsed);
+            const wRaw = Number(note.width);
+            const w = Number.isFinite(wRaw) && wRaw > 0 ? wRaw : STICKY_W;
+            const hRaw = Number(note.height);
+            const h = collapsed ? STICKY_COLLAPSED_H : (Number.isFinite(hRaw) && hRaw > 0 ? hRaw : STICKY_H);
+            const noteCx = asNumber(note.x) + w / 2;
+            const noteCy = asNumber(note.y) + h / 2;
+            const nodeCx = asNumber(node.pos_x) + NODE_W / 2;
+            const nodeCy = asNumber(node.pos_y) + NODE_H / 2;
+            const dx = Math.abs(nodeCx - noteCx) * 0.4;
+            const d = `M ${noteCx} ${noteCy} C ${noteCx + (nodeCx > noteCx ? dx : -dx)} ${noteCy} ${nodeCx + (nodeCx > noteCx ? -dx : dx)} ${nodeCy} ${nodeCx} ${nodeCy}`;
+            out.push(svg`<path class="sticky-attach-line" d=${d}></path>`);
+        }
+        return out;
     }
 
     _renderSelectionRect() {
@@ -989,7 +1340,7 @@ export class FlowsFlowCanvas extends PlatformElement {
                 .x=${menu.x}
                 .y=${menu.y}
                 target=${menu.target}
-                target-id=${menu.targetId || ''}
+                target-id=${asString(menu.targetId)}
                 @action=${this._onContextMenuAction}
                 @close=${() => this._editor.closeContextMenu({})}
             ></flows-canvas-context-menu>
@@ -998,16 +1349,35 @@ export class FlowsFlowCanvas extends PlatformElement {
 
     render() {
         const state = this._state();
-        const skillsData = state.skillsData || { nodes: {}, edges: [] };
-        const nodes = skillsData.nodes || {};
-        const edges = Array.isArray(skillsData.edges) ? skillsData.edges : [];
-        const activeTool = state.activeTool || 'select';
+        const skillsData = getSkillsData(state);
+        const nodes = getSkillsNodes(state);
+        const edges = getSkillsEdges(state);
+        const activeTool = typeof state.activeTool === 'string' && state.activeTool.length > 0 ? state.activeTool : 'select';
         const vb = this._viewBox();
         const vbStr = `${vb.x} ${vb.y} ${vb.w} ${vb.h}`;
         const panActive = Boolean(this._pan);
+        const linkMode = Boolean(this._stickyLinkMode);
 
-        const fromIds = new Set(edges.map((e) => e.from_node || e.from));
+        const fromIds = new Set();
+        for (const edge of edges) {
+            const { from, to } = getEdgeEndpoints(edge);
+            if (!from || !to) continue;
+            if (!nodes[from] || !nodes[to]) continue;
+            fromIds.add(from);
+        }
         const orphanNodes = Object.entries(nodes).filter(([id]) => !fromIds.has(id));
+        const entryId = typeof state.entryNodeId === 'string' && state.entryNodeId.length > 0
+            ? state.entryNodeId
+            : (typeof skillsData.entry === 'string' && skillsData.entry.length > 0 ? skillsData.entry : null);
+        const entryNode = entryId && nodes[entryId] ? nodes[entryId] : null;
+
+        const inDegrees = new Map();
+        for (const edge of edges) {
+            const { to } = getEdgeEndpoints(edge);
+            if (!to) continue;
+            const prev = inDegrees.has(to) ? inDegrees.get(to) : 0;
+            inDegrees.set(to, prev + 1);
+        }
 
         return html`
             <svg
@@ -1015,6 +1385,7 @@ export class FlowsFlowCanvas extends PlatformElement {
                 viewBox=${vbStr}
                 data-tool=${activeTool}
                 ?data-pan-active=${panActive}
+                ?data-link-mode=${linkMode}
                 @wheel=${this._onWheel}
                 @pointerdown=${this._onPointerDownBackground}
                 @pointermove=${this._onPointerMove}
@@ -1029,12 +1400,15 @@ export class FlowsFlowCanvas extends PlatformElement {
                         <circle cx="0" cy="0" r="0.8" class="grid-pattern"></circle>
                     </pattern>
                 </defs>
-                <rect x=${vb.x} y=${vb.y} width=${vb.w} height=${vb.h} fill="url(#canvas-grid)"></rect>
+                <rect x="-1000000" y="-1000000" width="2000000" height="2000000" fill="url(#canvas-grid)"></rect>
 
                 <g class="sticky-layer">${this._renderStickyNotes()}</g>
 
+                <g class="sticky-attach-layer">${this._renderStickyAttachLines()}</g>
+
                 <g class="edges-layer">
                     ${edges.map((edge, i) => this._renderEdge(edge, i, nodes))}
+                    ${entryNode ? this._renderVirtualStart(entryNode) : ''}
                     ${orphanNodes.map(([id, n]) => this._renderVirtualEnd(n))}
                     ${this._connection
                         ? svg`<path class="edge-temp" d=${pathFor(this._connection.x1, this._connection.y1, this._connection.x2, this._connection.y2)}></path>`
@@ -1044,7 +1418,7 @@ export class FlowsFlowCanvas extends PlatformElement {
                 <g class="guides-layer">${this._renderSmartGuides()}</g>
 
                 <g class="nodes-layer">
-                    ${Object.entries(nodes).map(([id, node]) => this._renderNode(id, node))}
+                    ${Object.entries(nodes).map(([id, node]) => this._renderNode(id, node, inDegrees.has(id) ? inDegrees.get(id) : 0))}
                 </g>
 
                 ${this._renderSelectionRect()}

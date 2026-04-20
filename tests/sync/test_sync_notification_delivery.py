@@ -41,6 +41,7 @@ async def _seed_topic_channel(
         name="Ns",
         description=None,
         avatar_url=None,
+        namespace=f"ns_{space_id[:12]}",
         created_by_user_id=owner_user_id,
     )
     await space_repo.create(space)

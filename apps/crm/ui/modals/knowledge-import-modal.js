@@ -1,7 +1,7 @@
 /**
  * CRMKnowledgeImportModal — мастер импорта знаний в выбранный namespace.
  *
- * 5-шаговый wizard поверх PlatformLightModal:
+ * 5-шаговый wizard поверх PlatformModal:
  *   0. mode      — graph (полный граф сущностей и связей) | notes_only (только заметки).
  *   1. types     — какие типы сущностей извлекать; пусто = все типы из namespace.
  *   2. source    — файлы (через crm/file_upload, multipart) и/или вставленный текст.
@@ -21,8 +21,8 @@
  *     запустить импорт (не понятно, в какой namespace писать).
  */
 
-import { html } from 'lit';
-import { PlatformLightModal } from '@platform/lib/components/glass-light-modal.js';
+import { html, css } from 'lit';
+import { PlatformModal } from '@platform/lib/components/glass-modal.js';
 import { registerModalKind } from '@platform/lib/utils/modal-registry.js';
 import { resolveFileIconKey } from '@platform/lib/utils/file-icons.js';
 import '@platform/lib/components/platform-icon.js';
@@ -42,12 +42,12 @@ const STEP_KEYS = Object.freeze([
     'step_mode', 'step_types', 'step_source', 'step_settings', 'step_summary',
 ]);
 
-export class CRMKnowledgeImportModal extends PlatformLightModal {
+export class CRMKnowledgeImportModal extends PlatformModal {
     static modalKind = 'crm.knowledge_import';
     static i18nNamespace = 'crm';
 
     static properties = {
-        ...PlatformLightModal.properties,
+        ...PlatformModal.properties,
         _step: { state: true },
         _mode: { state: true },
         _selectedTypeIds: { state: true },
@@ -60,8 +60,206 @@ export class CRMKnowledgeImportModal extends PlatformLightModal {
         _dropzoneActive: { state: true },
     };
 
+    static styles = [
+        ...PlatformModal.styles,
+        css`
+            .ki-steps {
+                display: flex; flex-wrap: wrap; gap: var(--space-2);
+                padding: 0 0 var(--space-3) 0;
+                border-bottom: 1px solid var(--glass-border-subtle, rgba(255,255,255,0.06));
+                margin-bottom: var(--space-3);
+            }
+            .ki-step-pill {
+                display: inline-flex; align-items: center; gap: 6px;
+                padding: 4px 10px; font-size: var(--text-xs);
+                color: var(--text-tertiary);
+                border-radius: var(--radius-full, 999px);
+                border: 1px solid var(--glass-border-subtle, rgba(255,255,255,0.06));
+            }
+            .ki-step-pill.active {
+                color: var(--text-primary);
+                border-color: var(--accent, #6366f1);
+                background: rgba(99,102,241,0.1);
+            }
+            .ki-step-pill.done { color: var(--text-secondary); }
+            .ki-step-num {
+                display: inline-flex; align-items: center; justify-content: center;
+                width: 18px; height: 18px; font-weight: 700;
+                border-radius: 50%;
+                background: rgba(255,255,255,0.06);
+                color: inherit;
+            }
+            .ki-step-body { display: flex; flex-direction: column; gap: var(--space-4); }
+            .ki-step-desc { color: var(--text-secondary); font-size: var(--text-sm); margin: 0; }
+            .ki-empty { color: var(--text-tertiary); padding: var(--space-4); text-align: center; }
+
+            .ki-mode-grid {
+                display: grid; gap: var(--space-3);
+                grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+            }
+            .ki-mode-card {
+                display: flex; flex-direction: column; gap: 6px;
+                padding: var(--space-4);
+                border-radius: var(--radius-lg);
+                border: 1px solid var(--glass-border-subtle, rgba(255,255,255,0.06));
+                background: var(--glass-solid-subtle, rgba(255,255,255,0.02));
+                color: var(--text-primary);
+                text-align: left; cursor: pointer;
+            }
+            .ki-mode-card:hover { border-color: var(--accent, #6366f1); }
+            .ki-mode-card.active {
+                border-color: var(--accent, #6366f1);
+                background: rgba(99,102,241,0.1);
+            }
+            .ki-mode-title { font-weight: 600; font-size: var(--text-sm); }
+            .ki-mode-desc { color: var(--text-tertiary); font-size: var(--text-xs); }
+
+            .ki-types-grid {
+                display: grid; gap: var(--space-2);
+                grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+            }
+            .ki-type-card {
+                display: inline-flex; align-items: center; gap: var(--space-2);
+                padding: var(--space-2) var(--space-3);
+                border-radius: var(--radius-md);
+                border: 1px solid var(--glass-border-subtle, rgba(255,255,255,0.06));
+                background: var(--glass-solid-subtle, rgba(255,255,255,0.02));
+                color: var(--text-primary);
+                cursor: pointer; text-align: left;
+            }
+            .ki-type-card.selected {
+                border-color: var(--accent, #6366f1);
+                background: rgba(99,102,241,0.1);
+            }
+            .ki-type-check {
+                display: inline-flex; align-items: center; justify-content: center;
+                width: 16px; height: 16px; border-radius: 4px;
+                border: 1px solid var(--glass-border-medium, rgba(255,255,255,0.1));
+                color: var(--accent, #6366f1);
+            }
+            .ki-type-name { font-size: var(--text-sm); }
+
+            .ki-dropzone {
+                display: flex; flex-direction: column; align-items: center; gap: 6px;
+                padding: var(--space-6);
+                border-radius: var(--radius-lg);
+                border: 2px dashed var(--glass-border-medium, rgba(255,255,255,0.1));
+                background: var(--glass-solid-subtle, rgba(255,255,255,0.02));
+                color: var(--text-secondary);
+                cursor: pointer; position: relative;
+            }
+            .ki-dropzone.active { border-color: var(--accent, #6366f1); background: rgba(99,102,241,0.08); }
+            .ki-dropzone:hover { border-color: var(--accent, #6366f1); }
+            .ki-file-input { position: absolute; inset: 0; opacity: 0; cursor: pointer; }
+            .ki-dropzone-label { font-weight: 600; color: var(--text-primary); }
+            .ki-dropzone-hint { font-size: var(--text-xs); color: var(--text-tertiary); }
+
+            .ki-uploading {
+                font-size: var(--text-xs); color: var(--text-tertiary);
+                text-align: center;
+            }
+            .ki-files-list { display: flex; flex-direction: column; gap: 6px; }
+            .ki-file-row {
+                display: flex; align-items: center; gap: var(--space-2);
+                padding: 6px var(--space-3);
+                border-radius: var(--radius-md);
+                border: 1px solid var(--glass-border-subtle, rgba(255,255,255,0.06));
+                background: var(--glass-solid-subtle, rgba(255,255,255,0.02));
+                color: var(--text-primary);
+            }
+            .ki-file-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--text-sm); }
+            .ki-file-remove {
+                display: inline-flex; align-items: center; justify-content: center;
+                width: 24px; height: 24px;
+                background: transparent; color: var(--text-tertiary);
+                border: 1px solid var(--glass-border-subtle, rgba(255,255,255,0.06));
+                border-radius: var(--radius-sm);
+                cursor: pointer;
+            }
+            .ki-file-remove:hover { color: var(--text-primary); }
+
+            .ki-label { font-weight: 600; font-size: var(--text-sm); color: var(--text-primary); }
+            .ki-textarea {
+                resize: vertical;
+                width: 100%;
+                font: inherit;
+                padding: var(--space-3);
+                border-radius: var(--radius-md);
+                border: 1px solid var(--glass-border-medium, rgba(255,255,255,0.1));
+                background: var(--glass-solid-subtle, rgba(255,255,255,0.02));
+                color: var(--text-primary);
+                box-sizing: border-box;
+            }
+            .ki-input {
+                font: inherit;
+                padding: 6px var(--space-3);
+                border-radius: var(--radius-md);
+                border: 1px solid var(--glass-border-medium, rgba(255,255,255,0.1));
+                background: var(--glass-solid-subtle, rgba(255,255,255,0.02));
+                color: var(--text-primary);
+            }
+            .ki-input--num { width: 120px; text-align: right; font-variant-numeric: tabular-nums; }
+            .ki-hint { font-size: var(--text-xs); color: var(--text-tertiary); }
+            .ki-hint--err { color: #fda4af; }
+
+            .ki-row {
+                display: flex; align-items: center; justify-content: space-between;
+                gap: var(--space-3);
+                padding: var(--space-3);
+                border-radius: var(--radius-md);
+                border: 1px solid var(--glass-border-subtle, rgba(255,255,255,0.06));
+                background: var(--glass-solid-subtle, rgba(255,255,255,0.02));
+            }
+            .ki-row-text { display: flex; flex-direction: column; gap: 2px; }
+            .ki-row-title { font-weight: 600; font-size: var(--text-sm); color: var(--text-primary); }
+            .ki-row-desc { font-size: var(--text-xs); color: var(--text-tertiary); }
+
+            .ki-summary-grid {
+                display: grid; gap: var(--space-3);
+                grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            }
+            .ki-summary-card {
+                padding: var(--space-3);
+                border-radius: var(--radius-md);
+                border: 1px solid var(--glass-border-subtle, rgba(255,255,255,0.06));
+                background: var(--glass-solid-subtle, rgba(255,255,255,0.02));
+                display: flex; flex-direction: column; gap: 4px;
+            }
+            .ki-summary-card--wide { grid-column: 1 / -1; }
+            .ki-summary-label { font-size: var(--text-xs); color: var(--text-tertiary); text-transform: uppercase; letter-spacing: 0.04em; }
+            .ki-summary-value { font-size: var(--text-sm); color: var(--text-primary); word-break: break-word; }
+
+            .ki-footer-row {
+                display: flex; align-items: center; gap: var(--space-3);
+                width: 100%;
+            }
+            .ki-footer-spacer { flex: 1; }
+            .ki-btn {
+                display: inline-flex; align-items: center; gap: 6px;
+                font: inherit; font-weight: 600; font-size: var(--text-sm);
+                padding: 8px var(--space-4);
+                border-radius: var(--radius-md);
+                cursor: pointer;
+            }
+            .ki-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+            .ki-btn--ghost {
+                background: transparent;
+                color: var(--text-secondary);
+                border: 1px solid var(--glass-border-subtle, rgba(255,255,255,0.06));
+            }
+            .ki-btn--ghost:hover:not(:disabled) { color: var(--text-primary); }
+            .ki-btn--primary {
+                background: var(--accent, #6366f1);
+                color: var(--platform-btn-primary-text, #fff);
+                border: 1px solid var(--accent, #6366f1);
+            }
+            .ki-btn--primary:hover:not(:disabled) { filter: brightness(1.05); }
+        `,
+    ];
+
     constructor() {
         super();
+        this.size = 'xl';
         this._step = 0;
         this._mode = 'graph';
         this._selectedTypeIds = [];
@@ -225,7 +423,7 @@ export class CRMKnowledgeImportModal extends PlatformLightModal {
     }
 
     _openFilePicker() {
-        const input = this.querySelector('input.ki-file-input');
+        const input = this.shadowRoot?.querySelector('input.ki-file-input');
         if (input instanceof HTMLInputElement) {
             input.click();
         }
@@ -308,32 +506,6 @@ export class CRMKnowledgeImportModal extends PlatformLightModal {
         };
         this._startImport.run(payload);
         this._starting = false;
-    }
-
-    _renderHeader() {
-        const titleKey = `knowledge_import_modal.${STEP_KEYS[this._step]}_title`;
-        return html`
-            <div class="ki-header">
-                <div class="ki-header-left">
-                    <platform-icon name="database" size="20"></platform-icon>
-                    <div class="ki-header-text">
-                        <div class="ki-header-title">${this.t('knowledge_import_modal.header')}</div>
-                        <div class="ki-header-subtitle">${this.t(titleKey)}</div>
-                    </div>
-                </div>
-                <button type="button" class="ki-close" @click=${() => this.close()} aria-label=${this.t('knowledge_import_modal.close')}>
-                    <platform-icon name="x" size="18"></platform-icon>
-                </button>
-            </div>
-            <div class="ki-steps">
-                ${STEP_KEYS.map((key, idx) => html`
-                    <div class="ki-step-pill ${idx === this._step ? 'active' : ''} ${idx < this._step ? 'done' : ''}">
-                        <span class="ki-step-num">${idx + 1}</span>
-                        <span>${this.t(`knowledge_import_modal.${key}_title`)}</span>
-                    </div>
-                `)}
-            </div>
-        `;
     }
 
     _renderStepMode() {
@@ -556,11 +728,45 @@ export class CRMKnowledgeImportModal extends PlatformLightModal {
         }
     }
 
-    _renderFooter() {
+    renderHeader() {
+        const titleKey = `knowledge_import_modal.${STEP_KEYS[this._step]}_title`;
+        return `${this.t('knowledge_import_modal.header')} — ${this.t(titleKey)}`;
+    }
+
+    renderBody() {
+        if (!this._hasNamespace()) {
+            return html`
+                <div class="ki-empty">${this.t('knowledge_import_modal.no_namespace_warning')}</div>
+            `;
+        }
+        return html`
+            <div class="ki-steps">
+                ${STEP_KEYS.map((key, idx) => html`
+                    <div class="ki-step-pill ${idx === this._step ? 'active' : ''} ${idx < this._step ? 'done' : ''}">
+                        <span class="ki-step-num">${idx + 1}</span>
+                        <span>${this.t(`knowledge_import_modal.${key}_title`)}</span>
+                    </div>
+                `)}
+            </div>
+            ${this._renderStepBody()}
+        `;
+    }
+
+    renderFooter() {
+        if (!this._hasNamespace()) {
+            return html`
+                <div class="ki-footer-row">
+                    <div class="ki-footer-spacer"></div>
+                    <button type="button" class="ki-btn ki-btn--ghost" @click=${() => this.close()}>
+                        ${this.t('knowledge_import_modal.close')}
+                    </button>
+                </div>
+            `;
+        }
         const isLast = this._step === STEP_KEYS.length - 1;
         const canProceed = this._canProceed();
         return html`
-            <div class="ki-footer">
+            <div class="ki-footer-row">
                 <button
                     type="button"
                     class="ki-btn ki-btn--ghost"
@@ -598,267 +804,6 @@ export class CRMKnowledgeImportModal extends PlatformLightModal {
                     `}
             </div>
         `;
-    }
-
-    render() {
-        if (!this.open) return html``;
-        return html`
-            ${this._renderStyles()}
-            <div class="light-modal-backdrop" @click=${this._onBackdropClick.bind(this)}></div>
-            <div class="light-modal-container ki-container">
-                ${!this._hasNamespace()
-                    ? html`
-                        ${this._renderHeader()}
-                        <div class="ki-body">
-                            <div class="ki-empty">${this.t('knowledge_import_modal.no_namespace_warning')}</div>
-                        </div>
-                        <div class="ki-footer">
-                            <div class="ki-footer-spacer"></div>
-                            <button type="button" class="ki-btn ki-btn--ghost" @click=${() => this.close()}>
-                                ${this.t('knowledge_import_modal.close')}
-                            </button>
-                        </div>
-                    `
-                    : html`
-                        ${this._renderHeader()}
-                        <div class="ki-body">${this._renderStepBody()}</div>
-                        ${this._renderFooter()}
-                    `}
-            </div>
-        `;
-    }
-
-    _renderStyles() {
-        return html`<style>
-            .ki-container {
-                width: min(880px, calc(100vw - 32px));
-                height: min(80vh, 720px);
-                max-height: calc(100vh - 32px);
-                margin: auto;
-                border-radius: var(--radius-xl, 16px);
-                background: var(--bg-primary, #0d0d14);
-                border: 1px solid var(--glass-border-medium, rgba(255,255,255,0.1));
-                box-shadow: 0 20px 60px rgba(0,0,0,0.5);
-                display: flex;
-                flex-direction: column;
-            }
-            .ki-header {
-                display: flex; align-items: center; justify-content: space-between;
-                gap: var(--space-3, 12px);
-                padding: var(--space-4, 16px) var(--space-5, 20px);
-                border-bottom: 1px solid var(--glass-border-subtle, rgba(255,255,255,0.06));
-            }
-            .ki-header-left { display: inline-flex; align-items: center; gap: var(--space-3, 12px); color: var(--text-primary); }
-            .ki-header-text { display: flex; flex-direction: column; gap: 2px; }
-            .ki-header-title { font-weight: 700; font-size: var(--text-lg, 18px); color: var(--text-primary); }
-            .ki-header-subtitle { font-size: var(--text-xs, 12px); color: var(--text-tertiary); }
-            .ki-close {
-                width: 32px; height: 32px;
-                display: inline-flex; align-items: center; justify-content: center;
-                background: transparent; color: var(--text-secondary);
-                border: 1px solid var(--glass-border-subtle, rgba(255,255,255,0.06));
-                border-radius: var(--radius-md, 8px);
-                cursor: pointer;
-            }
-            .ki-close:hover { color: var(--text-primary); }
-            .ki-steps {
-                display: flex; flex-wrap: wrap; gap: var(--space-2, 8px);
-                padding: var(--space-2, 8px) var(--space-5, 20px);
-                border-bottom: 1px solid var(--glass-border-subtle, rgba(255,255,255,0.06));
-                background: var(--glass-solid-subtle, rgba(255,255,255,0.02));
-            }
-            .ki-step-pill {
-                display: inline-flex; align-items: center; gap: 6px;
-                padding: 4px 10px; font-size: var(--text-xs, 12px);
-                color: var(--text-tertiary);
-                border-radius: var(--radius-full, 999px);
-                border: 1px solid var(--glass-border-subtle, rgba(255,255,255,0.06));
-            }
-            .ki-step-pill.active {
-                color: var(--text-primary);
-                border-color: var(--accent, #6366f1);
-                background: rgba(99,102,241,0.1);
-            }
-            .ki-step-pill.done { color: var(--text-secondary); }
-            .ki-step-num {
-                display: inline-flex; align-items: center; justify-content: center;
-                width: 18px; height: 18px; font-weight: 700;
-                border-radius: 50%;
-                background: rgba(255,255,255,0.06);
-                color: inherit;
-            }
-            .ki-body {
-                flex: 1; min-height: 0;
-                padding: var(--space-5, 20px);
-                overflow: auto;
-            }
-            .ki-step-body { display: flex; flex-direction: column; gap: var(--space-4, 16px); }
-            .ki-step-desc { color: var(--text-secondary); font-size: var(--text-sm, 14px); margin: 0; }
-            .ki-empty { color: var(--text-tertiary); padding: var(--space-4, 16px); text-align: center; }
-
-            .ki-mode-grid {
-                display: grid; gap: var(--space-3, 12px);
-                grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-            }
-            .ki-mode-card {
-                display: flex; flex-direction: column; gap: 6px;
-                padding: var(--space-4, 16px);
-                border-radius: var(--radius-lg, 12px);
-                border: 1px solid var(--glass-border-subtle, rgba(255,255,255,0.06));
-                background: var(--glass-solid-subtle, rgba(255,255,255,0.02));
-                color: var(--text-primary);
-                text-align: left; cursor: pointer;
-            }
-            .ki-mode-card:hover { border-color: var(--accent, #6366f1); }
-            .ki-mode-card.active {
-                border-color: var(--accent, #6366f1);
-                background: rgba(99,102,241,0.1);
-            }
-            .ki-mode-title { font-weight: 600; font-size: var(--text-sm, 14px); }
-            .ki-mode-desc { color: var(--text-tertiary); font-size: var(--text-xs, 12px); }
-
-            .ki-types-grid {
-                display: grid; gap: var(--space-2, 8px);
-                grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-            }
-            .ki-type-card {
-                display: inline-flex; align-items: center; gap: var(--space-2, 8px);
-                padding: var(--space-2, 8px) var(--space-3, 12px);
-                border-radius: var(--radius-md, 8px);
-                border: 1px solid var(--glass-border-subtle, rgba(255,255,255,0.06));
-                background: var(--glass-solid-subtle, rgba(255,255,255,0.02));
-                color: var(--text-primary);
-                cursor: pointer; text-align: left;
-            }
-            .ki-type-card.selected {
-                border-color: var(--accent, #6366f1);
-                background: rgba(99,102,241,0.1);
-            }
-            .ki-type-check {
-                display: inline-flex; align-items: center; justify-content: center;
-                width: 16px; height: 16px; border-radius: 4px;
-                border: 1px solid var(--glass-border-medium, rgba(255,255,255,0.1));
-                color: var(--accent, #6366f1);
-            }
-            .ki-type-name { font-size: var(--text-sm, 14px); }
-
-            .ki-dropzone {
-                display: flex; flex-direction: column; align-items: center; gap: 6px;
-                padding: var(--space-6, 24px);
-                border-radius: var(--radius-lg, 12px);
-                border: 2px dashed var(--glass-border-medium, rgba(255,255,255,0.1));
-                background: var(--glass-solid-subtle, rgba(255,255,255,0.02));
-                color: var(--text-secondary);
-                cursor: pointer; position: relative;
-            }
-            .ki-dropzone.active { border-color: var(--accent, #6366f1); background: rgba(99,102,241,0.08); }
-            .ki-dropzone:hover { border-color: var(--accent, #6366f1); }
-            .ki-file-input { position: absolute; inset: 0; opacity: 0; cursor: pointer; }
-            .ki-dropzone-label { font-weight: 600; color: var(--text-primary); }
-            .ki-dropzone-hint { font-size: var(--text-xs, 12px); color: var(--text-tertiary); }
-
-            .ki-uploading {
-                font-size: var(--text-xs, 12px); color: var(--text-tertiary);
-                text-align: center;
-            }
-            .ki-files-list { display: flex; flex-direction: column; gap: 6px; }
-            .ki-file-row {
-                display: flex; align-items: center; gap: var(--space-2, 8px);
-                padding: 6px var(--space-3, 12px);
-                border-radius: var(--radius-md, 8px);
-                border: 1px solid var(--glass-border-subtle, rgba(255,255,255,0.06));
-                background: var(--glass-solid-subtle, rgba(255,255,255,0.02));
-                color: var(--text-primary);
-            }
-            .ki-file-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--text-sm, 14px); }
-            .ki-file-remove {
-                display: inline-flex; align-items: center; justify-content: center;
-                width: 24px; height: 24px;
-                background: transparent; color: var(--text-tertiary);
-                border: 1px solid var(--glass-border-subtle, rgba(255,255,255,0.06));
-                border-radius: var(--radius-sm, 6px);
-                cursor: pointer;
-            }
-            .ki-file-remove:hover { color: var(--text-primary); }
-
-            .ki-label { font-weight: 600; font-size: var(--text-sm, 14px); color: var(--text-primary); }
-            .ki-textarea {
-                resize: vertical;
-                width: 100%;
-                font: inherit;
-                padding: var(--space-3, 12px);
-                border-radius: var(--radius-md, 8px);
-                border: 1px solid var(--glass-border-medium, rgba(255,255,255,0.1));
-                background: var(--glass-solid-subtle, rgba(255,255,255,0.02));
-                color: var(--text-primary);
-                box-sizing: border-box;
-            }
-            .ki-input {
-                font: inherit;
-                padding: 6px var(--space-3, 12px);
-                border-radius: var(--radius-md, 8px);
-                border: 1px solid var(--glass-border-medium, rgba(255,255,255,0.1));
-                background: var(--glass-solid-subtle, rgba(255,255,255,0.02));
-                color: var(--text-primary);
-            }
-            .ki-input--num { width: 120px; text-align: right; font-variant-numeric: tabular-nums; }
-            .ki-hint { font-size: var(--text-xs, 12px); color: var(--text-tertiary); }
-            .ki-hint--err { color: #fda4af; }
-
-            .ki-row {
-                display: flex; align-items: center; justify-content: space-between;
-                gap: var(--space-3, 12px);
-                padding: var(--space-3, 12px);
-                border-radius: var(--radius-md, 8px);
-                border: 1px solid var(--glass-border-subtle, rgba(255,255,255,0.06));
-                background: var(--glass-solid-subtle, rgba(255,255,255,0.02));
-            }
-            .ki-row-text { display: flex; flex-direction: column; gap: 2px; }
-            .ki-row-title { font-weight: 600; font-size: var(--text-sm, 14px); color: var(--text-primary); }
-            .ki-row-desc { font-size: var(--text-xs, 12px); color: var(--text-tertiary); }
-
-            .ki-summary-grid {
-                display: grid; gap: var(--space-3, 12px);
-                grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-            }
-            .ki-summary-card {
-                padding: var(--space-3, 12px);
-                border-radius: var(--radius-md, 8px);
-                border: 1px solid var(--glass-border-subtle, rgba(255,255,255,0.06));
-                background: var(--glass-solid-subtle, rgba(255,255,255,0.02));
-                display: flex; flex-direction: column; gap: 4px;
-            }
-            .ki-summary-card--wide { grid-column: 1 / -1; }
-            .ki-summary-label { font-size: var(--text-xs, 12px); color: var(--text-tertiary); text-transform: uppercase; letter-spacing: 0.04em; }
-            .ki-summary-value { font-size: var(--text-sm, 14px); color: var(--text-primary); word-break: break-word; }
-
-            .ki-footer {
-                display: flex; align-items: center; gap: var(--space-3, 12px);
-                padding: var(--space-3, 12px) var(--space-5, 20px);
-                border-top: 1px solid var(--glass-border-subtle, rgba(255,255,255,0.06));
-            }
-            .ki-footer-spacer { flex: 1; }
-            .ki-btn {
-                display: inline-flex; align-items: center; gap: 6px;
-                font: inherit; font-weight: 600; font-size: var(--text-sm, 14px);
-                padding: 8px var(--space-4, 16px);
-                border-radius: var(--radius-md, 8px);
-                cursor: pointer;
-            }
-            .ki-btn:disabled { opacity: 0.5; cursor: not-allowed; }
-            .ki-btn--ghost {
-                background: transparent;
-                color: var(--text-secondary);
-                border: 1px solid var(--glass-border-subtle, rgba(255,255,255,0.06));
-            }
-            .ki-btn--ghost:hover:not(:disabled) { color: var(--text-primary); }
-            .ki-btn--primary {
-                background: var(--accent, #6366f1);
-                color: var(--platform-btn-primary-text, #fff);
-                border: 1px solid var(--accent, #6366f1);
-            }
-            .ki-btn--primary:hover:not(:disabled) { filter: brightness(1.05); }
-        </style>`;
     }
 }
 

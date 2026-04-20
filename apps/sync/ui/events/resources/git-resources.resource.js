@@ -19,14 +19,9 @@ export const gitResourceUpsertOp = createAsyncOp({
 
 export const gitResourceGetOp = createAsyncOp({
     name: 'sync/git_resource_get',
-    transport: 'http',
+    transport: 'ws',
+    wsTimeoutMs: 5_000,
     silent: true,
+    commandType: 'sync/git_resources/get_requested',
     restMirror: { method: 'GET', path: '/sync/api/v1/git/resources/:git_ref_id' },
-    request: async ({ payload }) => {
-        const { httpRequest } = await import('@platform/lib/events/http.js');
-        return httpRequest({
-            method: 'GET',
-            url: `/sync/api/v1/git/resources/${encodeURIComponent(payload.git_ref_id)}`,
-        });
-    },
 });

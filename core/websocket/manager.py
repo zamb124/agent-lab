@@ -101,11 +101,31 @@ class NotificationManager:
         return bool(sockets) and len(sockets) > 0
 
     async def publish_ui_envelope(self, envelope_json: str) -> None:
-        """Публикация уже сериализованного UI-конверта (вызывается dispatcher'ом)."""
-        if not self._redis_client:
-            logger.warning("Redis client not initialized; UI event dropped")
+        """Публикация уже сериализованного UI-конверта (вызывается dispatcher'ом).
+
+        В HTTP-процессах `_redis_client` инициализирован `start_redis_listener`
+        на `on_startup`. В TaskIQ worker отдельного listener нет — клиент
+        поднимается лениво из `DATABASE__REDIS_URL` (см. `core/config`),
+        чтобы один и тот же dispatcher работал из любого процесса платформы.
+        """
+        client = await self._ensure_publisher_client()
+        if client is None:
+            logger.warning("Redis client not available; UI event dropped")
             return
-        await self._redis_client.publish(UI_EVENTS_REDIS_CHANNEL, envelope_json)
+        await client.publish(UI_EVENTS_REDIS_CHANNEL, envelope_json)
+
+    async def _ensure_publisher_client(self) -> Optional[aioredis.Redis]:
+        if self._redis_client is not None:
+            return self._redis_client
+        from core.config import get_settings
+
+        settings = get_settings()
+        redis_url = getattr(settings.database, "redis_url", None)
+        if not redis_url:
+            return None
+        self._redis_client = aioredis.from_url(redis_url)
+        logger.info("Redis publisher client lazy-initialized for UI events")
+        return self._redis_client
 
     async def _send_event_to_sockets(self, sockets: Set[WebSocket], event_text: str, label: str) -> None:
         dead: Set[WebSocket] = set()

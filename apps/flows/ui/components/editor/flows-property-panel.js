@@ -23,6 +23,7 @@ import '../nodes/flows-hitl-node-editor.js';
 import '../nodes/flows-external-api-editor.js';
 import '../nodes/flows-remote-flow-editor.js';
 import '../nodes/flows-base-node-editor.js';
+import { asArray, asObject, asNumber, asString, isPlainObject, getSkillsData, getSkillsNodes } from '../../_helpers/flows-resolvers.js';
 
 export class FlowsPropertyPanel extends PlatformElement {
     static properties = {
@@ -32,7 +33,26 @@ export class FlowsPropertyPanel extends PlatformElement {
 
     static styles = [
         PlatformElement.styles,
-        css`:host { display: block; }`,
+        css`
+            :host { display: block; height: 100%; min-height: 0; }
+            .inherited-banner {
+                margin: var(--space-3);
+                padding: var(--space-2) var(--space-3);
+                background: var(--accent-subtle, var(--info-bg));
+                border: 1px dashed var(--accent, var(--info));
+                border-radius: var(--radius-sm);
+                color: var(--text-secondary);
+                font-size: var(--text-sm);
+                line-height: 1.4;
+                display: flex;
+                gap: var(--space-2);
+                align-items: flex-start;
+            }
+            .inherited-banner .badge {
+                color: var(--accent, var(--info));
+                font-weight: var(--font-semibold);
+            }
+        `,
     ];
 
     constructor() {
@@ -44,7 +64,7 @@ export class FlowsPropertyPanel extends PlatformElement {
     }
 
     _onChange(e) {
-        const { nodeId, patch } = e.detail || {};
+        const { nodeId, patch } = isPlainObject(e.detail) ? e.detail : {};
         if (!nodeId || !patch || typeof patch !== 'object') return;
         const state = this._editor.state;
         if (!state) return;
@@ -60,7 +80,7 @@ export class FlowsPropertyPanel extends PlatformElement {
     }
 
     _onRenameNode(e) {
-        const { oldId, newId } = e.detail || {};
+        const { oldId, newId } = isPlainObject(e.detail) ? e.detail : {};
         if (typeof oldId !== 'string' || typeof newId !== 'string') return;
         const state = this._editor.state;
         const nodes = state?.skillsData?.nodes;
@@ -73,7 +93,7 @@ export class FlowsPropertyPanel extends PlatformElement {
     }
 
     async _onDeleteNode(e) {
-        const { nodeId } = e.detail || {};
+        const { nodeId } = isPlainObject(e.detail) ? e.detail : {};
         if (typeof nodeId !== 'string' || !nodeId) return;
         if (!this.flowId) return;
         await this._bulkDelete.run({ flow_id: this.flowId, node_ids: [nodeId] });
@@ -81,7 +101,7 @@ export class FlowsPropertyPanel extends PlatformElement {
     }
 
     _onDuplicateNode(e) {
-        const { nodeId } = e.detail || {};
+        const { nodeId } = isPlainObject(e.detail) ? e.detail : {};
         if (typeof nodeId !== 'string' || !nodeId) return;
         const state = this._editor.state;
         const skillsData = state?.skillsData;
@@ -100,8 +120,8 @@ export class FlowsPropertyPanel extends PlatformElement {
         if (typeof copy.name === 'string') copy.name = `${copy.name} copy`;
         if (copy.position && typeof copy.position === 'object') {
             copy.position = {
-                x: (copy.position.x || 0) + 40,
-                y: (copy.position.y || 0) + 40,
+                x: asNumber(copy.position.x) + 40,
+                y: asNumber(copy.position.y) + 40,
             };
         }
         const nextNodes = { ...nodes, [newId]: copy };
@@ -113,13 +133,14 @@ export class FlowsPropertyPanel extends PlatformElement {
     }
 
     _renderEditor(node, nodeId) {
-        const state = this._editor.state || {};
-        const skillsData = state.skillsData || {};
+        const state = asObject(this._editor.state);
+        const skillsData = isPlainObject(state.skillsData) ? state.skillsData : {};
         const flowVariables = skillsData.variables && typeof skillsData.variables === 'object' ? skillsData.variables : {};
         const graphNodes = skillsData.nodes && typeof skillsData.nodes === 'object'
-            ? Object.entries(skillsData.nodes).map(([id, n]) => ({ id, name: n?.name || id, type: n?.type || '' }))
+            ? Object.entries(skillsData.nodes).map(([id, n]) => ({ id, name: typeof n?.name === 'string' && n.name.length > 0 ? n.name : id, type: asString(n?.type) }))
             : [];
         const previewExecutionState = state.previewExecutionState;
+        const expanded = state.panelExpanded === true;
         const onChange = (e) => this._onChange(e);
         const onRename = (e) => this._onRenameNode(e);
         const onDelete = (e) => this._onDeleteNode(e);
@@ -131,6 +152,7 @@ export class FlowsPropertyPanel extends PlatformElement {
                     .nodeConfig=${node} .nodeType=${node.type}
                     .flowVariables=${flowVariables} .graphNodes=${graphNodes}
                     .previewExecutionState=${previewExecutionState}
+                    ?expanded=${expanded}
                     @change=${onChange} @rename-node=${onRename}
                     @delete-node=${onDelete} @duplicate-node=${onDuplicate}
                 ></flows-llm-node-editor>`;
@@ -140,6 +162,7 @@ export class FlowsPropertyPanel extends PlatformElement {
                     .nodeConfig=${node} .nodeType=${node.type}
                     .flowVariables=${flowVariables} .graphNodes=${graphNodes}
                     .previewExecutionState=${previewExecutionState}
+                    ?expanded=${expanded}
                     @change=${onChange} @rename-node=${onRename}
                     @delete-node=${onDelete} @duplicate-node=${onDuplicate}
                 ></flows-code-node-editor>`;
@@ -149,6 +172,7 @@ export class FlowsPropertyPanel extends PlatformElement {
                     .nodeConfig=${node} .nodeType=${node.type}
                     .flowVariables=${flowVariables} .graphNodes=${graphNodes}
                     .previewExecutionState=${previewExecutionState}
+                    ?expanded=${expanded}
                     @change=${onChange} @rename-node=${onRename}
                     @delete-node=${onDelete} @duplicate-node=${onDuplicate}
                 ></flows-channel-node-editor>`;
@@ -158,6 +182,7 @@ export class FlowsPropertyPanel extends PlatformElement {
                     .nodeConfig=${node} .nodeType=${node.type}
                     .flowVariables=${flowVariables} .graphNodes=${graphNodes}
                     .previewExecutionState=${previewExecutionState}
+                    ?expanded=${expanded}
                     @change=${onChange} @rename-node=${onRename}
                     @delete-node=${onDelete} @duplicate-node=${onDuplicate}
                 ></flows-flow-node-editor>`;
@@ -167,6 +192,7 @@ export class FlowsPropertyPanel extends PlatformElement {
                     .nodeConfig=${node} .nodeType=${node.type}
                     .flowVariables=${flowVariables} .graphNodes=${graphNodes}
                     .previewExecutionState=${previewExecutionState}
+                    ?expanded=${expanded}
                     @change=${onChange} @rename-node=${onRename}
                     @delete-node=${onDelete} @duplicate-node=${onDuplicate}
                 ></flows-mcp-node-editor>`;
@@ -176,6 +202,7 @@ export class FlowsPropertyPanel extends PlatformElement {
                     .nodeConfig=${node} .nodeType=${node.type}
                     .flowVariables=${flowVariables} .graphNodes=${graphNodes}
                     .previewExecutionState=${previewExecutionState}
+                    ?expanded=${expanded}
                     @change=${onChange} @rename-node=${onRename}
                     @delete-node=${onDelete} @duplicate-node=${onDuplicate}
                 ></flows-hitl-node-editor>`;
@@ -185,6 +212,7 @@ export class FlowsPropertyPanel extends PlatformElement {
                     .nodeConfig=${node} .nodeType=${node.type}
                     .flowVariables=${flowVariables} .graphNodes=${graphNodes}
                     .previewExecutionState=${previewExecutionState}
+                    ?expanded=${expanded}
                     @change=${onChange} @rename-node=${onRename}
                     @delete-node=${onDelete} @duplicate-node=${onDuplicate}
                 ></flows-external-api-editor>`;
@@ -194,15 +222,17 @@ export class FlowsPropertyPanel extends PlatformElement {
                     .nodeConfig=${node} .nodeType=${node.type}
                     .flowVariables=${flowVariables} .graphNodes=${graphNodes}
                     .previewExecutionState=${previewExecutionState}
+                    ?expanded=${expanded}
                     @change=${onChange} @rename-node=${onRename}
                     @delete-node=${onDelete} @duplicate-node=${onDuplicate}
                 ></flows-remote-flow-editor>`;
             default:
                 return html`<flows-base-node-editor
                     .nodeId=${nodeId} .flowId=${this.flowId} .skillId=${this.skillId}
-                    .nodeConfig=${node} .nodeType=${node.type || ''}
+                    .nodeConfig=${node} .nodeType=${asString(node.type)}
                     .flowVariables=${flowVariables} .graphNodes=${graphNodes}
                     .previewExecutionState=${previewExecutionState}
+                    ?expanded=${expanded}
                     @change=${onChange} @rename-node=${onRename}
                     @delete-node=${onDelete} @duplicate-node=${onDuplicate}
                 ></flows-base-node-editor>`;
@@ -210,15 +240,24 @@ export class FlowsPropertyPanel extends PlatformElement {
     }
 
     render() {
-        const state = this._editor.state || {};
+        const state = asObject(this._editor.state);
         const nodeId = state.selectedNodeId;
         if (!nodeId) {
             return html`<div style="padding: var(--space-3); color: var(--text-tertiary)">${this.t('property_panel.select_node')}</div>`;
         }
-        const skillsData = state.skillsData || { nodes: {} };
+        const skillsData = isPlainObject(state.skillsData) ? state.skillsData : { nodes: {} };
         const node = skillsData.nodes?.[nodeId];
         if (!node) return html`<div></div>`;
-        return this._renderEditor(node, nodeId);
+        const isInherited = asArray(state.inheritedNodeIds).includes(nodeId);
+        return html`
+            ${isInherited ? html`
+                <div class="inherited-banner">
+                    <span class="badge">↑</span>
+                    <span>${this.t('property_panel.inherited_hint')}</span>
+                </div>
+            ` : ''}
+            ${this._renderEditor(node, nodeId)}
+        `;
     }
 }
 

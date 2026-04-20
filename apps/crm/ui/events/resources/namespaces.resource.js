@@ -39,6 +39,7 @@ export const namespaceUpdateOp = createAsyncOp({
     name: 'crm/namespace_update',
     successToastKey: 'crm:toast.namespace.updated',
     errorToastKey: 'crm:toast.namespace.update_failed',
+    restMirror: { method: 'PUT', path: '/crm/api/v1/namespaces/:namespace_name' },
     request: async ({ payload }) => {
         if (!payload || typeof payload.name !== 'string' || !payload.body) {
             throw new Error('namespaceUpdateOp: { name, body } required');
@@ -54,6 +55,7 @@ export const namespaceUpdateOp = createAsyncOp({
 export const namespaceEditabilityOp = createAsyncOp({
     name: 'crm/namespace_editability',
     silent: true,
+    restMirror: { method: 'GET', path: '/crm/api/v1/namespaces/:namespace_name/editability' },
     request: async ({ payload }) => {
         if (!payload || typeof payload.name !== 'string' || payload.name.length === 0) {
             throw new Error('namespaceEditabilityOp: payload.name required');

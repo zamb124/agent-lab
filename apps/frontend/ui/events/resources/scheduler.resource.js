@@ -25,7 +25,7 @@ const BASE = '/frontend/api/scheduler/schedules';
 
 export const schedulerTasksResource = createResourceCollection({
     name: 'frontend/scheduler_tasks',
-    baseUrl: BASE,
+    baseUrl: '/frontend/api/scheduler/schedules',
     idField: 'id',
     operations: ['list', 'create'],
     toastKeys: {
@@ -47,6 +47,7 @@ function _reloadList(ctx) {
 export const schedulerPauseOp = createAsyncOp({
     name: 'frontend/scheduler_pause',
     silent: true,
+    restMirror: { method: 'POST', path: '/frontend/api/scheduler/schedules/:schedule_task_id/pause' },
     request: async ({ payload }) => {
         const id = payload && payload.task_id;
         if (!id) throw new Error('schedulerPauseOp: task_id required');
@@ -61,6 +62,7 @@ export const schedulerPauseOp = createAsyncOp({
 export const schedulerResumeOp = createAsyncOp({
     name: 'frontend/scheduler_resume',
     silent: true,
+    restMirror: { method: 'POST', path: '/frontend/api/scheduler/schedules/:schedule_task_id/resume' },
     request: async ({ payload }) => {
         const id = payload && payload.task_id;
         if (!id) throw new Error('schedulerResumeOp: task_id required');
@@ -75,6 +77,7 @@ export const schedulerResumeOp = createAsyncOp({
 export const schedulerCancelOp = createAsyncOp({
     name: 'frontend/scheduler_cancel',
     silent: true,
+    restMirror: { method: 'POST', path: '/frontend/api/scheduler/schedules/:schedule_task_id/cancel' },
     request: async ({ payload }) => {
         const id = payload && payload.task_id;
         if (!id) throw new Error('schedulerCancelOp: task_id required');
@@ -89,6 +92,7 @@ export const schedulerCancelOp = createAsyncOp({
 export const schedulerRunNowOp = createAsyncOp({
     name: 'frontend/scheduler_run_now',
     silent: true,
+    restMirror: { method: 'POST', path: '/frontend/api/scheduler/schedules/:schedule_task_id/run-now' },
     request: async ({ payload }) => {
         const id = payload && payload.task_id;
         if (!id) throw new Error('schedulerRunNowOp: task_id required');
@@ -110,6 +114,7 @@ export const schedulerRunNowOp = createAsyncOp({
 export const schedulerRedisOp = createAsyncOp({
     name: 'frontend/scheduler_redis',
     silent: true,
+    restMirror: { method: 'GET', path: '/frontend/api/scheduler/schedules/:schedule_task_id/redis' },
     request: async ({ payload }) => {
         const id = payload && payload.task_id;
         if (!id) throw new Error('schedulerRedisOp: task_id required');

@@ -3,16 +3,17 @@
  *
  * Группы:
  *   1. zoom: zoom_in / zoom_out / zoom_100 / fit_view
- *   2. tools: select / pan / add_node
- *   3. actions: undo / redo / variables / breakpoints / smart-guides toggle / help
+ *   2. tools: select / pan
+ *   3. actions: undo / redo / variables / smart-guides toggle / help
  *
  * Источник state: useOp('flows/editor').state.{activeTool,canUndo,canRedo,
- * variablesPanelOpen,smartGuidesEnabled,viewBox,skillsData}.
+ * smartGuidesEnabled,viewBox,skillsData,flowConfig}.
  */
 
 import { html, css } from 'lit';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
 import '@platform/lib/components/platform-icon.js';
+import { asNumber, asObject, isPlainObject, getSkillsNodes } from '../../_helpers/flows-resolvers.js';
 
 const ZOOM_FACTOR = 1.2;
 const DEFAULT_VIEWBOX = Object.freeze({ x: 0, y: 0, w: 1600, h: 1000 });
@@ -35,17 +36,22 @@ export class FlowsBottomToolbar extends PlatformElement {
                 box-shadow: var(--glass-shadow-strong);
             }
             .btn {
+                box-sizing: border-box;
+                flex: 0 0 auto;
                 width: 36px; height: 36px;
-                display: flex; align-items: center; justify-content: center;
+                padding: 0; gap: 0;
+                font-size: 0; line-height: 1;
+                display: inline-flex; align-items: center; justify-content: center;
                 background: transparent; border: none;
                 border-radius: var(--radius-full);
                 color: var(--text-secondary);
                 cursor: pointer;
                 transition: background var(--duration-fast), color var(--duration-fast);
             }
-            .btn:hover { background: var(--glass-solid-medium); color: var(--text-primary); }
+            .btn:hover:not(:disabled) { background: var(--glass-solid-medium); color: var(--text-primary); }
             .btn[active] { background: var(--accent-subtle); color: var(--accent); }
-            .btn:disabled { opacity: 0.35; cursor: not-allowed; }
+            .btn:disabled { opacity: 0.35; cursor: not-allowed; pointer-events: none; }
+            .btn platform-icon { display: inline-flex; pointer-events: none; }
             .divider {
                 width: 1px;
                 height: 22px;
@@ -61,7 +67,8 @@ export class FlowsBottomToolbar extends PlatformElement {
     }
 
     _viewBox() {
-        return this._editor.state?.viewBox || { ...DEFAULT_VIEWBOX };
+        const vb = isPlainObject(this._editor.state) ? this._editor.state.viewBox : null;
+        return isPlainObject(vb) ? vb : { ...DEFAULT_VIEWBOX };
     }
 
     _setViewBox(vb) {
@@ -85,12 +92,12 @@ export class FlowsBottomToolbar extends PlatformElement {
     }
 
     _fitView() {
-        const nodes = Object.values(this._editor.state?.skillsData?.nodes || {});
+        const nodes = Object.values(getSkillsNodes(this._editor.state));
         if (nodes.length === 0) return;
         let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
         for (const n of nodes) {
-            const x = Number(n.pos_x) || 0;
-            const y = Number(n.pos_y) || 0;
+            const x = asNumber(n.pos_x);
+            const y = asNumber(n.pos_y);
             if (x < minX) minX = x;
             if (y < minY) minY = y;
             if (x + 200 > maxX) maxX = x + 200;
@@ -103,20 +110,23 @@ export class FlowsBottomToolbar extends PlatformElement {
     _setTool(tool) { this._editor.setActiveTool({ tool }); }
     _undo() { this._editor.undo({}); }
     _redo() { this._editor.redo({}); }
-    _toggleVariables() { this._editor.toggleVariablesPanel({}); }
+    _openVariables() {
+        const flowId = this._editor.state.flowConfig.flow_id;
+        this.openModal('flows.variables', { scope: 'flow', flowId });
+    }
     _toggleGuides() { this._editor.toggleSmartGuides({}); }
     _help() { this.openModal('flows.canvas_help', {}); }
 
     render() {
-        const state = this._editor.state || {};
-        const activeTool = state.activeTool || 'select';
+        const state = asObject(this._editor.state);
+        const activeTool = typeof state.activeTool === 'string' && state.activeTool.length > 0 ? state.activeTool : 'select';
         const guidesOn = state.smartGuidesEnabled !== false;
         return html`
             <button class="btn" type="button" title=${this.t('canvas.toolbar.zoom_in')} @click=${this._zoomIn}>
                 <platform-icon name="plus" size="16"></platform-icon>
             </button>
             <button class="btn" type="button" title=${this.t('canvas.toolbar.zoom_out')} @click=${this._zoomOut}>
-                <platform-icon name="minimize" size="16"></platform-icon>
+                <platform-icon name="minus" size="16"></platform-icon>
             </button>
             <button class="btn" type="button" title=${this.t('canvas.toolbar.zoom_100')} @click=${this._zoom100}>
                 <platform-icon name="search" size="16"></platform-icon>
@@ -145,7 +155,7 @@ export class FlowsBottomToolbar extends PlatformElement {
 
             <span class="divider"></span>
 
-            <button class="btn" type="button" ?active=${state.variablesPanelOpen} title=${this.t('canvas.toolbar.toggle_variables')} @click=${this._toggleVariables}>
+            <button class="btn" type="button" title=${this.t('canvas.toolbar.open_variables')} @click=${this._openVariables}>
                 <platform-icon name="code" size="16"></platform-icon>
             </button>
             <button class="btn" type="button" ?active=${guidesOn} title=${this.t('canvas.toolbar.toggle_guides')} @click=${this._toggleGuides}>

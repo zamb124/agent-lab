@@ -16,23 +16,25 @@ import { PlatformApp } from '@platform/lib/base/PlatformApp.js';
 import { CoreEvents } from '@platform/lib/events/index.js';
 import { createRouterEffect } from '@platform/lib/events/effects/router.effect.js';
 import '@platform/lib/components/layout/platform-island.js';
-import '@platform/lib/components/platform-shell-page.js';
 
 import { spacesResource } from '../events/resources/spaces.resource.js';
+import { platformNamespacesResource } from '../events/resources/platform-namespaces.resource.js';
 import { channelsResource, channelMarkReadOp, channelTypingOp, channelAddMemberOp,
          channelMembersListOp, channelNotificationsUpdateOp } from '../events/resources/channels.resource.js';
-import { messagesResource } from '../events/resources/messages.resource.js';
+import { messagesResource, messagesLoadOlderOp, messagesLoadNewerOp } from '../events/resources/messages.resource.js';
 import { threadsResource } from '../events/resources/threads.resource.js';
 import { companyMembersResource, sharedChannelsOp } from '../events/resources/members.resource.js';
 import { presenceResource } from '../events/resources/presence.resource.js';
 import { callTokenOp, callStatusOp, callTurnOp, callRecordingsListOp,
          callInviteOp, callAcceptOp, callDeclineOp, callHangupOp,
          callRecordingStartOp, callRecordingStopOp, callAdminTransferOp,
-         callSignalOp, callLinksScheduledResource, callLinkCreateOp,
+         callSignalOp, callLinksScheduledOp, callLinkCreateOp,
          callLinkUpdateOp, callLinkRemoveOp, callJoinInfoOp,
-         callJoinAcceptOp, callUiResource } from '../events/resources/calls.resource.js';
+         callJoinAcceptOp, callUiResource,
+         channelCreateAdhocCallOp } from '../events/resources/calls.resource.js';
 import { fileUploadOp } from '../events/resources/files.resource.js';
 import { gitResourceUpsertOp, gitResourceGetOp } from '../events/resources/git-resources.resource.js';
+import { chatUiResource } from '../events/resources/chat-ui.resource.js';
 import { createSyncPersistEffect } from '../events/sync-persist.effect.js';
 
 const SYNC_ROUTES = [
@@ -51,11 +53,39 @@ export class SyncApp extends PlatformApp {
         super();
         this._incomingCallDispatched = new Set();
         this._wsEverConnected = false;
+        this._typingPruneTimer = null;
         this._authUserSel = this.select((s) => s.auth && s.auth.user ? s.auth.user : null);
         this._channelsSliceSel = this.select((s) => s.syncChannels);
         this.useEvent('sync/call/incoming', (event) => this._onIncomingCall(event));
         this.useEvent('sync/call/ended', (event) => this._onCallEnded(event));
         this.useEvent(CoreEvents.WS_CONNECTED, () => this._onWsConnected());
+        // Реакция на смену глобального namespace (CRM/Sync/Office используют один
+        // селект). Сейчас фильтрация каналов на UI-стороне (sidebar/picker сами
+        // перерисовываются через `select(state.ui.namespace)`); хук-точка
+        // расширения для случая, если backend начнёт фильтровать список каналов
+        // по `X-Platform-Namespace`.
+        this.useEvent(CoreEvents.UI_NAMESPACE_CHANGED, () => this._onNamespaceChanged());
+    }
+
+    _onNamespaceChanged() {
+        // No-op: list уже загружен; фильтрация на UI. Если backend в будущем
+        // начнёт фильтровать по namespace, здесь можно перезапросить
+        // `channelsResource.events.LIST_REQUESTED`.
+    }
+
+    connectedCallback() {
+        super.connectedCallback();
+        this._typingPruneTimer = window.setInterval(() => {
+            this.dispatch('sync/presence/typing_prune', null);
+        }, 1500);
+    }
+
+    disconnectedCallback() {
+        if (this._typingPruneTimer !== null) {
+            window.clearInterval(this._typingPruneTimer);
+            this._typingPruneTimer = null;
+        }
+        super.disconnectedCallback();
     }
 
     _resolveSelectedChannelId() {
@@ -72,16 +102,19 @@ export class SyncApp extends PlatformApp {
     }
 
     _onWsConnected() {
-        if (!this._wsEverConnected) {
-            this._wsEverConnected = true;
-            return;
-        }
-        // reconnect: redis pub/sub не хранит историю, нужно перезагрузить.
+        // На первом connect пере-запрашиваем ws-фабрики Sync, чьи initial
+        // autoload-LIST_REQUESTED отлетели в `ws_disconnected` (фабрика
+        // диспатчится раньше, чем WS успевает подняться). На последующих
+        // reconnect то же самое: redis pub/sub не хранит историю.
+        this.dispatch(spacesResource.events.LIST_REQUESTED, null);
         this.dispatch(channelsResource.events.LIST_REQUESTED, null);
-        const selectedChannelId = this._resolveSelectedChannelId();
-        if (selectedChannelId !== '') {
-            this.dispatch(messagesResource.events.REQUESTED, { channel_id: selectedChannelId, limit: 50 });
+        if (this._wsEverConnected) {
+            const selectedChannelId = this._resolveSelectedChannelId();
+            if (selectedChannelId !== '') {
+                this.dispatch(messagesResource.events.REQUESTED, { channel_id: selectedChannelId, limit: 50 });
+            }
         }
+        this._wsEverConnected = true;
     }
 
     _onIncomingCall(event) {
@@ -118,6 +151,7 @@ export class SyncApp extends PlatformApp {
 
     static factories = [
         spacesResource,
+        platformNamespacesResource,
         channelsResource,
         channelMarkReadOp,
         channelTypingOp,
@@ -125,6 +159,8 @@ export class SyncApp extends PlatformApp {
         channelMembersListOp,
         channelNotificationsUpdateOp,
         messagesResource,
+        messagesLoadOlderOp,
+        messagesLoadNewerOp,
         threadsResource,
         companyMembersResource,
         sharedChannelsOp,
@@ -141,33 +177,56 @@ export class SyncApp extends PlatformApp {
         callRecordingStopOp,
         callAdminTransferOp,
         callSignalOp,
-        callLinksScheduledResource,
+        callLinksScheduledOp,
         callLinkCreateOp,
         callLinkUpdateOp,
         callLinkRemoveOp,
         callJoinInfoOp,
         callJoinAcceptOp,
         callUiResource,
+        channelCreateAdhocCallOp,
         fileUploadOp,
         gitResourceUpsertOp,
         gitResourceGetOp,
+        chatUiResource,
     ];
 
     static styles = [
         PlatformApp.styles,
         css`
             :host {
-                display: block;
-                width: 100%;
-                height: 100vh;
+                display: flex;
+                flex-direction: row;
+                width: var(--app-vw, 100vw);
+                height: var(--app-vh, 100vh);
+                overflow: hidden;
                 background: var(--bg-gradient);
                 padding-top: env(safe-area-inset-top, 0);
                 padding-bottom: env(safe-area-inset-bottom, 0);
+            }
+            .sidebar {
+                height: var(--app-vh, 100vh);
+                flex-shrink: 0;
+                background: transparent;
+            }
+            .main {
+                flex: 1;
+                min-width: 0;
+                height: var(--app-vh, 100vh);
+                display: flex;
+                flex-direction: column;
+                overflow: hidden;
+            }
+            platform-island {
+                flex: 1;
+                min-height: 0;
+                min-width: 0;
             }
             @media (max-width: 767px) {
                 :host {
                     height: 100dvh;
                 }
+                .sidebar { position: absolute; width: 0; height: 0; overflow: visible; }
             }
         `,
     ];
@@ -192,10 +251,12 @@ export class SyncApp extends PlatformApp {
             return html`<sync-call-join-page .linkToken=${params.linkToken}></sync-call-join-page>`;
         }
         return html`
-            <platform-shell-page>
-                <sync-sidebar slot="sidebar"></sync-sidebar>
-                <platform-island slot="main">${this._renderInner(routeKey, params)}</platform-island>
-            </platform-shell-page>
+            <div class="sidebar"><sync-sidebar></sync-sidebar></div>
+            <div class="main">
+                <platform-island padding="none" content-no-scroll>
+                    ${this._renderInner(routeKey, params)}
+                </platform-island>
+            </div>
         `;
     }
 

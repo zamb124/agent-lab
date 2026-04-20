@@ -2,11 +2,11 @@
 API для управления RAG провайдерами.
 """
 
-from typing import List
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
 from core.logging import get_logger
+from core.pagination import ListResponse
 from core.rag.factory import get_rag_provider
 from apps.rag.config import get_rag_settings
 from ..dependencies import ContainerDep
@@ -24,9 +24,15 @@ class ProviderInfo(BaseModel):
     type: str
 
 
-class ProviderListResponse(BaseModel):
-    """Ответ со списком провайдеров"""
-    items: List[ProviderInfo]
+class ProvidersView(ListResponse[ProviderInfo]):
+    """Композитный ответ: канонический `items` из core.pagination +
+    метаполе `current_provider` (имя активного провайдера для компании).
+
+    Наследуется от ``ListResponse[ProviderInfo]`` — не ad-hoc модель
+    пагинации, а расширение канонической формы дополнительным полем
+    (см. правило «только CursorPage/OffsetPage/ListResponse» в main.mdc).
+    """
+
     current_provider: str
 
 
@@ -35,10 +41,10 @@ class ProviderSwitchRequest(BaseModel):
     provider_name: str
 
 
-@router.get("/providers", response_model=ProviderListResponse)
+@router.get("/providers", response_model=ProvidersView)
 async def list_providers(
     container: ContainerDep,
-) -> ProviderListResponse:
+) -> ProvidersView:
     """
     Возвращает список доступных RAG провайдеров.
     
@@ -62,9 +68,9 @@ async def list_providers(
     
     logger.info(f"Список провайдеров запрошен: {[p.name for p in providers]}")
     
-    return ProviderListResponse(
+    return ProvidersView(
         items=providers,
-        current_provider=settings.rag.default_provider
+        current_provider=settings.rag.default_provider,
     )
 
 

@@ -36,18 +36,21 @@ function ooFrameIdKey(id) {
 
 function parseJwtPayloadClaims(jwt) {
     if (typeof jwt !== 'string' || !jwt.includes('.')) {
-        return {};
+        throw new Error('parseJwtPayloadClaims: jwt must be a non-empty string with payload segment');
     }
-    try {
-        const part = jwt.split('.')[1];
-        const b64 = part.replace(/-/g, '+').replace(/_/g, '/');
-        const pad = b64.length % 4;
-        const padded = pad ? b64 + '='.repeat(4 - pad) : b64;
-        const json = atob(padded);
-        return JSON.parse(json);
-    } catch {
-        return {};
+    const part = jwt.split('.')[1];
+    if (!part) {
+        throw new Error('parseJwtPayloadClaims: jwt has no payload segment');
     }
+    const b64 = part.replace(/-/g, '+').replace(/_/g, '/');
+    const pad = b64.length % 4;
+    const padded = pad ? b64 + '='.repeat(4 - pad) : b64;
+    const json = atob(padded);
+    const claims = JSON.parse(json);
+    if (!claims || typeof claims !== 'object' || Array.isArray(claims)) {
+        throw new Error('parseJwtPayloadClaims: payload is not a JSON object');
+    }
+    return claims;
 }
 
 let _ooEmbedCounter = 0;
@@ -122,9 +125,6 @@ export class OnlyOfficeHost extends PlatformElement {
         this._ooIframeAttrObserver = null;
         this._ooBodyObserver = null;
         this._ooIframeMount = null;
-        this._onWinResize = () => {
-            requestAnimationFrame(() => this._syncOoLayout());
-        };
         this._onDocScrollCapture = () => {
             requestAnimationFrame(() => this._syncOoLayout());
         };
@@ -189,7 +189,6 @@ export class OnlyOfficeHost extends PlatformElement {
 
     _teardownOoDom() {
         document.removeEventListener('scroll', this._onDocScrollCapture, true);
-        window.removeEventListener('resize', this._onWinResize);
         this._detachOoBodyObserver();
         if (this._ooIframeAttrObserver) {
             this._ooIframeAttrObserver.disconnect();
@@ -361,7 +360,7 @@ export class OnlyOfficeHost extends PlatformElement {
         });
         this._ooResizeObserver.observe(anchor);
         this._ooResizeObserver.observe(this);
-        window.addEventListener('resize', this._onWinResize);
+        this._ooResizeObserver.observe(document.documentElement);
         document.addEventListener('scroll', this._onDocScrollCapture, true);
         requestAnimationFrame(() => this._syncOoLayout());
     }

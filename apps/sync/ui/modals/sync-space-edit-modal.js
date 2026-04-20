@@ -6,6 +6,7 @@ import { html, css } from 'lit';
 import { PlatformFormModal } from '@platform/lib/components/glass-form-modal.js';
 import { registerModalKind } from '@platform/lib/utils/modal-registry.js';
 import '@platform/lib/components/platform-button.js';
+import '@platform/lib/components/platform-icon.js';
 
 export class SyncSpaceEditModal extends PlatformFormModal {
     static modalKind = 'sync.space_edit';
@@ -15,6 +16,7 @@ export class SyncSpaceEditModal extends PlatformFormModal {
         ...PlatformFormModal.properties,
         spaceId: { type: String },
         _name: { state: true },
+        _namespace: { state: true },
         _transcribe: { state: true },
         _speechToChat: { state: true },
         _hydrated: { state: true },
@@ -23,16 +25,11 @@ export class SyncSpaceEditModal extends PlatformFormModal {
     static styles = [
         ...(PlatformFormModal.styles ? [PlatformFormModal.styles] : []),
         css`
-            .field { display: flex; flex-direction: column; gap: var(--space-1); margin-bottom: var(--space-3); }
-            input[type="text"] {
-                padding: var(--space-2);
-                border-radius: var(--radius-md);
-                border: 1px solid var(--glass-border);
-                background: var(--glass-solid);
-                color: var(--text-primary);
+            .ns-hint {
+                font-size: var(--text-xs);
+                color: var(--text-tertiary);
+                margin-top: var(--space-1);
             }
-            label { font-size: var(--text-sm); }
-            .toggle { display: flex; align-items: center; gap: var(--space-2); margin-bottom: var(--space-2); }
         `,
     ];
 
@@ -40,6 +37,7 @@ export class SyncSpaceEditModal extends PlatformFormModal {
         super();
         this.spaceId = '';
         this._name = '';
+        this._namespace = '';
         this._transcribe = false;
         this._speechToChat = false;
         this._hydrated = false;
@@ -52,6 +50,7 @@ export class SyncSpaceEditModal extends PlatformFormModal {
             const item = this._spaces.byId[this.spaceId];
             if (item) {
                 this._name = typeof item.name === 'string' ? item.name : '';
+                this._namespace = typeof item.namespace === 'string' ? item.namespace : '';
                 this._transcribe = Boolean(item.transcribe_voice_messages);
                 this._speechToChat = Boolean(item.speech_to_chat_enabled);
                 this._hydrated = true;
@@ -65,25 +64,57 @@ export class SyncSpaceEditModal extends PlatformFormModal {
 
     renderBody() {
         return html`
-            <div class="field">
-                <label>${this.t('space_modal.field_name')}</label>
-                <input type="text" .value=${this._name} @input=${(e) => { this._name = e.target.value; this.markDirty(); }} />
+            <div class="form-group">
+                <label class="form-label">${this.t('space_modal.field_name')}</label>
+                <input
+                    class="form-input"
+                    type="text"
+                    .value=${this._name}
+                    @input=${(e) => { this._name = e.target.value; this.isDirty = true; }}
+                />
             </div>
-            <div class="toggle">
-                <input type="checkbox" id="trans-e" .checked=${this._transcribe} @change=${(e) => { this._transcribe = e.target.checked; this.markDirty(); }} />
-                <label for="trans-e">${this.t('space_modal.field_transcribe')}</label>
+            <div class="form-group">
+                <label class="form-label">${this.t('space_modal.field_namespace')}</label>
+                <input
+                    class="form-input readonly"
+                    type="text"
+                    .value=${this._namespace}
+                    readonly
+                    disabled
+                />
+                <div class="ns-hint">${this.t('space_modal.namespace_immutable_hint')}</div>
             </div>
-            <div class="toggle">
-                <input type="checkbox" id="s2c-e" .checked=${this._speechToChat} @change=${(e) => { this._speechToChat = e.target.checked; this.markDirty(); }} />
-                <label for="s2c-e">${this.t('space_modal.field_speech_to_chat')}</label>
+            <div
+                class=${this._transcribe ? 'form-item selected' : 'form-item'}
+                @click=${() => { this._transcribe = !this._transcribe; this.isDirty = true; }}
+            >
+                <div class="form-checkbox">
+                    ${this._transcribe ? html`<platform-icon name="check" size="12"></platform-icon>` : ''}
+                </div>
+                <div class="form-item-content">
+                    <div class="form-item-title">${this.t('space_modal.field_transcribe')}</div>
+                </div>
+            </div>
+            <div
+                class=${this._speechToChat ? 'form-item selected' : 'form-item'}
+                @click=${() => { this._speechToChat = !this._speechToChat; this.isDirty = true; }}
+            >
+                <div class="form-checkbox">
+                    ${this._speechToChat ? html`<platform-icon name="check" size="12"></platform-icon>` : ''}
+                </div>
+                <div class="form-item-content">
+                    <div class="form-item-title">${this.t('space_modal.field_speech_to_chat')}</div>
+                </div>
             </div>
         `;
     }
 
     renderFooter() {
         return html`
-            <platform-button @click=${() => this.close()}>${this.t('space_modal.action_cancel')}</platform-button>
-            <platform-button variant="primary" @click=${this._onSubmit}>${this.t('space_modal.action_save')}</platform-button>
+            <div class="form-actions">
+                <platform-button variant="secondary" @click=${() => this.close()}>${this.t('space_modal.action_cancel')}</platform-button>
+                <platform-button variant="primary" @click=${this._onSubmit}>${this.t('space_modal.action_save')}</platform-button>
+            </div>
         `;
     }
 

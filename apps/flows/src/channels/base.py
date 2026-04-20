@@ -39,7 +39,7 @@ from core.context import Context, User, clear_context, get_context, set_context
 from core.logging import get_logger
 from apps.flows.src.mock import check_mock_permission, resolve_mock_config
 from apps.flows.src.models.flow_config import Edge, SkillConfig
-from apps.flows.src.models.enums import NodeType
+from apps.flows.src.models.enums import MergeMode, NodeType
 from apps.flows.src.services.flow_validator import FlowValidator, ValidationSeverity
 from apps.flows.src.state import collect_flow_node_files, create_initial_state
 from apps.flows.src.state.cancellation import CancellationToken, FlowCancelled, set_cancellation_token
@@ -915,15 +915,23 @@ class BaseChannel(ABC):
                 else:
                     edges.append(edge)
         
-        skill_config = SkillConfig(
-            name=data.get("name", skill_id),
-            description=data.get("description", ""),
-            tags=data.get("tags", []),
-            entry=skill_body.get("entry"),
-            nodes=skill_body.get("nodes"),
-            edges=edges,
-            variables=skill_body.get("variables", {}),
-        )
+        skill_kwargs: dict[str, Any] = {
+            "name": data.get("name", skill_id),
+            "description": data.get("description", ""),
+            "tags": data.get("tags", []),
+            "entry": skill_body.get("entry"),
+            "nodes": skill_body.get("nodes"),
+            "edges": edges,
+            "variables": skill_body.get("variables", {}),
+        }
+        if "nodes_mode" in skill_body:
+            skill_kwargs["nodes_mode"] = MergeMode(skill_body["nodes_mode"])
+        if "edges_mode" in skill_body:
+            skill_kwargs["edges_mode"] = MergeMode(skill_body["edges_mode"])
+        if "variables_mode" in skill_body:
+            skill_kwargs["variables_mode"] = MergeMode(skill_body["variables_mode"])
+
+        skill_config = SkillConfig(**skill_kwargs)
         
         if config.skills is None:
             config.skills = {}
@@ -999,14 +1007,34 @@ class BaseChannel(ABC):
                 else:
                     edges.append(edge)
         
+        existing_skill = config.skills.get(skill_id) if config.skills else None
+        nodes_mode = MergeMode(
+            skill_body["nodes_mode"]
+            if "nodes_mode" in skill_body
+            else (existing_skill.nodes_mode if existing_skill else "merge")
+        )
+        edges_mode = MergeMode(
+            skill_body["edges_mode"]
+            if "edges_mode" in skill_body
+            else (existing_skill.edges_mode if existing_skill else "merge")
+        )
+        variables_mode = MergeMode(
+            skill_body["variables_mode"]
+            if "variables_mode" in skill_body
+            else (existing_skill.variables_mode if existing_skill else "merge")
+        )
+
         skill_config = SkillConfig(
             name=data.get("name", skill_id),
             description=data.get("description", ""),
             tags=data.get("tags", []),
             entry=skill_body.get("entry"),
             nodes=skill_body.get("nodes"),
+            nodes_mode=nodes_mode,
             edges=edges,
+            edges_mode=edges_mode,
             variables=skill_body.get("variables", {}),
+            variables_mode=variables_mode,
         )
         
         if config.skills is None:

@@ -13,7 +13,8 @@
 import { html, css } from 'lit';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
 import './flows-base-node-editor.js';
-import '../editors/flows-prompt-editor.js';
+import '@platform/lib/components/prompt-editor.js';
+import { asObject, asString } from '../../_helpers/flows-resolvers.js';
 
 export class FlowsHitlNodeEditor extends PlatformElement {
     static properties = {
@@ -25,13 +26,14 @@ export class FlowsHitlNodeEditor extends PlatformElement {
         flowVariables: { type: Object },
         graphNodes: { type: Array },
         previewExecutionState: { type: Object },
+        expanded: { type: Boolean, reflect: true },
         _queueSearch: { state: true },
     };
 
     static styles = [
         PlatformElement.styles,
         css`
-            :host { display: block; }
+            :host { display: block; height: 100%; min-height: 0; }
             .field { display: flex; flex-direction: column; gap: var(--space-1); margin-bottom: var(--space-3); }
             label { font-size: var(--text-sm); color: var(--text-secondary); }
             input, select {
@@ -73,6 +75,7 @@ export class FlowsHitlNodeEditor extends PlatformElement {
         this.flowVariables = null;
         this.graphNodes = null;
         this.previewExecutionState = null;
+        this.expanded = false;
         this._queueSearch = '';
         this._queues = this.useResource('flows/operator_queues', { autoload: true });
     }
@@ -100,7 +103,7 @@ export class FlowsHitlNodeEditor extends PlatformElement {
     }
 
     render() {
-        const cfg = this.nodeConfig || {};
+        const cfg = asObject(this.nodeConfig);
         const slug = typeof cfg.operator_queue_slug === 'string' ? cfg.operator_queue_slug : '';
         const handoffMode = cfg.operator_handoff_mode === 'takeover' ? 'takeover' : 'single_reply';
         const taskTitle = typeof cfg.operator_task_title === 'string' ? cfg.operator_task_title : '';
@@ -110,8 +113,8 @@ export class FlowsHitlNodeEditor extends PlatformElement {
             ? queues
             : queues.filter((q) => {
                 const search = this._queueSearch.toLowerCase();
-                return (q.slug || '').toLowerCase().includes(search)
-                    || (q.name || '').toLowerCase().includes(search);
+                return asString(q.slug).toLowerCase().includes(search)
+                    || asString(q.name).toLowerCase().includes(search);
             });
         return html`
             <flows-base-node-editor
@@ -119,14 +122,11 @@ export class FlowsHitlNodeEditor extends PlatformElement {
                 .flowId=${this.flowId}
                 .skillId=${this.skillId}
                 .nodeConfig=${this.nodeConfig}
-                .nodeType=${this.nodeType || 'hitl_node'}
+                .nodeType=${typeof this.nodeType === 'string' && this.nodeType.length > 0 ? this.nodeType : 'hitl_node'}
                 .flowVariables=${this.flowVariables}
                 .graphNodes=${this.graphNodes}
                 .previewExecutionState=${this.previewExecutionState}
-                @change=${(e) => this.emit('change', e.detail)}
-                @rename-node=${(e) => this.emit('rename-node', e.detail)}
-                @delete-node=${(e) => this.emit('delete-node', e.detail)}
-                @duplicate-node=${(e) => this.emit('duplicate-node', e.detail)}
+                ?expanded=${this.expanded}
             >
                 <div slot="settings">
                     <div class="field">
@@ -165,11 +165,12 @@ export class FlowsHitlNodeEditor extends PlatformElement {
                     </div>
                     <div class="field">
                         <label>${this.t('hitl_node_editor.user_message')}</label>
-                        <flows-prompt-editor
+                        <prompt-editor
                             .value=${userMessage}
-                            .flowVariables=${this.flowVariables}
+                            .variables=${this.flowVariables && typeof this.flowVariables === 'object' ? this.flowVariables : {}}
+                            label=${this.t('hitl_node_editor.user_message')}
                             @change=${this._onUserMessage}
-                        ></flows-prompt-editor>
+                        ></prompt-editor>
                     </div>
                 </div>
             </flows-base-node-editor>

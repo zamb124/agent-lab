@@ -1,102 +1,111 @@
 {
-  "notifications": {
-    "title": "Notifications",
-    "dismiss_all": "Clear all",
-    "empty": "No notifications yet"
-  },
-  "menu": {
-    "user_button_title": "User menu",
-    "apps": "Apps",
-    "profile": "Profile",
-    "calendar": "Calendar",
-    "documentation": "Documentation",
-    "theme_light": "Light theme",
-    "theme_dark": "Dark theme",
-    "logout": "Log out",
-    "language": "Language",
-    "user_fallback": "User"
-  },
-  "apps": {
-    "flows": {
-      "name": "Flows",
-      "description": "Design AI flows with graphs and skills, connect external systems — ship automation from idea to production with less custom code"
+    "notifications": {
+        "title": "Notifications",
+        "dismiss_all": "Clear all",
+        "empty": "No notifications yet"
     },
-    "crm": {
-      "name": "NetWorkle",
-      "description": "CRM plus a knowledge graph: contacts, relationships, and deal context in one network so nothing falls through the cracks"
+    "menu": {
+        "user_button_title": "User menu",
+        "apps": "Apps",
+        "profile": "Profile",
+        "calendar": "Calendar",
+        "documentation": "Documentation",
+        "theme_light": "Light theme",
+        "theme_dark": "Dark theme",
+        "logout": "Log out",
+        "language": "Language",
+        "user_fallback": "User"
     },
-    "rag": {
-      "name": "RAG",
-      "description": "Your company knowledge base: upload documents, run semantic search, and give AI answers grounded in your own content"
+    "apps": {
+        "flows": {
+            "name": "Flows",
+            "description": "Design AI flows with graphs and skills, connect external systems — ship automation from idea to production with less custom code"
+        },
+        "crm": {
+            "name": "NetWorkle",
+            "description": "CRM plus a knowledge graph: contacts, relationships, and deal context in one network so nothing falls through the cracks"
+        },
+        "rag": {
+            "name": "RAG",
+            "description": "Your company knowledge base: upload documents, run semantic search, and give AI answers grounded in your own content"
+        },
+        "sync": {
+            "name": "Sync",
+            "description": "The engineering team hub: chat, Git, and calls alongside repos — align faster and ship with less friction"
+        },
+        "documents": {
+            "name": "Documents",
+            "description": "Collaborative Office editing: binding list, editor in iframe, namespace isolation, secrets only on the BFF"
+        },
+        "frontend": {
+            "name": "Console",
+            "description": "Your platform home: company settings, billing, and one-click access to every product"
+        }
     },
-    "sync": {
-      "name": "Sync",
-      "description": "The engineering team hub: chat, Git, and calls alongside repos — align faster and ship with less friction"
+    "file_preview_modal": {
+        "title": "Text from file",
+        "loading": "Reading file…",
+        "truncated_hint": "Showing an excerpt; the full file is processed on the server during import.",
+        "cancel": "Cancel",
+        "confirm": "Continue",
+        "error_no_file": "No file selected",
+        "error_bad_response": "Invalid server response"
     },
-    "documents": {
-      "name": "Documents",
-      "description": "Collaborative Office editing: binding list, editor in iframe, namespace isolation, secrets only on the BFF"
+    "company": {
+        "create_title": "Create company",
+        "create_subtitle": "Create a company to get started",
+        "name_label": "Company name",
+        "name_placeholder": "My company",
+        "slug_label": "Company URL",
+        "slug_hint": "Latin letters, digits, and hyphens only",
+        "slug_min": "At least 3 characters",
+        "slug_taken": "This URL is already taken",
+        "slug_check_error": "Could not check availability",
+        "error_name_required": "Enter a company name",
+        "error_slug_invalid": "Enter a valid company URL",
+        "error_slug_taken": "This company URL is already taken",
+        "error_create": "Could not create company",
+        "creating": "Creating...",
+        "submit": "Create"
     },
-    "frontend": {
-      "name": "Console",
-      "description": "Your platform home: company settings, billing, and one-click access to every product"
+    "platform_field": {
+        "empty_value": "Not set",
+        "boolean_true": "Yes",
+        "boolean_false": "No",
+        "array_placeholder": "Enter a value and press Enter",
+        "object_placeholder": "JSON object"
+    },
+    "user_chip": {
+        "unknown": "Unknown user",
+        "you": "You"
+    },
+    "user_info_modal": {
+        "header": "User profile",
+        "roles_label": "Roles",
+        "joined_at": "Joined",
+        "action_write_sync": "Message in Sync",
+        "action_open_team": "Open in Team",
+        "action_copy_id": "Copy ID",
+        "action_save": "Save",
+        "action_cancel": "Cancel",
+        "action_logout": "Sign out",
+        "action_save_roles": "Save roles",
+        "field_first_name": "First name",
+        "field_last_name": "Last name",
+        "field_name": "Display name",
+        "field_email": "Email",
+        "field_email_locked": "Email cannot be changed",
+        "field_bio": "Bio",
+        "field_language": "Interface language",
+        "lang_ru": "Russian",
+        "lang_en": "English",
+        "section_roles": "Team roles",
+        "role_owner": "Owner",
+        "role_admin": "Admin",
+        "role_developer": "Developer",
+        "role_viewer": "Viewer",
+        "role_owner_locked": "Cannot remove from company owner",
+        "error_name_required": "Name is required",
+        "error_role_required": "At least one role required"
     }
-  },
-  "file_preview_modal": {
-    "title": "Text from file",
-    "loading": "Reading file…",
-    "truncated_hint": "Showing an excerpt; the full file is processed on the server during import.",
-    "cancel": "Cancel",
-    "confirm": "Continue",
-    "error_no_file": "No file selected",
-    "error_bad_response": "Invalid server response"
-  },
-  "company": {
-    "switched": "Company switched",
-    "switch_error": "Could not switch company: {{message}}",
-    "subdomain_missing": "Subdomain not found for the selected company"
-  },
-  "platform_field": {
-    "empty_value": "Not set",
-    "boolean_true": "Yes",
-    "boolean_false": "No",
-    "array_placeholder": "Enter a value and press Enter",
-    "object_placeholder": "JSON object"
-  },
-  "user_chip": {
-    "unknown": "Unknown user",
-    "you": "You"
-  },
-  "user_info_modal": {
-    "header": "User profile",
-    "roles_label": "Roles",
-    "joined_at": "Joined",
-    "action_write_sync": "Message in Sync",
-    "action_open_team": "Open in Team",
-    "action_copy_id": "Copy ID",
-    "action_save": "Save",
-    "action_cancel": "Cancel",
-    "action_logout": "Sign out",
-    "action_save_roles": "Save roles",
-    "field_first_name": "First name",
-    "field_last_name": "Last name",
-    "field_name": "Display name",
-    "field_email": "Email",
-    "field_email_locked": "Email cannot be changed",
-    "field_bio": "Bio",
-    "field_language": "Interface language",
-    "lang_ru": "Russian",
-    "lang_en": "English",
-    "section_roles": "Team roles",
-    "role_owner": "Owner",
-    "role_admin": "Admin",
-    "role_developer": "Developer",
-    "role_viewer": "Viewer",
-    "role_owner_locked": "Cannot remove from company owner",
-    "toast_copied": "User ID copied",
-    "toast_copy_failed": "Failed to copy user ID",
-    "toast_profile_saved": "Profile saved",
-    "error_name_required": "Name is required",
-    "error_role_required": "At least one role required"
-  }
 }

@@ -27,6 +27,8 @@ export class SyncMessageComposer extends PlatformElement {
         _attachments: { state: true },
         _recording: { state: true },
         _mentionQuery: { state: true },
+        _emojiOpen: { state: true },
+        _mentionIndex: { state: true },
     };
 
     static styles = css`
@@ -131,6 +133,8 @@ export class SyncMessageComposer extends PlatformElement {
         this._mediaRecorder = null;
         this._recordedChunks = [];
         this._typingTimer = null;
+        this._emojiOpen = false;
+        this._mentionIndex = 0;
         this._messages = this.useOp('sync/messages');
         this._upload = this.useOp('sync/file_upload');
         this._typing = this.useOp('sync/channel_typing');
@@ -195,6 +199,35 @@ export class SyncMessageComposer extends PlatformElement {
             .slice(0, 8);
     }
 
+    _onKeyDown(e) {
+        const suggestions = this._filteredMembers();
+        if (suggestions.length > 0) {
+            if (e.key === 'ArrowDown') { e.preventDefault(); this._mentionIndex = (this._mentionIndex + 1) % suggestions.length; return; }
+            if (e.key === 'ArrowUp')   { e.preventDefault(); this._mentionIndex = (this._mentionIndex - 1 + suggestions.length) % suggestions.length; return; }
+            if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                const idx = Math.max(0, Math.min(this._mentionIndex, suggestions.length - 1));
+                this._insertMention(suggestions[idx]);
+                return;
+            }
+            if (e.key === 'Escape') { this._mentionQuery = null; return; }
+        }
+        if (e.key === 'Escape') {
+            if (this._emojiOpen) { this._emojiOpen = false; return; }
+            this._cancelMode();
+            return;
+        }
+        if (e.key === 'Enter' && !e.shiftKey) {
+            e.preventDefault();
+            this._send();
+        }
+    }
+
+    _onInsertEmoji(emoji) {
+        this._draft = this._draft + emoji;
+        this._emojiOpen = false;
+    }
+
     _insertMention(member) {
         if (!this._mentionQuery) return;
         const before = this._draft.slice(0, this._mentionQuery.atPos);
@@ -236,17 +269,14 @@ export class SyncMessageComposer extends PlatformElement {
     async _uploadFile(file) {
         await this._upload.run({ file });
         const result = this._upload.lastResult;
-        if (!result || !result.file_id) return;
-        const mime = (typeof result.mime === 'string' && result.mime !== '') ? result.mime : file.type;
-        const name = (typeof result.original_name === 'string' && result.original_name !== '')
-            ? result.original_name
-            : file.name;
-        this._attachments = [...this._attachments, {
-            file_id: result.file_id,
-            mime,
-            name,
-            url: result.url,
-        }];
+        if (!result || typeof result.file_id !== 'string' || result.file_id === '') return;
+        let mime = file.type;
+        if (typeof result.mime === 'string' && result.mime !== '') mime = result.mime;
+        let name = file.name;
+        if (typeof result.original_name === 'string' && result.original_name !== '') name = result.original_name;
+        const entry = { file_id: result.file_id, mime, name };
+        if (typeof result.url === 'string' && result.url !== '') entry.url = result.url;
+        this._attachments = [...this._attachments, entry];
     }
 
     _removeAttachment(idx) {
@@ -372,6 +402,7 @@ export class SyncMessageComposer extends PlatformElement {
         const editing = this._editMessageId();
         const overLimit = this._draft.length > SYNC_MESSAGE_TEXT_MAX_CHARS;
         const memberSuggestions = this._filteredMembers();
+        const emojis = ['👍', '❤️', '😂', '🎉', '🔥', '👏', '😮', '😢', '🙏', '🤔', '💯', '🚀', '✨', '🌟', '💡', '✅', '⚡', '🎯'];
         return html`
             ${reply ? html`
                 <div class="mode-bar">
@@ -397,14 +428,28 @@ export class SyncMessageComposer extends PlatformElement {
             <div class="row" style="position: relative;" @drop=${this._onDrop} @dragover=${(e) => e.preventDefault()}>
                 ${memberSuggestions.length > 0 ? html`
                     <div class="mention-popup">
-                        ${memberSuggestions.map((m) => html`
-                            <div class="item" @click=${() => this._insertMention(m)}>${resolveDisplayName(m)}</div>
+                        ${memberSuggestions.map((m, i) => html`
+                            <div class="item" style=${i === Math.max(0, Math.min(this._mentionIndex, memberSuggestions.length - 1)) ? 'background: var(--glass-hover);' : ''} @click=${() => this._insertMention(m)}>${resolveDisplayName(m)}</div>
                         `)}
                     </div>
                 ` : ''}
+                ${this._emojiOpen ? html`
+                    <div class="mention-popup" style="bottom: 100%; left: 80px; min-width: 240px; padding: var(--space-2); display: grid; grid-template-columns: repeat(6, 1fr); gap: 4px;">
+                        ${emojis.map((e) => html`
+                            <span style="cursor: pointer; font-size: 18px; padding: 4px; text-align: center; border-radius: var(--radius-sm);" @click=${() => this._onInsertEmoji(e)}>${e}</span>
+                        `)}
+                    </div>
+                ` : ''}
+                <input type="file" accept="image/*,video/*" multiple style="display: none;" id="photopick" @change=${this._onPickFiles} />
                 <input type="file" multiple style="display: none;" id="filepick" @change=${this._onPickFiles} />
-                <button title=${this.t('composer.action_attach')} @click=${() => this.renderRoot.getElementById('filepick').click()}>
+                <button title=${this.t('composer.attach_photo_video')} @click=${() => this.renderRoot.getElementById('photopick').click()}>
+                    <platform-icon name="image" size="18"></platform-icon>
+                </button>
+                <button title=${this.t('composer.attach_file')} @click=${() => this.renderRoot.getElementById('filepick').click()}>
                     <platform-icon name="paperclip" size="18"></platform-icon>
+                </button>
+                <button title=${this.t('composer.emoji_title')} @click=${() => { this._emojiOpen = !this._emojiOpen; }}>
+                    <platform-icon name="smile" size="18"></platform-icon>
                 </button>
                 <button title=${this.t('composer.action_voice')} @click=${this._toggleRecording}>
                     <platform-icon name=${this._recording ? 'square' : 'mic'} size="18"></platform-icon>
@@ -412,6 +457,7 @@ export class SyncMessageComposer extends PlatformElement {
                 <textarea
                     .value=${this._draft}
                     @input=${this._onInput}
+                    @keydown=${this._onKeyDown}
                     @paste=${this._onPaste}
                     placeholder=${this.t('composer.placeholder')}
                 ></textarea>

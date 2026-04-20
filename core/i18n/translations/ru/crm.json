@@ -1,19 +1,4 @@
 {
-    "routes": {
-        "notes": "Заметки",
-        "note": "Заметка",
-        "entities": "Сущности",
-        "entity": "Сущность",
-        "graph": "Граф",
-        "tasks": "Задачи",
-        "access_requests": "Запросы доступа",
-        "settings": "Настройки",
-        "spaces": "Пространства",
-        "space": "Пространство",
-        "templates": "Шаблоны",
-        "namespace_imports": "Импорт знаний",
-        "relationship_types": "Типы связей"
-    },
     "sidebar": {
         "namespace_label": "Пространство",
         "all_namespaces": "Все пространства",
@@ -22,12 +7,12 @@
         "org_section": "Организация",
         "nav": {
             "namespaces": "Пространства",
-            "notes": "Ежедневник",
+            "notes": "Ежедневные заметки",
             "entities": "Сущности",
-            "graph": "Граф связей",
+            "graph": "Граф",
             "tasks": "Задачи",
             "access_requests": "Запросы доступа",
-            "ai_analysis": "AI анализ",
+            "ai_analysis": "AI-анализ",
             "settings": "Настройки"
         }
     },
@@ -121,9 +106,6 @@
     "search": {
         "placeholder": "Поиск..."
     },
-    "notes": {
-        "date": "Дата"
-    },
     "entities": {
         "title": "Сущности",
         "empty": "Нет сущностей",
@@ -204,7 +186,6 @@
         "reset": "Сбросить фильтры"
     },
     "entity_card": {
-        "requester_fallback": "Пользователь",
         "related_entities": "Связанные сущности",
         "requests_empty": "Нет ожидающих запросов",
         "empty_pick_title": "Выберите сущность",
@@ -229,7 +210,6 @@
     "namespace_tasks_page": {
         "title": "Задачи пространства",
         "subtitle": "Фоновые задачи пространства: импорты знаний, AI-анализ заметок, дневные и периодные сводки.",
-        "select_namespace_warning": "Выберите конкретное пространство в селекторе слева, чтобы увидеть задачи.",
         "namespace_label": "Пространство: {{namespace}}",
         "namespace_label_all": "Все пространства компании",
         "live_polling": "Идёт опрос изменений",
@@ -256,12 +236,7 @@
         "confirm_cancel_ok": "Отменить",
         "confirm_rollback_title": "Откатить импорт?",
         "confirm_rollback_msg": "Все сущности и связи, созданные задачей {{task_id}}, будут удалены. Это действие необратимо.",
-        "confirm_rollback_ok": "Откатить",
-        "filter_all": "Все",
-        "filter_daily_summary": "Дневная сводка",
-        "filter_knowledge_import": "Импорт знаний",
-        "filter_note_analyze": "Анализ заметки",
-        "filter_period_summary": "Сводка за период"
+        "confirm_rollback_ok": "Откатить"
     },
     "templates_page": {
         "title": "Шаблоны пространств",
@@ -340,9 +315,7 @@
         "submit_failed": "Не удалось отправить запрос"
     },
     "note_content": {
-        "no_description": "Без описания",
-        "note_voice": "Голос заметки",
-        "context_anchor": "О чём заметка (якорь)"
+        "no_description": "Без описания"
     },
     "knowledge_import_modal": {
         "header": "Импорт знаний",
@@ -512,6 +485,9 @@
         "summary_title": "AI-резюме",
         "summary_generated_at": "Сгенерировано в {{time}}",
         "summary_refresh": "Обновить резюме",
+        "summary_analyze_starting": "Запускаем анализ...",
+        "summary_analyzing": "Идет анализ...",
+        "summary_progress_stage_fallback": "Подготовка анализа",
         "no_summary": "Резюме ещё не сформировано.",
         "related_entities": "Связанные сущности",
         "no_related": "Связанных сущностей нет.",
@@ -520,7 +496,10 @@
         "this_note": "Эта заметка",
         "attachments": "Вложения",
         "no_attachments": "Вложений нет.",
+        "attachments_empty_popover": "Вложения отсутствуют",
         "download": "Скачать",
+        "attachment_remove": "Удалить вложение",
+        "action_attachments": "Открыть вложения",
         "action_show_graph": "Показать граф связей",
         "action_delete": "Удалить заметку",
         "action_edit": "Редактировать",
@@ -530,20 +509,19 @@
         "task_done": "Отметить выполненной",
         "task_undone": "Снять отметку",
         "task_remove": "Удалить задачу",
-        "task_add_placeholder": "Введите задачу + Enter"
+        "task_add_placeholder": "Введите задачу + Enter",
+        "summary_entity_open": "Открыть сущность"
     },
     "note_edit": {
         "field_description": "Текст заметки",
         "field_date": "Дата заметки",
         "field_tags": "Теги",
-        "field_attachments": "Вложения",
         "placeholder_title": "Название заметки",
         "placeholder_description": "Что произошло, что обсудили, что важно запомнить...",
         "placeholder_tag": "Введите тег и нажмите Enter",
         "voice_start": "Голосовой ввод",
         "voice_stop": "Остановить запись",
         "attachment_add": "Добавить файл",
-        "attachment_uploading": "Загрузка...",
         "attachment_remove": "Удалить вложение",
         "action_cancel": "Отмена",
         "action_save": "Сохранить",
@@ -687,14 +665,15 @@
         "empty_period": "На выбранный период заметок нет",
         "analysis_open_draft": "Открыть черновик AI анализа",
         "analysis_run": "AI анализ",
-        "analysis_view_applied": "Просмотреть результаты AI анализа"
+        "analysis_view_applied": "Просмотреть результаты AI анализа",
+        "analysis_stage_fallback": "Идет анализ...",
+        "add_note_creating": "Создается заметка..."
     },
     "spaces_page": {
         "title": "Пространства",
         "subtitle": "Все namespace компании",
         "action_create": "Создать пространство",
         "action_open": "Открыть",
-        "action_edit": "Редактировать",
         "action_settings": "Настройки",
         "empty_message": "Пока нет пространств. Создайте первое.",
         "empty_description": "Описание не задано"

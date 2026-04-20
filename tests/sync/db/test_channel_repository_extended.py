@@ -27,6 +27,7 @@ async def test_list_by_space_and_list_for_user_with_space_filter(
         company_id=company_id,
         name="S",
         description=None,
+        namespace=f"ns_{unique_id}_l",
         created_at=datetime.now(tz=UTC),
         created_by_user_id="u1",
     )

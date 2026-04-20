@@ -528,7 +528,7 @@ async def validate_flow(
     )
 
 
-@router.get("", response_model=OffsetPage[FlowResponse])
+@router.get("/", response_model=OffsetPage[FlowResponse])
 async def list_flows(
     container: ContainerDep,
     type: Optional[FlowType] = None,
@@ -703,7 +703,7 @@ async def _validate_tool_nodes(
                             )
 
 
-@router.post("", response_model=FlowResponse)
+@router.post("/", response_model=FlowResponse)
 async def create_flow(
     request: FlowCreateRequest, container: ContainerDep
 ) -> FlowResponse:

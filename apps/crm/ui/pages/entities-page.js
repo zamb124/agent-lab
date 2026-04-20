@@ -985,12 +985,28 @@ export class CRMEntitiesPage extends PlatformPage {
     }
 
     _onDateRangeChange(e) {
-        const range = e.target.value;
-        if (range && typeof range !== 'object') {
-            throw new Error('Date range value must be object');
+        const detail = e.detail;
+        if (!detail || detail.selection !== 'range') {
+            throw new Error('platform-date-picker must use selection=range');
         }
-        this._dateFrom = range && range.start ? range.start : null;
-        this._dateTo = range && range.end ? range.end : null;
+        const value = detail.value;
+        if (value === null) {
+            this._dateFrom = null;
+            this._dateTo = null;
+            this._reloadList();
+            return;
+        }
+        if (!value || typeof value !== 'object') {
+            throw new Error('Date range value must be object or null');
+        }
+        const start = typeof value.start === 'string' && value.start.length > 0 ? value.start : null;
+        const end = typeof value.end === 'string' && value.end.length > 0 ? value.end : null;
+        const isoDate = /^\d{4}-\d{2}-\d{2}$/;
+        if ((start !== null && !isoDate.test(start)) || (end !== null && !isoDate.test(end))) {
+            throw new Error('Date range must be ISO (YYYY-MM-DD)');
+        }
+        this._dateFrom = start;
+        this._dateTo = end;
         this._reloadList();
     }
 

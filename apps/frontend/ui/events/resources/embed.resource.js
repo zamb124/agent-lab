@@ -38,6 +38,7 @@ export const embedConfigsResource = createResourceCollection({
 export const embedCodeLoadOp = createAsyncOp({
     name: 'frontend/embed_code',
     silent: true,
+    restMirror: { method: 'GET', path: '/frontend/api/embed/configs/:embed_id/code' },
     request: async ({ payload }) => {
         const id = payload && payload.embed_id;
         if (!id) throw new Error('embedCodeLoadOp: embed_id required');
@@ -47,9 +48,9 @@ export const embedCodeLoadOp = createAsyncOp({
         });
         return {
             embed_id: id,
-            html_code: r.html_code || '',
-            script_url: r.script_url || '',
-            token_endpoint: r.token_endpoint || '',
+            html_code: typeof r.html_code === 'string' ? r.html_code : '',
+            script_url: typeof r.script_url === 'string' ? r.script_url : '',
+            token_endpoint: typeof r.token_endpoint === 'string' ? r.token_endpoint : '',
         };
     },
     extraInitial: { codeByEmbedId: {}, codeLoadingById: {} },

@@ -136,7 +136,7 @@ apps/<svc>/ui/
                                # имена: '<svc>/<entity>'
   components/                  # PlatformElement-наследники
   pages/                       # PlatformPage; ZERO IMPORT (только базы + lit + локальные стили)
-  modals/                      # PlatformModal / PlatformFormModal / PlatformLightModal
+  modals/                      # PlatformModal / PlatformFormModal
   styles/<svc>.css
 ```
 

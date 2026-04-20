@@ -23,13 +23,16 @@ import '@platform/lib/components/platform-user.js';
 import '@platform/lib/components/platform-notification-manager.js';
 import '@platform/lib/components/platform-deployment-version.js';
 import './flow-card.js';
+import { asArray, asString, isPlainObject } from '../_helpers/flows-resolvers.js';
 
 const OPERATOR_ROLES = new Set(['admin', 'owner']);
 
 function userCanManageOperator(user, activeCompanyId) {
     if (!user || typeof user !== 'object' || typeof activeCompanyId !== 'string') return false;
-    const companies = user.companies || user.raw?.companies;
-    if (!companies || typeof companies !== 'object') return false;
+    const direct = isPlainObject(user.companies) ? user.companies : null;
+    const raw = isPlainObject(user.raw) && isPlainObject(user.raw.companies) ? user.raw.companies : null;
+    const companies = direct !== null ? direct : raw;
+    if (!companies) return false;
     const raw = companies[activeCompanyId];
     if (!raw) return false;
     const list = Array.isArray(raw) ? raw : [raw];
@@ -124,12 +127,12 @@ export class FlowsSidebar extends PlatformElement {
         this._flows = this.useResource('flows/flows', { autoload: true });
         this._skillRemove = this.useOp('flows/skill_remove');
         this._currentFlowSel = this.select((s) => {
-            const params = s.router?.params || {};
+            const params = isPlainObject(s.router) && isPlainObject(s.router.params) ? s.router.params : {};
             return typeof params.flowId === 'string' ? params.flowId : null;
         });
         this._authSel = this.select((s) => ({
-            user: s.auth?.user || null,
-            companyId: s.companies?.activeId || null,
+            user: isPlainObject(s.auth) && isPlainObject(s.auth.user) ? s.auth.user : null,
+            companyId: isPlainObject(s.auth) && typeof s.auth.activeCompanyId === 'string' ? s.auth.activeCompanyId : null,
         }));
     }
 
@@ -146,7 +149,7 @@ export class FlowsSidebar extends PlatformElement {
     }
 
     _onFlowAction(e) {
-        const { action, flowId, skillId } = e.detail || {};
+        const { action, flowId, skillId } = isPlainObject(e.detail) ? e.detail : {};
         switch (action) {
             case 'chat':
                 if (skillId) {
@@ -215,7 +218,7 @@ export class FlowsSidebar extends PlatformElement {
 
     _openSessions() {
         const flowId = this._currentFlowSel.value;
-        this.openModal('flows.sessions', { flowId: flowId || '' });
+        this.openModal('flows.sessions', { flowId: asString(flowId) });
     }
 
     _openMcp() {
@@ -223,7 +226,7 @@ export class FlowsSidebar extends PlatformElement {
     }
 
     _openVariables() {
-        this.openModal('flows.variables', {});
+        this.openModal('flows.variables', { scope: 'company' });
     }
 
     _openTriggers() {
@@ -241,7 +244,7 @@ export class FlowsSidebar extends PlatformElement {
     }
 
     render() {
-        const items = this._flows.items || [];
+        const items = asArray(this._flows.items);
         const currentFlowId = this._currentFlowSel.value;
         const auth = this._authSel.value;
         const operatorAllowed = userCanManageOperator(auth.user, auth.companyId);

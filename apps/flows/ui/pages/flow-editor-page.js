@@ -9,13 +9,10 @@
  *     .canvas-host:
  *       <flows-flow-canvas />         — native SVG canvas
  *       <flows-bottom-toolbar />      — floating pill снизу
- *       <flows-canvas-minimap />      — мини-карта снизу-справа
  *     <flows-floating-panel>          — chrome для property/resource panel
  *       <flows-property-panel />      — выбранная нода
  *       <flows-resource-property-panel /> — выбранный ресурс
- *   <flows-breakpoint-manager />     — индикатор брейкпоинтов
  *   <flows-execution-panel />        — тестовый запуск (виден по флагу)
- *   <flows-variables-panel />        — variables panel (виден по флагу)
  */
 
 import { html, css } from 'lit';
@@ -27,14 +24,12 @@ import '../components/editor/flows-node-types-sidebar.js';
 import '../components/editor/flows-property-panel.js';
 import '../components/editor/flows-resource-property-panel.js';
 import '../components/editor/flows-bottom-toolbar.js';
-import '../components/editor/flows-breakpoint-manager.js';
 import '../components/editor/flows-execution-panel.js';
-import '../components/editor/flows-variables-panel.js';
 import '../components/editor/flows-floating-panel.js';
 import '../components/flow-canvas/flows-flow-canvas.js';
-import '../components/flow-canvas/flows-canvas-minimap.js';
 import '../modals/flows-canvas-help-modal.js';
 import { getNodeTypeMeta, getCategoryToken } from '../constants/node-icons.js';
+import { asObject, isPlainObject } from '../_helpers/flows-resolvers.js';
 
 export class FlowEditorPage extends PlatformPage {
     static properties = {
@@ -48,7 +43,7 @@ export class FlowEditorPage extends PlatformPage {
             :host {
                 flex: 1; min-width: 0; min-height: 0;
                 display: flex; flex-direction: column;
-                background: var(--bg-gradient); overflow: hidden;
+                background: var(--bg-elevated); overflow: hidden;
             }
             .editor-shell {
                 flex: 1; min-height: 0;
@@ -73,6 +68,12 @@ export class FlowEditorPage extends PlatformPage {
         this._editorStateOp = this.useOp('flows/code_editor_state');
         this.useEvent(CoreEvents.ROUTER_ROUTE_CHANGED, () => this._loadFlowIfNeeded());
         this.useEvent('flows/flow/updated', () => this._reloadFlow());
+        this.useEvent('flows/flows/item_loaded', (e) => {
+            const item = e && e.payload && e.payload.item;
+            if (item && item.flow_id === this.flowId) {
+                this._applyFlow(item);
+            }
+        });
     }
 
     connectedCallback() {
@@ -87,46 +88,64 @@ export class FlowEditorPage extends PlatformPage {
         }
     }
 
-    async _loadFlowIfNeeded() {
+    _loadFlowIfNeeded() {
         if (!this.flowId) return;
         const editorState = this._editor.state;
         if (editorState && editorState.flowId === this.flowId && editorState.currentSkillId === this.skillId) return;
-        await this._flows.get(this.flowId);
-        const flow = (this._flows.items || []).find((f) => f && f.flow_id === this.flowId);
-        if (!flow) return;
-        const apiSkill = !this.skillId || this.skillId === 'base' ? 'default' : this.skillId;
+        const cached = this._flows.byId && this._flows.byId[this.flowId];
+        if (cached) {
+            this._applyFlow(cached);
+            return;
+        }
+        this._flows.get(this.flowId);
+    }
+
+    async _applyFlow(flow) {
+        this._editor.setFlow({
+            flow,
+            skillId: this.skillId,
+            previewExecutionState: null,
+        });
+        const apiSkill = (typeof this.skillId !== 'string' || this.skillId.length === 0 || this.skillId === 'base') ? 'default' : this.skillId;
         const previewExecutionState = await this._editorStateOp.run({
             flow_id: this.flowId,
             skill_id: apiSkill,
         });
-        this._editor.setFlow({
-            flow,
-            skillId: this.skillId,
-            previewExecutionState,
-        });
+        if (previewExecutionState !== null) {
+            this._editor.setPreviewExecutionState({ snapshot: previewExecutionState });
+        }
     }
 
-    async _reloadFlow() {
+    _reloadFlow() {
         if (!this.flowId) return;
-        await this._flows.get(this.flowId);
+        this._flows.get(this.flowId);
     }
 
     _panelHeader() {
-        const state = this._editor.state || {};
+        const state = asObject(this._editor.state);
+        const skills = isPlainObject(state.skillsData) ? state.skillsData : null;
         if (state.selectedNodeId) {
-            const node = state.skillsData?.nodes?.[state.selectedNodeId];
+            const nodes = skills && isPlainObject(skills.nodes) ? skills.nodes : null;
+            const node = nodes ? nodes[state.selectedNodeId] : null;
             const meta = getNodeTypeMeta(node?.type);
+            const title = node && typeof node.name === 'string' && node.name.length > 0
+                ? node.name
+                : state.selectedNodeId;
             return {
                 icon: meta.icon,
-                title: node?.name || state.selectedNodeId,
+                title,
                 colorToken: getCategoryToken(meta.category),
             };
         }
         if (state.selectedResourceId) {
-            const resource = state.skillsData?.resources?.[state.selectedResourceId];
+            const resources = skills && isPlainObject(skills.resources) ? skills.resources : null;
+            const resource = resources ? resources[state.selectedResourceId] : null;
+            const title = resource && typeof resource.name === 'string' && resource.name.length > 0
+                ? resource.name
+                : state.selectedResourceId;
             return {
                 icon: 'box',
-                title: resource?.name || state.selectedResourceId,
+                title,
                 colorToken: getCategoryToken('flow'),
             };
         }
@@ -136,7 +155,7 @@ export class FlowEditorPage extends PlatformPage {
     _renderPanel() {
         const header = this._panelHeader();
         if (!header) return '';
-        const state = this._editor.state || {};
+        const state = asObject(this._editor.state);
         return html`
             <flows-floating-panel
                 header-icon=${header.icon}
@@ -169,13 +188,10 @@ export class FlowEditorPage extends PlatformPage {
                 <div class="canvas-host">
                     <flows-flow-canvas .flowId=${this.flowId} .skillId=${this.skillId}></flows-flow-canvas>
                     <flows-bottom-toolbar></flows-bottom-toolbar>
-                    <flows-canvas-minimap></flows-canvas-minimap>
+                    <flows-execution-panel .flowId=${this.flowId} .skillId=${this.skillId}></flows-execution-panel>
                 </div>
                 ${this._renderPanel()}
             </div>
-            <flows-breakpoint-manager .flowId=${this.flowId}></flows-breakpoint-manager>
-            <flows-execution-panel .flowId=${this.flowId} .skillId=${this.skillId}></flows-execution-panel>
-            <flows-variables-panel .flowId=${this.flowId}></flows-variables-panel>
         `;
     }
 }

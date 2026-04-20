@@ -108,6 +108,7 @@ async def test_full_link_flow(
     sync_client,
     sync_auth_headers,
     sync_db_clean: None,
+    unique_id: str,
 ) -> None:
     """
     Полный flow: создание space → channel → ссылка → публичное чтение info.
@@ -115,7 +116,11 @@ async def test_full_link_flow(
     space_r = await sync_client.post(
         "/sync/api/v1/spaces/",
         headers=sync_auth_headers,
-        json={"name": "CallTestSpace", "description": None},
+        json={
+            "name": "CallTestSpace",
+            "description": None,
+            "namespace": f"call_{unique_id}",
+        },
     )
     assert space_r.status_code == 201
     space_id = space_r.json()["id"]
@@ -156,6 +161,7 @@ async def test_join_link_flow_registered_and_guest(
     sync_client,
     sync_auth_headers,
     sync_db_clean: None,
+    unique_id: str,
 ) -> None:
     """
     Полный flow: registered join + guest join + livekit token endpoint.
@@ -166,7 +172,11 @@ async def test_join_link_flow_registered_and_guest(
     space_r = await sync_client.post(
         "/sync/api/v1/spaces/",
         headers=sync_auth_headers,
-        json={"name": "JoinFlowSpace", "description": None},
+        json={
+            "name": "JoinFlowSpace",
+            "description": None,
+            "namespace": f"join_{unique_id}",
+        },
     )
     assert space_r.status_code == 201
 
@@ -237,12 +247,17 @@ async def test_create_link_with_call_id_guest_joins_same_livekit_call(
     call_repo: CallRepository,
     sync_user_id: str,
     company_id: str,
+    unique_id: str,
 ) -> None:
     """Ссылка с call_id (как из оверлея) — гость попадает в тот же звонок, без комнаты link-*."""
     space_r = await sync_client.post(
         "/sync/api/v1/spaces/",
         headers=sync_auth_headers,
-        json={"name": "LinkAttachSpace", "description": None},
+        json={
+            "name": "LinkAttachSpace",
+            "description": None,
+            "namespace": f"linkatt_{unique_id}",
+        },
     )
     assert space_r.status_code == 201
 
@@ -300,11 +315,16 @@ async def test_create_link_call_id_wrong_channel_returns_400(
     call_repo: CallRepository,
     sync_user_id: str,
     company_id: str,
+    unique_id: str,
 ) -> None:
     space_r = await sync_client.post(
         "/sync/api/v1/spaces/",
         headers=sync_auth_headers,
-        json={"name": "LinkWrongChSpace", "description": None},
+        json={
+            "name": "LinkWrongChSpace",
+            "description": None,
+            "namespace": f"linkwrong_{unique_id}",
+        },
     )
     assert space_r.status_code == 201
     space_id = space_r.json()["id"]
@@ -352,12 +372,17 @@ async def test_short_join_url_redirects_to_sync_join(
     frontend_app,
     sync_auth_headers,
     sync_db_clean: None,
+    unique_id: str,
 ) -> None:
     """GET /l/{code} на frontend (shared БД) отдаёт 303 на /sync/join/{link_token}."""
     space_r = await sync_client.post(
         "/sync/api/v1/spaces/",
         headers=sync_auth_headers,
-        json={"name": "ShortLinkSpace", "description": None},
+        json={
+            "name": "ShortLinkSpace",
+            "description": None,
+            "namespace": f"short_{unique_id}",
+        },
     )
     assert space_r.status_code == 201
     ch_r = await sync_client.post(

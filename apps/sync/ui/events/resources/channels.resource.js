@@ -34,6 +34,13 @@ export const channelsResource = createResourceCollection({
     operations: ['list', 'create', 'update'],
     transport: 'ws',
     wsTimeoutMs: 5_000,
+    // restMirror.update указывает на реальный path FastAPI
+    // (`@router.patch("/{channel_id}")` в `apps/sync/api/channels.py`).
+    // Auto-derived `/{id}` не подошёл бы: idField фабрики локально называется
+    // `id`, а FastAPI-параметр — `channel_id`.
+    restMirror: {
+        update: { method: 'PATCH', path: '/sync/api/v1/channels/:channel_id' },
+    },
     toastKeys: {
         create: 'sync:channels.toast_created',
         create_error: 'sync:channels.err_create',
@@ -49,9 +56,11 @@ export const channelsResource = createResourceCollection({
     },
     extraEvents: {
         SELECTED: 'channel_selected',
+        OWN_READ_SET: 'own_read_set',
     },
     actions: {
         selectChannel: 'channel_selected',
+        setOwnRead: 'own_read_set',
     },
     extraReducer: (state, event) => {
         switch (event.type) {
@@ -123,6 +132,42 @@ export const channelsResource = createResourceCollection({
                 const items = state.items.map((x, i) => (i === idx ? _normalizeChannel({ ...x, ...p }) : x));
                 return { ...state, items: Object.freeze(items) };
             }
+            case 'sync/message/created': {
+                const m = event.payload;
+                if (!m || typeof m.channel_id !== 'string') return state;
+                const idx = state.items.findIndex((x) => x.id === m.channel_id);
+                if (idx === -1) return state;
+                const channel = state.items[idx];
+                const isSelected = state.selectedChannelId === m.channel_id;
+                const preview = typeof m.preview === 'string' ? m.preview
+                    : (typeof m.last_message_preview === 'string' ? m.last_message_preview : channel.last_message_preview);
+                const lastAt = typeof m.sent_at === 'string' ? m.sent_at : channel.last_message_at;
+                const next = {
+                    ...channel,
+                    last_message_preview: preview,
+                    last_message_at: lastAt,
+                };
+                if (!isSelected && typeof m.local_id !== 'string') {
+                    next.unread_count = channel.unread_count + 1;
+                    if (Array.isArray(m.mentioned_user_ids) && m.mentioned_user_ids.length > 0) {
+                        next.mention_unread_count = channel.mention_unread_count + 1;
+                    }
+                }
+                const items = state.items.map((x, i) => (i === idx ? _normalizeChannel(next) : x));
+                return { ...state, items: Object.freeze(items) };
+            }
+            case 'sync/channels/own_read_set': {
+                const p = event.payload;
+                if (!p || typeof p.channelId !== 'string' || p.channelId === '') return state;
+                const idx = state.items.findIndex((x) => x.id === p.channelId);
+                if (idx === -1) return state;
+                const channel = state.items[idx];
+                if (channel.unread_count === 0 && channel.mention_unread_count === 0) return state;
+                const items = state.items.map((x, i) => (i === idx
+                    ? _normalizeChannel({ ...x, unread_count: 0, mention_unread_count: 0 })
+                    : x));
+                return { ...state, items: Object.freeze(items) };
+            }
             default:
                 return state;
         }
@@ -136,6 +181,11 @@ export const channelMarkReadOp = createAsyncOp({
     silent: true,
     commandType: 'sync/channels/mark_read_requested',
     restMirror: { method: 'POST', path: '/sync/api/v1/channels/:channel_id/read' },
+    onSuccess: (ctx, _result, event) => {
+        const p = event && event.payload;
+        if (!p || typeof p.channel_id !== 'string' || p.channel_id === '') return;
+        ctx.dispatch('sync/channels/own_read_set', { channelId: p.channel_id }, { source: 'local' });
+    },
 });
 
 export const channelTypingOp = createAsyncOp({
@@ -149,55 +199,29 @@ export const channelTypingOp = createAsyncOp({
 
 export const channelAddMemberOp = createAsyncOp({
     name: 'sync/channel_add_member',
-    transport: 'http',
+    transport: 'ws',
+    wsTimeoutMs: 5_000,
     successToastKey: 'sync:channels.toast_member_added',
     errorToastKey: 'sync:channels.err_member_add',
+    commandType: 'sync/channels/add_member_requested',
     restMirror: { method: 'POST', path: '/sync/api/v1/channels/:channel_id/members' },
-    request: async ({ payload }) => {
-        const { httpRequest } = await import('@platform/lib/events/http.js');
-        if (typeof payload.role !== 'string' || payload.role === '') {
-            throw new Error('channelAddMemberOp.request: payload.role required (non-empty string)');
-        }
-        if (typeof payload.user_id !== 'string' || payload.user_id === '') {
-            throw new Error('channelAddMemberOp.request: payload.user_id required');
-        }
-        if (typeof payload.channel_id !== 'string' || payload.channel_id === '') {
-            throw new Error('channelAddMemberOp.request: payload.channel_id required');
-        }
-        return httpRequest({
-            method: 'POST',
-            url: `/sync/api/v1/channels/${encodeURIComponent(payload.channel_id)}/members`,
-            body: { user_id: payload.user_id, role: payload.role },
-        });
-    },
 });
 
 export const channelMembersListOp = createAsyncOp({
     name: 'sync/channel_members_list',
-    transport: 'http',
+    transport: 'ws',
+    wsTimeoutMs: 5_000,
     silent: true,
+    commandType: 'sync/channels/list_members_requested',
     restMirror: { method: 'GET', path: '/sync/api/v1/channels/:channel_id/members' },
-    request: async ({ payload }) => {
-        const { httpRequest } = await import('@platform/lib/events/http.js');
-        return httpRequest({
-            method: 'GET',
-            url: `/sync/api/v1/channels/${encodeURIComponent(payload.channel_id)}/members`,
-        });
-    },
 });
 
 export const channelNotificationsUpdateOp = createAsyncOp({
     name: 'sync/channel_notifications_update',
-    transport: 'http',
+    transport: 'ws',
+    wsTimeoutMs: 5_000,
     successToastKey: 'sync:channels.toast_notifications_updated',
     errorToastKey: 'sync:channels.err_notifications',
+    commandType: 'sync/channels/notification_settings_update_requested',
     restMirror: { method: 'PATCH', path: '/sync/api/v1/channels/:channel_id/notification-settings' },
-    request: async ({ payload }) => {
-        const { httpRequest } = await import('@platform/lib/events/http.js');
-        return httpRequest({
-            method: 'PATCH',
-            url: `/sync/api/v1/channels/${encodeURIComponent(payload.channel_id)}/notification-settings`,
-            body: { notifications_muted: payload.notifications_muted },
-        });
-    },
 });

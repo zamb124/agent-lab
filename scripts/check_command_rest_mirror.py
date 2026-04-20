@@ -40,13 +40,26 @@ APPS = ROOT / "apps"
 # Сервисы с фабриками, для которых проверка строгая. Остальные пропускаются
 # с warning'ом (они либо не мигрированы на event-канон, либо не имеют
 # фабрик — например, scheduler.).
-FACTORY_CANON_SERVICES = {"frontend", "crm", "rag", "office"}
+FACTORY_CANON_SERVICES = {
+    "frontend",
+    "crm",
+    "rag",
+    "office",
+    "provider_litserve",
+    "sync",
+    "flows",
+}
+# Все мигрированные на event-канон сервисы. Парсер `_resolve_external_prefixes`
+# умеет резолвить вложенные `include_router(child, prefix='/...')`-цепочки
+# (используются в `apps/sync/api/__init__.py::get_api_router` и
+# `apps/flows/src/api/v1/__init__.py::api_v1_router`), поэтому sync и flows
+# тоже проверяются в strict-режиме.
 
 # Сервисный процесс может монтироваться под публичным путём, отличным от
 # имени каталога `apps/<svc>/` (`settings.server.name` в conf.json). Например,
 # `apps/office` слушает на `/documents/...` (см. `office.mdc`). Здесь —
 # карта `<dir name> -> <public mount prefix>`.
-SERVICE_PUBLIC_NAME = {"office": "documents"}
+SERVICE_PUBLIC_NAME = {"office": "documents", "provider_litserve": "litserve"}
 
 FACTORY_KINDS = (
     "createAsyncOp",
@@ -96,7 +109,7 @@ FASTAPI_DECO_RE = re.compile(
     re.M,
 )
 APIROUTER_DEF_RE = re.compile(
-    r"^(?P<name>\w+)\s*=\s*APIRouter\s*\((?P<args>[^)]*)\)",
+    r"^[ \t]*(?P<name>\w+)\s*=\s*APIRouter\s*\((?P<args>[^)]*)\)",
     re.M,
 )
 PREFIX_KW_RE = re.compile(
@@ -105,6 +118,22 @@ PREFIX_KW_RE = re.compile(
 )
 API_VERSION_RE = re.compile(
     r"api_version\s*=\s*(?:(?P<q>['\"])(?P<value>[^'\"]*)(?P=q)|(?P<none>None))",
+    re.M,
+)
+# Импорт `from <pkg>[.<sub>] import router as <alias>` либо
+# `from <pkg> import <module>_router as <alias>`. Нам нужно понять, к какому
+# .py-файлу относится переменная `<alias>`, чтобы потом увязать её
+# `include_router(...)`-prefix с реальным файлом.
+ROUTER_IMPORT_RE = re.compile(
+    r"^from\s+(?P<module>[.\w]+)\s+import\s+"
+    r"(?P<name>\w+)(?:\s+as\s+(?P<alias>\w+))?",
+    re.M,
+)
+# `<parent>.include_router(<child_var>, prefix='/...')` — извлекаем child_var
+# и prefix. Допускаем несколько kwargs (tags, dependencies). prefix может
+# отсутствовать (тогда внешнего префикса нет).
+INCLUDE_ROUTER_CALL_RE = re.compile(
+    r"\.include_router\s*\(\s*(?P<child>\w+)\s*(?P<rest>[^)]*)\)",
     re.M,
 )
 
@@ -232,11 +261,19 @@ def _extract_rest_entries(rest_mirror_block: str | None) -> dict[str, tuple[str,
     if op_entries:
         return op_entries
 
-    # Иначе — одиночная запись { method, path } (createAsyncOp/CursorList).
+    # Иначе — одиночная запись { method, path [, service] } (createAsyncOp/
+    # CursorList). Опциональное поле `service: '<svc>'` явно декларирует
+    # cross-service вызов (например, frontend dashboard бегает за счётчиками
+    # в `/flows/...`): скрипт не верифицирует path против своих routes, но
+    # и не фейлит strict.
     method_m = re.search(r"method\s*:\s*(?P<q>['\"])(?P<v>[A-Z]+)(?P=q)", rest_mirror_block)
     path_m = re.search(r"path\s*:\s*(?P<q>['\"])(?P<v>[^'\"]+)(?P=q)", rest_mirror_block)
+    service_m = re.search(r"service\s*:\s*(?P<q>['\"])(?P<v>[a-z_][a-z0-9_-]*)(?P=q)", rest_mirror_block)
     if method_m and path_m:
-        return {"_single": (method_m.group("v"), path_m.group("v"))}
+        result: dict[str, tuple[str, str]] = {"_single": (method_m.group("v"), path_m.group("v"))}
+        if service_m:
+            result["_cross_service"] = ("", service_m.group("v"))
+        return result
     return {}
 
 
@@ -257,7 +294,11 @@ def _collect_fastapi_routes(svc_dir: Path) -> set[tuple[str, str]]:
     @router.method(...) внутри). Не покрывает редкие случаи импорта чужого
     router'а из core. Для них список `EXTRA_ROUTES_PER_SVC` (см. ниже).
     """
-    api_root = svc_dir / "api"
+    # Сервисы могут класть REST-роутеры в `apps/<svc>/api/**` (каноничная
+    # раскладка) или в `apps/<svc>/src/api/**` (flows — исторический
+    # src-layout). Сканируем оба, если существуют.
+    api_roots = [p for p in (svc_dir / "api", svc_dir / "src" / "api") if p.exists()]
+    api_root = api_roots[0] if api_roots else (svc_dir / "api")
     main_py = svc_dir / "main.py"
 
     svc_name = svc_dir.name
@@ -277,10 +318,18 @@ def _collect_fastapi_routes(svc_dir: Path) -> set[tuple[str, str]]:
 
     routes: set[tuple[str, str]] = set()
 
-    # 1. Сервисные роутеры (apps/<svc>/api/**) монтируются под
-    #    `/<svc>/api/<version>` (для api_version != None) или `/<svc>` (None).
-    if api_root.exists():
-        _scan_routers_in_dir(api_root, service_api_prefix, routes)
+    # 1. Сервисные роутеры (apps/<svc>/api/** и/или apps/<svc>/src/api/**)
+    #    монтируются под `/<svc>/api/<version>` (для api_version != None)
+    #    или `/<svc>` (None).
+    for api_root_path in api_roots:
+        _scan_routers_in_dir(api_root_path, service_api_prefix, routes)
+
+    # 1b. Сервисы, регистрирующие роутеры прямо в main.py (например,
+    #     provider_litserve через `_register_model_management_api`):
+    #     APIRouter(prefix=...) в нём указан полный путь, без сервисного
+    #     префикса; mount_prefix здесь — пустой.
+    if main_py.exists():
+        _scan_router_file(main_py, "", routes)
 
     # 2. Core-роутеры, монтируемые `create_service_app` под именованными
     #    префиксами (см. `core/app/factory.py`): team, calendar, companies,
@@ -293,7 +342,12 @@ def _collect_fastapi_routes(svc_dir: Path) -> set[tuple[str, str]]:
     _scan_router_file_with_mount(core_root / "api" / "auth.py", f"/{svc_name}/api/auth", routes)
     _scan_router_file_with_mount(core_root / "api" / "push.py", f"/{svc_name}", routes)
     _scan_router_file_with_mount(core_root / "api" / "integrations.py", f"/{svc_name}", routes)
-    _scan_router_file_with_mount(core_root / "files" / "api.py", f"/{svc_name}/api/files", routes)
+    # Файловый роутер собирается в `core/app/factory.py::build_file_api_router`
+    # и монтируется под `{service_api_prefix}/files` (т.е. `/<svc>/api/v1/files`
+    # для сервисов с `api_version != None`; `/<svc>/files` иначе). См.
+    # `core/app/factory.py`, строки про `files_api_prefix`.
+    files_mount = f"{service_api_prefix}/files" if api_version else f"/{svc_name}/files"
+    _scan_router_file_with_mount(core_root / "files" / "api.py", files_mount, routes)
 
     return routes
 
@@ -305,8 +359,156 @@ def _scan_router_file_with_mount(py: Path, mount_prefix: str, routes: set[tuple[
 
 
 def _scan_routers_in_dir(root: Path, mount_prefix: str, routes: set[tuple[str, str]]) -> None:
+    """Сканировать все .py-файлы под root, учитывая вложенные include_router.
+
+    Стратегия:
+
+      1. Собрать карту external_prefix для каждого .py-файла, которая
+         учитывает include_router-цепочку из `__init__.py`-файлов.
+         Например, для flows:
+             apps/flows/src/api/v1/__init__.py:
+                 api_v1_router = APIRouter()
+                 api_v1_router.include_router(code_router, prefix="/code")
+             apps/flows/src/api/v1/code.py:
+                 router = APIRouter()
+                 @router.get("/completions") -> /flows/api/v1/code/completions
+         Здесь `code.py` получает external_prefix `/code`.
+
+      2. После этого пройти каждый файл через `_scan_router_file` с
+         итоговым mount_prefix = `mount_prefix + external_prefix`.
+    """
+    external_prefixes = _resolve_external_prefixes(root)
     for py in root.rglob("*.py"):
-        _scan_router_file(py, mount_prefix, routes)
+        external = external_prefixes.get(py, "")
+        _scan_router_file(py, mount_prefix + external, routes)
+
+
+def _resolve_external_prefixes(root: Path) -> dict[Path, str]:
+    """Для каждого .py-файла под root вернуть его external prefix
+    (то, что задаёт его родитель через `include_router(child, prefix='...')`).
+
+    Проходит ВСЕ файлы и склеивает include_router-цепочки. Если файл нигде не
+    включён через include_router — его external_prefix = "" (топ-уровень).
+    """
+    # 1. Для каждого .py: какие алиасы он экспортирует -> файл-источник.
+    #    Простая модель: считаем, что в файле объявлен `router = APIRouter(...)`.
+    #    Имя переменной берём из APIROUTER_DEF_RE (обычно `router`). Если в
+    #    файле несколько APIRouter — берём первую (этого хватает для текущей
+    #    раскладки).
+    declared_router_var: dict[Path, str] = {}
+    for py in root.rglob("*.py"):
+        text = py.read_text(encoding="utf-8", errors="ignore")
+        for rm in APIROUTER_DEF_RE.finditer(text):
+            declared_router_var[py] = rm.group("name")
+            break
+
+    # 2. Для каждого файла с include_router-вызовами: для каждого `<child_var>`
+    #    найдём его import и привяжем prefix.
+    file_to_external: dict[Path, str] = {}
+
+    for py in root.rglob("*.py"):
+        text = py.read_text(encoding="utf-8", errors="ignore")
+        if ".include_router" not in text:
+            continue
+        # Локальная карта алиас → путь к файлу-источнику.
+        alias_to_path: dict[str, Path] = {}
+        for im in ROUTER_IMPORT_RE.finditer(text):
+            alias = im.group("alias") or im.group("name")
+            module_dotted = im.group("module")
+            target = _resolve_import_target(py, module_dotted, im.group("name"))
+            if target is None:
+                continue
+            alias_to_path[alias] = target
+
+        for call in INCLUDE_ROUTER_CALL_RE.finditer(text):
+            child = call.group("child")
+            rest = call.group("rest")
+            prefix_m = PREFIX_KW_RE.search(rest)
+            child_prefix = prefix_m.group("value") if prefix_m else ""
+            target_path = alias_to_path.get(child)
+            if target_path is None:
+                # Если child = локально объявленный APIRouter в этом же файле
+                # с include_router'ом — пропускаем (его декораторы и так
+                # сканируются с своим router_prefix).
+                continue
+            # Накапливаем: файл-родитель сам мог быть включён под другим
+            # prefix'ом — финальный prefix вычисляется в цикле фиксации.
+            existing = file_to_external.get(target_path, "")
+            file_to_external[target_path] = existing + child_prefix
+
+    # 3. Транзитивно протянем prefix вверх по цепочке include_router. Для этого
+    #    повторяем проход, пока что-то меняется (на практике хватает 2 итераций
+    #    для api_v1_router → child_router и main.py → api_v1_router).
+    for _ in range(8):
+        changed = False
+        for py in root.rglob("*.py"):
+            text = py.read_text(encoding="utf-8", errors="ignore")
+            if ".include_router" not in text:
+                continue
+            parent_external = file_to_external.get(py, "")
+            if not parent_external:
+                continue
+            alias_to_path: dict[str, Path] = {}
+            for im in ROUTER_IMPORT_RE.finditer(text):
+                alias = im.group("alias") or im.group("name")
+                target = _resolve_import_target(py, im.group("module"), im.group("name"))
+                if target is None:
+                    continue
+                alias_to_path[alias] = target
+            for call in INCLUDE_ROUTER_CALL_RE.finditer(text):
+                child = call.group("child")
+                target_path = alias_to_path.get(child)
+                if target_path is None:
+                    continue
+                # Префикс ребёнка = parent_external + child_local_prefix.
+                # child_local_prefix уже учтён на шаге 2 (мы добавили его сами).
+                # Здесь просто префиксуем родительским внешним prefix'ом, если
+                # ещё не префиксован.
+                if not file_to_external.get(target_path, "").startswith(parent_external):
+                    file_to_external[target_path] = parent_external + file_to_external.get(target_path, "")
+                    changed = True
+        if not changed:
+            break
+
+    return file_to_external
+
+
+def _resolve_import_target(from_file: Path, module_dotted: str, name: str) -> Path | None:
+    """Резолвит `from <module> import <name>` в .py файл с router-объектом.
+
+    Поддерживает:
+      - relative `from .child import router as child_router` (внутри пакета);
+      - absolute `from apps.flows.src.api.v1.code import router as code_router`.
+
+    Возвращает Path или None, если файл вне сканируемого root'а или не найден.
+    """
+    if module_dotted.startswith("."):
+        # Relative import.
+        levels = len(module_dotted) - len(module_dotted.lstrip("."))
+        rest = module_dotted.lstrip(".")
+        base_dir = from_file.parent
+        for _ in range(levels - 1):
+            base_dir = base_dir.parent
+        candidate = base_dir
+        if rest:
+            for part in rest.split("."):
+                candidate = candidate / part
+        candidate_py = candidate.with_suffix(".py")
+        if candidate_py.exists():
+            return candidate_py
+        candidate_init = candidate / "__init__.py"
+        if candidate_init.exists():
+            return candidate_init
+        return None
+    # Absolute import: ищем под ROOT (apps/<svc>/...).
+    parts = module_dotted.split(".")
+    candidate_py = ROOT.joinpath(*parts).with_suffix(".py")
+    if candidate_py.exists():
+        return candidate_py
+    candidate_init = ROOT.joinpath(*parts) / "__init__.py"
+    if candidate_init.exists():
+        return candidate_init
+    return None
 
 
 def _scan_router_file(py: Path, mount_prefix: str, routes: set[tuple[str, str]]) -> None:
@@ -450,6 +652,12 @@ def main() -> int:
                     method, path_pattern = rest_entries.get("_single", ("", ""))
                     if not method or not path_pattern:
                         warnings.append(f"{prefix}: restMirror без method/path — пропуск")
+                        continue
+                    cross = rest_entries.get("_cross_service")
+                    if cross:
+                        # Cross-service вызов: path и method явно задекларированы,
+                        # но backend живёт в другом сервисе. Не проверяем против
+                        # локальных routes, не даём и WARN (strict pass).
                         continue
                     if not _route_exists(routes, method, path_pattern):
                         errors.append(

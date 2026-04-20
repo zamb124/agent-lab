@@ -89,7 +89,12 @@ class CRMContainer(BaseContainer):
     @lazy
     def attachment_service(self):
         from apps.crm.services.attachment_service import AttachmentService
-        return AttachmentService(entity_repository=self.entity_repository)
+        return AttachmentService(
+            entity_repository=self.entity_repository,
+            access_grant_repository=self.access_grant_repository,
+            company_repository=self.company_repository,
+            file_repository=self.file_repository,
+        )
 
     @lazy
     def daily_summary_cache_service(self):

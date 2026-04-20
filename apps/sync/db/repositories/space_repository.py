@@ -36,6 +36,29 @@ class SpaceRepository(BaseSyncRepository[SyncSpace]):
             result = await session.execute(stmt)
             return result.scalar_one_or_none()
 
+    async def get_by_namespace(
+        self,
+        namespace: str,
+        company_id: Optional[str] = None,
+    ) -> Optional[SyncSpace]:
+        """Находит пространство по платформенному namespace внутри компании."""
+        cid = company_id or self._get_company_id()
+        async with self._db.session() as session:
+            stmt = select(SyncSpace).where(
+                SyncSpace.company_id == cid,
+                SyncSpace.namespace == namespace,
+            )
+            result = await session.execute(stmt)
+            return result.scalar_one_or_none()
+
+    async def exists_for_namespace(
+        self,
+        namespace: str,
+        company_id: Optional[str] = None,
+    ) -> bool:
+        """Проверяет, занят ли уже namespace другим пространством в компании."""
+        return await self.get_by_namespace(namespace, company_id=company_id) is not None
+
     async def list_by_user(
         self,
         user_id: str,

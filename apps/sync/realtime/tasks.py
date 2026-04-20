@@ -28,11 +28,11 @@ from apps.sync.models.messages import (
     TextPlainContent,
 )
 from apps.sync.realtime.broker import broker
-from apps.sync.realtime.command_dispatch import dispatch_sync_command
-from apps.sync.realtime.commands import CommandEnvelope, MessagesSendPayload
 from apps.sync.realtime.events import event_call_recording_failed, event_message_updated
+from apps.sync.realtime.operations import MessagesSendPayload, op_messages_send
 from apps.sync.realtime.publish_events import publish_realtime_events
 from apps.sync.sender_display import guest_display_name_from_sender_id, sender_brief_for_message
+from core.models.identity_models import User
 from core.calls.livekit_client import LiveKitClient
 from core.config import get_settings
 from core.files.media.audio_extract import extract_audio_from_video
@@ -397,17 +397,14 @@ def _split_text_plain_chunks(full_text: str) -> list[str]:
     return chunks
 
 
-@broker.task
-async def handle_command(cmd: dict[str, Any]) -> dict[str, Any]:
-    command = CommandEnvelope.model_validate(cmd)
-    logger.info(
-        "task handle_command started: id=%s type=%s actor=%s company=%s",
-        command.id,
-        command.type,
-        command.actor_user_id,
-        command.company_id,
-    )
-    return await dispatch_sync_command(command)
+def _make_actor_user(actor_user_id: str, company_id: str) -> User:
+    """Создать минимальный User-объект для in-process вызова `op_messages_send`
+    из TaskIQ-таска (где нет HTTP/WS-контекста).
+
+    `op_messages_send` использует только `user.user_id` и
+    `user.active_company_id`, остальные поля не читаются.
+    """
+    return User(user_id=actor_user_id, name=actor_user_id, active_company_id=company_id)
 
 
 def _call_recording_s3_object_key(*, company_id: str, call_id: str, recording_id: str) -> str:
@@ -598,14 +595,11 @@ async def sync_finalize_recording_task(recording_id: str, company_id: str, actor
                 call_id=recording.call_id,
             )
             send_payload = MessagesSendPayload(channel_id=recording.channel_id, body=video_body)
-            cmd = CommandEnvelope(
-                id=uuid4().hex,
-                type="messages.send",
-                actor_user_id=recording.started_by_user_id,
-                company_id=company_id,
-                payload=send_payload.model_dump(mode="json"),
+            await op_messages_send(
+                send_payload,
+                user=_make_actor_user(recording.started_by_user_id, company_id),
+                container=container,
             )
-            await dispatch_sync_command(cmd)
             logger.info(
                 "sync_finalize_recording_task posted video message: recording_id=%s channel_id=%s",
                 recording.recording_id,
@@ -1125,14 +1119,11 @@ async def sync_aggregate_call_transcript_task(
             call_id=call_id,
         )
         send_payload = MessagesSendPayload(channel_id=channel_id, body=agg_body)
-        cmd = CommandEnvelope(
-            id=uuid4().hex,
-            type="messages.send",
-            actor_user_id=actor_user_id,
-            company_id=company_id,
-            payload=send_payload.model_dump(mode="json"),
+        await op_messages_send(
+            send_payload,
+            user=_make_actor_user(actor_user_id, company_id),
+            container=container,
         )
-        await dispatch_sync_command(cmd)
 
 
 def _speech_to_chat_poll_sleep_seconds(*, is_continuation: bool) -> float:

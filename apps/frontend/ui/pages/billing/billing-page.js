@@ -21,7 +21,8 @@ import { FrontendTopupModal } from '../../modals/topup-modal.js';
 const PLAN_KEYS = Object.freeze(['free', 'basic', 'premium', 'enterprise']);
 
 function _planTranslationKey(plan) {
-    return `tariff_plans.${(plan || 'free').toLowerCase()}.name`;
+    const p = typeof plan === 'string' && plan !== '' ? plan : 'free';
+    return `tariff_plans.${p.toLowerCase()}.name`;
 }
 
 function _formatCurrency(value) {
@@ -194,21 +195,23 @@ export class FrontendBillingPage extends PlatformPage {
             </div>
 
             <div class="plan-row">
-                ${PLAN_KEYS.map((p) => html`
+                ${PLAN_KEYS.map((p) => {
+                    const planLower = typeof plan === 'string' ? plan.toLowerCase() : '';
+                    return html`
                     <button class="btn btn-ghost"
-                        data-active=${(plan || '').toLowerCase() === p ? 'true' : 'false'}
-                        ?disabled=${(plan || '').toLowerCase() === p || this._planChange.busy}
+                        data-active=${planLower === p ? 'true' : 'false'}
+                        ?disabled=${planLower === p || this._planChange.busy}
                         @click=${() => this._changePlan(p)}
                     >${this.t(`tariff_plans.${p}.name`)}</button>
-                `)}
+                `;})}
             </div>
         `;
     }
 
     _renderUsage(usage) {
         if (!usage) return '';
-        const byResource = usage.by_resource || {};
-        const byUser = usage.by_user || {};
+        const byResource = usage.by_resource && typeof usage.by_resource === 'object' ? usage.by_resource : {};
+        const byUser = usage.by_user && typeof usage.by_user === 'object' ? usage.by_user : {};
         const resourceRows = Object.entries(byResource);
         const userRows = Object.entries(byUser);
         return html`
@@ -323,7 +326,7 @@ export class FrontendBillingPage extends PlatformPage {
         const subscription = this._subscription.lastResult;
         const usage = this._usage.lastResult;
         const historyResult = this._history.lastResult;
-        const history = (historyResult && historyResult.items) || [];
+        const history = historyResult && Array.isArray(historyResult.items) ? historyResult.items : [];
         const loading = this._subscription.busy && !subscription;
         return html`
             <page-header

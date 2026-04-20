@@ -19,6 +19,7 @@ import { PlatformElement } from '@platform/lib/platform-element/index.js';
 import './flows-base-node-editor.js';
 import '../editors/flows-variable-input.js';
 import '../editors/flows-json-field-editor.js';
+import { asString } from '../../_helpers/flows-resolvers.js';
 
 const CHANNELS = Object.freeze(['telegram', 'email', 'whatsapp', 'sms', 'webhook']);
 const PARSE_MODES = Object.freeze(['', 'HTML', 'MarkdownV2']);
@@ -34,12 +35,13 @@ export class FlowsChannelNodeEditor extends PlatformElement {
         flowVariables: { type: Object },
         graphNodes: { type: Array },
         previewExecutionState: { type: Object },
+        expanded: { type: Boolean, reflect: true },
     };
 
     static styles = [
         PlatformElement.styles,
         css`
-            :host { display: block; }
+            :host { display: block; height: 100%; min-height: 0; }
             .field { display: flex; flex-direction: column; gap: var(--space-1); margin-bottom: var(--space-2); }
             label { font-size: var(--text-sm); color: var(--text-secondary); }
             input, select {
@@ -74,6 +76,7 @@ export class FlowsChannelNodeEditor extends PlatformElement {
         this.flowVariables = null;
         this.graphNodes = null;
         this.previewExecutionState = null;
+        this.expanded = false;
     }
 
     _emitPatch(patch) {
@@ -109,14 +112,14 @@ export class FlowsChannelNodeEditor extends PlatformElement {
                 <flows-variable-input
                     .value=${typeof cfg.bot_token === 'string' ? cfg.bot_token : ''}
                     .flowVariables=${this.flowVariables}
-                    @change=${(e) => this._onChannelConfig('bot_token', e.detail?.value || '')}
+                    @change=${(e) => this._onChannelConfig('bot_token', asString(e.detail?.value))}
                 ></flows-variable-input>
             </div>
             <div class="field">
                 <label>${this.t('channel_node_editor.telegram_parse_mode')}</label>
                 <select
                     .value=${typeof cfg.parse_mode === 'string' ? cfg.parse_mode : ''}
-                    @change=${(e) => this._onChannelConfig('parse_mode', e.target.value || null)}
+                    @change=${(e) => this._onChannelConfig('parse_mode', e.target.value.length > 0 ? e.target.value : null)}
                 >
                     ${PARSE_MODES.map((m) => html`<option value=${m}>${m === '' ? '—' : m}</option>`)}
                 </select>
@@ -129,7 +132,7 @@ export class FlowsChannelNodeEditor extends PlatformElement {
             <div class="grid">
                 <div class="field">
                     <label>${this.t('channel_node_editor.email_smtp_host')}</label>
-                    <input type="text" .value=${cfg.smtp_host || ''}
+                    <input type="text" .value=${asString(cfg.smtp_host)}
                         @input=${(e) => this._onChannelConfig('smtp_host', e.target.value)} />
                 </div>
                 <div class="field">
@@ -139,7 +142,7 @@ export class FlowsChannelNodeEditor extends PlatformElement {
                 </div>
                 <div class="field">
                     <label>${this.t('channel_node_editor.email_from')}</label>
-                    <input type="email" .value=${cfg.from_email || ''}
+                    <input type="email" .value=${asString(cfg.from_email)}
                         @input=${(e) => this._onChannelConfig('from_email', e.target.value)} />
                 </div>
                 <div class="field">
@@ -147,7 +150,7 @@ export class FlowsChannelNodeEditor extends PlatformElement {
                     <flows-variable-input
                         .value=${typeof cfg.password === 'string' ? cfg.password : ''}
                         .flowVariables=${this.flowVariables}
-                        @change=${(e) => this._onChannelConfig('password', e.detail?.value || '')}
+                        @change=${(e) => this._onChannelConfig('password', asString(e.detail?.value))}
                     ></flows-variable-input>
                 </div>
             </div>
@@ -160,12 +163,12 @@ export class FlowsChannelNodeEditor extends PlatformElement {
         return html`
             <div class="field">
                 <label>${this.t('channel_node_editor.webhook_url')}</label>
-                <input type="url" .value=${cfg.url || ''}
+                <input type="url" .value=${asString(cfg.url)}
                     @input=${(e) => this._onChannelConfig('url', e.target.value)} />
             </div>
             <div class="field">
                 <label>${this.t('channel_node_editor.webhook_method')}</label>
-                <select .value=${cfg.method || 'POST'}
+                <select .value=${typeof cfg.method === 'string' && cfg.method.length > 0 ? cfg.method : 'POST'}
                     @change=${(e) => this._onChannelConfig('method', e.target.value)}>
                     ${HTTP_METHODS.map((m) => html`<option value=${m}>${m}</option>`)}
                 </select>
@@ -210,14 +213,11 @@ export class FlowsChannelNodeEditor extends PlatformElement {
                 .flowId=${this.flowId}
                 .skillId=${this.skillId}
                 .nodeConfig=${this.nodeConfig}
-                .nodeType=${this.nodeType || 'channel'}
+                .nodeType=${typeof this.nodeType === 'string' && this.nodeType.length > 0 ? this.nodeType : 'channel'}
                 .flowVariables=${this.flowVariables}
                 .graphNodes=${this.graphNodes}
                 .previewExecutionState=${this.previewExecutionState}
-                @change=${(e) => this.emit('change', e.detail)}
-                @rename-node=${(e) => this.emit('rename-node', e.detail)}
-                @delete-node=${(e) => this.emit('delete-node', e.detail)}
-                @duplicate-node=${(e) => this.emit('duplicate-node', e.detail)}
+                ?expanded=${this.expanded}
             >
                 <div slot="settings">
                     <div class="grid">

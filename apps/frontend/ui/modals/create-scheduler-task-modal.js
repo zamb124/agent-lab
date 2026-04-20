@@ -98,7 +98,7 @@ export class FrontendCreateSchedulerTaskModal extends PlatformFormModal {
         if (this._scheduleType === 'one_time' && !this._runAt) {
             errors.run_at = this.t('scheduler_modal.err_run_at');
         }
-        const trimmed = (this._payloadJson || '').trim();
+        const trimmed = this._payloadJson.trim();
         if (trimmed) {
             try { JSON.parse(trimmed); }
             catch { errors.payload = this.t('scheduler_modal.err_payload_invalid'); }
@@ -107,13 +107,13 @@ export class FrontendCreateSchedulerTaskModal extends PlatformFormModal {
     }
 
     async handleSubmit() {
-        const trimmed = (this._payloadJson || '').trim();
+        const trimmed = this._payloadJson.trim();
         const payload = trimmed ? JSON.parse(trimmed) : {};
         const body = {
             target_service: this._targetService.trim(),
             task_name: this._taskName.trim(),
             schedule_type: this._scheduleType,
-            timezone: this._timezone.trim() || 'UTC',
+            timezone: this._timezone.trim() === '' ? 'UTC' : this._timezone.trim(),
             payload,
         };
         if (this._queueName.trim()) body.queue_name = this._queueName.trim();

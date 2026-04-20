@@ -34,10 +34,12 @@ export const FALLBACK_NODE_META = Object.freeze({ icon: 'box', category: 'core' 
 
 export function getNodeTypeMeta(type) {
     if (typeof type !== 'string' || type.length === 0) return FALLBACK_NODE_META;
-    return NODE_TYPE_META[type] || FALLBACK_NODE_META;
+    const meta = NODE_TYPE_META[type];
+    return meta ? meta : FALLBACK_NODE_META;
 }
 
 export function getCategoryToken(category) {
     if (typeof category !== 'string' || category.length === 0) return CATEGORY_TOKEN.core;
-    return CATEGORY_TOKEN[category] || CATEGORY_TOKEN.core;
+    const token = CATEGORY_TOKEN[category];
+    return typeof token === 'string' && token.length > 0 ? token : CATEGORY_TOKEN.core;
 }

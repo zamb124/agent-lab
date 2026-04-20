@@ -6,7 +6,7 @@
  */
 
 import { html, css } from 'lit';
-import { PlatformLightModal } from '@platform/lib/components/glass-light-modal.js';
+import { PlatformModal } from '@platform/lib/components/glass-modal.js';
 import { registerModalKind } from '@platform/lib/utils/modal-registry.js';
 import { platformConfirm } from '@platform/lib/components/platform-confirm-modal.js';
 import './flows-trigger-editor-modal.js';
@@ -14,25 +14,31 @@ import '@platform/lib/components/platform-button.js';
 import '@platform/lib/components/platform-icon.js';
 import '@platform/lib/components/glass-spinner.js';
 
-export class FlowsTriggersModal extends PlatformLightModal {
+export class FlowsTriggersModal extends PlatformModal {
     static modalKind = 'flows.triggers';
     static i18nNamespace = 'flows';
 
     static properties = {
-        ...PlatformLightModal.properties,
+        ...PlatformModal.properties,
         flowId: { type: String },
     };
 
+    static styles = [
+        ...PlatformModal.styles,
+        css`
+            .trg-table { width: 100%; border-collapse: collapse; color: var(--text-secondary); }
+            .trg-table th, .trg-table td { padding: var(--space-2); text-align: left; border-bottom: 1px solid var(--border-subtle); }
+            .trg-empty { text-align: center; color: var(--text-tertiary); padding: var(--space-4); }
+        `,
+    ];
+
     constructor() {
         super();
+        this.size = 'xl';
         this.flowId = '';
         this._listOp = this.useOp('flows/triggers_list');
         this._removeOp = this.useOp('flows/trigger_remove');
         this._testOp = this.useOp('flows/trigger_test');
-    }
-
-    connectedCallback() {
-        super.connectedCallback();
     }
 
     updated(changed) {
@@ -95,43 +101,33 @@ export class FlowsTriggersModal extends PlatformLightModal {
         `);
     }
 
-    render() {
+    renderHeader() {
+        return this.t('triggers_modal.title');
+    }
+
+    renderHeaderActions() {
         return html`
-            <div class="light-modal-backdrop" @click=${this._onBackdropClick}></div>
-            <div class="light-modal-container trg-shell">
-                <style>
-                    .trg-shell { padding: var(--space-4); gap: var(--space-3); }
-                    .trg-header { display: flex; align-items: center; justify-content: space-between; }
-                    .trg-header h2 { margin: 0; color: var(--text-primary); }
-                    .trg-table { width: 100%; border-collapse: collapse; color: var(--text-secondary); }
-                    .trg-table th, .trg-table td { padding: var(--space-2); text-align: left; border-bottom: 1px solid var(--border-subtle); }
-                    .trg-empty { text-align: center; color: var(--text-tertiary); padding: var(--space-4); }
-                </style>
-                <div class="trg-header">
-                    <h2>${this.t('triggers_modal.title')}</h2>
-                    <div>
-                        <platform-button variant="primary" @click=${this._create}>
-                            <platform-icon name="plus" size="14"></platform-icon>
-                            ${this.t('triggers_modal.action_create')}
-                        </platform-button>
-                        <platform-button @click=${() => this.close()}>
-                            <platform-icon name="close" size="14"></platform-icon>
-                        </platform-button>
-                    </div>
-                </div>
-                <table class="trg-table">
-                    <thead>
-                        <tr>
-                            <th>${this.t('triggers_modal.col_id')}</th>
-                            <th>${this.t('triggers_modal.col_name')}</th>
-                            <th>${this.t('triggers_modal.col_type')}</th>
-                            <th>${this.t('triggers_modal.col_status')}</th>
-                            <th>${this.t('triggers_modal.col_actions')}</th>
-                        </tr>
-                    </thead>
-                    <tbody>${this._renderRows()}</tbody>
-                </table>
-            </div>
+            <platform-button variant="primary" @click=${() => this._create()}>
+                <platform-icon name="plus" size="14"></platform-icon>
+                ${this.t('triggers_modal.action_create')}
+            </platform-button>
+        `;
+    }
+
+    renderBody() {
+        return html`
+            <table class="trg-table">
+                <thead>
+                    <tr>
+                        <th>${this.t('triggers_modal.col_id')}</th>
+                        <th>${this.t('triggers_modal.col_name')}</th>
+                        <th>${this.t('triggers_modal.col_type')}</th>
+                        <th>${this.t('triggers_modal.col_status')}</th>
+                        <th>${this.t('triggers_modal.col_actions')}</th>
+                    </tr>
+                </thead>
+                <tbody>${this._renderRows()}</tbody>
+            </table>
         `;
     }
 }

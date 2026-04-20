@@ -19,16 +19,17 @@ export const leadSubmitOp = createAsyncOp({
     name: 'frontend/lead_submit',
     successToastKey: 'frontend:leads_page.toast_submitted',
     errorToastKey: 'frontend:leads_page.toast_submit_failed',
+    restMirror: { method: 'POST', path: '/frontend/api/leads' },
     request: async ({ payload }) => await httpRequest({
         method: 'POST',
         url: `${BASE}/leads`,
-        body: payload || {},
+        body: payload && typeof payload === 'object' ? payload : {},
     }),
 });
 
 export const leadRequestsList = createCursorList({
     name: 'frontend/lead_requests',
-    baseUrl: `${BASE}/lead-requests`,
+    baseUrl: '/frontend/api/lead-requests',
     pageSize: 50,
     buildQuery: () => ({}),
     statusMap: { 403: 'forbidden' },

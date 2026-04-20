@@ -7,7 +7,7 @@
  *   GET  /{entity_id}/related                  → RelatedEntitiesResponse
  *   GET  /{entity_id}/relationships            → EntityRelationshipsResponse
  *   GET  /shortest-path                        → ShortestPathResponse
- *   GET  /timeline-bounds                      → TimelineBoundsResponse
+ *   GET  /timeline/bounds                      → TimelineBoundsResponse
  */
 
 import { createAsyncOp } from '@platform/lib/events/index.js';
@@ -32,6 +32,7 @@ function _buildQuery(params) {
 export const overviewGraphOp = createAsyncOp({
     name: 'crm/overview_graph',
     silent: true,
+    restMirror: { method: 'POST', path: '/crm/api/v1/entities/overview-graph' },
     request: async ({ payload }) => {
         if (!payload || !Array.isArray(payload.entity_ids) || payload.entity_ids.length === 0) {
             throw new Error('overviewGraphOp: payload.entity_ids required');
@@ -53,6 +54,7 @@ export const overviewGraphOp = createAsyncOp({
 export const influenceGraphOp = createAsyncOp({
     name: 'crm/influence_graph',
     silent: true,
+    restMirror: { method: 'GET', path: '/crm/api/v1/entities/:entity_id/influence-graph' },
     request: async ({ payload }) => {
         if (!payload || typeof payload.entityId !== 'string' || payload.entityId.length === 0) {
             throw new Error('influenceGraphOp: payload.entityId required');
@@ -69,6 +71,7 @@ export const influenceGraphOp = createAsyncOp({
 export const relatedEntitiesOp = createAsyncOp({
     name: 'crm/related_entities',
     silent: true,
+    restMirror: { method: 'GET', path: '/crm/api/v1/entities/:entity_id/related' },
     request: async ({ payload }) => {
         if (!payload || typeof payload.entityId !== 'string' || payload.entityId.length === 0) {
             throw new Error('relatedEntitiesOp: payload.entityId required');
@@ -85,6 +88,7 @@ export const relatedEntitiesOp = createAsyncOp({
 export const entityRelationshipsOp = createAsyncOp({
     name: 'crm/entity_relationships',
     silent: true,
+    restMirror: { method: 'GET', path: '/crm/api/v1/entities/:entity_id/relationships' },
     request: async ({ payload }) => {
         if (!payload || typeof payload.entityId !== 'string' || payload.entityId.length === 0) {
             throw new Error('entityRelationshipsOp: payload.entityId required');
@@ -98,16 +102,26 @@ export const entityRelationshipsOp = createAsyncOp({
     },
 });
 
+/**
+ * `shortestPathOp` делает GET `/crm/api/v1/relationships/path/` с параметрами
+ * `from` / `to`. Ранее UI вызывал `/crm/api/v1/entities/shortest-path` —
+ * такого роута в `apps/crm/api/**` нет; эндпоинт кратчайшего пути живёт в
+ * `apps/crm/api/relationships.py` (router prefix `/relationships`).
+ * На время подготовки backend alias'а `/entities/shortest-path` выравниваем
+ * UI на существующий путь, а payload (`source_id`/`target_id`) маппим в
+ * query `from`/`to`.
+ */
 export const shortestPathOp = createAsyncOp({
     name: 'crm/shortest_path',
     silent: true,
+    restMirror: { method: 'GET', path: '/crm/api/v1/relationships/path/' },
     request: async ({ payload }) => {
         if (!payload || typeof payload.source_id !== 'string' || typeof payload.target_id !== 'string') {
             throw new Error('shortestPathOp: payload.source_id and target_id required');
         }
         const params = {
-            source_id: payload.source_id,
-            target_id: payload.target_id,
+            from: payload.source_id,
+            to: payload.target_id,
         };
         if (typeof payload.max_depth === 'number') params.max_depth = payload.max_depth;
         if (typeof payload.namespace === 'string') params.namespace = payload.namespace;
@@ -116,7 +130,7 @@ export const shortestPathOp = createAsyncOp({
         const qs = _buildQuery(params);
         return await httpRequest({
             method: 'GET',
-            url: `/crm/api/v1/entities/shortest-path${qs}`,
+            url: `/crm/api/v1/relationships/path/${qs}`,
         });
     },
 });
@@ -124,6 +138,7 @@ export const shortestPathOp = createAsyncOp({
 export const timelineBoundsOp = createAsyncOp({
     name: 'crm/timeline_bounds',
     silent: true,
+    restMirror: { method: 'GET', path: '/crm/api/v1/entities/timeline/bounds' },
     request: async ({ payload }) => {
         const params = {};
         if (payload && typeof payload.namespace === 'string') {
@@ -132,7 +147,7 @@ export const timelineBoundsOp = createAsyncOp({
         const qs = _buildQuery(params);
         return await httpRequest({
             method: 'GET',
-            url: `/crm/api/v1/entities/timeline-bounds${qs}`,
+            url: `/crm/api/v1/entities/timeline/bounds${qs}`,
         });
     },
 });

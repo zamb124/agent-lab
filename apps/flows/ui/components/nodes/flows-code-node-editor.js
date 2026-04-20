@@ -19,6 +19,7 @@ import '../editors/flows-args-schema-form.js';
 import '../editors/flows-json-field-editor.js';
 import '@platform/lib/components/glass-button.js';
 import '@platform/lib/components/platform-icon.js';
+import { asObject, asString } from '../../_helpers/flows-resolvers.js';
 
 export class FlowsCodeNodeEditor extends PlatformElement {
     static properties = {
@@ -30,13 +31,14 @@ export class FlowsCodeNodeEditor extends PlatformElement {
         flowVariables: { type: Object },
         graphNodes: { type: Array },
         previewExecutionState: { type: Object },
+        expanded: { type: Boolean, reflect: true },
         _showSchemaJson: { state: true },
     };
 
     static styles = [
         PlatformElement.styles,
         css`
-            :host { display: block; }
+            :host { display: block; height: 100%; min-height: 0; }
             details {
                 margin-bottom: var(--space-3);
                 padding: var(--space-2) var(--space-3);
@@ -82,6 +84,7 @@ export class FlowsCodeNodeEditor extends PlatformElement {
         this.flowVariables = null;
         this.graphNodes = null;
         this.previewExecutionState = null;
+        this.expanded = false;
         this._showSchemaJson = false;
         this._toolSource = this.useOp('flows/code_tool_source');
     }
@@ -105,7 +108,7 @@ export class FlowsCodeNodeEditor extends PlatformElement {
     }
 
     _onCodeChange(e) {
-        this._emitPatch({ code: e.detail?.value || '' });
+        this._emitPatch({ code: asString(e.detail?.value) });
     }
 
     _onToolIdChange(e) {
@@ -149,7 +152,7 @@ export class FlowsCodeNodeEditor extends PlatformElement {
             Object.entries(argsSchema).map(([k, v]) => [k, v && typeof v === 'object' && 'default' in v ? v.default : undefined])
         );
         const toolSource = mode === 'function' && toolId
-            ? (this._toolSource.lastResult?.code || '')
+            ? asString(this._toolSource.lastResult?.code)
             : '';
         return html`
             <flows-base-node-editor
@@ -157,14 +160,11 @@ export class FlowsCodeNodeEditor extends PlatformElement {
                 .flowId=${this.flowId}
                 .skillId=${this.skillId}
                 .nodeConfig=${this.nodeConfig}
-                .nodeType=${this.nodeType || 'code'}
+                .nodeType=${typeof this.nodeType === 'string' && this.nodeType.length > 0 ? this.nodeType : 'code'}
                 .flowVariables=${this.flowVariables}
                 .graphNodes=${this.graphNodes}
                 .previewExecutionState=${this.previewExecutionState}
-                @change=${(e) => this.emit('change', e.detail)}
-                @rename-node=${(e) => this.emit('rename-node', e.detail)}
-                @delete-node=${(e) => this.emit('delete-node', e.detail)}
-                @duplicate-node=${(e) => this.emit('duplicate-node', e.detail)}
+                ?expanded=${this.expanded}
             >
                 <div slot="settings">
                     <details open>

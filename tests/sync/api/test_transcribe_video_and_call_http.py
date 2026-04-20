@@ -69,13 +69,18 @@ async def test_transcribe_video_endpoint_marks_done_via_worker(
     sync_worker,
     sync_auth_headers,
     sync_db_clean: None,
+    unique_id: str,
 ) -> None:
     mp4 = _minimal_mp4_bytes()
     async with AsyncClient(base_url="http://127.0.0.1:9005", timeout=120.0) as client:
         pr = await client.post(
             "/sync/api/v1/spaces/",
             headers=sync_auth_headers,
-            json={"name": "VideoTxSpace", "description": None},
+            json={
+                "name": "VideoTxSpace",
+                "description": None,
+                "namespace": f"vid_{unique_id}",
+            },
         )
         assert pr.status_code == 201
         space_id = pr.json()["id"]
@@ -166,19 +171,20 @@ async def test_transcribe_call_aggregate_includes_guest_line(
     sync_auth_headers,
     sync_db_clean: None,
     company_id: str,
+    unique_id: str,
 ) -> None:
     from datetime import UTC, datetime
 
     from apps.sync.container import get_sync_container
     from apps.sync.db.models import SyncCallParticipant
-    from apps.sync.realtime.commands import CommandEnvelope
-    from apps.sync.realtime.handlers import execute_command
+    from apps.sync.realtime.operations import MessagesSendPayload, op_messages_send
     from apps.sync.models.messages import (
         AudioAttachmentContent,
         MessageContentModel,
         MessageContentType,
         MessageCreate,
     )
+    from core.models.identity_models import User
 
     guest_label = "ГостьАгрегат"
 
@@ -186,7 +192,11 @@ async def test_transcribe_call_aggregate_includes_guest_line(
         pr = await client.post(
             "/sync/api/v1/spaces/",
             headers=sync_auth_headers,
-            json={"name": "CallAggSpace", "description": None},
+            json={
+                "name": "CallAggSpace",
+                "description": None,
+                "namespace": f"callagg_{unique_id}",
+            },
         )
         assert pr.status_code == 201
         space_id = pr.json()["id"]
@@ -291,25 +301,13 @@ async def test_transcribe_call_aggregate_includes_guest_line(
             mentioned_user_ids=None,
             call_id=call_id,
         )
-        cmd_guest = CommandEnvelope(
-            id=uuid.uuid4().hex,
-            actor_user_id=guest_id,
-            company_id=company_id,
-            type="messages.send",
-            payload={"channel_id": channel_id, "body": body_guest.model_dump(mode="json")},
+        guest_user = User(user_id=guest_id, name=guest_id, active_company_id=company_id)
+        guest_message = await op_messages_send(
+            MessagesSendPayload(channel_id=channel_id, body=body_guest),
+            user=guest_user,
+            container=container,
         )
-        res_guest = await execute_command(
-            cmd_guest,
-            spaces=container.space_repository,
-            channels=container.channel_repository,
-            threads=container.thread_repository,
-            messages=container.message_repository,
-            git_refs=container.git_resource_ref_repository,
-            user_repository=container.user_repository,
-            calls=container.call_repository,
-        )
-        assert res_guest.ok
-        guest_message_id = res_guest.result.id
+        guest_message_id = guest_message.id
 
         deadline = time.monotonic() + 90.0
         guest_done = False

@@ -56,11 +56,12 @@ async def test_http_channel_members_403_not_member(
     sync_auth_headers,
     sync_auth_headers_user2,
     sync_db_clean: None,
+    unique_id: str,
 ) -> None:
     pr = await sync_client.post(
         "/sync/api/v1/spaces/",
         headers=sync_auth_headers,
-        json={"name": "M", "description": None},
+        json={"name": "M", "description": None, "namespace": f"m_{unique_id}"},
     )
     assert pr.status_code == 201
     space_id = pr.json()["id"]
@@ -130,11 +131,12 @@ async def test_http_list_threads_and_messages(
     sync_client,
     sync_auth_headers,
     sync_db_clean: None,
+    unique_id: str,
 ) -> None:
     pr = await sync_client.post(
         "/sync/api/v1/spaces/",
         headers=sync_auth_headers,
-        json={"name": "T", "description": None},
+        json={"name": "T", "description": None, "namespace": f"t_{unique_id}"},
     )
     assert pr.status_code == 201
     space_id = pr.json()["id"]
@@ -169,11 +171,12 @@ async def test_http_send_message_and_mark_read_flow(
     sync_client,
     sync_auth_headers,
     sync_db_clean: None,
+    unique_id: str,
 ) -> None:
     pr = await sync_client.post(
         "/sync/api/v1/spaces/",
         headers=sync_auth_headers,
-        json={"name": "Msg", "description": None},
+        json={"name": "Msg", "description": None, "namespace": f"msg_{unique_id}"},
     )
     assert pr.status_code == 201
     space_id = pr.json()["id"]
@@ -251,11 +254,16 @@ async def test_http_messages_default_limit_and_cursor_pagination(
     sync_client,
     sync_auth_headers,
     sync_db_clean: None,
+    unique_id: str,
 ) -> None:
     pr = await sync_client.post(
         "/sync/api/v1/spaces/",
         headers=sync_auth_headers,
-        json={"name": "Paginated", "description": None},
+        json={
+            "name": "Paginated",
+            "description": None,
+            "namespace": f"pag_{unique_id}",
+        },
     )
     assert pr.status_code == 201
     space_id = pr.json()["id"]
@@ -317,11 +325,16 @@ async def test_http_messages_invalid_cursor_returns_400(
     sync_client,
     sync_auth_headers,
     sync_db_clean: None,
+    unique_id: str,
 ) -> None:
     pr = await sync_client.post(
         "/sync/api/v1/spaces/",
         headers=sync_auth_headers,
-        json={"name": "BadCursor", "description": None},
+        json={
+            "name": "BadCursor",
+            "description": None,
+            "namespace": f"badcur_{unique_id}",
+        },
     )
     assert pr.status_code == 201
     space_id = pr.json()["id"]

@@ -2,7 +2,7 @@
  * flows/editor — UI-only фабрика состояния редактора.
  *
  * extraReducer: flow_loaded / node_selected / panel_closed / panel_expanded /
- * variables_panel_toggled / execution_panel_set / agent_execution_set /
+ * execution_panel_set / agent_execution_set /
  * active_tool_set / dirty_set / saving_set / preview_state_set /
  * history_pushed / history_undone / history_redone / history_cleared.
  */

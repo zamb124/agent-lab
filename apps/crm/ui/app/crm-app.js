@@ -123,6 +123,10 @@ import '../modals/note-graph-modal.js';
 import '../modals/entity-delete-modal.js';
 import '../modals/knowledge-import-modal.js';
 
+import { graphUiSlice } from '../events/resources/graph-ui.resource.js';
+import { dailyNotesUiSlice } from '../events/resources/daily-notes-ui.resource.js';
+import { createCrmPersistEffect } from '../events/crm-persist.effect.js';
+
 import '@platform/lib/components/layout/platform-island.js';
 
 const CRM_ROUTES = [
@@ -211,6 +215,8 @@ export class CRMApp extends PlatformApp {
         attachmentUploadOp,
         attachmentDeleteOp,
         fileUploadOp,
+        graphUiSlice,
+        dailyNotesUiSlice,
     ];
 
     static styles = [
@@ -257,6 +263,7 @@ export class CRMApp extends PlatformApp {
     getServiceEffects() {
         return [
             createRouterEffect({ baseUrl: '/crm', routes: CRM_ROUTES }),
+            createCrmPersistEffect(),
         ];
     }
 

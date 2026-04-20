@@ -37,6 +37,7 @@ export const notesListResource = createCursorList({
     baseUrl: '/crm/api/v1/entities/query',
     pageSize: 50,
     httpMethod: 'POST',
+    restMirror: { method: 'POST', path: '/crm/api/v1/entities/query' },
     buildQuery: (filters) => {
         if (!filters || typeof filters !== 'object') {
             throw new Error('notesListResource.buildQuery: filters required');
@@ -58,6 +59,7 @@ export const notesListResource = createCursorList({
 export const noteAnalysisDraftSaveOp = createAsyncOp({
     name: 'crm/note_analysis_draft_save',
     silent: true,
+    restMirror: { method: 'PATCH', path: '/crm/api/v1/entities/notes/:note_id/analysis-draft' },
     request: async ({ payload }) => {
         if (!payload || typeof payload.note_id !== 'string' || !payload.draft) {
             throw new Error('noteAnalysisDraftSaveOp: { note_id, draft } required');
@@ -74,6 +76,7 @@ export const noteVoiceInputOp = createAsyncOp({
     name: 'crm/note_voice_input',
     successToastKey: 'crm:toast.note.voice_stopped',
     errorToastKey: 'crm:toast.note.voice_failed',
+    restMirror: { method: 'POST', path: '/crm/api/v1/entities/voice-input' },
     request: async ({ payload }) => {
         if (!payload || !(payload.audio instanceof Blob)) {
             throw new Error('noteVoiceInputOp: payload.audio (Blob) required');
@@ -97,6 +100,7 @@ export const noteVoiceInputOp = createAsyncOp({
 export const noteSearchOp = createAsyncOp({
     name: 'crm/note_search',
     silent: true,
+    restMirror: { method: 'POST', path: '/crm/api/v1/entities/query' },
     request: async ({ payload }) => {
         if (!payload || typeof payload.q !== 'string' || payload.q.length === 0) {
             throw new Error('noteSearchOp: payload.q (non-empty string) required');
@@ -125,6 +129,7 @@ export const noteSearchOp = createAsyncOp({
 export const entityCardsBulkOp = createAsyncOp({
     name: 'crm/entity_cards_bulk',
     silent: true,
+    restMirror: { method: 'POST', path: '/crm/api/v1/entities/cards/bulk' },
     request: async ({ payload }) => {
         if (!payload || !Array.isArray(payload.entity_ids) || payload.entity_ids.length === 0) {
             throw new Error('entityCardsBulkOp: payload.entity_ids (non-empty array) required');
@@ -140,6 +145,7 @@ export const entityCardsBulkOp = createAsyncOp({
 export const noteAnalyzeStartOp = createAsyncOp({
     name: 'crm/note_analyze_start',
     silent: true,
+    restMirror: { method: 'POST', path: '/crm/api/v1/tasks/note-analyze' },
     request: async ({ payload }) => {
         if (!payload || typeof payload.note_id !== 'string') {
             throw new Error('noteAnalyzeStartOp: payload.note_id required');

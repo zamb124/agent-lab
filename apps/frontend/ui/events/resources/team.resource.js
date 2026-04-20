@@ -38,6 +38,7 @@ export const inviteGenerateOp = createAsyncOp({
     name: 'frontend/team_invite',
     successToastKey: 'frontend:team_page.toast_invite_generated',
     errorToastKey: 'frontend:team_page.err_invite',
+    restMirror: { method: 'POST', path: '/frontend/api/invites/generate' },
     request: async ({ payload }) => {
         const role = payload && payload.role;
         if (!role) throw new Error('inviteGenerateOp: role required');
@@ -46,7 +47,10 @@ export const inviteGenerateOp = createAsyncOp({
             url: '/frontend/api/invites/generate',
             body: { role },
         });
-        const link = response.invite_url || response.link || response.url;
+        let link = '';
+        if (typeof response.invite_url === 'string' && response.invite_url.length > 0) link = response.invite_url;
+        else if (typeof response.link === 'string' && response.link.length > 0) link = response.link;
+        else if (typeof response.url === 'string' && response.url.length > 0) link = response.url;
         if (!link) throw new Error('inviteGenerateOp: server did not return invite link');
         return { role, link };
     },

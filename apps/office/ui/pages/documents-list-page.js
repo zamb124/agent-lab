@@ -16,11 +16,17 @@
  *
  * Состояние фильтра (`filterCatalogIds`) и активного каталога
  * (`activeCatalogId`) живёт в slice `office/documents` (см. фабрику).
+ *
+ * Реакция на смену namespace: `useEvent(UI_DOCUMENTS_RELOAD_REQUESTED)` —
+ * сбрасываем фильтр и кеш ключа, перезагружаем `office/catalogs`; после
+ * прихода нового списка `_maybeReloadDocs()` в `updated()` сам пересоберёт
+ * запрос к документам уже в актуальном namespace.
  */
 
 import { html, css } from 'lit';
 import { PlatformPage } from '@platform/lib/base/PlatformPage.js';
 import { buttonStyles } from '@platform/lib/styles/shared/button.styles.js';
+import { CoreEvents } from '@platform/lib/events/contract.js';
 import '@platform/lib/components/platform-icon.js';
 import '../components/office-integration-banner.js';
 import '../components/office-document-row.js';
@@ -128,6 +134,14 @@ export class OfficeDocumentsListPage extends PlatformPage {
         if (!this._integration.lastResult && !this._integration.busy) {
             this._integration.run(null);
         }
+        this.useEvent(CoreEvents.UI_DOCUMENTS_RELOAD_REQUESTED, () => this._onNamespaceReload());
+    }
+
+    _onNamespaceReload() {
+        this._lastEffectiveKey = '';
+        this._filterSearch = '';
+        this._documents.clearFilter(null);
+        this._catalogs.load();
     }
 
     updated(changed) {
@@ -162,6 +176,7 @@ export class OfficeDocumentsListPage extends PlatformPage {
     }
 
     _maybeReloadDocs() {
+        if (this._catalogs.loading) return;
         const ids = this._effectiveCatalogIds();
         if (ids.length === 0) return;
         const key = ids.slice().sort().join(',');

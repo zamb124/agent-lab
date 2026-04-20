@@ -1,11 +1,8 @@
 /**
  * Sync Company Members — список участников компании для DM-секции и поиска.
  *
- * `transport: 'http'` — список меняется редко, инициируется один раз при
- * монтировании sidebar. REST-эндпоинт `apps/sync/api/company.py:GET /company/members`.
- *
- * sharedChannelsOp — отдельный AsyncOp для модалки DM-выбора (общие каналы
- * с конкретным участником).
+ * `transport: 'ws'` — единый канал для READ-операций. REST-зеркала живут в
+ * `apps/sync/api/company.py`.
  */
 
 import { createAsyncOp, createResourceCollection } from '@platform/lib/events/index.js';
@@ -27,20 +24,16 @@ export const companyMembersResource = createResourceCollection({
     baseUrl: '/sync/api/v1/company/members',
     idField: 'user_id',
     operations: ['list'],
-    transport: 'http',
+    transport: 'ws',
+    wsTimeoutMs: 5_000,
     mapItem: _normalizeMember,
 });
 
 export const sharedChannelsOp = createAsyncOp({
     name: 'sync/shared_channels',
-    transport: 'http',
+    transport: 'ws',
+    wsTimeoutMs: 5_000,
     silent: true,
-    restMirror: { method: 'GET', path: '/sync/api/v1/company/members/:user_id/shared-channels' },
-    request: async ({ payload }) => {
-        const { httpRequest } = await import('@platform/lib/events/http.js');
-        return httpRequest({
-            method: 'GET',
-            url: `/sync/api/v1/company/members/${encodeURIComponent(payload.user_id)}/shared-channels`,
-        });
-    },
+    commandType: 'sync/shared_channels/list_requested',
+    restMirror: { method: 'GET', path: '/sync/api/v1/company/members/:peer_user_id/shared-channels' },
 });

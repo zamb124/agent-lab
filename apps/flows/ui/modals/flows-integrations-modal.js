@@ -5,19 +5,30 @@
  */
 
 import { html, css } from 'lit';
-import { PlatformLightModal } from '@platform/lib/components/glass-light-modal.js';
+import { PlatformModal } from '@platform/lib/components/glass-modal.js';
 import { registerModalKind } from '@platform/lib/utils/modal-registry.js';
 import { platformConfirm } from '@platform/lib/components/platform-confirm-modal.js';
 import '@platform/lib/components/platform-button.js';
 import '@platform/lib/components/platform-icon.js';
 import '@platform/lib/components/glass-spinner.js';
+import { asString } from '../_helpers/flows-resolvers.js';
 
-export class FlowsIntegrationsModal extends PlatformLightModal {
+export class FlowsIntegrationsModal extends PlatformModal {
     static modalKind = 'flows.integrations';
     static i18nNamespace = 'flows';
 
+    static styles = [
+        ...PlatformModal.styles,
+        css`
+            .int-table { width: 100%; border-collapse: collapse; color: var(--text-secondary); }
+            .int-table th, .int-table td { padding: var(--space-2); text-align: left; border-bottom: 1px solid var(--border-subtle); }
+            .int-empty { text-align: center; color: var(--text-tertiary); padding: var(--space-4); }
+        `,
+    ];
+
     constructor() {
         super();
+        this.size = 'lg';
         this._listOp = this.useOp('flows/integrations_list');
         this._removeOp = this.useOp('flows/integrations_remove');
     }
@@ -60,7 +71,7 @@ export class FlowsIntegrationsModal extends PlatformLightModal {
             <tr>
                 <td>${it.provider}</td>
                 <td>${it.service}</td>
-                <td>${it.status || ''}</td>
+                <td>${asString(it.status)}</td>
                 <td>
                     <platform-button danger @click=${() => this._delete(it)}>
                         ${this.t('integrations_modal.action_disconnect')}
@@ -70,36 +81,23 @@ export class FlowsIntegrationsModal extends PlatformLightModal {
         `);
     }
 
-    render() {
+    renderHeader() {
+        return this.t('integrations_modal.title');
+    }
+
+    renderBody() {
         return html`
-            <div class="light-modal-backdrop" @click=${this._onBackdropClick}></div>
-            <div class="light-modal-container int-shell">
-                <style>
-                    .int-shell { padding: var(--space-4); gap: var(--space-3); }
-                    .int-header { display: flex; align-items: center; justify-content: space-between; }
-                    .int-header h2 { margin: 0; color: var(--text-primary); }
-                    .int-table { width: 100%; border-collapse: collapse; color: var(--text-secondary); }
-                    .int-table th, .int-table td { padding: var(--space-2); text-align: left; border-bottom: 1px solid var(--border-subtle); }
-                    .int-empty { text-align: center; color: var(--text-tertiary); padding: var(--space-4); }
-                </style>
-                <div class="int-header">
-                    <h2>${this.t('integrations_modal.title')}</h2>
-                    <platform-button @click=${() => this.close()}>
-                        <platform-icon name="close" size="14"></platform-icon>
-                    </platform-button>
-                </div>
-                <table class="int-table">
-                    <thead>
-                        <tr>
-                            <th>${this.t('integrations_modal.col_provider')}</th>
-                            <th>${this.t('integrations_modal.col_service')}</th>
-                            <th>${this.t('integrations_modal.col_status')}</th>
-                            <th>${this.t('integrations_modal.col_actions')}</th>
-                        </tr>
-                    </thead>
-                    <tbody>${this._renderRows()}</tbody>
-                </table>
-            </div>
+            <table class="int-table">
+                <thead>
+                    <tr>
+                        <th>${this.t('integrations_modal.col_provider')}</th>
+                        <th>${this.t('integrations_modal.col_service')}</th>
+                        <th>${this.t('integrations_modal.col_status')}</th>
+                        <th>${this.t('integrations_modal.col_actions')}</th>
+                    </tr>
+                </thead>
+                <tbody>${this._renderRows()}</tbody>
+            </table>
         `;
     }
 }

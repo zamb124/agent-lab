@@ -271,7 +271,7 @@ def speech_egress_repo(sync_database: SyncDatabase) -> CallSpeechEgressTrackRepo
 
 @pytest.fixture()
 def sync_user_repository(sync_database: SyncDatabase):
-    """UserRepository shared БД (как в dispatch_sync_command)."""
+    """UserRepository shared БД (тот же экземпляр, что использует op_*)."""
     from apps.sync.container import get_sync_container
 
     return get_sync_container().user_repository

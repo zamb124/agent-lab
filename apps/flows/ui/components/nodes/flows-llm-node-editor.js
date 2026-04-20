@@ -1,15 +1,23 @@
 /**
  * flows-llm-node-editor — редактор llm_node.
  *
- * Шесть секций (свёрнутые `<details>`):
- *   1. Промпт (`flows-prompt-editor` с автодополнением `@var:` по
- *      `flowVariables`).
+ * Секции стеком:
+ *   1. Промпт (core `<prompt-editor>` с подсветкой `{var}`, `{?opt}`,
+ *      `{var|default}`, `{for ... endfor}`, `@var:`, `@state:`, hover-tooltip
+ *      со значением переменной из `flowVariables`, автокомплитом по `{` и
+ *      `@var:`, режимами Preview / Split / Fullscreen).
  *   2. LLM конфигурация (`flows-llm-config-editor` поверх `cfg.llm_override`).
  *   3. Фильтр сообщений (`cfg.messages_filter`: 'all' | 'own' | string[]).
- *   4. Структурированный вывод (`cfg.structured_output` + `cfg.output_schema`).
- *   5. ReAct loop (`cfg.react`: loop_mode, max_iterations, exit_tool, strict,
- *      reminder_message); видна, только если structured_output=false.
- *   6. Инструменты (`cfg.tools: ToolReference[]`): chips + picker + create.
+ *   4. Режим вывода — toggle Tools / Structured Output (`cfg.structured_output`).
+ *   5a. Tools-режим (`structured_output=false`):
+ *       - ReAct loop (`cfg.react`: loop_mode, max_iterations, exit_tool, strict,
+ *         reminder_message);
+ *       - Инструменты (`cfg.tools: ToolReference[]`): chips + picker + create.
+ *   5b. Structured-режим (`structured_output=true`):
+ *       - Output JSON Schema (`cfg.output_schema`).
+ *
+ * Tools и Structured Output взаимоисключающи: если включён Structured Output,
+ * tools и react-секция не отображаются.
  *
  * Все поля — top-level свойства NodeConfig. Никаких parameters_schema/mocks
  * (их нет в модели — это поля ToolReference / get_mock_for_node).
@@ -18,11 +26,12 @@
 import { html, css } from 'lit';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
 import './flows-base-node-editor.js';
-import '../editors/flows-prompt-editor.js';
+import '@platform/lib/components/prompt-editor.js';
 import '../editors/flows-llm-config-editor.js';
 import '../editors/flows-json-field-editor.js';
 import '@platform/lib/components/glass-button.js';
 import '@platform/lib/components/platform-icon.js';
+import { asObject, isPlainObject } from '../../_helpers/flows-resolvers.js';
 
 const REACT_LOOP_MODES = Object.freeze(['auto', 'explicit']);
 
@@ -36,32 +45,38 @@ export class FlowsLlmNodeEditor extends PlatformElement {
         flowVariables: { type: Object },
         graphNodes: { type: Array },
         previewExecutionState: { type: Object },
+        expanded: { type: Boolean, reflect: true },
         _addToolMenuOpen: { state: true },
     };
 
     static styles = [
         PlatformElement.styles,
         css`
-            :host { display: block; }
-            details {
-                margin-bottom: var(--space-3);
-                padding: var(--space-2) var(--space-3);
+            :host {
+                display: block; height: 100%; min-height: 0;
+            }
+            .stack {
+                display: flex; flex-direction: column;
+                gap: var(--space-5);
+            }
+            .block { display: flex; flex-direction: column; gap: var(--space-2); }
+            .block-title {
+                font-size: var(--text-sm);
+                font-weight: var(--font-medium);
+                color: var(--text-secondary);
+                margin: 0;
+            }
+            .block-card {
+                display: flex; flex-direction: column;
+                gap: var(--space-3);
+                padding: var(--space-3);
                 border: 1px solid var(--glass-border-subtle);
                 border-radius: var(--radius-md);
                 background: var(--glass-solid-subtle);
             }
-            summary {
-                cursor: pointer;
-                font-size: var(--text-sm);
-                font-weight: var(--font-semibold);
-                color: var(--text-primary);
-                user-select: none;
-                padding: var(--space-1) 0;
-            }
-            .section-body {
-                display: flex; flex-direction: column;
-                gap: var(--space-2);
-                padding-top: var(--space-2);
+            .block-hint {
+                font-size: var(--text-xs);
+                color: var(--text-tertiary);
             }
             .field { display: flex; flex-direction: column; gap: var(--space-1); }
             .row { display: flex; align-items: center; gap: var(--space-2); flex-wrap: wrap; }
@@ -118,6 +133,22 @@ export class FlowsLlmNodeEditor extends PlatformElement {
                 background: var(--glass-solid-medium);
             }
             .filter-row { display: flex; align-items: center; gap: var(--space-2); font-size: var(--text-sm); }
+            .toggle { display: inline-flex; gap: var(--space-1); }
+            .toggle button {
+                padding: var(--space-2) var(--space-3);
+                background: var(--glass-solid-subtle);
+                color: var(--text-secondary);
+                border: 1px solid var(--glass-border-subtle);
+                border-radius: var(--radius-md);
+                font-size: var(--text-sm);
+                cursor: pointer;
+                transition: background var(--duration-fast), color var(--duration-fast), border-color var(--duration-fast);
+            }
+            .toggle button[active] {
+                background: var(--accent-subtle);
+                color: var(--accent);
+                border-color: var(--accent);
+            }
         `,
     ];
 
@@ -131,6 +162,7 @@ export class FlowsLlmNodeEditor extends PlatformElement {
         this.flowVariables = null;
         this.graphNodes = null;
         this.previewExecutionState = null;
+        this.expanded = false;
         this._addToolMenuOpen = false;
     }
 
@@ -178,8 +210,11 @@ export class FlowsLlmNodeEditor extends PlatformElement {
         this._emitPatch({ messages_filter: next });
     }
 
-    _onStructuredToggle(e) {
-        this._emitPatch({ structured_output: Boolean(e.target.checked) });
+    _onOutputModeToggle(mode) {
+        const next = mode === 'structured';
+        const current = Boolean(this.nodeConfig?.structured_output);
+        if (next === current) return;
+        this._emitPatch({ structured_output: next });
     }
 
     _onOutputSchemaChange(e) {
@@ -260,37 +295,37 @@ export class FlowsLlmNodeEditor extends PlatformElement {
 
     _toolLabel(t) {
         if (!t) return '';
-        return t.name || t.title || t.tool_id;
+        if (typeof t.name === 'string' && t.name.length > 0) return t.name;
+        if (typeof t.title === 'string' && t.title.length > 0) return t.title;
+        return t.tool_id;
     }
 
     _renderPromptSection() {
         const prompt = typeof this.nodeConfig?.prompt === 'string' ? this.nodeConfig.prompt : '';
+        const variables = this.flowVariables && typeof this.flowVariables === 'object' ? this.flowVariables : {};
         return html`
-            <details open>
-                <summary>${this.t('llm_node_editor.section_prompt')}</summary>
-                <div class="section-body">
-                    <flows-prompt-editor
-                        .value=${prompt}
-                        .flowVariables=${this.flowVariables}
-                        @change=${this._onPromptChange}
-                    ></flows-prompt-editor>
-                </div>
-            </details>
+            <prompt-editor
+                .value=${prompt}
+                .variables=${variables}
+                label=${this.t('llm_node_editor.section_prompt')}
+                @change=${this._onPromptChange}
+            ></prompt-editor>
         `;
     }
 
     _renderLlmSection() {
-        const llm = this.nodeConfig?.llm_override || this.nodeConfig?.llm || {};
+        const cfg = asObject(this.nodeConfig);
+        const override = isPlainObject(cfg.llm_override) ? cfg.llm_override : null;
+        const fallback = isPlainObject(cfg.llm) ? cfg.llm : null;
+        const llm = override !== null ? override : (fallback !== null ? fallback : {});
         return html`
-            <details>
-                <summary>${this.t('llm_node_editor.section_llm')}</summary>
-                <div class="section-body">
-                    <flows-llm-config-editor
-                        .config=${llm}
-                        @change=${this._onLlmConfigChange}
-                    ></flows-llm-config-editor>
-                </div>
-            </details>
+            <section class="block">
+                <h4 class="block-title">${this.t('llm_node_editor.section_llm')}</h4>
+                <flows-llm-config-editor
+                    .config=${llm}
+                    @change=${this._onLlmConfigChange}
+                ></flows-llm-config-editor>
+            </section>
         `;
     }
 
@@ -299,9 +334,9 @@ export class FlowsLlmNodeEditor extends PlatformElement {
         const customList = Array.isArray(this.nodeConfig?.messages_filter) ? this.nodeConfig.messages_filter : [];
         const nodes = Array.isArray(this.graphNodes) ? this.graphNodes : [];
         return html`
-            <details>
-                <summary>${this.t('llm_node_editor.section_messages_filter')}</summary>
-                <div class="section-body">
+            <section class="block">
+                <h4 class="block-title">${this.t('llm_node_editor.section_messages_filter')}</h4>
+                <div class="block-card">
                     <div class="row">
                         <label class="filter-row">
                             <input type="radio" name="filter-${this.nodeId}" ?checked=${mode === 'all'}
@@ -333,34 +368,47 @@ export class FlowsLlmNodeEditor extends PlatformElement {
                         </div>
                     ` : ''}
                 </div>
-            </details>
+            </section>
         `;
     }
 
-    _renderStructuredSection() {
-        const enabled = Boolean(this.nodeConfig?.structured_output);
+    _renderOutputModeSection() {
+        const structured = Boolean(this.nodeConfig?.structured_output);
+        return html`
+            <section class="block">
+                <h4 class="block-title">${this.t('llm_node_editor.section_output_mode')}</h4>
+                <div class="block-card">
+                    <div class="toggle">
+                        <button type="button" ?active=${!structured}
+                            @click=${() => this._onOutputModeToggle('tools')}>
+                            ${this.t('llm_node_editor.output_mode_tools')}
+                        </button>
+                        <button type="button" ?active=${structured}
+                            @click=${() => this._onOutputModeToggle('structured')}>
+                            ${this.t('llm_node_editor.output_mode_structured')}
+                        </button>
+                    </div>
+                    <div class="block-hint">${this.t('llm_node_editor.output_mode_hint')}</div>
+                </div>
+            </section>
+        `;
+    }
+
+    _renderOutputSchemaSection() {
+        if (!this.nodeConfig?.structured_output) return '';
         const schema = this.nodeConfig?.output_schema && typeof this.nodeConfig.output_schema === 'object'
             ? JSON.stringify(this.nodeConfig.output_schema, null, 2)
             : '{}';
         return html`
-            <details>
-                <summary>${this.t('llm_node_editor.section_structured')}</summary>
-                <div class="section-body">
-                    <label class="filter-row">
-                        <input type="checkbox" .checked=${enabled} @change=${this._onStructuredToggle} />
-                        ${this.t('llm_node_editor.structured_output')}
-                    </label>
-                    ${enabled ? html`
-                        <div class="field">
-                            <label>${this.t('llm_node_editor.output_schema')}</label>
-                            <flows-json-field-editor
-                                .value=${schema}
-                                @change=${this._onOutputSchemaChange}
-                            ></flows-json-field-editor>
-                        </div>
-                    ` : ''}
+            <section class="block">
+                <h4 class="block-title">${this.t('llm_node_editor.section_output_schema')}</h4>
+                <div class="block-card">
+                    <flows-json-field-editor
+                        .value=${schema}
+                        @change=${this._onOutputSchemaChange}
+                    ></flows-json-field-editor>
                 </div>
-            </details>
+            </section>
         `;
     }
 
@@ -373,9 +421,9 @@ export class FlowsLlmNodeEditor extends PlatformElement {
         const strict = react.strict === undefined ? true : Boolean(react.strict);
         const reminder = typeof react.reminder_message === 'string' ? react.reminder_message : '';
         return html`
-            <details>
-                <summary>${this.t('llm_node_editor.section_react')}</summary>
-                <div class="section-body">
+            <section class="block">
+                <h4 class="block-title">${this.t('llm_node_editor.section_react')}</h4>
+                <div class="block-card">
                     <div class="field">
                         <label>${this.t('llm_node_editor.react_loop_mode')}</label>
                         <select .value=${loopMode} @change=${this._onReactLoopMode}>
@@ -401,16 +449,17 @@ export class FlowsLlmNodeEditor extends PlatformElement {
                         </div>
                     ` : ''}
                 </div>
-            </details>
+            </section>
         `;
     }
 
     _renderToolsSection() {
+        if (this.nodeConfig?.structured_output) return '';
         const tools = Array.isArray(this.nodeConfig?.tools) ? this.nodeConfig.tools : [];
         return html`
-            <details>
-                <summary>${this.t('llm_node_editor.section_tools')}</summary>
-                <div class="section-body">
+            <section class="block">
+                <h4 class="block-title">${this.t('llm_node_editor.section_tools')}</h4>
+                <div class="block-card">
                     <div class="row">
                         ${tools.map((t) => html`
                             <span class="chip" @click=${() => this._onEditTool(t)}>
@@ -440,7 +489,7 @@ export class FlowsLlmNodeEditor extends PlatformElement {
                         </div>
                     </div>
                 </div>
-            </details>
+            </section>
         `;
     }
 
@@ -451,22 +500,20 @@ export class FlowsLlmNodeEditor extends PlatformElement {
                 .flowId=${this.flowId}
                 .skillId=${this.skillId}
                 .nodeConfig=${this.nodeConfig}
-                .nodeType=${this.nodeType || 'llm_node'}
+                .nodeType=${typeof this.nodeType === 'string' && this.nodeType.length > 0 ? this.nodeType : 'llm_node'}
                 .flowVariables=${this.flowVariables}
                 .graphNodes=${this.graphNodes}
                 .previewExecutionState=${this.previewExecutionState}
-                @change=${(e) => this.emit('change', e.detail)}
-                @rename-node=${(e) => this.emit('rename-node', e.detail)}
-                @delete-node=${(e) => this.emit('delete-node', e.detail)}
-                @duplicate-node=${(e) => this.emit('duplicate-node', e.detail)}
+                ?expanded=${this.expanded}
             >
-                <div slot="settings">
+                <div slot="settings" class="stack">
                     ${this._renderPromptSection()}
                     ${this._renderLlmSection()}
                     ${this._renderMessagesFilterSection()}
-                    ${this._renderStructuredSection()}
+                    ${this._renderOutputModeSection()}
                     ${this._renderReactSection()}
                     ${this._renderToolsSection()}
+                    ${this._renderOutputSchemaSection()}
                 </div>
             </flows-base-node-editor>
         `;

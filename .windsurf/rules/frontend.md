@@ -42,7 +42,6 @@ reducer фабрики.
 | `PlatformPage`    | `@platform/lib/base/PlatformPage.js`       | Страницы-маршруты. |
 | `PlatformModal`   | `@platform/lib/components/glass-modal.js`  | Модалка с тёмным backdrop'ом. |
 | `PlatformFormModal` | там же                                   | Модалка с формой (dirty-tracking, closeAfterSave). |
-| `PlatformLightModal` | `@platform/lib/components/glass-light-modal.js` | Лёгкая модалка / drawer. |
 
 Запрещено: `LitElement`, `HTMLElement`, любая своя база.
 
@@ -116,7 +115,7 @@ apps/<svc>/ui/
       ...
   components/                       # presentational PlatformElement
   pages/                            # PlatformPage; ZERO IMPORT (lit + база + локальные стили)
-  modals/                           # PlatformModal / PlatformFormModal / PlatformLightModal
+  modals/                           # PlatformModal / PlatformFormModal
   styles/<svc>.css
 ```
 
@@ -183,9 +182,9 @@ CI: `make check-ui-canon` (`scripts/check_ui_canon.sh`),
 
 ## Modal canon
 
-Все модалки наследуют `PlatformModal` / `PlatformFormModal` /
-`PlatformLightModal`, имеют `static modalKind = '<scope>.<entity>'` и
-регистрируются через `registerModalKind`.
+Все модалки наследуют `PlatformModal` / `PlatformFormModal`, имеют
+`static modalKind = '<scope>.<entity>'` и регистрируются через
+`registerModalKind`.
 
 ```js
 import { PlatformModal } from '@platform/lib/components/glass-modal.js';

@@ -21,6 +21,7 @@ const BASE = '/frontend/api/billing';
 export const billingSubscriptionLoadOp = createAsyncOp({
     name: 'frontend/billing_subscription',
     silent: true,
+    restMirror: { method: 'GET', path: '/frontend/api/billing/subscription' },
     request: async () => await httpRequest({
         method: 'GET',
         url: `${BASE}/subscription`,
@@ -30,6 +31,7 @@ export const billingSubscriptionLoadOp = createAsyncOp({
 export const billingUsageLoadOp = createAsyncOp({
     name: 'frontend/billing_usage',
     silent: true,
+    restMirror: { method: 'GET', path: '/frontend/api/billing/usage' },
     request: async () => await httpRequest({
         method: 'GET',
         url: `${BASE}/usage`,
@@ -39,12 +41,13 @@ export const billingUsageLoadOp = createAsyncOp({
 export const billingHistoryLoadOp = createAsyncOp({
     name: 'frontend/billing_history',
     silent: true,
+    restMirror: { method: 'GET', path: '/frontend/api/billing/history' },
     request: async () => {
         const data = await httpRequest({
             method: 'GET',
             url: `${BASE}/history`,
         });
-        return { items: data.payments || [] };
+        return { items: Array.isArray(data.payments) ? data.payments : [] };
     },
 });
 
@@ -52,6 +55,7 @@ export const billingPlanChangeOp = createAsyncOp({
     name: 'frontend/billing_plan_change',
     successToastKey: 'frontend:billing_page.toast_plan_changed',
     errorToastKey: 'frontend:billing_page.err_plan_change_failed',
+    restMirror: { method: 'PATCH', path: '/frontend/api/billing/plan' },
     request: async ({ payload }) => {
         const plan = payload && payload.plan;
         if (!plan) throw new Error('billingPlanChangeOp: plan required');
@@ -70,6 +74,7 @@ export const billingPlanChangeOp = createAsyncOp({
 export const billingTopupOp = createAsyncOp({
     name: 'frontend/billing_topup',
     silent: true,
+    restMirror: { method: 'POST', path: '/frontend/api/billing/topup' },
     request: async ({ payload }) => {
         const amount = payload && payload.amount;
         if (!amount) throw new Error('billingTopupOp: amount required');

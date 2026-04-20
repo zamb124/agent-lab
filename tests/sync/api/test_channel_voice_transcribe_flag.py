@@ -13,11 +13,17 @@ from httpx import AsyncClient
 from tests.fixtures.audio_bytes import minimal_wav_silence
 
 
-async def _create_topic_channel(client: AsyncClient, headers: dict[str, str]) -> str:
+async def _create_topic_channel(
+    client: AsyncClient, headers: dict[str, str], unique_id: str
+) -> str:
     pr = await client.post(
         "/sync/api/v1/spaces/",
         headers=headers,
-        json={"name": "VoiceFlagSpace", "description": None},
+        json={
+            "name": "VoiceFlagSpace",
+            "description": None,
+            "namespace": f"voice_{unique_id}",
+        },
     )
     assert pr.status_code == 201
     space_id = pr.json()["id"]
@@ -55,8 +61,9 @@ async def test_voice_message_without_channel_flag_stays_idle(
     sync_client,
     sync_auth_headers,
     sync_db_clean: None,
+    unique_id: str,
 ) -> None:
-    channel_id = await _create_topic_channel(sync_client, sync_auth_headers)
+    channel_id = await _create_topic_channel(sync_client, sync_auth_headers, unique_id)
     wav = minimal_wav_silence(duration_sec=0.05)
     up = await sync_client.post(
         "/sync/api/v1/files/",
@@ -88,9 +95,10 @@ async def test_voice_message_with_channel_flag_processing_then_done_via_worker(
     sync_worker,
     sync_auth_headers,
     sync_db_clean: None,
+    unique_id: str,
 ) -> None:
     async with AsyncClient(base_url="http://127.0.0.1:9005", timeout=120.0) as client:
-        channel_id = await _create_topic_channel(client, sync_auth_headers)
+        channel_id = await _create_topic_channel(client, sync_auth_headers, unique_id)
         patch = await client.patch(
             f"/sync/api/v1/channels/{channel_id}",
             headers=sync_auth_headers,

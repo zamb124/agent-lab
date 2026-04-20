@@ -1,15 +1,26 @@
 /**
- * flows-variable-editor-modal — создание/редактирование значения company-переменной.
+ * flows-variable-editor-modal — создание/редактирование одной переменной.
  *
- * Источник: useResource('flows/variables') (фабрика с операциями create/remove).
- * Создание/обновление выполняется через `create({ key, value, secret })` —
- * REST handler `POST /flows/api/v1/variables/` идемпотентен по `key`.
+ * Контракт переменной симметричен для обоих scope: { key, value, secret }.
+ *
+ * Submit ветвится по `scope`:
+ *   - 'company' — useResource('flows/variables').create({ key, value, secret })
+ *                 (REST POST /flows/api/v1/variables идемпотентен по key).
+ *   - 'flow'    — обновление черновика skillsData.variables через editor op
+ *                 (`updateSkillsData` + `setDirty`). A2A-поля
+ *                 (public/title/description/order) сохраняются неизменными
+ *                 при обновлении существующего ключа. Финальная фиксация —
+ *                 общим Save в editor-header.
  */
 
 import { html, css } from 'lit';
 import { PlatformFormModal } from '@platform/lib/components/glass-form-modal.js';
 import { registerModalKind } from '@platform/lib/utils/modal-registry.js';
 import '@platform/lib/components/platform-button.js';
+import { isPlainObject } from '../_helpers/flows-resolvers.js';
+
+const SCOPE_COMPANY = 'company';
+const SCOPE_FLOW = 'flow';
 
 export class FlowsVariableEditorModal extends PlatformFormModal {
     static modalKind = 'flows.variable_editor';
@@ -17,6 +28,8 @@ export class FlowsVariableEditorModal extends PlatformFormModal {
 
     static properties = {
         ...PlatformFormModal.properties,
+        scope: { type: String },
+        flowId: { type: String },
         variableKey: { type: String },
         variableValue: { type: String },
         variableSecret: { type: Boolean },
@@ -46,6 +59,8 @@ export class FlowsVariableEditorModal extends PlatformFormModal {
 
     constructor() {
         super();
+        this.scope = SCOPE_COMPANY;
+        this.flowId = '';
         this.variableKey = '';
         this.variableValue = '';
         this.variableSecret = false;
@@ -53,10 +68,17 @@ export class FlowsVariableEditorModal extends PlatformFormModal {
         this._value = '';
         this._secret = false;
         this._variables = this.useResource('flows/variables');
+        this._editor = this.useOp('flows/editor');
     }
 
     updated(changed) {
         super.updated?.(changed);
+        if (changed.has('scope') && this.scope !== SCOPE_COMPANY && this.scope !== SCOPE_FLOW) {
+            throw new Error(`flows-variable-editor-modal: invalid scope "${this.scope}"`);
+        }
+        if (changed.has('scope') && this.scope === SCOPE_FLOW && !this.flowId) {
+            throw new Error('flows-variable-editor-modal: flowId required for scope="flow"');
+        }
         if (changed.has('variableKey')) this._key = this.variableKey;
         if (changed.has('variableValue')) this._value = this.variableValue;
         if (changed.has('variableSecret')) this._secret = Boolean(this.variableSecret);
@@ -110,8 +132,33 @@ export class FlowsVariableEditorModal extends PlatformFormModal {
     _onSubmit() {
         const key = this._key.trim();
         if (key.length === 0) return;
-        this._variables.create({ key, value: this._value, secret: this._secret });
+        if (this.scope === SCOPE_FLOW) {
+            this._submitFlow(key);
+        } else {
+            this._submitCompany(key);
+        }
         this.closeAfterSave();
+    }
+
+    _submitCompany(key) {
+        this._variables.create({ key, value: this._value, secret: this._secret });
+    }
+
+    _submitFlow(key) {
+        const state = this._editor.state;
+        const skillsData = state.skillsData;
+        const prevVars = isPlainObject(skillsData.variables) ? skillsData.variables : {};
+        const prevRaw = prevVars[key];
+        const prevConfig = isPlainObject(prevRaw) ? prevRaw : null;
+        const merged = {
+            ...(prevConfig !== null ? prevConfig : {}),
+            value: this._value,
+            secret: this._secret,
+        };
+        const nextVars = { ...prevVars, [key]: merged };
+        this._editor.updateSkillsData({ data: { ...skillsData, variables: nextVars } });
+        this._editor.setDirty({ dirty: true });
+        this.toast('flows:toast.variable_applied', { type: 'success' });
     }
 }
 

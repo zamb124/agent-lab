@@ -19,6 +19,11 @@ export const operatorQueuesResource = createResourceCollection({
     baseUrl: '/flows/api/v1/operator/queues',
     idField: 'id',
     operations: ['list', 'create', 'update'],
+    // restMirror.update — реальный path FastAPI
+    // (`@router.patch("/queues/{queue_id}")` в `apps/flows/src/api/v1/operator.py`).
+    restMirror: {
+        update: { method: 'PATCH', path: '/flows/api/v1/operator/queues/:queue_id' },
+    },
     toastKeys: {
         create: 'flows:toast.operator_queue_created',
         create_error: 'flows:toast.operator_queue_create_error',

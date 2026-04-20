@@ -7,6 +7,7 @@ notification_manager здесь не используется — call-собы�
 from __future__ import annotations
 
 from datetime import UTC, datetime
+from typing import Any
 from uuid import uuid4
 
 import aiohttp
@@ -22,7 +23,6 @@ from apps.sync.realtime.commands import (
     CallDeclinePayload,
     CallHangupPayload,
     CallInvitePayload,
-    CommandEnvelope,
 )
 from apps.sync.realtime.events import (
     RealtimeEvent,
@@ -82,7 +82,7 @@ def _call_read_from_entities(call: SyncCall, participants: list[SyncCallParticip
 
 
 async def handle_call_invite(
-    cmd: CommandEnvelope,
+    cmd: Any,
     calls: CallRepository,
     channels: ChannelRepository,
     user_repository: UserRepository | None = None,
@@ -171,7 +171,7 @@ async def handle_call_invite(
 
 
 async def handle_call_accept(
-    cmd: CommandEnvelope,
+    cmd: Any,
     calls: CallRepository,
     channels: ChannelRepository,
 ) -> tuple[CallRead, list[RealtimeEvent], bool]:
@@ -219,7 +219,7 @@ async def handle_call_accept(
 
 
 async def handle_call_decline(
-    cmd: CommandEnvelope,
+    cmd: Any,
     calls: CallRepository,
     channels: ChannelRepository,
 ) -> tuple[CallRead, list[RealtimeEvent]]:
@@ -247,7 +247,7 @@ async def handle_call_decline(
 
 
 async def handle_call_hangup(
-    cmd: CommandEnvelope,
+    cmd: Any,
     calls: CallRepository,
     channels: ChannelRepository,
 ) -> tuple[CallRead, list[RealtimeEvent], bool]:

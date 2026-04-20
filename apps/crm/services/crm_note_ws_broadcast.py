@@ -1,5 +1,20 @@
 """
 Рассылка WS-уведомлений о событиях заметки CRM пользователям namespace.
+
+Намеренно публикует **два разных** типа событий в `platform:ui_events`:
+
+1. ``notify/crm/crm_note_updated_received`` через ``notify_user`` —
+   платформенное уведомление для ``platform-notification-manager`` (бейдж
+   в core-шапке + offline web-push адресатам, которые не онлайн).
+2. ``crm/note/updated`` через ``publish_ui_event_to_user`` — доменное
+   событие для реактивных фабрик CRM-UI (``apps/crm/ui/events/resources/
+   notes.resource.js``): slice ``crm/notes`` перезагружает ленту, страница
+   ``crm/daily-notes`` обновляет превью.
+
+Это не дубликат, а два канала с разной семантикой: один — про
+notification-center, второй — про обновление доменного slice в
+реальном времени. Проверяется CI: имена не пересекаются
+(``notify/*_received`` vs ``crm/note/updated``).
 """
 
 from __future__ import annotations

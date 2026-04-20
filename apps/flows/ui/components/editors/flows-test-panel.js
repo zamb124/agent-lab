@@ -11,6 +11,7 @@ import './flows-code-editor.js';
 import './flows-json-field-editor.js';
 import '@platform/lib/components/glass-button.js';
 import '@platform/lib/components/glass-spinner.js';
+import { asString } from '../../_helpers/flows-resolvers.js';
 
 export class FlowsTestPanel extends PlatformElement {
     static properties = {
@@ -18,6 +19,8 @@ export class FlowsTestPanel extends PlatformElement {
         nodeConfig: { type: Object },
         flowId: { type: String },
         skillId: { type: String },
+        previewExecutionState: { type: Object },
+        hideInputState: { type: Boolean, attribute: 'hide-input-state', reflect: true },
         _stateJson: { state: true },
     };
 
@@ -38,19 +41,30 @@ export class FlowsTestPanel extends PlatformElement {
         this.nodeConfig = {};
         this.flowId = '';
         this.skillId = '';
+        this.previewExecutionState = null;
+        this.hideInputState = false;
         this._stateJson = '{}';
         this._executeOp = this.useOp('flows/code_execute');
     }
 
     _onStateChange(e) {
-        this._stateJson = e.detail?.value || '{}';
+        const v = asString(e.detail?.value);
+        this._stateJson = v.length > 0 ? v : '{}';
+    }
+
+    _resolveState() {
+        if (this.hideInputState && this.previewExecutionState) {
+            return this.previewExecutionState;
+        }
+        return JSON.parse(this._stateJson);
     }
 
     async _run() {
         let state;
         try {
-            state = JSON.parse(this._stateJson);
-        } catch {
+            state = this._resolveState();
+        } catch (err) {
+            this.toast('flows:test_panel.toast_state_invalid', { type: 'error' });
             return;
         }
         await this._executeOp.run({
@@ -66,11 +80,13 @@ export class FlowsTestPanel extends PlatformElement {
         const result = this._executeOp.lastResult;
         const error = this._executeOp.error;
         return html`
-            <div class="label">${this.t('test_panel.input_state')}</div>
-            <flows-json-field-editor
-                .value=${this._stateJson}
-                @change=${this._onStateChange}
-            ></flows-json-field-editor>
+            ${this.hideInputState ? '' : html`
+                <div class="label">${this.t('test_panel.input_state')}</div>
+                <flows-json-field-editor
+                    .value=${this._stateJson}
+                    @change=${this._onStateChange}
+                ></flows-json-field-editor>
+            `}
             <div class="row">
                 <glass-button variant="primary" ?disabled=${this._executeOp.busy} @click=${this._run}>
                     ${this.t('test_panel.action_run')}
@@ -78,7 +94,7 @@ export class FlowsTestPanel extends PlatformElement {
                 ${this._executeOp.busy ? html`<glass-spinner></glass-spinner>` : ''}
             </div>
             ${error
-                ? html`<div class="error">${error.message || error}</div>`
+                ? html`<div class="error">${typeof error.message === 'string' && error.message.length > 0 ? error.message : error}</div>`
                 : ''}
             ${result
                 ? html`

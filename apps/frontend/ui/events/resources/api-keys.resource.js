@@ -26,14 +26,21 @@ export const apiKeysResource = createResourceCollection({
         update: 'frontend:api_keys_page.toast_renamed',
         remove: 'frontend:api_keys_page.toast_revoked',
     },
-    mapItem: (raw) => ({
-        key_id: raw.key_id,
-        name: raw.name,
-        scopes: raw.scopes || [],
-        key_prefix: raw.key_prefix || (raw.secret ? raw.secret.slice(0, 12) : ''),
-        created_at: raw.created_at || new Date().toISOString(),
-        last_used: raw.last_used || null,
-    }),
+    mapItem: (raw) => {
+        if (typeof raw.key_id !== 'string') {
+            throw new Error('frontend/api_keys.mapItem: key_id required');
+        }
+        return {
+            key_id: raw.key_id,
+            name: typeof raw.name === 'string' ? raw.name : '',
+            scopes: Array.isArray(raw.scopes) ? raw.scopes : [],
+            key_prefix: typeof raw.key_prefix === 'string' && raw.key_prefix.length > 0
+                ? raw.key_prefix
+                : (typeof raw.secret === 'string' ? raw.secret.slice(0, 12) : ''),
+            created_at: typeof raw.created_at === 'string' ? raw.created_at : new Date().toISOString(),
+            last_used: typeof raw.last_used === 'string' ? raw.last_used : null,
+        };
+    },
     extraInitial: { lastSecret: null },
     actions: { dismissSecret: 'secret_dismissed' },
     extraReducer: (state, event, events) => {

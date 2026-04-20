@@ -36,7 +36,7 @@ function _buildSpansQuery(filters) {
 
 export const tracingSpansList = createCursorList({
     name: 'frontend/tracing_spans',
-    baseUrl: `${BASE}/spans`,
+    baseUrl: '/frontend/api/platform-tracing/spans',
     pageSize: 50,
     buildQuery: _buildSpansQuery,
     statusMap: { 403: 'forbidden', 503: 'unavailable' },
@@ -62,6 +62,7 @@ export const tracingFacets = createFacets({
 export const tracingTraceLoadOp = createAsyncOp({
     name: 'frontend/tracing_trace_load',
     silent: true,
+    restMirror: { method: 'GET', path: '/frontend/api/platform-tracing/traces/:trace_id' },
     request: async ({ payload }) => {
         const id = payload && payload.trace_id;
         if (!id) throw new Error('tracing_trace_load: trace_id required');

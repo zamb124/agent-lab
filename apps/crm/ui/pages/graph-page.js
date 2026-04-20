@@ -51,39 +51,8 @@ import '../components/graph-context-menu.js';
 
 const VIEW_MODES = ['influence', 'related', 'path'];
 const PANEL_IDS = ['search', 'timeline', 'legend', 'meta'];
-const PANELS_STORAGE_KEY = 'crm_graph_panels';
-const TIMELINE_SEEDED_KEY = 'crm_graph_timeline_seeded';
 const SEARCH_DEBOUNCE_MS = 400;
 const TIMELINE_RELOAD_DEBOUNCE_MS = 220;
-
-function _isMobileViewport() {
-    return typeof window !== 'undefined' && window.innerWidth <= 767;
-}
-
-function _resolvePanelVisibility() {
-    const isMobile = _isMobileViewport();
-    const defaults = {
-        search: !isMobile,
-        timeline: !isMobile,
-        legend: !isMobile,
-        meta: !isMobile,
-    };
-    if (typeof localStorage === 'undefined') return defaults;
-    const raw = localStorage.getItem(PANELS_STORAGE_KEY);
-    if (!raw) return defaults;
-    const parsed = JSON.parse(raw);
-    if (!parsed || typeof parsed !== 'object') return defaults;
-    const resolved = {};
-    PANEL_IDS.forEach((panelId) => {
-        resolved[panelId] = typeof parsed[panelId] === 'boolean' ? parsed[panelId] : defaults[panelId];
-    });
-    return resolved;
-}
-
-function _persistPanelVisibility(panels) {
-    if (typeof localStorage === 'undefined') return;
-    localStorage.setItem(PANELS_STORAGE_KEY, JSON.stringify(panels));
-}
 
 function _parseTimestamp(rawValue) {
     if (!rawValue) return null;
@@ -125,7 +94,6 @@ export class CRMGraphPage extends PlatformPage {
         _timelineEndPercent: { state: true },
         _timelineMinTimestamp: { state: true },
         _timelineMaxTimestamp: { state: true },
-        _panelVisibility: { state: true },
         _contextMenu: { state: true },
         _graphNodes: { state: true },
         _graphEdges: { state: true },
@@ -352,7 +320,6 @@ export class CRMGraphPage extends PlatformPage {
         this._timelineEndPercent = 100;
         this._timelineMinTimestamp = 0;
         this._timelineMaxTimestamp = 0;
-        this._panelVisibility = _resolvePanelVisibility();
         this._contextMenu = null;
         this._graphNodes = [];
         this._relatedNodesPending = [];
@@ -371,6 +338,7 @@ export class CRMGraphPage extends PlatformPage {
         this._pendingPathLookups = null;
         this._lastNamespaceLoaded = undefined;
 
+        this._graphUi = this.useSlice('crm/graph_ui');
         this._entityTypes = this.useResource('crm/entity_types', { autoload: true });
         this._relationshipTypes = this.useResource('crm/relationship_types', { autoload: true });
         this._timelineBoundsOp = this.useOp('crm/timeline_bounds');
@@ -480,10 +448,9 @@ export class CRMGraphPage extends PlatformPage {
     }
 
     _applyDefaultTimelineTodayIfNeeded() {
-        if (typeof sessionStorage === 'undefined') return;
-        if (sessionStorage.getItem(TIMELINE_SEEDED_KEY)) return;
+        if (this._graphUi.value.timelineSeeded) return;
         if (!this._timelineMinTimestamp || !this._timelineMaxTimestamp) {
-            sessionStorage.setItem(TIMELINE_SEEDED_KEY, '1');
+            this._graphUi.markTimelineSeeded(null);
             return;
         }
         const span = Math.max(1, this._timelineMaxTimestamp - this._timelineMinTimestamp);
@@ -504,7 +471,7 @@ export class CRMGraphPage extends PlatformPage {
         }
         this._timelineStartPercent = startPercent;
         this._timelineEndPercent = endPercent;
-        sessionStorage.setItem(TIMELINE_SEEDED_KEY, '1');
+        this._graphUi.markTimelineSeeded(null);
     }
 
     _onEntitiesLookupLoaded(response) {
@@ -1139,9 +1106,9 @@ export class CRMGraphPage extends PlatformPage {
     _onPanelToggle(event) {
         const panelId = event.detail.panelId;
         if (!PANEL_IDS.includes(panelId)) return;
-        const next = { ...this._panelVisibility, [panelId]: !this._panelVisibility[panelId] };
-        this._panelVisibility = next;
-        _persistPanelVisibility(next);
+        const cur = this._graphUi.value.panels;
+        const next = { ...cur, [panelId]: !cur[panelId] };
+        this._graphUi.setPanels({ panels: next });
     }
 
     _onGoToImport() {
@@ -1170,10 +1137,10 @@ export class CRMGraphPage extends PlatformPage {
             { id: 'merge_entities', label: this.t('graph_page.toolbar_merge') },
         ];
         const toolbarToggles = [
-            { id: 'search', label: this.t('graph_page.panel_toggle_search'), active: this._panelVisibility.search },
-            { id: 'timeline', label: this.t('graph_page.panel_toggle_timeline'), active: this._panelVisibility.timeline },
-            { id: 'legend', label: this.t('graph_page.panel_toggle_legend'), active: this._panelVisibility.legend },
-            { id: 'meta', label: this.t('graph_page.panel_toggle_meta'), active: this._panelVisibility.meta },
+            { id: 'search', label: this.t('graph_page.panel_toggle_search'), active: this._graphUi.value.panels.search },
+            { id: 'timeline', label: this.t('graph_page.panel_toggle_timeline'), active: this._graphUi.value.panels.timeline },
+            { id: 'legend', label: this.t('graph_page.panel_toggle_legend'), active: this._graphUi.value.panels.legend },
+            { id: 'meta', label: this.t('graph_page.panel_toggle_meta'), active: this._graphUi.value.panels.meta },
         ];
 
         return html`
@@ -1203,7 +1170,7 @@ export class CRMGraphPage extends PlatformPage {
                 ></crm-graph-canvas>
 
                 <crm-graph-search-pill
-                    class=${this._panelVisibility.search ? '' : 'panel-hidden'}
+                    class=${this._graphUi.value.panels.search ? '' : 'panel-hidden'}
                     .query=${this._entitySearchQuery}
                     .viewMode=${this._viewMode}
                     .modes=${VIEW_MODES}
@@ -1218,7 +1185,7 @@ export class CRMGraphPage extends PlatformPage {
                     @refresh=${this._onSearchRefresh}
                 ></crm-graph-search-pill>
 
-                ${this._panelVisibility.timeline ? html`
+                ${this._graphUi.value.panels.timeline ? html`
                     <crm-graph-timeline
                         .minTimestamp=${this._timelineMinTimestamp}
                         .maxTimestamp=${this._timelineMaxTimestamp}
@@ -1228,7 +1195,7 @@ export class CRMGraphPage extends PlatformPage {
                     ></crm-graph-timeline>
                 ` : nothing}
 
-                ${this._panelVisibility.meta ? html`
+                ${this._graphUi.value.panels.meta ? html`
                     <div class="overlay-meta">
                         <span class="meta-pill">${this.t('graph_page.meta_mode')} ${this._viewMode}</span>
                         <span class="meta-pill">${this.t('graph_page.meta_depth')} ${this._maxDepth}</span>
@@ -1245,7 +1212,7 @@ export class CRMGraphPage extends PlatformPage {
                     @panel-toggle=${this._onPanelToggle}
                 ></crm-graph-toolbar>
 
-                ${this._panelVisibility.legend ? html`
+                ${this._graphUi.value.panels.legend ? html`
                     <crm-graph-legend
                         .nodes=${this._graphNodes}
                         .entityTypeColors=${entityTypeColors}

@@ -199,11 +199,27 @@ export class PlatformElement extends LitElement {
         this.dispatch(CoreEvents.UI_MODAL_OPEN, { kind, props: modalProps });
     }
 
-    closeModal(kind) {
-        if (kind !== undefined && (typeof kind !== 'string' || kind.length === 0)) {
-            throw new Error('PlatformElement.closeModal: kind must be non-empty string or omitted');
+    closeModal(target) {
+        let kind = null;
+        let id = null;
+        if (target === undefined || target === null) {
+            // pop topmost
+        } else if (typeof target === 'string') {
+            if (target.length === 0) {
+                throw new Error('PlatformElement.closeModal: kind must be non-empty string');
+            }
+            kind = target;
+        } else if (typeof target === 'object') {
+            if (typeof target.id !== 'string' || target.id.length === 0) {
+                throw new Error('PlatformElement.closeModal: { id } must contain non-empty string');
+            }
+            id = target.id;
+        } else {
+            throw new Error('PlatformElement.closeModal: target must be string kind, { id }, or omitted');
         }
-        this.dispatch(CoreEvents.UI_MODAL_CLOSE, { kind: kind === undefined ? null : kind });
+        const payload = { kind };
+        if (id !== null) payload.id = id;
+        this.dispatch(CoreEvents.UI_MODAL_CLOSE, payload);
     }
 
     openSidebar() {

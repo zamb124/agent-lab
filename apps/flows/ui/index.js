@@ -9,7 +9,6 @@
 import '@platform/lib/components/glass-card.js';
 import '@platform/lib/components/glass-modal.js';
 import '@platform/lib/components/glass-form-modal.js';
-import '@platform/lib/components/glass-light-modal.js';
 import '@platform/lib/components/glass-button.js';
 import '@platform/lib/components/glass-input.js';
 import '@platform/lib/components/glass-textarea.js';
@@ -78,9 +77,7 @@ import './components/editor/flows-node-types-sidebar.js';
 import './components/editor/flows-property-panel.js';
 import './components/editor/flows-resource-property-panel.js';
 import './components/editor/flows-skills-tabs.js';
-import './components/editor/flows-breakpoint-manager.js';
 import './components/editor/flows-execution-panel.js';
-import './components/editor/flows-variables-panel.js';
 import './components/flow-canvas/flows-flow-canvas.js';
 
 // Editor-related modals
@@ -94,6 +91,7 @@ import './modals/flows-tracing-modal.js';
 import './modals/flows-span-details-modal.js';
 import './modals/flows-raw-json-modal.js';
 import './modals/flows-state-modal.js';
+import './modals/flows-mocks-modal.js';
 
 // CRUD-модалки
 import './modals/flows-flow-create-modal.js';

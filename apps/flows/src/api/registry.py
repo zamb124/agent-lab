@@ -177,6 +177,14 @@ async def get_tools(container: ContainerDep) -> List[Dict[str, Any]]:
     return [tool.to_registry_format() for tool in tools]
 
 
+@router.get("/providers/values")
+async def get_providers_values(container: ContainerDep) -> List[str]:
+    """
+    Список настроенных LLM-провайдеров платформы (читается из conf.json).
+    """
+    return container.llm_models_service.get_configured_providers()
+
+
 @router.get("/models/values")
 async def get_models_values(container: ContainerDep, provider: Optional[str] = None) -> List[str]:
     """

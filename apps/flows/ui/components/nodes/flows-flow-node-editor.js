@@ -9,6 +9,7 @@
 import { html, css } from 'lit';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
 import './flows-base-node-editor.js';
+import { asObject, asString } from '../../_helpers/flows-resolvers.js';
 
 export class FlowsFlowNodeEditor extends PlatformElement {
     static properties = {
@@ -20,13 +21,14 @@ export class FlowsFlowNodeEditor extends PlatformElement {
         flowVariables: { type: Object },
         graphNodes: { type: Array },
         previewExecutionState: { type: Object },
+        expanded: { type: Boolean, reflect: true },
         _showCustom: { state: true },
     };
 
     static styles = [
         PlatformElement.styles,
         css`
-            :host { display: block; }
+            :host { display: block; height: 100%; min-height: 0; }
             .field { display: flex; flex-direction: column; gap: var(--space-1); margin-bottom: var(--space-3); }
             label { font-size: var(--text-sm); color: var(--text-secondary); }
             input, select {
@@ -61,6 +63,7 @@ export class FlowsFlowNodeEditor extends PlatformElement {
         this.flowVariables = null;
         this.graphNodes = null;
         this.previewExecutionState = null;
+        this.expanded = false;
         this._showCustom = false;
         this._flows = this.useResource('flows/flows', { autoload: true });
     }
@@ -78,7 +81,7 @@ export class FlowsFlowNodeEditor extends PlatformElement {
     }
 
     render() {
-        const cfg = this.nodeConfig || {};
+        const cfg = asObject(this.nodeConfig);
         const flowId = typeof cfg.flow_id === 'string' ? cfg.flow_id : '';
         const skillId = typeof cfg.skill_id === 'string' ? cfg.skill_id : 'default';
         const flows = Array.isArray(this._flows.items) ? this._flows.items.filter((f) => f && f.flow_id !== this.flowId) : [];
@@ -90,14 +93,11 @@ export class FlowsFlowNodeEditor extends PlatformElement {
                 .flowId=${this.flowId}
                 .skillId=${this.skillId}
                 .nodeConfig=${this.nodeConfig}
-                .nodeType=${this.nodeType || 'flow'}
+                .nodeType=${typeof this.nodeType === 'string' && this.nodeType.length > 0 ? this.nodeType : 'flow'}
                 .flowVariables=${this.flowVariables}
                 .graphNodes=${this.graphNodes}
                 .previewExecutionState=${this.previewExecutionState}
-                @change=${(e) => this.emit('change', e.detail)}
-                @rename-node=${(e) => this.emit('rename-node', e.detail)}
-                @delete-node=${(e) => this.emit('delete-node', e.detail)}
-                @duplicate-node=${(e) => this.emit('duplicate-node', e.detail)}
+                ?expanded=${this.expanded}
             >
                 <div slot="settings">
                     <div class="field">
@@ -116,7 +116,7 @@ export class FlowsFlowNodeEditor extends PlatformElement {
                         ` : html`
                             <select .value=${flowId} @change=${this._onFlowId}>
                                 <option value="">—</option>
-                                ${flows.map((f) => html`<option value=${f.flow_id} ?selected=${f.flow_id === flowId}>${f.name || f.flow_id}</option>`)}
+                                ${flows.map((f) => html`<option value=${f.flow_id} ?selected=${f.flow_id === flowId}>${typeof f.name === 'string' && f.name.length > 0 ? f.name : f.flow_id}</option>`)}
                             </select>
                         `}
                     </div>

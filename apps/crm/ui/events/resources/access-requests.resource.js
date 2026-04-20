@@ -41,6 +41,7 @@ export const accessRequestUpdateOp = createAsyncOp({
     name: 'crm/access_request_update',
     successToastKey: 'crm:toast.access_request.updated',
     errorToastKey: 'crm:toast.access_request.update_failed',
+    restMirror: { method: 'PUT', path: '/crm/api/v1/access-requests/:request_id' },
     request: async ({ payload }) => {
         if (!payload || typeof payload.request_id !== 'string' || !payload.body) {
             throw new Error('accessRequestUpdateOp: { request_id, body } required');

@@ -97,10 +97,7 @@ class OperatorHandoffService:
             queue.slug,
             cid_str,
         )
-        container = get_container()
-        await publish_operator_tasks_refresh(
-            container.redis_client, self._repo, queue.id
-        )
+        await publish_operator_tasks_refresh(self._repo, queue.id)
         return cid, task_row.id
 
     async def claim_task(
@@ -121,10 +118,7 @@ class OperatorHandoffService:
             status=OperatorTaskStatus.CLAIMED.value,
             claimed_by_user_id=operator_user_id,
         )
-        container = get_container()
-        await publish_operator_tasks_refresh(
-            container.redis_client, self._repo, task.queue_id
-        )
+        await publish_operator_tasks_refresh(self._repo, task.queue_id)
 
     def _task_handoff_mode(self, task: "OperatorTasks") -> HandoffMode:
         return parse_handoff_mode(task)
@@ -186,9 +180,7 @@ class OperatorHandoffService:
             task_id,
             status=OperatorTaskStatus.USER_DIALOG.value,
         )
-        await publish_operator_tasks_refresh(
-            container.redis_client, self._repo, task.queue_id
-        )
+        await publish_operator_tasks_refresh(self._repo, task.queue_id)
 
     async def _validate_file_ids(self, file_ids: list[str]) -> list[str]:
         """Проверяет существование файлов и возвращает валидный список."""
@@ -307,9 +299,7 @@ class OperatorHandoffService:
             status=OperatorTaskStatus.COMPLETED.value,
             resolution_payload=resolution_payload,
         )
-        await publish_operator_tasks_refresh(
-            container.redis_client, self._repo, task.queue_id
-        )
+        await publish_operator_tasks_refresh(self._repo, task.queue_id)
 
         from apps.flows.src.tasks.flow_tasks import process_flow_task
 
@@ -367,7 +357,4 @@ class OperatorHandoffService:
             log_entry["file_ids"] = file_ids
         await self._repo.append_dialog_log(company_id, task_id, log_entry)
 
-        container = get_container()
-        await publish_operator_tasks_refresh(
-            container.redis_client, self._repo, task.queue_id
-        )
+        await publish_operator_tasks_refresh(self._repo, task.queue_id)

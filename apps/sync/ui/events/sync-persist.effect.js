@@ -1,15 +1,20 @@
 /**
  * Sync persist effect — связка локального state с core storage-effect.
  *
- * Подписывается на UI-actions фабрик (selectSpace/selectChannel/toggleFilter)
- * и диспатчит `STORAGE_PERSIST_REQUESTED`. На bootstrap диспатчит
+ * Подписывается на UI-actions фабрик (selectChannel, sidebarSectionOpen) и
+ * диспатчит `STORAGE_PERSIST_REQUESTED`. На bootstrap диспатчит
  * `STORAGE_LOAD_REQUESTED` для каждого ключа и реагирует на `STORAGE_LOADED`
  * соответствующим action для гидратации slice.
  *
+ * «Активное пространство Sync» теперь = платформенный namespace
+ * (state.ui.namespace.selectionByCompany), который persist'ит сам core
+ * ui.effect (`crm:last-namespace-by-company`). В этом эффекте больше нет
+ * собственных ключей `selectedSpaceId` / `sidebarSpaceFilterIds` — выбор
+ * глобально согласован с CRM/RAG/Office через `setPlatformNamespaceSelection`.
+ *
  * Ключи в localStorage:
- *   sync.chat.selectedSpaceId         — string | null
  *   sync.chat.selectedChannelId       — string | null
- *   sync.ui.sidebarSpaceFilterIds     — string[]
+ *   sync.ui.sidebarSectionOpen        — { spaces: bool, channels: bool, direct: bool }
  *
  * Не содержит fallback: если ключа нет, action не диспатчится (slice
  * остаётся в initial state).
@@ -18,15 +23,16 @@
 import { CoreEvents } from '@platform/lib/events/index.js';
 
 const KEYS = Object.freeze({
-    selectedSpaceId:        'sync.chat.selectedSpaceId',
     selectedChannelId:      'sync.chat.selectedChannelId',
-    sidebarSpaceFilterIds:  'sync.ui.sidebarSpaceFilterIds',
+    sidebarSectionOpen:     'sync.ui.sidebarSectionOpen',
 });
 
 const HYDRATION_ACTIONS = Object.freeze({
-    [KEYS.selectedSpaceId]:        (value) => ({ type: 'sync/spaces/space_selected',   payload: { spaceId: value } }),
     [KEYS.selectedChannelId]:      (value) => ({ type: 'sync/channels/channel_selected', payload: { channelId: value } }),
-    [KEYS.sidebarSpaceFilterIds]:  (value) => null,
+    [KEYS.sidebarSectionOpen]:     (value) => {
+        if (!value || typeof value !== 'object') return null;
+        return { type: 'sync/chat_ui/section_hydrated', payload: { sections: value } };
+    },
 });
 
 function _extractStringField(event, fieldName) {
@@ -36,14 +42,14 @@ function _extractStringField(event, fieldName) {
 }
 
 const PERSIST_TRIGGERS = Object.freeze({
-    'sync/spaces/space_selected':     (event) => ({ key: KEYS.selectedSpaceId,    value: _extractStringField(event, 'spaceId') }),
     'sync/channels/channel_selected': (event) => ({ key: KEYS.selectedChannelId,  value: _extractStringField(event, 'channelId') }),
-    'sync/spaces/filter_toggled':     (event, getState) => {
-        const slice = getState().syncSpaces;
-        const ids = (slice && Array.isArray(slice.sidebarSpaceFilterIds)) ? slice.sidebarSpaceFilterIds : [];
-        return { key: KEYS.sidebarSpaceFilterIds, value: Array.from(ids) };
+    'sync/chat_ui/section_toggled':   (event, getState) => {
+        const slice = getState().syncChatUi;
+        if (!slice || !slice.sidebarSectionOpen || typeof slice.sidebarSectionOpen !== 'object') {
+            return { key: KEYS.sidebarSectionOpen, value: {} };
+        }
+        return { key: KEYS.sidebarSectionOpen, value: { ...slice.sidebarSectionOpen } };
     },
-    'sync/spaces/filter_reset':       () => ({ key: KEYS.sidebarSpaceFilterIds,   value: [] }),
 });
 
 export function createSyncPersistEffect() {
@@ -57,15 +63,6 @@ export function createSyncPersistEffect() {
         }
     }
 
-    function hydrateSidebarFilter(value, ctx) {
-        if (!Array.isArray(value)) return;
-        for (const spaceId of value) {
-            if (typeof spaceId === 'string' && spaceId !== '') {
-                ctx.dispatch('sync/spaces/filter_toggled', { spaceId }, { source: 'storage' });
-            }
-        }
-    }
-
     return async function syncPersistEffect(event, ctx) {
         if (event.type === CoreEvents.AUTH_USER_LOADED || event.type === CoreEvents.AUTH_LOGIN_SUCCEEDED) {
             dispatchBootstrap(ctx);
@@ -76,14 +73,10 @@ export function createSyncPersistEffect() {
             if (!event.payload || typeof event.payload !== 'object') return;
             const { key, value } = event.payload;
             if (value === null || value === undefined) return;
-            if (key === KEYS.sidebarSpaceFilterIds) {
-                hydrateSidebarFilter(value, ctx);
-                return;
-            }
             const factory = HYDRATION_ACTIONS[key];
             if (typeof factory !== 'function') return;
             const action = factory(value);
-            if (action) {
+            if (action && typeof action.type === 'string') {
                 ctx.dispatch(action.type, action.payload, { source: 'storage' });
             }
             return;

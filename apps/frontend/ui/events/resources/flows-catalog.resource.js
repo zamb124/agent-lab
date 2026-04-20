@@ -15,14 +15,18 @@ import { httpRequest } from '@platform/lib/events/http.js';
 export const flowsCatalogOp = createAsyncOp({
     name: 'frontend/flows_catalog',
     silent: true,
+    // Cross-service вызов: составной запрос /flows/api/v1/flows/ + /tools/.
+    // CI (check_command_rest_mirror.py) распознаёт `service:` в restMirror
+    // как явную декларацию cross-service и не верифицирует path.
+    restMirror: { method: 'GET', path: '/flows/api/v1/flows/', service: 'flows' },
     request: async () => {
         const [flows, tools] = await Promise.all([
             httpRequest({ method: 'GET', url: '/flows/api/v1/flows/' }),
             httpRequest({ method: 'GET', url: '/flows/api/v1/tools/' }),
         ]);
         return {
-            flows: flows.items || [],
-            tools: tools.items || [],
+            flows: Array.isArray(flows.items) ? flows.items : [],
+            tools: Array.isArray(tools.items) ? tools.items : [],
         };
     },
 });

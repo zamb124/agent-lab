@@ -30,6 +30,7 @@ import { sessionsResource, sessionStateOp } from '../events/resources/sessions.r
 import { tracesBySessionOp, tracesByTaskOp, tracesByTraceOp } from '../events/resources/traces.resource.js';
 import { nodeTypesOp, resourceTypesOp } from '../events/resources/metadata.resource.js';
 import { modelsListOp } from '../events/resources/models.resource.js';
+import { providersListOp } from '../events/resources/providers.resource.js';
 import { codeCompletionsOp, codeDocumentationOp, codeTemplatesOp,
          codeEditorStateOp, codeSourceOp, codeFlowFunctionsOp,
          codeToolSourceOp, codeParseSignatureOp, codeValidateOp,
@@ -42,6 +43,8 @@ import { operatorQueuesResource, operatorQueueAddMemberOp, operatorQueueRemoveMe
          operatorTasksListOp, operatorTaskGetOp, operatorTaskClaimOp,
          operatorTaskPostMessageOp, operatorTaskCompleteOp } from '../events/resources/operator.resource.js';
 import { editorResource, editorBulkDeleteOp, stickyNoteUpsertOp } from '../events/resources/editor.resource.js';
+import { executionUiSlice } from '../events/resources/execution-ui.resource.js';
+import { asObject, asString, isPlainObject } from '../_helpers/flows-resolvers.js';
 
 const FLOWS_ROUTES = [
     { key: 'list',                path: '' },
@@ -91,6 +94,7 @@ export class FlowsApp extends PlatformApp {
         nodeTypesOp,
         resourceTypesOp,
         modelsListOp,
+        providersListOp,
         codeCompletionsOp,
         codeDocumentationOp,
         codeTemplatesOp,
@@ -119,6 +123,7 @@ export class FlowsApp extends PlatformApp {
         editorResource,
         editorBulkDeleteOp,
         stickyNoteUpsertOp,
+        executionUiSlice,
     ];
 
     static styles = [
@@ -200,8 +205,8 @@ export class FlowsApp extends PlatformApp {
                     <flows-list-page></flows-list-page>
                     <chat-page
                         .flowId=${params.flowId}
-                        .skillId=${params.skillId || 'base'}
-                        .sessionId=${params.sessionId || ''}
+                        .skillId=${typeof params.skillId === 'string' && params.skillId.length > 0 ? params.skillId : 'base'}
+                        .sessionId=${asString(params.sessionId)}
                     ></chat-page>
                     ${this._renderLara()}
                 `;
@@ -210,7 +215,7 @@ export class FlowsApp extends PlatformApp {
                 return html`
                     <flow-editor-page
                         .flowId=${params.flowId}
-                        .skillId=${params.skillId || 'base'}
+                        .skillId=${typeof params.skillId === 'string' && params.skillId.length > 0 ? params.skillId : 'base'}
                     ></flow-editor-page>
                     ${this._renderLara()}
                 `;
@@ -245,21 +250,29 @@ export class FlowsApp extends PlatformApp {
     };
 
     _buildLaraFlowsContext(options = {}) {
-        const editorState = this._editor?.state || {};
-        const params = this._routerSelect?.value?.params || {};
-        const flowId = editorState.flowId || params.flowId || options.flow_id || null;
-        const skillId = editorState.currentSkillId || params.skillId || options.skill_id || 'base';
-        const nodeId = editorState.selectedNodeId || options.node_id || null;
-        const skillsData = editorState.skillsData || { nodes: {} };
-        const node = nodeId ? skillsData.nodes?.[nodeId] : null;
+        const editorState = isPlainObject(this._editor?.state) ? this._editor.state : {};
+        const routerValue = this._routerSelect ? this._routerSelect.value : null;
+        const params = isPlainObject(routerValue?.params) ? routerValue.params : {};
+        const pickString = (...candidates) => {
+            for (const c of candidates) {
+                if (typeof c === 'string' && c.length > 0) return c;
+            }
+            return null;
+        };
+        const flowId = pickString(editorState.flowId, params.flowId, options.flow_id);
+        const skillId = pickString(editorState.currentSkillId, params.skillId, options.skill_id, 'base');
+        const nodeId = pickString(editorState.selectedNodeId, options.node_id);
+        const skillsData = isPlainObject(editorState.skillsData) ? editorState.skillsData : { nodes: {} };
+        const nodes = isPlainObject(skillsData.nodes) ? skillsData.nodes : {};
+        const node = nodeId && isPlainObject(nodes[nodeId]) ? nodes[nodeId] : null;
         return {
             app_surface: 'flows',
             flow_id: flowId,
-            target_skill_id: skillId || 'base',
+            target_skill_id: skillId,
             node_id: nodeId,
-            node_type: node?.type || null,
-            node_payload: node || null,
-            flow_payload: editorState.flowConfig || null,
+            node_type: node && typeof node.type === 'string' ? node.type : null,
+            node_payload: node,
+            flow_payload: isPlainObject(editorState.flowConfig) ? editorState.flowConfig : null,
             screen: nodeId ? 'flow_editor_node' : (flowId ? 'flow_editor' : 'flow_list'),
         };
     }
@@ -270,12 +283,12 @@ export class FlowsApp extends PlatformApp {
             lara_ui_context_json: JSON.stringify(context),
             app_surface: context.app_surface,
             screen: context.screen,
-            flow_id: context.flow_id || '',
-            target_skill_id: context.target_skill_id || 'base',
-            skill_id: context.target_skill_id || 'base',
+            flow_id: asString(context.flow_id),
+            target_skill_id: typeof context.target_skill_id === 'string' && context.target_skill_id.length > 0 ? context.target_skill_id : 'base',
+            skill_id: typeof context.target_skill_id === 'string' && context.target_skill_id.length > 0 ? context.target_skill_id : 'base',
             assistant_skill_id: 'flows',
-            node_id: context.node_id || '',
-            node_type: context.node_type || '',
+            node_id: asString(context.node_id),
+            node_type: asString(context.node_type),
             node_payload_json: context.node_payload ? JSON.stringify(context.node_payload) : '',
             flow_payload_json: context.flow_payload ? JSON.stringify(context.flow_payload) : '',
         };

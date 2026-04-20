@@ -18,6 +18,7 @@ async def test_two_ws_clients_receive_message_created(
     sync_auth_token,
     sync_auth_token_user2,
     sync_db_clean: None,
+    unique_id: str,
 ) -> None:
     import websockets
     from httpx import AsyncClient
@@ -27,7 +28,11 @@ async def test_two_ws_clients_receive_message_created(
         pr = await http.post(
             "/sync/api/v1/spaces/",
             headers={"Authorization": f"Bearer {sync_auth_token}"},
-            json={"name": "WsBroadcastSpace", "description": None},
+            json={
+                "name": "WsBroadcastSpace",
+                "description": None,
+                "namespace": f"wsb_{unique_id}",
+            },
         )
         assert pr.status_code == 201
         space_id = pr.json()["id"]

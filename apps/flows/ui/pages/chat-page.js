@@ -1,18 +1,17 @@
 /**
  * ChatPage — чат с flow.
  *
- * Транспорт: команда отправки `flows/chat/send_requested` идёт через WS
- * (`useOp('flows/chat_send')`); ответ от воркера — push-события `flows/chat/*`,
- * которые слайс `flows/chat` (см. `events/resources/chat.resource.js`)
- * раскладывает в `messagesByContextId[contextId]`.
- *
- * Никаких прямых SSE/`fetch`/`postStream` — всё через шину.
+ * Транспорт: `useOp('flows/chat_send')` запускает `POST /flows/api/v1/{flow_id}`
+ * с JSON-RPC `message/stream` по SSE A2A (см. `events/resources/chat.resource.js`).
+ * Каждый A2A-фрейм маппится в локальное событие `flows/chat/<verb>`, которое
+ * слайс `flows/chat` раскладывает в `messagesByContextId[contextId]`.
  */
 
 import { html, css } from 'lit';
 import { PlatformPage } from '@platform/lib/base/PlatformPage.js';
 import '../components/chat/chat-input.js';
 import '../components/chat/chat-messages.js';
+import { asArray, asString, isPlainObject } from '../_helpers/flows-resolvers.js';
 
 export class ChatPage extends PlatformPage {
     static properties = {
@@ -133,23 +132,39 @@ export class ChatPage extends PlatformPage {
 
     async _restoreSessionFromUrl(sessionId) {
         const result = await this._sessionState.run({ session_id: sessionId });
-        const messages = (result?.messages || []).map((msg, idx) => {
-            const role = typeof msg.role === 'string'
-                ? msg.role.toLowerCase()
-                : (msg.role?.value || 'assistant');
-            let content = msg.content || '';
-            if (!content && Array.isArray(msg.parts)) {
+        const rawMessages = isPlainObject(result) && Array.isArray(result.messages) ? result.messages : [];
+        const resultTaskId = isPlainObject(result) && typeof result.task_id === 'string' ? result.task_id : null;
+        const messages = rawMessages.map((msg, idx) => {
+            let role;
+            if (typeof msg.role === 'string') {
+                role = msg.role.toLowerCase();
+            } else if (isPlainObject(msg.role) && typeof msg.role.value === 'string') {
+                role = msg.role.value;
+            } else {
+                role = 'assistant';
+            }
+            let content = asString(msg.content);
+            if (content === '' && Array.isArray(msg.parts)) {
                 content = msg.parts
                     .filter((p) => p && (p.kind === 'text' || p.text))
-                    .map((p) => p.text || '')
+                    .map((p) => asString(p.text))
                     .join('');
             }
+            const id = typeof msg.messageId === 'string' && msg.messageId.length > 0
+                ? msg.messageId
+                : (typeof msg.id === 'string' && msg.id.length > 0 ? msg.id : `msg-${idx}`);
+            const timestamp = typeof msg.timestamp === 'string' && msg.timestamp.length > 0
+                ? msg.timestamp
+                : new Date().toISOString();
+            const taskId = typeof msg.taskId === 'string' && msg.taskId.length > 0
+                ? msg.taskId
+                : resultTaskId;
             return {
-                id: msg.messageId || msg.id || `msg-${idx}`,
+                id,
                 role: role === 'user' ? 'user' : 'assistant',
                 content,
-                timestamp: msg.timestamp || new Date().toISOString(),
-                taskId: msg.taskId || result?.task_id || null,
+                timestamp,
+                taskId,
                 streaming: false,
             };
         });
@@ -157,7 +172,7 @@ export class ChatPage extends PlatformPage {
             sessionId,
             flowId: this.flowId,
             messages,
-            taskId: result?.task_id || null,
+            taskId: resultTaskId,
         });
     }
 
@@ -165,17 +180,21 @@ export class ChatPage extends PlatformPage {
         const state = this._chat.state;
         const ctx = state?.currentContextId;
         if (!ctx) return [];
-        const bucket = state?.messagesByContextId?.[ctx];
-        return bucket?.messages || [];
+        const buckets = isPlainObject(state) && isPlainObject(state.messagesByContextId)
+            ? state.messagesByContextId
+            : null;
+        const bucket = buckets !== null && isPlainObject(buckets[ctx]) ? buckets[ctx] : null;
+        return bucket !== null && Array.isArray(bucket.messages) ? bucket.messages : [];
     }
 
     _currentFlow() {
-        const items = this._flows.items || [];
-        return items.find((f) => f && f.flow_id === this.flowId) || null;
+        const items = asArray(this._flows.items);
+        const found = items.find((f) => f && f.flow_id === this.flowId);
+        return found ? found : null;
     }
 
     async _onSendMessage(e) {
-        const detail = e.detail || {};
+        const detail = isPlainObject(e.detail) ? e.detail : {};
         const text = typeof detail.message === 'string' ? detail.message : '';
         const files = Array.isArray(detail.files) ? detail.files : [];
         if (!text && files.length === 0) return;
@@ -224,7 +243,7 @@ export class ChatPage extends PlatformPage {
                     kind: 'file',
                     file: {
                         name: file.name,
-                        mimeType: file.type || 'application/octet-stream',
+                        mimeType: typeof file.type === 'string' && file.type.length > 0 ? file.type : 'application/octet-stream',
                         bytes: base64,
                     },
                 });
@@ -274,7 +293,14 @@ export class ChatPage extends PlatformPage {
 
     render() {
         const flow = this._currentFlow();
-        const flowName = flow?.name || this.flowId || this.t('platform_chat.no_flow');
+        let flowName;
+        if (flow && typeof flow.name === 'string' && flow.name.length > 0) {
+            flowName = flow.name;
+        } else if (typeof this.flowId === 'string' && this.flowId.length > 0) {
+            flowName = this.flowId;
+        } else {
+            flowName = this.t('platform_chat.no_flow');
+        }
         const messages = this._currentMessages();
         const streaming = Boolean(this._chat.state?.streaming);
 

@@ -10,6 +10,7 @@ import { httpRequest } from '@platform/lib/events/http.js';
 export const servicesStatusLoadOp = createAsyncOp({
     name: 'frontend/services_status_load',
     silent: true,
+    restMirror: { method: 'GET', path: '/frontend/api/services/status' },
     request: async () => await httpRequest({
         method: 'GET',
         url: '/frontend/api/services/status',

@@ -4,6 +4,7 @@
 import { html, css } from 'lit';
 import { repeat } from 'lit/directives/repeat.js';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
+import { asArray, asString } from '../../_helpers/flows-resolvers.js';
 
 export class ChatMessages extends PlatformElement {
     static styles = [
@@ -114,17 +115,17 @@ export class ChatMessages extends PlatformElement {
                         <chat-message
                             .role=${message.role}
                             .content=${message.content}
-                            .timestamp=${message.timestamp || ''}
+                            .timestamp=${asString(message.timestamp)}
                             ?streaming=${message.streaming}
-                            .reasoning=${message.reasoning || ''}
-                            .toolCalls=${message.toolCalls || []}
-                            .toolResults=${message.toolResults || []}
+                            .reasoning=${asString(message.reasoning)}
+                            .toolCalls=${asArray(message.toolCalls)}
+                            .toolResults=${asArray(message.toolResults)}
                             .inputRequired=${message.inputRequired}
-                            .operatorReply=${message.operatorReply || ''}
+                            .operatorReply=${asString(message.operatorReply)}
                             .breakpoint=${message.breakpoint}
-                            .files=${message.files || []}
-                            .fileIds=${message.fileIds || []}
-                            .taskId=${message.taskId || ''}
+                            .files=${asArray(message.files)}
+                            .fileIds=${asArray(message.fileIds)}
+                            .taskId=${asString(message.taskId)}
                             @show-tracing=${this._onShowTracing}
                         ></chat-message>
                     `

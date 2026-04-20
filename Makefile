@@ -114,6 +114,10 @@ check-i18n:
 check-i18n-keys:
 	@uv run python scripts/check_i18n_keys.py
 
+# Удаление common-unused ключей из JSON (см. scripts/clean_i18n_unused.py, scripts/i18n_unused_scan_exclusions.py).
+clean-i18n-unused:
+	@uv run python scripts/clean_i18n_unused.py --apply
+
 # Сборка объединённых JSON переводов для статической отдачи (dev)
 build-i18n:
 	uv run python -m scripts.build_i18n

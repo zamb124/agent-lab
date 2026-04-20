@@ -32,7 +32,7 @@ export class FlowsFloatingPanel extends PlatformElement {
                 top: var(--space-3);
                 right: var(--space-3);
                 bottom: var(--space-3);
-                width: 380px;
+                width: 420px;
                 z-index: 5;
                 display: flex;
                 flex-direction: column;
@@ -76,9 +76,9 @@ export class FlowsFloatingPanel extends PlatformElement {
 
             :host([expanded]) .panel-backdrop {
                 display: block;
-                background: rgba(0, 0, 0, 0.5);
+                background: color-mix(in oklab, var(--bg-primary) 60%, transparent);
                 pointer-events: auto;
-                backdrop-filter: blur(4px);
+                backdrop-filter: blur(6px);
             }
 
             .panel-header {
@@ -133,9 +133,16 @@ export class FlowsFloatingPanel extends PlatformElement {
                 flex: 1;
                 min-height: 0;
                 overflow: auto;
-                padding: var(--space-3) var(--space-4);
+                padding: 0;
                 position: relative;
                 z-index: 1;
+            }
+            :host(:not([expanded])) .panel-body {
+                padding: 0;
+            }
+            :host([expanded]) .panel-body {
+                overflow: hidden;
+                padding: 0;
             }
             .panel-body[data-lara-glow] {
                 animation: laraNodeGlow 3.2s ease-out;

@@ -7,6 +7,7 @@ import { classMap } from 'lit/directives/class-map.js';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
 import '@platform/lib/components/platform-icon.js';
 import './skill-item.js';
+import { asString } from '../_helpers/flows-resolvers.js';
 
 export class FlowCard extends PlatformElement {
     static properties = {
@@ -295,7 +296,14 @@ export class FlowCard extends PlatformElement {
     }
 
     _getInitials() {
-        const name = this.flow?.name || this.flow?.flow_id || '';
+        let name;
+        if (this.flow && typeof this.flow.name === 'string' && this.flow.name.length > 0) {
+            name = this.flow.name;
+        } else if (this.flow && typeof this.flow.flow_id === 'string') {
+            name = this.flow.flow_id;
+        } else {
+            name = '';
+        }
         const words = name.split(/[\s_-]+/);
         if (words.length >= 2) {
             return (words[0].charAt(0) + words[1].charAt(0)).toUpperCase();
@@ -314,7 +322,8 @@ export class FlowCard extends PlatformElement {
             'linear-gradient(135deg, #f97316 0%, #f59e0b 100%)',
             'linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%)',
         ];
-        const hash = (this.flow?.flow_id || '').split('').reduce((a, b) => a + b.charCodeAt(0), 0);
+        const flowId = asString(this.flow?.flow_id);
+        const hash = flowId.split('').reduce((a, b) => a + b.charCodeAt(0), 0);
         return colors[hash % colors.length];
     }
 
@@ -367,7 +376,7 @@ export class FlowCard extends PlatformElement {
                         ${this._getInitials()}
                     </div>
                     <div class="flow-info">
-                        <div class="flow-name">${this.flow.name || this.flow.flow_id}</div>
+                        <div class="flow-name">${typeof this.flow.name === 'string' && this.flow.name.length > 0 ? this.flow.name : this.flow.flow_id}</div>
                         <div class="flow-meta">
                             <div class="flow-subid">${this.flow.flow_id}</div>
                             ${this.flow.has_bundle_update

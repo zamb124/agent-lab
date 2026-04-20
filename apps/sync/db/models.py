@@ -29,7 +29,7 @@ class SyncSpace(Base):
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     avatar_url: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
-    namespace: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    namespace: Mapped[str] = mapped_column(String(100), nullable=False)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
     )
@@ -39,6 +39,7 @@ class SyncSpace(Base):
 
     __table_args__ = (
         Index("ix_sync_spaces_company", "company_id"),
+        Index("idx_sync_spaces_company_namespace", "company_id", "namespace", unique=True),
     )
 
     def __repr__(self) -> str:

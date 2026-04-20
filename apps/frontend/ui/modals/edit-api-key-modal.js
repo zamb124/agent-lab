@@ -46,7 +46,7 @@ export class FrontendEditApiKeyModal extends PlatformFormModal {
         super.willUpdate(changed);
         this.title = this.t('api_key_edit_modal.header');
         if (changed.has('item') && this.item) {
-            this._name = this.item.name || '';
+            this._name = this.item.name;
         }
     }
 

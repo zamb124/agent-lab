@@ -6,25 +6,37 @@
  */
 
 import { html, css } from 'lit';
-import { PlatformLightModal } from '@platform/lib/components/glass-light-modal.js';
+import { PlatformModal } from '@platform/lib/components/glass-modal.js';
 import { registerModalKind } from '@platform/lib/utils/modal-registry.js';
 import '@platform/lib/components/platform-button.js';
 import '@platform/lib/components/platform-icon.js';
 import '@platform/lib/components/glass-spinner.js';
 
-export class FlowsTracingModal extends PlatformLightModal {
+export class FlowsTracingModal extends PlatformModal {
     static modalKind = 'flows.tracing';
     static i18nNamespace = 'flows';
 
     static properties = {
-        ...PlatformLightModal.properties,
+        ...PlatformModal.properties,
         sessionId: { type: String },
         taskId: { type: String },
         traceId: { type: String },
     };
 
+    static styles = [
+        ...PlatformModal.styles,
+        css`
+            .tracing-empty { padding: var(--space-4); text-align: center; color: var(--text-tertiary); }
+            .span-row { padding: var(--space-1) 0; border-bottom: 1px solid var(--border-subtle); }
+            .span-name { font-weight: var(--font-medium); cursor: pointer; }
+            .span-name:hover { color: var(--accent); }
+            .span-meta { font-size: var(--text-xs); color: var(--text-tertiary); }
+        `,
+    ];
+
     constructor() {
         super();
+        this.size = 'full';
         this.sessionId = '';
         this.taskId = '';
         this.traceId = '';
@@ -53,11 +65,11 @@ export class FlowsTracingModal extends PlatformLightModal {
     _renderSpan(span, depth = 0) {
         const children = Array.isArray(span.children) ? span.children : [];
         return html`
-            <div style="margin-left:${depth * 16}px; padding: var(--space-1) 0; border-bottom: 1px solid var(--border-subtle)">
-                <div style="font-weight: var(--font-medium)" @click=${() => this.openModal('flows.span_details', { span })}>
+            <div class="span-row" style="margin-left:${depth * 16}px">
+                <div class="span-name" @click=${() => this.openModal('flows.span_details', { span })}>
                     ${span.name || span.span_id}
                 </div>
-                <div style="font-size: var(--text-xs); color: var(--text-tertiary)">
+                <div class="span-meta">
                     ${span.duration_ms != null ? `${span.duration_ms} ms` : ''}
                     ${span.status_code ? ` · ${span.status_code}` : ''}
                 </div>
@@ -66,31 +78,21 @@ export class FlowsTracingModal extends PlatformLightModal {
         `;
     }
 
-    render() {
+    renderHeader() {
+        return this.t('tracing_modal.title');
+    }
+
+    renderBody() {
         const data = this._activeData();
         const spans = Array.isArray(data?.spans) ? data.spans : Array.isArray(data) ? data : [];
         const busy = this._bySession.busy || this._byTask.busy || this._byTrace.busy;
-        return html`
-            <div class="light-modal-backdrop" @click=${this._onBackdropClick}></div>
-            <div class="light-modal-container tracing-shell">
-                <style>
-                    .tracing-shell { padding: var(--space-4); gap: var(--space-3); height: 90vh; }
-                    .tracing-header { display: flex; align-items: center; justify-content: space-between; }
-                    .tracing-body { flex: 1; min-height: 0; overflow: auto; }
-                </style>
-                <div class="tracing-header">
-                    <h2>${this.t('tracing_modal.title')}</h2>
-                    <platform-button @click=${() => this.close()}>
-                        <platform-icon name="close" size="14"></platform-icon>
-                    </platform-button>
-                </div>
-                ${busy && spans.length === 0
-                    ? html`<glass-spinner></glass-spinner>`
-                    : spans.length === 0
-                        ? html`<div>${this.t('tracing_modal.empty')}</div>`
-                        : html`<div class="tracing-body">${spans.map((s) => this._renderSpan(s))}</div>`}
-            </div>
-        `;
+        if (busy && spans.length === 0) {
+            return html`<glass-spinner></glass-spinner>`;
+        }
+        if (spans.length === 0) {
+            return html`<div class="tracing-empty">${this.t('tracing_modal.empty')}</div>`;
+        }
+        return html`<div>${spans.map((s) => this._renderSpan(s))}</div>`;
     }
 }
 

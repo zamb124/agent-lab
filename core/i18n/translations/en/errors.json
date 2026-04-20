@@ -1,8 +1,1 @@
-{
-  "network": "Network error. Check connection",
-  "server": "Server error. Try again later",
-  "validation": "Data validation error",
-  "permission": "Insufficient access rights",
-  "not_found": "Requested resource not found",
-  "timeout": "Request timeout exceeded"
-}
+{}

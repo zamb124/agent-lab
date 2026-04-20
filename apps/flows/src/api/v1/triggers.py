@@ -12,6 +12,7 @@ from pydantic import BaseModel, Field
 
 from apps.flows.src.dependencies import ContainerDep
 from apps.flows.src.models import TriggerConfig, TriggerStatus, TriggerType
+from apps.flows.src.models.channel_config import OutputAction
 from apps.flows.src.triggers import TriggerRegistry, TriggerValidationError
 from apps.flows.src.triggers.handlers.telegram import TelegramTriggerHandler
 from core.logging import get_logger
@@ -30,7 +31,18 @@ class TriggerCreateRequest(BaseModel):
     type: TriggerType = Field(..., description="Тип триггера")
     enabled: bool = Field(default=True, description="Активен")
     config: Dict[str, Any] = Field(default_factory=dict, description="Конфигурация")
-    input_mapping: Dict[str, str] = Field(default_factory=dict, description="Маппинг")
+    output_mapping: Dict[str, str] = Field(
+        default_factory=dict,
+        description="Маппинг payload -> state (state.path -> payload.path)",
+    )
+    input_mapping: Dict[str, str] = Field(
+        default_factory=dict,
+        description="DEPRECATED: используйте output_mapping",
+    )
+    output_actions: List[OutputAction] = Field(
+        default_factory=list,
+        description="Действия отправки ответа в канал после агента",
+    )
 
 
 class TriggerUpdateRequest(BaseModel):
@@ -38,7 +50,9 @@ class TriggerUpdateRequest(BaseModel):
     name: Optional[str] = None
     enabled: Optional[bool] = None
     config: Optional[Dict[str, Any]] = None
+    output_mapping: Optional[Dict[str, str]] = None
     input_mapping: Optional[Dict[str, str]] = None
+    output_actions: Optional[List[OutputAction]] = None
 
 
 class TriggerResponse(BaseModel):
@@ -48,7 +62,9 @@ class TriggerResponse(BaseModel):
     type: TriggerType
     enabled: bool
     config: Dict[str, Any]
+    output_mapping: Dict[str, str]
     input_mapping: Dict[str, str]
+    output_actions: List[OutputAction]
     webhook_url: Optional[str] = None
     status: TriggerStatus
     last_error: Optional[str] = None
@@ -71,7 +87,9 @@ async def list_triggers(flow_id: str, container: ContainerDep) -> list[TriggerRe
             type=t.type,
             enabled=t.enabled,
             config={k: v for k, v in t.config.items() if not k.startswith("_")},
+            output_mapping=t.output_mapping,
             input_mapping=t.input_mapping,
+            output_actions=t.output_actions,
             webhook_url=t.webhook_url,
             status=t.status,
             last_error=t.last_error,
@@ -99,7 +117,9 @@ async def get_trigger(flow_id: str, trigger_id: str, container: ContainerDep) ->
         type=trigger.type,
         enabled=trigger.enabled,
         config={k: v for k, v in trigger.config.items() if not k.startswith("_")},
+        output_mapping=trigger.output_mapping,
         input_mapping=trigger.input_mapping,
+        output_actions=trigger.output_actions,
         webhook_url=trigger.webhook_url,
         status=trigger.status,
         last_error=trigger.last_error,
@@ -126,7 +146,9 @@ async def create_trigger(flow_id: str, request: TriggerCreateRequest, container:
         type=request.type,
         enabled=request.enabled,
         config=request.config,
+        output_mapping=request.output_mapping,
         input_mapping=request.input_mapping,
+        output_actions=request.output_actions,
     )
     
     # Сохраняем старый конфиг для sync
@@ -155,7 +177,9 @@ async def create_trigger(flow_id: str, request: TriggerCreateRequest, container:
         type=updated_trigger.type,
         enabled=updated_trigger.enabled,
         config={k: v for k, v in updated_trigger.config.items() if not k.startswith("_")},
+        output_mapping=updated_trigger.output_mapping,
         input_mapping=updated_trigger.input_mapping,
+        output_actions=updated_trigger.output_actions,
         webhook_url=updated_trigger.webhook_url,
         status=updated_trigger.status,
         last_error=updated_trigger.last_error,
@@ -191,9 +215,13 @@ async def update_trigger(
         trigger.enabled = request.enabled
     if request.config is not None:
         trigger.config = request.config
+    if request.output_mapping is not None:
+        trigger.output_mapping = request.output_mapping
     if request.input_mapping is not None:
         trigger.input_mapping = request.input_mapping
-    
+    if request.output_actions is not None:
+        trigger.output_actions = request.output_actions
+
     flow_config.triggers[trigger_id] = trigger
     
     # Синхронизируем триггеры
@@ -216,7 +244,9 @@ async def update_trigger(
         type=updated_trigger.type,
         enabled=updated_trigger.enabled,
         config={k: v for k, v in updated_trigger.config.items() if not k.startswith("_")},
+        output_mapping=updated_trigger.output_mapping,
         input_mapping=updated_trigger.input_mapping,
+        output_actions=updated_trigger.output_actions,
         webhook_url=updated_trigger.webhook_url,
         status=updated_trigger.status,
         last_error=updated_trigger.last_error,

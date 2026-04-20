@@ -7,6 +7,8 @@ import io
 import pytest
 from httpx import ASGITransport, AsyncClient
 
+from tests.sync.integration.conftest import _temporary_settings
+
 
 @pytest.mark.asyncio
 async def test_upload_empty_file_400(
@@ -38,28 +40,23 @@ async def test_get_file_metadata_404(
 
 
 @pytest.mark.asyncio
-async def test_upload_returns_503_when_s3_disabled_via_env(
-    monkeypatch: pytest.MonkeyPatch,
+async def test_upload_returns_503_when_s3_disabled(
     sync_auth_headers,
     sync_db_clean: None,
 ) -> None:
-    monkeypatch.setenv("S3__ENABLED", "false")
-
-    import core.config.base as config_base
-
-    config_base._settings_instance = None
-
+    """503 при отключённом S3. Подмена settings через fixture-runtime
+    `_temporary_settings`, без `monkeypatch` (zero-mock canon).
+    """
     from apps.sync.main import app
 
-    files = {"file": ("x.txt", io.BytesIO(b"data"), "text/plain")}
-    transport = ASGITransport(app=app)
-    async with AsyncClient(transport=transport, base_url="http://testserver") as client:
-        r = await client.post(
-            "/sync/api/v1/files/",
-            headers=sync_auth_headers,
-            files=files,
-        )
+    async with _temporary_settings({"s3.enabled": False}):
+        files = {"file": ("x.txt", io.BytesIO(b"data"), "text/plain")}
+        transport = ASGITransport(app=app)
+        async with AsyncClient(transport=transport, base_url="http://testserver") as client:
+            r = await client.post(
+                "/sync/api/v1/files/",
+                headers=sync_auth_headers,
+                files=files,
+            )
     assert r.status_code == 503
     assert "S3" in r.json()["detail"]
-
-    config_base._settings_instance = None

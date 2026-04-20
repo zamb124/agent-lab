@@ -19,6 +19,7 @@ import '../editors/flows-state-mapping-editor.js';
 import '../editors/flows-args-schema-form.js';
 import '@platform/lib/components/glass-button.js';
 import '@platform/lib/components/platform-icon.js';
+import { asObject, asString, isPlainObject } from '../../_helpers/flows-resolvers.js';
 
 export class FlowsMcpNodeEditor extends PlatformElement {
     static properties = {
@@ -90,7 +91,8 @@ export class FlowsMcpNodeEditor extends PlatformElement {
     }
 
     _onStateMapping(e) {
-        this._emitPatch({ state_mapping: e.detail?.mapping || {} });
+        const mapping = e.detail?.mapping;
+        this._emitPatch({ state_mapping: isPlainObject(mapping) ? mapping : {} });
     }
 
     async _onSync(serverId) {
@@ -99,15 +101,17 @@ export class FlowsMcpNodeEditor extends PlatformElement {
     }
 
     _findServer(servers, id) {
-        return servers.find((s) => s && s.server_id === id) || null;
+        const found = servers.find((s) => s && s.server_id === id);
+        return found ? found : null;
     }
 
     _findTool(server, name) {
         if (!server || !Array.isArray(server.cached_tools)) return null;
-        return server.cached_tools.find((t) => {
+        const found = server.cached_tools.find((t) => {
             if (typeof t === 'string') return t === name;
             return t && t.name === name;
-        }) || null;
+        });
+        return found ? found : null;
     }
 
     _toolSchema(tool) {
@@ -121,7 +125,7 @@ export class FlowsMcpNodeEditor extends PlatformElement {
     }
 
     render() {
-        const cfg = this.nodeConfig || {};
+        const cfg = asObject(this.nodeConfig);
         const serverId = typeof cfg.server_id === 'string' ? cfg.server_id : '';
         const toolName = typeof cfg.tool_name === 'string' ? cfg.tool_name : '';
         const servers = Array.isArray(this._servers.items) ? this._servers.items : [];
@@ -139,7 +143,7 @@ export class FlowsMcpNodeEditor extends PlatformElement {
                 .flowId=${this.flowId}
                 .skillId=${this.skillId}
                 .nodeConfig=${this.nodeConfig}
-                .nodeType=${this.nodeType || 'mcp'}
+                .nodeType=${typeof this.nodeType === 'string' && this.nodeType.length > 0 ? this.nodeType : 'mcp'}
                 .flowVariables=${this.flowVariables}
                 .graphNodes=${this.graphNodes}
                 .previewExecutionState=${this.previewExecutionState}
@@ -169,7 +173,7 @@ export class FlowsMcpNodeEditor extends PlatformElement {
                             <option value="">—</option>
                             ${tools.map((t) => {
                                 const value = typeof t === 'string' ? t : t.name;
-                                const label = typeof t === 'string' ? t : (t.title || t.name);
+                                const label = typeof t === 'string' ? t : (typeof t.title === 'string' && t.title.length > 0 ? t.title : t.name);
                                 return html`<option value=${value} ?selected=${value === toolName}>${label}</option>`;
                             })}
                         </select>

@@ -21,12 +21,6 @@ export class SyncCallLinkEditModal extends PlatformFormModal {
 
     static styles = [
         ...(PlatformFormModal.styles ? [PlatformFormModal.styles] : []),
-        css`
-            .field { display: flex; flex-direction: column; gap: var(--space-1); margin-bottom: var(--space-3); }
-            input { padding: var(--space-2); border-radius: var(--radius-md); border: 1px solid var(--glass-border); background: var(--glass-solid); color: var(--text-primary); }
-            label { font-size: var(--text-sm); }
-            .row { display: flex; gap: var(--space-2); }
-        `,
     ];
 
     constructor() {
@@ -58,22 +52,32 @@ export class SyncCallLinkEditModal extends PlatformFormModal {
 
     renderBody() {
         return html`
-            <div class="field">
-                <label>${this.t('call_link.field_title')}</label>
-                <input type="text" .value=${this._title} @input=${(e) => { this._title = e.target.value; this.markDirty(); }} />
+            <div class="form-group">
+                <label class="form-label">${this.t('call_link.field_title')}</label>
+                <input
+                    class="form-input"
+                    type="text"
+                    .value=${this._title}
+                    @input=${(e) => { this._title = e.target.value; this.isDirty = true; }}
+                />
             </div>
-            <div class="field">
-                <label>${this.t('call_link.field_scheduled_at')}</label>
-                <input type="datetime-local" .value=${this._scheduledAt} @input=${(e) => { this._scheduledAt = e.target.value; this.markDirty(); }} />
+            <div class="form-group">
+                <label class="form-label">${this.t('call_link.field_scheduled_at')}</label>
+                <input
+                    class="form-input"
+                    type="datetime-local"
+                    .value=${this._scheduledAt}
+                    @input=${(e) => { this._scheduledAt = e.target.value; this.isDirty = true; }}
+                />
             </div>
         `;
     }
 
     renderFooter() {
         return html`
-            <div class="row">
+            <div class="form-actions">
                 <platform-button variant="danger" @click=${this._onDelete}>${this.t('call_link.action_delete')}</platform-button>
-                <platform-button @click=${() => this.close()} style="margin-left: auto;">${this.t('call_link.action_cancel')}</platform-button>
+                <platform-button variant="secondary" @click=${() => this.close()} style="margin-left: auto;">${this.t('call_link.action_cancel')}</platform-button>
                 <platform-button variant="primary" @click=${this._onSubmit}>${this.t('call_link.action_save')}</platform-button>
             </div>
         `;

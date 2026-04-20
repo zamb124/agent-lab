@@ -14,6 +14,7 @@
 import { html, css } from 'lit';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
 import '@platform/lib/components/platform-icon.js';
+import { asArray } from '../../_helpers/flows-resolvers.js';
 
 export class FlowsSkillsTabs extends PlatformElement {
     static properties = {
@@ -25,21 +26,20 @@ export class FlowsSkillsTabs extends PlatformElement {
         PlatformElement.styles,
         css`
             :host {
-                display: flex;
-                align-items: center;
-                gap: var(--space-1);
+                display: block;
                 padding: var(--space-2) var(--space-4);
                 border-bottom: 1px solid var(--border-subtle);
                 background: var(--glass-tint-subtle);
                 overflow-x: auto;
+                overflow-y: hidden;
                 scrollbar-width: thin;
             }
             .tabs-row {
                 display: flex;
                 align-items: center;
                 gap: var(--space-1);
-                flex: 1;
-                min-width: 0;
+                width: max-content;
+                min-width: 100%;
             }
             .tab-wrap {
                 display: inline-flex;
@@ -49,6 +49,8 @@ export class FlowsSkillsTabs extends PlatformElement {
                 border: 1px solid transparent;
                 background: transparent;
                 transition: all var(--duration-fast);
+                flex-shrink: 0;
+                white-space: nowrap;
             }
             .tab-wrap:hover { background: var(--glass-solid-medium); }
             .tab-wrap[active] {
@@ -65,6 +67,7 @@ export class FlowsSkillsTabs extends PlatformElement {
                 font-weight: var(--font-medium);
                 cursor: pointer;
                 font-family: inherit;
+                white-space: nowrap;
             }
             .tab-wrap[active] .tab { color: var(--accent); }
             .tab-close {
@@ -77,6 +80,7 @@ export class FlowsSkillsTabs extends PlatformElement {
                 font-size: 16px;
                 line-height: 1;
                 font-family: inherit;
+                flex-shrink: 0;
             }
             .tab-close:hover { color: var(--error); }
             .add-skill-btn {
@@ -92,8 +96,9 @@ export class FlowsSkillsTabs extends PlatformElement {
                 font-family: inherit;
                 cursor: pointer;
                 transition: all var(--duration-fast);
-                margin-left: auto;
+                margin-left: var(--space-2);
                 flex-shrink: 0;
+                white-space: nowrap;
             }
             .add-skill-btn:hover { color: var(--accent); border-color: var(--accent); background: var(--accent-subtle); }
         `,
@@ -129,7 +134,7 @@ export class FlowsSkillsTabs extends PlatformElement {
     }
 
     render() {
-        const flow = (this._flows.items || []).find((f) => f && f.flow_id === this.flowId);
+        const flow = asArray(this._flows.items).find((f) => f && f.flow_id === this.flowId);
         const skillIds = flow && flow.skills ? Object.keys(flow.skills) : [];
         return html`
             <div class="tabs-row">
@@ -151,11 +156,11 @@ export class FlowsSkillsTabs extends PlatformElement {
                         >×</button>
                     </div>
                 `)}
+                <button class="add-skill-btn" type="button" @click=${this._create}>
+                    <platform-icon name="plus" size="14"></platform-icon>
+                    ${this.t('skills_tabs.add')}
+                </button>
             </div>
-            <button class="add-skill-btn" type="button" @click=${this._create}>
-                <platform-icon name="plus" size="14"></platform-icon>
-                ${this.t('skills_tabs.add')}
-            </button>
         `;
     }
 }

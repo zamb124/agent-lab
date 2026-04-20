@@ -101,7 +101,7 @@ export const triggerTestOp = createAsyncOp({
         return httpRequest({
             method: 'POST',
             url: `${triggersBase(payload.flow_id)}/${encodeURIComponent(payload.trigger_id)}/test`,
-            body: payload.body || {},
+            body: payload.body && typeof payload.body === 'object' ? payload.body : {},
         });
     },
 });

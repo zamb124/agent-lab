@@ -1,25 +1,29 @@
 /**
- * sync-call-incoming-modal — баннер входящего звонка.
+ * sync-call-incoming-modal — баннер входящего звонка (фикс. позиция в углу).
  *
- * Открывается автоматически при push-событии `sync/call/incoming` через
- * useEvent в `sync-app.js` (см. sync-app.js auto-open hook).
+ * Не диалог поверх scrim'а: появляется как уведомление в верхнем правом углу
+ * экрана. Управляется stack'ом модалок (kind = 'sync.call_incoming'), но
+ * визуально — overlay-баннер, поэтому базовый класс PlatformElement, а не
+ * PlatformModal.
  *
- * Закрытие: после accept/decline или push `sync/call/ended`.
+ * Контракт со стеком: stack ставит `_modalId`, `_modalKind`, props и
+ * `open = true`; close() диспатчит UI_MODAL_CLOSE с `_modalId`, reducer
+ * убирает запись и stack снимает элемент из DOM.
  */
 
 import { html, css } from 'lit';
-import { PlatformLightModal } from '@platform/lib/components/glass-light-modal.js';
+import { PlatformElement } from '@platform/lib/platform-element/index.js';
 import { registerModalKind } from '@platform/lib/utils/modal-registry.js';
 import '@platform/lib/components/platform-button.js';
 import '@platform/lib/components/platform-icon.js';
 import '@platform/lib/components/platform-user-chip.js';
 
-export class SyncCallIncomingModal extends PlatformLightModal {
+export class SyncCallIncomingModal extends PlatformElement {
     static modalKind = 'sync.call_incoming';
     static i18nNamespace = 'sync';
 
     static properties = {
-        ...PlatformLightModal.properties,
+        open: { type: Boolean, reflect: true },
         callId: { type: String },
         callType: { type: String },
         channelId: { type: String },
@@ -34,8 +38,9 @@ export class SyncCallIncomingModal extends PlatformLightModal {
             top: var(--space-4);
             right: var(--space-4);
             z-index: 9999;
-            display: block;
+            display: none;
         }
+        :host([open]) { display: block; }
         .card {
             background: var(--glass-solid);
             border: 1px solid var(--glass-border);
@@ -59,6 +64,8 @@ export class SyncCallIncomingModal extends PlatformLightModal {
         this.callerUserId = '';
         this.callerDisplayName = '';
         this.channelDisplayName = '';
+        this._modalId = '';
+        this._modalKind = '';
         this._accept = this.useOp('sync/calls_accept');
         this._decline = this.useOp('sync/calls_decline');
     }
@@ -76,6 +83,13 @@ export class SyncCallIncomingModal extends PlatformLightModal {
             this._ringtone = null;
         }
         super.disconnectedCallback();
+    }
+
+    close() {
+        if (typeof this._modalId !== 'string' || this._modalId.length === 0) {
+            throw new Error('SyncCallIncomingModal.close: _modalId is required');
+        }
+        this.closeModal({ id: this._modalId });
     }
 
     async _onAccept() {

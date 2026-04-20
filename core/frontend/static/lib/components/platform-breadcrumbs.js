@@ -13,8 +13,8 @@ import '@platform/lib/components/platform-icon.js';
  *   - routeKey — текущий маршрут (`ROUTER_ROUTE_CHANGED`).
  *   - params   — параметры текущего маршрута.
  *
- * Подписи берутся через `this.t('routes.<routeKey>')` (резолв через
- * `defaultI18nNamespace` сервиса). Динамический хвост (имя заметки, имя
+ * Подписи маршрутов: ключ routes.<routeKey> в defaultI18nNamespace сервиса.
+ * Динамический хвост (имя заметки, имя
  * документа и т.д.) — через prop `currentLabel`.
  *
  * Клик по неактивной крошке диспатчит `ROUTER_NAVIGATE_REQUESTED` с params

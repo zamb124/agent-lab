@@ -49,7 +49,7 @@ Python 3.13+, FastAPI, PostgreSQL (pgvector), Redis, TaskIQ, UV, Lit 3, Zustand.
 
 Весь UI в `apps/*/ui/` **строго** наследуется от общей базы в `core/frontend/static/` и правил **`frontend.mdc`**. Писать «свой» фронт в обход канона (другие базовые классы, обход import map, свой реестр сервисов в компонентах, самодельные модалки там, где нужен glass-стек) **нельзя**. Исключения (например drawer/panel, не полноценное модальное окно) — только там, где это **уже явно описано** в `frontend.mdc` / `sync.mdc`.
 
-Кратко: **`PlatformElement` / `PlatformApp` / `PlatformModal` (или `PlatformFormModal` / `PlatformLightModal` по смыслу)**; импорты только через **`@platform/...`**; сервисы в компонентах — **`this.services`**, не `ServiceRegistry`; новый shell — viewport и import map по канону. Контроль: **`make check-ui-canon`** (`scripts/check_ui_canon.sh`). Любое новое исключение из канона — **сначала правка рулов**, потом код.
+Кратко: **`PlatformElement` / `PlatformApp` / `PlatformModal` (или `PlatformFormModal` по смыслу)**; импорты только через **`@platform/...`**; сервисы в компонентах — **`this.services`**, не `ServiceRegistry`; новый shell — viewport и import map по канону. Контроль: **`make check-ui-canon`** (`scripts/check_ui_canon.sh`). Любое новое исключение из канона — **сначала правка рулов**, потом код.
 
 ## ОЧЕНЬ ВАЖНО: ноль костылей
 

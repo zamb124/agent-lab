@@ -59,11 +59,13 @@ describe('canon: factory strictness', () => {
         expect(() => createCursorList({ name: 'svc/x', baseUrl: '/x', buildQuery: () => ({}) })).toThrow(/pageSize/);
     });
 
-    it('createCursorList restMirror.method !== GET — throw', () => {
+    it('createCursorList restMirror.method не из (GET, POST) — throw', () => {
+        // Канон cursor-lists read-only: разрешены GET (по умолчанию) и POST
+        // (для CRM search-операций с большими query). PATCH/PUT/DELETE — throw.
         expect(() => createCursorList({
             name: 'svc/x', baseUrl: '/x', buildQuery: () => ({}), pageSize: 50,
-            restMirror: { method: 'POST', path: '/x' },
-        })).toThrow(/GET/);
+            restMirror: { method: 'PATCH', path: '/x' },
+        })).toThrow(/GET|POST/);
     });
 
     it('createFacets без debounceMs/minQueryLength — throw', () => {

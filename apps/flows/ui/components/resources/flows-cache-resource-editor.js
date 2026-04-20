@@ -64,7 +64,10 @@ export class FlowsCacheResourceEditor extends PlatformElement {
                     <div class="field">
                         <label>${this.t('cache_resource_editor.ttl')}</label>
                         <input type="number" min="0" step="1" .value=${String(ttl)}
-                            @input=${(e) => this._emitConfig({ ttl: parseInt(e.target.value, 10) || 0 })} />
+                            @input=${(e) => {
+                                const v = parseInt(e.target.value, 10);
+                                this._emitConfig({ ttl: Number.isFinite(v) && v >= 0 ? v : 0 });
+                            }} />
                     </div>
                 </div>
             </flows-base-resource-editor>

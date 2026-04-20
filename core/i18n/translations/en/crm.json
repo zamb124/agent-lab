@@ -1,19 +1,4 @@
 {
-    "routes": {
-        "notes": "Notes",
-        "note": "Note",
-        "entities": "Entities",
-        "entity": "Entity",
-        "graph": "Graph",
-        "tasks": "Tasks",
-        "access_requests": "Access requests",
-        "settings": "Settings",
-        "spaces": "Namespaces",
-        "space": "Namespace",
-        "templates": "Templates",
-        "namespace_imports": "Knowledge import",
-        "relationship_types": "Relationship types"
-    },
     "sidebar": {
         "namespace_label": "Namespace",
         "all_namespaces": "All namespaces",
@@ -121,9 +106,6 @@
     "search": {
         "placeholder": "Search..."
     },
-    "notes": {
-        "date": "Date"
-    },
     "entities": {
         "title": "Entities",
         "empty": "No entities",
@@ -204,7 +186,6 @@
         "reset": "Reset filters"
     },
     "entity_card": {
-        "requester_fallback": "User",
         "related_entities": "Related entities",
         "requests_empty": "No pending requests",
         "empty_pick_title": "Select an entity",
@@ -229,7 +210,6 @@
     "namespace_tasks_page": {
         "title": "Namespace tasks",
         "subtitle": "Namespace background jobs: knowledge imports, AI note analyses, daily and period summaries.",
-        "select_namespace_warning": "Pick a specific namespace in the left selector to see tasks.",
         "namespace_label": "Namespace: {{namespace}}",
         "namespace_label_all": "All company namespaces",
         "live_polling": "Polling for updates",
@@ -256,12 +236,7 @@
         "confirm_cancel_ok": "Cancel task",
         "confirm_rollback_title": "Rollback import?",
         "confirm_rollback_msg": "All entities and relationships created by task {{task_id}} will be removed. This action cannot be undone.",
-        "confirm_rollback_ok": "Rollback",
-        "filter_all": "All",
-        "filter_daily_summary": "Daily summary",
-        "filter_knowledge_import": "Knowledge import",
-        "filter_note_analyze": "Note analyze",
-        "filter_period_summary": "Period summary"
+        "confirm_rollback_ok": "Rollback"
     },
     "templates_page": {
         "title": "Namespace templates",
@@ -340,9 +315,7 @@
         "submit_failed": "Failed to send request"
     },
     "note_content": {
-        "no_description": "No description",
-        "note_voice": "Note voice",
-        "context_anchor": "What the note is about (anchor)"
+        "no_description": "No description"
     },
     "knowledge_import_modal": {
         "header": "Knowledge import",
@@ -512,6 +485,9 @@
         "summary_title": "AI summary",
         "summary_generated_at": "Generated at {{time}}",
         "summary_refresh": "Refresh summary",
+        "summary_analyze_starting": "Starting analysis...",
+        "summary_analyzing": "Analysis in progress...",
+        "summary_progress_stage_fallback": "Preparing analysis",
         "no_summary": "Summary is not generated yet.",
         "related_entities": "Related entities",
         "no_related": "No related entities.",
@@ -520,7 +496,10 @@
         "this_note": "This note",
         "attachments": "Attachments",
         "no_attachments": "No attachments.",
+        "attachments_empty_popover": "No attachments yet",
         "download": "Download",
+        "attachment_remove": "Remove attachment",
+        "action_attachments": "Open attachments",
         "action_show_graph": "Show relationship graph",
         "action_delete": "Delete note",
         "action_edit": "Edit",
@@ -530,20 +509,19 @@
         "task_done": "Mark as done",
         "task_undone": "Mark as not done",
         "task_remove": "Remove task",
-        "task_add_placeholder": "Type a task + Enter"
+        "task_add_placeholder": "Type a task + Enter",
+        "summary_entity_open": "Open entity"
     },
     "note_edit": {
         "field_description": "Note text",
         "field_date": "Note date",
         "field_tags": "Tags",
-        "field_attachments": "Attachments",
         "placeholder_title": "Note title",
         "placeholder_description": "What happened, what was discussed, what's worth remembering...",
         "placeholder_tag": "Type a tag and press Enter",
         "voice_start": "Voice input",
         "voice_stop": "Stop recording",
         "attachment_add": "Attach file",
-        "attachment_uploading": "Uploading...",
         "attachment_remove": "Remove attachment",
         "action_cancel": "Cancel",
         "action_save": "Save",
@@ -687,14 +665,15 @@
         "empty_period": "No notes for the selected period",
         "analysis_open_draft": "Open AI analysis draft",
         "analysis_run": "AI analysis",
-        "analysis_view_applied": "View AI analysis results"
+        "analysis_view_applied": "View AI analysis results",
+        "analysis_stage_fallback": "Analysis in progress...",
+        "add_note_creating": "Creating note..."
     },
     "spaces_page": {
         "title": "Namespaces",
         "subtitle": "All company namespaces",
         "action_create": "Create namespace",
         "action_open": "Open",
-        "action_edit": "Edit",
         "action_settings": "Settings",
         "empty_message": "No namespaces yet. Create the first one.",
         "empty_description": "No description"

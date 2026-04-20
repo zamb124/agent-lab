@@ -37,10 +37,7 @@ import {
 import '@platform/lib/components/platform-icon.js';
 import '@platform/lib/components/platform-date-picker.js';
 import '@platform/lib/components/glass-spinner.js';
-
-const DAILY_NOTES_RANGE_KEY = 'crm:daily-notes-range';
-
-const DEFAULT_RANGE_DAYS = 7;
+import '@platform/lib/components/platform-user-chip.js';
 
 function _formatIsoDate(d) {
     const y = d.getFullYear();
@@ -51,41 +48,6 @@ function _formatIsoDate(d) {
 
 function _today() {
     return _formatIsoDate(new Date());
-}
-
-function _defaultRange() {
-    const to = new Date();
-    const from = new Date();
-    from.setDate(from.getDate() - (DEFAULT_RANGE_DAYS - 1));
-    return { from: _formatIsoDate(from), to: _formatIsoDate(to) };
-}
-
-function _readPersistedRange() {
-    if (typeof window === 'undefined' || !window.localStorage) {
-        return _defaultRange();
-    }
-    const raw = window.localStorage.getItem(DAILY_NOTES_RANGE_KEY);
-    if (!raw) {
-        return _defaultRange();
-    }
-    let parsed = null;
-    try {
-        parsed = JSON.parse(raw);
-    } catch {
-        return _defaultRange();
-    }
-    if (!parsed || typeof parsed !== 'object'
-        || typeof parsed.from !== 'string' || typeof parsed.to !== 'string'
-        || !/^\d{4}-\d{2}-\d{2}$/.test(parsed.from)
-        || !/^\d{4}-\d{2}-\d{2}$/.test(parsed.to)) {
-        return _defaultRange();
-    }
-    return { from: parsed.from, to: parsed.to };
-}
-
-function _persistRange(range) {
-    if (typeof window === 'undefined' || !window.localStorage) return;
-    window.localStorage.setItem(DAILY_NOTES_RANGE_KEY, JSON.stringify(range));
 }
 
 function _formatHHMM(date) {
@@ -101,13 +63,6 @@ function _normalizeChipKey(label) {
     if (s.startsWith('@')) s = s.slice(1).trim();
     s = s.replace(/^["'([{]+|["')\]}.,;:!?]+$/g, '').trim();
     return s.length === 0 ? null : s.toLowerCase();
-}
-
-function _initials(name) {
-    if (typeof name !== 'string' || name.trim().length === 0) return '?';
-    const parts = name.trim().split(/\s+/);
-    if (parts.length === 1) return parts[0].slice(0, 1).toUpperCase();
-    return `${parts[0].slice(0, 1)}${parts[1].slice(0, 1)}`.toUpperCase();
 }
 
 const SUMMARY_CHIP_TONES = ['blue', 'cyan', 'orange', 'rose'];
@@ -127,6 +82,8 @@ const ENTITY_TYPE_ICONS = {
     organization: 'database',
 };
 const SEARCH_MODES = ['text', 'semantic', 'hybrid'];
+const ACTIVE_ANALYZE_TASK_STATUSES = new Set(['pending', 'running']);
+const ANALYZE_TASKS_POLL_MS = 2500;
 
 export class CRMDailyNotesPage extends PlatformPage {
     static i18nNamespace = 'crm';
@@ -134,14 +91,14 @@ export class CRMDailyNotesPage extends PlatformPage {
     static properties = {
         _query: { state: true },
         _searchMode: { state: true },
-        _dateFrom: { state: true },
-        _dateTo: { state: true },
         _isMobile: { state: true },
         _summaryOpen: { state: true },
         _voiceState: { state: true },
         _noteEntitiesByNoteId: { state: true },
+        _analyzeTasksByNoteId: { state: true },
         _searchResults: { state: true },
         _searchLoading: { state: true },
+        _creatingNote: { state: true },
     };
 
     static styles = [
@@ -292,6 +249,12 @@ export class CRMDailyNotesPage extends PlatformPage {
                 white-space: nowrap;
             }
             .cta-btn:hover { background: var(--crm-daily-notes-cta-hover); }
+            .cta-btn:disabled { opacity: 0.7; cursor: not-allowed; }
+            .cta-btn-content {
+                display: inline-flex;
+                align-items: center;
+                gap: var(--space-2);
+            }
 
             .voice-btn {
                 min-height: 44px;
@@ -417,6 +380,41 @@ export class CRMDailyNotesPage extends PlatformPage {
                 line-height: 20px;
                 overflow-wrap: anywhere;
             }
+            .note-analysis-progress {
+                margin-top: 2px;
+                display: flex;
+                flex-direction: column;
+                gap: 6px;
+            }
+            .note-analysis-progress-head {
+                display: flex;
+                align-items: center;
+                justify-content: space-between;
+                gap: var(--space-2);
+            }
+            .note-analysis-progress-stage {
+                font-size: var(--text-xs);
+                color: var(--text-secondary);
+            }
+            .note-analysis-progress-pct {
+                font-size: var(--text-xs);
+                color: var(--text-tertiary);
+                font-weight: var(--font-medium);
+            }
+            .note-analysis-progress-line {
+                width: 100%;
+                height: 5px;
+                border-radius: var(--radius-full);
+                border: 1px solid var(--glass-border-subtle);
+                background: var(--glass-solid-subtle);
+                overflow: hidden;
+            }
+            .note-analysis-progress-line > span {
+                display: block;
+                height: 100%;
+                background: var(--accent);
+                transition: width var(--duration-fast);
+            }
 
             .note-footer {
                 display: flex;
@@ -425,27 +423,6 @@ export class CRMDailyNotesPage extends PlatformPage {
                 gap: 16px;
                 margin-top: auto;
             }
-
-            .author {
-                display: inline-flex;
-                align-items: center;
-                gap: 4px;
-                color: var(--text-primary);
-                font-size: 12px;
-            }
-            .author-avatar {
-                width: 32px;
-                height: 32px;
-                border-radius: 999px;
-                overflow: hidden;
-                display: inline-flex;
-                align-items: center;
-                justify-content: center;
-                background: var(--accent-gradient);
-                flex-shrink: 0;
-            }
-            .author-avatar img { width: 100%; height: 100%; object-fit: cover; }
-            .author-avatar-fallback { color: var(--text-inverse); font-size: 12px; font-weight: 600; }
 
             .note-footer-right {
                 display: inline-flex;
@@ -710,17 +687,17 @@ export class CRMDailyNotesPage extends PlatformPage {
 
     constructor() {
         super();
-        const range = _readPersistedRange();
-        this._dateFrom = range.from;
-        this._dateTo = range.to;
+        this._dailyNotesUi = this.useSlice('crm/daily_notes_ui');
         this._query = '';
         this._searchMode = 'hybrid';
         this._summaryOpen = false;
         this._voiceState = 'idle';
         this._voiceMode = 'note';
         this._noteEntitiesByNoteId = {};
+        this._analyzeTasksByNoteId = {};
         this._searchResults = [];
         this._searchLoading = false;
+        this._creatingNote = false;
         this._isMobile = typeof window !== 'undefined' && window.innerWidth <= 767;
 
         this._notes = this.useCursorList('crm/notes_list');
@@ -732,8 +709,8 @@ export class CRMDailyNotesPage extends PlatformPage {
         this._voice = this.useOp('crm/note_voice_input');
         this._analyze = this.useOp('crm/note_analyze_start');
         this._cardsBulk = this.useOp('crm/entity_cards_bulk');
+        this._tasks = this.useResource('crm/tasks');
 
-        this._authSel = this.select((s) => s.auth.user);
         this._namespaceSelectionSel = this.select((s) => {
             const user = s.auth.user;
             if (!user || typeof user.company_id !== 'string') return 'all';
@@ -750,6 +727,7 @@ export class CRMDailyNotesPage extends PlatformPage {
         this._mediaRecorder = null;
         this._audioChunks = [];
         this._lastSearchRequestId = null;
+        this._analyzeTasksPollTimer = null;
     }
 
     connectedCallback() {
@@ -766,7 +744,8 @@ export class CRMDailyNotesPage extends PlatformPage {
             this._reloadSummary();
         });
         this.useEvent('crm/note/updated', (event) => this._onNoteWsUpdate(event.payload));
-        this.useEvent('crm/daily_summary/updated', (event) => this._onSummaryWsUpdate(event.payload));
+        this.useEvent('crm/daily_summary/updated', (event) => this._onSummaryWsUpdate(event.payload, false));
+        this.useEvent('crm/period_summary/updated', (event) => this._onSummaryWsUpdate(event.payload, true));
 
         this.useEvent('crm/note_search/succeeded', (event) => {
             if (event.meta && event.meta.causation_id !== this._lastSearchRequestId) return;
@@ -779,6 +758,15 @@ export class CRMDailyNotesPage extends PlatformPage {
         this.useEvent('crm/note_search/failed', () => { this._searchLoading = false; });
 
         this.useEvent('crm/note_voice_input/succeeded', (event) => this._onVoiceTranscribed(event.payload.result));
+        this.useEvent(this._tasks.resource.events.LIST_LOADED, () => {
+            this._rebuildAnalyzeTaskMap();
+            this._syncAnalyzeTasksPolling();
+        });
+        this.useEvent(this._analyze.op.events.SUCCEEDED, () => {
+            this._loadAnalyzeTasks();
+            this._syncAnalyzeTasksPolling();
+        });
+        this.useEvent(this._analyze.op.events.FAILED, () => this._syncAnalyzeTasksPolling());
 
         this.useEvent('crm/notes_list/loaded', (event) => {
             const items = event.payload && Array.isArray(event.payload.items) ? event.payload.items : [];
@@ -789,6 +777,7 @@ export class CRMDailyNotesPage extends PlatformPage {
 
         this._reloadNotes();
         this._reloadSummary();
+        this._loadAnalyzeTasks();
     }
 
     disconnectedCallback() {
@@ -802,6 +791,8 @@ export class CRMDailyNotesPage extends PlatformPage {
         if (this._mediaRecorder && this._mediaRecorder.state === 'recording') {
             this._mediaRecorder.stop();
         }
+        this._stopAnalyzeTasksPolling();
+        this._creatingNote = false;
         super.disconnectedCallback();
     }
 
@@ -810,25 +801,85 @@ export class CRMDailyNotesPage extends PlatformPage {
         return selection === 'all' ? null : selection;
     }
 
-    _isPeriod() { return this._dateFrom !== this._dateTo; }
+    _isPeriod() { return this._dailyNotesUi.value.range.from !== this._dailyNotesUi.value.range.to; }
 
     _reloadNotes() {
         const filters = {
-            date_from: this._dateFrom,
-            date_to: this._dateTo,
+            date_from: this._dailyNotesUi.value.range.from,
+            date_to: this._dailyNotesUi.value.range.to,
         };
         const ns = this._currentNamespace();
         if (typeof ns === 'string' && ns.length > 0) filters.namespace = ns;
         this._noteEntitiesByNoteId = {};
         this._notes.load(filters);
+        this._loadAnalyzeTasks();
+    }
+
+    _loadAnalyzeTasks() {
+        const payload = {
+            limit: 200,
+            offset: 0,
+            task_type: 'note_analyze',
+        };
+        const ns = this._currentNamespace();
+        if (typeof ns === 'string' && ns.length > 0) {
+            payload.namespace = ns;
+        }
+        this._tasks.load(payload);
+    }
+
+    _rebuildAnalyzeTaskMap() {
+        const byNoteId = {};
+        const items = this._tasks.items;
+        for (const task of items) {
+            if (!ACTIVE_ANALYZE_TASK_STATUSES.has(task.status)) {
+                continue;
+            }
+            const data = task && typeof task.data === 'object' && task.data !== null ? task.data : null;
+            const noteId = data && typeof data.note_id === 'string' ? data.note_id : '';
+            if (noteId.length === 0) {
+                continue;
+            }
+            byNoteId[noteId] = task;
+        }
+        this._analyzeTasksByNoteId = byNoteId;
+    }
+
+    _hasActiveAnalyzeTasks() {
+        return Object.keys(this._analyzeTasksByNoteId).length > 0 || this._analyze.busy;
+    }
+
+    _syncAnalyzeTasksPolling() {
+        if (this._hasActiveAnalyzeTasks()) {
+            this._startAnalyzeTasksPolling();
+            return;
+        }
+        this._stopAnalyzeTasksPolling();
+    }
+
+    _startAnalyzeTasksPolling() {
+        if (this._analyzeTasksPollTimer !== null) {
+            return;
+        }
+        this._analyzeTasksPollTimer = window.setInterval(() => {
+            this._loadAnalyzeTasks();
+        }, ANALYZE_TASKS_POLL_MS);
+    }
+
+    _stopAnalyzeTasksPolling() {
+        if (this._analyzeTasksPollTimer === null) {
+            return;
+        }
+        window.clearInterval(this._analyzeTasksPollTimer);
+        this._analyzeTasksPollTimer = null;
     }
 
     _reloadSummary(options) {
         const force_rebuild = options && options.force_rebuild === true;
         const ns = this._currentNamespace();
         const payload = this._isPeriod()
-            ? { date_from: this._dateFrom, date_to: this._dateTo, namespace: ns, force_rebuild }
-            : { date: this._dateFrom, namespace: ns, force_rebuild };
+            ? { date_from: this._dailyNotesUi.value.range.from, date_to: this._dailyNotesUi.value.range.to, namespace: ns, force_rebuild }
+            : { date: this._dailyNotesUi.value.range.from, namespace: ns, force_rebuild };
         if (this._isPeriod()) {
             this._periodSummary.run(payload);
         } else {
@@ -836,19 +887,18 @@ export class CRMDailyNotesPage extends PlatformPage {
         }
     }
 
-    _onSummaryWsUpdate(payload) {
+    _onSummaryWsUpdate(payload, periodEvent) {
         if (!payload || typeof payload !== 'object') return;
         const ns = this._currentNamespace();
         const payloadNs = payload.namespace === null || payload.namespace === undefined
             ? null
             : (typeof payload.namespace === 'string' && payload.namespace.length > 0 ? payload.namespace : null);
         if (ns !== payloadNs) return;
-        const st = payload.summary_state;
+        const st = payload.state;
         if (!st || typeof st !== 'object') return;
-        const isPeriod = st.period === true;
-        if (isPeriod) {
+        if (periodEvent === true) {
             if (!this._isPeriod()) return;
-            if (st.date_to !== this._dateTo || st.date_from < this._dateFrom) return;
+            if (payload.date_from !== this._dailyNotesUi.value.range.from || payload.date_to !== this._dailyNotesUi.value.range.to) return;
             this._periodSummary.applyWsPatch({
                 summary: typeof st.summary === 'string' ? st.summary : '',
                 entities: Array.isArray(st.entities) ? st.entities : [],
@@ -858,7 +908,7 @@ export class CRMDailyNotesPage extends PlatformPage {
             return;
         }
         if (this._isPeriod()) return;
-        if (payload.date !== this._dateFrom) return;
+        if (payload.date !== this._dailyNotesUi.value.range.from) return;
         this._dailySummary.applyWsPatch({
             summary: typeof st.summary === 'string' ? st.summary : '',
             entities: Array.isArray(st.entities) ? st.entities : [],
@@ -876,12 +926,13 @@ export class CRMDailyNotesPage extends PlatformPage {
             : (typeof payload.namespace === 'string' && payload.namespace.length > 0 ? payload.namespace : null);
         if (ns !== payloadNs) return;
         if (typeof payload.note_date !== 'string') return;
-        if (payload.note_date < this._dateFrom || payload.note_date > this._dateTo) return;
+        if (payload.note_date < this._dailyNotesUi.value.range.from || payload.note_date > this._dailyNotesUi.value.range.to) return;
         const next = { ...this._noteEntitiesByNoteId };
         delete next[payload.note_id.trim()];
         this._noteEntitiesByNoteId = next;
         this._reloadNotes();
         this._reloadSummary();
+        this._loadAnalyzeTasks();
     }
 
     _onSearchInput(event) {
@@ -921,19 +972,18 @@ export class CRMDailyNotesPage extends PlatformPage {
             || typeof v.start !== 'string' || typeof v.end !== 'string'
             || !/^\d{4}-\d{2}-\d{2}$/.test(v.start)
             || !/^\d{4}-\d{2}-\d{2}$/.test(v.end)) {
-            const fallback = _defaultRange();
-            this._dateFrom = fallback.from;
-            this._dateTo = fallback.to;
-        } else {
-            this._dateFrom = v.start;
-            this._dateTo = v.end;
+            throw new Error('platform-date-picker returned invalid range value');
         }
-        _persistRange({ from: this._dateFrom, to: this._dateTo });
+        this._dailyNotesUi.setRange({ from: v.start, to: v.end });
         this._reloadNotes();
         this._reloadSummary();
     }
 
     _onCreateNote() {
+        if (this._creatingNote) {
+            return;
+        }
+        this._creatingNote = true;
         this.navigate('note', { itemId: 'new' });
     }
 
@@ -1014,6 +1064,8 @@ export class CRMDailyNotesPage extends PlatformPage {
             return;
         }
         this._analyze.run({ note_id: note.entity_id });
+        this._loadAnalyzeTasks();
+        this._syncAnalyzeTasksPolling();
         this.openModal('crm.ai_analysis', { noteId: note.entity_id });
     }
 
@@ -1076,9 +1128,23 @@ export class CRMDailyNotesPage extends PlatformPage {
     }
 
     _isAnalyzingNote(note) {
-        return this._analyze.busy
+        if (!note || typeof note.entity_id !== 'string') {
+            return false;
+        }
+        if (this._analyze.busy
             && this._analyze.lastResult
-            && this._analyze.lastResult.note_id === note.entity_id;
+            && this._analyze.lastResult.note_id === note.entity_id) {
+            return true;
+        }
+        return this._analyzeTaskForNote(note.entity_id) !== null;
+    }
+
+    _analyzeTaskForNote(noteId) {
+        if (typeof noteId !== 'string' || noteId.length === 0) {
+            return null;
+        }
+        const task = this._analyzeTasksByNoteId[noteId];
+        return task === undefined ? null : task;
     }
 
     _filteredNotes() {
@@ -1125,7 +1191,7 @@ export class CRMDailyNotesPage extends PlatformPage {
 
     _summaryPanelTitle() {
         if (this._isPeriod()) {
-            return this.t('daily_notes_page.summary_panel_title_period', { from: this._dateFrom, to: this._dateTo });
+            return this.t('daily_notes_page.summary_panel_title_period', { from: this._dailyNotesUi.value.range.from, to: this._dailyNotesUi.value.range.to });
         }
         return this.t('daily_notes_page.summary_panel_title_daily');
     }
@@ -1186,6 +1252,17 @@ export class CRMDailyNotesPage extends PlatformPage {
             && typeof attrs.ai_summary === 'string' && attrs.ai_summary.trim().length > 0) {
             return this._truncate(attrs.ai_summary, 260);
         }
+        if (attrs && typeof attrs === 'object'
+            && typeof attrs.ai_summary_snippet === 'string' && attrs.ai_summary_snippet.trim().length > 0) {
+            return this._truncate(attrs.ai_summary_snippet, 260);
+        }
+        if (attrs && typeof attrs === 'object'
+            && attrs.ai_analysis_draft && typeof attrs.ai_analysis_draft === 'object'
+            && attrs.ai_analysis_draft.note && typeof attrs.ai_analysis_draft.note === 'object'
+            && typeof attrs.ai_analysis_draft.note.description === 'string'
+            && attrs.ai_analysis_draft.note.description.trim().length > 0) {
+            return this._truncate(attrs.ai_analysis_draft.note.description, 260);
+        }
         const desc = typeof note.description === 'string' && note.description.trim().length > 0
             ? note.description
             : this.t('note_content.no_description');
@@ -1202,35 +1279,6 @@ export class CRMDailyNotesPage extends PlatformPage {
         const d = new Date(dateString);
         if (Number.isNaN(d.getTime())) return '';
         return _formatHHMM(d);
-    }
-
-    _getAuthorName(note) {
-        const attrs = note && note.attributes;
-        if (attrs && typeof attrs.author_name === 'string' && attrs.author_name.trim().length > 0) {
-            return attrs.author_name;
-        }
-        const user = this._authSel.value;
-        if (user && note.user_id === user.user_id && typeof user.name === 'string' && user.name.trim().length > 0) {
-            return user.name;
-        }
-        return this.t('entity_card.requester_fallback');
-    }
-
-    _getAuthorAvatar(note) {
-        const attrs = note && note.attributes;
-        if (attrs) {
-            if (typeof attrs.author_avatar_url === 'string' && attrs.author_avatar_url.trim().length > 0) {
-                return attrs.author_avatar_url;
-            }
-            if (typeof attrs.avatar_url === 'string' && attrs.avatar_url.trim().length > 0) {
-                return attrs.avatar_url;
-            }
-        }
-        const user = this._authSel.value;
-        if (user && note.user_id === user.user_id && typeof user.avatar_url === 'string' && user.avatar_url.trim().length > 0) {
-            return user.avatar_url;
-        }
-        return '';
     }
 
     _openNote(note) {
@@ -1308,11 +1356,18 @@ export class CRMDailyNotesPage extends PlatformPage {
             ? this._noteEntitiesByNoteId[note.entity_id]
             : [];
         const isAnalyzing = this._isAnalyzingNote(note);
+        const analyzeTask = this._analyzeTaskForNote(note.entity_id);
+        const progressPctRaw = analyzeTask && typeof analyzeTask.progress_pct === 'number'
+            ? analyzeTask.progress_pct
+            : 0;
+        const progressPct = Math.max(0, Math.min(100, progressPctRaw));
+        const progressStage = analyzeTask && typeof analyzeTask.stage === 'string' && analyzeTask.stage.length > 0
+            ? analyzeTask.stage
+            : this.t('daily_notes_page.analysis_stage_fallback');
         const draft = this._hasAnalysisDraft(note);
         const applied = this._hasAnalysisApplied(note);
         const needsAi = this._noteNeedsAi(note);
-        const author = this._getAuthorName(note);
-        const avatar = this._getAuthorAvatar(note);
+        const authorId = typeof note.user_id === 'string' && note.user_id.length > 0 ? note.user_id : '';
         const updated = typeof note.updated_at === 'string' && note.updated_at.length > 0 ? note.updated_at : note.created_at;
         const time = typeof updated === 'string' && updated.length > 0 ? this._formatTime(updated) : '';
         return html`
@@ -1341,15 +1396,21 @@ export class CRMDailyNotesPage extends PlatformPage {
                 ` : ''}
                 <h3 class="note-title">${note.name}</h3>
                 <p class="note-text">${this._notePreview(note)}</p>
+                ${isAnalyzing ? html`
+                    <div class="note-analysis-progress">
+                        <div class="note-analysis-progress-head">
+                            <span class="note-analysis-progress-stage">${progressStage}</span>
+                            <span class="note-analysis-progress-pct">${progressPct}%</span>
+                        </div>
+                        <div class="note-analysis-progress-line">
+                            <span style="width:${progressPct}%;"></span>
+                        </div>
+                    </div>
+                ` : ''}
                 <div class="note-footer">
-                    <span class="author">
-                        <span class="author-avatar">
-                            ${avatar.length > 0
-                                ? html`<img src=${avatar} alt=${author} />`
-                                : html`<span class="author-avatar-fallback">${_initials(author)}</span>`}
-                        </span>
-                        ${author}
-                    </span>
+                    ${authorId.length > 0
+                        ? html`<platform-user-chip user-id=${authorId} size="sm" @click=${(e) => e.stopPropagation()}></platform-user-chip>`
+                        : html`<span></span>`}
                     <div class="note-footer-right">
                         <span class="published-at">${time}</span>
                         <button
@@ -1421,7 +1482,7 @@ export class CRMDailyNotesPage extends PlatformPage {
                         class="date-input"
                         labeled
                         selection="range"
-                        .value=${{ start: this._dateFrom, end: this._dateTo }}
+                        .value=${{ start: this._dailyNotesUi.value.range.from, end: this._dailyNotesUi.value.range.to }}
                         @date-change=${this._onDateRangeChange}
                     ></platform-date-picker>
                     <button
@@ -1433,8 +1494,15 @@ export class CRMDailyNotesPage extends PlatformPage {
                     >
                         <platform-icon name="microphone" size="18"></platform-icon>
                     </button>
-                    <button class="cta-btn" type="button" @click=${this._onCreateNote}>
-                        ${this.t('daily_notes_page.add_note')}
+                    <button class="cta-btn" type="button" ?disabled=${this._creatingNote} @click=${this._onCreateNote}>
+                        <span class="cta-btn-content">
+                            ${this._creatingNote
+                                ? html`<glass-spinner size="16"></glass-spinner>`
+                                : ''}
+                            ${this._creatingNote
+                                ? this.t('daily_notes_page.add_note_creating')
+                                : this.t('daily_notes_page.add_note')}
+                        </span>
                     </button>
                 </div>
             </div>

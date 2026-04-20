@@ -43,6 +43,8 @@ const EMPTY_CHANNEL_DATA = Object.freeze({
     items: Object.freeze([]),
     pendingByLocalId: Object.freeze({}),
     loading: false,
+    loadingOlder: false,
+    loadingNewer: false,
     error: null,
     pagination: Object.freeze({
         hasOlder: false,
@@ -89,6 +91,8 @@ export const messagesResource = createAsyncOp({
         replyToMessageId: null,
         editMessageId: null,
         contextMenuTarget: null,
+        flashMessageId: null,
+        flashSeq: 0,
     },
     extraEvents: {
         SEND_REQUESTED: 'send_requested',
@@ -114,6 +118,12 @@ export const messagesResource = createAsyncOp({
         CONTEXT_MENU_DISMISSED: 'context_menu_dismissed',
         OPTIMISTIC_ADDED: 'optimistic_added',
         OPTIMISTIC_FAILED: 'optimistic_failed',
+        FLASH_REQUESTED: 'flash_requested',
+        FLASH_CLEARED: 'flash_cleared',
+        HISTORY_OLDER_STARTED: 'history_older_started',
+        HISTORY_NEWER_STARTED: 'history_newer_started',
+        HISTORY_OLDER_LOADED: 'history_older_loaded',
+        HISTORY_NEWER_LOADED: 'history_newer_loaded',
     },
     actions: {
         send: 'send_requested',
@@ -130,6 +140,8 @@ export const messagesResource = createAsyncOp({
         setEditMode: 'edit_mode_set',
         showContextMenu: 'context_menu_requested',
         dismissContextMenu: 'context_menu_dismissed',
+        flash: 'flash_requested',
+        clearFlash: 'flash_cleared',
     },
     extraReducer: (state, event) => {
         const updateChannel = (channelId, updater) => {
@@ -150,10 +162,71 @@ export const messagesResource = createAsyncOp({
                 const firstItem = result.items[0];
                 const channelId = firstItem && typeof firstItem.channel_id === 'string' ? firstItem.channel_id : '';
                 if (channelId === '') return state;
+                const items = _normalizeMessages(result.items);
+                const hasOlder = typeof result.has_older === 'boolean' ? result.has_older : false;
+                const hasNewer = typeof result.has_newer === 'boolean' ? result.has_newer : false;
+                const oldestCursor = typeof result.oldest_cursor === 'string' ? result.oldest_cursor : null;
+                const newestCursor = typeof result.newest_cursor === 'string' ? result.newest_cursor : null;
                 return updateChannel(channelId, (cur) => ({
                     ...cur,
-                    items: Object.freeze(_normalizeMessages(result.items)),
+                    items: Object.freeze(items),
+                    pagination: Object.freeze({
+                        hasOlder,
+                        oldestCursor,
+                        hasNewer,
+                        newestCursor,
+                    }),
                 }));
+            }
+            case 'sync/messages/history_older_loaded': {
+                const p = event.payload;
+                if (!p || typeof p.channelId !== 'string' || p.channelId === '') return state;
+                if (!Array.isArray(p.items)) return state;
+                const newItems = _normalizeMessages(p.items);
+                return updateChannel(p.channelId, (cur) => {
+                    const seen = new Set(cur.items.map((x) => x.message_id));
+                    const merged = [...newItems.filter((x) => !seen.has(x.message_id)), ...cur.items];
+                    return {
+                        ...cur,
+                        items: Object.freeze(merged),
+                        loadingOlder: false,
+                        pagination: Object.freeze({
+                            ...cur.pagination,
+                            hasOlder: typeof p.hasOlder === 'boolean' ? p.hasOlder : cur.pagination.hasOlder,
+                            oldestCursor: typeof p.oldestCursor === 'string' ? p.oldestCursor : cur.pagination.oldestCursor,
+                        }),
+                    };
+                });
+            }
+            case 'sync/messages/history_newer_loaded': {
+                const p = event.payload;
+                if (!p || typeof p.channelId !== 'string' || p.channelId === '') return state;
+                if (!Array.isArray(p.items)) return state;
+                const newItems = _normalizeMessages(p.items);
+                return updateChannel(p.channelId, (cur) => {
+                    const seen = new Set(cur.items.map((x) => x.message_id));
+                    const merged = [...cur.items, ...newItems.filter((x) => !seen.has(x.message_id))];
+                    return {
+                        ...cur,
+                        items: Object.freeze(merged),
+                        loadingNewer: false,
+                        pagination: Object.freeze({
+                            ...cur.pagination,
+                            hasNewer: typeof p.hasNewer === 'boolean' ? p.hasNewer : cur.pagination.hasNewer,
+                            newestCursor: typeof p.newestCursor === 'string' ? p.newestCursor : cur.pagination.newestCursor,
+                        }),
+                    };
+                });
+            }
+            case 'sync/messages/history_older_started': {
+                const p = event.payload;
+                if (!p || typeof p.channelId !== 'string' || p.channelId === '') return state;
+                return updateChannel(p.channelId, (cur) => ({ ...cur, loadingOlder: true }));
+            }
+            case 'sync/messages/history_newer_started': {
+                const p = event.payload;
+                if (!p || typeof p.channelId !== 'string' || p.channelId === '') return state;
+                return updateChannel(p.channelId, (cur) => ({ ...cur, loadingNewer: true }));
             }
             case 'sync/message/created': {
                 const m = _normalizeMessage(event.payload);
@@ -255,6 +328,13 @@ export const messagesResource = createAsyncOp({
                     }),
                 }));
             }
+            case 'sync/messages/flash_requested': {
+                const p = event.payload;
+                if (!p || typeof p.messageId !== 'string' || p.messageId === '') return state;
+                return { ...state, flashMessageId: p.messageId, flashSeq: state.flashSeq + 1 };
+            }
+            case 'sync/messages/flash_cleared':
+                return { ...state, flashMessageId: null };
             case 'sync/messages/optimistic_failed': {
                 const p = event.payload;
                 if (!p || typeof p.channelId !== 'string' || typeof p.localId !== 'string') return state;
@@ -278,6 +358,32 @@ export const messagesResource = createAsyncOp({
                 return state;
         }
     },
+});
+
+/**
+ * Двусторонняя пагинация: отдельные ops с уникальным `name` (и slice),
+ * но с тем же canonical `commandType` (`sync/messages/list_requested`).
+ *
+ * Reducer `messagesResource` не читает их `succeeded` — компоненты после
+ * успеха явно диспатчат `HISTORY_OLDER_LOADED` / `HISTORY_NEWER_LOADED`
+ * с уже распакованным `result.items`.
+ */
+export const messagesLoadOlderOp = createAsyncOp({
+    name: 'sync/messages_load_older',
+    transport: 'ws',
+    wsTimeoutMs: 10_000,
+    silent: true,
+    commandType: 'sync/messages/list_requested',
+    restMirror: { method: 'GET', path: '/sync/api/v1/channels/:channel_id/messages' },
+});
+
+export const messagesLoadNewerOp = createAsyncOp({
+    name: 'sync/messages_load_newer',
+    transport: 'ws',
+    wsTimeoutMs: 10_000,
+    silent: true,
+    commandType: 'sync/messages/list_requested',
+    restMirror: { method: 'GET', path: '/sync/api/v1/channels/:channel_id/messages' },
 });
 
 export { _getChannelData, _emptyChannelData };

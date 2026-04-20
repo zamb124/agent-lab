@@ -104,8 +104,10 @@ class TestNoteAnalyzeDedup:
             json={"note_id": note_id},
             headers=auth_headers_system,
         )
-        assert resp.status_code == 400, resp.text
-        assert "уже выполняется" in resp.json().get("detail", "")
+        assert resp.status_code == 409, resp.text
+        detail = resp.json()["detail"]
+        assert detail["code"] == "active_task_exists"
+        assert detail["task_type"] == "note_analyze"
 
     @pytest.mark.asyncio
     async def test_pending_task_blocks_new_analyze(
@@ -143,8 +145,10 @@ class TestNoteAnalyzeDedup:
             json={"note_id": note_id},
             headers=auth_headers_system,
         )
-        assert resp.status_code == 400, resp.text
-        assert "уже выполняется" in resp.json().get("detail", "")
+        assert resp.status_code == 409, resp.text
+        detail = resp.json()["detail"]
+        assert detail["code"] == "active_task_exists"
+        assert detail["task_type"] == "note_analyze"
 
     @pytest.mark.asyncio
     async def test_completed_task_allows_new_analyze(
@@ -253,8 +257,10 @@ class TestKnowledgeImportDedup:
             json={"namespace": ns, "mode": "notes_only", "source_text": "hello world"},
             headers=auth_headers_system,
         )
-        assert resp.status_code == 400, resp.text
-        assert "уже выполняется" in resp.json().get("detail", "")
+        assert resp.status_code == 409, resp.text
+        detail = resp.json()["detail"]
+        assert detail["code"] == "active_task_exists"
+        assert detail["task_type"] == "knowledge_import"
 
     @pytest.mark.asyncio
     async def test_completed_import_allows_new(
@@ -284,7 +290,7 @@ class TestKnowledgeImportDedup:
             json={"namespace": ns, "mode": "notes_only", "source_text": "hello world"},
             headers=auth_headers_system,
         )
-        assert resp.status_code != 400 or "уже выполняется" not in resp.json().get("detail", "")
+        assert resp.status_code != 409, resp.text
 
 
 # ─── Дедупликация: daily_summary ─────────────────────────────────────────────
@@ -319,8 +325,10 @@ class TestDailySummaryDedup:
             json={"namespace": ns, "date_str": date_str},
             headers=auth_headers_system,
         )
-        assert resp.status_code == 400, resp.text
-        assert "уже выполняется" in resp.json().get("detail", "")
+        assert resp.status_code == 409, resp.text
+        detail = resp.json()["detail"]
+        assert detail["code"] == "active_task_exists"
+        assert detail["task_type"] == "daily_summary"
 
     @pytest.mark.asyncio
     async def test_running_daily_summary_different_date_does_not_block(

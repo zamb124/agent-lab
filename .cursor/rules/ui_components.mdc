@@ -138,7 +138,7 @@ this.openModal(SomeModal, { entityId: '...' });
 ### Запреты
 
 - `extends LitElement` или `extends PlatformElement` для модалок — только
-  `PlatformModal` / `PlatformFormModal` / `PlatformLightModal`.
+  `PlatformModal` / `PlatformFormModal` (исключение — sync.call_incoming как overlay-баннер на PlatformElement).
 - `document.createElement('*-modal')`, `document.body.appendChild(modalEl)`.
 - `modal.open = true` / `this.open = false`.
 - Слушатели `CustomEvent('open-modal' / 'close')` для открытия/закрытия —

@@ -17,6 +17,7 @@
 import { html, css } from 'lit';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
 import '../editors/flows-tag-input.js';
+import { asString } from '../../_helpers/flows-resolvers.js';
 
 export class FlowsBaseResourceEditor extends PlatformElement {
     static properties = {
@@ -103,7 +104,14 @@ export class FlowsBaseResourceEditor extends PlatformElement {
         const name = typeof this.resource.name === 'string' ? this.resource.name : this.resourceId;
         const description = typeof this.resource.description === 'string' ? this.resource.description : '';
         const tags = Array.isArray(this.resource.tags) ? this.resource.tags : [];
-        const type = this.resourceType || this.resource.type || '';
+        let type;
+        if (typeof this.resourceType === 'string' && this.resourceType.length > 0) {
+            type = this.resourceType;
+        } else if (this.resource && typeof this.resource.type === 'string') {
+            type = this.resource.type;
+        } else {
+            type = '';
+        }
         return html`
             <div class="header">
                 <div class="row">

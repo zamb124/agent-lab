@@ -50,42 +50,52 @@ alwaysApply: false
 ## Сигналинг
 
 ```
-Мутации (call.invite/accept/decline/hangup/recording.start/stop/admin.transfer):
+Мутации и read-операции звонков (call.invite/accept/decline/hangup/recording.start/stop/admin.transfer/get/recordings_list/token/turn/links_*/join_*):
   WS frame { request_id, type: 'sync/calls/<verb>_requested', payload }
-    → core.websocket.command_router → register_ws_command_handler в
-      apps/sync/realtime/command_router.SYNC_COMMAND_TYPE_MAP
-    → CommandEnvelope → handle_command.kiq (TaskIQ sync queue) →
-      apps/sync/realtime/handlers.execute_command (call_handlers внутри) →
-      БД sync_calls / sync_call_participants
+    → core.websocket.command_router → _make_ws_handler из
+      apps/sync/realtime/command_router.SYNC_OPERATIONS
+    → op_calls_<verb>(payload, *, user, container) в
+      apps/sync/realtime/operations.py (call_handlers внутри как helpers) →
+      БД sync_calls / sync_call_participants (in-process, без TaskIQ)
     → publish_realtime_events → core.ui_events.publish_ui_event_to_*
     → Redis platform:ui_events
     → core.websocket.manager форвардит target_user_ids → WS-сокеты
        /sync/api/ws/notifications
 
-call.signal (быстрый путь без TaskIQ):
-  WS frame sync/calls/signal_requested →
-    apps/sync/realtime/command_router._handle_call_signal →
+REST-зеркало (apps/sync/api/calls.py) собирает Pydantic-payload и зовёт ту же op_calls_<verb>.
+
+call.signal (быстрый путь):
+  WS frame sync/calls/signal_requested → op_calls_signal →
     publish_realtime_events напрямую → platform:ui_events → fanout per target_user_id
 
 Токен SFU:
-  GET /sync/api/v1/calls/{call_id}/token → LiveKitClient.generate_token()
-  Frontend фабрика sync/call_token (transport: 'http')
+  WS sync/calls/token_requested или REST GET /sync/api/v1/calls/{call_id}/token
+    → op_calls_token → LiveKitClient.generate_token()
+  Frontend фабрика sync/call_token (transport: 'ws', commandType: 'sync/calls/token_requested')
 ```
 
 ## WS Команды
 
-Канонические имена `sync/calls/<verb>_requested` зарегистрированы в `SYNC_COMMAND_TYPE_MAP`; UI-фабрики в `apps/sync/ui/events/resources/calls.resource.js` указывают их через `commandType` (имя фабрики `sync/calls_<verb>` для уникальности slice).
+Канонические имена `sync/calls/<verb>_requested` зарегистрированы в `SYNC_OPERATIONS` (`apps/sync/realtime/command_router.py`); UI-фабрики в `apps/sync/ui/events/resources/calls.resource.js` указывают их через `commandType` (имя фабрики `sync/calls_<verb>` для уникальности slice).
 
-| Канонический WS-тип | UI фабрика | Через TaskIQ | Описание |
+| Канонический WS-тип | UI фабрика | op_* | Описание |
 |---|---|---|---|
-| `sync/calls/invite_requested` | `callInviteOp` | да | Создаёт звонок, уведомляет участников канала |
-| `sync/calls/accept_requested` | `callAcceptOp` | да | Участник принимает |
-| `sync/calls/decline_requested` | `callDeclineOp` | да | Участник отклоняет |
-| `sync/calls/hangup_requested` | `callHangupOp` | да | Участник завершает |
-| `sync/calls/recording_start_requested` | `callRecordingStartOp` | да | Запуск LiveKit egress в S3 |
-| `sync/calls/recording_stop_requested` | `callRecordingStopOp` | да | Остановка egress по `provider_job_id` |
-| `sync/calls/admin_transfer_requested` | `callAdminTransferOp` | да | Передача админа встречи |
-| `sync/calls/signal_requested` | `callSignalOp` | **нет** | Быстрый путь сигналинга (offer/answer/ICE/SFU) |
+| `sync/calls/invite_requested` | `callInviteOp` | `op_calls_invite` | Создаёт звонок, уведомляет участников канала |
+| `sync/calls/accept_requested` | `callAcceptOp` | `op_calls_accept` | Участник принимает |
+| `sync/calls/decline_requested` | `callDeclineOp` | `op_calls_decline` | Участник отклоняет |
+| `sync/calls/hangup_requested` | `callHangupOp` | `op_calls_hangup` | Участник завершает |
+| `sync/calls/recording_start_requested` | `callRecordingStartOp` | `op_calls_recording_start` | Запуск LiveKit egress в S3 |
+| `sync/calls/recording_stop_requested` | `callRecordingStopOp` | `op_calls_recording_stop` | Остановка egress по `provider_job_id` |
+| `sync/calls/admin_transfer_requested` | `callAdminTransferOp` | `op_calls_admin_transfer` | Передача админа встречи |
+| `sync/calls/signal_requested` | `callSignalOp` | `op_calls_signal` | Быстрый путь сигналинга (offer/answer/ICE/SFU) |
+| `sync/calls/get_requested` | `callStatusOp` | `op_calls_get` | Статус звонка + участники |
+| `sync/calls/recordings_list_requested` | `callRecordingsListOp` | `op_calls_recordings_list` | Список записей звонка |
+| `sync/calls/token_requested` | `callTokenOp` | `op_calls_token` | LiveKit access token (SFU) |
+| `sync/calls/turn_credentials_requested` | `callTurnOp` | `op_calls_turn_credentials` | TURN HMAC-SHA1 credentials |
+| `sync/calls/links_{list,create,update,remove}_requested` | `callLinks*Op` | `op_calls_links_*` | Календарные ссылки на встречи |
+| `sync/calls/join_{info,accept}_requested` | `callJoin*Op` | `op_calls_join_*` | Гостевой вход по ссылке |
+
+Все операции идут in-process через `op_*`. TaskIQ остаётся ТОЛЬКО для transcribe-задач (`messages.transcribe_*` и `sync_finalize_recording_task`).
 
 REST-зеркала: `apps/sync/api/calls.py` — `POST /sync/api/v1/calls/{call_id}/{invite|accept|decline|hangup|recording/start|recording/stop|admin/transfer|signal}` с тем же payload.
 
@@ -197,13 +207,13 @@ Push `sync/call/ended` обрабатывается в reducer'е slice `sync/ca
 
 - `core/calls/` — переиспользуемая библиотека (LiveKit/turn).
 - `apps/sync/realtime/call_handlers.py` — бизнес-логика звонков (invite/accept/decline/hangup/recording/admin_transfer).
-- `apps/sync/realtime/command_router.py` — `_handle_call_signal` (быстрый путь без TaskIQ) + `SYNC_COMMAND_TYPE_MAP`.
+- `apps/sync/realtime/command_router.py` — `SYNC_OPERATIONS` реестр (включая `sync/calls/signal_requested` → `op_calls_signal`, fast-path без TaskIQ).
 - `apps/sync/api/calls.py` — REST + публичные эндпоинты гостевой ссылки.
 - `apps/sync/ui/events/resources/calls.resource.js` — фабрики (HTTP + WS ops с `commandType`, `createSlice('sync/call_ui')` для UI-state).
 - `apps/sync/ui/modals/sync-call-overlay-modal.js` — `PlatformModal` с LiveKit Room (бандл в `core/frontend/static/assets/js/livekit/`, `importmap` в `index.html`).
-- `apps/sync/ui/modals/sync-call-incoming-modal.js` — `PlatformLightModal` входящего звонка; auto-open через `useEvent('sync/call/incoming')` в `sync-app.js`.
+- `apps/sync/ui/modals/sync-call-incoming-modal.js` — `PlatformElement` (overlay-баннер) входящего звонка; auto-open через `useEvent('sync/call/incoming')` в `sync-app.js`.
 - `apps/sync/ui/pages/sync-call-join-page.js` — `PlatformPage`, маршрут `/sync/join/:linkToken`.
 - `tests/sync/unit/test_turn_credentials.py` — HMAC математика.
 - `tests/sync/db/test_call_repository.py` — CRUD реальная БД.
-- `tests/sync/realtime/test_call_handlers.py` — execute_command с реальным Redis и LiveKit.
+- `tests/sync/integration/test_op_calls_lifecycle.py` — invite/accept/hangup/recording через `op_calls_*` с реальным Redis и LiveKit.
 - `tests/sync/api/test_calls_api.py` — HTTP API.

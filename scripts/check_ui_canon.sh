@@ -71,9 +71,13 @@ if rg -q 'new CustomEvent\(' apps -g '*.js'; then
 fi
 
 # 6. Доступ к старым геттерам PlatformElement.
-if rg -q 'this\.(services|auth|notify|icon|theme|companies|calendarApi|filesApi|fileTypes|team|a2a|syncWs|syncApi|crmApi|ragApi)\b' apps -g '*.js'; then
-    fail "this.services / this.auth / this.icon / ... удалены — используйте dispatch/select"
-    rg 'this\.(services|auth|notify|icon|theme|companies|calendarApi|filesApi|fileTypes|team|a2a|syncWs|syncApi|crmApi|ragApi)\b' apps -g '*.js' >&2 || true
+#    `icon` удалён из списка: это — реактивное property Lit-компонентов
+#    (`<dashboard-stat-tile icon="..."/>`, `<sidebar-nav-item icon="..."/>`),
+#    а не IconService-геттер (его в платформе нет). Для иконок в компонентах
+#    используется `<platform-icon name="...">` в рендере.
+if rg -q 'this\.(services|auth|notify|theme|companies|calendarApi|filesApi|fileTypes|team|a2a|syncWs|syncApi|crmApi|ragApi)\b' apps -g '*.js'; then
+    fail "this.services / this.auth / this.theme / ... удалены — используйте dispatch/select"
+    rg 'this\.(services|auth|notify|theme|companies|calendarApi|filesApi|fileTypes|team|a2a|syncWs|syncApi|crmApi|ragApi)\b' apps -g '*.js' >&2 || true
 fi
 
 # 7. fetch / axios в компонентах — только в effects/.
@@ -132,10 +136,13 @@ if rg -q "new CustomEvent\(\s*['\"]navigate['\"]" "${LEGACY_GLOBS[@]}"; then
 fi
 
 # 11. Запрет старых геттеров в core/frontend/static/lib (кроме embed-chat — у него свой бутстрап).
+#     `icon` удалён из списка: reactive property Lit-компонентов
+#     (`<sidebar-nav-item icon="...">`, `<platform-panel icon="...">`), а не
+#     IconService (его нет).
 CORE_LIB_GLOBS=( core/frontend/static/lib -g '*.js' --glob '!core/frontend/static/lib/embed-chat/**' )
-if rg -q 'this\.(services|auth|notify|icon|theme|companies|calendarApi|filesApi|fileTypes|team|a2a|syncWs|syncApi|crmApi|ragApi)\b' "${CORE_LIB_GLOBS[@]}"; then
+if rg -q 'this\.(services|auth|notify|theme|companies|calendarApi|filesApi|fileTypes|team|a2a|syncWs|syncApi|crmApi|ragApi)\b' "${CORE_LIB_GLOBS[@]}"; then
     fail "this.services/this.calendarApi/... в core/lib — используйте dispatch(<SLICE_EVENTS>) и select"
-    rg -n 'this\.(services|auth|notify|icon|theme|companies|calendarApi|filesApi|fileTypes|team|a2a|syncWs|syncApi|crmApi|ragApi)\b' "${CORE_LIB_GLOBS[@]}" >&2 || true
+    rg -n 'this\.(services|auth|notify|theme|companies|calendarApi|filesApi|fileTypes|team|a2a|syncWs|syncApi|crmApi|ragApi)\b' "${CORE_LIB_GLOBS[@]}" >&2 || true
 fi
 
 # 12. Имена событий: this.dispatch('<scope>/<entity>/<verb>') — snake_case, >= 3 сегмента.
@@ -150,9 +157,17 @@ fi
 #     Canon: единственная точка входа — helpers PlatformElement (useResource/useOp/useForm/useCursorList/useFacets/useSlice,
 #     openModal/closeModal/toast/copyToClipboard/navigate). I18nNs не нужен — namespace резолвится через
 #     static i18nNamespace или PlatformApp.defaultI18nNamespace.
-FACTORY_CANON_SERVICES=( frontend crm rag sync office flows )
+FACTORY_CANON_SERVICES=( frontend crm rag sync office flows provider_litserve )
 for svc in "${FACTORY_CANON_SERVICES[@]}"; do
-    PG_GLOBS=( "apps/${svc}/ui/pages" "apps/${svc}/ui/modals" -g '*.js' )
+    # rg падает с error если ни одной из переданных директорий нет; игнорируем
+    # отсутствующие (например, у provider_litserve нет модалок).
+    PG_DIRS=()
+    [ -d "apps/${svc}/ui/pages" ] && PG_DIRS+=("apps/${svc}/ui/pages")
+    [ -d "apps/${svc}/ui/modals" ] && PG_DIRS+=("apps/${svc}/ui/modals")
+    if [ "${#PG_DIRS[@]}" -eq 0 ]; then
+        continue
+    fi
+    PG_GLOBS=( "${PG_DIRS[@]}" -g '*.js' )
 
     if rg -q "from ['\"]@platform/lib/events/controllers/" "${PG_GLOBS[@]}"; then
         fail "${svc}: pages/modals не импортируют контроллеры напрямую — используйте this.useResource/useOp/..."
@@ -209,6 +224,21 @@ fi
 if rg -q 'this\.i18n\.(getCurrentLocale|t)\s*\(' "${RUNTIME_ANTI_GLOBS[@]}"; then
     fail "this.i18n.* запрещено — используйте this.t(key) и this.select(s => s.i18n.locale)"
     rg -n 'this\.i18n\.(getCurrentLocale|t)\s*\(' "${RUNTIME_ANTI_GLOBS[@]}" >&2 || true
+fi
+
+# 15. Запрет фолбеков `|| [] / || {} / || null / || ''` в events/resources/**
+#     (zero-fallback канон фабрик; дефолты — только в initialSlice / extraInitial).
+RESOURCES_FALLBACK_PATTERN='\|\|\s*\[\]|\|\|\s*\{\}|\|\|\s*null\b|\|\|\s*['\''"]\s*['\''"]'
+if rg -q "${RESOURCES_FALLBACK_PATTERN}" apps -g '*.resource.js'; then
+    fail "фолбеки '|| [] / || {} / || null / ' в apps/**/events/resources/**.resource.js запрещены — нормализуйте через _normalize<X> или initialSlice"
+    rg -n "${RESOURCES_FALLBACK_PATTERN}" apps -g '*.resource.js' >&2 || true
+fi
+# Запрет `?? []` / `?? {}` / `?? null` / `?? '—'` в events/resources/** — та же
+# логика фолбеков, но через nullish coalescing.
+RESOURCES_NULLISH_PATTERN='\?\?\s*\[\]|\?\?\s*\{\}|\?\?\s*null\b|\?\?\s*['\''"]'
+if rg -q "${RESOURCES_NULLISH_PATTERN}" apps -g '*.resource.js'; then
+    fail "фолбеки '?? [] / ?? {} / ?? null / ?? \"\"' в apps/**/events/resources/**.resource.js запрещены"
+    rg -n "${RESOURCES_NULLISH_PATTERN}" apps -g '*.resource.js' >&2 || true
 fi
 
 if [ "$ERR" -ne 0 ]; then

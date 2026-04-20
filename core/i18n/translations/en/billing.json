@@ -1,165 +1,72 @@
 {
-  "title": "Tariffs and Payment",
-  "current_plan": {
-    "title": "Current Plan",
-    "company": "Company",
-    "balance": "Balance",
-    "monthly_limit": "Monthly Limit",
-    "no_limit": "No Limit"
-  },
-  "tariff_plans": {
-    "free": {
-      "name": "Free"
+    "title": "Tariffs and Payment",
+    "current_plan": {
+        "title": "Current Plan",
+        "balance": "Balance",
+        "monthly_limit": "Monthly Limit",
+        "no_limit": "No Limit"
     },
-    "basic": {
-      "name": "Basic"
+    "tariff_plans": {
+        "free": {
+            "name": "Free"
+        },
+        "basic": {
+            "name": "Basic"
+        },
+        "premium": {
+            "name": "Premium"
+        },
+        "enterprise": {
+            "name": "Enterprise"
+        }
     },
-    "premium": {
-      "name": "Premium"
+    "budget_usage": {
+        "spent_this_month": "Spent This Month",
+        "used": "used",
+        "billing_period": "Billing Period"
     },
-    "enterprise": {
-      "name": "Enterprise"
+    "usage_stats": {
+        "title": "Usage Statistics",
+        "total_calls": "Total Calls",
+        "total_cost": "Total Cost"
+    },
+    "resources": {
+        "title": "Resource Details",
+        "resource": "Resource",
+        "calls": "Calls",
+        "cost": "Cost",
+        "no_data": "Resource usage data not yet available"
+    },
+    "users": {
+        "title": "User Details",
+        "user": "User",
+        "calls": "Calls",
+        "cost": "Cost",
+        "no_data": "User data not yet available"
+    },
+    "payment_history": {
+        "title": "Payment History",
+        "empty_title": "Payment history is empty",
+        "empty_description": "Payments will appear here after balance replenishment"
+    },
+    "status": {
+        "success": "Success",
+        "pending": "Pending",
+        "failed": "Failed",
+        "cancelled": "Cancelled",
+        "refunded": "Refunded",
+        "error": "Error"
+    },
+    "history_table": {
+        "date": "Date",
+        "amount": "Amount",
+        "status": "Status",
+        "provider": "Provider"
+    },
+    "frontend_console": {
+        "page_title": "Billing",
+        "balance_available": "Available on account",
+        "top_up": "Top up balance",
+        "currency_rub": "RUB"
     }
-  },
-  "budget_usage": {
-    "title": "Budget Usage",
-    "add_funds": "Add Funds",
-    "spent_this_month": "Spent This Month",
-    "used": "used",
-    "billing_period": "Billing Period"
-  },
-  "usage_stats": {
-    "title": "Usage Statistics",
-    "total_calls": "Total Calls",
-    "total_cost": "Total Cost"
-  },
-  "resources": {
-    "title": "Resource Details",
-    "resource": "Resource",
-    "calls": "Calls",
-    "cost": "Cost",
-    "no_data": "Resource usage data not yet available"
-  },
-  "users": {
-    "title": "User Details",
-    "user": "User",
-    "calls": "Calls",
-    "cost": "Cost",
-    "no_data": "User data not yet available"
-  },
-  "payment_modal": {
-    "title": "Top Up Balance",
-    "coming_soon": "Payment functionality will be available in future versions.",
-    "integrations_info": "In the future, integration with payment systems (Stripe, YooKassa and others) will be here.",
-    "card_payment": "Bank Card Payment",
-    "secure_transaction": "Secure Transaction",
-    "auto_receipt": "Automatic Receipt Issuance"
-  },
-  "create_company": "Create Company",
-  "init_message": "Initializing Billing module",
-  "functions_registered": "Billing global functions registered",
-  "creating_payment": "Creating payment...",
-  "redirecting_to_payment": "Redirecting to payment...",
-  "payment_success_message": "Payment processed successfully! Balance will be updated within a minute.",
-  "payment_error_message": "Payment error. Please try again or choose another payment method.",
-  "module_unloaded": "Billing module unloaded",
-  "validation": {
-    "min_amount": "Minimum top-up amount: {amount}",
-    "max_amount": "Maximum top-up amount: {amount}"
-  },
-  "errors": {
-    "payment_creation": "Payment creation error",
-    "stats_update": "Error updating statistics",
-    "stats_refresh": "Statistics refresh error"
-  },
-  "payment_history": {
-    "title": "Payment History",
-    "empty_title": "Payment history is empty",
-    "empty_description": "Payments will appear here after balance replenishment"
-  },
-  "status": {
-    "success": "Success",
-    "pending": "Pending",
-    "failed": "Failed",
-    "cancelled": "Cancelled",
-    "refunded": "Refunded",
-    "error": "Error"
-  },
-  "history_table": {
-    "date": "Date",
-    "amount": "Amount",
-    "status": "Status",
-    "provider": "Provider"
-  },
-  "payment_methods": {
-    "yoomoney": "YooMoney",
-    "yookassa": "YooKassa"
-  },
-  "modal": {
-    "title": "Top up balance",
-    "amount_label": "Top-up amount",
-    "amount_placeholder": "Enter amount",
-    "amount_help": "Minimum: {min_amount}, Maximum: {max_amount}",
-    "card_payment": "Card payment via YooMoney",
-    "secure_transaction": "Secure transaction",
-    "instant_crediting": "Instant crediting",
-    "how_it_works": "How it works:",
-    "process_description": "After clicking the button, you will be redirected to the YooMoney page for secure payment. After successful payment, funds will be automatically credited to the company balance.",
-    "proceed_to_payment": "Proceed to payment"
-  },
-  "notifications": {
-    "balance_blocked_title": "Insufficient balance",
-    "balance_blocked_message": "The operation «{operation}» was not started: company «{company_name}» has a non-positive balance ({balance} RUB). Top up your balance in Billing.",
-    "balance_blocked_api_detail": "Insufficient funds: company {company_id}, balance {balance} RUB. Operation: {operation}.",
-    "blocked_operation": {
-      "llm": "Language model request",
-      "embedding": "Indexing (embeddings)",
-      "vision": "Image recognition (vision)",
-      "livekit_room": "Call room creation",
-      "livekit_egress": "Call recording or export (egress)"
-    }
-  },
-  "frontend_console": {
-    "loading": "Loading...",
-    "page_title": "Billing",
-    "balance_title": "Balance",
-    "balance_available": "Available on account",
-    "top_up": "Top up balance",
-    "plan_title": "Subscription plan",
-    "upgrade_pro": "Upgrade to Pro",
-    "budget_title": "Monthly limit",
-    "spent": "Spent",
-    "limit": "Limit",
-    "limit_not_set": "Not set",
-    "change_limit": "Change limit",
-    "set_limit": "Set limit",
-    "usage_title": "Usage statistics",
-    "total_spent": "Total spent",
-    "total_calls": "Total calls",
-    "resources_used": "Resources used",
-    "resource_calls": "{{count}} calls",
-    "currency_rub": "RUB",
-    "topup_success": "Balance topped up",
-    "upgrade_wip": "Plan change is coming soon",
-    "budget_wip": "Budget limit settings are coming soon",
-    "plan_FREE_description": "Free tier to get started",
-    "plan_FREE_f1": "100 requests per month",
-    "plan_FREE_f2": "Basic agents",
-    "plan_FREE_f3": "Community support",
-    "plan_BASIC_description": "For small projects",
-    "plan_BASIC_f1": "10,000 requests per month",
-    "plan_BASIC_f2": "All agent types",
-    "plan_BASIC_f3": "Email support",
-    "plan_BASIC_f4": "API access",
-    "plan_PREMIUM_description": "For professionals",
-    "plan_PREMIUM_f1": "100,000 requests per month",
-    "plan_PREMIUM_f2": "Priority support",
-    "plan_PREMIUM_f3": "Advanced analytics",
-    "plan_PREMIUM_f4": "Customization",
-    "plan_ENTERPRISE_description": "For large companies",
-    "plan_ENTERPRISE_f1": "Unlimited requests",
-    "plan_ENTERPRISE_f2": "24/7 support",
-    "plan_ENTERPRISE_f3": "SLA guarantees",
-    "plan_ENTERPRISE_f4": "Dedicated manager"
-  }
 }

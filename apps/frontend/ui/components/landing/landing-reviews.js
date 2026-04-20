@@ -205,7 +205,7 @@ export class LandingReviews extends PlatformElement {
     }
 
     _getReviews() {
-        const t = (key) => (this.t(key) || key);
+        const t = (key) => this.t(key);
         return [
             {
                 name: t('testimonials.slide1_name'),
@@ -259,7 +259,7 @@ export class LandingReviews extends PlatformElement {
         return html`
             <div class="reviews-container">
                 <h2 class="reviews-title">
-                    ${(this.t('testimonials.tag') || 'testimonials.tag')}
+                    ${this.t('testimonials.tag')}
                 </h2>
                 
                 <div class="review-card">

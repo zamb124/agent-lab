@@ -1,24 +1,33 @@
 {
-  "sidebar": {
-    "models": "Models"
-  },
-  "models": {
-    "title": "Humanitec Models",
-    "subtitle": "Manage local LitServe model registry",
-    "kind": "Kind",
-    "hf_model": "HF model id",
-    "api_model": "API model id",
-    "updated_at": "Updated",
-    "error": "Error",
-    "add": "Add",
-    "retry": "Retry",
-    "delete": "Delete",
-    "loading": "Loading models...",
-    "empty": "No models yet",
-    "hf_placeholder": "Example: Qwen/Qwen2.5-1.5B-Instruct",
-    "api_placeholder": "Example: qwen/qwen2.5-1.5b-instruct",
-    "add_success": "Model added",
-    "retry_success": "Retry started",
-    "delete_success": "Model deleted"
-  }
+    "sidebar": {
+        "title": "Humanitec Models",
+        "models": "Models"
+    },
+    "routes": {
+        "models": "Models"
+    },
+    "models": {
+        "title": "Model registry",
+        "subtitle": "Local LitServe models (LLM, embedding, rerank)",
+        "kind": "Kind",
+        "hf_model": "HuggingFace ID",
+        "api_model": "API ID",
+        "hf_placeholder": "e.g. BAAI/bge-m3",
+        "api_placeholder": "e.g. bge-m3",
+        "add": "Add",
+        "loading": "Loading models…",
+        "empty": "No registered models",
+        "updated_at": "Updated at",
+        "error": "Error",
+        "retry": "Retry",
+        "delete": "Delete"
+    },
+    "toast": {
+        "model_created": "Model queued for download",
+        "model_create_error": "Failed to add model",
+        "model_removed": "Model removed",
+        "model_remove_error": "Failed to remove model",
+        "model_retry_started": "Model download restarted",
+        "model_retry_error": "Failed to restart download"
+    }
 }

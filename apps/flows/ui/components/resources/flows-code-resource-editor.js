@@ -12,6 +12,7 @@ import './flows-base-resource-editor.js';
 import '../editors/flows-code-editor.js';
 import '@platform/lib/components/glass-button.js';
 import '@platform/lib/components/platform-icon.js';
+import { asString } from '../../_helpers/flows-resolvers.js';
 
 const LANGUAGES = Object.freeze(['python', 'javascript']);
 
@@ -83,7 +84,7 @@ export class FlowsCodeResourceEditor extends PlatformElement {
                         <flows-code-editor
                             language=${language}
                             .value=${code}
-                            @change=${(e) => this._emitConfig({ code: e.detail?.value || '' })}
+                            @change=${(e) => this._emitConfig({ code: asString(e.detail?.value) })}
                         ></flows-code-editor>
                     </div>
                 </div>

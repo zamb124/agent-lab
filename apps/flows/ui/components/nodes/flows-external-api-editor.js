@@ -22,6 +22,7 @@ import '../editors/flows-json-field-editor.js';
 import '../editors/flows-state-mapping-editor.js';
 import '@platform/lib/components/glass-button.js';
 import '@platform/lib/components/platform-icon.js';
+import { asObject, isPlainObject } from '../../_helpers/flows-resolvers.js';
 
 const HTTP_METHODS = Object.freeze(['GET', 'POST', 'PUT', 'PATCH', 'DELETE']);
 const PARAM_LOCATIONS = Object.freeze(['body', 'query', 'path', 'header']);
@@ -37,12 +38,13 @@ export class FlowsExternalApiEditor extends PlatformElement {
         flowVariables: { type: Object },
         graphNodes: { type: Array },
         previewExecutionState: { type: Object },
+        expanded: { type: Boolean, reflect: true },
     };
 
     static styles = [
         PlatformElement.styles,
         css`
-            :host { display: block; }
+            :host { display: block; height: 100%; min-height: 0; }
             details {
                 margin-bottom: var(--space-3);
                 padding: var(--space-2) var(--space-3);
@@ -92,6 +94,7 @@ export class FlowsExternalApiEditor extends PlatformElement {
         this.flowVariables = null;
         this.graphNodes = null;
         this.previewExecutionState = null;
+        this.expanded = false;
     }
 
     _emitPatch(patch) {
@@ -120,7 +123,8 @@ export class FlowsExternalApiEditor extends PlatformElement {
     }
 
     _onStateMapping(e) {
-        this._emitPatch({ state_mapping: e.detail?.mapping || {} });
+        const mapping = e.detail?.mapping;
+        this._emitPatch({ state_mapping: isPlainObject(mapping) ? mapping : {} });
     }
 
     _params() {
@@ -182,7 +186,7 @@ export class FlowsExternalApiEditor extends PlatformElement {
     }
 
     render() {
-        const cfg = this.nodeConfig || {};
+        const cfg = asObject(this.nodeConfig);
         const name = typeof cfg.name === 'string' ? cfg.name : '';
         const description = typeof cfg.description === 'string' ? cfg.description : '';
         const url = typeof cfg.url === 'string' ? cfg.url : '';
@@ -200,14 +204,11 @@ export class FlowsExternalApiEditor extends PlatformElement {
                 .flowId=${this.flowId}
                 .skillId=${this.skillId}
                 .nodeConfig=${this.nodeConfig}
-                .nodeType=${this.nodeType || 'external_api'}
+                .nodeType=${typeof this.nodeType === 'string' && this.nodeType.length > 0 ? this.nodeType : 'external_api'}
                 .flowVariables=${this.flowVariables}
                 .graphNodes=${this.graphNodes}
                 .previewExecutionState=${this.previewExecutionState}
-                @change=${(e) => this.emit('change', e.detail)}
-                @rename-node=${(e) => this.emit('rename-node', e.detail)}
-                @delete-node=${(e) => this.emit('delete-node', e.detail)}
-                @duplicate-node=${(e) => this.emit('duplicate-node', e.detail)}
+                ?expanded=${this.expanded}
             >
                 <div slot="settings">
                     <div class="grid">

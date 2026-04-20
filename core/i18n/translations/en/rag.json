@@ -1,100 +1,85 @@
 {
-  "routes": {
-    "namespaces": "Namespaces",
-    "namespace_detail": "Namespace",
-    "search": "Search",
-    "settings": "Settings"
-  },
-  "sidebar": {
-    "title": "RAG Service",
-    "menu_namespaces": "Namespaces",
-    "menu_search": "Search",
-    "menu_settings": "Settings",
-    "provider_label": "Provider",
-    "providers_loading": "Loading providers..."
-  },
-  "namespace_list": {
-    "header_title": "Namespaces",
-    "header_subtitle": "Manage your document namespaces",
-    "create_button": "Create namespace",
-    "loading": "Loading namespaces...",
-    "empty_title": "No namespaces yet",
-    "empty_hint": "Create your first namespace to start ingesting documents.",
-    "card_documents_label": "documents"
-  },
-  "namespace_detail": {
-    "not_found": "Namespace not found",
-    "open_menu": "Open menu",
-    "back": "Back",
-    "documents_count": "{{count}} documents",
-    "upload_button": "Upload document",
-    "uploading_short": "Uploading...",
-    "loading_documents": "Loading documents...",
-    "drop_here": "Drop a file here",
-    "drop_or_choose": "or click to choose a file",
-    "uploading_document": "Uploading document...",
-    "created_at_label": "Created",
-    "pages_count": "{{count}} pages",
-    "delete_button_title": "Delete",
-    "delete_confirm": "Delete this document?"
-  },
-  "search_view": {
-    "header_title": "Search",
-    "header_subtitle": "Semantic search across documents in a namespace",
-    "label_namespace": "Namespace",
-    "select_namespace": "Select a namespace",
-    "label_limit": "Results",
-    "label_query": "Query",
-    "query_placeholder": "Enter a search query...",
-    "find_button": "Search",
-    "searching": "Searching...",
-    "fill_all_fields": "Fill in all fields",
-    "empty_no_results_title": "No results",
-    "empty_hint": "Enter a query to start searching",
-    "result_document_fallback": "Document",
-    "result_page_meta": "Page {{page}}"
-  },
-  "settings_view": {
-    "header_title": "Settings",
-    "header_subtitle": "RAG service configuration",
-    "providers_section": "Providers",
-    "providers_section_desc": "Active backend for vector storage and semantic search",
-    "providers_loading": "Loading providers...",
-    "providers_default_badge": "default",
-    "providers_active_badge": "active",
-    "providers_switch_button": "Use",
-    "about_title": "About RAG Service",
-    "about_text": "Retrieval Augmented Generation: documents are chunked, vectorized, and stored for semantic search across enterprise data."
-  },
-  "namespace_create_modal": {
-    "header": "Create namespace",
-    "label_name": "Name",
-    "name_placeholder": "my-namespace",
-    "name_hint": "Lowercase letters, digits, hyphen; up to 64 characters",
-    "label_description": "Description",
-    "description_placeholder": "Describe what this namespace is for...",
-    "submit": "Create",
-    "submitting": "Creating...",
-    "cancel": "Cancel"
-  },
-  "form": {
-    "namespace_name_required": "Enter a valid namespace name"
-  },
-  "toast": {
-    "namespace_created": "Namespace created",
-    "namespace_create_failed": "Failed to create namespace",
-    "namespace_deleted": "Namespace deleted",
-    "namespace_delete_failed": "Failed to delete namespace",
-    "document_uploaded": "Document accepted for indexing",
-    "document_upload_failed": "Failed to upload document",
-    "document_deleted": "Document deleted",
-    "document_delete_failed": "Failed to delete document",
-    "document_processed": "Document \"{{name}}\" indexed",
-    "document_process_failed": "Indexing of \"{{name}}\" failed",
-    "text_ingested": "Text indexed",
-    "text_ingest_failed": "Failed to index text",
-    "search_failed": "Search failed",
-    "provider_switched": "Provider switched",
-    "provider_switch_failed": "Failed to switch provider"
-  }
+    "sidebar": {
+        "title": "RAG Service",
+        "provider_label": "Provider",
+        "providers_loading": "Loading providers..."
+    },
+    "namespace_list": {
+        "header_title": "Namespaces",
+        "header_subtitle": "Manage your document namespaces",
+        "create_button": "Create namespace",
+        "loading": "Loading namespaces...",
+        "empty_title": "No namespaces yet",
+        "empty_hint": "Create your first namespace to start ingesting documents."
+    },
+    "namespace_detail": {
+        "not_found": "Namespace not found",
+        "back": "Back",
+        "documents_count": "{{count}} documents",
+        "upload_button": "Upload document",
+        "uploading_short": "Uploading...",
+        "loading_documents": "Loading documents...",
+        "drop_here": "Drop a file here",
+        "drop_or_choose": "or click to choose a file",
+        "uploading_document": "Uploading document...",
+        "created_at_label": "Created",
+        "pages_count": "{{count}} pages",
+        "delete_button_title": "Delete",
+        "delete_confirm": "Delete this document?"
+    },
+    "search_view": {
+        "header_title": "Search",
+        "header_subtitle": "Semantic search across documents in a namespace",
+        "label_namespace": "Namespace",
+        "select_namespace": "Select a namespace",
+        "label_limit": "Results",
+        "label_query": "Query",
+        "query_placeholder": "Enter a search query...",
+        "find_button": "Search",
+        "searching": "Searching...",
+        "empty_no_results_title": "No results",
+        "empty_hint": "Enter a query to start searching",
+        "result_document_fallback": "Document",
+        "result_page_meta": "Page {{page}}"
+    },
+    "settings_view": {
+        "header_title": "Settings",
+        "header_subtitle": "RAG service configuration",
+        "providers_section": "Providers",
+        "providers_section_desc": "Active backend for vector storage and semantic search",
+        "providers_loading": "Loading providers...",
+        "providers_default_badge": "default",
+        "providers_active_badge": "active",
+        "providers_switch_button": "Use",
+        "about_title": "About RAG Service",
+        "about_text": "Retrieval Augmented Generation: documents are chunked, vectorized, and stored for semantic search across enterprise data."
+    },
+    "namespace_create_modal": {
+        "header": "Create namespace",
+        "label_name": "Name",
+        "name_placeholder": "my-namespace",
+        "name_hint": "Lowercase letters, digits, hyphen; up to 64 characters",
+        "label_description": "Description",
+        "description_placeholder": "Describe what this namespace is for...",
+        "submit": "Create",
+        "submitting": "Creating...",
+        "cancel": "Cancel"
+    },
+    "toast": {
+        "namespace_created": "Namespace created",
+        "namespace_create_failed": "Failed to create namespace",
+        "namespace_deleted": "Namespace deleted",
+        "namespace_delete_failed": "Failed to delete namespace",
+        "document_uploaded": "Document accepted for indexing",
+        "document_upload_failed": "Failed to upload document",
+        "document_deleted": "Document deleted",
+        "document_delete_failed": "Failed to delete document",
+        "document_processed": "Document \"{{name}}\" indexed",
+        "document_process_failed": "Indexing of \"{{name}}\" failed",
+        "text_ingested": "Text indexed",
+        "text_ingest_failed": "Failed to index text",
+        "search_failed": "Search failed",
+        "provider_switched": "Provider switched",
+        "provider_switch_failed": "Failed to switch provider"
+    }
 }

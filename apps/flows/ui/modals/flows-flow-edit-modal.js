@@ -9,6 +9,7 @@ import { html, css } from 'lit';
 import { PlatformFormModal } from '@platform/lib/components/glass-form-modal.js';
 import { registerModalKind } from '@platform/lib/utils/modal-registry.js';
 import '@platform/lib/components/platform-button.js';
+import { asArray } from '../_helpers/flows-resolvers.js';
 
 export class FlowsFlowEditModal extends PlatformFormModal {
     static modalKind = 'flows.flow_edit';
@@ -53,7 +54,7 @@ export class FlowsFlowEditModal extends PlatformFormModal {
     updated(changed) {
         super.updated?.(changed);
         if (!this._hydrated && this.flowId) {
-            const item = (this._flows.items || []).find((f) => f && f.flow_id === this.flowId);
+            const item = asArray(this._flows.items).find((f) => f && f.flow_id === this.flowId);
             if (item) {
                 this._name = typeof item.name === 'string' ? item.name : '';
                 this._description = typeof item.description === 'string' ? item.description : '';
@@ -93,7 +94,7 @@ export class FlowsFlowEditModal extends PlatformFormModal {
 
     _onSubmit() {
         if (!this.flowId) return;
-        const item = (this._flows.items || []).find((f) => f && f.flow_id === this.flowId);
+        const item = asArray(this._flows.items).find((f) => f && f.flow_id === this.flowId);
         if (!item) return;
         const body = {
             ...item,

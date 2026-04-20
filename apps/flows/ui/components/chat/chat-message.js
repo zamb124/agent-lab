@@ -6,6 +6,7 @@ import { classMap } from 'lit/directives/class-map.js';
 import { unsafeHTML } from 'lit/directives/unsafe-html.js';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
 import '@platform/lib/components/platform-icon.js';
+import { asObject, asString, isPlainObject } from '../../_helpers/flows-resolvers.js';
 
 export class ChatMessage extends PlatformElement {
     static styles = [
@@ -494,7 +495,7 @@ export class ChatMessage extends PlatformElement {
     }
 
     _toggleReasoning() {
-        const current = this.expandedStates.get('reasoning') || false;
+        const current = this.expandedStates.has('reasoning') ? Boolean(this.expandedStates.get('reasoning')) : false;
         this.expandedStates.set('reasoning', !current);
         this.expandedStates = new Map(this.expandedStates);
     }
@@ -551,11 +552,17 @@ export class ChatMessage extends PlatformElement {
             return html`
                 <div class="tool-call">
                     <div class="tool-header" @click=${() => this._toggleToolCall(index)}>
-                        <span class="tool-name">${this.t('chat_message.tool_call_label', { name: toolCall.name || 'Tool' })}</span>
+                        <span class="tool-name">${this.t('chat_message.tool_call_label', { name: typeof toolCall.name === 'string' && toolCall.name.length > 0 ? toolCall.name : 'Tool' })}</span>
                         <span class="reasoning-toggle">${isExpanded ? '▼' : '▶'}</span>
                     </div>
                     <div class="tool-content ${isExpanded ? '' : 'collapsed'}">
-                        ${JSON.stringify(toolCall.arguments || toolCall.args || {}, null, 2)}
+                        ${JSON.stringify(
+                            isPlainObject(toolCall.arguments)
+                                ? toolCall.arguments
+                                : (isPlainObject(toolCall.args) ? toolCall.args : {}),
+                            null,
+                            2,
+                        )}
                     </div>
                 </div>
             `;
@@ -578,7 +585,7 @@ export class ChatMessage extends PlatformElement {
             return html`
                 <div class="tool-result">
                     <div class="tool-header" @click=${() => this._toggleToolResult(index)}>
-                        <span class="tool-name">${this.t('chat_message.tool_result_label', { name: result.name || 'Result' })}</span>
+                        <span class="tool-name">${this.t('chat_message.tool_result_label', { name: typeof result.name === 'string' && result.name.length > 0 ? result.name : 'Result' })}</span>
                         <span class="reasoning-toggle">${isExpanded ? '▼' : '▶'}</span>
                     </div>
                     <div class="tool-content ${isExpanded ? '' : 'collapsed'}">
@@ -634,7 +641,8 @@ export class ChatMessage extends PlatformElement {
     }
 
     _renderOperatorReply() {
-        const t = (this.operatorReply && String(this.operatorReply).trim()) || '';
+        const reply = this.operatorReply ? String(this.operatorReply).trim() : '';
+        const t = reply;
         if (!t) {
             return '';
         }
@@ -718,7 +726,7 @@ export class ChatMessage extends PlatformElement {
 
     _renderFile(file) {
         const isImage = file.type && file.type.startsWith('image/');
-        const iconKey = isImage ? 'image' : resolveFileIconKey(file.name || '', file.type || '');
+        const iconKey = isImage ? 'image' : resolveFileIconKey(asString(file.name), asString(file.type));
 
         return html`
             <div class="file-item">

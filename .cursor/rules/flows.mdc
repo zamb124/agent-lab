@@ -75,8 +75,7 @@ apps/flows/ui/
       flows-editor-header.js, flows-bottom-toolbar.js,
       flows-node-types-sidebar.js, flows-property-panel.js,
       flows-resource-property-panel.js, flows-skills-tabs.js,
-      flows-breakpoint-manager.js, flows-execution-panel.js,
-      flows-variables-panel.js
+      flows-execution-panel.js
     flow-canvas/
       flows-flow-canvas.js    # native SVG (без vendored Drawflow):
                               # <g class="node">/<path class="edge">/<circle class="port">,
@@ -108,7 +107,7 @@ apps/flows/ui/
     flows-state-modal.js         ('flows.state')
 ```
 
-Каждая модалка наследует `PlatformModal`/`PlatformFormModal`/`PlatformLightModal`,
+Каждая модалка наследует `PlatformModal`/`PlatformFormModal`,
 имеет `static modalKind = 'flows.<entity>'` и `registerModalKind(...)` при импорте.
 Для подтверждений использует core-helper `platformConfirm({...})` из
 [core/frontend/static/lib/components/platform-confirm-modal.js](core/frontend/static/lib/components/platform-confirm-modal.js)
@@ -128,35 +127,37 @@ apps/flows/ui/
 
 Навигация — только `this.navigate(routeKey, params)`. Старые `?session=`/`?edit=`/`?skill=` query-параметры удалены.
 
-### Чат: WS-команды + push-события (платформенный инвариант)
+### Чат: A2A SSE (платформенный инвариант)
 
-| Канон-имя WS-команды           | Транспорт | REST-зеркало                                  |
-|--------------------------------|-----------|-----------------------------------------------|
-| `flows/chat/send_requested`    | `ws`      | `POST /flows/api/v1/{flow_id}` (A2A `message/stream`) |
-| `flows/chat/cancel_requested`  | `ws`      | `POST /flows/api/v1/{flow_id}` (A2A `tasks/cancel`) |
-| `flows/operator_task/claim_requested` | `ws` | `POST /flows/api/v1/operator/tasks/{task_id}/claim` |
-| `flows/operator_task/post_message_requested` | `ws` | `POST /flows/api/v1/operator/tasks/{task_id}/messages` |
-| `flows/operator_task/complete_requested` | `ws` | `POST /flows/api/v1/operator/tasks/{task_id}/complete` |
+Транспорт чата — стандартный JSON-RPC поверх Server-Sent Events:
 
-Все команды зарегистрированы в `apps/flows/src/realtime/command_router.py` через `register_ws_command_handler` (вызов `register_flows_ws_commands()` в `on_startup` сервиса).
+- Запрос: `POST /flows/api/v1/{flow_id}` с телом `{ jsonrpc: "2.0", id, method: "message/stream", params: { message, metadata? } }`, `Accept: text/event-stream`. Источник — `_handle_streaming` в [apps/flows/src/api/a2a.py](apps/flows/src/api/a2a.py).
+- Cancel: `POST /flows/api/v1/{flow_id}` с `method: "tasks/cancel", params: { id: task_id }`.
+- Ответ: `text/event-stream`, кадры `data: {jsonrpc, id, result: <a2a_event>}\n\n`. Терминальные `state` — `completed` / `failed` / `input-required`.
 
-Push-события чата (через `core.ui_events.publish_ui_event_to_user`, маппинг — в `apps/flows/src/services/chat_stream_publisher.py`):
+Frontend-фабрика `chatSendOp` / `chatCancelOp` (`transport: 'http'`, `apps/flows/ui/events/resources/chat.resource.js`) внутри `request` вычитывает SSE-стрим и маппит каждый A2A-фрейм в локальное событие `flows/chat/<verb>`, которое применяет slice-reducer к `messagesByContextId[ctx]`:
 
-| Push-событие                    | Когда публикуется                                                |
-|---------------------------------|------------------------------------------------------------------|
-| `flows/chat/task_started`       | Старт стрима, до первого артефакта                              |
-| `flows/chat/content_chunk`      | Текстовый чанк ответа ассистента                                 |
-| `flows/chat/reasoning_chunk`    | Чанк reasoning                                                  |
-| `flows/chat/operator_reply`     | Реплика оператора (artifact `operator_reply`)                    |
-| `flows/chat/operator_files`     | Файлы оператора (artifact `operator_files`)                      |
-| `flows/chat/tool_calls`         | Очередной набор tool_calls                                       |
-| `flows/chat/tool_result`        | Результат tool                                                   |
-| `flows/chat/breakpoint`         | `state=input-required` + `metadata.breakpoint`                   |
-| `flows/chat/input_required`     | `state=input-required` (general handoff/oauth)                   |
-| `flows/chat/completed`          | `state=completed`/`finished`, `final=true`                       |
-| `flows/chat/failed`             | `state=failed`/`error` или ошибка стрима                         |
+| Локальное событие             | Источник в A2A-стриме                                                |
+|--------------------------------|----------------------------------------------------------------------|
+| `flows/chat/task_started`      | первый `Task` (или первый кадр стрима)                              |
+| `flows/chat/content_chunk`     | `TaskArtifactUpdateEvent` с обычным text-part'ом                    |
+| `flows/chat/reasoning_chunk`   | `TaskArtifactUpdateEvent` с artifact `name === 'reasoning'`         |
+| `flows/chat/operator_reply`    | artifact `name === 'operator_reply'`                                 |
+| `flows/chat/operator_files`    | artifact `name === 'operator_files'`                                 |
+| `flows/chat/tool_calls`        | `Message` с `metadata.tool_calls`                                    |
+| `flows/chat/tool_result`       | `Message` с `metadata.tool_result`                                   |
+| `flows/chat/breakpoint`        | `TaskStatusUpdateEvent` `state=input-required` + `metadata.breakpoint` |
+| `flows/chat/input_required`    | `TaskStatusUpdateEvent` `state=input-required` без breakpoint        |
+| `flows/chat/completed`         | `TaskStatusUpdateEvent` `state=completed`/`finished`, `final=true`   |
+| `flows/chat/failed`            | `TaskStatusUpdateEvent` `state=failed`/`error` либо ошибка стрима   |
 
-Слайс `flows/chat` (`extraReducer` в `events/resources/chat.resource.js`) применяет каждое push-событие к `messagesByContextId[ctx]`. UI получает их через `useEvent('flows/chat/...')` или просто читает `useResource('flows/chat').state` (slice автоматически обновляется).
+WS остаётся только для operator-команд. Все они зарегистрированы в `apps/flows/src/realtime/command_router.py` через `register_ws_command_handler` (вызов `register_flows_ws_commands()` в `on_startup` сервиса):
+
+| Канон-имя WS-команды                          | Транспорт | REST-зеркало                                              |
+|-----------------------------------------------|-----------|-----------------------------------------------------------|
+| `flows/operator_task/claim_requested`         | `ws`      | `POST /flows/api/v1/operator/tasks/{task_id}/claim`       |
+| `flows/operator_task/post_message_requested`  | `ws`      | `POST /flows/api/v1/operator/tasks/{task_id}/messages`    |
+| `flows/operator_task/complete_requested`      | `ws`      | `POST /flows/api/v1/operator/tasks/{task_id}/complete`    |
 
 ### Push-события flow и skill (синхронизация открытых редакторов)
 
@@ -171,13 +172,13 @@ Push-события чата (через `core.ui_events.publish_ui_event_to_use
 | `flows/skill/deleted`    | то же, `delete_skill` | то же |
 | `notify/flows/flows_operator_tasks_updated_received` | [`operator_tasks_broadcast.py`](apps/flows/src/services/operator_tasks_broadcast.py) | `<operator-page>` `useEvent` → reload tasks |
 
-REST-зеркало `POST /flows/api/v1/{flow_id}` (A2A SSE) **остаётся** для CLI/SDK/embed — REST по-прежнему стримит в `text/event-stream`. Бэк передаёт стрим в две стороны: для WS-клиента — push-события, для REST-клиента — оригинальный SSE.
+`POST /flows/api/v1/{flow_id}` (A2A SSE) — единственный транспорт чата для всех клиентов (UI, CLI, SDK, embed): сервер стримит `text/event-stream` с JSON-RPC-кадрами.
 
 ## UI: i18n (flows)
 
 - Тексты интерфейса — только через **`this.t('группа.ключ')`**; namespace `flows` через `static i18nNamespace = 'flows';` или `defaultI18nNamespace='flows'` в `<flows-app>`.
 - Файлы переводов: **`core/i18n/translations/ru/flows.json`** и **`en/flows.json`** — ключи **парно**, проверка **`make check-i18n`**, **`make check-i18n-keys`**.
-- Соглашение по ключам: **`snake_case`**, верхний уровень = зона экрана или фичи (`editor`, `llm_node`, `state_modal`, `skills_tabs`, `variables_panel`, `node_modal`, …). Общие слова вне flows (Отмена, Сохранить, …) — **`this.t('cancel', {}, 'common')`** и т.п. из **`common.json`**.
+- Соглашение по ключам: **`snake_case`**, верхний уровень = зона экрана или фичи (`editor`, `llm_node`, `state_modal`, `skills_tabs`, `variables_modal`, `node_modal`, …). Общие слова вне flows (Отмена, Сохранить, …) — **`this.t('cancel', {}, 'common')`** и т.п. из **`common.json`**.
 - Хардкод кириллицы в **`apps/flows/ui/**/*.js`** — ориентир для выноса в JSON; то же правило сканирования: **`uv run python scripts/report_ui_i18n_gaps.py --app flows`**. Полный список без фильтра комментариев: **`scripts/report_ui_cyrillic.sh`**.
 - Сообщения **`console.*` и технические комментарии** в коде — на **английском** (без ключей i18n), чтобы не раздувать бандл и не дублировать переводы для отладки.
 

@@ -506,7 +506,7 @@ export class CRMEntityMergeModal extends PlatformModal {
                         ${typeName}
                     </span>
                     <span class="badge">
-                        <platform-icon name="hash" size="10"></platform-icon>
+                        <platform-icon name="tag" size="10"></platform-icon>
                         ${entity.entity_id}
                     </span>
                 </div>
