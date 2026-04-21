@@ -225,7 +225,7 @@ chip рендерит сокращённый id и подпись `user_chip.unk
 - Read-only действия в other-режиме:
   - «Написать в Sync» → `window.location.href = '/sync?direct=' + encodeURIComponent(userId)`;
   - «Открыть в Команде» → `window.location.href = '/frontend/team?focus=' + encodeURIComponent(userId)`;
-  - «Скопировать ID» → `this.copyToClipboard(userId, { success_i18n_key: 'platform:user_info_modal.toast_copied', error_i18n_key: 'platform:user_info_modal.toast_copy_failed' })`.
+  - «Скопировать ID» — круглая кнопка с иконкой в шапке слева от Save (и для own/other/unknown): `this.copyToClipboard(userId, { success_i18n_key: 'platform:user_info_modal.toast_copied', error_i18n_key: 'platform:user_info_modal.toast_copy_failed' })`.
 
 Открывается **только** через helper
 `this.openModal('platform.user_info', { userId })`. `userId` обязателен —

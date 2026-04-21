@@ -9,7 +9,9 @@
  *   - forwardModal — { open, message } | null для модалки forward;
  *   - pinnedNavigateIndex — текущий индекс при цикле по pinned messages;
  *   - sidebarSectionOpen — состояние раскрытых секций sidebar (хранится в
- *     localStorage через sync-persist.effect.js).
+ *     localStorage через sync-persist.effect.js);
+ *   - sidebarSearchScope — фильтр списка чатов при поиске: все каналы и личные,
+ *     только групповые каналы, только личные (direct) и контакты для нового DM.
  *
  * Все мутации — через actions слайс-контроллера (`useSlice('sync/chat_ui')`).
  */
@@ -28,6 +30,7 @@ export const chatUiResource = createSlice({
         pinnedNavigateIndex: 0,
         sidebarSectionOpen: EMPTY_SECTIONS,
         sidebarSearchQuery: '',
+        sidebarSearchScope: 'all',
     },
     extraEvents: {
         SELECTION_TOGGLED: 'selection_toggled',
@@ -41,6 +44,7 @@ export const chatUiResource = createSlice({
         SECTION_TOGGLED: 'section_toggled',
         SECTION_HYDRATED: 'section_hydrated',
         SIDEBAR_SEARCH_SET: 'sidebar_search_set',
+        SIDEBAR_SEARCH_SCOPE_SET: 'sidebar_search_scope_set',
     },
     actions: {
         toggleSelectionMode: 'selection_toggled',
@@ -54,6 +58,7 @@ export const chatUiResource = createSlice({
         toggleSection: 'section_toggled',
         hydrateSections: 'section_hydrated',
         setSidebarSearch: 'sidebar_search_set',
+        setSidebarSearchScope: 'sidebar_search_scope_set',
     },
     extraReducer: (state, event) => {
         switch (event.type) {
@@ -66,6 +71,7 @@ export const chatUiResource = createSlice({
                     forwardModal: null,
                     pinnedNavigateIndex: 0,
                     sidebarSearchQuery: '',
+                    sidebarSearchScope: 'all',
                 };
             }
             case 'sync/chat_ui/selection_toggled': {
@@ -142,6 +148,12 @@ export const chatUiResource = createSlice({
                 const p = event.payload;
                 if (!p || typeof p.query !== 'string') return state;
                 return { ...state, sidebarSearchQuery: p.query };
+            }
+            case 'sync/chat_ui/sidebar_search_scope_set': {
+                const p = event.payload;
+                if (!p || typeof p.scope !== 'string') return state;
+                if (p.scope !== 'all' && p.scope !== 'groups' && p.scope !== 'direct') return state;
+                return { ...state, sidebarSearchScope: p.scope };
             }
             default:
                 return state;

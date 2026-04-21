@@ -103,7 +103,7 @@ export const UI_ICON_MAP = Object.freeze({
     copy: 'copy', check: 'check', info: 'info', agent: 'agent', llm_node: 'agent',
     plus: 'plus', chat: 'chat', folder: 'folder', code: 'code', terminal: 'terminal',
     play: 'play', stop: 'stop', sun: 'sun', moon: 'moon', 'theme-auto': 'theme-auto',
-    logout: 'logout', login: 'login', user: 'user', users: 'user', settings: 'settings',
+    logout: 'logout', login: 'login', user: 'user', users: 'users', settings: 'settings',
     refresh: 'refresh', tool: 'tool', workflow: 'workflow', 'tree-square-dot': 'workflow',
     breakpoint: 'breakpoint', target: 'target', 'target-lock': 'target', globe: 'globe',
     help: 'help', share: 'share', route: 'share', save: 'save', eye: 'eye', box: 'box',

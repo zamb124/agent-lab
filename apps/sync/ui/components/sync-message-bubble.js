@@ -136,6 +136,9 @@ export class SyncMessageBubble extends PlatformElement {
             border: 1px solid var(--glass-border-subtle, var(--glass-border));
             border-radius: var(--radius-2xl, 18px);
             padding: 10px var(--space-4);
+            display: inline-flex;
+            flex-direction: column;
+            align-items: stretch;
             width: fit-content;
             max-width: 70%;
             min-width: 0;
@@ -214,8 +217,9 @@ export class SyncMessageBubble extends PlatformElement {
             flex-direction: row;
             align-items: center;
             gap: var(--space-2);
-            width: 100%;
-            margin-top: 6px;
+            align-self: stretch;
+            min-width: 0;
+            margin-top: 4px;
             justify-content: space-between;
             flex-wrap: wrap;
         }
@@ -325,7 +329,15 @@ export class SyncMessageBubble extends PlatformElement {
         :host([data-own]) .file-size { color: rgba(255,255,255,0.85); }
         .audio-attachment {
             display: block;
+            align-self: flex-start;
+            width: max-content;
             max-width: min(360px, 100%);
+            min-width: 0;
+            margin: 0;
+            padding: 0;
+        }
+        :host([data-own]) .audio-attachment {
+            align-self: flex-end;
         }
         .image-wrap {
             margin: -2px 0;
@@ -450,23 +462,36 @@ export class SyncMessageBubble extends PlatformElement {
             position: absolute;
             top: -28px;
             right: 8px;
-            background: var(--glass-solid);
+            left: auto;
+            margin: 0;
+            box-sizing: border-box;
+            width: max-content;
+            max-width: calc(100dvw - var(--platform-safe-left) - var(--platform-safe-right) - 16px);
+            flex-wrap: nowrap;
+            align-items: center;
+            background: var(--glass-solid-strong);
             border: 1px solid var(--glass-border);
             border-radius: 999px;
-            padding: 2px 4px;
+            padding: 2px 6px;
             gap: 2px;
             box-shadow: 0 4px 12px rgba(0,0,0,0.18);
             z-index: 10;
+            pointer-events: none;
         }
-        .bubble:hover .quick-reactions { display: inline-flex; }
+        .bubble:hover .quick-reactions {
+            display: inline-flex;
+            pointer-events: auto;
+        }
         .quick-reactions span {
             cursor: pointer;
             font-size: 16px;
+            line-height: 1;
             padding: 2px;
             border-radius: 50%;
+            flex-shrink: 0;
             transition: transform 100ms ease;
         }
-        .quick-reactions span:hover { transform: scale(1.25); background: var(--glass-hover); }
+        .quick-reactions span:hover { transform: scale(1.25); background: var(--glass-tint-medium); }
     `;
 
     constructor() {

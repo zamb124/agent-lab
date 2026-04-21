@@ -93,15 +93,16 @@ export class PlatformAudioMessagePlayer extends PlatformElement {
             .wave {
                 position: relative;
                 height: 16px;
-                display: grid;
-                grid-auto-flow: column;
-                grid-auto-columns: minmax(2px, 1fr);
-                align-items: end;
+                display: flex;
+                align-items: flex-end;
                 gap: 2px;
+                flex-wrap: nowrap;
+                min-width: 0;
             }
 
             .bar {
-                width: 100%;
+                width: 3px;
+                flex: 0 0 3px;
                 border-radius: 999px;
                 background: var(--platform-audio-bar-inactive);
                 min-height: 3px;
@@ -166,6 +167,11 @@ export class PlatformAudioMessagePlayer extends PlatformElement {
                 line-height: 1.35;
                 color: var(--platform-audio-transcription-text);
                 white-space: pre-line;
+                word-break: break-word;
+                overflow-wrap: anywhere;
+                margin: 0;
+                padding: 0;
+                align-self: stretch;
             }
 
             .transcription.error {
@@ -343,6 +349,18 @@ export class PlatformAudioMessagePlayer extends PlatformElement {
         }));
     }
 
+    _transcriptionForDisplay() {
+        const raw = this.transcriptionText;
+        if (typeof raw !== 'string') {
+            return '';
+        }
+        return raw.trimEnd();
+    }
+
+    _hasTranscriptionToShow() {
+        return this._transcriptionForDisplay() !== '';
+    }
+
     _bars() {
         if (Array.isArray(this.waveform) && this.waveform.length > 0) {
             return this.waveform.slice(0, 48).map((v) => {
@@ -417,11 +435,11 @@ export class PlatformAudioMessagePlayer extends PlatformElement {
                         : ''}
                 </div>
                 ${transcribeLoading ? html`<div class="transcription">${this.t('audio_player.transcribe_processing')}</div>` : ''}
-                ${transcribeDone && this.transcriptionText
-                    ? html`<div class="transcription">${this.transcriptionText}</div>`
+                ${transcribeDone && this._hasTranscriptionToShow()
+                    ? html`<div class="transcription">${this._transcriptionForDisplay()}</div>`
                     : ''}
-                ${transcribeFailed && this.transcriptionError
-                    ? html`<div class="transcription error">${this.transcriptionError}</div>`
+                ${transcribeFailed && typeof this.transcriptionError === 'string' && this.transcriptionError.trim() !== ''
+                    ? html`<div class="transcription error">${this.transcriptionError.trimEnd()}</div>`
                     : ''}
             </div>
         `;

@@ -2,6 +2,8 @@
  * sync-channel-edit-modal — настройки канала: имя, аватар, флаги
  * (notifications mute, transcribe voice, speech-to-chat), список участников
  * + кнопка добавления.
+ * Второе действие на превью: удалить загруженный аватар или сменить вариант
+ * сгенерированного плейсхолдера (alohe).
  */
 
 import { html, css } from 'lit';
@@ -33,6 +35,8 @@ export class SyncChannelEditModal extends PlatformFormModal {
         _speechToChat: { state: true },
         _hydrated: { state: true },
         _members: { state: true },
+        /** Смена PNG из коллекции alohe при «обновить» для сгенерированного аватара. */
+        _placeholderVariantNonce: { state: true },
     };
 
     static styles = [
@@ -52,9 +56,29 @@ export class SyncChannelEditModal extends PlatformFormModal {
                 gap: var(--space-2);
                 padding: var(--space-1) 0;
             }
-            .add-btn {
+            .add-members-icon-btn {
                 margin-top: var(--space-2);
-                width: 100%;
+                display: inline-flex;
+                align-items: center;
+                justify-content: center;
+                width: 40px;
+                height: 40px;
+                padding: 0;
+                border-radius: var(--radius-full, 999px);
+                border: 1px solid var(--border-subtle, rgba(255, 255, 255, 0.12));
+                background: var(--glass-tint-subtle, rgba(255, 255, 255, 0.06));
+                color: var(--text-secondary);
+                cursor: pointer;
+                transition: background var(--duration-fast), color var(--duration-fast), border-color var(--duration-fast);
+            }
+            .add-members-icon-btn:hover {
+                background: var(--glass-hover);
+                color: var(--accent);
+                border-color: color-mix(in srgb, var(--accent) 35%, transparent);
+            }
+            .add-members-icon-btn:focus-visible {
+                outline: 2px solid var(--accent);
+                outline-offset: 2px;
             }
             .toggle-row {
                 display: flex;
@@ -90,16 +114,34 @@ export class SyncChannelEditModal extends PlatformFormModal {
                 flex-shrink: 0;
                 margin-top: 2px;
             }
-            .avatar-editor {
+            .avatar-name-row {
                 display: flex;
+                flex-direction: row;
+                align-items: flex-start;
+                gap: var(--space-4);
                 flex-wrap: wrap;
-                align-items: center;
-                gap: var(--space-3);
-                margin-top: var(--space-2);
+            }
+            .avatar-name-row__avatar {
+                flex-shrink: 0;
+                display: flex;
+                flex-direction: column;
+                gap: var(--space-2);
+                min-width: 0;
+            }
+            .avatar-name-row__name {
+                flex: 1;
+                min-width: 180px;
+                display: flex;
+                flex-direction: column;
+                gap: var(--space-2);
+            }
+            .avatar-editor {
+                margin-top: 0;
             }
             .avatar-preview-wrap {
-                width: 64px;
-                height: 64px;
+                position: relative;
+                width: 96px;
+                height: 96px;
                 border-radius: var(--radius-md);
                 overflow: hidden;
                 flex-shrink: 0;
@@ -112,11 +154,40 @@ export class SyncChannelEditModal extends PlatformFormModal {
                 object-fit: cover;
                 display: block;
             }
-            .avatar-actions {
+            .avatar-overlay-actions {
+                position: absolute;
+                right: 2px;
+                bottom: 2px;
                 display: flex;
-                flex-wrap: wrap;
-                gap: var(--space-2);
+                flex-direction: row;
+                gap: 2px;
+                z-index: 1;
+            }
+            .avatar-overlay-btn {
+                display: inline-flex;
                 align-items: center;
+                justify-content: center;
+                width: 20px;
+                height: 20px;
+                padding: 0;
+                border: none;
+                border-radius: 4px;
+                background: rgba(15, 23, 42, 0.55);
+                color: #f8fafc;
+                cursor: pointer;
+                box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
+                transition: background var(--duration-fast), transform var(--duration-fast);
+            }
+            .avatar-overlay-btn:hover:not(:disabled) {
+                background: rgba(15, 23, 42, 0.78);
+            }
+            .avatar-overlay-btn:focus-visible {
+                outline: 2px solid var(--accent);
+                outline-offset: 1px;
+            }
+            .avatar-overlay-btn:disabled {
+                opacity: 0.45;
+                cursor: not-allowed;
             }
             .avatar-file-input {
                 position: absolute;
@@ -141,6 +212,7 @@ export class SyncChannelEditModal extends PlatformFormModal {
         this._speechToChat = false;
         this._hydrated = false;
         this._members = [];
+        this._placeholderVariantNonce = 0;
         this._channels = this.useResource('sync/channels');
         this._channelUpdate = this.useOp('sync/channel_update');
         this._membersOp = this.useOp('sync/channel_members_list');
@@ -156,6 +228,7 @@ export class SyncChannelEditModal extends PlatformFormModal {
             this._avatarDraftUrl = '';
             this._avatarIntent = 'unchanged';
             this._members = [];
+            this._placeholderVariantNonce = 0;
         }
         if (!this._hydrated && this.channelId) {
             const item = this._channels.items.find((c) => c.id === this.channelId);
@@ -183,16 +256,25 @@ export class SyncChannelEditModal extends PlatformFormModal {
 
     /**
      * @param {{ id: string, type: string }} item
-     * @returns {string}
+     * @returns {{ kind: 'remote' | 'placeholder', src: string }}
      */
-    _avatarPreviewSrc(item) {
+    _avatarPreviewResolve(item) {
         const coll = syncChannelPlaceholderCollection(item);
         const hasDraft =
             this._avatarIntent !== 'removed'
             && typeof this._avatarDraftUrl === 'string'
             && this._avatarDraftUrl !== '';
         const avatarUrl = hasDraft ? this._avatarDraftUrl : null;
-        return resolveAvatarImageSrc({ avatarUrl, seed: item.id, collection: coll }).src;
+        const seed = `${item.id}:${this._placeholderVariantNonce}`;
+        return resolveAvatarImageSrc({ avatarUrl, seed, collection: coll });
+    }
+
+    /**
+     * @param {{ id: string, type: string }} item
+     * @returns {string}
+     */
+    _avatarPreviewSrc(item) {
+        return this._avatarPreviewResolve(item).src;
     }
 
     _pickAvatarFile() {
@@ -241,7 +323,19 @@ export class SyncChannelEditModal extends PlatformFormModal {
         if (!item || item.type === 'direct') return;
         this._avatarDraftUrl = '';
         this._avatarIntent = 'removed';
+        this._placeholderVariantNonce = 0;
         this.isDirty = true;
+    }
+
+    /**
+     * Другой PNG из той же коллекции (только превью; на сервере по-прежнему нет своего файла).
+     */
+    _refreshPlaceholderAvatar(e) {
+        e.stopPropagation();
+        const item = this._channels.items.find((c) => c.id === this.channelId);
+        if (!item || item.type === 'direct') return;
+        if (this._avatarPreviewResolve(item).kind !== 'placeholder') return;
+        this._placeholderVariantNonce += 1;
     }
 
     renderHeader() {
@@ -252,59 +346,103 @@ export class SyncChannelEditModal extends PlatformFormModal {
         const item = this._channels.items.find((c) => c.id === this.channelId);
         const showAvatar = Boolean(item && item.type !== 'direct');
         const busyAvatar = this._fileUpload.busy;
+        const showRemoveAvatar = Boolean(item && this._avatarPreviewResolve(item).kind === 'remote');
         return html`
             ${showAvatar
                 ? html`
-                      <div class="form-group">
-                          <label class="form-label">${this.t('channel_settings.field_avatar')}</label>
-                          <div class="avatar-editor">
-                              <div class="avatar-preview-wrap">
-                                  <img
-                                      class="avatar-preview-img"
-                                      src=${this._avatarPreviewSrc(item)}
-                                      alt=""
-                                  />
+                      <div class="form-group avatar-name-row">
+                          <div class="avatar-name-row__avatar">
+                              <label class="form-label">${this.t('channel_settings.field_avatar')}</label>
+                              <div class="avatar-editor">
+                                  <div class="avatar-preview-wrap">
+                                      <img
+                                          class="avatar-preview-img"
+                                          src=${this._avatarPreviewSrc(item)}
+                                          alt=""
+                                      />
+                                      <input
+                                          id="sync-channel-avatar-file"
+                                          class="avatar-file-input"
+                                          type="file"
+                                          accept="image/*"
+                                          @change=${this._onAvatarFileChange}
+                                      />
+                                      <div class="avatar-overlay-actions">
+                                          <button
+                                              type="button"
+                                              class="avatar-overlay-btn"
+                                              ?disabled=${busyAvatar}
+                                              title=${this.t('channel_settings.avatar_change')}
+                                              aria-label=${this.t('channel_settings.avatar_change')}
+                                              @click=${(e) => {
+                                                  e.stopPropagation();
+                                                  this._pickAvatarFile();
+                                              }}
+                                          >
+                                              <platform-icon name="edit" size="10"></platform-icon>
+                                          </button>
+                                          ${showRemoveAvatar
+                                              ? html`
+                                          <button
+                                              type="button"
+                                              class="avatar-overlay-btn"
+                                              ?disabled=${busyAvatar}
+                                              title=${this.t('channel_settings.avatar_remove')}
+                                              aria-label=${this.t('channel_settings.avatar_remove')}
+                                              @click=${(e) => {
+                                                  e.stopPropagation();
+                                                  this._clearAvatar();
+                                              }}
+                                          >
+                                              <platform-icon name="trash" size="10"></platform-icon>
+                                          </button>
+                                              `
+                                              : html`
+                                          <button
+                                              type="button"
+                                              class="avatar-overlay-btn"
+                                              ?disabled=${busyAvatar}
+                                              title=${this.t('channel_settings.avatar_refresh_placeholder')}
+                                              aria-label=${this.t('channel_settings.avatar_refresh_placeholder')}
+                                              @click=${(e) => this._refreshPlaceholderAvatar(e)}
+                                          >
+                                              <platform-icon name="refresh" size="10"></platform-icon>
+                                          </button>
+                                              `}
+                                      </div>
+                                  </div>
                               </div>
-                              <div class="avatar-actions">
-                                  <input
-                                      id="sync-channel-avatar-file"
-                                      class="avatar-file-input"
-                                      type="file"
-                                      accept="image/*"
-                                      @change=${this._onAvatarFileChange}
-                                  />
-                                  <platform-button
-                                      variant="secondary"
-                                      ?disabled=${busyAvatar}
-                                      @click=${this._pickAvatarFile}
-                                  >
-                                      ${this.t('channel_settings.avatar_change')}
-                                  </platform-button>
-                                  <platform-button
-                                      variant="secondary"
-                                      ?disabled=${busyAvatar}
-                                      @click=${this._clearAvatar}
-                                  >
-                                      ${this.t('channel_settings.avatar_remove')}
-                                  </platform-button>
-                              </div>
+                          </div>
+                          <div class="avatar-name-row__name">
+                              <label class="form-label">${this.t('channel_settings.field_name')}</label>
+                              <input
+                                  class="form-input"
+                                  type="text"
+                                  .value=${this._name}
+                                  placeholder=${this.t('channel_settings.placeholder_name')}
+                                  @input=${(e) => {
+                                      this._name = e.target.value;
+                                      this.isDirty = true;
+                                  }}
+                              />
                           </div>
                       </div>
                   `
-                : null}
-            <div class="form-group">
-                <label class="form-label">${this.t('channel_settings.field_name')}</label>
-                <input
-                    class="form-input"
-                    type="text"
-                    .value=${this._name}
-                    placeholder=${this.t('channel_settings.placeholder_name')}
-                    @input=${(e) => {
-                        this._name = e.target.value;
-                        this.isDirty = true;
-                    }}
-                />
-            </div>
+                : html`
+                      <div class="form-group">
+                          <label class="form-label">${this.t('channel_settings.field_name')}</label>
+                          <input
+                              class="form-input"
+                              type="text"
+                              .value=${this._name}
+                              placeholder=${this.t('channel_settings.placeholder_name')}
+                              @input=${(e) => {
+                                  this._name = e.target.value;
+                                  this.isDirty = true;
+                              }}
+                          />
+                      </div>
+                  `}
 
             <div class="form-group">
                 <label class="form-label">${this.t('channel_settings.notifications')}</label>
@@ -361,9 +499,15 @@ export class SyncChannelEditModal extends PlatformFormModal {
                               `,
                           )}
                       </div>`}
-                <platform-button class="add-btn" variant="secondary" @click=${this._onAddMembers}>
-                    ${this.t('channel_settings.toggle_add_members')}
-                </platform-button>
+                <button
+                    type="button"
+                    class="add-members-icon-btn"
+                    @click=${this._onAddMembers}
+                    title=${this.t('channel_settings.toggle_add_members')}
+                    aria-label=${this.t('channel_settings.toggle_add_members')}
+                >
+                    <platform-icon name="plus" size="20"></platform-icon>
+                </button>
             </div>
         `;
     }

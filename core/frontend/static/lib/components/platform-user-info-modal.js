@@ -27,11 +27,12 @@
  *     владельца компании).
  *   - Save roles → useResource('frontend/team_members').update(userId, { roles }).
  *   - Footer: Save roles (если admin и роли изменены), Message in Sync,
- *     Open in Team, Copy ID, Close.
+ *     Open in Team, Close.
+ *   - Копирование user id: иконка в шапке слева от Save.
  *
  * Режим Other (member не найден):
  *   - Read-only карточка с user_chip.unknown.
- *   - Footer: Copy ID, Close.
+ *   - Footer: Close (копирование id — иконка в шапке).
  *
  * Cross-app переходы — через window.location.href (общего routes-реестра
  * между сервисами нет; см. platform-user.js — тот же приём).
@@ -50,6 +51,7 @@ import { CoreEvents } from '../events/contract.js';
 import { redirectToLogin } from '../utils/auth-redirect.js';
 import { resolveAvatarImageSrc } from '../utils/placeholder-avatar.js';
 import './platform-button.js';
+import './platform-icon.js';
 
 const AVAILABLE_ROLES = Object.freeze(['owner', 'admin', 'developer', 'viewer']);
 
@@ -663,6 +665,24 @@ export class PlatformUserInfoModal extends PlatformFormModal {
         });
     }
 
+    renderHeaderActions() {
+        if (typeof this.userId !== 'string' || this.userId.length === 0) {
+            return html``;
+        }
+        const copyTitle = this.t('user_info_modal.action_copy_id');
+        return html`
+            <button
+                type="button"
+                class="header-btn"
+                title=${copyTitle}
+                aria-label=${copyTitle}
+                @click=${() => this._copyId()}
+            >
+                <platform-icon name="copy" size="16"></platform-icon>
+            </button>
+        `;
+    }
+
     renderFooter() {
         const resolved = this._resolveUser();
         if (!resolved) {
@@ -697,9 +717,6 @@ export class PlatformUserInfoModal extends PlatformFormModal {
         if (!resolved.user) {
             return html`
                 <div class="actions">
-                    <platform-button variant="ghost" @click=${() => this._copyId()}>
-                        ${this.t('user_info_modal.action_copy_id')}
-                    </platform-button>
                     <platform-button variant="secondary" @click=${() => this.close()}>
                         ${this.t('user_info_modal.action_cancel')}
                     </platform-button>
@@ -725,9 +742,6 @@ export class PlatformUserInfoModal extends PlatformFormModal {
                 </platform-button>
                 <platform-button variant="secondary" @click=${() => this._openTeamPage()}>
                     ${this.t('user_info_modal.action_open_team')}
-                </platform-button>
-                <platform-button variant="ghost" @click=${() => this._copyId()}>
-                    ${this.t('user_info_modal.action_copy_id')}
                 </platform-button>
             </div>
         `;

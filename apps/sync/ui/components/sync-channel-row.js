@@ -6,8 +6,8 @@
  *   select syncPresence                — typing preview, online dot для DM.
  *   select syncCallUi.activeCallChannels — pill «Войти» (как баннер свёрнутого звонка).
  *
- * Действия: navigate('channel', { channelId }), openModal('sync.channel_edit')
- * на gear-иконке (hover).
+ * Действия: navigate('channel', { channelId }); иконка типа (user / users); шестерёнка:
+ * группы — sync.channel_edit, личные — platform.user_info.
  */
 
 import { html, css } from 'lit';
@@ -138,6 +138,7 @@ export class SyncChannelRow extends PlatformElement {
             display: flex;
             align-items: center;
             gap: var(--space-2);
+            min-width: 0;
         }
         .preview {
             flex: 1;
@@ -149,6 +150,30 @@ export class SyncChannelRow extends PlatformElement {
             text-overflow: ellipsis;
         }
         .preview.typing { color: var(--accent); font-style: italic; }
+
+        .row-bottom-trail {
+            display: inline-flex;
+            align-items: center;
+            gap: var(--space-2);
+            flex-shrink: 0;
+        }
+        .kind-icon-wrap {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            flex-shrink: 0;
+            color: var(--text-tertiary);
+            pointer-events: none;
+        }
+        .kind-icon-wrap--direct {
+            color: color-mix(in srgb, var(--accent) 88%, var(--text-primary));
+        }
+        .kind-icon-wrap--group {
+            color: var(--text-secondary);
+        }
+        :host([data-selected]) .kind-icon-wrap {
+            color: rgba(255, 255, 255, 0.92);
+        }
 
         .badges {
             display: inline-flex;
@@ -322,7 +347,15 @@ export class SyncChannelRow extends PlatformElement {
     _onGear(e) {
         e.stopPropagation();
         if (!this.channel) return;
-        this.openModal('sync.channel_edit', { channelId: this.channel.id });
+        const ch = this.channel;
+        const isDm = ch.type === 'direct' && ch.peer && typeof ch.peer.user_id === 'string' && ch.peer.user_id !== '';
+        if (isDm) {
+            this.openModal('platform.user_info', { userId: ch.peer.user_id });
+            return;
+        }
+        if (typeof ch.id === 'string' && ch.id !== '') {
+            this.openModal('sync.channel_edit', { channelId: ch.id });
+        }
     }
 
     _renderAvatar() {
@@ -388,6 +421,16 @@ export class SyncChannelRow extends PlatformElement {
         const previewText = typeof this.channel.last_message_preview === 'string' ? this.channel.last_message_preview : '';
         const lastAtIso = typeof this.channel.last_message_at === 'string' ? this.channel.last_message_at : '';
         const timeLabel = lastAtIso !== '' ? this._formatTime(lastAtIso) : '';
+        const isDm = this.channel.type === 'direct' && this.channel.peer
+            && typeof this.channel.peer.user_id === 'string' && this.channel.peer.user_id !== '';
+        const showGear = isDm || this.channel.type !== 'direct';
+        const gearTitle = isDm
+            ? this.t('chat_view.peer_profile_aria')
+            : this.t('sidebar.channel_settings_aria');
+        const isDirectType = this.channel.type === 'direct';
+        const kindIconClass = isDirectType ? 'kind-icon-wrap kind-icon-wrap--direct' : 'kind-icon-wrap kind-icon-wrap--group';
+        const kindAria = isDirectType ? this.t('sidebar.meta_direct') : this.t('sidebar.meta_group');
+        const kindIconName = isDirectType ? 'user' : 'users';
         return html`
             ${this._renderAvatar()}
             <div class="text" @click=${this._onClick}>
@@ -399,25 +442,35 @@ export class SyncChannelRow extends PlatformElement {
                     ${typingLine !== ''
                         ? html`<span class="preview typing">${typingLine}</span>`
                         : html`<span class="preview">${previewText}</span>`}
-                    <div class="badges">
-                        ${activeCall ? html`
-                            <button
-                                type="button"
-                                class="call-pill"
-                                @click=${(e) => this._onJoinCall(activeCall, e)}
-                                title=${this.t('sidebar.call_active_title')}
-                            >
-                                <platform-icon name="phone" size="10"></platform-icon>
-                                ${this.t('sidebar.call_join')}
-                            </button>
-                        ` : ''}
-                        ${mentions > 0 ? html`<span class="badge mention">@${mentions}</span>` : ''}
-                        ${unread > 0 ? html`<span class="badge">${unread}</span>` : ''}
-                        ${this.channel.type !== 'direct' ? html`
-                            <button class="gear" @click=${this._onGear} title=${this.t('sidebar.channel_settings_aria')}>
-                                <platform-icon name="settings" size="14"></platform-icon>
-                            </button>
-                        ` : ''}
+                    <div class="row-bottom-trail">
+                        <span class=${kindIconClass} title=${kindAria} aria-label=${kindAria} role="img">
+                            <platform-icon name=${kindIconName} size="14"></platform-icon>
+                        </span>
+                        <div class="badges">
+                            ${activeCall ? html`
+                                <button
+                                    type="button"
+                                    class="call-pill"
+                                    @click=${(e) => this._onJoinCall(activeCall, e)}
+                                    title=${this.t('sidebar.call_active_title')}
+                                >
+                                    <platform-icon name="phone" size="10"></platform-icon>
+                                    ${this.t('sidebar.call_join')}
+                                </button>
+                            ` : ''}
+                            ${mentions > 0 ? html`<span class="badge mention">@${mentions}</span>` : ''}
+                            ${unread > 0 ? html`<span class="badge">${unread}</span>` : ''}
+                            ${showGear ? html`
+                                <button
+                                    class="gear"
+                                    @click=${this._onGear}
+                                    title=${gearTitle}
+                                    aria-label=${gearTitle}
+                                >
+                                    <platform-icon name="settings" size="14"></platform-icon>
+                                </button>
+                            ` : ''}
+                        </div>
                     </div>
                 </div>
             </div>

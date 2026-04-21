@@ -186,6 +186,30 @@ export class SyncMessageComposer extends PlatformElement {
             cursor: pointer;
         }
         .mention-popup .item:hover, .mention-popup .item.active { background: var(--glass-hover); }
+        .emoji-anchor {
+            position: relative;
+            display: inline-flex;
+            align-items: center;
+            flex-shrink: 0;
+        }
+        .emoji-popup {
+            position: absolute;
+            right: 0;
+            bottom: 100%;
+            margin-bottom: 8px;
+            background: var(--glass-solid-strong);
+            border: 1px solid var(--glass-border);
+            border-radius: var(--radius-lg);
+            min-width: 240px;
+            padding: var(--space-2);
+            display: grid;
+            grid-template-columns: repeat(6, 1fr);
+            gap: 4px;
+            box-shadow: 0 8px 24px rgba(0, 0, 0, 0.16);
+            z-index: 10;
+            box-sizing: border-box;
+            max-width: calc(100dvw - var(--platform-safe-left) - var(--platform-safe-right) - 16px);
+        }
         .warn { color: var(--color-error, #ef4444); font-size: var(--text-xs); padding: 0 var(--space-3); }
     `;
 
@@ -625,13 +649,6 @@ export class SyncMessageComposer extends PlatformElement {
                         `)}
                     </div>
                 ` : ''}
-                ${this._emojiOpen ? html`
-                    <div class="mention-popup" style="bottom: 100%; left: 80px; min-width: 240px; padding: var(--space-2); display: grid; grid-template-columns: repeat(6, 1fr); gap: 4px;">
-                        ${emojis.map((e) => html`
-                            <span style="cursor: pointer; font-size: 18px; padding: 4px; text-align: center; border-radius: var(--radius-sm);" @click=${() => this._onInsertEmoji(e)}>${e}</span>
-                        `)}
-                    </div>
-                ` : ''}
                 <input type="file" accept="image/*,video/*" multiple style="display: none;" id="photopick" @change=${this._onPickFiles} />
                 <input type="file" multiple style="display: none;" id="filepick" @change=${this._onPickFiles} />
                 <button class="icon" title=${this.t('composer.attach_photo_video')} @click=${() => this.renderRoot.getElementById('photopick').click()}>
@@ -648,9 +665,18 @@ export class SyncMessageComposer extends PlatformElement {
                     @paste=${this._onPaste}
                     placeholder=${this.t('composer.placeholder')}
                 ></textarea>
-                <button class="icon" title=${this.t('composer.emoji_title')} @click=${() => { this._emojiOpen = !this._emojiOpen; }}>
-                    <platform-icon name="smile" size="22"></platform-icon>
-                </button>
+                <span class="emoji-anchor">
+                    ${this._emojiOpen ? html`
+                        <div class="emoji-popup">
+                            ${emojis.map((e) => html`
+                                <span style="cursor: pointer; font-size: 18px; padding: 4px; text-align: center; border-radius: var(--radius-sm);" @click=${() => this._onInsertEmoji(e)}>${e}</span>
+                            `)}
+                        </div>
+                    ` : ''}
+                    <button class="icon" title=${this.t('composer.emoji_title')} @click=${() => { this._emojiOpen = !this._emojiOpen; }}>
+                        <platform-icon name="smile" size="22"></platform-icon>
+                    </button>
+                </span>
                 ${(() => {
                     const hasContent = this._draft.trim().length > 0 || this._attachments.length > 0;
                     if (this._recording) {

@@ -37,7 +37,7 @@ export class SyncMessageContextMenu extends PlatformElement {
         }
         :host([open]) { display: block; }
         .menu {
-            background: var(--glass-solid);
+            background: var(--glass-solid-strong);
             border: 1px solid var(--glass-border-subtle, var(--glass-border));
             border-radius: var(--radius-xl, 16px);
             box-shadow: 0 16px 40px rgba(0, 0, 0, 0.18);
@@ -55,7 +55,7 @@ export class SyncMessageContextMenu extends PlatformElement {
             font-size: var(--text-sm);
             color: var(--text-primary);
         }
-        .item:hover { background: var(--glass-hover); }
+        .item:hover { background: var(--glass-tint-medium); }
         .item.danger { color: var(--color-error, #ef4444); }
         .reactions {
             display: flex;
@@ -71,7 +71,7 @@ export class SyncMessageContextMenu extends PlatformElement {
             border-radius: var(--radius-sm);
             line-height: 1;
         }
-        .reactions span:hover { background: var(--glass-hover); }
+        .reactions span:hover { background: var(--glass-tint-medium); }
     `;
 
     constructor() {

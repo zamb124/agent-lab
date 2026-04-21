@@ -209,6 +209,39 @@ export class SyncSidebar extends PlatformElement {
             }
             .search-box input::placeholder { color: var(--text-tertiary); }
 
+            .search-scope {
+                display: inline-flex;
+                flex-shrink: 0;
+                align-items: center;
+                gap: 0;
+                padding: 2px;
+                margin-left: 2px;
+                border-radius: var(--radius-full, 999px);
+                background: color-mix(in srgb, var(--glass-hover) 65%, transparent);
+            }
+            .search-scope-btn {
+                display: inline-flex;
+                align-items: center;
+                justify-content: center;
+                width: 26px;
+                height: 26px;
+                padding: 0;
+                border: none;
+                border-radius: var(--radius-full, 999px);
+                background: transparent;
+                color: var(--text-tertiary);
+                cursor: pointer;
+                transition: background var(--duration-fast), color var(--duration-fast);
+            }
+            .search-scope-btn:hover {
+                color: var(--text-secondary);
+                background: var(--glass-hover);
+            }
+            .search-scope-btn.is-active {
+                color: var(--accent);
+                background: var(--glass-solid-soft, rgba(255, 255, 255, 0.1));
+            }
+
             .empty-row {
                 padding: var(--space-2) var(--space-3);
                 color: var(--text-tertiary);
@@ -284,6 +317,20 @@ export class SyncSidebar extends PlatformElement {
         return slice.sidebarSearchQuery.trim().toLowerCase();
     }
 
+    _searchScope() {
+        const slice = this._chatUi.value;
+        const s = slice && typeof slice.sidebarSearchScope === 'string' ? slice.sidebarSearchScope : 'all';
+        if (s === 'groups' || s === 'direct') return s;
+        return 'all';
+    }
+
+    _channelMatchesScope(channel, scope) {
+        if (scope === 'all') return true;
+        if (scope === 'groups') return channel.type !== 'direct';
+        if (scope === 'direct') return channel.type === 'direct';
+        return true;
+    }
+
     _channelMatchesSearch(channel, search) {
         if (search === '') return true;
         if (channel.type === 'direct') {
@@ -305,9 +352,11 @@ export class SyncSidebar extends PlatformElement {
     _unifiedChats() {
         const activeNs = this._activeNamespace();
         const search = this._searchQuery();
+        const scope = this._searchScope();
         const filtered = this._channels.items.filter((c) => (
             this._channelMatchesNamespace(c, activeNs)
             && this._channelMatchesSearch(c, search)
+            && this._channelMatchesScope(c, scope)
         ));
         return filtered.slice().sort((a, b) => {
             const ta = typeof a.last_message_at === 'string' ? a.last_message_at : '';
@@ -318,6 +367,7 @@ export class SyncSidebar extends PlatformElement {
     }
 
     _membersWithoutDm() {
+        if (this._searchScope() === 'groups') return [];
         if (this._activeNamespace() !== 'all') return [];
         const directs = this._channels.items.filter((c) => c.type === 'direct');
         const dmUserIds = new Set();
@@ -403,12 +453,27 @@ export class SyncSidebar extends PlatformElement {
         this._chatUi.setSidebarSearch({ query: value });
     }
 
+    _onSearchScopeToggle(e, kind) {
+        e.stopPropagation();
+        const cur = this._searchScope();
+        if (kind === 'groups') {
+            const next = cur === 'groups' ? 'all' : 'groups';
+            this._chatUi.setSidebarSearchScope({ scope: next });
+            return;
+        }
+        if (kind === 'direct') {
+            const next = cur === 'direct' ? 'all' : 'direct';
+            this._chatUi.setSidebarSearchScope({ scope: next });
+        }
+    }
+
     _renderHeaderArea() {
         const activeNs = this._activeNamespace();
         const selectValue = activeNs === 'all' ? '' : activeNs;
         const search = this._chatUi.value && typeof this._chatUi.value.sidebarSearchQuery === 'string'
             ? this._chatUi.value.sidebarSearchQuery
             : '';
+        const scope = this._searchScope();
         return html`
             <div class="sync-sidebar-header-inner">
                 <div class="header-adhoc">
@@ -451,6 +516,28 @@ export class SyncSidebar extends PlatformElement {
                             placeholder=${this.t('sidebar.direct_search_placeholder')}
                             aria-label=${this.t('sidebar.direct_search_aria')}
                         />
+                        <div
+                            class="search-scope"
+                            role="group"
+                            aria-label=${this.t('sidebar.search_scope_group_aria')}
+                        >
+                            <button
+                                type="button"
+                                class="search-scope-btn ${scope === 'groups' ? 'is-active' : ''}"
+                                title=${this.t('sidebar.search_scope_groups_title')}
+                                aria-label=${this.t('sidebar.search_scope_groups_title')}
+                                aria-pressed=${scope === 'groups'}
+                                @click=${(ev) => this._onSearchScopeToggle(ev, 'groups')}
+                            ><platform-icon name="users" size="12"></platform-icon></button>
+                            <button
+                                type="button"
+                                class="search-scope-btn ${scope === 'direct' ? 'is-active' : ''}"
+                                title=${this.t('sidebar.search_scope_direct_title')}
+                                aria-label=${this.t('sidebar.search_scope_direct_title')}
+                                aria-pressed=${scope === 'direct'}
+                                @click=${(ev) => this._onSearchScopeToggle(ev, 'direct')}
+                            ><platform-icon name="user" size="12"></platform-icon></button>
+                        </div>
                     </div>
                 </div>
             </div>
