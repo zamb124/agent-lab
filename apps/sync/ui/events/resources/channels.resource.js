@@ -19,11 +19,13 @@ function _normalizeChannel(channel) {
     const unread = typeof channel.unread_count === 'number' ? channel.unread_count : 0;
     const mention = typeof channel.mention_unread_count === 'number' ? channel.mention_unread_count : 0;
     const preview = typeof channel.last_message_preview === 'string' ? channel.last_message_preview : '';
+    const pinnedIds = Array.isArray(channel.pinned_message_ids) ? channel.pinned_message_ids : [];
     return Object.freeze({
         ...channel,
         unread_count: unread,
         mention_unread_count: mention,
         last_message_preview: preview,
+        pinned_message_ids: Object.freeze(pinnedIds.slice()),
     });
 }
 

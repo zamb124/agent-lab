@@ -11,6 +11,8 @@ function formatDuration(seconds) {
 }
 
 export class PlatformAudioMessagePlayer extends PlatformElement {
+    static i18nNamespace = 'platform';
+
     static properties = {
         src: { type: String },
         fileName: { type: String, attribute: 'file-name' },
@@ -397,17 +399,22 @@ export class PlatformAudioMessagePlayer extends PlatformElement {
                             <span class="time">${formatDuration(current)} / ${formatDuration(duration)}</span>
                         </div>
                     </div>
+                    ${!transcribeDone
+                        ? html`
                     <div class="actions">
                         <button
                             type="button"
                             class="transcribe-btn"
-                            title="Расшифровать"
+                            title=${this.t('audio_player.transcribe_aria')}
+                            aria-label=${this.t('audio_player.transcribe_aria')}
                             ?disabled=${transcribeLoading}
                             @click=${this._requestTranscription}
                         >A</button>
                     </div>
+                `
+                        : ''}
                 </div>
-                ${transcribeLoading ? html`<div class="transcription">Расшифровка...</div>` : ''}
+                ${transcribeLoading ? html`<div class="transcription">${this.t('audio_player.transcribe_processing')}</div>` : ''}
                 ${transcribeDone && this.transcriptionText
                     ? html`<div class="transcription">${this.transcriptionText}</div>`
                     : ''}

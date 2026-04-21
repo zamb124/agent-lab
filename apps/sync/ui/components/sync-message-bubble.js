@@ -32,7 +32,7 @@ import { hueFromString, initialsFromName } from '../_helpers/sync-hue.js';
 const FILE_DOWNLOAD_BASE = '/sync/api/v1/files/download';
 const LONG_PRESS_MS = 450;
 
-const EMOJI_QUICK = ['👍', '❤️', '😂', '🔥', '🎉', '👏'];
+const EMOJI_QUICK = ['👍','👎','❤️', '😂', '🔥', '🎉', '👏'];
 
 /** API хранит плоский список { user_id, emoji, created_at }; для UI — одна пилюля на emoji. */
 function _reactionsGroupedByEmoji(raw) {
@@ -292,6 +292,10 @@ export class SyncMessageBubble extends PlatformElement {
             color: var(--text-secondary);
         }
         :host([data-own]) .file-size { color: rgba(255,255,255,0.85); }
+        .audio-attachment {
+            display: block;
+            max-width: min(360px, 100%);
+        }
         .image-wrap {
             margin: -2px 0;
         }
@@ -631,18 +635,23 @@ export class SyncMessageBubble extends PlatformElement {
         const fileId = data ? data.file_id : null;
         if (typeof fileId !== 'string') return '';
         const url = `${FILE_DOWNLOAD_BASE}/${encodeURIComponent(fileId)}`;
-        const status = data ? data.transcription_status : null;
-        const transcript = data ? data.transcript : null;
+        const status = data && typeof data.transcription_status === 'string' ? data.transcription_status : 'idle';
+        const durationMs = data && typeof data.duration_ms === 'number' ? data.duration_ms : 0;
+        const hasWaveform = data && Array.isArray(data.waveform);
+        const waveform = hasWaveform ? data.waveform : null;
+        const transcriptionText = data && typeof data.transcription_text === 'string' ? data.transcription_text : '';
+        const transcriptionError = data && typeof data.transcription_error === 'string' ? data.transcription_error : '';
         return html`
-            <div class="file" style="flex-direction: column; align-items: stretch;">
-                <platform-audio-message-player src=${url}></platform-audio-message-player>
-                ${status === 'done' && typeof transcript === 'string' && transcript !== ''
-                    ? html`<div class="body">${transcript}</div>` : ''}
-                ${status !== 'done' && status !== 'processing'
-                    ? html`<button class="transcribe-btn" @click=${this._onTranscribeAudio}>${this.t('message_bubble.action_transcribe')}</button>`
-                    : ''}
-                ${status === 'processing'
-                    ? html`<span class="file-size">${this.t('message_bubble.transcribe_processing')}</span>` : ''}
+            <div class="audio-attachment">
+                <platform-audio-message-player
+                    src=${url}
+                    duration-ms=${durationMs}
+                    .waveform=${waveform}
+                    transcription-status=${status}
+                    .transcriptionText=${transcriptionText}
+                    .transcriptionError=${transcriptionError}
+                    @request-transcription=${this._onTranscribeAudio}
+                ></platform-audio-message-player>
             </div>
         `;
     }

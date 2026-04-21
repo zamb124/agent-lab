@@ -278,6 +278,21 @@ export class SyncMessageList extends PlatformElement {
         return n > 0 ? n : 0;
     }
 
+    /** Закрепы хранятся на канале (`pinned_message_ids`), не в теле MessageRead. */
+    _pinnedIdsSet() {
+        const slice = this._channelsSel.value;
+        if (!slice || !Array.isArray(slice.items)) return new Set();
+        const ch = slice.items.find((c) => c && c.id === this.channelId);
+        if (!ch || !Array.isArray(ch.pinned_message_ids)) return new Set();
+        return new Set(ch.pinned_message_ids.filter((id) => typeof id === 'string' && id !== ''));
+    }
+
+    _messageForBubble(raw, pinnedSet) {
+        const mid = typeof raw.message_id === 'string' ? raw.message_id : '';
+        const pinned = mid !== '' && pinnedSet.has(mid);
+        return Object.freeze({ ...raw, is_pinned: pinned });
+    }
+
     updated() {
         // Скролл-контейнер может появиться позже первого render'а
         // (skeleton → реальный список). Подвязываемся как только увидим .scroll.
@@ -333,6 +348,7 @@ export class SyncMessageList extends PlatformElement {
             return html`<div class="scroll"><div class="empty">${this.t('message_list.empty')}</div></div>`;
         }
         const grouped = groupMessagesForRender(items, (k, v) => this.t(k, v));
+        const pinnedSet = this._pinnedIdsSet();
         const hasOlder = channelData.pagination && channelData.pagination.hasOlder === true;
         const loadingOlder = channelData.loadingOlder === true;
         const unread = this._channelUnread();
@@ -344,7 +360,7 @@ export class SyncMessageList extends PlatformElement {
                 ${grouped.map((entry) => entry.kind === 'day'
                     ? html`<div class="day" data-day-key=${entry.key}><span class="day-pill">${entry.label}</span></div>`
                     : html`<sync-message-bubble
-                        .message=${entry.message}
+                        .message=${this._messageForBubble(entry.message, pinnedSet)}
                         my-user-id=${this.myUserId}
                         channel-type=${this.channelType}
                         data-position=${entry.position}

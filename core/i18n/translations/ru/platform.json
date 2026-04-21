@@ -4,6 +4,10 @@
         "dismiss_all": "Очистить все",
         "empty": "Уведомлений пока нет"
     },
+    "audio_player": {
+        "transcribe_aria": "Расшифровать",
+        "transcribe_processing": "Расшифровка…"
+    },
     "menu": {
         "user_button_title": "Меню пользователя",
         "apps": "Apps",

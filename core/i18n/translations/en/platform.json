@@ -4,6 +4,10 @@
         "dismiss_all": "Clear all",
         "empty": "No notifications yet"
     },
+    "audio_player": {
+        "transcribe_aria": "Transcribe",
+        "transcribe_processing": "Transcribing…"
+    },
     "menu": {
         "user_button_title": "User menu",
         "apps": "Apps",

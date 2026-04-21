@@ -60,6 +60,28 @@ export class SyncChannelPage extends PlatformPage {
         this.useEvent('sync/message/created', (event) => this._onMessageCreated(event));
     }
 
+    connectedCallback() {
+        super.connectedCallback();
+        this.addEventListener('jump-to-message', this._onJumpToMessageFromPinStrip);
+    }
+
+    disconnectedCallback() {
+        this.removeEventListener('jump-to-message', this._onJumpToMessageFromPinStrip);
+        super.disconnectedCallback();
+    }
+
+    /**
+     * Полоска закрепов — sibling `sync-message-list`, не предок: всплывающее
+     * DOM-событие ловим на странице и вызываем публичный API списка (скролл + flash).
+     */
+    _onJumpToMessageFromPinStrip = (e) => {
+        if (!e.detail || typeof e.detail.messageId !== 'string' || e.detail.messageId === '') return;
+        const list = this.shadowRoot && this.shadowRoot.querySelector('sync-message-list');
+        if (!list || typeof list.scrollToMessageId !== 'function') return;
+        e.stopPropagation();
+        list.scrollToMessageId(e.detail.messageId);
+    };
+
     updated(changed) {
         super.updated?.(changed);
         if (this.channelId && this._lastLoadedChannel !== this.channelId) {
