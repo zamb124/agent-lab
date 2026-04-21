@@ -48,6 +48,7 @@ import { hasFactory } from '../events/factory-registry.js';
 const TEAM_MEMBERS_RESOURCE_NAME = 'frontend/team_members';
 import { CoreEvents } from '../events/contract.js';
 import { redirectToLogin } from '../utils/auth-redirect.js';
+import { resolveAvatarImageSrc } from '../utils/placeholder-avatar.js';
 import './platform-button.js';
 
 const AVAILABLE_ROLES = Object.freeze(['owner', 'admin', 'developer', 'viewer']);
@@ -61,6 +62,7 @@ export class PlatformUserInfoModal extends PlatformFormModal {
         userId: { type: String, attribute: 'user-id' },
         _roles: { state: true },
         _rolesDirty: { state: true },
+        _avatarLgFallback: { state: true },
     };
 
     static styles = [
@@ -232,9 +234,10 @@ export class PlatformUserInfoModal extends PlatformFormModal {
     constructor() {
         super();
         this.userId = '';
-        this.size = 'md';
         this._roles = new Set();
         this._rolesDirty = false;
+        this._avatarLgFallback = 0;
+        this._avatarLgSig = '';
         this._teamSel = this.select((s) => s.team);
         this._authSel = this.select((s) => s.auth);
         this._localeSel = this.select((s) => s.i18n.locale);
@@ -269,6 +272,8 @@ export class PlatformUserInfoModal extends PlatformFormModal {
         }
         if (changed.has('userId') && this.userId) {
             this._rolesDirty = false;
+            this._avatarLgFallback = 0;
+            this._avatarLgSig = '';
             const resolved = this._resolveUser();
             if (resolved && !resolved.isOwn) {
                 this._roles = new Set(resolved.user.roles);
@@ -281,6 +286,16 @@ export class PlatformUserInfoModal extends PlatformFormModal {
                     || Array.from(incoming).some((r) => !this._roles.has(r))) {
                     this._roles = incoming;
                 }
+            }
+        }
+        const resolvedAvatar = this._resolveUser();
+        if (resolvedAvatar && resolvedAvatar.user) {
+            const u = resolvedAvatar.user;
+            const au = typeof u.avatar_url === 'string' ? u.avatar_url : '';
+            const sig = `${u.user_id}|${au}`;
+            if (this._avatarLgSig !== sig) {
+                this._avatarLgSig = sig;
+                this._avatarLgFallback = 0;
             }
         }
     }
@@ -336,6 +351,30 @@ export class PlatformUserInfoModal extends PlatformFormModal {
         return { isOwn: false, source: 'unknown', user: null };
     }
 
+    _onAvatarLgError() {
+        const resolved = this._resolveUser();
+        if (!resolved || !resolved.user) return;
+        const u = resolved.user;
+        const hadUrl = typeof u.avatar_url === 'string' && u.avatar_url.length > 0;
+        if (this._avatarLgFallback === 0 && hadUrl) {
+            this._avatarLgFallback = 1;
+        } else {
+            this._avatarLgFallback = 2;
+        }
+    }
+
+    _renderAvatarLg(user) {
+        if (this._avatarLgFallback >= 2) {
+            return html`<div class="avatar-lg">${(user.name || '?').trim().charAt(0).toUpperCase()}</div>`;
+        }
+        const hadUrl = typeof user.avatar_url === 'string' && user.avatar_url.length > 0;
+        const resolved = resolveAvatarImageSrc({
+            avatarUrl: this._avatarLgFallback === 0 && hadUrl ? user.avatar_url : null,
+            seed: user.user_id,
+        });
+        return html`<div class="avatar-lg"><img src=${resolved.src} alt=${user.name} @error=${this._onAvatarLgError} /></div>`;
+    }
+
     _canEditRoles() {
         if (!hasFactory(TEAM_MEMBERS_RESOURCE_NAME)) return false;
         const auth = this._authSel.value;
@@ -389,9 +428,7 @@ export class PlatformUserInfoModal extends PlatformFormModal {
     _renderOwnForm(user) {
         return html`
             <div class="user-card">
-                ${user.avatar_url
-                    ? html`<div class="avatar-lg"><img src=${user.avatar_url} alt=${user.name} /></div>`
-                    : html`<div class="avatar-lg">${(user.name || '?').trim().charAt(0).toUpperCase()}</div>`}
+                ${this._renderAvatarLg(user)}
                 <div class="name">${user.name}</div>
                 ${user.email ? html`<div class="email">${user.email}</div>` : null}
             </div>
@@ -488,9 +525,7 @@ export class PlatformUserInfoModal extends PlatformFormModal {
         const showRolesEditor = this._canEditRoles();
         return html`
             <div class="user-card">
-                ${user.avatar_url
-                    ? html`<div class="avatar-lg"><img src=${user.avatar_url} alt=${user.name} /></div>`
-                    : html`<div class="avatar-lg">${(user.name || '?').trim().charAt(0).toUpperCase()}</div>`}
+                ${this._renderAvatarLg(user)}
                 <div class="name">${user.name}</div>
                 ${user.email ? html`<div class="email">${user.email}</div>` : null}
                 <div class="meta">

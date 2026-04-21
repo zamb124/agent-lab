@@ -14,6 +14,17 @@ import { createAsyncOp, createResourceCollection } from '@platform/lib/events/in
 
 const EMPTY_TYPING = Object.freeze({});
 
+function _mergeChannelReadIntoItems(state, result) {
+    if (!result || typeof result !== 'object' || typeof result.id !== 'string' || result.id === '') {
+        return state;
+    }
+    const idx = state.items.findIndex((x) => x.id === result.id);
+    if (idx === -1) return state;
+    const merged = _normalizeChannel({ ...state.items[idx], ...result });
+    const items = state.items.map((x, i) => (i === idx ? merged : x));
+    return { ...state, items: Object.freeze(items) };
+}
+
 function _normalizeChannel(channel) {
     if (!channel || typeof channel !== 'object') return channel;
     const unread = typeof channel.unread_count === 'number' ? channel.unread_count : 0;
@@ -57,6 +68,21 @@ export const channelsResource = createResourceCollection({
     },
     extraReducer: (state, event) => {
         switch (event.type) {
+            case 'sync/context/company_cleared': {
+                return {
+                    ...state,
+                    items: Object.freeze([]),
+                    byId: Object.freeze({}),
+                    loading: false,
+                    error: null,
+                    busyIds: Object.freeze({}),
+                    lastError: Object.freeze({}),
+                    selectedChannelId: null,
+                    readByChannelUser: Object.freeze({}),
+                    typingByChannel: Object.freeze({}),
+                    membersByChannel: Object.freeze({}),
+                };
+            }
             case 'sync/channels/channel_selected': {
                 const p = event.payload;
                 const channelId = p && typeof p.channelId === 'string' ? p.channelId : null;
@@ -128,6 +154,11 @@ export const channelsResource = createResourceCollection({
                 if (idx === -1) return state;
                 const items = state.items.map((x, i) => (i === idx ? _normalizeChannel({ ...x, ...p }) : x));
                 return { ...state, items: Object.freeze(items) };
+            }
+            case 'sync/channel_update/succeeded':
+            case 'sync/channel_notifications_update/succeeded': {
+                const r = event.payload && event.payload.result;
+                return _mergeChannelReadIntoItems(state, r);
             }
             case 'sync/message/created': {
                 const m = event.payload;

@@ -9,6 +9,31 @@
     --sync-overlay-z: 4000;
     --sync-banner-z: 3500;
     --sync-typing-color: var(--text-secondary);
+    --sync-composer-capsule-bg: #f3f4f6;
+    --sync-composer-capsule-border: rgba(15, 23, 42, 0.1);
+    --sync-composer-capsule-shadow: 0 1px 2px rgba(15, 23, 42, 0.06);
+    --sync-composer-host-bg: color-mix(in srgb, var(--glass-solid-soft, var(--glass-solid)) 92%, var(--text-primary) 8%);
+    --sync-pastel-avatar-s-bg: 42%;
+    --sync-pastel-avatar-l-bg: 88%;
+    --sync-pastel-avatar-s-fg: 36%;
+    --sync-pastel-avatar-l-fg: 22%;
+    --sync-reply-quote-bg-mix: rgba(15, 23, 42, 0.06);
+    --sync-channel-row-bg: var(--glass-solid-medium);
+    --sync-channel-row-bg-hover: var(--glass-solid-strong);
+    --sync-channel-row-border: color-mix(in srgb, var(--glass-border-subtle, var(--glass-border)) 65%, var(--text-primary) 35%);
+}
+
+[data-theme="dark"] {
+    --sync-composer-capsule-bg: rgba(255, 255, 255, 0.08);
+    --sync-composer-capsule-border: rgba(255, 255, 255, 0.12);
+    --sync-composer-capsule-shadow: 0 1px 3px rgba(0, 0, 0, 0.35);
+    --sync-composer-host-bg: color-mix(in srgb, var(--glass-solid-soft, var(--glass-solid)) 88%, transparent);
+    --sync-pastel-avatar-l-bg: 30%;
+    --sync-pastel-avatar-l-fg: 92%;
+    --sync-reply-quote-bg-mix: rgba(255, 255, 255, 0.08);
+    --sync-channel-row-bg: var(--glass-solid-medium);
+    --sync-channel-row-bg-hover: var(--glass-solid-strong);
+    --sync-channel-row-border: color-mix(in srgb, var(--glass-border-subtle, var(--glass-border)) 55%, white 45%);
 }
 
 [data-call-overlay-expanded="true"] platform-shell-page,

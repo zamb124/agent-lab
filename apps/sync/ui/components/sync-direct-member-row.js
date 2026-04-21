@@ -11,13 +11,15 @@
 import { html, css } from 'lit';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
 import { resolveDisplayName } from '../_helpers/sync-id-resolvers.js';
-import { hueFromString, initialsFromName } from '../_helpers/sync-hue.js';
+import { resolveAvatarImageSrc } from '@platform/lib/utils/placeholder-avatar.js';
+import { initialsFromName, syncAvatarHueVar } from '../_helpers/sync-hue.js';
 import { getPeerPresenceSubtitle } from '../_helpers/sync-presence.js';
 import '@platform/lib/components/platform-icon.js';
 
 export class SyncDirectMemberRow extends PlatformElement {
     static properties = {
         member: { type: Object },
+        _avatarImgFailed: { state: true },
     };
 
     static styles = css`
@@ -38,11 +40,15 @@ export class SyncDirectMemberRow extends PlatformElement {
             display: inline-flex;
             align-items: center;
             justify-content: center;
-            color: white;
             font-weight: 600;
             font-size: var(--text-xs);
             flex-shrink: 0;
             position: relative;
+        }
+        .avatar.pastel-initials {
+            --sync-avatar-h: 0;
+            background: hsl(var(--sync-avatar-h), var(--sync-pastel-avatar-s-bg), var(--sync-pastel-avatar-l-bg));
+            color: hsl(var(--sync-avatar-h), var(--sync-pastel-avatar-s-fg), var(--sync-pastel-avatar-l-fg));
         }
         .avatar img {
             width: 100%;
@@ -79,13 +85,49 @@ export class SyncDirectMemberRow extends PlatformElement {
             overflow: hidden;
             text-overflow: ellipsis;
         }
+
+        @media (min-width: 768px) {
+            :host-context(platform-service-sidebar[collapsed]) {
+                justify-content: center;
+                width: 100%;
+                max-width: 100%;
+                margin: 0 0 var(--space-1) 0;
+                padding: var(--space-2);
+                box-sizing: border-box;
+            }
+            :host-context(platform-service-sidebar[collapsed]) .text {
+                display: none;
+            }
+            :host-context(platform-service-sidebar[collapsed]) .avatar {
+                width: 36px;
+                height: 36px;
+            }
+        }
     `;
 
     constructor() {
         super();
         this.member = null;
+        this._avatarImgFailed = false;
+        this._avatarMemberSig = '';
         this._channels = this.useResource('sync/channels');
         this._presenceSel = this.select((s) => s.syncPresence);
+    }
+
+    updated(changed) {
+        super.updated(changed);
+        if (this.member && typeof this.member.user_id === 'string') {
+            const au = typeof this.member.avatar_url === 'string' ? this.member.avatar_url : '';
+            const sig = `${this.member.user_id}|${au}`;
+            if (this._avatarMemberSig !== sig) {
+                this._avatarMemberSig = sig;
+                this._avatarImgFailed = false;
+            }
+        }
+    }
+
+    _onMemberAvatarError() {
+        this._avatarImgFailed = true;
     }
 
     _findDirectChannel() {
@@ -107,11 +149,13 @@ export class SyncDirectMemberRow extends PlatformElement {
     _renderAvatar() {
         const m = this.member;
         const name = resolveDisplayName(m);
-        if (typeof m.avatar_url === 'string' && m.avatar_url !== '') {
-            return html`<span class="avatar"><img src=${m.avatar_url} alt="" /></span>`;
+        const hueVar = syncAvatarHueVar(m.user_id);
+        if (this._avatarImgFailed) {
+            return html`<span class="avatar pastel-initials" style=${hueVar}>${initialsFromName(name)}</span>`;
         }
-        const hue = hueFromString(m.user_id);
-        return html`<span class="avatar" style=${`background: hsl(${hue}, 60%, 55%)`}>${initialsFromName(name)}</span>`;
+        const mUrl = typeof m.avatar_url === 'string' && m.avatar_url !== '' ? m.avatar_url : null;
+        const resolved = resolveAvatarImageSrc({ avatarUrl: mUrl, seed: m.user_id });
+        return html`<span class="avatar"><img src=${resolved.src} alt="" @error=${this._onMemberAvatarError} /></span>`;
     }
 
     render() {

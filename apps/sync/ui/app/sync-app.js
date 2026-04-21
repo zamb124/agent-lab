@@ -80,6 +80,13 @@ export class SyncApp extends PlatformApp {
         // расширения для случая, если backend начнёт фильтровать список каналов
         // по `X-Platform-Namespace`.
         this.useEvent(CoreEvents.UI_NAMESPACE_CHANGED, () => this._onNamespaceChanged());
+        this.useEvent(CoreEvents.AUTH_COMPANY_SWITCHED, () => this._onCompanySwitched());
+    }
+
+    _onCompanySwitched() {
+        this.dispatch('sync/context/company_cleared', null);
+        this.navigate('shell', {});
+        this.dispatch(channelsResource.events.LIST_REQUESTED, null);
     }
 
     _onNamespaceChanged() {

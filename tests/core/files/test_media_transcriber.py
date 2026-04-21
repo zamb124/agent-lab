@@ -14,7 +14,9 @@ import pytest
 
 from core.files.media.audio_extract import extract_audio_from_video
 from core.files.media.chunked_stt import (
+    audio_needs_mp3_upload_for_stt,
     is_stt_format_not_recognized_error,
+    normalize_audio_to_mp3_for_stt,
     split_audio_for_stt_chunks,
     validate_stt_result_text,
 )
@@ -137,6 +139,33 @@ class TestValidateSttResultText:
             validate_stt_result_text(
                 transcript_result=result, job_id="test-2", context="unit"
             )
+
+
+class TestAudioNeedsMp3UploadForStt:
+    def test_m4a_by_suffix(self) -> None:
+        assert audio_needs_mp3_upload_for_stt(file_name="v.m4a", mime_type="audio/mp4") is True
+
+    def test_mp4_mime(self) -> None:
+        assert audio_needs_mp3_upload_for_stt(file_name="x.bin", mime_type="video/mp4") is True
+
+    def test_wav_false(self) -> None:
+        assert audio_needs_mp3_upload_for_stt(file_name="v.wav", mime_type="audio/wav") is False
+
+
+class TestNormalizeAudioToMp3ForStt:
+    def test_wav_to_mp3(self) -> None:
+        wav = minimal_wav_silence(duration_sec=0.5)
+        mp3_bytes, name = normalize_audio_to_mp3_for_stt(
+            audio_bytes=wav,
+            file_name="a.wav",
+            mime_type="audio/wav",
+            chunk_bitrate_kbps=32,
+            chunk_sample_rate_hz=16000,
+            chunk_channels=1,
+        )
+        assert name == "a.mp3"
+        assert len(mp3_bytes) > 100
+        assert mp3_bytes[:3] == b"ID3" or mp3_bytes[:2] == b"\xff\xfb" or mp3_bytes[:2] == b"\xff\xf3"
 
 
 class TestIsSttFormatNotRecognizedError:

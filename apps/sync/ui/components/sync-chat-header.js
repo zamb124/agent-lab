@@ -17,13 +17,16 @@ import '@platform/lib/components/platform-icon.js';
 import '@platform/lib/components/platform-user-chip.js';
 import { buildChatSubtitle, channelDisplayTitle } from './_helpers/sync-channel-display.js';
 import { isOnline } from '../_helpers/sync-presence.js';
-import { hueFromString, initialsFromName } from '../_helpers/sync-hue.js';
+import { resolveAvatarImageSrc } from '@platform/lib/utils/placeholder-avatar.js';
+import { initialsFromName, syncAvatarHueVar } from '../_helpers/sync-hue.js';
 import { resolveDisplayName } from '../_helpers/sync-id-resolvers.js';
+import { syncChannelPlaceholderCollection } from '../_helpers/sync-channel-placeholder-collection.js';
 
 export class SyncChatHeader extends PlatformElement {
     static properties = {
         channelId: { type: String },
         _menuOpen: { state: true },
+        _headerAvatarFailed: { state: true },
     };
 
     static styles = css`
@@ -71,9 +74,16 @@ export class SyncChatHeader extends PlatformElement {
             font-size: var(--text-sm);
             flex-shrink: 0;
             position: relative;
-            box-shadow: 0 1px 4px rgba(0, 0, 0, 0.06);
+            overflow: hidden;
+            background: var(--accent-subtle, rgba(99, 102, 241, 0.15));
+            box-shadow: 0 1px 4px rgba(0, 0, 0, 0.06), inset 0 0 0 1px color-mix(in srgb, var(--text-primary) 8%, transparent);
             cursor: pointer;
             transition: transform var(--duration-fast);
+        }
+        .avatar.pastel-initials {
+            --sync-avatar-h: 0;
+            background: hsl(var(--sync-avatar-h), var(--sync-pastel-avatar-s-bg), var(--sync-pastel-avatar-l-bg));
+            color: hsl(var(--sync-avatar-h), var(--sync-pastel-avatar-s-fg), var(--sync-pastel-avatar-l-fg));
         }
         .avatar:hover { transform: scale(1.05); }
         .avatar img {
@@ -119,6 +129,14 @@ export class SyncChatHeader extends PlatformElement {
         :host([data-call-banner]) .title,
         :host([data-call-banner]) .subtitle { color: var(--text-inverse, #fff); }
         :host([data-call-banner]) .subtitle { color: rgba(255, 255, 255, 0.88); }
+        :host([data-call-banner]) .avatar:not(.pastel-initials) {
+            background: rgba(255, 255, 255, 0.22);
+            box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.28);
+        }
+        :host([data-call-banner]) .avatar.pastel-initials {
+            background: rgba(255, 255, 255, 0.24);
+            color: var(--text-inverse, #fff);
+        }
 
         .actions {
             display: inline-flex;
@@ -133,7 +151,7 @@ export class SyncChatHeader extends PlatformElement {
             margin: 0 var(--space-1);
         }
         .icon-btn {
-            background: transparent;
+            background: color-mix(in srgb, var(--glass-hover) 35%, transparent);
             border: none;
             color: var(--text-tertiary);
             padding: 10px;
@@ -145,12 +163,22 @@ export class SyncChatHeader extends PlatformElement {
             transition: background var(--duration-fast), color var(--duration-fast);
         }
         .icon-btn:hover { background: var(--glass-hover); color: var(--text-primary); }
+        .icon-btn:focus-visible {
+            outline: 2px solid var(--accent);
+            outline-offset: 2px;
+        }
         .icon-btn.accent:hover {
             background: var(--accent-subtle, rgba(153, 166, 249, 0.12));
             color: var(--accent);
         }
-        :host([data-call-banner]) .icon-btn { color: var(--text-inverse, #fff); }
-        :host([data-call-banner]) .icon-btn:hover { background: rgba(255, 255, 255, 0.16); color: var(--text-inverse, #fff); }
+        :host([data-call-banner]) .icon-btn {
+            color: var(--text-inverse, #fff);
+            background: rgba(255, 255, 255, 0.12);
+        }
+        :host([data-call-banner]) .icon-btn:hover {
+            background: rgba(255, 255, 255, 0.22);
+            color: var(--text-inverse, #fff);
+        }
         .pulse {
             display: inline-block;
             width: 8px;
@@ -215,6 +243,8 @@ export class SyncChatHeader extends PlatformElement {
         super();
         this.channelId = '';
         this._menuOpen = false;
+        this._headerAvatarFailed = false;
+        this._headerAvatarSig = '';
         this._channels = this.useResource('sync/channels', { autoload: true });
         this._members = this.useResource('sync/company_members');
         this._authSel = this.select((s) => s.auth && s.auth.user);
@@ -239,6 +269,29 @@ export class SyncChatHeader extends PlatformElement {
     disconnectedCallback() {
         document.removeEventListener('pointerdown', this._onDocClick);
         super.disconnectedCallback();
+    }
+
+    updated(changed) {
+        super.updated?.(changed);
+        const channel = this._channel();
+        if (channel) {
+            const isDm = channel.type === 'direct' && channel.peer && typeof channel.peer.user_id === 'string';
+            let sig;
+            if (isDm) {
+                const peer = channel.peer;
+                const au = typeof peer.avatar_url === 'string' ? peer.avatar_url : '';
+                sig = `dm:${peer.user_id}|${au}`;
+            } else {
+                const id = typeof channel.id === 'string' ? channel.id : '';
+                const au = typeof channel.avatar_url === 'string' ? channel.avatar_url : '';
+                const coll = syncChannelPlaceholderCollection(channel);
+                sig = `ch:${id}|${au}|${coll}`;
+            }
+            if (this._headerAvatarSig !== sig) {
+                this._headerAvatarSig = sig;
+                this._headerAvatarFailed = false;
+            }
+        }
     }
 
     _channel() {
@@ -300,6 +353,10 @@ export class SyncChatHeader extends PlatformElement {
         this.openModal('platform.user_info', { userId: channel.peer.user_id });
     }
 
+    _onHeaderAvatarError() {
+        this._headerAvatarFailed = true;
+    }
+
     _renderAvatar(channel) {
         const isDm = channel.type === 'direct' && channel.peer && typeof channel.peer.user_id === 'string';
         if (isDm) {
@@ -307,24 +364,47 @@ export class SyncChatHeader extends PlatformElement {
             const presenceByUserId = presence && presence.presenceByUserId ? presence.presenceByUserId : null;
             const online = isOnline(presenceByUserId, channel.peer.user_id);
             const name = resolveDisplayName(channel.peer);
-            const hue = hueFromString(channel.peer.user_id);
+            const hueVar = syncAvatarHueVar(channel.peer.user_id);
+            if (this._headerAvatarFailed) {
+                return html`
+                    <span class="avatar pastel-initials" style=${hueVar} @click=${() => this._onPeerClick(channel)}>
+                        ${initialsFromName(name)}
+                        ${online ? html`<span class="presence-dot"></span>` : ''}
+                    </span>
+                `;
+            }
+            const peerUrl = typeof channel.peer.avatar_url === 'string' && channel.peer.avatar_url !== ''
+                ? channel.peer.avatar_url
+                : null;
+            const resolved = resolveAvatarImageSrc({ avatarUrl: peerUrl, seed: channel.peer.user_id });
             return html`
-                <span class="avatar" style=${`background: hsl(${hue}, 60%, 55%)`} @click=${() => this._onPeerClick(channel)}>
-                    ${typeof channel.peer.avatar_url === 'string' && channel.peer.avatar_url !== ''
-                        ? html`<img src=${channel.peer.avatar_url} alt="" />`
-                        : initialsFromName(name)}
+                <span class="avatar" @click=${() => this._onPeerClick(channel)}>
+                    <img src=${resolved.src} alt="" @error=${this._onHeaderAvatarError} />
                     ${online ? html`<span class="presence-dot"></span>` : ''}
                 </span>
             `;
         }
         const seed = typeof channel.id === 'string' ? channel.id : 'sync';
-        const hue = hueFromString(seed);
+        const hueVar = syncAvatarHueVar(seed);
         const name = typeof channel.name === 'string' && channel.name !== '' ? channel.name : '#';
+        if (this._headerAvatarFailed) {
+            return html`
+                <span class="avatar pastel-initials" style=${hueVar}>
+                    ${initialsFromName(name)}
+                </span>
+            `;
+        }
+        const chUrl = typeof channel.avatar_url === 'string' && channel.avatar_url !== ''
+            ? channel.avatar_url
+            : null;
+        const resolved = resolveAvatarImageSrc({
+            avatarUrl: chUrl,
+            seed,
+            collection: syncChannelPlaceholderCollection(channel),
+        });
         return html`
-            <span class="avatar" style=${`background: hsl(${hue}, 60%, 55%)`}>
-                ${typeof channel.avatar_url === 'string' && channel.avatar_url !== ''
-                    ? html`<img src=${channel.avatar_url} alt="" />`
-                    : initialsFromName(name)}
+            <span class="avatar">
+                <img src=${resolved.src} alt="" @error=${this._onHeaderAvatarError} />
             </span>
         `;
     }

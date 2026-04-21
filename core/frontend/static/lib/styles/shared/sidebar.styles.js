@@ -279,8 +279,8 @@ export const sidebarStyles = css`
         overflow-y: auto;
         overflow-x: hidden;
         min-height: 0;
-        padding: 0 var(--space-2);
-        margin: 0 calc(-1 * var(--space-2));
+        padding: 0 var(--sidebar-nav-inline, var(--space-2));
+        margin: 0 calc(-1 * var(--sidebar-nav-inline, var(--space-2)));
     }
 
     .sidebar-section {

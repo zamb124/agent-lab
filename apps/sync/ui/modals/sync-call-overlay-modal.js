@@ -39,7 +39,7 @@ import '@platform/lib/components/platform-icon.js';
 import '@platform/lib/components/platform-user-chip.js';
 import '@platform/lib/components/platform-switch.js';
 import '@platform/lib/components/glass-spinner.js';
-import { hueFromString, initialsFromName } from '../_helpers/sync-hue.js';
+import { initialsFromName, syncAvatarHueVar } from '../_helpers/sync-hue.js';
 
 const SCROLL_TOP_THRESHOLD = 60;
 const COPY_LINK_FEEDBACK_MS = 2000;
@@ -277,6 +277,11 @@ export class SyncCallOverlayModal extends PlatformModal {
                 color: #fff;
                 font-weight: 700;
                 font-size: var(--text-2xl, 28px);
+            }
+            .avatar.pastel-initials {
+                --sync-avatar-h: 0;
+                background: hsl(var(--sync-avatar-h), 34%, 38%);
+                color: #fff;
             }
             .name {
                 position: absolute;
@@ -1939,7 +1944,7 @@ export class SyncCallOverlayModal extends PlatformModal {
         const showActions = this._canTransferAdmin() && !tile.isLocal && !tile.isScreen;
         const menuOpen = this._participantMenuIdentity === tile.identity;
         const fsActive = this._fullscreenTileKey === tile.key;
-        const hue = hueFromString(tile.identity || `tile-${idx}`);
+        const hueVar = syncAvatarHueVar(tile.identity || `tile-${idx}`);
         return html`
             <div class="${tileClass}" data-idx=${idx} data-tile-key=${tile.key}>
                 ${showActions ? html`
@@ -1964,7 +1969,7 @@ export class SyncCallOverlayModal extends PlatformModal {
                 ` : ''}
                 ${tile.track
                     ? html`<video autoplay playsinline ?muted=${tile.isLocal}></video>`
-                    : html`<div class="avatar" style=${`background: hsl(${hue}, 60%, 50%)`}>${initialsFromName(display)}</div>`}
+                    : html`<div class="avatar pastel-initials" style=${hueVar}>${initialsFromName(display)}</div>`}
                 <span class="name">
                     ${isAdmin ? html`<span class="crown" title=${this.t('call_overlay.meeting_admin')}><platform-icon name="zap" size="12"></platform-icon></span>` : ''}
                     ${label}

@@ -280,6 +280,16 @@ export const messagesStoreSlice = createSlice({
         };
 
         switch (event.type) {
+            case 'sync/context/company_cleared': {
+                return {
+                    byChannelId: Object.freeze({}),
+                    replyToMessageId: null,
+                    editMessageId: null,
+                    contextMenuTarget: null,
+                    flashMessageId: null,
+                    flashSeq: 0,
+                };
+            }
             case 'sync/messages/succeeded': {
                 if (!event.payload || !event.payload.result) return state;
                 const result = event.payload.result;

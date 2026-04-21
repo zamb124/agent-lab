@@ -32,8 +32,9 @@ export class PlatformAudioMessagePlayer extends PlatformElement {
         css`
             :host {
                 display: block;
-                min-width: 220px;
+                width: fit-content;
                 max-width: 100%;
+                min-width: 220px;
                 box-sizing: border-box;
                 --platform-audio-bar-inactive: rgba(8, 105, 60, 0.33);
                 --platform-audio-bar-active: rgba(8, 105, 60, 0.88);
@@ -45,6 +46,7 @@ export class PlatformAudioMessagePlayer extends PlatformElement {
             }
 
             .root {
+                width: fit-content;
                 min-width: 220px;
                 max-width: min(360px, 100%);
                 border: none;

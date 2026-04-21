@@ -69,6 +69,15 @@ export function createSyncPersistEffect() {
             return;
         }
 
+        if (event.type === CoreEvents.AUTH_COMPANY_SWITCHED) {
+            ctx.dispatch(
+                CoreEvents.STORAGE_PERSIST_REQUESTED,
+                { key: KEYS.selectedChannelId, value: null },
+                { source: 'system', causation_id: event.id },
+            );
+            return;
+        }
+
         if (event.type === CoreEvents.STORAGE_LOADED) {
             if (!event.payload || typeof event.payload !== 'object') return;
             const { key, value } = event.payload;

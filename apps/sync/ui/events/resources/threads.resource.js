@@ -38,6 +38,19 @@ export const threadsResource = createResourceCollection({
     },
     extraReducer: (state, event) => {
         switch (event.type) {
+            case 'sync/context/company_cleared': {
+                return {
+                    ...state,
+                    items: Object.freeze([]),
+                    byId: Object.freeze({}),
+                    loading: false,
+                    error: null,
+                    busyIds: Object.freeze({}),
+                    lastError: Object.freeze({}),
+                    selectedThreadId: null,
+                    byChannelId: Object.freeze({}),
+                };
+            }
             case 'sync/thread/created': {
                 const item = event.payload;
                 if (!item || typeof item.thread_id !== 'string') return state;

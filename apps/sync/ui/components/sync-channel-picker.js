@@ -10,7 +10,7 @@
  *   - клик по карточке канала → navigate('channel', { channelId })
  *   - "Создать канал" → openModal('sync.channel_create', { namespace })
  *   - "Создать встречу" → dispatch('sync/calls/adhoc_create_requested') —
- *     слушается sync-shell-page (создание adhoc-канала + auto invite).
+ *     sync-shell-page открывает модалку создания канала (без auto-invite).
  *
  * Активный namespace — `getPlatformNamespaceSidebarSelection(company_id)`
  * (тот же глобальный селект, что и в CRM); фильтрация — по
@@ -26,10 +26,16 @@ import { getPlatformNamespaceSidebarSelection } from '@platform/lib/utils/platfo
 import '@platform/lib/components/glass-card.js';
 import '@platform/lib/components/platform-button.js';
 import '@platform/lib/components/platform-icon.js';
+import { resolveAvatarImageSrc } from '@platform/lib/utils/placeholder-avatar.js';
 import { channelDisplayTitle } from './_helpers/sync-channel-display.js';
-import { hueFromString, initialsFromName } from '../_helpers/sync-hue.js';
+import { syncChannelPlaceholderCollection } from '../_helpers/sync-channel-placeholder-collection.js';
+import { initialsFromName, syncAvatarHueVar } from '../_helpers/sync-hue.js';
 
 export class SyncChannelPicker extends PlatformElement {
+    static properties = {
+        _tileAvatarFailed: { state: true },
+    };
+
     static styles = css`
         :host {
             display: block;
@@ -114,10 +120,16 @@ export class SyncChannelPicker extends PlatformElement {
             display: inline-flex;
             align-items: center;
             justify-content: center;
-            color: var(--text-inverse);
             font-weight: var(--font-semibold);
             font-size: var(--text-sm);
             flex-shrink: 0;
+            overflow: hidden;
+            background: var(--accent-subtle, rgba(99, 102, 241, 0.12));
+        }
+        .tile-avatar.pastel-initials {
+            --sync-avatar-h: 0;
+            background: hsl(var(--sync-avatar-h), var(--sync-pastel-avatar-s-bg), var(--sync-pastel-avatar-l-bg));
+            color: hsl(var(--sync-avatar-h), var(--sync-pastel-avatar-s-fg), var(--sync-pastel-avatar-l-fg));
         }
         .tile-title {
             margin: 0;
@@ -150,6 +162,7 @@ export class SyncChannelPicker extends PlatformElement {
 
     constructor() {
         super();
+        this._tileAvatarFailed = Object.freeze({});
         this._channels = this.useResource('sync/channels', { autoload: true });
         this._namespaces = this.useResource('sync/namespaces', { autoload: true });
         this._authSel = this.select((s) => s.auth && s.auth.user ? s.auth.user : null);
@@ -185,14 +198,35 @@ export class SyncChannelPicker extends PlatformElement {
         return all.filter((c) => typeof c.namespace === 'string' && c.namespace === activeNs);
     }
 
+    _onTileAvatarError(channelId) {
+        if (typeof channelId !== 'string' || channelId === '') return;
+        this._tileAvatarFailed = Object.freeze({ ...this._tileAvatarFailed, [channelId]: true });
+    }
+
     _renderTileAvatar(channel) {
         const seed = typeof channel.id === 'string' && channel.id !== '' ? channel.id : 'sync';
-        const hue = hueFromString(seed);
+        const hueVar = syncAvatarHueVar(seed);
         const name = typeof channel.name === 'string' && channel.name !== '' ? channel.name : '#';
-        if (typeof channel.avatar_url === 'string' && channel.avatar_url !== '') {
-            return html`<span class="tile-avatar"><img src=${channel.avatar_url} alt="" style="width:100%;height:100%;border-radius:inherit;object-fit:cover;" /></span>`;
+        const cid = typeof channel.id === 'string' ? channel.id : '';
+        if (cid !== '' && this._tileAvatarFailed[cid] === true) {
+            return html`<span class="tile-avatar pastel-initials" style=${hueVar}>${initialsFromName(name)}</span>`;
         }
-        return html`<span class="tile-avatar" style=${`background: hsl(${hue}, 60%, 55%)`}>${initialsFromName(name)}</span>`;
+        const chUrl = typeof channel.avatar_url === 'string' && channel.avatar_url !== ''
+            ? channel.avatar_url
+            : null;
+        const resolved = resolveAvatarImageSrc({
+            avatarUrl: chUrl,
+            seed,
+            collection: syncChannelPlaceholderCollection(channel),
+        });
+        return html`<span class="tile-avatar">
+            <img
+                src=${resolved.src}
+                alt=""
+                style="width:100%;height:100%;border-radius:inherit;object-fit:cover;"
+                @error=${() => this._onTileAvatarError(cid)}
+            />
+        </span>`;
     }
 
     render() {

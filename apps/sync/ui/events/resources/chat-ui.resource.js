@@ -57,6 +57,17 @@ export const chatUiResource = createSlice({
     },
     extraReducer: (state, event) => {
         switch (event.type) {
+            case 'sync/context/company_cleared': {
+                return {
+                    ...state,
+                    selectionMode: false,
+                    selectedMessageIds: Object.freeze([]),
+                    deletingMessageIds: Object.freeze([]),
+                    forwardModal: null,
+                    pinnedNavigateIndex: 0,
+                    sidebarSearchQuery: '',
+                };
+            }
             case 'sync/chat_ui/selection_toggled': {
                 const next = !state.selectionMode;
                 return {

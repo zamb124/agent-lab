@@ -26,6 +26,7 @@ import { COMPANIES_EVENTS } from '../events/reducers/companies.js';
 import { redirectToLogin } from '../utils/auth-redirect.js';
 import { buildCompanySubdomainUrl } from '../utils/tenant-url.js';
 import { buildScenarioDocumentationUrl } from '../utils/documentation-url.js';
+import { resolveAvatarImageSrc } from '../utils/placeholder-avatar.js';
 import './platform-icon.js';
 import './platform-calendar-modal.js';
 
@@ -59,7 +60,7 @@ export class PlatformUser extends PlatformElement {
         _menuOpen: { state: true },
         _companySelectorOpen: { state: true },
         _appsMenuOpen: { state: true },
-        _avatarBroken: { state: true },
+        _avatarFallbackLevel: { state: true },
     };
 
     constructor() {
@@ -69,7 +70,8 @@ export class PlatformUser extends PlatformElement {
         this._menuOpen = false;
         this._companySelectorOpen = false;
         this._appsMenuOpen = false;
-        this._avatarBroken = false;
+        this._avatarFallbackLevel = 0;
+        this._menuAvatarSig = '';
 
         this._authSelect = this.select((s) => ({
             status: s.auth.status,
@@ -110,6 +112,18 @@ export class PlatformUser extends PlatformElement {
         if (auth.status === 'authenticated' && auth.user && !this._companiesLoaded) {
             this._companiesLoaded = true;
             this.dispatch(COMPANIES_EVENTS.LOAD_REQUESTED, null);
+        }
+
+        const menuUser = auth.user;
+        if (menuUser) {
+            const raw = menuUser.raw;
+            const uid = raw && typeof raw.user_id === 'string' ? raw.user_id : '';
+            const url = this._avatarUrl(menuUser);
+            const sig = `${uid}|${url || ''}`;
+            if (this._menuAvatarSig !== sig) {
+                this._menuAvatarSig = sig;
+                this._avatarFallbackLevel = 0;
+            }
         }
 
         if (changedProperties.has('_menuOpen')) {
@@ -327,8 +341,16 @@ export class PlatformUser extends PlatformElement {
         return '?';
     }
 
-    _onAvatarError() {
-        this._avatarBroken = true;
+    _onMenuAvatarError() {
+        const auth = this._authSelect.value;
+        const user = auth.user;
+        if (!user) return;
+        const url = this._avatarUrl(user);
+        if (this._avatarFallbackLevel === 0 && url) {
+            this._avatarFallbackLevel = 1;
+        } else {
+            this._avatarFallbackLevel = 2;
+        }
     }
 
     _attachCollapsedListeners() {
@@ -386,6 +408,17 @@ export class PlatformUser extends PlatformElement {
         const themeMode = this._themeSelect.value;
         const locale = this._localeSelect.value;
         const avatarUrl = this._avatarUrl(user);
+        const raw = user.raw;
+        if (!raw || typeof raw.user_id !== 'string' || raw.user_id === '') {
+            throw new Error('platform-user: auth.user.raw.user_id required');
+        }
+        const avatarSeed = raw.user_id;
+        const menuAvatarSrc = this._avatarFallbackLevel >= 2
+            ? null
+            : resolveAvatarImageSrc({
+                avatarUrl: this._avatarFallbackLevel === 0 && avatarUrl ? avatarUrl : null,
+                seed: avatarSeed,
+            }).src;
 
         return html`
             <button
@@ -393,12 +426,12 @@ export class PlatformUser extends PlatformElement {
                 @click=${this._toggleMenu}
                 title=${this.t('menu.user_button_title')}
             >
-                ${avatarUrl && !this._avatarBroken ? html`
-                    <span class="user-avatar has-image">
-                        <img class="avatar-img" src=${avatarUrl} alt="" @error=${this._onAvatarError} />
-                    </span>
-                ` : html`
+                ${this._avatarFallbackLevel >= 2 ? html`
                     <span class="user-avatar">${this._avatarLetter(user)}</span>
+                ` : html`
+                    <span class="user-avatar has-image">
+                        <img class="avatar-img" src=${menuAvatarSrc} alt="" @error=${this._onMenuAvatarError} />
+                    </span>
                 `}
                 <span class="user-info">
                     <span class="user-name">${this._displayName(user)}</span>
@@ -816,6 +849,8 @@ export class PlatformUser extends PlatformElement {
                 align-items: center;
                 gap: var(--space-3);
                 padding: var(--space-2) var(--space-3);
+                font-size: var(--text-sm);
+                color: var(--text-primary);
             }
             .lang-switcher { display: inline-flex; align-items: center; gap: 2px; }
             .lang-option {

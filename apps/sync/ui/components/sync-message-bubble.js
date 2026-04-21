@@ -27,7 +27,8 @@ import '@platform/lib/components/platform-icon.js';
 import '@platform/lib/components/platform-user-chip.js';
 import '@platform/lib/components/platform-audio-message-player.js';
 import { parseMentionsToSegments } from '../_helpers/sync-mention-text.js';
-import { hueFromString, initialsFromName } from '../_helpers/sync-hue.js';
+import { resolveAvatarImageSrc } from '@platform/lib/utils/placeholder-avatar.js';
+import { initialsFromName, syncAvatarHueVar } from '../_helpers/sync-hue.js';
 
 const FILE_DOWNLOAD_BASE = '/sync/api/v1/files/download';
 const LONG_PRESS_MS = 450;
@@ -68,6 +69,7 @@ export class SyncMessageBubble extends PlatformElement {
         channelType: { type: String, attribute: 'channel-type' },
         position: { type: String, reflect: true, attribute: 'data-position' },
         members: { type: Array },
+        _senderAvatarFailed: { state: true },
     };
 
     static styles = css`
@@ -99,10 +101,20 @@ export class SyncMessageBubble extends PlatformElement {
             display: inline-flex;
             align-items: center;
             justify-content: center;
-            color: white;
             font-weight: 600;
             font-size: var(--text-xs);
             cursor: pointer;
+        }
+        .avatar.pastel-initials {
+            --sync-avatar-h: 0;
+            background: hsl(var(--sync-avatar-h), var(--sync-pastel-avatar-s-bg), var(--sync-pastel-avatar-l-bg));
+            color: hsl(var(--sync-avatar-h), var(--sync-pastel-avatar-s-fg), var(--sync-pastel-avatar-l-fg));
+        }
+        .avatar img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            border-radius: 50%;
         }
         :host([data-own]) .avatar-slot { display: none; }
         :host(:not([data-show-avatar])) .avatar-slot .avatar { visibility: hidden; }
@@ -124,9 +136,11 @@ export class SyncMessageBubble extends PlatformElement {
             border: 1px solid var(--glass-border-subtle, var(--glass-border));
             border-radius: var(--radius-2xl, 18px);
             padding: 10px var(--space-4);
+            width: fit-content;
             max-width: 70%;
             min-width: 0;
             position: relative;
+            overflow: visible;
             color: var(--text-primary);
             box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
             transition: background var(--duration-fast);
@@ -137,15 +151,15 @@ export class SyncMessageBubble extends PlatformElement {
             border-color: transparent;
             box-shadow: 0 2px 8px var(--accent-subtle, rgba(153, 166, 249, 0.18));
         }
-        :host(:not([data-own])) .bubble { border-bottom-left-radius: 4px; }
-        :host([data-own]) .bubble { border-bottom-right-radius: 4px; }
+        :host(:not([data-own])) .bubble { border-bottom-left-radius: 6px; }
+        :host([data-own]) .bubble { border-bottom-right-radius: 6px; }
         :host(:not([data-own])[data-position="middle"]) .bubble,
         :host(:not([data-own])[data-position="first"]) .bubble {
-            border-bottom-left-radius: 4px;
+            border-bottom-left-radius: 6px;
         }
         :host([data-own][data-position="middle"]) .bubble,
         :host([data-own][data-position="first"]) .bubble {
-            border-bottom-right-radius: 4px;
+            border-bottom-right-radius: 6px;
         }
         :host([data-flash]) .bubble {
             box-shadow: 0 0 0 3px var(--accent), 0 0 22px var(--accent);
@@ -156,8 +170,9 @@ export class SyncMessageBubble extends PlatformElement {
             100% { box-shadow: 0 0 0 0 transparent; }
         }
         .sender {
-            font-size: var(--text-xs);
-            font-weight: 600;
+            font-size: 11px;
+            font-weight: 700;
+            letter-spacing: 0.01em;
             margin-bottom: var(--space-1);
             color: var(--text-secondary);
             cursor: pointer;
@@ -165,15 +180,18 @@ export class SyncMessageBubble extends PlatformElement {
         :host([data-own]) .sender { display: none; }
         .reply-quote {
             border-left: 3px solid var(--accent);
-            padding: 2px var(--space-2);
-            margin-bottom: var(--space-1);
-            background: var(--glass-hover);
+            padding: 6px var(--space-3);
+            margin-bottom: var(--space-2);
+            background: color-mix(in srgb, var(--glass-solid-soft, var(--glass-solid)) 82%, var(--sync-reply-quote-bg-mix));
             border-radius: var(--radius-sm);
             font-size: var(--text-xs);
             color: var(--text-secondary);
             cursor: pointer;
         }
-        :host([data-own]) .reply-quote { background: rgba(255,255,255,0.18); color: rgba(255,255,255,0.92); }
+        :host([data-own]) .reply-quote {
+            background: rgba(255, 255, 255, 0.24);
+            color: rgba(255, 255, 255, 0.95);
+        }
         .reply-quote .who { font-weight: 600; }
         .forwarded {
             display: inline-flex;
@@ -188,8 +206,24 @@ export class SyncMessageBubble extends PlatformElement {
             white-space: pre-wrap;
             word-break: break-word;
             overflow-wrap: anywhere;
-            font-size: var(--text-base, 15px);
+            font-size: var(--text-base, 16px);
             line-height: 1.5;
+        }
+        .tail-row {
+            display: flex;
+            flex-direction: row;
+            align-items: center;
+            gap: var(--space-2);
+            width: 100%;
+            margin-top: 6px;
+            justify-content: space-between;
+            flex-wrap: wrap;
+        }
+        .tail-row--meta-only {
+            justify-content: flex-end;
+        }
+        .tail-row .meta {
+            margin-top: 0;
         }
         .body a { color: inherit; text-decoration: underline; }
         .mention {
@@ -214,15 +248,20 @@ export class SyncMessageBubble extends PlatformElement {
             margin: 0;
         }
         .meta {
-            display: flex;
+            display: inline-flex;
             align-items: center;
-            gap: var(--space-1);
+            gap: 4px;
             justify-content: flex-end;
             font-size: 11px;
-            color: var(--text-secondary);
+            line-height: 1.2;
+            color: var(--text-tertiary);
             margin-top: 2px;
+            opacity: 0.88;
         }
-        :host([data-own]) .meta { color: rgba(255, 255, 255, 0.85); }
+        :host([data-own]) .meta {
+            color: rgba(255, 255, 255, 0.82);
+            opacity: 0.95;
+        }
         .status-failed {
             display: inline-flex;
             align-items: center;
@@ -242,14 +281,6 @@ export class SyncMessageBubble extends PlatformElement {
             border-radius: 999px;
         }
         :host([data-own]) .status-failed { color: var(--color-error, #ef4444); }
-        .footer {
-            display: flex;
-            flex-wrap: wrap;
-            align-items: center;
-            gap: var(--space-2);
-            margin-top: var(--space-1);
-        }
-        .footer .meta { margin: 0; margin-left: auto; }
         .reactions {
             display: flex;
             flex-wrap: wrap;
@@ -456,6 +487,8 @@ export class SyncMessageBubble extends PlatformElement {
         this._channelsSel = this.select((s) => s.syncChannels);
         this._longPressTimer = null;
         this._longPressTriggered = false;
+        this._senderAvatarFailed = false;
+        this._senderAvatarSig = '';
     }
 
     updated(changed) {
@@ -465,6 +498,15 @@ export class SyncMessageBubble extends PlatformElement {
             this.toggleAttribute('data-own', own);
             const showAvatar = !own && (this.position === 'first' || this.position === 'single');
             this.toggleAttribute('data-show-avatar', showAvatar);
+            const sender = this.message && this.message.sender;
+            if (sender && typeof sender.user_id === 'string') {
+                const au = typeof sender.avatar_url === 'string' ? sender.avatar_url : '';
+                const sig = `${sender.user_id}|${au}`;
+                if (this._senderAvatarSig !== sig) {
+                    this._senderAvatarSig = sig;
+                    this._senderAvatarFailed = false;
+                }
+            }
         }
         const slice = this._chatUi.value;
         const selectionMode = !!(slice && slice.selectionMode === true);
@@ -522,6 +564,11 @@ export class SyncMessageBubble extends PlatformElement {
         this.emit('jump-to-message', { messageId: parent });
     }
 
+    _onSenderAvatarError(e) {
+        e.stopPropagation();
+        this._senderAvatarFailed = true;
+    }
+
     _onSenderClick() {
         const senderId = this.message && this.message.sender && this.message.sender.user_id;
         if (typeof senderId !== 'string' || senderId === '') return;
@@ -570,6 +617,24 @@ export class SyncMessageBubble extends PlatformElement {
     _onJoinCall(callId) {
         if (typeof callId !== 'string' || callId === '') return;
         this._callAccept.run({ call_id: callId });
+    }
+
+    _reactionsNonEmpty() {
+        const raw = this.message && Array.isArray(this.message.reactions) ? this.message.reactions : [];
+        return _reactionsGroupedByEmoji(raw).length > 0;
+    }
+
+    _renderTailRow() {
+        const hasReactions = this._reactionsNonEmpty();
+        if (!hasReactions) {
+            return html`<div class="tail-row tail-row--meta-only">${this._renderMeta()}</div>`;
+        }
+        return html`
+            <div class="tail-row">
+                ${this._renderReactions()}
+                ${this._renderMeta()}
+            </div>
+        `;
     }
 
     _renderText(content) {
@@ -929,11 +994,17 @@ export class SyncMessageBubble extends PlatformElement {
         const name = (typeof sender.display_name === 'string' && sender.display_name !== '')
             ? sender.display_name
             : sender.user_id;
-        const hue = hueFromString(sender.user_id);
-        if (typeof sender.avatar_url === 'string' && sender.avatar_url !== '') {
-            return html`<img class="avatar" src=${sender.avatar_url} alt="" @click=${this._onSenderClick} />`;
+        const hueVar = syncAvatarHueVar(sender.user_id);
+        if (this._senderAvatarFailed) {
+            return html`<span class="avatar pastel-initials" style=${hueVar} @click=${this._onSenderClick}>${initialsFromName(name)}</span>`;
         }
-        return html`<span class="avatar" style=${`background: hsl(${hue}, 60%, 55%)`} @click=${this._onSenderClick}>${initialsFromName(name)}</span>`;
+        const sUrl = typeof sender.avatar_url === 'string' && sender.avatar_url !== ''
+            ? sender.avatar_url
+            : null;
+        const resolved = resolveAvatarImageSrc({ avatarUrl: sUrl, seed: sender.user_id });
+        return html`<span class="avatar" @click=${this._onSenderClick}>
+            <img src=${resolved.src} alt="" @error=${this._onSenderAvatarError} />
+        </span>`;
     }
 
     render() {
@@ -955,6 +1026,7 @@ export class SyncMessageBubble extends PlatformElement {
         const senderName = sender && (typeof sender.display_name === 'string' && sender.display_name !== ''
             ? sender.display_name
             : sender.user_id);
+        const bodyMain = html`${contents.map((c) => this._renderContent(c))}`;
         return html`
             <div class="row"
                  @contextmenu=${this._onContextMenu}
@@ -969,11 +1041,8 @@ export class SyncMessageBubble extends PlatformElement {
                     ${showSenderName && senderName ? html`<div class="sender" @click=${this._onSenderClick}>${senderName}</div>` : ''}
                     ${this._renderForwarded()}
                     ${this._renderReplyQuote()}
-                    ${contents.map((c) => this._renderContent(c))}
-                    <div class="footer">
-                        ${this._renderReactions()}
-                        ${this._renderMeta()}
-                    </div>
+                    ${bodyMain}
+                    ${this._renderTailRow()}
                     <span class="quick-reactions">
                         ${EMOJI_QUICK.map((e) => html`<span @click=${(ev) => { ev.stopPropagation(); this._onReaction(e); }}>${e}</span>`)}
                     </span>

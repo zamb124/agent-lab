@@ -23,6 +23,89 @@ def _normalize_mime_type(raw_mime_type: str | None) -> str | None:
     return raw_mime_type.split(";", 1)[0].strip().lower()
 
 
+def audio_needs_mp3_upload_for_stt(*, file_name: str, mime_type: str) -> bool:
+    """Контейнеры вроде M4A/MP4: cloud.ru STT в multipart часто отвечает Format not recognised.
+
+    Для них сначала гоняем байты через ffmpeg в MP3 (как при чанковании).
+    """
+    suffix = Path(file_name).suffix.lower().lstrip(".")
+    if suffix in ("m4a", "mp4", "mov", "3gp"):
+        return True
+    normalized_mime_type = _normalize_mime_type(mime_type)
+    if normalized_mime_type is None:
+        return False
+    return normalized_mime_type in (
+        "audio/mp4",
+        "audio/x-m4a",
+        "video/mp4",
+        "video/quicktime",
+    )
+
+
+def normalize_audio_to_mp3_for_stt(
+    *,
+    audio_bytes: bytes,
+    file_name: str,
+    mime_type: str,
+    chunk_bitrate_kbps: int,
+    chunk_sample_rate_hz: int,
+    chunk_channels: int,
+) -> tuple[bytes, str]:
+    """Одна дорожка → MP3 теми же параметрами, что и сегменты `split_audio_for_stt_chunks`."""
+    if not audio_bytes:
+        raise ValueError("audio_bytes не может быть пустым.")
+    if chunk_bitrate_kbps <= 0:
+        raise ValueError("chunk_bitrate_kbps должен быть больше 0.")
+    if chunk_sample_rate_hz <= 0:
+        raise ValueError("chunk_sample_rate_hz должен быть больше 0.")
+    if chunk_channels <= 0:
+        raise ValueError("chunk_channels должен быть больше 0.")
+
+    input_extension = _audio_input_extension(file_name=file_name, mime_type=mime_type)
+    file_stem = Path(file_name).stem
+    if file_stem == "":
+        file_stem = "recording"
+    out_file_name = f"{file_stem}.mp3"
+
+    with tempfile.TemporaryDirectory(prefix="media-stt-norm-") as work_dir:
+        source_path = Path(work_dir) / f"source.{input_extension}"
+        source_path.write_bytes(audio_bytes)
+        out_path = Path(work_dir) / "normalized.mp3"
+        ffmpeg_cmd = [
+            "ffmpeg",
+            "-hide_banner",
+            "-loglevel",
+            "error",
+            "-y",
+            "-i",
+            str(source_path),
+            "-vn",
+            "-ac",
+            str(chunk_channels),
+            "-ar",
+            str(chunk_sample_rate_hz),
+            "-b:a",
+            f"{chunk_bitrate_kbps}k",
+            str(out_path),
+        ]
+        ffmpeg_result = subprocess.run(
+            ffmpeg_cmd,
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+        if ffmpeg_result.returncode != 0:
+            stderr = ffmpeg_result.stderr.strip()
+            raise RuntimeError(
+                "Не удалось нормализовать аудио в MP3 для STT. "
+                f"return_code={ffmpeg_result.returncode}; stderr={stderr}"
+            )
+        mp3_bytes = out_path.read_bytes()
+        if len(mp3_bytes) == 0:
+            raise ValueError("Нормализация STT дала пустой MP3.")
+        return mp3_bytes, out_file_name
+
+
 def _audio_input_extension(file_name: str, mime_type: str) -> str:
     if file_name == "":
         raise ValueError("file_name не может быть пустым.")
@@ -203,39 +286,92 @@ async def transcribe_audio_with_chunking(
         stt_client = STTClientFactory.create_client()
 
     should_chunk_first = len(audio_bytes) > max_upload_bytes
+
+    async def _single_shot(
+        payload_bytes: bytes,
+        payload_name: str,
+        payload_mime: str,
+        *,
+        context: str,
+    ) -> str:
+        transcript_result = await stt_client.transcribe_audio(
+            audio_bytes=payload_bytes,
+            file_name=payload_name,
+            mime_type=payload_mime,
+            language=language,
+        )
+        return validate_stt_result_text(
+            transcript_result=transcript_result,
+            job_id=job_id,
+            context=context,
+        )
+
     if not should_chunk_first:
-        try:
-            transcript_result = await stt_client.transcribe_audio(
+        if audio_needs_mp3_upload_for_stt(file_name=file_name, mime_type=mime_type):
+            norm_bytes, norm_name = normalize_audio_to_mp3_for_stt(
                 audio_bytes=audio_bytes,
                 file_name=file_name,
                 mime_type=mime_type,
-                language=language,
+                chunk_bitrate_kbps=chunk_bitrate_kbps,
+                chunk_sample_rate_hz=chunk_sample_rate_hz,
+                chunk_channels=chunk_channels,
             )
-            return validate_stt_result_text(
-                transcript_result=transcript_result,
-                job_id=job_id,
-                context="single_request",
-            )
-        except httpx.HTTPStatusError as exc:
-            if exc.response.status_code != 413:
-                raise
-            logger.warning(
-                "STT single request returned 413; switching to chunked mode: job_id=%s file=%s bytes=%s",
-                job_id,
-                file_name,
-                len(audio_bytes),
-            )
-        except ValueError as exc:
-            if not is_stt_format_not_recognized_error(exc):
-                raise
-            logger.warning(
-                "STT single request returned format error; switching to chunked mode: "
-                "job_id=%s file=%s mime=%s error=%s",
-                job_id,
-                file_name,
-                mime_type,
-                str(exc),
-            )
+            if len(norm_bytes) <= max_upload_bytes:
+                try:
+                    return await _single_shot(
+                        norm_bytes,
+                        norm_name,
+                        "audio/mpeg",
+                        context="single_request_mp3_normalized",
+                    )
+                except httpx.HTTPStatusError as exc:
+                    if exc.response.status_code != 413:
+                        raise
+                    logger.warning(
+                        "STT normalized single request returned 413; switching to chunked mode: "
+                        "job_id=%s file=%s bytes=%s",
+                        job_id,
+                        file_name,
+                        len(audio_bytes),
+                    )
+                except ValueError as exc:
+                    if not is_stt_format_not_recognized_error(exc):
+                        raise
+                    logger.warning(
+                        "STT normalized single request returned format error; switching to chunked mode: "
+                        "job_id=%s file=%s error=%s",
+                        job_id,
+                        file_name,
+                        str(exc),
+                    )
+        else:
+            try:
+                return await _single_shot(
+                    audio_bytes,
+                    file_name,
+                    mime_type,
+                    context="single_request",
+                )
+            except httpx.HTTPStatusError as exc:
+                if exc.response.status_code != 413:
+                    raise
+                logger.warning(
+                    "STT single request returned 413; switching to chunked mode: job_id=%s file=%s bytes=%s",
+                    job_id,
+                    file_name,
+                    len(audio_bytes),
+                )
+            except ValueError as exc:
+                if not is_stt_format_not_recognized_error(exc):
+                    raise
+                logger.warning(
+                    "STT single request returned format error; switching to chunked mode: "
+                    "job_id=%s file=%s mime=%s error=%s",
+                    job_id,
+                    file_name,
+                    mime_type,
+                    str(exc),
+                )
 
     chunks = split_audio_for_stt_chunks(
         audio_bytes=audio_bytes,

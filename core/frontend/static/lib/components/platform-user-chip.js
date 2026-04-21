@@ -21,6 +21,7 @@
 import { html, css } from 'lit';
 import { PlatformElement } from '../platform-element/index.js';
 import { TEAM_EVENTS } from '../events/reducers/team.js';
+import { resolveAvatarImageSrc } from '../utils/placeholder-avatar.js';
 
 const ALLOWED_SIZES = new Set(['sm', 'md']);
 
@@ -31,6 +32,7 @@ export class PlatformUserChip extends PlatformElement {
         userId: { type: String, attribute: 'user-id' },
         size: { type: String },
         interactive: { type: Boolean },
+        _chipAvatarFallback: { state: true },
     };
 
     static styles = [
@@ -137,6 +139,8 @@ export class PlatformUserChip extends PlatformElement {
         this.userId = '';
         this.size = 'sm';
         this.interactive = true;
+        this._chipAvatarFallback = 0;
+        this._chipAvatarSig = '';
         this._teamSel = this.select((s) => s.team);
         this._authSel = this.select((s) => s.auth);
         this._loadDispatched = false;
@@ -157,6 +161,21 @@ export class PlatformUserChip extends PlatformElement {
         ) {
             this._loadDispatched = true;
             this.dispatch(TEAM_EVENTS.MEMBERS_LOAD_REQUESTED, null);
+        }
+        const resolved = this._resolveUser();
+        if (resolved) {
+            const au = typeof resolved.avatar_url === 'string' ? resolved.avatar_url : '';
+            const sig = `${resolved.user_id}|${au}`;
+            if (this._chipAvatarSig !== sig) {
+                this._chipAvatarSig = sig;
+                this._chipAvatarFallback = 0;
+            }
+        } else if (typeof this.userId === 'string' && this.userId.length > 0) {
+            const sig = `${this.userId}|unknown`;
+            if (this._chipAvatarSig !== sig) {
+                this._chipAvatarSig = sig;
+                this._chipAvatarFallback = 0;
+            }
         }
     }
 
@@ -209,12 +228,28 @@ export class PlatformUserChip extends PlatformElement {
         }
     }
 
-    _renderAvatar(user) {
-        if (user.avatar_url) {
-            return html`<span class="avatar"><img src=${user.avatar_url} alt=${user.name} /></span>`;
+    _onChipAvatarError() {
+        const user = this._resolveUser();
+        if (!user) return;
+        const hadUrl = typeof user.avatar_url === 'string' && user.avatar_url.length > 0;
+        if (this._chipAvatarFallback === 0 && hadUrl) {
+            this._chipAvatarFallback = 1;
+        } else {
+            this._chipAvatarFallback = 2;
         }
-        const letter = user.name && user.name.length > 0 ? user.name.trim().charAt(0).toUpperCase() : '?';
-        return html`<span class="avatar">${letter}</span>`;
+    }
+
+    _renderAvatar(user) {
+        if (this._chipAvatarFallback >= 2) {
+            const letter = user.name && user.name.length > 0 ? user.name.trim().charAt(0).toUpperCase() : '?';
+            return html`<span class="avatar">${letter}</span>`;
+        }
+        const hadUrl = typeof user.avatar_url === 'string' && user.avatar_url.length > 0;
+        const resolved = resolveAvatarImageSrc({
+            avatarUrl: this._chipAvatarFallback === 0 && hadUrl ? user.avatar_url : null,
+            seed: user.user_id,
+        });
+        return html`<span class="avatar"><img src=${resolved.src} alt=${user.name} @error=${this._onChipAvatarError} /></span>`;
     }
 
     render() {

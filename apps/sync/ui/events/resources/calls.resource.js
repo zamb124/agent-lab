@@ -8,7 +8,28 @@
  * REST-зеркала живут в `apps/sync/api/calls.py` и вызывают те же `op_*`.
  */
 
-import { createAsyncOp, createSlice } from '@platform/lib/events/index.js';
+import {
+    createAsyncOp,
+    createSlice,
+    CoreEvents,
+    HttpError,
+    WsTransportError,
+} from '@platform/lib/events/index.js';
+
+/**
+ * У `silent: true` фабрика не шлёт errorToastKey; показываем текст ошибки
+ * сервера/транспорта (error_detail WS, тело HTTP) в одном тосте.
+ */
+function _syncOpToastOnFailure(ctx, err, event) {
+    if (!(err instanceof HttpError) && !(err instanceof WsTransportError)) return;
+    const msg = typeof err.message === 'string' ? err.message : '';
+    if (msg === '') return;
+    ctx.dispatch(
+        CoreEvents.UI_TOAST_SHOW,
+        { type: 'error', message: msg },
+        { causation_id: event.id, source: 'local' },
+    );
+}
 
 // ============================================================================
 // Read-операции звонков
@@ -19,6 +40,7 @@ export const callTokenOp = createAsyncOp({
     transport: 'ws',
     wsTimeoutMs: 5_000,
     silent: true,
+    onFailure: _syncOpToastOnFailure,
     commandType: 'sync/calls/token_requested',
     restMirror: { method: 'GET', path: '/sync/api/v1/calls/:call_id/token' },
 });
@@ -28,6 +50,7 @@ export const callStatusOp = createAsyncOp({
     transport: 'ws',
     wsTimeoutMs: 5_000,
     silent: true,
+    onFailure: _syncOpToastOnFailure,
     commandType: 'sync/calls/get_requested',
     restMirror: { method: 'GET', path: '/sync/api/v1/calls/:call_id' },
 });
@@ -37,6 +60,7 @@ export const callTurnOp = createAsyncOp({
     transport: 'ws',
     wsTimeoutMs: 5_000,
     silent: true,
+    onFailure: _syncOpToastOnFailure,
     commandType: 'sync/calls/turn_credentials_requested',
     restMirror: { method: 'GET', path: '/sync/api/v1/calls/turn-credentials' },
 });
@@ -46,6 +70,7 @@ export const callRecordingsListOp = createAsyncOp({
     transport: 'ws',
     wsTimeoutMs: 5_000,
     silent: true,
+    onFailure: _syncOpToastOnFailure,
     commandType: 'sync/calls/recordings_list_requested',
     restMirror: { method: 'GET', path: '/sync/api/v1/calls/:call_id/recordings' },
 });
@@ -60,6 +85,7 @@ export const callInviteOp = createAsyncOp({
     transport: 'ws',
     wsTimeoutMs: 8_000,
     silent: true,
+    onFailure: _syncOpToastOnFailure,
     commandType: 'sync/calls/invite_requested',
     restMirror: { method: 'POST', path: '/sync/api/v1/calls/:call_id/invite' },
 });
@@ -69,6 +95,7 @@ export const callAcceptOp = createAsyncOp({
     transport: 'ws',
     wsTimeoutMs: 5_000,
     silent: true,
+    onFailure: _syncOpToastOnFailure,
     commandType: 'sync/calls/accept_requested',
     restMirror: { method: 'POST', path: '/sync/api/v1/calls/:call_id/accept' },
 });
@@ -78,6 +105,7 @@ export const callDeclineOp = createAsyncOp({
     transport: 'ws',
     wsTimeoutMs: 3_000,
     silent: true,
+    onFailure: _syncOpToastOnFailure,
     commandType: 'sync/calls/decline_requested',
     restMirror: { method: 'POST', path: '/sync/api/v1/calls/:call_id/decline' },
 });
@@ -87,6 +115,7 @@ export const callHangupOp = createAsyncOp({
     transport: 'ws',
     wsTimeoutMs: 5_000,
     silent: true,
+    onFailure: _syncOpToastOnFailure,
     commandType: 'sync/calls/hangup_requested',
     restMirror: { method: 'POST', path: '/sync/api/v1/calls/:call_id/hangup' },
 });
@@ -96,6 +125,7 @@ export const callRecordingStartOp = createAsyncOp({
     transport: 'ws',
     wsTimeoutMs: 8_000,
     silent: true,
+    onFailure: _syncOpToastOnFailure,
     commandType: 'sync/calls/recording_start_requested',
     restMirror: { method: 'POST', path: '/sync/api/v1/calls/:call_id/recording/start' },
 });
@@ -105,6 +135,7 @@ export const callRecordingStopOp = createAsyncOp({
     transport: 'ws',
     wsTimeoutMs: 8_000,
     silent: true,
+    onFailure: _syncOpToastOnFailure,
     commandType: 'sync/calls/recording_stop_requested',
     restMirror: { method: 'POST', path: '/sync/api/v1/calls/:call_id/recording/stop' },
 });
@@ -114,6 +145,7 @@ export const callAdminTransferOp = createAsyncOp({
     transport: 'ws',
     wsTimeoutMs: 5_000,
     silent: true,
+    onFailure: _syncOpToastOnFailure,
     commandType: 'sync/calls/admin_transfer_requested',
     restMirror: { method: 'POST', path: '/sync/api/v1/calls/:call_id/admin/transfer' },
 });
@@ -123,16 +155,15 @@ export const callSignalOp = createAsyncOp({
     transport: 'ws',
     wsTimeoutMs: 2_000,
     silent: true,
+    onFailure: _syncOpToastOnFailure,
     commandType: 'sync/calls/signal_requested',
     restMirror: { method: 'POST', path: '/sync/api/v1/calls/:call_id/signal' },
 });
 
 // ============================================================================
-// Ad-hoc встреча: создать канал и сразу пригласить себя в звонок.
-// На backend нет отдельного REST/WS-эндпоинта для adhoc — используем
-// канонический `sync/channels/create_requested` через WS (тот же commandType,
-// что и обычное создание канала из `channelsResource`). Имя фабрики уникальное
-// для отдельного slice, чтобы не пересекаться с CRUD-resource'ом.
+// Ad-hoc встреча: канал создаётся через `sync/channels/create_requested` (WS).
+// Сразу после создания UI вызывает `sync/calls_invite` и открывает оверлей
+// (`sync-sidebar._startAdhocCallSession`), как кнопка звонка в шапке чата.
 // ============================================================================
 
 export const channelCreateAdhocCallOp = createAsyncOp({
@@ -140,6 +171,7 @@ export const channelCreateAdhocCallOp = createAsyncOp({
     transport: 'ws',
     wsTimeoutMs: 8_000,
     silent: true,
+    onFailure: _syncOpToastOnFailure,
     commandType: 'sync/channels/create_requested',
     restMirror: { method: 'POST', path: '/sync/api/v1/channels/' },
 });
@@ -153,6 +185,7 @@ export const callLinksScheduledOp = createAsyncOp({
     transport: 'ws',
     wsTimeoutMs: 5_000,
     silent: true,
+    onFailure: _syncOpToastOnFailure,
     commandType: 'sync/calls/links_list_requested',
     restMirror: { method: 'GET', path: '/sync/api/v1/calls/links/scheduled' },
 });
@@ -378,6 +411,7 @@ export const callJoinInfoOp = createAsyncOp({
     name: 'sync/call_join_info',
     transport: 'http',
     silent: true,
+    onFailure: _syncOpToastOnFailure,
     restMirror: { method: 'GET', path: '/sync/api/v1/calls/join/:link_token' },
     request: async ({ payload }) => {
         const { httpRequest } = await import('@platform/lib/events/http.js');
@@ -396,6 +430,7 @@ export const callJoinAcceptOp = createAsyncOp({
     name: 'sync/call_join_accept',
     transport: 'http',
     silent: true,
+    onFailure: _syncOpToastOnFailure,
     restMirror: { method: 'POST', path: '/sync/api/v1/calls/join/:link_token' },
     request: async ({ payload }) => {
         const { httpRequest } = await import('@platform/lib/events/http.js');

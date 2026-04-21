@@ -93,6 +93,8 @@ function _ensurePanelStyles() {
 }
 
 export class PlatformNotificationManager extends PlatformElement {
+    static i18nNamespace = 'platform';
+
     static properties = {
         _panelOpen: { state: true },
     };

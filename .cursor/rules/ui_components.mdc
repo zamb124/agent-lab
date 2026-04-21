@@ -174,6 +174,17 @@ core-компоненты `<platform-user-chip>` и core-модалку `platfor
 Отдельных опс/фабрик для этого добавлять не нужно — `createTeamEffect`
 зарегистрирован в `core/.../events/bootstrap.js` для каждого `PlatformApp`.
 
+### Placeholder-аватары (alohe / CDN)
+
+Единый модуль: `@platform/lib/utils/placeholder-avatar.js` — `resolveAvatarImageSrc`,
+`getPlaceholderAvatarUrl`. Если нет `avatar_url`, нужен **непустой** `seed`
+(`user_id`, id канала и т.д.); иначе `throw` (zero-guess). Опция `collection`
+выбирает набор PNG в репозитории alohe (в т.ч. `memo`, `toon`, `3d`, `upstream`,
+…); для групповых каналов Sync задаётся `PLACEHOLDER_NON_PERSON_COLLECTION`, не
+`memo`; для каналов календарных встреч (`calendar_meeting`) — константа
+`PLACEHOLDER_MEETING_COLLECTION` (`upstream`). Базовый URL CDN и списки имён — только в модуле. При ошибке загрузки
+картинки — локальный `onerror` → пастельные инициалы (Sync).
+
 ### Контракт `<platform-user-chip>`
 
 ```html

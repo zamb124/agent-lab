@@ -17,7 +17,7 @@
  * Slots `<platform-service-sidebar>`:
  *   - header: ad-hoc встреча, namespace selector, поиск.
  *   - default (nav): единая секция «Чаты» — каналы + DM-участники.
- *   - footer: <platform-user block> + <platform-deployment-version>.
+ *   - footer: <platform-user block>.
  */
 
 import { html, css } from 'lit';
@@ -36,7 +36,6 @@ import { resolveDisplayName } from '../_helpers/sync-id-resolvers.js';
 import '@platform/lib/components/layout/platform-service-sidebar.js';
 import '@platform/lib/components/platform-icon.js';
 import '@platform/lib/components/platform-user.js';
-import '@platform/lib/components/platform-deployment-version.js';
 import '@platform/lib/components/platform-notification-manager.js';
 import './sync-channel-row.js';
 import './sync-direct-member-row.js';
@@ -55,13 +54,33 @@ export class SyncSidebar extends PlatformElement {
         sidebarNavItemStyles,
         sidebarSectionStyles,
         css`
-            :host { display: block; height: 100%; }
+            :host {
+                display: block;
+                height: 100%;
+                --sidebar-nav-inline: var(--space-1);
+            }
 
             platform-service-sidebar {
                 --sidebar-logo-text-weight: 700;
                 --sidebar-logo-text-gradient: var(--accent-gradient);
                 --sidebar-logo-text-clip: text;
                 --sidebar-logo-text-fill: transparent;
+            }
+
+            .sync-sidebar-header-inner {
+                display: flex;
+                flex-direction: column;
+                width: 100%;
+                min-width: 0;
+                box-sizing: border-box;
+            }
+
+            .header-adhoc {
+                display: flex;
+                flex-direction: column;
+                width: 100%;
+                box-sizing: border-box;
+                margin-bottom: var(--space-2);
             }
 
             .header-area {
@@ -99,7 +118,7 @@ export class SyncSidebar extends PlatformElement {
                 display: flex;
                 align-items: center;
                 gap: var(--space-2);
-                padding: var(--space-2) var(--space-3);
+                padding: var(--space-1) var(--space-3);
                 background: var(--glass-tint-subtle, rgba(255, 255, 255, 0.04));
                 border: 1px solid var(--border-subtle, rgba(255, 255, 255, 0.06));
                 border-radius: var(--radius-full, 999px);
@@ -107,13 +126,14 @@ export class SyncSidebar extends PlatformElement {
                 box-sizing: border-box;
             }
             .ns-label {
-                font-size: 10px;
+                font-size: var(--text-xs);
                 font-weight: var(--font-semibold);
                 text-transform: uppercase;
                 letter-spacing: 0.05em;
                 color: var(--text-tertiary);
                 white-space: nowrap;
                 flex-shrink: 0;
+                line-height: 1.2;
             }
             .ns-select {
                 flex: 1;
@@ -125,9 +145,10 @@ export class SyncSidebar extends PlatformElement {
                 font-weight: var(--font-medium);
                 cursor: pointer;
                 outline: none;
-                padding: var(--space-1) var(--space-2);
+                padding: 0 var(--space-2);
                 overflow: hidden;
                 text-overflow: ellipsis;
+                line-height: 1.25;
             }
             .ns-edit-btn,
             .ns-add-btn {
@@ -162,7 +183,8 @@ export class SyncSidebar extends PlatformElement {
                 display: flex;
                 align-items: center;
                 gap: var(--space-2);
-                padding: var(--space-2) var(--space-4);
+                padding: var(--space-3) var(--space-4);
+                min-height: var(--button-height, 44px);
                 background: var(--glass-tint-subtle, rgba(255, 255, 255, 0.04));
                 border: 1px solid var(--border-subtle, rgba(255, 255, 255, 0.06));
                 border-radius: var(--radius-full, 999px);
@@ -182,7 +204,8 @@ export class SyncSidebar extends PlatformElement {
                 border: none;
                 outline: none;
                 color: var(--text-primary);
-                font-size: var(--text-sm);
+                font-size: var(--text-base);
+                line-height: 1.35;
             }
             .search-box input::placeholder { color: var(--text-tertiary); }
 
@@ -201,21 +224,33 @@ export class SyncSidebar extends PlatformElement {
                 letter-spacing: 0.06em;
             }
 
+            .section-content {
+                gap: var(--space-1);
+            }
+
             .user-section {
                 display: flex;
                 flex-direction: column;
-                gap: var(--space-2);
+                gap: 0;
                 width: 100%;
                 min-width: 0;
+                padding: var(--space-3) var(--sidebar-nav-inline) 0;
+                margin-top: 0;
+                box-sizing: border-box;
             }
 
-            platform-service-sidebar[collapsed] .header-area,
             platform-service-sidebar[collapsed] .ns-section,
             platform-service-sidebar[collapsed] .search-box,
             platform-service-sidebar[collapsed] .section-header,
             platform-service-sidebar[collapsed] .section-subheader { display: none; }
+            platform-service-sidebar[collapsed] .sync-sidebar-header-inner .header-adhoc {
+                align-items: center;
+                margin-bottom: var(--space-3);
+            }
             platform-service-sidebar[collapsed] .adhoc-btn {
                 width: auto;
+                min-width: 40px;
+                min-height: 40px;
                 padding: var(--space-2);
             }
             platform-service-sidebar[collapsed] .adhoc-btn span { display: none; }
@@ -232,6 +267,7 @@ export class SyncSidebar extends PlatformElement {
         this._chatUi = this.useSlice('sync/chat_ui');
         this._callUi = this.useSlice('sync/call_ui');
         this._adhoc = this.useOp('sync/channel_create_adhoc_call');
+        this._callInvite = this.useOp('sync/calls_invite');
         this._authSel = this.select((s) => s.auth && s.auth.user ? s.auth.user : null);
         this._uiNsSel = this.select((s) => s.ui.namespace);
     }
@@ -323,8 +359,30 @@ export class SyncSidebar extends PlatformElement {
         this.openModal('sync.channel_create', { namespace });
     }
 
+    /**
+     * После создания канала митинга — тот же путь, что «Позвонить» в шапке чата:
+     * invite (LiveKit room + участники), затем overlay с подключением.
+     */
+    async _startAdhocCallSession(channelId) {
+        if (typeof channelId !== 'string' || channelId === '') return;
+        await this._callInvite.run({ channel_id: channelId });
+        const inv = this._callInvite.lastResult;
+        if (!inv || typeof inv.call_id !== 'string') return;
+        this._callUi.openOverlay({
+            call_id: inv.call_id,
+            channel_id: typeof inv.channel_id === 'string' ? inv.channel_id : channelId,
+            call_type: typeof inv.call_type === 'string' ? inv.call_type : 'video',
+            livekit_room_name: typeof inv.livekit_room_name === 'string' ? inv.livekit_room_name : null,
+            livekit_url: typeof inv.livekit_url === 'string' ? inv.livekit_url : null,
+        });
+        this.openModal('sync.call_overlay', {
+            callId: inv.call_id,
+            channelId: typeof inv.channel_id === 'string' ? inv.channel_id : channelId,
+        });
+    }
+
     async _onAdhocCall() {
-        if (this._adhoc.busy) return;
+        if (this._adhoc.busy || this._callInvite.busy) return;
         const now = new Date();
         const dateStr = now.toLocaleDateString();
         const timeStr = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
@@ -334,10 +392,10 @@ export class SyncSidebar extends PlatformElement {
         if (ns !== null) payload.namespace = ns.name;
         const result = await this._adhoc.run(payload);
         const channelId = result && typeof result.id === 'string' ? result.id : null;
-        if (channelId !== null) {
-            this.navigate('channel', { channelId });
-            this.renderRoot?.querySelector('platform-service-sidebar')?.closeMobile?.();
-        }
+        if (channelId === null) return;
+        this.navigate('channel', { channelId });
+        this.renderRoot?.querySelector('platform-service-sidebar')?.closeMobile?.();
+        await this._startAdhocCallSession(channelId);
     }
 
     _onSearchInput(e) {
@@ -352,44 +410,48 @@ export class SyncSidebar extends PlatformElement {
             ? this._chatUi.value.sidebarSearchQuery
             : '';
         return html`
-            <div class="header-area">
-                <button
-                    class="adhoc-btn"
-                    @click=${this._onAdhocCall}
-                    ?disabled=${this._adhoc.busy}
-                    title=${this.t('sidebar.create_sync_title')}
-                >
-                    <platform-icon name="phone-plus" size="16"></platform-icon>
-                    <span>${this.t('sidebar.action_adhoc_call')}</span>
-                </button>
-                <div class="ns-section">
-                    <span class="ns-label">${this.t('sidebar.namespace_label')}</span>
-                    <select class="ns-select" .value=${selectValue} @change=${this._onNamespaceChange}>
-                        <option value="">${this.t('sidebar.all_namespaces')}</option>
-                        ${this._namespaces.items.map((ns) => html`
-                            <option value=${ns.name} ?selected=${ns.name === selectValue}>${ns.name}</option>
-                        `)}
-                    </select>
-                    ${selectValue !== '' && this._activeNamespaceItem() !== null ? html`
-                        <button
-                            type="button"
-                            class="ns-edit-btn"
-                            @click=${this._onEditActiveNamespace}
-                            title=${this.t('sidebar.edit_namespace_tooltip')}
-                        >
-                            <platform-icon name="settings" size="14"></platform-icon>
-                        </button>
-                    ` : ''}
+            <div class="sync-sidebar-header-inner">
+                <div class="header-adhoc">
+                    <button
+                        class="adhoc-btn"
+                        @click=${this._onAdhocCall}
+                        ?disabled=${this._adhoc.busy || this._callInvite.busy}
+                        title=${this.t('sidebar.create_sync_title')}
+                    >
+                        <platform-icon name="phone-plus" size="16"></platform-icon>
+                        <span>${this.t('sidebar.action_adhoc_call')}</span>
+                    </button>
                 </div>
-                <div class="search-box">
-                    <platform-icon name="search" size="14"></platform-icon>
-                    <input
-                        type="text"
-                        .value=${search}
-                        @input=${this._onSearchInput}
-                        placeholder=${this.t('sidebar.direct_search_placeholder')}
-                        aria-label=${this.t('sidebar.direct_search_aria')}
-                    />
+                <div class="header-area">
+                    <div class="ns-section">
+                        <span class="ns-label">${this.t('sidebar.namespace_label')}</span>
+                        <select class="ns-select" .value=${selectValue} @change=${this._onNamespaceChange}>
+                            <option value="">${this.t('sidebar.all_namespaces')}</option>
+                            ${this._namespaces.items.map((ns) => html`
+                                <option value=${ns.name} ?selected=${ns.name === selectValue}>${ns.name}</option>
+                            `)}
+                        </select>
+                        ${selectValue !== '' && this._activeNamespaceItem() !== null ? html`
+                            <button
+                                type="button"
+                                class="ns-edit-btn"
+                                @click=${this._onEditActiveNamespace}
+                                title=${this.t('sidebar.edit_namespace_tooltip')}
+                            >
+                                <platform-icon name="settings" size="14"></platform-icon>
+                            </button>
+                        ` : ''}
+                    </div>
+                    <div class="search-box">
+                        <platform-icon name="search" size="14"></platform-icon>
+                        <input
+                            type="text"
+                            .value=${search}
+                            @input=${this._onSearchInput}
+                            placeholder=${this.t('sidebar.direct_search_placeholder')}
+                            aria-label=${this.t('sidebar.direct_search_aria')}
+                        />
+                    </div>
                 </div>
             </div>
         `;
@@ -434,6 +496,7 @@ export class SyncSidebar extends PlatformElement {
     render() {
         return html`
             <platform-service-sidebar
+                logo-src="/static/core/assets/service_logos/sync_logo.svg"
                 logo-text="Sync"
                 ?collapsed=${this.collapsed}
                 ?mobile-open=${this.mobileOpen}
@@ -446,7 +509,6 @@ export class SyncSidebar extends PlatformElement {
                     <platform-user block>
                         <platform-notification-manager slot="user-toolbar"></platform-notification-manager>
                     </platform-user>
-                    <platform-deployment-version base-url="/sync" footer></platform-deployment-version>
                 </div>
             </platform-service-sidebar>
         `;

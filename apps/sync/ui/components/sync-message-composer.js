@@ -39,9 +39,9 @@ export class SyncMessageComposer extends PlatformElement {
         :host {
             display: flex;
             flex-direction: column;
-            padding: var(--space-3) var(--space-6) var(--space-4);
+            padding: var(--space-4) var(--space-6) var(--space-4);
             gap: var(--space-2);
-            background: var(--glass-solid-soft, var(--glass-solid));
+            background: var(--sync-composer-host-bg, var(--glass-solid-soft, var(--glass-solid)));
             backdrop-filter: blur(8px);
             -webkit-backdrop-filter: blur(8px);
             border-top: 1px solid var(--glass-border-subtle, var(--glass-border));
@@ -77,15 +77,16 @@ export class SyncMessageComposer extends PlatformElement {
             display: flex;
             align-items: center;
             gap: var(--space-1);
-            padding: 4px;
-            background: var(--glass-tint-subtle, var(--glass-hover));
-            border: 1px solid var(--glass-border-subtle, var(--glass-border));
-            border-radius: var(--radius-3xl, 28px);
+            padding: 6px 8px;
+            background: var(--sync-composer-capsule-bg, var(--glass-tint-subtle, var(--glass-hover)));
+            border: 1px solid var(--sync-composer-capsule-border, var(--glass-border-subtle, var(--glass-border)));
+            border-radius: 24px;
+            box-shadow: var(--sync-composer-capsule-shadow, none);
             transition: border-color var(--duration-fast), box-shadow var(--duration-fast);
         }
         .pill:focus-within {
             border-color: var(--accent);
-            box-shadow: 0 0 0 4px var(--accent-subtle, rgba(153, 166, 249, 0.16));
+            box-shadow: 0 0 0 4px var(--accent-subtle, rgba(153, 166, 249, 0.16)), var(--sync-composer-capsule-shadow, none);
         }
         /* Высота textarea подгоняется под одну строку (24px) и совпадает с
            высотой иконок 40px (height = 24 + 16 padding = 40). При вводе
