@@ -4,7 +4,7 @@
  * Источники:
  *   useResource('sync/channels')      — выбранный канал, для подсветки.
  *   select syncPresence                — typing preview, online dot для DM.
- *   select syncCallUi.activeCallChannels — зелёный «Войти» pill при активном звонке.
+ *   select syncCallUi.activeCallChannels — pill «Войти» (как баннер свёрнутого звонка).
  *
  * Действия: navigate('channel', { channelId }), openModal('sync.channel_edit')
  * на gear-иконке (hover).
@@ -27,25 +27,37 @@ export class SyncChannelRow extends PlatformElement {
         :host {
             display: flex;
             align-items: center;
-            gap: var(--space-2);
-            padding: var(--space-1) var(--space-2);
-            border-radius: var(--radius-sm);
+            gap: var(--space-3);
+            padding: var(--space-3);
+            margin: 0 var(--space-2) var(--space-1);
+            border-radius: var(--radius-xl);
             cursor: pointer;
             position: relative;
+            transition: background var(--duration-fast), box-shadow var(--duration-fast);
         }
-        :host(:hover) { background: var(--glass-hover); }
-        :host([data-selected]) { background: var(--glass-active, var(--glass-hover)); }
-        :host([data-mention]) .title { color: var(--accent); font-weight: 600; }
+        :host(:hover) {
+            background: var(--glass-tint-subtle, rgba(255, 255, 255, 0.04));
+        }
+        :host([data-selected]) {
+            background: var(--accent);
+            box-shadow: 0 4px 12px var(--accent-subtle, rgba(153, 166, 249, 0.18));
+        }
+        :host([data-selected]) .title,
+        :host([data-selected]) .time,
+        :host([data-selected]) .preview { color: var(--text-inverse, #fff); }
+        :host([data-selected]) .preview.typing { color: var(--text-inverse, #fff); font-weight: var(--font-medium); }
+        :host([data-mention]:not([data-selected])) .title { color: var(--accent); font-weight: var(--font-semibold); }
+
         .avatar {
-            width: 32px;
-            height: 32px;
+            width: 48px;
+            height: 48px;
             border-radius: 50%;
             display: inline-flex;
             align-items: center;
             justify-content: center;
-            color: white;
-            font-weight: 600;
-            font-size: var(--text-xs);
+            color: var(--text-inverse, #fff);
+            font-weight: var(--font-semibold);
+            font-size: var(--text-sm);
             flex-shrink: 0;
             position: relative;
         }
@@ -57,75 +69,125 @@ export class SyncChannelRow extends PlatformElement {
         }
         .presence-dot {
             position: absolute;
-            right: -1px;
-            bottom: -1px;
-            width: 10px;
-            height: 10px;
+            right: 0;
+            bottom: 0;
+            width: 14px;
+            height: 14px;
             border-radius: 50%;
             background: var(--success, #22c55e);
-            border: 2px solid var(--glass-solid);
+            border: 2px solid var(--bg-elevated, var(--glass-solid));
         }
+        :host([data-selected]) .presence-dot { border-color: var(--accent); }
+
         .text {
             flex: 1;
             min-width: 0;
+            display: flex;
+            flex-direction: column;
+            gap: 2px;
+        }
+        .row-top {
+            display: flex;
+            align-items: baseline;
+            gap: var(--space-2);
         }
         .title {
-            font-size: var(--text-sm);
-            font-weight: 500;
+            flex: 1;
+            min-width: 0;
+            font-size: var(--text-base);
+            font-weight: var(--font-semibold);
+            color: var(--text-primary);
             white-space: nowrap;
             overflow: hidden;
             text-overflow: ellipsis;
         }
-        .preview {
+        .time {
             font-size: var(--text-xs);
+            color: var(--text-tertiary);
+            white-space: nowrap;
+            flex-shrink: 0;
+        }
+        .row-bottom {
+            display: flex;
+            align-items: center;
+            gap: var(--space-2);
+        }
+        .preview {
+            flex: 1;
+            min-width: 0;
+            font-size: var(--text-sm);
             color: var(--text-secondary);
             white-space: nowrap;
             overflow: hidden;
             text-overflow: ellipsis;
         }
         .preview.typing { color: var(--accent); font-style: italic; }
+
         .badges {
-            display: flex;
+            display: inline-flex;
             align-items: center;
             gap: var(--space-1);
             flex-shrink: 0;
         }
         .badge {
-            min-width: 18px;
-            height: 18px;
-            padding: 0 4px;
-            border-radius: 9px;
+            min-width: 20px;
+            height: 20px;
+            padding: 0 6px;
+            border-radius: 999px;
             background: var(--accent);
-            color: white;
+            color: var(--text-inverse, #fff);
             font-size: var(--text-xs);
             display: inline-flex;
             align-items: center;
             justify-content: center;
-            font-weight: 600;
+            font-weight: var(--font-bold);
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
         }
-        .badge.mention { background: var(--error, #ef4444); }
+        :host([data-selected]) .badge {
+            background: var(--text-inverse, #fff);
+            color: var(--accent);
+        }
+        .badge.mention { background: var(--color-error, #ef4444); }
+        :host([data-selected]) .badge.mention { background: var(--text-inverse, #fff); color: var(--color-error, #ef4444); }
+
         .call-pill {
             display: inline-flex;
             align-items: center;
             gap: 4px;
-            padding: 2px 8px;
+            padding: 3px 10px;
             border-radius: 999px;
-            background: #22c55e;
-            color: white;
-            font-size: 11px;
-            font-weight: 600;
+            border: none;
+            background: var(--accent-gradient, linear-gradient(135deg, #6366f1, #8b5cf6));
+            color: var(--text-inverse, #fff);
+            font-size: var(--text-xs);
+            font-weight: var(--font-semibold);
             cursor: pointer;
+            box-shadow: 0 1px 4px rgba(99, 102, 241, 0.22);
         }
+        .call-pill:hover {
+            filter: brightness(1.06);
+        }
+        .call-pill:focus-visible {
+            outline: 2px solid rgba(99, 102, 241, 0.75);
+            outline-offset: 2px;
+        }
+        :host([data-selected]) .call-pill {
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12);
+        }
+
         .gear {
             opacity: 0;
-            transition: opacity 150ms ease;
+            transition: opacity var(--duration-fast);
             background: transparent;
             border: none;
             color: var(--text-secondary);
-            padding: 2px;
+            padding: 4px;
             cursor: pointer;
+            border-radius: var(--radius-sm);
         }
         :host(:hover) .gear { opacity: 1; }
+        .gear:hover { background: var(--glass-hover); color: var(--text-primary); }
+        :host([data-selected]) .gear { color: var(--text-inverse, #fff); }
     `;
 
     constructor() {
@@ -133,6 +195,8 @@ export class SyncChannelRow extends PlatformElement {
         this.channel = null;
         this._presenceSel = this.select((s) => s.syncPresence);
         this._callUiSel = this.select((s) => s.syncCallUi);
+        this._callUi = this.useSlice('sync/call_ui');
+        this._modalsSel = this.select((s) => s.modals.stack);
         this._channelsSel = this.select((s) => s.syncChannels);
         this._authSel = this.select((s) => s.auth && s.auth.user);
         this._members = this.useResource('sync/company_members');
@@ -152,9 +216,30 @@ export class SyncChannelRow extends PlatformElement {
         this.navigate('channel', { channelId: this.channel.id });
     }
 
-    _onJoinCall(callId, e) {
+    _onJoinCall(callInfo, e) {
         e.stopPropagation();
-        if (typeof callId !== 'string' || callId === '') return;
+        if (!this.channel || !callInfo || typeof callInfo.call_id !== 'string' || callInfo.call_id === '') {
+            return;
+        }
+        const stack = this._modalsSel.value;
+        const list = Array.isArray(stack) ? stack : [];
+        const hasOverlay = list.some(
+            (m) => m.kind === 'sync.call_overlay'
+                && m.props
+                && typeof m.props.callId === 'string'
+                && m.props.callId === callInfo.call_id,
+        );
+        this._callUi.expandOverlay(null);
+        if (!hasOverlay) {
+            const callType = typeof callInfo.call_type === 'string' && callInfo.call_type !== ''
+                ? callInfo.call_type
+                : 'video';
+            this.openModal('sync.call_overlay', {
+                callId: callInfo.call_id,
+                channelId: this.channel.id,
+                callType,
+            });
+        }
         this.navigate('channel', { channelId: this.channel.id });
     }
 
@@ -208,30 +293,65 @@ export class SyncChannelRow extends PlatformElement {
         const unread = typeof this.channel.unread_count === 'number' ? this.channel.unread_count : 0;
         const mentions = typeof this.channel.mention_unread_count === 'number' ? this.channel.mention_unread_count : 0;
         const previewText = typeof this.channel.last_message_preview === 'string' ? this.channel.last_message_preview : '';
+        const lastAtIso = typeof this.channel.last_message_at === 'string' ? this.channel.last_message_at : '';
+        const timeLabel = lastAtIso !== '' ? this._formatTime(lastAtIso) : '';
         return html`
             ${this._renderAvatar()}
             <div class="text" @click=${this._onClick}>
-                <div class="title">${channelDisplayTitle(this.channel)}</div>
-                ${typingLine !== ''
-                    ? html`<div class="preview typing">${typingLine}</div>`
-                    : (previewText !== '' ? html`<div class="preview">${previewText}</div>` : '')}
-            </div>
-            <div class="badges">
-                ${activeCall ? html`
-                    <span class="call-pill" @click=${(e) => this._onJoinCall(activeCall.call_id, e)} title=${this.t('sidebar.call_active_title')}>
-                        <platform-icon name="phone" size="10"></platform-icon>
-                        ${this.t('sidebar.call_join')}
-                    </span>
-                ` : ''}
-                ${mentions > 0 ? html`<span class="badge mention">@${mentions}</span>` : ''}
-                ${unread > 0 ? html`<span class="badge">${unread}</span>` : ''}
-                ${this.channel.type !== 'direct' ? html`
-                    <button class="gear" @click=${this._onGear} title=${this.t('sidebar.channel_settings_aria')}>
-                        <platform-icon name="settings" size="14"></platform-icon>
-                    </button>
-                ` : ''}
+                <div class="row-top">
+                    <span class="title">${channelDisplayTitle(this.channel)}</span>
+                    ${timeLabel !== '' ? html`<span class="time">${timeLabel}</span>` : ''}
+                </div>
+                <div class="row-bottom">
+                    ${typingLine !== ''
+                        ? html`<span class="preview typing">${typingLine}</span>`
+                        : html`<span class="preview">${previewText}</span>`}
+                    <div class="badges">
+                        ${activeCall ? html`
+                            <button
+                                type="button"
+                                class="call-pill"
+                                @click=${(e) => this._onJoinCall(activeCall, e)}
+                                title=${this.t('sidebar.call_active_title')}
+                            >
+                                <platform-icon name="phone" size="10"></platform-icon>
+                                ${this.t('sidebar.call_join')}
+                            </button>
+                        ` : ''}
+                        ${mentions > 0 ? html`<span class="badge mention">@${mentions}</span>` : ''}
+                        ${unread > 0 ? html`<span class="badge">${unread}</span>` : ''}
+                        ${this.channel.type !== 'direct' ? html`
+                            <button class="gear" @click=${this._onGear} title=${this.t('sidebar.channel_settings_aria')}>
+                                <platform-icon name="settings" size="14"></platform-icon>
+                            </button>
+                        ` : ''}
+                    </div>
+                </div>
             </div>
         `;
+    }
+
+    _formatTime(iso) {
+        const dt = new Date(iso);
+        if (Number.isNaN(dt.getTime())) return '';
+        const now = new Date();
+        const sameDay = dt.getFullYear() === now.getFullYear()
+            && dt.getMonth() === now.getMonth()
+            && dt.getDate() === now.getDate();
+        if (sameDay) {
+            return dt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        }
+        const yesterday = new Date(now);
+        yesterday.setDate(now.getDate() - 1);
+        const wasYesterday = dt.getFullYear() === yesterday.getFullYear()
+            && dt.getMonth() === yesterday.getMonth()
+            && dt.getDate() === yesterday.getDate();
+        if (wasYesterday) return this.t('sidebar.time_yesterday');
+        const within7days = (now.getTime() - dt.getTime()) < 7 * 24 * 60 * 60 * 1000;
+        if (within7days) {
+            return dt.toLocaleDateString([], { weekday: 'short' });
+        }
+        return dt.toLocaleDateString([], { day: '2-digit', month: '2-digit' });
     }
 }
 

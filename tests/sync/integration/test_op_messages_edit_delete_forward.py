@@ -14,7 +14,6 @@ from apps.sync.models.messages import (
     TextPlainContent,
 )
 from apps.sync.realtime.operations import (
-    ChannelsCreatePayload,
     MessagesDeletePayload,
     MessagesEditPayload,
     MessagesForwardPayload,
@@ -37,25 +36,21 @@ async def _setup_two_channels(
 ) -> tuple[str, str]:
     namespace = await seed_test_namespace(op_user, op_container, unique_id, suffix="edf")
     ch1 = await op_channels_create(
-        ChannelsCreatePayload(
-            body=ChannelCreate(
-                type=ChannelType.TOPIC,
-                name=f"From {unique_id}",
-                namespace=namespace,
-                is_private=False,
-            )
+        ChannelCreate(
+            type=ChannelType.TOPIC,
+            name=f"From {unique_id}",
+            namespace=namespace,
+            is_private=False,
         ),
         user=op_user,
         container=op_container,
     )
     ch2 = await op_channels_create(
-        ChannelsCreatePayload(
-            body=ChannelCreate(
-                type=ChannelType.TOPIC,
-                name=f"To {unique_id}",
-                namespace=namespace,
-                is_private=False,
-            )
+        ChannelCreate(
+            type=ChannelType.TOPIC,
+            name=f"To {unique_id}",
+            namespace=namespace,
+            is_private=False,
         ),
         user=op_user,
         container=op_container,

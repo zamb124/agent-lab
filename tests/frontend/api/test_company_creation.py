@@ -186,15 +186,15 @@ async def test_company_creation_with_agents_initialization(
         tool_repo = container.tool_repository
         tools = await tool_repo.list(limit=1000)
         
-        print(f"📋 Загружено tools: {len(tools)} шт")
+        print(f"Загружено tools: {len(tools)} шт")
         
         assert len(tools) > 0, "Должны быть загружены public tools"
         
         tool_ids = [tool.tool_id for tool in tools]
-        print(f"📋 Tools: {tool_ids}")
+        print(f"Tools: {tool_ids}")
         
         # Шаг 7: КРИТИЧЕСКАЯ ПРОВЕРКА - получение агентов через API с контекстом компании
-        print(f"\n🔍 Проверка получения агентов через API с контекстом компании...")
+        print(f"\n Проверка получения агентов через API с контекстом компании...")
         
         # Создаем токен для новой компании с реальным user_id
         company_token = token_service.create_token(user_id, company_id=company_id)

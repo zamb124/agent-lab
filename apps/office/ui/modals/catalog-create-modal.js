@@ -66,7 +66,7 @@ export class OfficeCatalogCreateModal extends PlatformFormModal {
     }
 
     _onTitleInput(e) { this._form.setField('title', e.target.value); }
-    _onPublicChange(e) { this._form.setField('is_public', Boolean(e.detail.checked)); }
+    _onPublicChange(e) { this._form.setField('is_public', Boolean(e.detail.value)); }
 
     async _performSave() { this._form.submit(); }
 

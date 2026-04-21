@@ -249,6 +249,14 @@ class MessageCreate(BaseModel):
         default=None,
         description="Связать сообщение с активным/завершённым звонком (голос, чат оверлея, запись).",
     )
+    local_id: str | None = Field(
+        default=None,
+        description=(
+            "Клиентский идентификатор optimistic-сообщения. Не сохраняется в БД, "
+            "но эхо-возвращается в payload push-события sync/message/created, "
+            "чтобы UI отправителя удалил pending optimistic-запись и не показывал дубль."
+        ),
+    )
 
 
 class MessageEdit(BaseModel):

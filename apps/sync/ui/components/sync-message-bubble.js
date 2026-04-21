@@ -34,6 +34,25 @@ const LONG_PRESS_MS = 450;
 
 const EMOJI_QUICK = ['👍', '❤️', '😂', '🔥', '🎉', '👏'];
 
+/** API хранит плоский список { user_id, emoji, created_at }; для UI — одна пилюля на emoji. */
+function _reactionsGroupedByEmoji(raw) {
+    if (!Array.isArray(raw)) return [];
+    const map = new Map();
+    for (const r of raw) {
+        if (!r || typeof r !== 'object') continue;
+        const emoji = typeof r.emoji === 'string' ? r.emoji : '';
+        if (emoji === '') continue;
+        const uid = typeof r.user_id === 'string' ? r.user_id : '';
+        let userIds = map.get(emoji);
+        if (!userIds) {
+            userIds = [];
+            map.set(emoji, userIds);
+        }
+        if (uid !== '' && !userIds.includes(uid)) userIds.push(uid);
+    }
+    return [...map.entries()].map(([emoji, user_ids]) => ({ emoji, user_ids }));
+}
+
 function _formatBytes(n, t) {
     if (typeof n !== 'number' || n < 0) return '';
     if (n < 1024) return t('bubble.file_size_b', { n });
@@ -101,26 +120,33 @@ export class SyncMessageBubble extends PlatformElement {
             cursor: pointer;
         }
         .bubble {
-            background: var(--glass-solid);
-            border: 1px solid var(--glass-border);
-            border-radius: 14px;
-            padding: var(--space-2) var(--space-3);
+            background: var(--glass-solid-soft, var(--glass-solid));
+            border: 1px solid var(--glass-border-subtle, var(--glass-border));
+            border-radius: var(--radius-2xl, 18px);
+            padding: 10px var(--space-4);
             max-width: 70%;
             min-width: 0;
             position: relative;
-            transition: background 150ms ease;
+            color: var(--text-primary);
+            box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+            transition: background var(--duration-fast);
         }
         :host([data-own]) .bubble {
             background: var(--accent);
-            color: white;
+            color: var(--text-inverse, #fff);
             border-color: transparent;
+            box-shadow: 0 2px 8px var(--accent-subtle, rgba(153, 166, 249, 0.18));
         }
-        :host([data-position="first"]) .bubble { border-bottom-left-radius: 4px; }
-        :host([data-position="middle"]) .bubble { border-radius: 14px 14px 14px 4px; }
-        :host([data-position="last"]) .bubble { border-top-left-radius: 4px; }
-        :host([data-own][data-position="first"]) .bubble { border-bottom-left-radius: 14px; border-bottom-right-radius: 4px; }
-        :host([data-own][data-position="middle"]) .bubble { border-radius: 14px 14px 4px 14px; }
-        :host([data-own][data-position="last"]) .bubble { border-top-right-radius: 4px; border-top-left-radius: 14px; }
+        :host(:not([data-own])) .bubble { border-bottom-left-radius: 4px; }
+        :host([data-own]) .bubble { border-bottom-right-radius: 4px; }
+        :host(:not([data-own])[data-position="middle"]) .bubble,
+        :host(:not([data-own])[data-position="first"]) .bubble {
+            border-bottom-left-radius: 4px;
+        }
+        :host([data-own][data-position="middle"]) .bubble,
+        :host([data-own][data-position="first"]) .bubble {
+            border-bottom-right-radius: 4px;
+        }
         :host([data-flash]) .bubble {
             box-shadow: 0 0 0 3px var(--accent), 0 0 22px var(--accent);
             animation: flash-ring 1.4s ease-out;
@@ -162,8 +188,8 @@ export class SyncMessageBubble extends PlatformElement {
             white-space: pre-wrap;
             word-break: break-word;
             overflow-wrap: anywhere;
-            font-size: var(--text-sm);
-            line-height: 1.4;
+            font-size: var(--text-base, 15px);
+            line-height: 1.5;
         }
         .body a { color: inherit; text-decoration: underline; }
         .mention {
@@ -197,11 +223,37 @@ export class SyncMessageBubble extends PlatformElement {
             margin-top: 2px;
         }
         :host([data-own]) .meta { color: rgba(255, 255, 255, 0.85); }
+        .status-failed {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            padding: 0;
+            margin: 0;
+            border: none;
+            background: transparent;
+            color: var(--color-error, #ef4444);
+            cursor: pointer;
+            line-height: 0;
+        }
+        .status-failed:hover { color: var(--color-error, #ef4444); opacity: 0.85; }
+        .status-failed:focus-visible {
+            outline: 2px solid var(--color-error, #ef4444);
+            outline-offset: 2px;
+            border-radius: 999px;
+        }
+        :host([data-own]) .status-failed { color: var(--color-error, #ef4444); }
+        .footer {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            gap: var(--space-2);
+            margin-top: var(--space-1);
+        }
+        .footer .meta { margin: 0; margin-left: auto; }
         .reactions {
             display: flex;
             flex-wrap: wrap;
             gap: var(--space-1);
-            margin-top: var(--space-1);
         }
         .reaction {
             display: inline-flex;
@@ -240,17 +292,82 @@ export class SyncMessageBubble extends PlatformElement {
             color: var(--text-secondary);
         }
         :host([data-own]) .file-size { color: rgba(255,255,255,0.85); }
+        .image-wrap {
+            margin: -2px 0;
+        }
         .image-wrap img {
             max-width: 320px;
             max-height: 360px;
-            border-radius: var(--radius-sm);
+            border-radius: var(--radius-lg, 12px);
             display: block;
             cursor: zoom-in;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
+            transition: opacity var(--duration-fast);
         }
-        video {
-            max-width: 360px;
-            border-radius: var(--radius-sm);
+        .image-wrap img:hover { opacity: 0.95; }
+        .video-attachment {
+            display: inline-block;
+            max-width: 320px;
+            vertical-align: top;
+        }
+        .video-wrap {
+            position: relative;
+            display: block;
+            border-radius: var(--radius-lg, 12px);
+            overflow: hidden;
+            background: #000;
+        }
+        .video-wrap video {
+            max-width: 320px;
+            width: 100%;
+            vertical-align: bottom;
+            border-radius: var(--radius-lg, 12px);
             background: black;
+            display: block;
+        }
+        .video-overlay-actions {
+            position: absolute;
+            top: var(--space-2);
+            left: var(--space-2);
+            z-index: 2;
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            pointer-events: auto;
+        }
+        .video-action {
+            box-sizing: border-box;
+            width: 32px;
+            height: 32px;
+            padding: 0;
+            border: none;
+            border-radius: var(--radius-md, 8px);
+            background: rgba(0, 0, 0, 0.52);
+            color: #fff;
+            cursor: pointer;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            text-decoration: none;
+            backdrop-filter: blur(6px);
+            -webkit-backdrop-filter: blur(6px);
+            transition: background var(--duration-fast);
+        }
+        .video-action:hover:not([disabled]) {
+            background: rgba(0, 0, 0, 0.68);
+        }
+        .video-action[disabled] {
+            opacity: 0.75;
+            cursor: default;
+        }
+        .video-action-a {
+            font-size: var(--text-sm);
+            font-weight: 800;
+            line-height: 1;
+            letter-spacing: -0.02em;
+        }
+        .video-action platform-icon {
+            color: #fff;
         }
         .call-boundary {
             display: inline-flex;
@@ -453,7 +570,7 @@ export class SyncMessageBubble extends PlatformElement {
 
     _renderText(content) {
         const data = (content && content.data && typeof content.data === 'object') ? content.data : null;
-        const text = data && (typeof data.text === 'string' ? data.text : (typeof data.body === 'string' ? data.body : ''));
+        const text = data && (typeof data.body === 'string' ? data.body : (typeof data.text === 'string' ? data.text : ''));
         if (typeof text !== 'string' || text === '') return '';
         const segments = parseMentionsToSegments(text, this.members);
         return html`<div class="body">${segments.map((s) => s.kind === 'mention'
@@ -476,7 +593,10 @@ export class SyncMessageBubble extends PlatformElement {
         if (typeof data.url === 'string' && data.url !== '') url = data.url;
         else if (typeof data.file_id === 'string') url = `${FILE_DOWNLOAD_BASE}/${encodeURIComponent(data.file_id)}`;
         if (url === '') return '';
-        return html`<div class="image-wrap"><img src=${url} alt="" loading="lazy" @click=${() => window.open(url, '_blank')} /></div>`;
+        const alt = (typeof data.alt_text === 'string' && data.alt_text !== '')
+            ? data.alt_text
+            : (typeof data.filename === 'string' ? data.filename : '');
+        return html`<div class="image-wrap"><img src=${url} alt=${alt} loading="lazy" @click=${() => window.open(url, '_blank')} /></div>`;
     }
 
     _renderFile(content) {
@@ -484,7 +604,8 @@ export class SyncMessageBubble extends PlatformElement {
         const fileId = data ? data.file_id : null;
         if (typeof fileId !== 'string') return '';
         let name = '';
-        if (data && typeof data.original_name === 'string' && data.original_name !== '') name = data.original_name;
+        if (data && typeof data.filename === 'string' && data.filename !== '') name = data.filename;
+        else if (data && typeof data.original_name === 'string' && data.original_name !== '') name = data.original_name;
         else if (data && typeof data.name === 'string' && data.name !== '') name = data.name;
         else name = this.t('bubble.file_fallback');
         const url = `${FILE_DOWNLOAD_BASE}/${encodeURIComponent(fileId)}`;
@@ -532,14 +653,49 @@ export class SyncMessageBubble extends PlatformElement {
         if (typeof fileId !== 'string') return '';
         const url = `${FILE_DOWNLOAD_BASE}/${encodeURIComponent(fileId)}`;
         const status = data ? data.transcription_status : null;
+        let name = '';
+        if (data && typeof data.filename === 'string' && data.filename !== '') {
+            name = data.filename;
+        } else {
+            name = this.t('bubble.file_fallback');
+        }
+        const transcribeControl = status === 'processing'
+            ? html`
+                <button
+                    type="button"
+                    class="video-action"
+                    disabled
+                    title=${this.t('message_bubble.transcribe_processing')}
+                ><span class="video-action-a" aria-hidden="true">...</span></button>
+            `
+            : status !== 'done'
+                ? html`
+                <button
+                    type="button"
+                    class="video-action"
+                    title=${this.t('message_bubble.action_transcribe')}
+                    @click=${(e) => {
+                        e.stopPropagation();
+                        this._onTranscribeVideo();
+                    }}
+                ><span class="video-action-a">A</span></button>
+            `
+                : '';
         return html`
-            <div class="file" style="flex-direction: column; align-items: stretch; padding: 0; background: transparent;">
-                <video controls src=${url} preload="metadata"></video>
-                ${status !== 'done' && status !== 'processing'
-                    ? html`<button class="transcribe-btn" @click=${this._onTranscribeVideo}>${this.t('message_bubble.action_transcribe')}</button>`
-                    : ''}
-                ${status === 'processing'
-                    ? html`<span class="file-size">${this.t('message_bubble.transcribe_processing')}</span>` : ''}
+            <div class="video-attachment">
+                <div class="video-wrap">
+                    <video controls src=${url} preload="metadata"></video>
+                    <div class="video-overlay-actions">
+                        ${transcribeControl}
+                        <a
+                            class="video-action"
+                            href=${url}
+                            download=${name}
+                            title=${this.t('bubble.download_title')}
+                            @click=${(e) => e.stopPropagation()}
+                        ><platform-icon name="download" size="16"></platform-icon></a>
+                    </div>
+                </div>
             </div>
         `;
     }
@@ -634,9 +790,9 @@ export class SyncMessageBubble extends PlatformElement {
         const parentId = this.message && this.message.parent_message_id;
         if (typeof parentId !== 'string' || parentId === '') return '';
         const channelId = this.message && this.message.channel_id;
-        const channelsSlice = this._messagesSlice.value;
-        const channelData = channelsSlice && channelsSlice.byChannelId
-            ? channelsSlice.byChannelId[channelId]
+        const messagesSlice = this._messagesStoreSel.value;
+        const channelData = messagesSlice && messagesSlice.byChannelId
+            ? messagesSlice.byChannelId[channelId]
             : null;
         const items = channelData && Array.isArray(channelData.items) ? channelData.items : [];
         const parent = items.find((m) => m.message_id === parentId);
@@ -654,8 +810,12 @@ export class SyncMessageBubble extends PlatformElement {
             }
         }
         const previewContent = Array.isArray(parent.contents) ? parent.contents.find((c) => c.type === 'text/plain') : null;
-        const previewText = previewContent && previewContent.data && typeof previewContent.data.text === 'string'
-            ? previewContent.data.text.slice(0, 80)
+        const previewData = previewContent && previewContent.data;
+        const previewBody = previewData && typeof previewData.body === 'string'
+            ? previewData.body
+            : (previewData && typeof previewData.text === 'string' ? previewData.text : '');
+        const previewText = previewBody !== ''
+            ? previewBody.slice(0, 80)
             : this.t('bubble.default_message');
         return html`<div class="reply-quote" @click=${this._onReplyQuoteClick}>
             <span class="who">${senderName}</span>: ${previewText}
@@ -672,9 +832,10 @@ export class SyncMessageBubble extends PlatformElement {
     }
 
     _renderReactions() {
-        const reactions = this.message && Array.isArray(this.message.reactions)
+        const raw = this.message && Array.isArray(this.message.reactions)
             ? this.message.reactions
             : [];
+        const reactions = _reactionsGroupedByEmoji(raw);
         if (reactions.length === 0) return '';
         return html`
             <div class="reactions">
@@ -682,7 +843,7 @@ export class SyncMessageBubble extends PlatformElement {
                     <span
                         class=${Array.isArray(r.user_ids) && r.user_ids.includes(this.myUserId) ? 'reaction mine' : 'reaction'}
                         @click=${() => this._onReaction(r.emoji)}
-                    >${r.emoji} ${Array.isArray(r.user_ids) ? r.user_ids.length : 0}</span>
+                    >${r.emoji} ${r.user_ids.length}</span>
                 `)}
             </div>
         `;
@@ -693,16 +854,50 @@ export class SyncMessageBubble extends PlatformElement {
         if (typeof status !== 'string' || status === '') return '';
         const own = this.message.sender && this.message.sender.user_id === this.myUserId;
         if (!own) return '';
-        const channelsSlice = this._channelsSel.value;
-        const peerReadAt = channelsSlice && channelsSlice.peerReadAtByChannel
-            ? channelsSlice.peerReadAtByChannel[this.message.channel_id]
+        const errorText = typeof this.message._error === 'string' && this.message._error !== ''
+            ? this.message._error
             : null;
-        const isRead = typeof peerReadAt === 'string' && typeof this.message.sent_at === 'string'
-            && peerReadAt >= this.message.sent_at;
+        if (errorText !== null) {
+            const tip = this.t('message_bubble.send_failed', { error: errorText });
+            return html`<button
+                class="status-failed"
+                title=${tip}
+                aria-label=${this.t('message_bubble.send_failed_action_resend')}
+                @click=${this._onResendFailed}
+            ><platform-icon name="alert-circle" size="13"></platform-icon></button>`;
+        }
+        const channelsSlice = this._channelsSel.value;
+        const readMap = channelsSlice && channelsSlice.readByChannelUser
+            ? channelsSlice.readByChannelUser[this.message.channel_id]
+            : null;
+        const sentAtMs = typeof this.message.sent_at === 'string'
+            ? Date.parse(this.message.sent_at)
+            : NaN;
+        let isRead = false;
+        if (readMap && typeof readMap === 'object' && !Number.isNaN(sentAtMs)) {
+            for (const [readerId, readAt] of Object.entries(readMap)) {
+                if (readerId === this.myUserId) continue;
+                if (typeof readAt !== 'string') continue;
+                const readAtMs = Date.parse(readAt);
+                if (!Number.isNaN(readAtMs) && readAtMs >= sentAtMs) {
+                    isRead = true;
+                    break;
+                }
+            }
+        }
         if (this.message._pending) return html`<platform-icon name="clock" size="11"></platform-icon>`;
         if (isRead || status === 'read') return html`<platform-icon name="check-double" size="11"></platform-icon>`;
         if (status === 'delivered') return html`<platform-icon name="check" size="11"></platform-icon>`;
         return html`<platform-icon name="check" size="11"></platform-icon>`;
+    }
+
+    _onResendFailed(e) {
+        e.stopPropagation();
+        if (!this.message) return;
+        const channelId = this.message.channel_id;
+        const localId = this.message.local_id;
+        if (typeof channelId !== 'string' || typeof localId !== 'string') return;
+        this._store.resendOptimistic({ channelId, localId });
     }
 
     _renderMeta() {
@@ -766,8 +961,10 @@ export class SyncMessageBubble extends PlatformElement {
                     ${this._renderForwarded()}
                     ${this._renderReplyQuote()}
                     ${contents.map((c) => this._renderContent(c))}
-                    ${this._renderReactions()}
-                    ${this._renderMeta()}
+                    <div class="footer">
+                        ${this._renderReactions()}
+                        ${this._renderMeta()}
+                    </div>
                     <span class="quick-reactions">
                         ${EMOJI_QUICK.map((e) => html`<span @click=${(ev) => { ev.stopPropagation(); this._onReaction(e); }}>${e}</span>`)}
                     </span>

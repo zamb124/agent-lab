@@ -60,8 +60,7 @@ class TestVariablesE2E:
             if "example_react" in url:
                 flow_id = url.split("/flows/")[-1]
                 break
-        if not flow_id:
-            pytest.skip("example_react flow not found")
+        assert flow_id, "В реестре flows не найден example_react (url должен содержать example_react)"
         return flow_id
 
     @pytest.mark.asyncio

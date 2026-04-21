@@ -19,6 +19,8 @@ from __future__ import annotations
 from typing import Any
 
 from apps.sync.container import get_sync_container
+from apps.sync.models.calls import CallLinkCreate
+from apps.sync.models.channels import ChannelCreate
 from apps.sync.realtime.operations import (
     Operation,
     dump_result,
@@ -76,7 +78,6 @@ from apps.sync.realtime.operations import (
     CallsInvitePayload,
     CallsJoinAcceptPayload,
     CallsJoinInfoPayload,
-    CallsLinksCreatePayload,
     CallsLinksListPayload,
     CallsLinksRemovePayload,
     CallsLinksUpdatePayload,
@@ -87,7 +88,6 @@ from apps.sync.realtime.operations import (
     CallsTokenPayload,
     CallsTurnCredentialsPayload,
     ChannelsAddMemberPayload,
-    ChannelsCreatePayload,
     ChannelsListMembersPayload,
     ChannelsListPayload,
     ChannelsMarkReadPayload,
@@ -130,7 +130,7 @@ SYNC_OPERATIONS: dict[str, Operation] = {
     ),
     "sync/channels/create_requested": Operation(
         canonical_type="sync/channels/create_requested",
-        payload_model=ChannelsCreatePayload,
+        payload_model=ChannelCreate,
         fn=op_channels_create,
     ),
     "sync/channels/update_requested": Operation(
@@ -315,7 +315,7 @@ SYNC_OPERATIONS: dict[str, Operation] = {
     ),
     "sync/calls/links_create_requested": Operation(
         canonical_type="sync/calls/links_create_requested",
-        payload_model=CallsLinksCreatePayload,
+        payload_model=CallLinkCreate,
         fn=op_calls_links_create,
     ),
     "sync/calls/links_update_requested": Operation(

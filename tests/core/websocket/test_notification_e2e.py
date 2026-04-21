@@ -293,8 +293,9 @@ async def test_ws_stats_endpoint(crm_client, auth_headers_system, ws_cookie_syst
                 headers=auth_headers_system,
             )
 
-            if stats_resp.status_code != 200:
-                pytest.skip(f"Endpoint /ws/stats требует сессию через cookie (status={stats_resp.status_code})")
+            assert stats_resp.status_code == 200, (
+                f"GET /crm/api/ws/stats ожидает 200 (cookie+Bearer); получено {stats_resp.status_code}: {stats_resp.text}"
+            )
 
             stats = stats_resp.json()
             # Новый формат stats: active_users / total_connections / redis_connected.

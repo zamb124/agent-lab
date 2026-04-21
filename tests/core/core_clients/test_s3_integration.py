@@ -26,8 +26,6 @@ def skip_if_s3_disabled():
     try:
         S3ClientFactory.create_client_for_bucket(bucket_name)
     except ValueError as e:
-        if "S3 отключен" in str(e) or "не найден в конфигурации" in str(e):
-            pytest.skip(f"S3 отключен или bucket {bucket_name} не настроен")
         raise
 
 
@@ -37,10 +35,8 @@ def skip_if_s3_fails(test_func):
         try:
             return await test_func(*args, **kwargs)
         except Exception as e:
-            if "AccessDenied" in str(e) or "upload failed" in str(e).lower():
-                pytest.skip(f"S3 operation failed: {e}")
-            else:
-                raise
+
+            raise
     return wrapper
 
 
@@ -62,7 +58,7 @@ async def minio_bucket():
         
         await client.close()
     except Exception as e:
-        pytest.skip(f"MinIO недоступен: {e}")
+        raise
 
 
 @pytest.mark.asyncio
@@ -127,9 +123,7 @@ class TestS3Integration:
                 metadata={"test": "integration", "source": "pytest"}
             )
             
-            if not upload_success:
-                print("⚠️ Загрузка не удалась (возможно ограничения прав), пропускаем тест")
-                pytest.skip("S3 upload failed - possibly access restrictions")
+            assert upload_success, "S3 upload_bytes вернул False (права доступа или конфиг бакета)"
             
             print(f"✅ Файл загружен в S3: {test_key}")
             
@@ -148,10 +142,6 @@ class TestS3Integration:
             assert metadata is not None
             assert metadata['content_length'] == len(test_data)
             print(f"✅ Метаданные получены: {metadata['content_length']} bytes")
-            
-        except Exception as e:
-            print(f"⚠️ S3 операция не удалась: {e}")
-            pytest.skip(f"S3 operation failed: {e}")
             
         finally:
             # Очищаем тестовый файл
@@ -183,9 +173,7 @@ class TestS3Integration:
                 content_type="text/plain"
             )
             
-            if not upload_success:
-                print("⚠️ Загрузка не удалась (возможно ограничения прав), пропускаем тест")
-                pytest.skip("S3 upload failed - possibly access restrictions")
+            assert upload_success, "S3 upload_file вернул False (права доступа или конфиг бакета)"
             print(f"✅ Файл загружен с диска в S3: {test_key}")
             
             # Проверяем что файл существует
@@ -225,28 +213,15 @@ class TestS3Integration:
                 data = f"Test file {i} content".encode()
                 
                 success = await client.upload_bytes(data, key, content_type="text/plain")
-                if not success:
-                    print("⚠️ Загрузка не удалась, пропускаем тест")
-                    pytest.skip("S3 upload failed - possibly access restrictions")
+                assert success, "S3 upload_bytes вернул False при подготовке list_objects"
                 test_files.append(key)
             
             print(f"✅ Создано {len(test_files)} тестовых файлов")
             
-            # Получаем список объектов с префиксом
-            try:
-                objects = await client.list_objects(prefix=test_prefix, max_keys=10)
-            except Exception as e:
-                if "SignatureDoesNotMatch" in str(e) or "Signature" in str(e):
-                    print("⚠️ Ошибка подписи S3 - пропускаем тест")
-                    pytest.skip(f"S3 signature error: {e}")
-                raise
-            
-            # Если список пустой, возможно проблема с подписью S3
-            if len(objects) == 0:
-                print("⚠️ Список объектов пустой - возможна проблема с подписью S3 для VK Cloud")
-                pytest.skip("S3 list_objects returned empty - possibly signature issue with VK Cloud")
-            
-            assert len(objects) >= 3
+            objects = await client.list_objects(prefix=test_prefix, max_keys=10)
+            assert len(objects) >= 3, (
+                f"S3 list_objects по префиксу {test_prefix!r} вернул {len(objects)} объектов (ожидалось >= 3)"
+            )
             print(f"✅ Получен список объектов: {len(objects)} файлов")
             
             # Проверяем что наши файлы в списке
@@ -273,8 +248,7 @@ class TestS3Integration:
         try:
             # Загружаем исходный файл
             upload_success = await client.upload_bytes(test_data, source_key)
-            if not upload_success:
-                pytest.skip("S3 upload failed - possibly access restrictions")
+            assert upload_success, "S3 upload_bytes вернул False перед copy_object"
             
             # Копируем файл
             copy_success = await client.copy_object(source_key, dest_key)
@@ -310,8 +284,7 @@ class TestS3Integration:
         try:
             # Загружаем файл
             upload_success = await client.upload_bytes(test_data, test_key)
-            if not upload_success:
-                pytest.skip("S3 upload failed - possibly access restrictions")
+            assert upload_success, "S3 upload_bytes вернул False перед presigned URL"
             
             # Генерируем presigned URL для скачивания
             download_url = await client.generate_presigned_url(
@@ -434,10 +407,9 @@ class TestS3WithDatabase:
             )
             
             if not s3_upload_success:
-                # Обновляем статус на FAILED в БД
                 file_record.status = FileStatus.FAILED
                 await storage.set(file_record.key, file_record.model_dump_json())
-                pytest.skip("S3 upload failed - possibly access restrictions")
+            assert s3_upload_success, "S3 upload_bytes вернул False в сценарии FileRecord"
             print(f"✅ 2. Файл загружен в S3: {s3_key}")
             
             # 3. Обновляем статус в БД
@@ -527,8 +499,7 @@ class TestS3WithDatabase:
         
         try:
             upload_success = await default_client.upload_bytes(test_data, test_key)
-            if not upload_success:
-                pytest.skip("S3 upload failed - possibly access restrictions")
+            assert upload_success, "S3 upload_bytes вернул False для default_client"
             
             exists = await default_client.object_exists(test_key)
             assert exists

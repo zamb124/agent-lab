@@ -8,9 +8,13 @@ from __future__ import annotations
 
 import json
 import uuid
+from io import BytesIO
 from pathlib import Path
 
+import fitz
+import openpyxl
 import pytest
+from docx import Document
 
 from tests.crm.knowledge_import_helpers import (
     combined_entity_blob,
@@ -33,11 +37,6 @@ def _test_namespace(unique_id: str) -> str:
 
 
 def _xlsx_bytes(marker: str) -> bytes:
-    pytest.importorskip("openpyxl")
-    from io import BytesIO
-
-    import openpyxl
-
     wb = openpyxl.Workbook()
     ws = wb.active
     assert ws is not None
@@ -48,11 +47,6 @@ def _xlsx_bytes(marker: str) -> bytes:
 
 
 def _docx_bytes(marker: str) -> bytes:
-    pytest.importorskip("docx")
-    from io import BytesIO
-
-    from docx import Document
-
     doc = Document()
     doc.add_paragraph(marker)
     buf = BytesIO()
@@ -61,7 +55,6 @@ def _docx_bytes(marker: str) -> bytes:
 
 
 def _pdf_bytes(tmp_path: Path, marker: str) -> bytes:
-    fitz = pytest.importorskip("fitz")
     doc = fitz.open()
     page = doc.new_page()
     page.insert_text((72, 72), marker)
@@ -255,7 +248,6 @@ class TestKnowledgeImportE2E:
     async def test_notes_only_xlsx_file(
         self, crm_client, crm_worker, unique_id, auth_headers_system
     ) -> None:
-        pytest.importorskip("openpyxl")
         ns = _test_namespace(unique_id)
         marker = f"KN_E2E_XLSX_{unique_id}"
         raw = _xlsx_bytes(marker)
@@ -277,7 +269,6 @@ class TestKnowledgeImportE2E:
     async def test_notes_only_docx_file(
         self, crm_client, crm_worker, unique_id, auth_headers_system
     ) -> None:
-        pytest.importorskip("docx")
         ns = _test_namespace(unique_id)
         marker = f"KN_E2E_DOCX_{unique_id}"
         raw = _docx_bytes(marker)
@@ -299,7 +290,6 @@ class TestKnowledgeImportE2E:
     async def test_notes_only_pdf_file(
         self, crm_client, crm_worker, unique_id, auth_headers_system, tmp_path
     ) -> None:
-        pytest.importorskip("fitz")
         ns = _test_namespace(unique_id)
         marker = f"KN_E2E_PDF_{unique_id}"
         raw = _pdf_bytes(tmp_path, marker)

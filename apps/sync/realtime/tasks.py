@@ -11,6 +11,7 @@ from urllib.parse import urlparse
 from uuid import uuid4
 
 import redis.asyncio as redis_async
+from google.protobuf.json_format import MessageToDict
 
 from apps.sync.container import get_sync_container
 from apps.sync.db.models import SyncCallRecording, SyncFile
@@ -89,6 +90,29 @@ def _normalize_http_base_url(url: str) -> str:
     if url.startswith("http://") or url.startswith("https://"):
         return url
     raise ValueError(f"Неподдерживаемая схема URL источника записи: {url}")
+
+
+def _egress_item_failure_match_text(item: Any) -> str:
+    """Текст для поиска известных ошибок LiveKit (сообщение может быть в error, details или вложенных полях)."""
+    parts: list[str] = []
+    for attr in ("error", "details"):
+        v = getattr(item, attr, None)
+        if v:
+            s = str(v).strip()
+            if s:
+                parts.append(s)
+    code = getattr(item, "error_code", None)
+    if code is not None:
+        parts.append(str(code))
+    try:
+        blob = json.dumps(
+            MessageToDict(item, preserving_proto_field_name=True),
+            ensure_ascii=False,
+        )
+        parts.append(blob)
+    except Exception:
+        pass
+    return " ".join(parts).lower()
 
 
 def _extract_egress_file_location(egress_info: Any) -> str | None:
@@ -208,10 +232,15 @@ async def _resolve_livekit_egress_result(
                     )
                     return egress_id, location
                 if ended_at > 0:
-                    error_str = str(error) if error else ""
-                    if "stop called before pipeline could start" in error_str.lower():
+                    error_str = _egress_item_failure_match_text(item)
+                    if "stop called before pipeline could start" in error_str:
                         raise RuntimeError(
                             "Запись слишком короткая — файл не был создан. Попробуйте записать дольше."
+                        )
+                    if "start signal not received" in error_str:
+                        raise RuntimeError(
+                            "Запись не получила медиа с комнаты: нет опубликованного видео или аудио для композита. "
+                            "Включите камеру или микрофон до старта записи либо дождитесь публикации потока участниками."
                         )
                     raise RuntimeError(
                         "LiveKit egress завершился без location. "

@@ -189,6 +189,31 @@ class CallRepository(BaseSyncRepository[SyncCall]):
             result = await session.execute(stmt)
             return result.scalar_one_or_none()
 
+    async def get_persistent_channel_link(
+        self, company_id: str, channel_id: str
+    ) -> Optional[SyncCallLink]:
+        async with self._db.session() as session:
+            stmt = (
+                select(SyncCallLink)
+                .where(
+                    SyncCallLink.company_id == company_id,
+                    SyncCallLink.channel_id == channel_id,
+                    SyncCallLink.is_persistent_channel_link.is_(True),
+                )
+                .limit(1)
+            )
+            result = await session.execute(stmt)
+            return result.scalar_one_or_none()
+
+    async def update_link_expires_at(self, link_token: str, expires_at: datetime) -> None:
+        async with self._db.session() as session:
+            await session.execute(
+                update(SyncCallLink)
+                .where(SyncCallLink.link_token == link_token)
+                .values(expires_at=expires_at)
+            )
+            await session.commit()
+
     async def update_calendar_link(
         self,
         link_token: str,

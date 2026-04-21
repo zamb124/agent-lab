@@ -3,7 +3,10 @@
 from __future__ import annotations
 
 import base64
+
+import fitz
 import pytest
+import unstructured  # noqa: F401
 
 from core.files.checksum import compute_content_checksum_sha256
 from core.files.reader import FileReader, FileReadError
@@ -35,7 +38,6 @@ async def test_read_path_text_stable_checksum(tmp_path) -> None:
 
 @pytest.mark.asyncio
 async def test_read_pdf_with_fitz(tmp_path) -> None:
-    fitz = pytest.importorskip("fitz")
     doc = fitz.open()
     page = doc.new_page()
     page.insert_text((72, 72), "MarkerPDF123")
@@ -80,7 +82,6 @@ async def test_read_csv_as_text(tmp_path) -> None:
 
 @pytest.mark.asyncio
 async def test_read_eml_via_unstructured_office_path() -> None:
-    pytest.importorskip("unstructured")
     raw = (
         b"From: a@b.c\r\nTo: d@e.f\r\nSubject: X\r\n"
         b"Content-Type: text/plain; charset=utf-8\r\n\r\n"

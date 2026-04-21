@@ -134,6 +134,20 @@ export const UI_ICON_MAP = Object.freeze({
     more: 'more-vert', dots: 'more-vert', variable: 'code', package: 'box',
     clock: 'schedule', timer: 'schedule', email: 'mail', envelope: 'mail',
     'message-circle': 'chat', phone: 'phone-call',
+    video: 'video-call', smile: 'smile', emoji: 'smile', emoticon: 'smile',
+    mic: 'mic', microphone: 'microphone', 'mic-off': 'mic-off',
+    'check-double': 'done-all', 'done-all': 'done-all', checkall: 'done-all',
+    'alert-circle': 'alert-triangle', 'alert-triangle': 'alert-triangle',
+    file: 'doc-detail', document: 'doc-detail',
+    image: 'image', picture: 'image', photo: 'image',
+    pause: 'pause', 'phone-plus': 'phone-plus', 'screen-share': 'screen-share',
+    pin: 'pin', reply: 'reply', forward: 'forward', download: 'download',
+    monitor: 'monitor', square: 'square',
+    'message-square': 'chat', message: 'chat', comment: 'chat',
+    'phone-off': 'phone-ended', hangup: 'phone-ended',
+    'git-branch': 'git-branch', branch: 'git-branch',
+    circle: 'circle', dot: 'fiber-manual-record', record: 'fiber-manual-record',
+    zap: 'zap', bolt: 'zap', flash: 'zap',
 });
 
 const UI_ICON_KEYS = new Set([...Object.keys(UI_ICON_MAP), ...Object.values(UI_ICON_MAP)]);

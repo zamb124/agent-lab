@@ -73,33 +73,36 @@ export class SyncSidebar extends PlatformElement {
             }
 
             .adhoc-btn {
-                display: flex;
+                display: inline-flex;
                 align-items: center;
                 justify-content: center;
                 gap: var(--space-2);
                 width: 100%;
-                padding: var(--space-2) var(--space-3);
+                padding: var(--space-3) var(--space-4);
                 border: none;
-                border-radius: var(--radius-lg);
-                background: var(--accent-gradient);
+                border-radius: var(--radius-full, 999px);
+                background: var(--accent);
                 color: var(--text-inverse);
                 font-size: var(--text-sm);
                 font-weight: var(--font-semibold);
                 cursor: pointer;
                 box-sizing: border-box;
-                transition: transform var(--duration-fast);
+                transition: transform var(--duration-fast), box-shadow var(--duration-fast), background var(--duration-fast);
+                box-shadow: 0 2px 8px var(--accent-subtle, rgba(153, 166, 249, 0.18));
             }
-            .adhoc-btn:hover { transform: scale(1.02); }
-            .adhoc-btn:disabled { opacity: 0.6; cursor: wait; transform: none; }
+            .adhoc-btn:hover { background: var(--accent-hover, var(--accent)); }
+            .adhoc-btn:hover { transform: translateY(-1px); }
+            .adhoc-btn:active { transform: translateY(0); }
+            .adhoc-btn:disabled { opacity: 0.6; cursor: wait; transform: none; box-shadow: none; }
 
             .ns-section {
                 display: flex;
                 align-items: center;
                 gap: var(--space-2);
-                padding: var(--space-2);
+                padding: var(--space-2) var(--space-3);
                 background: var(--glass-tint-subtle, rgba(255, 255, 255, 0.04));
                 border: 1px solid var(--border-subtle, rgba(255, 255, 255, 0.06));
-                border-radius: var(--radius-lg);
+                border-radius: var(--radius-full, 999px);
                 width: 100%;
                 box-sizing: border-box;
             }
@@ -159,16 +162,18 @@ export class SyncSidebar extends PlatformElement {
                 display: flex;
                 align-items: center;
                 gap: var(--space-2);
-                padding: 6px var(--space-2);
+                padding: var(--space-2) var(--space-4);
                 background: var(--glass-tint-subtle, rgba(255, 255, 255, 0.04));
                 border: 1px solid var(--border-subtle, rgba(255, 255, 255, 0.06));
-                border-radius: var(--radius-lg);
+                border-radius: var(--radius-full, 999px);
                 color: var(--text-secondary);
                 box-sizing: border-box;
+                transition: border-color var(--duration-fast), box-shadow var(--duration-fast);
             }
             .search-box:focus-within {
                 border-color: var(--accent);
-                color: var(--text-primary);
+                color: var(--accent);
+                box-shadow: 0 0 0 4px var(--accent-subtle, rgba(153, 166, 249, 0.16));
             }
             .search-box input {
                 flex: 1;
@@ -179,6 +184,7 @@ export class SyncSidebar extends PlatformElement {
                 color: var(--text-primary);
                 font-size: var(--text-sm);
             }
+            .search-box input::placeholder { color: var(--text-tertiary); }
 
             .empty-row {
                 padding: var(--space-2) var(--space-3);

@@ -18,13 +18,15 @@ alwaysApply: false
 - В API и БД один тип: **`call_type: "video"`**. Значение `audio` нормализуется в `video` на сервере.
 - Все звонки в текущем коде — **SFU** (`P2P_MAX = 0` в `apps/sync/realtime/call_handlers.py`); P2P-ветки оставлены как заготовка.
 - Камера по умолчанию и при переключении: `localStorage` ключ `humanitec.sync.call.camera_enabled` (boolean-строка). После `enableCameraAndMicrophone()` SFU выставляет `setCameraEnabled` из LS.
-- Демонстрация экрана: `new Room({ publishDefaults: { screenShareEncoding: ScreenSharePresets.h1080fps30.encoding } })`. При старте шеринга камера выключается и состояние сохраняется для восстановления после остановки. Кнопка камеры `disabled` пока идёт демонстрация. В сетке при активном screen share у участника показывается только плитка экрана (`_videoPubsForGrid`). Класс плитки экрана — `screen`, `object-fit: contain`.
+- Демонстрация экрана: `new Room({ publishDefaults: { screenShareEncoding: ScreenSharePresets.h1080fps30.encoding } })`. `setScreenShareEnabled(true, { selfBrowserSurface: 'exclude', surfaceSwitching: 'include' })` — подсказка Chromium не предлагать текущую вкладку в picker. Камера при демонстрации может оставаться включённой (два видеотрека); состояние «камера до шеринга» сохраняется для восстановления после остановки. Превью и кнопки: при поддержке `documentPictureInPicture.requestWindow()` открывается отдельное always-on-top окно (видно при другой вкладке и при шаринге не браузера); иначе панель внутри оверлея; без камеры — только кнопки. В сетке при активном screen share у участника показывается только плитка экрана. Класс плитки экрана — `screen`, `object-fit: contain`.
+- **Document PiP и смена вкладки (Chrome desktop):** после успешного старта шаринга UI регистрирует `navigator.mediaSession.setActionHandler('enterpictureinpicture', …)` и при необходимости открывает `documentPictureInPicture.requestWindow()` без отдельного user gesture при уходе на другую вкладку (см. [Enter picture-in-picture automatically](https://developer.chrome.com/blog/automatic-picture-in-picture)); регистрация Media Session не зависит от успеха первого `requestWindow` сразу после включения шаринга. В настройках сайта в Chrome — **Automatic picture-in-picture** (по умолчанию включено). Окно, открытое по этому авто-сценарию, при возврате фокуса на вкладку может закрываться — это описано в статье. Паттерн «как Meet» (не опора на `visibilitychange` как единственный триггер): [WICG document-picture-in-picture #138](https://github.com/WICG/document-picture-in-picture/issues/138). Скрытый `<video>` с потоком камеры для `autopictureinpicture` — с явным `play()` там, где политика браузера требует.
 - Полный экран по плитке: кнопка на плитке с видео — в DOM **после** `<video>` и подписи; повторный клик / Escape / `fullscreenchange` синхронизируют иконку. iOS Safari — `video.webkitEnterFullscreen()` + `webkitendfullscreen`. Android (Chrome/Blink) — `element.requestFullscreen()` на `.participant-tile`. Оверлей: `env(safe-area-inset-*)` на `:host` при `viewport-fit=cover`. Глобальный порядок слоя: `nextModalLayerZIndex()` и `--platform-modal-layer-z` на `:host` `sync.call_overlay` / `sync.call_incoming`.
 
 ### Инкогнито и «пустая комната»
 
 - Пустой `localStorage` (новое окно / инкогнито): не восстанавливается выбранный канал и прочие настройки UI.
-- Гостевая ссылка `POST /calls/links` без привязки к текущему `call_id`: первый `POST /calls/join/{token}` создаёт отдельный `SyncCall` и LiveKit-комнату `link-{prefix}`. Чтобы гость попал в ту же комнату, что и чат, ссылка должна быть создана с `call_id` активного звонка (кнопка «Скопировать ссылку» в оверлее передаёт его).
+- **Постоянная ссылка на обычный канал** (`POST /calls/links` без `call_id` и без `calendar_event_id`): на пару `(company_id, channel_id)` хранится не больше одной канонической строки (`is_persistent_channel_link`, уникальный частичный индекс). Повторное создание с тем же `channel_id` и `reuse_channel_link: true` (по умолчанию) возвращает тот же `link_token` и продлевает `expires_at`. Первый `POST /calls/join/{token}` создаёт `SyncCall` и комнату `link-{token[:16]}`; гости входят в ту же логическую комнату по той же ссылке. После `call.status == ended` следующий join создаёт **новый** `SyncCall` с тем же `livekit_room_name`, обновляя `link.call_id`.
+- Ссылка с **`call_id`** (оверлей «Скопировать ссылку»): привязка к текущему активному `SyncCall` — гость в той же LiveKit-комнате, что и участники этого звонка; это отдельный сценарий от постоянной ссылки на канал.
 
 ### UI оверлея (устройства и качество звука)
 
@@ -43,6 +45,8 @@ alwaysApply: false
 | Участников | Режим | Медиа-путь |
 |---|---|---|
 | 1+ (текущая реализация) | SFU | Браузер ↔ LiveKit ↔ Браузер |
+
+Если для канала уже есть **постоянная гостевая ссылка** (`get_persistent_channel_link`), `handle_call_invite` создаёт комнату `link-{link_token[:16]}`, как при гостевом join без `call_id`. Иначе имя комнаты — `call-{uuid}`. Так хост и гость по одной ссылке оказываются в одной LiveKit-комнате после повторного входа.
 
 Сервер не участвует в медиа-потоке. **Speech-to-chat** (речь в ленту): канал с `speech_to_chat_enabled`, серверный LiveKit segmented egress микрофона → S3 → `messages.send`; пустой `file_results` у egress — догрузка сегментов листингом S3 по префиксу `sync-speech/...` и курсору `last_segment_s3_key`. Длительность сегмента — `calls.speech_to_chat.segment_seconds` (default 60s). После скачивания сегмента воркер: `volumedetect` (`speech_segment_discard_below_max_volume_db` для отбраковки), затем обрезка кромочной тишины (`silenceremove + areverse` в `core/files/audio_silence.py`) с порогами `speech_segment_trim_*`; если после обрезки `< speech_segment_min_post_duration_ms` — пропуск. TTL lock авто-STT — `transcribe_audio_redis_lock_ttl_seconds`. Полное описание pipelines / locks — `sync.mdc`.
 
@@ -128,9 +132,10 @@ POST /sync/api/v1/calls/join/{token}         → JoinResponse (`participant_name
 - Зарегистрированный → identity = `user_id`, cookie auth.
 - Гость → body `{guest_name}` → identity = `guest:{uuid8}:{name}`.
 - Всегда SFU режим.
-- `POST /calls/links` с `call_id` (оверлей «Скопировать ссылку»): ссылка привязана к текущему `SyncCall` — гость в той же LiveKit-комнате, что и чат.
-- Без `call_id`: первый вход по ссылке создаёт новый `SyncCall` и комнату `link-{tokenPrefix}`; последующие переиспользуют.
-- Публичный URL: `join_url` в ответе API — `{platform_public_base_url}/l/{code}`; резолв на frontend (`GET /l/{code}`) → редирект на `/sync/join/{link_token}`. Хранение: `platform_short_links` (kind `sync_call_join`), `ShortLinkService` в `core/short_links/`; при удалении ссылки звонка — удаление short link по `link_token`.
+- `POST /calls/links` с `call_id` (оверлей «Скопировать ссылку»): ссылка привязана к текущему `SyncCall` — гость в той же LiveKit-комнате, что и этот звонок.
+- Без `call_id` на обычном канале (не `calendar_meeting`): одна постоянная ссылка на канал; повторный `links` с `reuse_channel_link: true` — тот же `link_token`. Первый join создаёт `SyncCall` и `link-{tokenPrefix}`; пока звонок активен, следующие join идут в тот же `call_id`. После `ended` join создаёт новый `SyncCall` с тем же `livekit_room_name`. `reuse_channel_link: false` удаляет старую постоянную ссылку и создаёт новую.
+- Календарные встречи (`calendar_event_id`): отдельная семантика, без смешения с постоянной ссылкой на обычный канал.
+- Публичный URL: `join_url` в ответе API — `{platform_public_base_url}/l/{code}`; резолв на frontend (`GET /l/{code}`) → редирект на `/sync/join/{link_token}`. Хранение: `platform_short_links` (kind `sync_call_join`), `ShortLinkService` в `core/short_links/`; при существующем `link_token` продление `expires_at` обновляет срок short link; при удалении ссылки звонка — удаление short link по `link_token`.
 - Страница: `/sync/join/{token}` → `apps/sync/ui/pages/sync-call-join-page.js` (`PlatformPage`, route `call_join` в `SYNC_ROUTES`); фабрики `sync/call_join_info` и `sync/call_join_accept` (HTTP-only).
 - Route config: `/sync/api/v1/calls/join/*` → `auth_required=False`.
 
@@ -189,7 +194,7 @@ Push `sync/call/ended` обрабатывается в reducer'е slice `sync/ca
 |---|---|
 | `sync_calls` | Звонки: mode (sfu), status (ringing/active/ended), livekit_room_name |
 | `sync_call_participants` | Участники: status (invited/joined/declined/left) |
-| `sync_call_links` | Гостевые ссылки: link_token, expires_at, call_type |
+| `sync_call_links` | Гостевые ссылки: link_token, expires_at, call_type, `is_persistent_channel_link` (каноническая ссылка на обычный канал без календаря) |
 | `sync_call_recordings` | Записи звонков: status (requested/recording/uploaded/failed), provider_job_id, raw_file_id |
 
 ## Запись и канал как интерфейс STT
@@ -198,7 +203,7 @@ Push `sync/call/ended` обрабатывается в reducer'е slice `sync/ca
 - `recording_start` запускает `RoomCompositeEgress` с `EncodedFileOutput.s3` (ключ `sync-recordings/{company_id}/{call_id}/{recording_id}.mp4`).
 - `recording_stop` останавливает egress по `provider_job_id`. Запустить запись может только текущий админ встречи; остановить — админ или пользователь, запустивший активную запись (`sync_call_recordings.started_by_user_id`).
 - Передача админа: `sync/calls/admin_transfer_requested`; новый админ должен быть `joined` участником (гостей назначать нельзя).
-- `sync_finalize_recording_task`: ожидание готового egress — `calls.finalize_recording_egress_wait_timeout_seconds` и `finalize_recording_egress_poll_interval_seconds`; затем `file/video` в канал с `call_id`. Отдельных таблиц встреч/summary нет. Если egress завершился с «Stop called before pipeline could start» — пользователю показывается «Запись слишком короткая — файл не был создан».
+- `sync_finalize_recording_task`: ожидание готового egress — `calls.finalize_recording_egress_wait_timeout_seconds` и `finalize_recording_egress_poll_interval_seconds`; затем `file/video` в канал с `call_id`. Отдельных таблиц встреч/summary нет. Если egress завершился с «Stop called before pipeline could start» — в `recording.error` и UI — «Запись слишком короткая…». Если с «Start signal not received» — нет опубликованного медиатрека для композита; в `recording.error` — пояснение из `tasks._resolve_livekit_egress_result`.
 - WS-события: `sync/call/recording_started|stopped|failed`. Событий `call.transcript.*`, `call.summary.*`, `call.export.crm.*` нет.
 - REST: `GET /sync/api/v1/calls/{call_id}/recordings`; транскрипция через `POST .../messages/.../transcribe`, `.../transcribe-video`, `POST .../channels/{channel_id}/calls/{call_id}/transcribe` (см. `sync.mdc`).
 

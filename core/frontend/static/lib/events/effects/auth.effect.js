@@ -50,7 +50,10 @@ export function createAuthEffect({ baseUrl }) {
                     const data = await httpRequest({ method: 'GET', url: `${base}/api/auth/me` });
                     const user = {
                         id: data.user_id,
+                        user_id: data.user_id,
                         name: data.name,
+                        email: data.email,
+                        avatar_url: data.avatar_url,
                         company_id: data.company_id,
                         roles: data.roles || [],
                         raw: data,

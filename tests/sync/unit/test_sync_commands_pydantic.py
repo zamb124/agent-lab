@@ -11,17 +11,18 @@ from __future__ import annotations
 import pytest
 from pydantic import ValidationError
 
+from apps.sync.models.channels import ChannelCreate
 from apps.sync.realtime.operations import (
+    CallsJoinAcceptPayload,
     CallsRecordingStartPayload,
-    ChannelsCreatePayload,
     ChannelsTypingPayload,
 )
 
 
-def test_channels_create_payload_requires_body() -> None:
-    """Без `body` payload не валидируется (zero-fallback canon)."""
+def test_channels_create_payload_requires_type() -> None:
+    """Без `type` payload не валидируется (zero-fallback canon)."""
     with pytest.raises(ValidationError):
-        ChannelsCreatePayload.model_validate({})
+        ChannelCreate.model_validate({})
 
 
 def test_channels_create_payload_topic_requires_namespace_at_runtime() -> None:
@@ -31,10 +32,10 @@ def test_channels_create_payload_topic_requires_namespace_at_runtime() -> None:
     `namespace` (для DM/calendar_meeting); проверка обязательности для
     topic — в бизнес-логике handler'а.
     """
-    p = ChannelsCreatePayload.model_validate(
-        {"body": {"type": "topic", "name": "t", "namespace": "default"}}
+    p = ChannelCreate.model_validate(
+        {"type": "topic", "name": "t", "namespace": "default"}
     )
-    assert p.body.namespace == "default"
+    assert p.namespace == "default"
 
 
 def test_channels_typing_payload_valid() -> None:
@@ -59,3 +60,16 @@ def test_calls_recording_start_payload_valid() -> None:
 def test_calls_recording_start_payload_missing_call_id_raises() -> None:
     with pytest.raises(ValidationError):
         CallsRecordingStartPayload.model_validate({})
+
+
+def test_calls_join_accept_payload_flat_guest_name_coerced_to_body() -> None:
+    p = CallsJoinAcceptPayload.model_validate(
+        {"link_token": "tok", "guest_name": "Alice"}
+    )
+    assert p.body is not None
+    assert p.body.guest_name == "Alice"
+
+
+def test_calls_join_accept_payload_registered_no_body() -> None:
+    p = CallsJoinAcceptPayload.model_validate({"link_token": "tok"})
+    assert p.body is None

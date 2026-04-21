@@ -365,6 +365,11 @@ class SyncCallLink(Base):
         DateTime(timezone=True), nullable=True
     )
     calendar_event_id: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    is_persistent_channel_link: Mapped[bool] = mapped_column(
+        Boolean(),
+        nullable=False,
+        default=False,
+    )
 
     __table_args__ = (
         Index("ix_sync_call_links_channel", "channel_id"),

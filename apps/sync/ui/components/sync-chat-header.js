@@ -31,40 +31,51 @@ export class SyncChatHeader extends PlatformElement {
             display: flex;
             align-items: center;
             gap: var(--space-3);
-            padding: var(--space-2) var(--space-4);
+            padding: var(--space-3) var(--space-6);
             border-bottom: 1px solid var(--glass-border);
-            background: var(--glass-solid);
-            min-height: 56px;
-            position: relative;
+            background: var(--glass-solid-soft, var(--glass-solid));
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            min-height: 72px;
+            position: sticky;
+            top: 0;
+            z-index: 10;
         }
         :host([data-call-banner]) {
             background: var(--accent-gradient, linear-gradient(135deg, #6366f1, #8b5cf6));
-            color: white;
+            color: var(--text-inverse, #fff);
         }
         .menu-btn {
             display: none;
             background: transparent;
             border: none;
             color: var(--text-primary);
-            padding: var(--space-1);
+            padding: var(--space-2);
+            margin-left: calc(var(--space-2) * -1);
+            border-radius: var(--radius-full, 999px);
             cursor: pointer;
         }
+        .menu-btn:hover { background: var(--glass-hover); }
         @media (max-width: 767px) {
             .menu-btn { display: inline-flex; }
         }
         .avatar {
-            width: 36px;
-            height: 36px;
+            width: 44px;
+            height: 44px;
             border-radius: 50%;
             display: inline-flex;
             align-items: center;
             justify-content: center;
-            color: white;
-            font-weight: 600;
+            color: var(--text-inverse, #fff);
+            font-weight: var(--font-semibold);
             font-size: var(--text-sm);
             flex-shrink: 0;
             position: relative;
+            box-shadow: 0 1px 4px rgba(0, 0, 0, 0.06);
+            cursor: pointer;
+            transition: transform var(--duration-fast);
         }
+        .avatar:hover { transform: scale(1.05); }
         .avatar img {
             width: 100%;
             height: 100%;
@@ -73,55 +84,73 @@ export class SyncChatHeader extends PlatformElement {
         }
         .presence-dot {
             position: absolute;
-            right: -2px;
-            bottom: -2px;
-            width: 10px;
-            height: 10px;
+            right: 0;
+            bottom: 0;
+            width: 12px;
+            height: 12px;
             border-radius: 50%;
             background: var(--success, #22c55e);
-            border: 2px solid var(--glass-solid);
+            border: 2px solid var(--bg-elevated, var(--glass-solid));
         }
         .text {
             display: flex;
             flex-direction: column;
             flex: 1;
             min-width: 0;
+            gap: 2px;
         }
         .title {
-            font-weight: 600;
+            font-weight: var(--font-semibold);
             font-size: var(--text-base);
+            color: var(--text-primary);
+            line-height: 1.2;
             white-space: nowrap;
             overflow: hidden;
             text-overflow: ellipsis;
         }
         .subtitle {
-            font-size: var(--text-xs);
+            font-size: var(--text-sm);
             color: var(--text-secondary);
             white-space: nowrap;
             overflow: hidden;
             text-overflow: ellipsis;
         }
-        :host([data-call-banner]) .subtitle { color: rgba(255,255,255,0.85); }
+        .subtitle.online { color: var(--accent); font-weight: var(--font-medium); }
+        :host([data-call-banner]) .title,
+        :host([data-call-banner]) .subtitle { color: var(--text-inverse, #fff); }
+        :host([data-call-banner]) .subtitle { color: rgba(255, 255, 255, 0.88); }
+
         .actions {
-            display: flex;
+            display: inline-flex;
             align-items: center;
             gap: var(--space-1);
             position: relative;
         }
+        .actions-divider {
+            width: 1px;
+            height: 24px;
+            background: var(--glass-border);
+            margin: 0 var(--space-1);
+        }
         .icon-btn {
             background: transparent;
             border: none;
-            color: var(--text-primary);
-            padding: var(--space-1);
+            color: var(--text-tertiary);
+            padding: 10px;
             cursor: pointer;
-            border-radius: var(--radius-sm);
+            border-radius: var(--radius-full, 999px);
             display: inline-flex;
             align-items: center;
             justify-content: center;
+            transition: background var(--duration-fast), color var(--duration-fast);
         }
-        .icon-btn:hover { background: var(--glass-hover); }
-        :host([data-call-banner]) .icon-btn { color: white; }
-        :host([data-call-banner]) .icon-btn:hover { background: rgba(255,255,255,0.16); }
+        .icon-btn:hover { background: var(--glass-hover); color: var(--text-primary); }
+        .icon-btn.accent:hover {
+            background: var(--accent-subtle, rgba(153, 166, 249, 0.12));
+            color: var(--accent);
+        }
+        :host([data-call-banner]) .icon-btn { color: var(--text-inverse, #fff); }
+        :host([data-call-banner]) .icon-btn:hover { background: rgba(255, 255, 255, 0.16); color: var(--text-inverse, #fff); }
         .pulse {
             display: inline-block;
             width: 8px;
@@ -187,8 +216,11 @@ export class SyncChatHeader extends PlatformElement {
         this.channelId = '';
         this._menuOpen = false;
         this._channels = this.useResource('sync/channels', { autoload: true });
+        this._members = this.useResource('sync/company_members');
+        this._authSel = this.select((s) => s.auth && s.auth.user);
         this._presenceSel = this.select((s) => s.syncPresence);
         this._callUiSel = this.select((s) => s.syncCallUi);
+        this._callUi = this.useSlice('sync/call_ui');
         this._wsSel = this.select((s) => s.network);
         this._callInvite = this.useOp('sync/calls_invite');
         this._callHangup = this.useOp('sync/calls_hangup');
@@ -217,9 +249,22 @@ export class SyncChatHeader extends PlatformElement {
         this.openSidebar();
     }
 
-    _onInviteCall() {
+    async _onInviteCall() {
         if (!this.channelId) return;
-        this._callInvite.run({ channel_id: this.channelId });
+        await this._callInvite.run({ channel_id: this.channelId });
+        const result = this._callInvite.lastResult;
+        if (!result || typeof result.call_id !== 'string') return;
+        this._callUi.openOverlay({
+            call_id: result.call_id,
+            channel_id: typeof result.channel_id === 'string' ? result.channel_id : this.channelId,
+            call_type: typeof result.call_type === 'string' ? result.call_type : 'video',
+            livekit_room_name: typeof result.livekit_room_name === 'string' ? result.livekit_room_name : null,
+            livekit_url: typeof result.livekit_url === 'string' ? result.livekit_url : null,
+        });
+        this.openModal('sync.call_overlay', {
+            callId: result.call_id,
+            channelId: typeof result.channel_id === 'string' ? result.channel_id : this.channelId,
+        });
     }
 
     _onSettings() {
@@ -237,13 +282,16 @@ export class SyncChatHeader extends PlatformElement {
     }
 
     _onExpandCall() {
-        this.dispatch('sync/call_ui/overlay_expanded', null);
+        this._callUi.expandOverlay(null);
     }
 
     _onHangupCall(e) {
         e.stopPropagation();
         const callUi = this._callUiSel.value;
         if (!callUi || !callUi.activeCall || typeof callUi.activeCall.call_id !== 'string') return;
+        if (typeof callUi.bannerHangupGuardUntil === 'number' && Date.now() < callUi.bannerHangupGuardUntil) {
+            return;
+        }
         this._callHangup.run({ call_id: callUi.activeCall.call_id });
     }
 
@@ -289,6 +337,8 @@ export class SyncChatHeader extends PlatformElement {
         const presence = this._presenceSel.value;
         const typingByChannel = presence && presence.typingByChannel ? presence.typingByChannel : null;
         const presenceByUserId = presence && presence.presenceByUserId ? presence.presenceByUserId : null;
+        const me = this._authSel.value;
+        const myUserId = me && typeof me.user_id === 'string' ? me.user_id : '';
         const callUi = this._callUiSel.value;
         const title = channelDisplayTitle(channel);
         const subtitle = buildChatSubtitle({
@@ -296,11 +346,20 @@ export class SyncChatHeader extends PlatformElement {
             typingByChannel,
             presenceByUserId,
             t: (k, vars) => this.t(k, vars),
+            myUserId,
+            members: this._members.items,
         });
-        const callActiveHere = Boolean(
-            callUi && callUi.activeCall
-            && callUi.activeCall.channel_id === this.channelId
-        );
+        const isPeerOnline = channel.type === 'direct'
+            && channel.peer && typeof channel.peer.user_id === 'string'
+            && isOnline(presenceByUserId, channel.peer.user_id);
+        const ac = callUi && callUi.activeCall ? callUi.activeCall : null;
+        const chId = typeof this.channelId === 'string' ? this.channelId : '';
+        const byChannelId = ac && typeof ac.channel_id === 'string' && ac.channel_id === chId;
+        const byTracker = ac && chId !== ''
+            && callUi.activeCallChannels
+            && callUi.activeCallChannels[chId]
+            && callUi.activeCallChannels[chId].call_id === ac.call_id;
+        const callActiveHere = Boolean(ac && (byChannelId || byTracker));
         this.toggleAttribute('data-call-banner', callActiveHere && callUi && callUi.overlayMinimized);
         const ws = this._wsSel.value;
         const wsConnected = !!(ws && ws.connected === true);
@@ -316,7 +375,9 @@ export class SyncChatHeader extends PlatformElement {
                 <div class="title">${callActiveHere && callUi.overlayMinimized ? this.t('chat_view.call_banner_title') : title}</div>
                 ${callActiveHere && callUi.overlayMinimized
                     ? html`<div class="subtitle">${this.t('chat_view.call_banner_subtitle')}</div>`
-                    : (subtitle ? html`<div class="subtitle">${subtitle}</div>` : '')}
+                    : (subtitle
+                        ? html`<div class="subtitle ${isPeerOnline ? 'online' : ''}">${subtitle}</div>`
+                        : '')}
             </div>
             <div class="actions">
                 ${callActiveHere && callUi.overlayMinimized ? html`
@@ -324,14 +385,18 @@ export class SyncChatHeader extends PlatformElement {
                         <platform-icon name="phone-off" size="18"></platform-icon>
                     </button>
                 ` : html`
-                    <button class="icon-btn" @click=${this._onInviteCall} ?disabled=${this._callInvite.busy} title=${this.t('chat_header.action_call')}>
-                        <platform-icon name="phone" size="18"></platform-icon>
+                    <button class="icon-btn accent" @click=${this._onInviteCall} ?disabled=${this._callInvite.busy} title=${this.t('chat_header.action_call')}>
+                        <platform-icon name="phone" size="20"></platform-icon>
                     </button>
+                    <button class="icon-btn accent" @click=${this._onInviteCall} ?disabled=${this._callInvite.busy} title=${this.t('chat_header.action_video_call')}>
+                        <platform-icon name="video" size="20"></platform-icon>
+                    </button>
+                    <span class="actions-divider"></span>
                     <button class="icon-btn" @click=${this._onSettings} title=${this.t('chat_header.action_settings')}>
-                        <platform-icon name="settings" size="18"></platform-icon>
+                        <platform-icon name="settings" size="20"></platform-icon>
                     </button>
                     <button class="icon-btn" @click=${this._onMoreToggle} title=${this.t('chat_view.more_title')}>
-                        <platform-icon name="more-vertical" size="18"></platform-icon>
+                        <platform-icon name="more-vertical" size="20"></platform-icon>
                     </button>
                     ${this._menuOpen ? html`
                         <div class="menu-flyout" @click=${(e) => e.stopPropagation()}>

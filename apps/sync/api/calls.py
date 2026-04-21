@@ -29,7 +29,6 @@ from apps.sync.realtime.operations import (
     CallsInvitePayload,
     CallsJoinAcceptPayload,
     CallsJoinInfoPayload,
-    CallsLinksCreatePayload,
     CallsLinksListPayload,
     CallsLinksRemovePayload,
     CallsLinksUpdatePayload,
@@ -86,9 +85,7 @@ async def get_turn_credentials(container: ContainerDep) -> TurnCredentials:
 @router.post("/links", status_code=201, response_model=CallLinkRead)
 async def create_call_link(body: CallLinkCreate, container: ContainerDep) -> CallLinkRead:
     user = get_context().user
-    return await op_calls_links_create(
-        CallsLinksCreatePayload(body=body), user=user, container=container
-    )
+    return await op_calls_links_create(body, user=user, container=container)
 
 
 @router.get("/links/scheduled", response_model=OffsetPage[CallScheduledLinkRead])

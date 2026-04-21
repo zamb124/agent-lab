@@ -75,8 +75,7 @@ class TestAllFlowConfigs:
         container = get_container()
         config = await container.flow_repository.get(flow_id)
         
-        if config is None:
-            pytest.skip(f"Agent {flow_id} не загружен в БД")
+        assert config is not None, f"Agent {flow_id} не загружен в БД"
         
         # Конвертируем FlowConfig в dict для Flow.from_config
         config_dict = {
@@ -100,8 +99,7 @@ class TestAllFlowConfigs:
         container = get_container()
         config = await container.flow_repository.get(flow_id)
         
-        if config is None:
-            pytest.skip(f"Agent {flow_id} не загружен в БД")
+        assert config is not None, f"Agent {flow_id} не загружен в БД"
         
         from apps.flows.src.models.enums import NodeType
         valid_types = {t.value for t in NodeType}
@@ -120,8 +118,7 @@ class TestAllFlowsExecution:
         container = get_container()
         config = await container.flow_repository.get(flow_id)
         
-        if config is None:
-            pytest.skip(f"Agent {flow_id} не загружен в БД")
+        assert config is not None, f"Agent {flow_id} не загружен в БД"
 
         # Настраиваем mock LLM
         expected_response = f"Mock response for {config.name}"
@@ -130,8 +127,7 @@ class TestAllFlowsExecution:
         # Получаем flow из БД (где уже загружены промпты и инлайнены tools)
         flow = await container.flow_factory.get_flow(flow_id)
 
-        if flow is None:
-            pytest.skip(f"Agent {flow_id} не загружен в БД")
+        assert flow is not None, f"Agent {flow_id} не загружен в БД (flow_factory.get_flow)"
 
         # Выполняем
         state = ExecutionState(

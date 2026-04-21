@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from apps.sync.container import SyncContainer
 from apps.sync.models.channels import ChannelCreate, ChannelType
-from apps.sync.realtime.operations import ChannelsCreatePayload, op_channels_create
+from apps.sync.realtime.operations import op_channels_create
 from core.models.identity_models import Namespace, User
 
 
@@ -46,13 +46,11 @@ async def create_test_topic_channel(
     """Создаёт topic-канал в новом namespace и возвращает channel_id."""
     namespace = await seed_test_namespace(op_user, op_container, unique_id, suffix=name_suffix or "ch")
     ch = await op_channels_create(
-        ChannelsCreatePayload(
-            body=ChannelCreate(
-                type=ChannelType.TOPIC,
-                name=f"Ch {unique_id}{name_suffix}",
-                namespace=namespace,
-                is_private=False,
-            )
+        ChannelCreate(
+            type=ChannelType.TOPIC,
+            name=f"Ch {unique_id}{name_suffix}",
+            namespace=namespace,
+            is_private=False,
         ),
         user=op_user,
         container=op_container,

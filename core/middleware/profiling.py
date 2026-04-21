@@ -60,7 +60,7 @@ class ProfilingMiddleware(BaseHTTPMiddleware):
             response.headers["X-Process-Time"] = f"{process_time:.2f}ms"
             
             logger.info(
-                f"🔍 ПРОФИЛИРОВАНИЕ: {request.method} {request.url.path} "
+                f"ПРОФИЛИРОВАНИЕ: {request.method} {request.url.path} "
                 f"[{process_time:.2f}ms]\n{profile_data[:2000]}"
             )
             

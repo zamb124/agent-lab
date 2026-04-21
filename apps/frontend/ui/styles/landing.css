@@ -329,3 +329,28 @@ a:hover {
     }
 }
 
+/*
+ * Маркетинговые страницы (landing + продукты): класс вешает frontend-app на <html>.
+ * В Android WebView reset.css рисует заметную полосу прокрутки у документа — скрываем её,
+ * вертикальный скролл тачем/колёсом сохраняется.
+ */
+html.frontend-landing-public {
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+}
+
+html.frontend-landing-public::-webkit-scrollbar {
+    width: 0;
+    height: 0;
+}
+
+html.frontend-landing-public body {
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+}
+
+html.frontend-landing-public body::-webkit-scrollbar {
+    width: 0;
+    height: 0;
+}
+

@@ -203,7 +203,7 @@ class TranslationManager:
     
     async def _auto_generate_translations(self):
         """Автоматическая генерация переводов из кода"""
-        logger.info("🔍 Сканирование кода для автогенерации переводов...")
+        logger.info("Сканирование кода для автогенерации переводов...")
         
         # Сканируем различные источники
         await self._scan_pydantic_models()

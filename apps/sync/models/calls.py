@@ -56,6 +56,10 @@ class CallLinkCreate(BaseModel):
         default=None,
         description="Участники канала встречи (platform user_id), без создателя.",
     )
+    reuse_channel_link: bool = Field(
+        default=True,
+        description="Для channel без calendar: вернуть существующую постоянную ссылку и продлить TTL.",
+    )
 
     @model_validator(mode="before")
     @classmethod
@@ -139,6 +143,8 @@ class CallScheduledLinkRead(BaseModel):
 class CallLinkInfo(BaseModel):
     """Публичная информация о ссылке (без auth)."""
     link_token: str
+    company_id: str
+    channel_id: str
     channel_name: Optional[str]
     creator_display_name: str
     creator_avatar_url: Optional[str] = Field(

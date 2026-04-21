@@ -19,8 +19,6 @@ from tests.fixtures.audio_bytes import minimal_wav_silence
 
 def _minimal_mp4_bytes() -> bytes:
     ffmpeg = shutil.which("ffmpeg")
-    if ffmpeg is None:
-        pytest.skip("Для transcribe-video нужен ffmpeg в PATH")
     out_path = Path(tempfile.gettempdir()) / f"sync_stt_vid_{uuid.uuid4().hex[:10]}.mp4"
     try:
         proc = subprocess.run(
@@ -52,7 +50,7 @@ def _minimal_mp4_bytes() -> bytes:
             text=True,
         )
         if proc.returncode != 0:
-            pytest.skip(
+            pytest.fail(
                 "ffmpeg не смог собрать тестовый mp4: "
                 f"{proc.stderr.strip() or proc.stdout.strip()}"
             )

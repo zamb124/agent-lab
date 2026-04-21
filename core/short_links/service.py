@@ -38,8 +38,10 @@ class ShortLinkService:
         base = require_platform_public_base_url()
         return f"{base}/l/{code}"
 
-    async def mint_sync_call_join(self, link_token: str, expires_at: datetime) -> str:
-        payload_model = SyncCallJoinPayload(link_token=link_token)
+    async def mint_sync_call_join(
+        self, link_token: str, expires_at: datetime, company_id: str
+    ) -> str:
+        payload_model = SyncCallJoinPayload(link_token=link_token, company_id=company_id)
         payload = payload_model.model_dump()
 
         existing_any = await self._repo.find_sync_by_link_token(link_token)
@@ -85,13 +87,17 @@ class ShortLinkService:
         if row.expires_at <= now:
             return None
 
-        base = require_platform_public_base_url()
-
         if row.kind == SHORT_LINK_KIND_SYNC_CALL_JOIN:
             token = row.payload.get("link_token")
             if not isinstance(token, str) or token == "":
                 return None
+            base = require_platform_public_base_url()
+            cid = row.payload.get("company_id")
+            if isinstance(cid, str) and cid != "":
+                return f"{base}/sync/join/{token}?company_id={quote(cid, safe='')}"
             return f"{base}/sync/join/{token}"
+
+        base = require_platform_public_base_url()
 
         if row.kind == SHORT_LINK_KIND_COMPANY_INVITE:
             return f"{base}/join?c={quote(code, safe='')}"

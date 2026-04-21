@@ -19,15 +19,11 @@ import pytest
 _TEST_IMAGE_PATH = Path(__file__).parent.parent / "2026-01-11 11.43.21.jpg"
 
 
-def _skip_if_s3_disabled() -> None:
-    """Пропускает тест если S3 не настроен или недоступен."""
+def _require_s3() -> None:
+    """Падает, если S3 не настроен или клиент не создаётся."""
     from core.files.s3_client import S3ClientFactory
-    try:
-        S3ClientFactory.create_default_client()
-    except ValueError as e:
-        pytest.skip(f"S3 не настроен: {e}")
-    except Exception as e:
-        pytest.skip(f"S3 недоступен: {e}")
+
+    S3ClientFactory.create_default_client()
 
 
 # ==============================================================================
@@ -37,7 +33,7 @@ def _skip_if_s3_disabled() -> None:
 @pytest.mark.asyncio
 async def test_sync_upload_returns_file_response(sync_client, auth_headers_system):
     """POST /sync/api/v1/files/ возвращает FileResponse с платформенным URL."""
-    _skip_if_s3_disabled()
+    _require_s3()
 
     r = await sync_client.post(
         "/sync/api/v1/files/",
@@ -59,9 +55,8 @@ async def test_sync_upload_returns_file_response(sync_client, auth_headers_syste
 @pytest.mark.asyncio
 async def test_sync_upload_real_jpeg_image(sync_client, auth_headers_system):
     """Загрузка реального JPEG — content_type определяется по имени файла."""
-    _skip_if_s3_disabled()
-    if not _TEST_IMAGE_PATH.exists():
-        pytest.skip("Тестовое изображение не найдено")
+    _require_s3()
+    assert _TEST_IMAGE_PATH.is_file(), f"Тестовое изображение не найдено: {_TEST_IMAGE_PATH}"
 
     image_data = _TEST_IMAGE_PATH.read_bytes()
     r = await sync_client.post(
@@ -80,7 +75,7 @@ async def test_sync_upload_real_jpeg_image(sync_client, auth_headers_system):
 @pytest.mark.asyncio
 async def test_sync_download_returns_original_content(sync_client, auth_headers_system):
     """Загрузка файла, затем скачивание — содержимое совпадает."""
-    _skip_if_s3_disabled()
+    _require_s3()
 
     content = b"round-trip content check"
     r = await sync_client.post(
@@ -105,7 +100,7 @@ async def test_sync_download_returns_original_content(sync_client, auth_headers_
 @pytest.mark.asyncio
 async def test_sync_download_partial_content_range(sync_client, auth_headers_system):
     """GET с Range — 206, фрагмент и Content-Range (нужно Safari/iOS для <audio>)."""
-    _skip_if_s3_disabled()
+    _require_s3()
 
     content = b"abcdefgh"
     r = await sync_client.post(
@@ -132,9 +127,8 @@ async def test_sync_download_partial_content_range(sync_client, auth_headers_sys
 @pytest.mark.asyncio
 async def test_sync_download_image_round_trip(sync_client, auth_headers_system):
     """Загрузка и скачивание реального JPEG — байты идентичны."""
-    _skip_if_s3_disabled()
-    if not _TEST_IMAGE_PATH.exists():
-        pytest.skip("Тестовое изображение не найдено")
+    _require_s3()
+    assert _TEST_IMAGE_PATH.is_file(), f"Тестовое изображение не найдено: {_TEST_IMAGE_PATH}"
 
     image_data = _TEST_IMAGE_PATH.read_bytes()
     upload = await sync_client.post(
@@ -157,7 +151,7 @@ async def test_sync_download_image_round_trip(sync_client, auth_headers_system):
 @pytest.mark.asyncio
 async def test_sync_metadata_endpoint(sync_client, auth_headers_system):
     """GET /sync/api/v1/files/{file_id} возвращает FileResponse без скачивания."""
-    _skip_if_s3_disabled()
+    _require_s3()
 
     r = await sync_client.post(
         "/sync/api/v1/files/",
@@ -186,7 +180,7 @@ async def test_sync_upload_creates_file_record_in_shared_db(
     sync_client, auth_headers_system, mock_context
 ):
     """FileRecord создаётся в shared DB — доступен через container.file_repository."""
-    _skip_if_s3_disabled()
+    _require_s3()
 
     r = await sync_client.post(
         "/sync/api/v1/files/",
@@ -216,7 +210,7 @@ async def test_sync_upload_creates_file_record_in_shared_db(
 @pytest.mark.asyncio
 async def test_sync_download_404_for_unknown_file(sync_client, auth_headers_system):
     """Скачивание несуществующего файла → 404."""
-    _skip_if_s3_disabled()
+    _require_s3()
     r = await sync_client.get(
         "/sync/api/v1/files/download/nonexistent_file_id_xyz",
         headers=auth_headers_system,
@@ -236,7 +230,7 @@ async def test_cross_service_download_via_agents(
     Файл, загруженный в sync, доступен для скачивания через agents.
     Оба сервиса читают из одного shared DB (FileRecord).
     """
-    _skip_if_s3_disabled()
+    _require_s3()
 
     content = b"cross-service payload"
     upload = await sync_client.post(
@@ -260,31 +254,27 @@ async def test_cross_service_download_via_agents(
 # ==============================================================================
 
 def test_avatar_url_pydantic_rejects_external_url():
-    """SpaceUpdate и ChannelUpdate отвергают прямые S3 URL на уровне Pydantic."""
+    """ChannelUpdate отвергает прямые S3 URL на уровне Pydantic."""
     from pydantic import ValidationError
-    from apps.sync.models.spaces import SpaceUpdate
     from apps.sync.models.channels import ChannelUpdate
 
-    for Model in (SpaceUpdate, ChannelUpdate):
-        with pytest.raises(ValidationError) as exc_info:
-            Model(avatar_url="http://127.0.0.1:19001/test-bucket/files/img.jpg")
-        assert "относительным URL" in str(exc_info.value)
+    with pytest.raises(ValidationError) as exc_info:
+        ChannelUpdate(avatar_url="http://127.0.0.1:19001/test-bucket/files/img.jpg")
+    assert "относительным URL" in str(exc_info.value)
 
-        with pytest.raises(ValidationError):
-            Model(avatar_url="https://external.cdn.com/img.jpg")
+    with pytest.raises(ValidationError):
+        ChannelUpdate(avatar_url="https://external.cdn.com/img.jpg")
 
 
 def test_avatar_url_pydantic_accepts_relative_url():
-    """SpaceUpdate и ChannelUpdate принимают относительные platform URL."""
-    from apps.sync.models.spaces import SpaceUpdate
+    """ChannelUpdate принимает относительные platform URL."""
     from apps.sync.models.channels import ChannelUpdate
 
-    for Model in (SpaceUpdate, ChannelUpdate):
-        m = Model(avatar_url="/sync/api/v1/files/download/file_abc123")
-        assert m.avatar_url == "/sync/api/v1/files/download/file_abc123"
+    m = ChannelUpdate(avatar_url="/sync/api/v1/files/download/file_abc123")
+    assert m.avatar_url == "/sync/api/v1/files/download/file_abc123"
 
-        m_none = Model(avatar_url=None)
-        assert m_none.avatar_url is None
+    m_none = ChannelUpdate(avatar_url=None)
+    assert m_none.avatar_url is None
 
 
 # ==============================================================================
@@ -294,15 +284,14 @@ def test_avatar_url_pydantic_accepts_relative_url():
 @pytest.mark.asyncio
 async def test_rag_upload_includes_file_response(rag_client, auth_headers_system):
     """POST /rag/api/v1/namespaces/{id}/documents возвращает file: FileResponse."""
-    _skip_if_s3_disabled()
+    _require_s3()
 
     ns = await rag_client.post(
         "/rag/api/v1/namespaces",
         json={"name": f"test-ns-unified"},
         headers=auth_headers_system,
     )
-    if ns.status_code not in (200, 201):
-        pytest.skip(f"Создание namespace недоступно: {ns.status_code}")
+    assert ns.status_code in (200, 201), f"Создание namespace: {ns.status_code} {ns.text}"
     namespace_id = ns.json()["name"]
 
     content = b"Document content for unified file test."
@@ -331,15 +320,14 @@ async def test_rag_upload_creates_file_record_in_shared_db(
     rag_client, auth_headers_system, mock_context
 ):
     """FileRecord создаётся в shared DB при загрузке RAG документа."""
-    _skip_if_s3_disabled()
+    _require_s3()
 
     ns = await rag_client.post(
         "/rag/api/v1/namespaces",
         json={"name": "test-ns-record-check"},
         headers=auth_headers_system,
     )
-    if ns.status_code not in (200, 201):
-        pytest.skip(f"Создание namespace недоступно: {ns.status_code}")
+    assert ns.status_code in (200, 201), f"Создание namespace: {ns.status_code} {ns.text}"
     namespace_id = ns.json()["name"]
 
     content = b"FileRecord creation check"
@@ -369,15 +357,14 @@ async def test_rag_upload_creates_file_record_in_shared_db(
 @pytest.mark.asyncio
 async def test_rag_download_via_rag_file_router(rag_client, auth_headers_system):
     """Загруженный в RAG документ скачивается через стандартный файловый роутер."""
-    _skip_if_s3_disabled()
+    _require_s3()
 
     ns = await rag_client.post(
         "/rag/api/v1/namespaces",
         json={"name": "test-ns-download"},
         headers=auth_headers_system,
     )
-    if ns.status_code not in (200, 201):
-        pytest.skip(f"Создание namespace недоступно: {ns.status_code}")
+    assert ns.status_code in (200, 201), f"Создание namespace: {ns.status_code} {ns.text}"
     namespace_id = ns.json()["name"]
 
     content = b"Downloadable document content"
@@ -404,7 +391,7 @@ async def test_rag_download_via_rag_file_router(rag_client, auth_headers_system)
 @pytest.mark.asyncio
 async def test_upload_empty_file_rejected(sync_client, auth_headers_system):
     """Пустой файл → 400."""
-    _skip_if_s3_disabled()
+    _require_s3()
     r = await sync_client.post(
         "/sync/api/v1/files/",
         headers=auth_headers_system,

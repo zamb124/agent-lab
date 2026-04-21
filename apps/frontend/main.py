@@ -4,6 +4,7 @@ Frontend Service - FastAPI приложение для управления пл
 import logging
 import os
 from pathlib import Path
+from urllib.parse import urlparse
 
 from core.config.testing import is_testing
 from fastapi import FastAPI, HTTPException
@@ -49,6 +50,20 @@ INDEXABLE_PUBLIC_PATHS: tuple[str, ...] = (
     "/products/sync",
     "/products/documents",
 )
+
+
+def _short_link_redirect_location(target: str) -> str:
+    """Относительный path+query: браузер остаётся на том же host:port, что и GET /l/{code}.
+
+    В development DevInterServiceProxyMiddleware пересылает /sync/* на server.sync_service_url.
+    Абсолютный URL из platform_public_base_url не используется в Location, чтобы не уводить
+    на другой домен и не зависеть от совпадения host с запросом.
+    """
+    p = urlparse(target)
+    loc = p.path
+    if p.query:
+        loc = f"{loc}?{p.query}"
+    return loc
 
 
 def _get_platform_public_base_url() -> str:
@@ -196,12 +211,12 @@ async def health(container: ContainerDep):
     return {"status": "ok", "service": "frontend"}
 
 
-@app.get("/l/{code}")
+@app.api_route("/l/{code}", methods=["GET", "HEAD"])
 async def resolve_short_link(container: ContainerDep, code: str):
     target = await container.short_link_service.resolve_absolute_redirect_url(code.strip())
     if target is None:
         raise HTTPException(status_code=404, detail="Ссылка не найдена или истекла")
-    return RedirectResponse(url=target, status_code=303)
+    return RedirectResponse(url=_short_link_redirect_location(target), status_code=303)
 
 
 @app.get("/api/public/legal")

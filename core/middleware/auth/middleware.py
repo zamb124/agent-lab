@@ -100,7 +100,7 @@ class AuthMiddleware(BaseHTTPMiddleware):
         
         # Не логировать для публичных путей
         if not path.startswith(("/openapi", "/docs", "/static")):
-            logger.info(f"🎯 Matched rule for {path}: context_type={rule.context_type}, auth_required={rule.auth_required}")
+            logger.info(f"Matched rule for {path}: context_type={rule.context_type}, auth_required={rule.auth_required}")
         
         try:
             context = await self._create_context(

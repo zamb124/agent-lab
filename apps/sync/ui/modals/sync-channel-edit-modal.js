@@ -9,6 +9,7 @@ import { PlatformFormModal } from '@platform/lib/components/glass-form-modal.js'
 import { registerModalKind } from '@platform/lib/utils/modal-registry.js';
 import '@platform/lib/components/platform-button.js';
 import '@platform/lib/components/platform-icon.js';
+import '@platform/lib/components/platform-switch.js';
 import '@platform/lib/components/platform-user-chip.js';
 
 export class SyncChannelEditModal extends PlatformFormModal {
@@ -48,6 +49,40 @@ export class SyncChannelEditModal extends PlatformFormModal {
                 margin-top: var(--space-2);
                 width: 100%;
             }
+            .toggle-row {
+                display: flex;
+                align-items: flex-start;
+                justify-content: space-between;
+                gap: var(--space-3);
+                padding: var(--space-3) 0;
+                border-bottom: 1px solid var(--glass-border, rgba(255, 255, 255, 0.08));
+            }
+            .toggle-row:last-of-type {
+                border-bottom: none;
+                padding-bottom: 0;
+            }
+            .toggle-label {
+                display: flex;
+                flex-direction: column;
+                gap: var(--space-1);
+                flex: 1;
+                min-width: 0;
+            }
+            .toggle-title {
+                font-size: var(--text-sm);
+                font-weight: var(--font-medium);
+                color: var(--text-primary);
+                line-height: 1.35;
+            }
+            .notifications-toggles {
+                display: flex;
+                flex-direction: column;
+                margin-top: var(--space-1);
+            }
+            .notifications-toggles platform-switch {
+                flex-shrink: 0;
+                margin-top: 2px;
+            }
         `,
     ];
 
@@ -62,6 +97,7 @@ export class SyncChannelEditModal extends PlatformFormModal {
         this._hydrated = false;
         this._members = [];
         this._channels = this.useResource('sync/channels');
+        this._channelUpdate = this.useOp('sync/channel_update');
         this._membersOp = this.useOp('sync/channel_members_list');
         this._notificationsOp = this.useOp('sync/channel_notifications_update');
     }
@@ -102,42 +138,35 @@ export class SyncChannelEditModal extends PlatformFormModal {
                 />
             </div>
 
-            <div class="form-section">
-                <div class="form-section-title">${this.t('channel_settings.notifications')}</div>
-
-                <div
-                    class=${this._muted ? 'form-item selected' : 'form-item'}
-                    @click=${() => { this._muted = !this._muted; this.isDirty = true; }}
-                >
-                    <div class="form-checkbox">
-                        ${this._muted ? html`<platform-icon name="check" size="12"></platform-icon>` : ''}
+            <div class="form-group">
+                <label class="form-label">${this.t('channel_settings.notifications')}</label>
+                <div class="notifications-toggles">
+                    <div class="toggle-row">
+                        <div class="toggle-label">
+                            <span class="toggle-title">${this.t('channel_settings.mute_label')}</span>
+                        </div>
+                        <platform-switch
+                            .checked=${this._muted}
+                            @change=${(e) => { this._muted = !!e.detail.value; this.isDirty = true; }}
+                        ></platform-switch>
                     </div>
-                    <div class="form-item-content">
-                        <div class="form-item-title">${this.t('channel_settings.mute_label')}</div>
+                    <div class="toggle-row">
+                        <div class="toggle-label">
+                            <span class="toggle-title">${this.t('channel_settings.transcribe_voice_label')}</span>
+                        </div>
+                        <platform-switch
+                            .checked=${this._transcribe}
+                            @change=${(e) => { this._transcribe = !!e.detail.value; this.isDirty = true; }}
+                        ></platform-switch>
                     </div>
-                </div>
-
-                <div
-                    class=${this._transcribe ? 'form-item selected' : 'form-item'}
-                    @click=${() => { this._transcribe = !this._transcribe; this.isDirty = true; }}
-                >
-                    <div class="form-checkbox">
-                        ${this._transcribe ? html`<platform-icon name="check" size="12"></platform-icon>` : ''}
-                    </div>
-                    <div class="form-item-content">
-                        <div class="form-item-title">${this.t('channel_settings.transcribe_voice_label')}</div>
-                    </div>
-                </div>
-
-                <div
-                    class=${this._speechToChat ? 'form-item selected' : 'form-item'}
-                    @click=${() => { this._speechToChat = !this._speechToChat; this.isDirty = true; }}
-                >
-                    <div class="form-checkbox">
-                        ${this._speechToChat ? html`<platform-icon name="check" size="12"></platform-icon>` : ''}
-                    </div>
-                    <div class="form-item-content">
-                        <div class="form-item-title">${this.t('channel_settings.speech_to_chat_label')}</div>
+                    <div class="toggle-row">
+                        <div class="toggle-label">
+                            <span class="toggle-title">${this.t('channel_settings.speech_to_chat_label')}</span>
+                        </div>
+                        <platform-switch
+                            .checked=${this._speechToChat}
+                            @change=${(e) => { this._speechToChat = !!e.detail.value; this.isDirty = true; }}
+                        ></platform-switch>
                     </div>
                 </div>
             </div>
@@ -176,11 +205,13 @@ export class SyncChannelEditModal extends PlatformFormModal {
 
     _onSubmit() {
         if (!this.channelId) return;
-        this._channels.update({
-            id: this.channelId,
-            name: this._name.trim(),
-            transcribe_voice_enabled: this._transcribe,
-            speech_to_chat_enabled: this._speechToChat,
+        this._channelUpdate.run({
+            channel_id: this.channelId,
+            body: {
+                name: this._name.trim(),
+                transcribe_voice_messages: this._transcribe,
+                speech_to_chat_enabled: this._speechToChat,
+            },
         });
         this._notificationsOp.run({
             channel_id: this.channelId,

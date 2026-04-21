@@ -7,6 +7,7 @@
  */
 
 import { resolveChannelTitle, resolveDisplayName } from '../../_helpers/sync-id-resolvers.js';
+import { getTypingIndicatorLine } from '../../_helpers/sync-typing.js';
 
 /**
  * Заголовок канала. Тонкая обёртка над `resolveChannelTitle` для
@@ -40,21 +41,28 @@ export function normalizeSyncChannelId(channelId) {
 /**
  * Подзаголовок шапки чата: typing-индикатор / presence DM-собеседника /
  * количество участников / last-message preview.
+ *
+ * Typing в slice — только user_id + ts (без display_name); имена как в сайдбаре —
+ * через getTypingIndicatorLine и members.
  */
-export function buildChatSubtitle({ channel, typingByChannel, presenceByUserId, t }) {
+export function buildChatSubtitle({
+    channel,
+    typingByChannel,
+    presenceByUserId,
+    t,
+    myUserId,
+    members,
+}) {
     if (!channel) return '';
-    const typingPeers = typingByChannel && typingByChannel[channel.id];
-    if (typingPeers) {
-        const names = [];
-        for (const entry of Object.values(typingPeers)) {
-            if (entry && entry.user && typeof entry.user.display_name === 'string' && entry.user.display_name !== '') {
-                names.push(entry.user.display_name);
-            }
-        }
-        if (names.length > 0) {
-            return t('chat_header.subtitle_typing', { names: names.join(', ') });
-        }
-    }
+    const typingLine = getTypingIndicatorLine({
+        typingByChannel,
+        channelId: channel.id,
+        threadId: null,
+        myUserId: typeof myUserId === 'string' ? myUserId : '',
+        members: Array.isArray(members) ? members : [],
+        t,
+    });
+    if (typingLine !== '') return typingLine;
     if (channel.type === 'direct' && channel.peer && typeof channel.peer === 'object') {
         const presence = presenceByUserId && presenceByUserId[channel.peer.user_id];
         if (presence) {

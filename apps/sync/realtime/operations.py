@@ -40,7 +40,7 @@ from datetime import UTC, datetime, timedelta
 from typing import Any, Awaitable, Callable, Generic, Literal, Optional, TypeVar
 from uuid import uuid4
 
-from pydantic import BaseModel, Field, ValidationError
+from pydantic import BaseModel, Field, ValidationError, model_validator
 
 from apps.sync.channel_read_helpers import channel_read_from_entity
 from apps.sync.constants import CHANNEL_TYPE_CALENDAR_MEETING
@@ -137,9 +137,12 @@ from core.calls.turn import generate_turn_credentials
 from core.config import get_settings
 from core.context import get_context
 from core.files.models import FileRecord
+from core.logging import get_logger
 from core.models.identity_models import User
 from core.pagination import ListResponse, OffsetPage
 from core.websocket import WsCommandError
+
+logger = get_logger(__name__)
 
 PayloadT = TypeVar("PayloadT", bound=BaseModel)
 ResultT = TypeVar("ResultT", bound=BaseModel)
@@ -281,10 +284,6 @@ class ChannelsListResult(BaseModel):
     offset: int
 
 
-class ChannelsCreatePayload(BaseModel):
-    body: ChannelCreate
-
-
 class ChannelsUpdatePayload(BaseModel):
     channel_id: str = Field(min_length=1)
     body: ChannelUpdate
@@ -379,14 +378,14 @@ async def op_channels_list(
 
 
 async def op_channels_create(
-    payload: ChannelsCreatePayload,
+    payload: ChannelCreate,
     *,
     user: User,
     container: SyncContainer,
 ) -> ChannelRead:
     company_id = resolve_company_id(user)
     channel = await _create_channel(
-        payload.body,
+        payload,
         actor_user_id=user.user_id,
         company_id=company_id,
         channels=container.channel_repository,
@@ -882,11 +881,12 @@ async def op_messages_send(
     recipients = await _channel_recipient_user_ids(
         container.channel_repository, payload.channel_id, company_id
     )
-    events: list[RealtimeEvent] = [
-        event_message_created(
-            message, company_id=company_id, recipient_user_ids=recipients
-        ),
-    ]
+    created_event = event_message_created(
+        message, company_id=company_id, recipient_user_ids=recipients
+    )
+    if payload.body.local_id is not None and payload.body.local_id != "":
+        created_event.payload["local_id"] = payload.body.local_id
+    events: list[RealtimeEvent] = [created_event]
 
     channel_entity = await container.channel_repository.get(payload.channel_id)
     if channel_entity is None:
@@ -1768,6 +1768,14 @@ async def op_calls_recording_start(
     provider_job_id = getattr(egress_info, "egress_id", None)
     if not isinstance(provider_job_id, str) or provider_job_id == "":
         raise WsCommandError("internal", "LiveKit не вернул egress_id после старта записи.")
+    logger.info(
+        "call.recording.start: call_id=%s recording_id=%s room=%s egress_id=%s audio_only=%s",
+        call.call_id,
+        recording_id,
+        call.livekit_room_name,
+        provider_job_id,
+        call.call_type == "audio",
+    )
     recording = SyncCallRecording(
         recording_id=recording_id,
         call_id=call.call_id,
@@ -1967,10 +1975,6 @@ class CallsLinksListResult(BaseModel):
     offset: int
 
 
-class CallsLinksCreatePayload(BaseModel):
-    body: CallLinkCreate
-
-
 class CallsLinksUpdatePayload(BaseModel):
     link_token: str = Field(min_length=1)
     body: CallLinkPatch
@@ -1987,6 +1991,20 @@ class CallsJoinInfoPayload(BaseModel):
 class CallsJoinAcceptPayload(BaseModel):
     link_token: str = Field(min_length=1)
     body: GuestJoinRequest | None = Field(default=None)
+
+    @model_validator(mode="before")
+    @classmethod
+    def _coerce_flat_guest_name_into_body(cls, data: Any) -> Any:
+        if not isinstance(data, dict):
+            return data
+        if data.get("body") is not None:
+            return data
+        raw = data.get("guest_name")
+        if isinstance(raw, str) and raw.strip():
+            out = {k: v for k, v in data.items() if k != "guest_name"}
+            out["body"] = {"guest_name": raw.strip()}
+            return out
+        return data
 
 
 def _livekit_client(settings) -> LiveKitClient:
@@ -2032,9 +2050,11 @@ async def _participant_names_for_call(
 
 
 async def _mint_join_short_url(
-    container: SyncContainer, link_token: str, expires_at: datetime
+    container: SyncContainer, link_token: str, expires_at: datetime, company_id: str
 ) -> str:
-    return await container.short_link_service.mint_sync_call_join(link_token, expires_at)
+    return await container.short_link_service.mint_sync_call_join(
+        link_token, expires_at, company_id
+    )
 
 
 async def _reconcile_calendar_meeting_channel_members(
@@ -2176,7 +2196,9 @@ async def op_calls_links_list(
             continue
         if row.calendar_event_id is None:
             continue
-        join_url = await _mint_join_short_url(container, row.link_token, row.expires_at)
+        join_url = await _mint_join_short_url(
+            container, row.link_token, row.expires_at, row.company_id
+        )
         out.append(
             CallScheduledLinkRead(
                 link_token=row.link_token,
@@ -2196,13 +2218,12 @@ async def op_calls_links_list(
 
 
 async def op_calls_links_create(
-    payload: CallsLinksCreatePayload,
+    body: CallLinkCreate,
     *,
     user: User,
     container: SyncContainer,
 ) -> CallLinkRead:
     company_id = resolve_company_id(user)
-    body = payload.body
     actor_id = user.user_id
 
     channel_id: str
@@ -2212,6 +2233,7 @@ async def op_calls_links_create(
     cal_end: Optional[datetime] = None
     cal_event_id: Optional[str] = None
     ttl_hours = body.ttl_hours
+    is_persistent_channel_link = False
 
     if body.calendar_event_id:
         dup = await container.call_repository.get_link_by_calendar_event(
@@ -2261,6 +2283,7 @@ async def op_calls_links_create(
             channel_id, actor_id, company_id=company_id
         ):
             raise WsCommandError("forbidden", "Нет доступа к каналу.")
+        expires_at = datetime.now(UTC) + timedelta(hours=ttl_hours)
         if body.call_id:
             try:
                 existing = await container.call_repository.get_call(body.call_id, company_id)
@@ -2282,7 +2305,46 @@ async def op_calls_links_create(
             if not existing.livekit_room_name:
                 raise WsCommandError("forbidden", "У звонка нет LiveKit-комнаты.")
             attached_call_id = existing.call_id
-        expires_at = datetime.now(UTC) + timedelta(hours=ttl_hours)
+        else:
+            ch = await container.channel_repository.get(channel_id)
+            if ch is None:
+                raise WsCommandError("not_found", "Канал не найден.")
+            if ch.type == CHANNEL_TYPE_CALENDAR_MEETING:
+                raise WsCommandError(
+                    "ws_invalid_payload",
+                    "Постоянная ссылка на канал календарной встречи не создаётся через channel_id.",
+                )
+            existing_p = await container.call_repository.get_persistent_channel_link(
+                company_id, channel_id
+            )
+            if body.reuse_channel_link:
+                if existing_p is not None:
+                    await container.call_repository.update_link_expires_at(
+                        existing_p.link_token, expires_at
+                    )
+                    join_url = await _mint_join_short_url(
+                        container, existing_p.link_token, expires_at, company_id
+                    )
+                    return CallLinkRead(
+                        link_token=existing_p.link_token,
+                        channel_id=channel_id,
+                        call_type="video",
+                        expires_at=expires_at,
+                        join_url=join_url,
+                        title=existing_p.title,
+                        scheduled_start_at=existing_p.scheduled_start_at,
+                        scheduled_end_at=existing_p.scheduled_end_at,
+                        calendar_event_id=existing_p.calendar_event_id,
+                    )
+            else:
+                if existing_p is not None:
+                    await container.short_link_service.delete_sync_by_link_token(existing_p.link_token)
+                    deleted = await container.call_repository.delete_link(
+                        existing_p.link_token, company_id
+                    )
+                    if not deleted:
+                        raise WsCommandError("internal", "Не удалось заменить постоянную ссылку.")
+            is_persistent_channel_link = True
 
     link_token = uuid4().hex
     link = SyncCallLink(
@@ -2297,10 +2359,11 @@ async def op_calls_links_create(
         scheduled_start_at=cal_start,
         scheduled_end_at=cal_end,
         calendar_event_id=cal_event_id,
+        is_persistent_channel_link=is_persistent_channel_link,
     )
     await container.call_repository.create_link(link)
 
-    join_url = await _mint_join_short_url(container, link_token, expires_at)
+    join_url = await _mint_join_short_url(container, link_token, expires_at, company_id)
     return CallLinkRead(
         link_token=link_token,
         channel_id=channel_id,
@@ -2371,7 +2434,9 @@ async def op_calls_links_update(
             calendar_member_user_ids=body.calendar_member_user_ids,
         )
     updated = await container.call_repository.get_link_for_company(payload.link_token, company_id)
-    join_url = await _mint_join_short_url(container, payload.link_token, updated.expires_at)
+    join_url = await _mint_join_short_url(
+        container, payload.link_token, updated.expires_at, company_id
+    )
     return CallLinkRead(
         link_token=updated.link_token,
         channel_id=updated.channel_id,
@@ -2435,6 +2500,8 @@ async def op_calls_join_info(
 
     return CallLinkInfo(
         link_token=payload.link_token,
+        company_id=link.company_id,
+        channel_id=link.channel_id,
         channel_name=channel_name,
         creator_display_name=creator_name,
         creator_avatar_url=creator_avatar_url,
@@ -2471,6 +2538,34 @@ async def op_calls_join_accept(
 
     if link.call_id:
         call = await container.call_repository.get_call(link.call_id, link.company_id)
+        if call.status == "ended":
+            livekit_room = call.livekit_room_name
+            if not livekit_room:
+                raise WsCommandError(
+                    "internal",
+                    "У завершённого звонка нет LiveKit комнаты.",
+                )
+            await _livekit_client(settings).create_room(
+                livekit_room,
+                company_id=link.company_id,
+                user_id=identity,
+            )
+            new_call = SyncCall(
+                call_id=uuid4().hex,
+                company_id=link.company_id,
+                channel_id=link.channel_id,
+                mode="sfu",
+                call_type="video",
+                status="active",
+                livekit_room_name=livekit_room,
+                started_at=datetime.now(UTC),
+                created_by_user_id=link.created_by_user_id,
+            )
+            await container.call_repository.create_call(new_call)
+            await container.call_repository.attach_call_to_link(
+                payload.link_token, new_call.call_id
+            )
+            call = new_call
     else:
         livekit_room_name = f"link-{payload.link_token[:16]}"
         await _livekit_client(settings).create_room(

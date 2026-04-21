@@ -647,8 +647,7 @@ class TestLLMModelsServiceRealAPI:
         from apps.flows.config import get_settings
         
         settings = get_settings()
-        if not settings.llm.bothub or not settings.llm.bothub.api_key:
-            pytest.skip("BotHub API key не настроен в конфиге")
+        assert settings.llm.bothub and settings.llm.bothub.api_key, "BotHub API key не настроен в конфиге"
         
         mock_repo = MagicMock(spec=LLMModelRepository)
         service = LLMModelsService(mock_repo, AsyncMock())
@@ -657,9 +656,9 @@ class TestLLMModelsServiceRealAPI:
             models = await service._fetch_bothub_models()
         except httpx.HTTPStatusError as exc:
             if exc.response.status_code in (401, 403):
-                pytest.skip(
+                raise AssertionError(
                     "BotHub API отклонил запрос (неверный или отозванный ключ, ограничение доступа)"
-                )
+                ) from exc
             raise
         
         # BotHub должен вернуть список моделей
@@ -685,8 +684,9 @@ class TestLLMModelsServiceRealAPI:
         from apps.flows.config import get_settings
         
         settings = get_settings()
-        if not settings.llm.openrouter or not settings.llm.openrouter.api_key:
-            pytest.skip("OpenRouter API key не настроен в конфиге")
+        assert settings.llm.openrouter and settings.llm.openrouter.api_key, (
+            "OpenRouter API key не настроен в конфиге"
+        )
         
         mock_repo = MagicMock(spec=LLMModelRepository)
         service = LLMModelsService(mock_repo, AsyncMock())
@@ -723,8 +723,7 @@ class TestLLMModelsServiceRealAPI:
         from apps.flows.config import get_settings
         
         settings = get_settings()
-        if not settings.llm.openai or not settings.llm.openai.api_key:
-            pytest.skip("OpenAI API key не настроен в конфиге")
+        assert settings.llm.openai and settings.llm.openai.api_key, "OpenAI API key не настроен в конфиге"
         
         mock_repo = MagicMock(spec=LLMModelRepository)
         service = LLMModelsService(mock_repo, AsyncMock())
@@ -768,10 +767,10 @@ class TestLLMModelsServiceRealAPI:
         provider = settings.llm.provider
         
         # Проверяем что провайдер настроен
-        if provider == "bothub" and (not settings.llm.bothub or not settings.llm.bothub.api_key):
-            pytest.skip("BotHub API key не настроен")
-        if provider == "openrouter" and (not settings.llm.openrouter or not settings.llm.openrouter.api_key):
-            pytest.skip("OpenRouter API key не настроен")
+        if provider == "bothub":
+            assert settings.llm.bothub and settings.llm.bothub.api_key, "BotHub API key не настроен"
+        if provider == "openrouter":
+            assert settings.llm.openrouter and settings.llm.openrouter.api_key, "OpenRouter API key не настроен"
         
         # Storage использует PostgreSQL напрямую из settings
         storage = Storage()
@@ -812,8 +811,7 @@ class TestLLMModelsServiceRealAPI:
         has_openrouter = settings.llm.openrouter and settings.llm.openrouter.api_key
         has_openai = settings.llm.openai and settings.llm.openai.api_key
         
-        if not (has_bothub or has_openrouter or has_openai):
-            pytest.skip("Нет настроенных провайдеров")
+        assert has_bothub or has_openrouter or has_openai, "Нет настроенных провайдеров (bothub/openrouter/openai)"
         
         storage = Storage()
         repo = LLMModelRepository(storage)
@@ -847,8 +845,7 @@ class TestLLMModelsServiceRealAPI:
         from apps.flows.config import get_settings
         
         settings = get_settings()
-        if not settings.llm.bothub or not settings.llm.bothub.api_key:
-            pytest.skip("BotHub API key не настроен в конфиге")
+        assert settings.llm.bothub and settings.llm.bothub.api_key, "BotHub API key не настроен в конфиге"
         
         url = "https://bothub.chat/api/v2/model/list?children=1"
         headers = {
@@ -859,7 +856,7 @@ class TestLLMModelsServiceRealAPI:
         async with httpx.AsyncClient(timeout=30.0) as client:
             response = await client.get(url, headers=headers)
             if response.status_code in (401, 403):
-                pytest.skip(
+                pytest.fail(
                     "BotHub API отклонил запрос (неверный или отозванный ключ, ограничение доступа)"
                 )
             response.raise_for_status()

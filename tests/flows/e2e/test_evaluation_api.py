@@ -883,9 +883,9 @@ class TestFlowTypeEvaluation:
             "Тест должен быть failed если судья поставил passed=false"
         )
 
-    async def test_flow_dialog_test_max_turns_limit(self, client, mock_llm_redis, mock_llm):
-        """Проверяем что тест останавливается по max_turns."""
-        # Не отправляем маркер завершения - тест должен остановиться по лимиту
+    async def test_flow_dialog_test_max_turns_limit(self, client, mock_llm_redis, mock_llm, container):
+        """Проверяем что тест останавливается по max_turns=5 из flow_dialog_test."""
+        # Тестер: 1 затравка + 5 итераций без TEST_COMPLETE = 6 вызовов; затем 1 судья.
         await setup_mock_llm_redis(
             mock_llm_redis,
             [
@@ -895,9 +895,10 @@ class TestFlowTypeEvaluation:
                 "Вопрос 4",
                 "Вопрос 5",
                 "Вопрос 6",
-                '{"scores": {"quality": 5}, "total_score": 5, "passed": true, "feedback": "OK"}',
+                '{"scores": {"quality": 5}, "total_score": 5, "passed": true, "feedback": "max_turns reached"}',
             ],
         )
+        # Агент: ровно 5 вызовов flow на 5 итерациях диалога.
         setup_mock_llm(
             mock_llm,
             [
@@ -906,14 +907,23 @@ class TestFlowTypeEvaluation:
                 "Ответ 3",
                 "Ответ 4",
                 "Ответ 5",
-                "Ответ 6",
             ],
         )
 
         data = await run_evaluation(client, "example_react", "flow_dialog_test", "test_full")
 
         state = get_task_state(data)
-        assert state in ("completed", "failed"), "Тест должен завершиться по max_turns"
+        assert state == "completed", f"Evaluation должен завершиться completed, получено {state}"
+
+        results = await container.evaluation_repository.get_latest_results(
+            "example_react", "test_full", limit=1
+        )
+        assert len(results) >= 1, "Результат evaluation должен быть сохранён"
+        result = results[0]
+        assert result.test_case_id == "flow_dialog_test"
+        assert result.turns_count == 5, (
+            f"Диалог должен остановиться ровно на max_turns=5, получено {result.turns_count}"
+        )
 
     async def test_flow_dialog_test_graph_flow(self, client, mock_llm_redis, mock_llm):
         """Проверяем evaluation на графовом flow."""

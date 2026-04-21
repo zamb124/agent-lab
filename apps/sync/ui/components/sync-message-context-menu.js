@@ -32,15 +32,19 @@ export class SyncMessageContextMenu extends PlatformElement {
             position: fixed;
             display: none;
             z-index: 1000;
+            top: 0;
+            left: 0;
         }
         :host([open]) { display: block; }
         .menu {
             background: var(--glass-solid);
-            border: 1px solid var(--glass-border);
-            border-radius: var(--radius-md);
-            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
-            min-width: 180px;
+            border: 1px solid var(--glass-border-subtle, var(--glass-border));
+            border-radius: var(--radius-xl, 16px);
+            box-shadow: 0 16px 40px rgba(0, 0, 0, 0.18);
+            min-width: 200px;
+            max-width: 280px;
             padding: var(--space-1) 0;
+            overflow: hidden;
         }
         .item {
             display: flex;
@@ -52,18 +56,20 @@ export class SyncMessageContextMenu extends PlatformElement {
             color: var(--text-primary);
         }
         .item:hover { background: var(--glass-hover); }
-        .item.danger { color: var(--color-danger, #ff6b6b); }
+        .item.danger { color: var(--color-error, #ef4444); }
         .reactions {
             display: flex;
+            flex-wrap: nowrap;
             gap: var(--space-1);
-            padding: var(--space-2);
-            border-bottom: 1px solid var(--glass-border);
+            padding: var(--space-2) var(--space-3);
+            border-bottom: 1px solid var(--glass-border-subtle, var(--glass-border));
         }
         .reactions span {
             cursor: pointer;
-            font-size: var(--text-base);
+            font-size: var(--text-lg, 18px);
             padding: 4px;
             border-radius: var(--radius-sm);
+            line-height: 1;
         }
         .reactions span:hover { background: var(--glass-hover); }
     `;
@@ -86,6 +92,12 @@ export class SyncMessageContextMenu extends PlatformElement {
         super.connectedCallback();
         document.addEventListener('pointerdown', this._boundOnDocClick, true);
         document.addEventListener('keydown', this._boundOnKey);
+        // Перенос хоста в body: гарантирует, что position: fixed работает
+        // от viewport, без containing-block эффектов от ancestor с
+        // backdrop-filter / will-change / transform / contain.
+        if (this.parentNode !== document.body) {
+            document.body.appendChild(this);
+        }
     }
 
     disconnectedCallback() {
@@ -174,7 +186,8 @@ export class SyncMessageContextMenu extends PlatformElement {
         const m = this._currentMessage();
         if (!m || !Array.isArray(m.contents)) return;
         const textBlock = m.contents.find((c) => c.type === 'text/plain');
-        const text = textBlock && textBlock.data && textBlock.data.text;
+        const data = textBlock && textBlock.data;
+        const text = data && (typeof data.body === 'string' ? data.body : (typeof data.text === 'string' ? data.text : ''));
         if (typeof text !== 'string' || text.length === 0) {
             this._dismiss();
             return;
@@ -205,8 +218,26 @@ export class SyncMessageContextMenu extends PlatformElement {
         const target = this._currentTarget();
         if (target) {
             this.setAttribute('open', '');
-            this.style.left = `${target.x}px`;
-            this.style.top  = `${target.y}px`;
+            const requestedX = typeof target.x === 'number' ? target.x : 0;
+            const requestedY = typeof target.y === 'number' ? target.y : 0;
+            this.style.left = `${requestedX}px`;
+            this.style.top = `${requestedY}px`;
+            requestAnimationFrame(() => {
+                if (!this.hasAttribute('open')) return;
+                const rect = this.getBoundingClientRect();
+                if (rect.width === 0 || rect.height === 0) return;
+                const margin = 8;
+                const vw = window.innerWidth;
+                const vh = window.innerHeight;
+                let x = requestedX;
+                let y = requestedY;
+                if (x + rect.width > vw - margin) x = Math.max(margin, vw - rect.width - margin);
+                if (y + rect.height > vh - margin) y = Math.max(margin, vh - rect.height - margin);
+                if (x < margin) x = margin;
+                if (y < margin) y = margin;
+                this.style.left = `${x}px`;
+                this.style.top = `${y}px`;
+            });
         } else {
             this.removeAttribute('open');
         }

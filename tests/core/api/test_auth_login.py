@@ -75,9 +75,10 @@ class TestAuthLogin:
     async def test_login_apple_returns_appleid_when_configured(self, frontend_client):
         """При настроенном Apple в конфиге — JSON с auth_url на appleid.apple.com."""
         response = await frontend_client.get("/frontend/api/auth/login/apple")
-        if response.status_code == 400:
-            pytest.skip("Apple OAuth не настроен в тестовом окружении")
-        assert response.status_code == 200
+        assert response.status_code == 200, (
+            "Ожидался JSON Apple login (200); при 400 проверьте конфиг Apple OAuth в тестовом окружении. "
+            f"Ответ: {response.text}"
+        )
         data = response.json()
         assert data.get("provider") == "apple"
         assert "appleid.apple.com" in data["auth_url"]

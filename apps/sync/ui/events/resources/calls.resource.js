@@ -205,6 +205,8 @@ export const callUiResource = createSlice({
         activeCall: null,
         incomingCall: null,
         overlayMinimized: false,
+        bannerHangupGuardUntil: 0,
+        overlayChatOpen: false,
         recordingStatus: 'idle',
         recordingError: null,
         activeCallChannels: Object.freeze({}),
@@ -214,6 +216,7 @@ export const callUiResource = createSlice({
         OVERLAY_MINIMIZED: 'overlay_minimized',
         OVERLAY_EXPANDED: 'overlay_expanded',
         OVERLAY_CLOSED: 'overlay_closed',
+        OVERLAY_CHAT_SET: 'overlay_chat_set',
         INCOMING_DISMISSED: 'incoming_dismissed',
         RECORDING_STATUS_SET: 'recording_status_set',
     },
@@ -222,6 +225,7 @@ export const callUiResource = createSlice({
         minimizeOverlay: 'overlay_minimized',
         expandOverlay: 'overlay_expanded',
         closeOverlay: 'overlay_closed',
+        setOverlayChatOpen: 'overlay_chat_set',
         dismissIncoming: 'incoming_dismissed',
         setRecordingStatus: 'recording_status_set',
     },
@@ -257,27 +261,59 @@ export const callUiResource = createSlice({
             case 'sync/call_ui/overlay_opened': {
                 const p = event.payload;
                 if (!p || typeof p.call_id !== 'string') return state;
+                const tracker = { ...state.activeCallChannels };
+                const ch = typeof p.channel_id === 'string' ? p.channel_id : '';
+                if (ch !== '') {
+                    tracker[ch] = {
+                        call_id: p.call_id,
+                        call_type: typeof p.call_type === 'string' ? p.call_type : 'video',
+                    };
+                }
+                const isSameCallId =
+                    state.activeCall !== null
+                    && typeof state.activeCall.call_id === 'string'
+                    && state.activeCall.call_id === p.call_id;
+                const overlayMinimized = isSameCallId ? state.overlayMinimized : false;
+                const activeCall =
+                    isSameCallId && state.activeCall
+                        ? { ...state.activeCall, ...p }
+                        : { ...p };
                 return {
                     ...state,
-                    activeCall: { ...p },
-                    overlayMinimized: false,
+                    activeCall,
+                    overlayMinimized,
+                    bannerHangupGuardUntil: 0,
                     incomingCall: state.incomingCall && state.incomingCall.call_id === p.call_id
                         ? null
                         : state.incomingCall,
+                    activeCallChannels: Object.freeze(tracker),
                 };
             }
-            case 'sync/call_ui/overlay_minimized':
-                return state.activeCall ? { ...state, overlayMinimized: true } : state;
+            case 'sync/call_ui/overlay_minimized': {
+                const p = event.payload;
+                let guard = 0;
+                if (p !== null && typeof p === 'object' && typeof p.banner_hangup_guard_until === 'number') {
+                    guard = p.banner_hangup_guard_until;
+                }
+                return { ...state, overlayMinimized: true, bannerHangupGuardUntil: guard };
+            }
             case 'sync/call_ui/overlay_expanded':
-                return state.activeCall ? { ...state, overlayMinimized: false } : state;
+                return { ...state, overlayMinimized: false, bannerHangupGuardUntil: 0 };
             case 'sync/call_ui/overlay_closed':
                 return {
                     ...state,
                     activeCall: null,
                     overlayMinimized: false,
+                    bannerHangupGuardUntil: 0,
+                    overlayChatOpen: false,
                     recordingStatus: 'idle',
                     recordingError: null,
                 };
+            case 'sync/call_ui/overlay_chat_set': {
+                const p = event.payload;
+                if (!p || typeof p.open !== 'boolean') return state;
+                return { ...state, overlayChatOpen: p.open };
+            }
             case 'sync/call_ui/incoming_dismissed':
                 return { ...state, incomingCall: null };
             case 'sync/call_ui/recording_status_set': {
@@ -299,6 +335,8 @@ export const callUiResource = createSlice({
                     activeCall: state.activeCall && state.activeCall.call_id === p.call_id ? null : state.activeCall,
                     incomingCall: state.incomingCall && state.incomingCall.call_id === p.call_id ? null : state.incomingCall,
                     overlayMinimized: state.activeCall && state.activeCall.call_id === p.call_id ? false : state.overlayMinimized,
+                    bannerHangupGuardUntil:
+                        state.activeCall && state.activeCall.call_id === p.call_id ? 0 : state.bannerHangupGuardUntil,
                     recordingStatus: state.activeCall && state.activeCall.call_id === p.call_id ? 'idle' : state.recordingStatus,
                     activeCallChannels: Object.freeze(tracker),
                 };
@@ -333,23 +371,51 @@ export const callUiResource = createSlice({
 });
 
 // ============================================================================
-// Гостевая страница входа в звонок
+// Гостевая страница входа в звонок (HTTP: сокет у гостя может быть не готов)
 // ============================================================================
 
 export const callJoinInfoOp = createAsyncOp({
     name: 'sync/call_join_info',
-    transport: 'ws',
-    wsTimeoutMs: 5_000,
+    transport: 'http',
     silent: true,
-    commandType: 'sync/calls/join_info_requested',
     restMirror: { method: 'GET', path: '/sync/api/v1/calls/join/:link_token' },
+    request: async ({ payload }) => {
+        const { httpRequest } = await import('@platform/lib/events/http.js');
+        if (!payload || typeof payload.link_token !== 'string' || payload.link_token === '') {
+            throw new Error('callJoinInfoOp: payload.link_token (non-empty string) required');
+        }
+        const token = encodeURIComponent(payload.link_token);
+        return httpRequest({
+            method: 'GET',
+            url: `/sync/api/v1/calls/join/${token}`,
+        });
+    },
 });
 
 export const callJoinAcceptOp = createAsyncOp({
     name: 'sync/call_join_accept',
-    transport: 'ws',
-    wsTimeoutMs: 5_000,
+    transport: 'http',
     silent: true,
-    commandType: 'sync/calls/join_accept_requested',
     restMirror: { method: 'POST', path: '/sync/api/v1/calls/join/:link_token' },
+    request: async ({ payload }) => {
+        const { httpRequest } = await import('@platform/lib/events/http.js');
+        if (!payload || typeof payload.link_token !== 'string' || payload.link_token === '') {
+            throw new Error('callJoinAcceptOp: payload.link_token (non-empty string) required');
+        }
+        const token = encodeURIComponent(payload.link_token);
+        const body = payload.body !== null && payload.body !== undefined && typeof payload.body === 'object'
+            ? payload.body
+            : null;
+        if (body !== null) {
+            return httpRequest({
+                method: 'POST',
+                url: `/sync/api/v1/calls/join/${token}`,
+                body,
+            });
+        }
+        return httpRequest({
+            method: 'POST',
+            url: `/sync/api/v1/calls/join/${token}`,
+        });
+    },
 });

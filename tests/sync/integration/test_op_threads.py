@@ -17,7 +17,6 @@ from apps.sync.models.messages import (
 )
 from apps.sync.models.threads import ThreadCreate
 from apps.sync.realtime.operations import (
-    ChannelsCreatePayload,
     MessagesSendPayload,
     ThreadsCreatePayload,
     ThreadsItemPayload,
@@ -40,13 +39,11 @@ async def _create_namespace_and_channel(
 ) -> str:
     namespace = await seed_test_namespace(op_user, op_container, unique_id, suffix="th")
     channel = await op_channels_create(
-        ChannelsCreatePayload(
-            body=ChannelCreate(
-                type=ChannelType.TOPIC,
-                name=f"ThCh {unique_id}",
-                namespace=namespace,
-                is_private=False,
-            )
+        ChannelCreate(
+            type=ChannelType.TOPIC,
+            name=f"ThCh {unique_id}",
+            namespace=namespace,
+            is_private=False,
         ),
         user=op_user,
         container=op_container,

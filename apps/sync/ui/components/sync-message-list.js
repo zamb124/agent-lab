@@ -20,6 +20,7 @@
 import { html, css } from 'lit';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
 import '@platform/lib/components/glass-spinner.js';
+import '@platform/lib/components/platform-icon.js';
 import './sync-message-bubble.js';
 import { groupMessagesForRender } from '../_helpers/sync-day-grouping.js';
 
@@ -44,28 +45,29 @@ export class SyncMessageList extends PlatformElement {
             flex: 1;
             min-height: 0;
             overflow-y: auto;
-            padding: var(--space-3);
+            padding: var(--space-6) var(--space-8);
             display: flex;
             flex-direction: column;
-            gap: 1px;
+            gap: var(--space-3);
+            background: var(--bg-primary, var(--glass-solid));
+        }
+        @media (max-width: 767px) {
+            .scroll { padding: var(--space-4); }
         }
         .day {
-            text-align: center;
-            margin: var(--space-3) 0 var(--space-1);
+            display: flex;
+            justify-content: center;
+            margin: var(--space-3) 0;
+        }
+        .day-pill {
             font-size: var(--text-xs);
             color: var(--text-secondary);
-            position: relative;
+            background: var(--glass-tint-subtle, var(--glass-hover));
+            border: 1px solid var(--glass-border);
+            padding: 4px 12px;
+            border-radius: var(--radius-full, 999px);
+            font-weight: var(--font-medium);
         }
-        .day::before, .day::after {
-            content: '';
-            position: absolute;
-            top: 50%;
-            width: 35%;
-            height: 1px;
-            background: var(--glass-border);
-        }
-        .day::before { left: 0; }
-        .day::after  { right: 0; }
         .empty {
             margin: auto;
             color: var(--text-secondary);
@@ -100,6 +102,27 @@ export class SyncMessageList extends PlatformElement {
             0% { background-position: 200% 0; }
             100% { background-position: -200% 0; }
         }
+        .unread-jump {
+            position: absolute;
+            right: var(--space-6);
+            bottom: var(--space-4);
+            z-index: 5;
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 8px 14px;
+            background: var(--accent);
+            color: var(--text-inverse, #fff);
+            border: none;
+            border-radius: var(--radius-full, 999px);
+            font-size: var(--text-sm);
+            font-weight: var(--font-semibold);
+            cursor: pointer;
+            box-shadow: 0 6px 18px var(--accent-subtle, rgba(153, 166, 249, 0.32));
+            transition: transform var(--duration-fast), background var(--duration-fast);
+        }
+        .unread-jump:hover { background: var(--accent-hover, var(--accent)); transform: translateY(-1px); }
+        .unread-jump:active { transform: translateY(0); }
     `;
 
     constructor() {
@@ -115,6 +138,7 @@ export class SyncMessageList extends PlatformElement {
         this._loadNewer = this.useOp('sync/messages_load_newer');
         this._stickToBottom = true;
         this._lastItemsLength = 0;
+        this._lastItemId = '';
         this._scrollEl = null;
         this._observer = null;
     }
@@ -134,14 +158,32 @@ export class SyncMessageList extends PlatformElement {
     }
 
     firstUpdated() {
-        this._scrollEl = this.renderRoot.querySelector('.scroll');
-        if (!this._scrollEl) return;
+        this._ensureScrollBindings();
+    }
+
+    _ensureScrollBindings() {
+        const el = this.renderRoot.querySelector('.scroll');
+        if (!el) return false;
+        if (this._scrollEl === el) return true;
+        // Если нашли новый .scroll (например, после skeleton → реальный список),
+        // переподписываемся: отвязываемся от старого, привязываемся к новому.
+        if (this._scrollEl) {
+            this._scrollEl.removeEventListener('scroll', this._onScroll);
+        }
+        if (this._observer) {
+            this._observer.disconnect();
+            this._observer = null;
+        }
+        this._scrollEl = el;
         this._scrollEl.addEventListener('scroll', this._onScroll);
         if (typeof ResizeObserver === 'function') {
             this._observer = new ResizeObserver(() => this._maybeStickBottom());
             this._observer.observe(this._scrollEl);
         }
-        this._maybeStickBottom();
+        // Сразу к низу — после skeleton мы хотим показать самые свежие сообщения.
+        this._scrollEl.scrollTop = this._scrollEl.scrollHeight;
+        this._stickToBottom = true;
+        return true;
     }
 
     _items() {
@@ -218,13 +260,36 @@ export class SyncMessageList extends PlatformElement {
     _maybeStickBottom() {
         if (!this._scrollEl) return;
         if (!this._stickToBottom) return;
-        this._scrollEl.scrollTop = this._scrollEl.scrollHeight;
+        this._scrollEl.scrollTo({ top: this._scrollEl.scrollHeight, behavior: 'smooth' });
+    }
+
+    _scrollToBottomSmooth() {
+        if (!this._scrollEl) return;
+        this._stickToBottom = true;
+        this._scrollEl.scrollTo({ top: this._scrollEl.scrollHeight, behavior: 'smooth' });
+    }
+
+    _channelUnread() {
+        const slice = this._channelsSel.value;
+        if (!slice || !Array.isArray(slice.items)) return 0;
+        const ch = slice.items.find((c) => c && c.id === this.channelId);
+        if (!ch) return 0;
+        const n = typeof ch.unread_count === 'number' ? ch.unread_count : 0;
+        return n > 0 ? n : 0;
     }
 
     updated() {
+        // Скролл-контейнер может появиться позже первого render'а
+        // (skeleton → реальный список). Подвязываемся как только увидим .scroll.
+        const bound = this._ensureScrollBindings();
         const items = this._items();
-        if (items.length !== this._lastItemsLength) {
+        const lastId = items.length > 0
+            ? (items[items.length - 1].message_id || items[items.length - 1].local_id || '')
+            : '';
+        const changed = items.length !== this._lastItemsLength || lastId !== this._lastItemId;
+        if (bound && changed) {
             this._lastItemsLength = items.length;
+            this._lastItemId = lastId;
             requestAnimationFrame(() => this._maybeStickBottom());
         }
     }
@@ -270,12 +335,14 @@ export class SyncMessageList extends PlatformElement {
         const grouped = groupMessagesForRender(items, (k, v) => this.t(k, v));
         const hasOlder = channelData.pagination && channelData.pagination.hasOlder === true;
         const loadingOlder = channelData.loadingOlder === true;
+        const unread = this._channelUnread();
+        const showJump = unread > 0 && !this._stickToBottom;
         return html`
             <div class="scroll">
                 ${loadingOlder ? html`<div class="loading-banner"><glass-spinner size="14"></glass-spinner>${this.t('message_list.loading_history')}</div>` : ''}
                 ${!hasOlder && items.length > 0 ? '' : ''}
                 ${grouped.map((entry) => entry.kind === 'day'
-                    ? html`<div class="day" data-day-key=${entry.key}>${entry.label}</div>`
+                    ? html`<div class="day" data-day-key=${entry.key}><span class="day-pill">${entry.label}</span></div>`
                     : html`<sync-message-bubble
                         .message=${entry.message}
                         my-user-id=${this.myUserId}
@@ -285,8 +352,22 @@ export class SyncMessageList extends PlatformElement {
                     ></sync-message-bubble>`
                 )}
             </div>
+            ${showJump ? html`
+                <button
+                    class="unread-jump"
+                    @click=${this._onUnreadJump}
+                    title=${this.t('message_list.unread_jump_title', { count: unread })}
+                >
+                    <span>${unread}</span>
+                    <platform-icon name="arrow-down" size="14"></platform-icon>
+                </button>
+            ` : ''}
         `;
     }
+
+    _onUnreadJump = () => {
+        this._scrollToBottomSmooth();
+    };
 }
 
 customElements.define('sync-message-list', SyncMessageList);

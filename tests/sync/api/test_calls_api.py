@@ -6,7 +6,7 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
-from urllib.parse import urlparse
+from urllib.parse import parse_qs, urlparse
 from uuid import uuid4
 
 import pytest
@@ -372,4 +372,150 @@ async def test_short_join_url_redirects_to_sync_join(
     assert res.status_code == 303
     loc = res.headers.get("location")
     assert loc is not None
-    assert loc.endswith(f"/sync/join/{token}")
+    loc_parsed = urlparse(loc)
+    assert loc_parsed.path.endswith(f"/sync/join/{token}")
+    qs = parse_qs(loc_parsed.query)
+    assert qs.get("company_id", [None])[0] == company_id
+
+
+@pytest.mark.asyncio
+async def test_invite_uses_persistent_link_livekit_room_name(
+    sync_client,
+    sync_auth_headers,
+    sync_db_clean: None,
+    company_id: str,
+    unique_id: str,
+) -> None:
+    """После создания постоянной ссылки invite в том же канале использует link-{prefix}, не call-."""
+    namespace = f"ns_{unique_id}_invlk"
+    await seed_namespace_via_repo(company_id, namespace)
+    ch_r = await sync_client.post(
+        "/sync/api/v1/channels/",
+        headers=sync_auth_headers,
+        json={"name": "InviteLkCh", "type": "topic", "namespace": namespace},
+    )
+    assert ch_r.status_code == 201
+    channel_id = ch_r.json()["id"]
+
+    link_r = await sync_client.post(
+        "/sync/api/v1/calls/links",
+        headers=sync_auth_headers,
+        json={"channel_id": channel_id, "call_type": "video", "ttl_hours": 2},
+    )
+    assert link_r.status_code == 201
+    token = link_r.json()["link_token"]
+    expected_room = f"link-{token[:16]}"
+
+    inv_r = await sync_client.post(
+        "/sync/api/v1/calls/any/invite",
+        headers=sync_auth_headers,
+        json={"channel_id": channel_id},
+    )
+    assert inv_r.status_code == 200
+    call_id = inv_r.json()["call_id"]
+    get_r = await sync_client.get(
+        f"/sync/api/v1/calls/{call_id}",
+        headers=sync_auth_headers,
+    )
+    assert get_r.status_code == 200
+    assert get_r.json()["livekit_room_name"] == expected_room
+
+
+@pytest.mark.asyncio
+async def test_persistent_channel_link_create_twice_same_token(
+    sync_client,
+    sync_auth_headers,
+    sync_db_clean: None,
+    company_id: str,
+    unique_id: str,
+) -> None:
+    """Два POST /calls/links без call_id для одного канала — один и тот же link_token."""
+    namespace = f"ns_{unique_id}_persist"
+    await seed_namespace_via_repo(company_id, namespace)
+    ch_r = await sync_client.post(
+        "/sync/api/v1/channels/",
+        headers=sync_auth_headers,
+        json={"name": "PersistLinkCh", "type": "topic", "namespace": namespace},
+    )
+    assert ch_r.status_code == 201
+    channel_id = ch_r.json()["id"]
+
+    body = {"channel_id": channel_id, "call_type": "video", "ttl_hours": 2}
+    link_r1 = await sync_client.post(
+        "/sync/api/v1/calls/links",
+        headers=sync_auth_headers,
+        json=body,
+    )
+    link_r2 = await sync_client.post(
+        "/sync/api/v1/calls/links",
+        headers=sync_auth_headers,
+        json=body,
+    )
+    assert link_r1.status_code == 201
+    assert link_r2.status_code == 201
+    t1 = link_r1.json()["link_token"]
+    t2 = link_r2.json()["link_token"]
+    assert t1 == t2
+
+
+@pytest.mark.asyncio
+async def test_join_after_call_ended_new_call_same_livekit_room(
+    sync_client,
+    sync_auth_headers,
+    sync_db_clean: None,
+    call_repo: CallRepository,
+    company_id: str,
+    unique_id: str,
+) -> None:
+    """После ended следующий join создаёт новый SyncCall с тем же livekit_room_name."""
+    namespace = f"ns_{unique_id}_endedjoin"
+    await seed_namespace_via_repo(company_id, namespace)
+    ch_r = await sync_client.post(
+        "/sync/api/v1/channels/",
+        headers=sync_auth_headers,
+        json={"name": "EndedJoinCh", "type": "topic", "namespace": namespace},
+    )
+    assert ch_r.status_code == 201
+    channel_id = ch_r.json()["id"]
+
+    link_r = await sync_client.post(
+        "/sync/api/v1/calls/links",
+        headers=sync_auth_headers,
+        json={"channel_id": channel_id, "call_type": "video", "ttl_hours": 2},
+    )
+    assert link_r.status_code == 201
+    token = link_r.json()["link_token"]
+
+    join1 = await sync_client.post(
+        f"/sync/api/v1/calls/join/{token}",
+        json={"guest_name": "Гость1"},
+    )
+    assert join1.status_code == 200
+    call_id1 = join1.json()["call_id"]
+
+    call1_r = await sync_client.get(
+        f"/sync/api/v1/calls/{call_id1}",
+        headers=sync_auth_headers,
+    )
+    assert call1_r.status_code == 200
+    room_name = call1_r.json()["livekit_room_name"]
+    assert isinstance(room_name, str) and room_name != ""
+
+    await call_repo.update_call_status(
+        call_id1, "ended", ended_at=datetime.now(UTC)
+    )
+
+    join2 = await sync_client.post(
+        f"/sync/api/v1/calls/join/{token}",
+        json={"guest_name": "Гость2"},
+    )
+    assert join2.status_code == 200
+    call_id2 = join2.json()["call_id"]
+    assert call_id2 != call_id1
+
+    call2_r = await sync_client.get(
+        f"/sync/api/v1/calls/{call_id2}",
+        headers=sync_auth_headers,
+    )
+    assert call2_r.status_code == 200
+    assert call2_r.json()["livekit_room_name"] == room_name

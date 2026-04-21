@@ -58,9 +58,6 @@ def test_resolve_skips_plain_bytes() -> None:
 
 @pytest.mark.asyncio
 async def test_transcode_produces_m4a_when_ffmpeg_and_webm() -> None:
-    if shutil.which("ffmpeg") is None:
-        pytest.skip("ffmpeg не установлен")
-
     import subprocess
     import tempfile
     from pathlib import Path

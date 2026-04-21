@@ -504,9 +504,9 @@ class A2AChannel(BaseChannel):
                     )
 
                 elif event_type == "result":
-                    status_icon = "✅" if event["status"] == "passed" else "❌"
+                    status_icon = "" if event["status"] == "passed" else "❌"
                     result_text = f"\n---\n{status_icon} **Результат**: {event['status'].upper()}"
-                    result_text += f"\n⏱️ Время: {event['duration_ms']}ms"
+                    result_text += f"\n⏱Время: {event['duration_ms']}ms"
                     if event.get("turns_count", 0) > 0:
                         result_text += f"\n💬 Ходов: {event['turns_count']}"
                     if event.get("error"):
@@ -515,7 +515,7 @@ class A2AChannel(BaseChannel):
                     # task_id для трейсинга
                     eval_task_id = event.get("task_id")
                     if eval_task_id:
-                        result_text += f"\n🔍 Task ID: {eval_task_id}"
+                        result_text += f"\nTask ID: {eval_task_id}"
 
                     yield TaskArtifactUpdateEvent(
                         taskId=task_id,

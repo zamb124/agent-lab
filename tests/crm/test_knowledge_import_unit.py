@@ -2,7 +2,12 @@
 
 from __future__ import annotations
 
+from io import BytesIO
+
+import fitz
+import openpyxl
 import pytest
+from docx import Document
 
 from core.files.checksum import compute_content_checksum_sha256
 from core.files.reader import FileReader
@@ -72,11 +77,6 @@ async def test_file_reader_markdown_bytes() -> None:
 
 @pytest.mark.asyncio
 async def test_file_reader_xlsx_bytes() -> None:
-    pytest.importorskip("openpyxl")
-    from io import BytesIO
-
-    import openpyxl
-
     wb = openpyxl.Workbook()
     ws = wb.active
     assert ws is not None
@@ -94,11 +94,6 @@ async def test_file_reader_xlsx_bytes() -> None:
 
 @pytest.mark.asyncio
 async def test_file_reader_docx_bytes() -> None:
-    pytest.importorskip("docx")
-    from io import BytesIO
-
-    from docx import Document
-
     doc = Document()
     doc.add_paragraph("KN_UNIT_DOCX_MARKER")
     buf = BytesIO()
@@ -114,7 +109,6 @@ async def test_file_reader_docx_bytes() -> None:
 
 @pytest.mark.asyncio
 async def test_file_reader_pdf_bytes(tmp_path) -> None:
-    fitz = pytest.importorskip("fitz")
     doc = fitz.open()
     page = doc.new_page()
     page.insert_text((72, 72), "KN_UNIT_PDF_MARKER")

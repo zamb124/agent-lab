@@ -11,7 +11,6 @@ from apps.sync.container import SyncContainer
 from apps.sync.models.channels import ChannelCreate, ChannelType, ChannelUpdate
 from apps.sync.realtime.operations import (
     ChannelsAddMemberPayload,
-    ChannelsCreatePayload,
     ChannelsListMembersPayload,
     ChannelsListPayload,
     ChannelsMarkReadPayload,
@@ -40,13 +39,11 @@ async def _create_topic(
 ) -> tuple[str, str]:
     namespace = await seed_test_namespace(op_user, op_container, unique_id, suffix=suffix)
     channel = await op_channels_create(
-        ChannelsCreatePayload(
-            body=ChannelCreate(
-                type=ChannelType.TOPIC,
-                name=name,
-                namespace=namespace,
-                is_private=False,
-            )
+        ChannelCreate(
+            type=ChannelType.TOPIC,
+            name=name,
+            namespace=namespace,
+            is_private=False,
         ),
         user=op_user,
         container=op_container,
@@ -83,12 +80,10 @@ async def test_op_channels_create_direct_with_peer(
 ) -> None:
     _ = sync_auth_token_user2
     direct = await op_channels_create(
-        ChannelsCreatePayload(
-            body=ChannelCreate(
-                type=ChannelType.DIRECT,
-                member_ids=[op_user2.user_id],
-                is_private=True,
-            )
+        ChannelCreate(
+            type=ChannelType.DIRECT,
+            member_ids=[op_user2.user_id],
+            is_private=True,
         ),
         user=op_user,
         container=op_container,

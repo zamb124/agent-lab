@@ -11,8 +11,6 @@ import pytest
 @pytest.mark.asyncio
 async def test_sync_ws_presence_refresh_clear() -> None:
     url = os.environ.get("DATABASE__REDIS_URL")
-    if not url:
-        pytest.skip("DATABASE__REDIS_URL не задан")
 
     from apps.sync.ws_presence import (
         clear_sync_ws_presence,

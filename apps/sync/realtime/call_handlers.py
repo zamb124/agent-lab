@@ -112,7 +112,14 @@ async def handle_call_invite(
             api_key=settings.calls.livekit_api_key,
             api_secret=settings.calls.livekit_api_secret,
         )
-        livekit_room_name = f"call-{uuid4().hex}"
+        persistent = await calls.get_persistent_channel_link(
+            cmd.company_id, payload.channel_id
+        )
+        if persistent is not None:
+            # Та же комната, что у гостевой ссылки без call_id (join / op_calls_join_accept).
+            livekit_room_name = f"link-{persistent.link_token[:16]}"
+        else:
+            livekit_room_name = f"call-{uuid4().hex}"
         await lk.create_room(
             livekit_room_name,
             company_id=cmd.company_id,

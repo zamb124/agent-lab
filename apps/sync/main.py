@@ -80,12 +80,12 @@ if sync_ui_path.exists():
 
 @app.get("/sync/join/{token}")
 async def serve_call_join(container: ContainerDep, token: str):
-    """Публичная страница входа в звонок по ссылке (без auth)."""
+    """Публичная страница входа в звонок по ссылке (без auth). SPA: sync-app, маршрут call_join."""
     _ = container
-    join_file = Path(__file__).parent / "ui" / "call-join.html"
-    if not join_file.exists():
-        raise HTTPException(status_code=404, detail="Call join page not found")
-    return FileResponse(join_file)
+    ui_index = Path(__file__).parent / "ui" / "index.html"
+    if not ui_index.exists():
+        raise HTTPException(status_code=404, detail="Sync UI not found")
+    return FileResponse(ui_index)
 
 
 @app.get("/sync")

@@ -346,7 +346,9 @@ async def calendar_sync_meeting_reminder_tick(
             token = event.metadata.get("sync_link_token")
             if not token:
                 raise ValueError(f"У события {event.event_id} нет sync_link_token в metadata.")
-            action_url = await container.short_link_service.mint_sync_call_join(token, event.end_at)
+            action_url = await container.short_link_service.mint_sync_call_join(
+                token, event.end_at, event.company_id
+            )
         recipients = await calendar_service.sync_meeting_reminder_recipient_user_ids(event)
         for user_id in recipients:
             await notify_user(

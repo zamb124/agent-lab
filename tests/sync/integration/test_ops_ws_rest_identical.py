@@ -5,7 +5,9 @@
 результат после нормализации (volatile поля — `created_at`, `request_id`,
 любые `*_id` верхнего уровня — игнорируются).
 
-49 параметризованных кейсов покрывают весь `SYNC_OPERATIONS`. Для критичных
+Параметризованные кейсы — операции из `SYNC_OPERATIONS`, у которых есть
+`_SETUP_BY_OP`, `_REST_MAPPING` и которые не входят в `_DEEP_INTEGRATION_OPS`.
+Для критичных
 операций детальные проверки бизнес-логики — в `test_op_*.py`.
 
 Без моков: реальный sync_service на 9005, real Postgres, real Redis,
@@ -88,7 +90,7 @@ _REST_MAPPING: dict[str, dict[str, Any]] = {
     "sync/channels/create_requested": {
         "method": "POST",
         "url": "/sync/api/v1/channels/",
-        "payload_strategy": "ws_body_field",
+        "payload_strategy": "ws_payload",
     },
     "sync/channels/update_requested": {
         "method": "PATCH",
@@ -253,12 +255,10 @@ async def _setup_channels_create(
     namespace = await _seed_namespace(company_id, unique_id, "create")
     return (
         {
-            "body": {
-                "type": "topic",
-                "name": f"Identity Channel {unique_id}",
-                "namespace": namespace,
-                "is_private": False,
-            }
+            "type": "topic",
+            "name": f"Identity Channel {unique_id}",
+            "namespace": namespace,
+            "is_private": False,
         },
         {},
     )
@@ -293,6 +293,14 @@ _SETUP_BY_OP: dict[str, Any] = {
     "sync/channels/update_requested": _setup_channels_update,
 }
 
+_WS_REST_TEST_OPS: tuple[str, ...] = tuple(
+    sorted(
+        k
+        for k in SYNC_OPERATIONS
+        if k not in _DEEP_INTEGRATION_OPS and k in _SETUP_BY_OP and k in _REST_MAPPING
+    )
+)
+
 
 # ---------------------------------------------------------------------------
 # Параметризованный тест
@@ -301,7 +309,7 @@ _SETUP_BY_OP: dict[str, Any] = {
 
 @pytest.mark.asyncio
 @pytest.mark.real_taskiq
-@pytest.mark.parametrize("canonical_type", sorted(SYNC_OPERATIONS.keys()))
+@pytest.mark.parametrize("canonical_type", _WS_REST_TEST_OPS)
 async def test_op_via_ws_and_rest_identical(
     canonical_type: str,
     sync_service,
@@ -312,16 +320,7 @@ async def test_op_via_ws_and_rest_identical(
     company_id: str,
     unique_id: str,
 ) -> None:
-    if canonical_type in _DEEP_INTEGRATION_OPS:
-        pytest.skip(
-            f"{canonical_type}: требует deep-integration setup (LiveKit/multipart/transcribe), "
-            f"WS=REST identity покрывается в специализированном test_op_*.py"
-        )
-    setup = _SETUP_BY_OP.get(canonical_type)
-    if setup is None:
-        pytest.skip(f"{canonical_type}: setup-функция не определена в _SETUP_BY_OP")
-    if canonical_type not in _REST_MAPPING:
-        pytest.skip(f"{canonical_type}: REST-зеркало не описано в _REST_MAPPING")
+    setup = _SETUP_BY_OP[canonical_type]
 
     # Уникальные данные для WS-вызова
     ws_unique = f"{unique_id}_ws"

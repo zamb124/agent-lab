@@ -39,10 +39,15 @@ export class SyncMessageComposer extends PlatformElement {
         :host {
             display: flex;
             flex-direction: column;
-            border-top: 1px solid var(--glass-border);
-            padding: var(--space-2) var(--space-3);
-            gap: var(--space-1);
-            background: var(--glass-solid);
+            padding: var(--space-3) var(--space-6) var(--space-4);
+            gap: var(--space-2);
+            background: var(--glass-solid-soft, var(--glass-solid));
+            backdrop-filter: blur(8px);
+            -webkit-backdrop-filter: blur(8px);
+            border-top: 1px solid var(--glass-border-subtle, var(--glass-border));
+        }
+        @media (max-width: 767px) {
+            :host { padding: var(--space-3) var(--space-4); }
         }
         .mode-bar {
             display: flex;
@@ -50,80 +55,137 @@ export class SyncMessageComposer extends PlatformElement {
             gap: var(--space-2);
             font-size: var(--text-xs);
             color: var(--text-secondary);
-            padding: var(--space-1) var(--space-2);
-            background: var(--glass-hover);
-            border-radius: var(--radius-sm);
+            padding: var(--space-2) var(--space-3);
+            background: var(--glass-tint-subtle, var(--glass-hover));
+            border-left: 3px solid var(--accent);
+            border-radius: var(--radius-md);
         }
         .mode-bar .cancel {
             background: transparent;
             border: none;
-            color: var(--text-primary);
+            color: var(--text-secondary);
             cursor: pointer;
             margin-left: auto;
+            padding: 4px;
+            border-radius: var(--radius-sm);
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
         }
-        .row {
+        .mode-bar .cancel:hover { background: var(--glass-hover); color: var(--text-primary); }
+        .pill {
             display: flex;
-            gap: var(--space-2);
-            align-items: flex-end;
+            align-items: center;
+            gap: var(--space-1);
+            padding: 4px;
+            background: var(--glass-tint-subtle, var(--glass-hover));
+            border: 1px solid var(--glass-border-subtle, var(--glass-border));
+            border-radius: var(--radius-3xl, 28px);
+            transition: border-color var(--duration-fast), box-shadow var(--duration-fast);
         }
+        .pill:focus-within {
+            border-color: var(--accent);
+            box-shadow: 0 0 0 4px var(--accent-subtle, rgba(153, 166, 249, 0.16));
+        }
+        /* Высота textarea подгоняется под одну строку (24px) и совпадает с
+           высотой иконок 40px (height = 24 + 16 padding = 40). При вводе
+           _autoResize() выставляет height по scrollHeight в пределах 3 строк
+           (~88px). Дальше включается overflow-y. */
         textarea {
             flex: 1;
-            min-height: 36px;
-            max-height: 200px;
-            padding: var(--space-2);
-            border-radius: var(--radius-md);
-            border: 1px solid var(--glass-border);
-            background: var(--glass-solid);
-            color: var(--text-primary);
-            font: inherit;
-            font-size: var(--text-sm);
-            resize: vertical;
-            outline: none;
-        }
-        button {
-            padding: var(--space-2);
-            border-radius: var(--radius-md);
+            min-width: 0;
+            height: 24px;
+            min-height: 24px;
+            max-height: 88px;
+            padding: 8px var(--space-2);
+            margin: 0;
+            border: none;
             background: transparent;
             color: var(--text-primary);
-            border: 1px solid var(--glass-border);
+            font: inherit;
+            font-size: var(--text-base, 15px);
+            line-height: 1.4;
+            resize: none;
+            outline: none;
+            overflow-y: hidden;
+        }
+        textarea::placeholder { color: var(--text-tertiary); }
+        button.icon {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            padding: 10px;
+            border-radius: var(--radius-full, 999px);
+            background: transparent;
+            color: var(--text-tertiary);
+            border: none;
             cursor: pointer;
+            transition: background var(--duration-fast), color var(--duration-fast);
+            flex-shrink: 0;
         }
+        button.icon:hover { background: var(--glass-hover); color: var(--accent); }
+        button.icon.recording { color: var(--color-error, #ef4444); }
         button.send {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            padding: 12px;
             background: var(--accent);
-            color: white;
-            border-color: transparent;
-            padding: var(--space-2) var(--space-4);
+            color: var(--text-inverse, #fff);
+            border: none;
+            border-radius: var(--radius-full, 999px);
+            cursor: pointer;
+            box-shadow: 0 2px 8px var(--accent-subtle, rgba(153, 166, 249, 0.32));
+            transition: transform var(--duration-fast), box-shadow var(--duration-fast);
+            flex-shrink: 0;
         }
-        button:disabled { opacity: 0.5; cursor: not-allowed; }
+        button.send:hover { transform: translateY(-1px); background: var(--accent-hover, var(--accent)); }
+        button.send:active { transform: translateY(0); }
+        button.send:disabled, button.icon:disabled { opacity: 0.5; cursor: not-allowed; transform: none; box-shadow: none; }
+        button.send.recording {
+            background: var(--color-error, #ef4444);
+            box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.6);
+            animation: rec-pulse 1.4s ease-in-out infinite;
+        }
+        @keyframes rec-pulse {
+            0%   { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.55); }
+            70%  { box-shadow: 0 0 0 10px rgba(239, 68, 68, 0); }
+            100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0); }
+        }
         .attachments {
             display: flex;
             flex-wrap: wrap;
             gap: var(--space-1);
         }
         .att {
-            background: var(--glass-hover);
-            padding: 2px 6px;
-            border-radius: var(--radius-sm);
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            background: var(--glass-tint-subtle, var(--glass-hover));
+            padding: 4px 10px;
+            border-radius: var(--radius-full, 999px);
             font-size: var(--text-xs);
+            color: var(--text-secondary);
         }
         .mention-popup {
             position: absolute;
             bottom: 100%;
-            left: var(--space-3);
+            left: var(--space-6);
             background: var(--glass-solid);
             border: 1px solid var(--glass-border);
-            border-radius: var(--radius-md);
-            min-width: 180px;
-            max-height: 200px;
+            border-radius: var(--radius-lg);
+            min-width: 220px;
+            max-height: 240px;
             overflow-y: auto;
+            box-shadow: 0 8px 24px rgba(0, 0, 0, 0.16);
             z-index: 10;
         }
         .mention-popup .item {
-            padding: var(--space-2);
+            padding: var(--space-2) var(--space-3);
             cursor: pointer;
         }
-        .mention-popup .item:hover { background: var(--glass-hover); }
-        .warn { color: var(--color-danger, #ff6b6b); font-size: var(--text-xs); }
+        .mention-popup .item:hover, .mention-popup .item.active { background: var(--glass-hover); }
+        .warn { color: var(--color-error, #ef4444); font-size: var(--text-xs); padding: 0 var(--space-3); }
     `;
 
     constructor() {
@@ -139,37 +201,103 @@ export class SyncMessageComposer extends PlatformElement {
         this._typingTimer = null;
         this._emojiOpen = false;
         this._mentionIndex = 0;
-        this._send = this.useOp('sync/messages_send');
-        this._edit = this.useOp('sync/messages_edit');
+        this._sendOp = this.useOp('sync/messages_send');
+        this._editOp = this.useOp('sync/messages_edit');
         this._upload = this.useOp('sync/file_upload');
         this._typing = this.useOp('sync/channel_typing');
         this._members = this.useResource('sync/company_members', { autoload: true });
         this._store = this.useSlice('sync/messages_store');
         this._messagesStoreSel = this.select((s) => s.syncMessagesStore);
         this._authSel = this.select((s) => s.auth && s.auth.user);
-        this.useEvent('sync/messages_store/reply_mode_set', () => this.requestUpdate());
+        this.useEvent('sync/messages_store/reply_mode_set', (event) => this._onReplyMode(event));
         this.useEvent('sync/messages_store/edit_mode_set', (event) => this._onEditMode(event));
+        this.useEvent('sync/messages_store/optimistic_resend_requested', (event) => this._onResendRequested(event));
+    }
+
+    async _onResendRequested(event) {
+        const p = event && event.payload;
+        if (!p || typeof p.channelId !== 'string' || typeof p.localId !== 'string') return;
+        if (p.channelId !== this.channelId) return;
+        const slice = this._messagesStoreSel.value;
+        const channelData = slice && slice.byChannelId && slice.byChannelId[p.channelId];
+        if (!channelData || typeof channelData.pendingByLocalId !== 'object') return;
+        const pending = channelData.pendingByLocalId[p.localId];
+        if (!pending || !Array.isArray(pending.contents)) return;
+        const body = { contents: pending.contents, local_id: p.localId };
+        if (typeof pending.thread_id === 'string') body.thread_id = pending.thread_id;
+        if (typeof pending.parent_message_id === 'string') body.parent_message_id = pending.parent_message_id;
+        try {
+            await this._sendOp.run({ channel_id: p.channelId, body });
+        } catch (err) {
+            const errorMessage = err && typeof err.message === 'string' && err.message !== ''
+                ? err.message
+                : this.t('composer.send_failed_default');
+            this._store.failOptimistic({
+                channelId: p.channelId,
+                localId: p.localId,
+                message: errorMessage,
+            });
+        }
+    }
+
+    _onReplyMode(event) {
+        const messageId = event && event.payload && event.payload.messageId;
+        this.requestUpdate();
+        if (typeof messageId === 'string' && messageId !== '') {
+            this._focusTextarea({ selectAll: false });
+        }
     }
 
     _onEditMode(event) {
         const messageId = event && event.payload && event.payload.messageId;
-        if (typeof messageId !== 'string') return;
+        if (typeof messageId !== 'string' || messageId === '') {
+            this.requestUpdate();
+            return;
+        }
         const slice = this._messagesStoreSel.value;
         const channelData = slice && slice.byChannelId && slice.byChannelId[this.channelId];
         if (!channelData || !Array.isArray(channelData.items)) return;
         const message = channelData.items.find((m) => m.message_id === messageId);
         if (!message || !Array.isArray(message.contents)) return;
         const textBlock = message.contents.find((c) => c.type === 'text/plain');
-        const draft = (textBlock && textBlock.data && typeof textBlock.data.text === 'string')
-            ? textBlock.data.text
-            : '';
+        const data = textBlock && textBlock.data;
+        const draft = data && typeof data.body === 'string'
+            ? data.body
+            : (data && typeof data.text === 'string' ? data.text : '');
         this._draft = draft;
         this.requestUpdate();
+        this._focusTextarea({ selectAll: true });
+    }
+
+    _focusTextarea({ selectAll }) {
+        this.updateComplete.then(() => {
+            const ta = this.renderRoot && this.renderRoot.querySelector('textarea');
+            if (!ta) return;
+            this._autoResize(ta);
+            ta.focus();
+            if (selectAll) {
+                const len = typeof ta.value === 'string' ? ta.value.length : 0;
+                if (len > 0) ta.setSelectionRange(len, len);
+            } else {
+                const len = typeof ta.value === 'string' ? ta.value.length : 0;
+                ta.setSelectionRange(len, len);
+            }
+        });
+    }
+
+    _autoResize(ta) {
+        if (!ta) return;
+        ta.style.height = 'auto';
+        const max = parseFloat(getComputedStyle(ta).maxHeight) || 88;
+        const next = Math.min(ta.scrollHeight, max);
+        ta.style.height = `${next}px`;
+        ta.style.overflowY = ta.scrollHeight > max ? 'auto' : 'hidden';
     }
 
     _onInput(e) {
         const text = e.target.value;
         this._draft = text;
+        this._autoResize(e.target);
         this._maybeNotifyTyping();
         this._maybeMentionPopup(text, e.target);
     }
@@ -276,11 +404,15 @@ export class SyncMessageComposer extends PlatformElement {
         await this._upload.run({ file });
         const result = this._upload.lastResult;
         if (!result || typeof result.file_id !== 'string' || result.file_id === '') return;
-        let mime = file.type;
-        if (typeof result.mime === 'string' && result.mime !== '') mime = result.mime;
-        let name = file.name;
-        if (typeof result.original_name === 'string' && result.original_name !== '') name = result.original_name;
-        const entry = { file_id: result.file_id, mime, name };
+        const mimeType = (typeof result.mime_type === 'string' && result.mime_type !== '')
+            ? result.mime_type
+            : (typeof result.mime === 'string' && result.mime !== '' ? result.mime : file.type);
+        const filename = (typeof result.filename === 'string' && result.filename !== '')
+            ? result.filename
+            : (typeof result.original_name === 'string' && result.original_name !== '' ? result.original_name : file.name);
+        const size = typeof result.size === 'number' ? result.size : file.size;
+        const entry = { file_id: result.file_id, filename, mime_type: mimeType, size };
+        if (typeof result.duration_ms === 'number') entry.duration_ms = result.duration_ms;
         if (typeof result.url === 'string' && result.url !== '') entry.url = result.url;
         this._attachments = [...this._attachments, entry];
     }
@@ -294,7 +426,28 @@ export class SyncMessageComposer extends PlatformElement {
             if (this._mediaRecorder) this._mediaRecorder.stop();
             return;
         }
-        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        // Secure context check: navigator.mediaDevices доступно только на
+        // https или localhost. На http (qqq.lvh.me:8002) mediaDevices = undefined.
+        const md = navigator.mediaDevices;
+        if (!md || typeof md.getUserMedia !== 'function') {
+            this.toast('composer.voice_insecure_context', { type: 'error' });
+            return;
+        }
+        if (typeof window.MediaRecorder === 'undefined') {
+            this.toast('composer.voice_unsupported', { type: 'error' });
+            return;
+        }
+        let stream;
+        try {
+            stream = await md.getUserMedia({ audio: true });
+        } catch (err) {
+            const code = err && typeof err.name === 'string' ? err.name : '';
+            const i18nKey = code === 'NotAllowedError' || code === 'SecurityError'
+                ? 'composer.voice_permission_denied'
+                : (code === 'NotFoundError' ? 'composer.voice_no_microphone' : 'composer.voice_failed');
+            this.toast(i18nKey, { type: 'error' });
+            return;
+        }
         const mimeOptions = ['audio/mp4', 'audio/webm;codecs=opus', 'audio/webm'];
         const supported = mimeOptions.find((mt) => MediaRecorder.isTypeSupported(mt));
         const chosen = typeof supported === 'string' ? supported : 'audio/webm';
@@ -334,6 +487,10 @@ export class SyncMessageComposer extends PlatformElement {
         this._store.setReplyMode({ messageId: null });
         this._store.setEditMode({ messageId: null });
         this._draft = '';
+        this.updateComplete.then(() => {
+            const ta = this.renderRoot && this.renderRoot.querySelector('textarea');
+            this._autoResize(ta);
+        });
     }
 
     async _send() {
@@ -344,25 +501,41 @@ export class SyncMessageComposer extends PlatformElement {
 
         const editId = this._editMessageId();
         if (editId) {
-            await this._edit.run({
+            await this._editOp.run({
                 channel_id: this.channelId,
                 message_id: editId,
-                body: { contents: [{ type: 'text/plain', data: { text } }] },
+                body: { contents: [{ type: 'text/plain', data: { body: text }, order: 0 }] },
             });
             this._cancelMode();
             return;
         }
 
         const contents = [];
-        if (text.length > 0) contents.push({ type: 'text/plain', data: { text } });
+        if (text.length > 0) {
+            contents.push({ type: 'text/plain', data: { body: text }, order: 0 });
+        }
         for (const att of this._attachments) {
-            const baseType = att.mime && att.mime.startsWith('audio/') ? 'file/audio'
-                : att.mime && att.mime.startsWith('video/') ? 'file/video'
-                : 'file/attachment';
-            contents.push({
-                type: baseType,
-                data: { file_id: att.file_id, mime: att.mime, original_name: att.name, url: att.url },
-            });
+            const mt = typeof att.mime_type === 'string' ? att.mime_type : '';
+            const isAudio = mt.startsWith('audio/');
+            const isVideo = mt.startsWith('video/');
+            const isImage = mt.startsWith('image/');
+            const blockType = isAudio ? 'file/audio'
+                : isVideo ? 'file/video'
+                : isImage ? 'file/image'
+                : 'file/document';
+            const data = {
+                file_id: att.file_id,
+                filename: att.filename,
+                mime_type: mt,
+                size: att.size,
+            };
+            if (isAudio) {
+                data.duration_ms = typeof att.duration_ms === 'number' ? att.duration_ms : 0;
+            }
+            if (isVideo && typeof att.duration_ms === 'number') {
+                data.duration_ms = att.duration_ms;
+            }
+            contents.push({ type: blockType, data, order: contents.length });
         }
 
         const reply = this._replyMessage();
@@ -372,21 +545,24 @@ export class SyncMessageComposer extends PlatformElement {
         if (reply) body.parent_message_id = reply.message_id;
 
         const me = this._authSel.value;
+        const optimisticItem = {
+            local_id: localId,
+            message_id: localId,
+            channel_id: this.channelId,
+            contents,
+            sender: me ? { user_id: me.user_id, display_name: me.name } : null,
+            sent_at: new Date().toISOString(),
+            status: 'sending',
+        };
+        if (this.threadId) optimisticItem.thread_id = this.threadId;
+        if (reply) optimisticItem.parent_message_id = reply.message_id;
         this._store.addOptimistic({
             channelId: this.channelId,
-            item: {
-                local_id: localId,
-                message_id: localId,
-                channel_id: this.channelId,
-                contents,
-                sender: me ? { user_id: me.user_id, display_name: me.name } : null,
-                sent_at: new Date().toISOString(),
-                status: 'sending',
-            },
+            item: optimisticItem,
         });
 
         try {
-            await this._send.run({ channel_id: this.channelId, body });
+            await this._sendOp.run({ channel_id: this.channelId, body });
         } catch (err) {
             const errorMessage = err && typeof err.message === 'string' && err.message !== ''
                 ? err.message
@@ -401,6 +577,10 @@ export class SyncMessageComposer extends PlatformElement {
         this._draft = '';
         this._attachments = [];
         if (reply) this._store.setReplyMode({ messageId: null });
+        this.updateComplete.then(() => {
+            const ta = this.renderRoot && this.renderRoot.querySelector('textarea');
+            this._autoResize(ta);
+        });
     }
 
     render() {
@@ -413,29 +593,34 @@ export class SyncMessageComposer extends PlatformElement {
             ${reply ? html`
                 <div class="mode-bar">
                     <span>${this.t('composer.reply_to', { name: resolveDisplayName(reply.sender) })}</span>
-                    <button class="cancel" @click=${this._cancelMode}>${this.t('composer.cancel')}</button>
+                    <button class="cancel" @click=${this._cancelMode} title=${this.t('composer.cancel')}>
+                        <platform-icon name="close" size="14"></platform-icon>
+                    </button>
                 </div>
             ` : ''}
             ${editing ? html`
                 <div class="mode-bar">
                     <span>${this.t('composer.editing')}</span>
-                    <button class="cancel" @click=${this._cancelMode}>${this.t('composer.cancel')}</button>
+                    <button class="cancel" @click=${this._cancelMode} title=${this.t('composer.cancel')}>
+                        <platform-icon name="close" size="14"></platform-icon>
+                    </button>
                 </div>
             ` : ''}
             ${this._attachments.length > 0 ? html`
                 <div class="attachments">
                     ${this._attachments.map((att, i) => html`
                         <span class="att" @click=${() => this._removeAttachment(i)}>
-                            ${att.name} ✕
+                            ${att.filename || att.name || ''}
+                            <platform-icon name="close" size="12"></platform-icon>
                         </span>
                     `)}
                 </div>
             ` : ''}
-            <div class="row" style="position: relative;" @drop=${this._onDrop} @dragover=${(e) => e.preventDefault()}>
+            <div class="pill" style="position: relative;" @drop=${this._onDrop} @dragover=${(e) => e.preventDefault()}>
                 ${memberSuggestions.length > 0 ? html`
                     <div class="mention-popup">
                         ${memberSuggestions.map((m, i) => html`
-                            <div class="item" style=${i === Math.max(0, Math.min(this._mentionIndex, memberSuggestions.length - 1)) ? 'background: var(--glass-hover);' : ''} @click=${() => this._insertMention(m)}>${resolveDisplayName(m)}</div>
+                            <div class="item ${i === Math.max(0, Math.min(this._mentionIndex, memberSuggestions.length - 1)) ? 'active' : ''}" @click=${() => this._insertMention(m)}>${resolveDisplayName(m)}</div>
                         `)}
                     </div>
                 ` : ''}
@@ -448,28 +633,49 @@ export class SyncMessageComposer extends PlatformElement {
                 ` : ''}
                 <input type="file" accept="image/*,video/*" multiple style="display: none;" id="photopick" @change=${this._onPickFiles} />
                 <input type="file" multiple style="display: none;" id="filepick" @change=${this._onPickFiles} />
-                <button title=${this.t('composer.attach_photo_video')} @click=${() => this.renderRoot.getElementById('photopick').click()}>
-                    <platform-icon name="image" size="18"></platform-icon>
+                <button class="icon" title=${this.t('composer.attach_photo_video')} @click=${() => this.renderRoot.getElementById('photopick').click()}>
+                    <platform-icon name="image" size="22"></platform-icon>
                 </button>
-                <button title=${this.t('composer.attach_file')} @click=${() => this.renderRoot.getElementById('filepick').click()}>
-                    <platform-icon name="paperclip" size="18"></platform-icon>
-                </button>
-                <button title=${this.t('composer.emoji_title')} @click=${() => { this._emojiOpen = !this._emojiOpen; }}>
-                    <platform-icon name="smile" size="18"></platform-icon>
-                </button>
-                <button title=${this.t('composer.action_voice')} @click=${this._toggleRecording}>
-                    <platform-icon name=${this._recording ? 'square' : 'mic'} size="18"></platform-icon>
+                <button class="icon" title=${this.t('composer.attach_file')} @click=${() => this.renderRoot.getElementById('filepick').click()}>
+                    <platform-icon name="paperclip" size="22"></platform-icon>
                 </button>
                 <textarea
+                    rows="1"
                     .value=${this._draft}
                     @input=${this._onInput}
                     @keydown=${this._onKeyDown}
                     @paste=${this._onPaste}
                     placeholder=${this.t('composer.placeholder')}
                 ></textarea>
-                <button class="send" @click=${this._send} ?disabled=${overLimit || (this._draft.trim().length === 0 && this._attachments.length === 0)}>
-                    ${this.t('composer.action_send')}
+                <button class="icon" title=${this.t('composer.emoji_title')} @click=${() => { this._emojiOpen = !this._emojiOpen; }}>
+                    <platform-icon name="smile" size="22"></platform-icon>
                 </button>
+                ${(() => {
+                    const hasContent = this._draft.trim().length > 0 || this._attachments.length > 0;
+                    if (this._recording) {
+                        return html`<button
+                            class="send recording"
+                            @click=${this._toggleRecording}
+                            title=${this.t('composer.action_voice_stop')}
+                            aria-label=${this.t('composer.action_voice_stop')}
+                        ><platform-icon name="stop" size="20"></platform-icon></button>`;
+                    }
+                    if (hasContent) {
+                        return html`<button
+                            class="send"
+                            @click=${this._send}
+                            ?disabled=${overLimit}
+                            title=${this.t('composer.action_send')}
+                            aria-label=${this.t('composer.action_send')}
+                        ><platform-icon name="send" size="20"></platform-icon></button>`;
+                    }
+                    return html`<button
+                        class="send"
+                        @click=${this._toggleRecording}
+                        title=${this.t('composer.action_voice')}
+                        aria-label=${this.t('composer.action_voice')}
+                    ><platform-icon name="mic" size="20"></platform-icon></button>`;
+                })()}
             </div>
             ${overLimit ? html`<div class="warn">${this.t('composer.over_limit', { max: SYNC_MESSAGE_TEXT_MAX_CHARS })}</div>` : ''}
         `;

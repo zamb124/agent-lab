@@ -37,12 +37,10 @@ async def test_ws_channels_create_via_command_router(
         "request_id": request_id,
         "type": "sync/channels/create_requested",
         "payload": {
-            "body": {
-                "type": "topic",
-                "name": "WsTopic",
-                "namespace": namespace,
-                "is_private": False,
-            }
+            "type": "topic",
+            "name": "WsTopic",
+            "namespace": namespace,
+            "is_private": False,
         },
     }
     async with websockets.connect(
@@ -131,24 +129,20 @@ async def test_ws_two_commands_sequential(
         "request_id": id1,
         "type": "sync/channels/create_requested",
         "payload": {
-            "body": {
-                "type": "topic",
-                "name": "WsA",
-                "namespace": namespace,
-                "is_private": False,
-            }
+            "type": "topic",
+            "name": "WsA",
+            "namespace": namespace,
+            "is_private": False,
         },
     }
     f2 = {
         "request_id": id2,
         "type": "sync/channels/create_requested",
         "payload": {
-            "body": {
-                "type": "topic",
-                "name": "WsB",
-                "namespace": namespace,
-                "is_private": False,
-            }
+            "type": "topic",
+            "name": "WsB",
+            "namespace": namespace,
+            "is_private": False,
         },
     }
     async with websockets.connect(

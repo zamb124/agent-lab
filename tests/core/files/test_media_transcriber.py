@@ -53,8 +53,7 @@ def _generate_test_mp4(duration_sec: float = 1.0) -> bytes:
             str(out_path),
         ]
         result = subprocess.run(ffmpeg_cmd, check=False, capture_output=True, text=True)
-        if result.returncode != 0:
-            pytest.skip(f"ffmpeg не смог создать тестовый mp4: {result.stderr}")
+        assert result.returncode == 0, f"ffmpeg не смог создать тестовый mp4: {result.stderr}"
         return out_path.read_bytes()
 
 

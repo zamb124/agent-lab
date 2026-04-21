@@ -19,17 +19,19 @@ async def test_sync_mint_idempotent_resolve_and_delete(setup_database_before_tes
 
     svc = ShortLinkService(db_url=shared_url)
     link_token = uuid4().hex
+    company_id = "test_company_join"
     expires_at = datetime.now(UTC) + timedelta(hours=2)
 
-    url_a = await svc.mint_sync_call_join(link_token, expires_at)
-    url_b = await svc.mint_sync_call_join(link_token, expires_at)
+    url_a = await svc.mint_sync_call_join(link_token, expires_at, company_id)
+    url_b = await svc.mint_sync_call_join(link_token, expires_at, company_id)
     assert url_a == url_b
     assert "/l/" in url_a
 
     code = url_a.rstrip("/").split("/l/")[-1]
     target = await svc.resolve_absolute_redirect_url(code)
     assert target is not None
-    assert target.endswith(f"/sync/join/{link_token}")
+    assert f"/sync/join/{link_token}" in target
+    assert "company_id=" in target
 
     n = await svc.delete_sync_by_link_token(link_token)
     assert n >= 1

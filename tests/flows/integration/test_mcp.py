@@ -80,8 +80,8 @@ class TestMCPClientHTTP:
                 first_tool.name,
                 {"libraryName": "react"},
             )
-        except httpx.ReadTimeout:
-            pytest.skip("MCP stub не ответил в отведённое время")
+        except httpx.ReadTimeout as exc:
+            raise AssertionError("MCP stub не ответил в отведённое время") from exc
         
         # Главное - результат получен и имеет правильную структуру
         assert result is not None

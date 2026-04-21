@@ -15,11 +15,8 @@ from core.config import get_settings
 from core.files.s3_client import S3ClientFactory
 
 
-def _skip_if_s3_unavailable() -> None:
-    try:
-        S3ClientFactory.create_default_client()
-    except ValueError as exc:
-        pytest.skip(f"S3 не настроен: {exc}")
+def _require_s3_client() -> None:
+    S3ClientFactory.create_default_client()
 
 
 @pytest.mark.asyncio
@@ -30,7 +27,7 @@ async def test_call_recording_register_platform_file_then_download_ok(
     sync_user_id: str,
     sync_auth_headers: dict[str, str],
 ) -> None:
-    _skip_if_s3_unavailable()
+    _require_s3_client()
     call_id = uuid.uuid4().hex
     recording_id = uuid.uuid4().hex
     s3_key = _call_recording_s3_object_key(
@@ -41,9 +38,7 @@ async def test_call_recording_register_platform_file_then_download_ok(
     payload = b"sync-test-recording-bytes"
     s3_client = S3ClientFactory.create_client_for_bucket(get_settings().s3.default_bucket)
     uploaded = await s3_client.upload_bytes(payload, s3_key, content_type="video/mp4")
-    if not uploaded:
-        await s3_client.close()
-        pytest.skip("S3 upload_bytes не удалился")
+    assert uploaded, "S3 upload_bytes вернул False"
     await s3_client.close()
 
     try:

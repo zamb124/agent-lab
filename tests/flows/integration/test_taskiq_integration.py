@@ -100,8 +100,10 @@ async def execute(args, state):
 
         try:
             result = await task.wait_result(timeout=5)
-        except TaskiqResultTimeoutError:
-            pytest.skip("TaskIQ worker не обработал задачу за 10 секунд (возможно не запущен или не подключен к Redis)")
+        except TaskiqResultTimeoutError as exc:
+            raise AssertionError(
+                "TaskIQ worker не обработал задачу за 5 секунд (проверьте, что воркер запущен и Redis доступен)"
+            ) from exc
 
         assert not result.is_err, f"Task failed: {result.error}"
         assert result.return_value["tool_id"] == "taskiq_test_calculator"

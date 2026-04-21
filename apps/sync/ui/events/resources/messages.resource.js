@@ -53,6 +53,7 @@
  */
 
 import { createAsyncOp, createSlice } from '@platform/lib/events/index.js';
+import { CoreEvents } from '@platform/lib/events/contract.js';
 
 const EMPTY_CHANNEL_DATA = Object.freeze({
     items: Object.freeze([]),
@@ -82,8 +83,16 @@ function _getChannelData(state, channelId) {
 
 function _normalizeMessage(message) {
     if (!message || typeof message !== 'object') return message;
+    const messageId = typeof message.message_id === 'string' && message.message_id !== ''
+        ? message.message_id
+        : (typeof message.id === 'string' ? message.id : null);
+    const id = typeof message.id === 'string' && message.id !== ''
+        ? message.id
+        : messageId;
     return Object.freeze({
         ...message,
+        id,
+        message_id: messageId,
         contents: Array.isArray(message.contents) ? message.contents : [],
         reactions: Array.isArray(message.reactions) ? message.reactions : [],
     });
@@ -173,6 +182,15 @@ export const messagesPinOp = createAsyncOp({
     silent: true,
     commandType: 'sync/messages/pin_requested',
     restMirror: { method: 'POST', path: '/sync/api/v1/channels/:channel_id/pins' },
+    onFailure: (ctx, err, event) => {
+        const msg = typeof err.message === 'string' ? err.message : '';
+        if (msg === '') return;
+        ctx.dispatch(
+            CoreEvents.UI_TOAST_SHOW,
+            { type: 'error', message: msg },
+            { causation_id: event.id },
+        );
+    },
 });
 
 export const messagesMarkReadOp = createAsyncOp({
@@ -228,6 +246,7 @@ export const messagesStoreSlice = createSlice({
         CONTEXT_MENU_DISMISSED: 'context_menu_dismissed',
         OPTIMISTIC_ADDED: 'optimistic_added',
         OPTIMISTIC_FAILED: 'optimistic_failed',
+        OPTIMISTIC_RESEND_REQUESTED: 'optimistic_resend_requested',
         FLASH_REQUESTED: 'flash_requested',
         FLASH_CLEARED: 'flash_cleared',
         HISTORY_OLDER_STARTED: 'history_older_started',
@@ -242,6 +261,7 @@ export const messagesStoreSlice = createSlice({
         dismissContextMenu: 'context_menu_dismissed',
         addOptimistic: 'optimistic_added',
         failOptimistic: 'optimistic_failed',
+        resendOptimistic: 'optimistic_resend_requested',
         flash: 'flash_requested',
         clearFlash: 'flash_cleared',
         startOlder: 'history_older_started',
@@ -463,6 +483,25 @@ export const messagesStoreSlice = createSlice({
                                 ...cur.pendingByLocalId[p.localId],
                                 _pending: false,
                                 _error: errorMessage,
+                            }),
+                        }),
+                    };
+                });
+            }
+            case 'sync/messages_store/optimistic_resend_requested': {
+                const p = event.payload;
+                if (!p || typeof p.channelId !== 'string' || typeof p.localId !== 'string') return state;
+                return updateChannel(p.channelId, (cur) => {
+                    if (!cur.pendingByLocalId[p.localId]) return cur;
+                    return {
+                        ...cur,
+                        pendingByLocalId: Object.freeze({
+                            ...cur.pendingByLocalId,
+                            [p.localId]: Object.freeze({
+                                ...cur.pendingByLocalId[p.localId],
+                                _pending: true,
+                                _error: null,
+                                status: 'sending',
                             }),
                         }),
                     };

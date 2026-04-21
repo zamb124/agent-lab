@@ -223,7 +223,11 @@ export class FrontendApp extends PlatformApp {
 
         const route = this._routerSelect ? this._routerSelect.value : null;
         const routeKey = route ? route.routeKey : null;
-        this.toggleAttribute('landing', !!routeKey && LANDING_ROUTE_KEYS.has(routeKey));
+        const landingPublic = !!routeKey && LANDING_ROUTE_KEYS.has(routeKey);
+        this.toggleAttribute('landing', landingPublic);
+        if (typeof document !== 'undefined' && document.documentElement) {
+            document.documentElement.classList.toggle('frontend-landing-public', landingPublic);
+        }
 
         const auth = this._authSelect ? this._authSelect.value : null;
         if (
@@ -231,6 +235,13 @@ export class FrontendApp extends PlatformApp {
             && routeKey && !PUBLIC_ROUTE_KEYS.has(routeKey)
         ) {
             this.navigate('login');
+        }
+    }
+
+    disconnectedCallback() {
+        super.disconnectedCallback();
+        if (typeof document !== 'undefined' && document.documentElement) {
+            document.documentElement.classList.remove('frontend-landing-public');
         }
     }
 

@@ -31,26 +31,17 @@ export const channelsResource = createResourceCollection({
     name: 'sync/channels',
     baseUrl: '/sync/api/v1/channels',
     idField: 'id',
-    operations: ['list', 'create', 'update'],
+    operations: ['list', 'create'],
     transport: 'ws',
     wsTimeoutMs: 5_000,
-    // restMirror.update указывает на реальный path FastAPI
-    // (`@router.patch("/{channel_id}")` в `apps/sync/api/channels.py`).
-    // Auto-derived `/{id}` не подошёл бы: idField фабрики локально называется
-    // `id`, а FastAPI-параметр — `channel_id`.
-    restMirror: {
-        update: { method: 'PATCH', path: '/sync/api/v1/channels/:channel_id' },
-    },
     toastKeys: {
         create: 'sync:channels.toast_created',
         create_error: 'sync:channels.err_create',
-        update: 'sync:channels.toast_updated',
-        update_error: 'sync:channels.err_update',
     },
     mapItem: _normalizeChannel,
     extraInitial: {
         selectedChannelId: null,
-        peerReadAtByChannel: Object.freeze({}),
+        readByChannelUser: Object.freeze({}),
         typingByChannel: Object.freeze({}),
         membersByChannel: Object.freeze({}),
     },
@@ -80,11 +71,15 @@ export const channelsResource = createResourceCollection({
                 const p = event.payload;
                 if (!p || typeof p.channel_id !== 'string') return state;
                 if (typeof p.read_at !== 'string') return state;
+                if (typeof p.reader_user_id !== 'string' || p.reader_user_id === '') return state;
+                const cur = state.readByChannelUser[p.channel_id];
+                const channelMap = (cur && typeof cur === 'object') ? { ...cur } : {};
+                channelMap[p.reader_user_id] = p.read_at;
                 return {
                     ...state,
-                    peerReadAtByChannel: Object.freeze({
-                        ...state.peerReadAtByChannel,
-                        [p.channel_id]: p.read_at,
+                    readByChannelUser: Object.freeze({
+                        ...state.readByChannelUser,
+                        [p.channel_id]: Object.freeze(channelMap),
                     }),
                 };
             }
@@ -195,6 +190,16 @@ export const channelTypingOp = createAsyncOp({
     silent: true,
     commandType: 'sync/channels/typing_requested',
     restMirror: { method: 'POST', path: '/sync/api/v1/channels/:channel_id/typing' },
+});
+
+export const channelUpdateOp = createAsyncOp({
+    name: 'sync/channel_update',
+    transport: 'ws',
+    wsTimeoutMs: 5_000,
+    successToastKey: 'sync:channels.toast_updated',
+    errorToastKey: 'sync:channels.err_update',
+    commandType: 'sync/channels/update_requested',
+    restMirror: { method: 'PATCH', path: '/sync/api/v1/channels/:channel_id' },
 });
 
 export const channelAddMemberOp = createAsyncOp({

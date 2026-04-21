@@ -186,15 +186,6 @@ class TestVariableRepository:
         await repo.delete("var2")
 
 
-class TestSessionRepository:
-    """Тесты SessionRepository - удален, используйте StateRepository.search_sessions()"""
-
-    @pytest.mark.asyncio
-    async def test_set_and_get_session(self, app):
-        """SessionRepository удален, используйте StateRepository.search_sessions()"""
-        pytest.skip("SessionRepository удален, используйте StateRepository.search_sessions()")
-
-
 class TestStateRepository:
     """Тесты StateRepository."""
 

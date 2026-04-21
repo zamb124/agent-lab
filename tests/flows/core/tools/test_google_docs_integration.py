@@ -12,7 +12,7 @@ delete_range, share), документ создаётся ПЕРЕД flow чер
   - env GOOGLE_IMPERSONATE_EMAIL — email пользователя Google Workspace
     для domain-wide delegation (SA работает от его имени)
 
-Пропускается автоматически, если файл или email не найдены.
+Без файла `google_service_account.json` и `GOOGLE_IMPERSONATE_EMAIL` тесты падают с `pytest.fail`.
 
 Запуск:
     GOOGLE_IMPERSONATE_EMAIL=user@domain.ru \\
@@ -62,10 +62,11 @@ if _creds_json is None:
 if _impersonate_email is None:
     _skip_reason_parts.append("env GOOGLE_IMPERSONATE_EMAIL не задан")
 
-skip_no_creds = pytest.mark.skipif(
-    bool(_skip_reason_parts),
-    reason=" + ".join(_skip_reason_parts) if _skip_reason_parts else "",
-)
+
+@pytest.fixture(autouse=True)
+def _require_google_docs_credentials() -> None:
+    if _skip_reason_parts:
+        pytest.fail("; ".join(_skip_reason_parts))
 
 
 @pytest.fixture()
@@ -154,7 +155,6 @@ async def _run_single_tool_flow(
 # ── Тесты ─────────────────────────────────────────────────────────
 
 
-@skip_no_creds
 class TestGDocsCreateViaAgent:
     """gdocs_create_document через LlmNode — создание пустого документа."""
 
@@ -179,7 +179,6 @@ class TestGDocsCreateViaAgent:
         assert "document_id" in tool_contents[0]
 
 
-@skip_no_creds
 class TestGDocsReadViaAgent:
     """gdocs_read_document через LlmNode — чтение реального документа."""
 
@@ -207,7 +206,6 @@ class TestGDocsReadViaAgent:
         assert "Контент для чтения" in tool_contents[0]
 
 
-@skip_no_creds
 class TestGDocsAppendViaAgent:
     """gdocs_append_text через LlmNode — добавление текста в конец."""
 
@@ -236,7 +234,6 @@ class TestGDocsAppendViaAgent:
         assert "Добавленный текст из агента." in text
 
 
-@skip_no_creds
 class TestGDocsInsertViaAgent:
     """gdocs_insert_text через LlmNode — вставка в начало."""
 
@@ -268,7 +265,6 @@ class TestGDocsInsertViaAgent:
         assert "Второй." in text
 
 
-@skip_no_creds
 class TestGDocsFindReplaceViaAgent:
     """gdocs_find_replace через LlmNode — поиск и замена."""
 
@@ -303,7 +299,6 @@ class TestGDocsFindReplaceViaAgent:
         assert "Старая" not in text
 
 
-@skip_no_creds
 class TestGDocsDeleteRangeViaAgent:
     """gdocs_delete_range через LlmNode — удаление диапазона."""
 
@@ -334,7 +329,6 @@ class TestGDocsDeleteRangeViaAgent:
         assert not text.startswith("ABC")
 
 
-@skip_no_creds
 class TestGDocsShareViaAgent:
     """gdocs_share_document через LlmNode — расшаривание по ссылке."""
 

@@ -13,7 +13,6 @@ from apps.sync.models.messages import (
     TextPlainContent,
 )
 from apps.sync.realtime.operations import (
-    ChannelsCreatePayload,
     MessagesPinPayload,
     MessagesReactPayload,
     MessagesSendPayload,
@@ -31,13 +30,11 @@ async def _setup_message(
 ) -> tuple[str, str]:
     namespace = await seed_test_namespace(op_user, op_container, unique_id, suffix="rp")
     ch = await op_channels_create(
-        ChannelsCreatePayload(
-            body=ChannelCreate(
-                type=ChannelType.TOPIC,
-                name=f"RPCh {unique_id}",
-                namespace=namespace,
-                is_private=False,
-            )
+        ChannelCreate(
+            type=ChannelType.TOPIC,
+            name=f"RPCh {unique_id}",
+            namespace=namespace,
+            is_private=False,
         ),
         user=op_user,
         container=op_container,

@@ -18,7 +18,7 @@ import { createRouterEffect } from '@platform/lib/events/effects/router.effect.j
 import '@platform/lib/components/layout/platform-island.js';
 
 import { namespacesResource, namespaceUpdateOp } from '../events/resources/namespaces.resource.js';
-import { channelsResource, channelMarkReadOp, channelTypingOp, channelAddMemberOp,
+import { channelsResource, channelMarkReadOp, channelTypingOp, channelUpdateOp, channelAddMemberOp,
          channelMembersListOp, channelNotificationsUpdateOp } from '../events/resources/channels.resource.js';
 import {
     messagesResource,
@@ -46,10 +46,12 @@ import { callTokenOp, callStatusOp, callTurnOp, callRecordingsListOp,
          callLinkUpdateOp, callLinkRemoveOp, callJoinInfoOp,
          callJoinAcceptOp, callUiResource,
          channelCreateAdhocCallOp } from '../events/resources/calls.resource.js';
+import { callPrefsSlice } from '../events/resources/call-prefs.resource.js';
 import { fileUploadOp } from '../events/resources/files.resource.js';
 import { gitResourceUpsertOp, gitResourceGetOp } from '../events/resources/git-resources.resource.js';
 import { chatUiResource } from '../events/resources/chat-ui.resource.js';
 import { createSyncPersistEffect } from '../events/sync-persist.effect.js';
+import { createSyncCallPrefsEffect } from '../events/sync-call-prefs.effect.js';
 
 const SYNC_ROUTES = [
     { key: 'shell',           path: '' },
@@ -168,6 +170,7 @@ export class SyncApp extends PlatformApp {
         channelsResource,
         channelMarkReadOp,
         channelTypingOp,
+        channelUpdateOp,
         channelAddMemberOp,
         channelMembersListOp,
         channelNotificationsUpdateOp,
@@ -208,6 +211,7 @@ export class SyncApp extends PlatformApp {
         callJoinInfoOp,
         callJoinAcceptOp,
         callUiResource,
+        callPrefsSlice,
         channelCreateAdhocCallOp,
         fileUploadOp,
         gitResourceUpsertOp,
@@ -246,6 +250,16 @@ export class SyncApp extends PlatformApp {
                 min-height: 0;
                 min-width: 0;
             }
+            .call-join-only {
+                flex: 1;
+                min-width: 0;
+                min-height: 0;
+                display: flex;
+                flex-direction: column;
+                width: 100%;
+                height: 100%;
+                overflow: auto;
+            }
             @media (max-width: 767px) {
                 :host {
                     height: 100dvh;
@@ -259,6 +273,15 @@ export class SyncApp extends PlatformApp {
         return '/sync';
     }
 
+    /**
+     * Вход по ссылке на звонок (/sync/join/...) — гость без cookie: /api/auth/me даёт 401,
+     * иначе PlatformApp уводит на страницу логина до отрисовки join-страницы.
+     */
+    rendersUnauthenticated() {
+        if (typeof window === 'undefined') return false;
+        return window.location.pathname.startsWith('/sync/join/');
+    }
+
     getRoutes() {
         return [];
     }
@@ -267,12 +290,17 @@ export class SyncApp extends PlatformApp {
         return [
             createRouterEffect({ baseUrl: '/sync', routes: SYNC_ROUTES }),
             createSyncPersistEffect(),
+            createSyncCallPrefsEffect(),
         ];
     }
 
     renderRoute(routeKey, params) {
         if (routeKey === 'call_join') {
-            return html`<sync-call-join-page .linkToken=${params.linkToken}></sync-call-join-page>`;
+            return html`
+                <div class="call-join-only">
+                    <sync-call-join-page .linkToken=${params.linkToken}></sync-call-join-page>
+                </div>
+            `;
         }
         return html`
             <div class="sidebar"><sync-sidebar></sync-sidebar></div>

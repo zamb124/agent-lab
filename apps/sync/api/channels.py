@@ -14,7 +14,6 @@ from apps.sync.models.channels import (
 )
 from apps.sync.realtime.operations import (
     ChannelsAddMemberPayload,
-    ChannelsCreatePayload,
     ChannelsListMembersPayload,
     ChannelsListPayload,
     ChannelsMarkReadPayload,
@@ -62,9 +61,7 @@ async def list_channels(
 @router.post("/", status_code=201, response_model=ChannelRead)
 async def create_channel(container: ContainerDep, body: ChannelCreate) -> ChannelRead:
     user = get_context().user
-    return await op_channels_create(
-        ChannelsCreatePayload(body=body), user=user, container=container
-    )
+    return await op_channels_create(body, user=user, container=container)
 
 
 @router.patch("/{channel_id}", response_model=ChannelRead)

@@ -8,9 +8,10 @@
  * Создание/удаление namespace выполняется в CRM (см. `crm.namespace`-modal).
  */
 
-import { html, css, nothing } from 'lit';
+import { html, css } from 'lit';
 import { PlatformFormModal } from '@platform/lib/components/glass-form-modal.js';
 import { registerModalKind } from '@platform/lib/utils/modal-registry.js';
+import '@platform/lib/components/platform-button.js';
 import '@platform/lib/components/platform-icon.js';
 import '@platform/lib/components/platform-switch.js';
 import '@platform/lib/components/glass-spinner.js';
@@ -35,29 +36,34 @@ export class SyncNamespaceModal extends PlatformFormModal {
                 justify-content: space-between;
                 align-items: center;
                 gap: var(--space-3);
-                padding: var(--space-2) 0;
+                padding: var(--space-3) 0;
             }
-            .row + .row { border-top: 1px solid var(--glass-border); }
-            .row .label { font-size: var(--text-sm); color: var(--text-primary); }
+            .row + .row { border-top: 1px solid var(--glass-border-subtle, var(--glass-border)); }
+            .row .label { font-size: var(--text-sm); color: var(--text-primary); font-weight: var(--font-medium); }
             .row .desc { font-size: var(--text-xs); color: var(--text-secondary); margin-top: 2px; }
             .name {
                 display: inline-flex;
                 align-items: center;
                 gap: var(--space-2);
                 padding: var(--space-2) var(--space-3);
-                border: 1px solid var(--glass-border);
+                border: 1px solid var(--glass-border-subtle, var(--glass-border));
                 border-radius: var(--radius-md);
-                background: var(--glass-hover);
+                background: var(--glass-tint-subtle, var(--glass-hover));
                 color: var(--text-primary);
                 font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
                 font-size: var(--text-sm);
                 margin-bottom: var(--space-3);
             }
-            .footer-actions {
+            .empty {
+                padding: var(--space-4);
+                color: var(--text-secondary);
+                font-size: var(--text-sm);
+                text-align: center;
+            }
+            .center {
                 display: flex;
-                gap: var(--space-3);
-                justify-content: flex-end;
-                width: 100%;
+                justify-content: center;
+                padding: var(--space-4);
             }
         `,
     ];
@@ -86,12 +92,12 @@ export class SyncNamespaceModal extends PlatformFormModal {
     }
 
     _onTranscribeToggle(event) {
-        this._transcribe = Boolean(event.detail && event.detail.checked);
+        this._transcribe = Boolean(event.detail && event.detail.value);
         this.isDirty = true;
     }
 
     _onSpeechToChatToggle(event) {
-        this._speechToChat = Boolean(event.detail && event.detail.checked);
+        this._speechToChat = Boolean(event.detail && event.detail.value);
         this.isDirty = true;
     }
 
@@ -115,13 +121,13 @@ export class SyncNamespaceModal extends PlatformFormModal {
         return html`<h3>${this.t('namespace_settings.title')}</h3>`;
     }
 
-    render() {
+    renderBody() {
         if (typeof this.name !== 'string' || this.name === '') {
             return html`<div class="empty">${this.t('namespace_settings.no_namespace')}</div>`;
         }
         const item = this._namespaces.byId[this.name];
         if (!item && this._namespaces.loading) {
-            return html`<glass-spinner></glass-spinner>`;
+            return html`<div class="center"><glass-spinner></glass-spinner></div>`;
         }
         return html`
             <div class="name">
@@ -148,13 +154,24 @@ export class SyncNamespaceModal extends PlatformFormModal {
                     @change=${this._onSpeechToChatToggle}
                 ></platform-switch>
             </div>
-            <div class="footer-actions" style="margin-top: var(--space-4);">
-                <button class="btn" @click=${() => this.close()}>${this.t('namespace_settings.cancel')}</button>
-                <button class="btn primary" @click=${this._onSave} ?disabled=${this._update.busy}>
+        `;
+    }
+
+    renderFooter() {
+        const hasName = typeof this.name === 'string' && this.name !== '';
+        return html`
+            <div class="form-actions">
+                <platform-button variant="secondary" @click=${() => this.close()}>
+                    ${this.t('namespace_settings.cancel')}
+                </platform-button>
+                <platform-button
+                    variant="primary"
+                    @click=${this._onSave}
+                    ?disabled=${!hasName || this._update.busy}
+                >
                     ${this._update.busy ? this.t('namespace_settings.saving') : this.t('namespace_settings.save')}
-                </button>
+                </platform-button>
             </div>
-            ${nothing}
         `;
     }
 }

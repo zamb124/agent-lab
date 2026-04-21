@@ -8,13 +8,13 @@ from io import BytesIO
 from pathlib import Path
 
 import pytest
+import xlwt
 
 from core.files.reader import FileReader, FileReadError
 from core.files.reader.models import FileReadKind
 
 
 def _make_xls_bytes(sheet_name: str, rows: list[list[str]]) -> bytes:
-    xlwt = pytest.importorskip("xlwt")
     wb = xlwt.Workbook(encoding="utf-8")
     ws = wb.add_sheet(sheet_name)
     for row_idx, row in enumerate(rows):
@@ -63,7 +63,6 @@ async def test_read_xls_single_sheet(tmp_path: Path) -> None:
 
 @pytest.mark.asyncio
 async def test_read_xls_multiple_sheets(tmp_path: Path) -> None:
-    xlwt = pytest.importorskip("xlwt")
     wb = xlwt.Workbook(encoding="utf-8")
 
     ws1 = wb.add_sheet("Январь")
@@ -93,7 +92,6 @@ async def test_read_xls_multiple_sheets(tmp_path: Path) -> None:
 
 @pytest.mark.asyncio
 async def test_read_xls_numeric_values(tmp_path: Path) -> None:
-    xlwt = pytest.importorskip("xlwt")
     wb = xlwt.Workbook()
     ws = wb.add_sheet("Data")
     ws.write(0, 0, 42)
@@ -114,7 +112,6 @@ async def test_read_xls_numeric_values(tmp_path: Path) -> None:
 @pytest.mark.asyncio
 async def test_read_xls_empty_raises() -> None:
     """Пустой XLS без данных поднимает FileReadError."""
-    xlwt = pytest.importorskip("xlwt")
     wb = xlwt.Workbook()
     wb.add_sheet("Empty")
     buf = BytesIO()
@@ -134,15 +131,9 @@ _SAMPLE_DOC = _FIXTURES_DIR / "sample.doc"
 
 @pytest.mark.asyncio
 @pytest.mark.timeout(30)
-@pytest.mark.skipif(
-    shutil.which("antiword") is None,
-    reason="antiword не установлен — пропускаем тест чтения .doc",
-)
-@pytest.mark.skipif(
-    not _SAMPLE_DOC.exists(),
-    reason="tests/core/files/fixtures/sample.doc не найден — положи любой .doc файл",
-)
 async def test_read_doc_via_antiword() -> None:
+    assert shutil.which("antiword"), "Для чтения .doc нужен исполняемый antiword в PATH"
+    assert _SAMPLE_DOC.is_file(), f"Фикстура .doc не найдена: {_SAMPLE_DOC}"
     reader = FileReader()
     result = await reader.read(_SAMPLE_DOC)
 
