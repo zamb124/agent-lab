@@ -535,6 +535,10 @@ export class SyncChannelEditModal extends PlatformFormModal {
         this.openModal('sync.channel_members_add', { channelId: this.channelId });
     }
 
+    async handleSubmit() {
+        await this._onSubmit();
+    }
+
     async _onSubmit() {
         if (!this.channelId) return;
         const item = this._channels.items.find((c) => c.id === this.channelId);

@@ -68,5 +68,17 @@
         "balance_available": "Доступно на счете",
         "top_up": "Пополнить баланс",
         "currency_rub": "Р"
+    },
+    "notifications": {
+        "balance_blocked_title": "Баланс исчерпан",
+        "balance_blocked_message": "Операция «{operation}» недоступна: на счёте компании «{company_name}» недостаточно средств (баланс: {balance}). Пополните баланс в разделе биллинга.",
+        "balance_blocked_api_detail": "Недостаточно средств для операции «{operation}». Компания {company_id}, баланс: {balance}.",
+        "blocked_operation": {
+            "llm": "генерация LLM",
+            "embedding": "эмбеддинги",
+            "vision": "обработка изображений",
+            "livekit_room": "комната звонка",
+            "livekit_egress": "запись звонка"
+        }
     }
 }

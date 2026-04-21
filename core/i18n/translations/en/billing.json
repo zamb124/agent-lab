@@ -68,5 +68,17 @@
         "balance_available": "Available on account",
         "top_up": "Top up balance",
         "currency_rub": "RUB"
+    },
+    "notifications": {
+        "balance_blocked_title": "Insufficient balance",
+        "balance_blocked_message": "Operation «{operation}» is unavailable: company «{company_name}» has insufficient funds (balance: {balance}). Add funds in Billing.",
+        "balance_blocked_api_detail": "Insufficient balance for «{operation}». Company {company_id}, balance: {balance}.",
+        "blocked_operation": {
+            "llm": "LLM generation",
+            "embedding": "embeddings",
+            "vision": "image processing",
+            "livekit_room": "call room",
+            "livekit_egress": "call recording"
+        }
     }
 }

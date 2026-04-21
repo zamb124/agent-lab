@@ -19,6 +19,9 @@ async def test_sync_app_exposes_i18n_ru() -> None:
     assert "platform" in payload
     assert "landing" in payload
     assert payload["platform"]["menu"]["logout"]
+    assert "billing" in payload
+    detail = payload["billing"]["notifications"]["balance_blocked_api_detail"]
+    assert isinstance(detail, str) and len(detail) > 0
 
 
 @pytest.mark.asyncio

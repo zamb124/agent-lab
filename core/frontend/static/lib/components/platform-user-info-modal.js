@@ -277,12 +277,14 @@ export class PlatformUserInfoModal extends PlatformFormModal {
             this._avatarLgFallback = 0;
             this._avatarLgSig = '';
             const resolved = this._resolveUser();
-            if (resolved && !resolved.isOwn) {
+            if (resolved && !resolved.isOwn && resolved.user) {
                 this._roles = new Set(resolved.user.roles);
+            } else if (resolved && !resolved.isOwn && !resolved.user) {
+                this._roles = new Set();
             }
         } else if (!this._rolesDirty) {
             const resolved = this._resolveUser();
-            if (resolved && !resolved.isOwn) {
+            if (resolved && !resolved.isOwn && resolved.user) {
                 const incoming = new Set(resolved.user.roles);
                 if (incoming.size !== this._roles.size
                     || Array.from(incoming).some((r) => !this._roles.has(r))) {
