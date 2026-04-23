@@ -9,7 +9,7 @@ CODE_TEMPLATES: List[Dict[str, Any]] = [
     {
         "id": "http_get",
         "name": "HTTP GET запрос",
-        "description": "**Категория:** HTTP. `httpx.get` к внешнему URL; при ошибке статуса возвращает `{\"error\": ...}`.",
+        "description": "**Категория:** HTTP. `httpx.get` к внешнему URL; при ошибке статуса возвращает `{\"error\": ...}`. В рантайме `state` — `ExecutionState` (доступ как к dict и через атрибуты).",
         "category": "http",
         "node_type": "tool",
         "tags": ["http", "api", "external"],
@@ -35,7 +35,7 @@ CODE_TEMPLATES: List[Dict[str, Any]] = [
     {
         "id": "http_post",
         "name": "HTTP POST запрос",
-        "description": "**Категория:** HTTP. `httpx.post` с JSON-телом; ожидаемые статусы `200` / `201`.",
+        "description": "**Категория:** HTTP. `httpx.post` с JSON-телом; ожидаемые статусы `200` / `201`. `state` — `ExecutionState` в рантайме.",
         "category": "http",
         "node_type": "tool",
         "tags": ["http", "api", "external"],
@@ -62,7 +62,7 @@ CODE_TEMPLATES: List[Dict[str, Any]] = [
     {
         "id": "llm_simple",
         "name": "LLM вызов",
-        "description": "**Категория:** LLM. Один вызов `llm.chat(prompt)` и извлечение текста из первой части ответа.",
+        "description": "**Категория:** LLM. Один вызов `llm.chat(prompt)` и текст из первой части ответа. kwargs `llm.chat` см. справку (model, tools, response_model, temperature, …).",
         "category": "llm",
         "node_type": "tool",
         "tags": ["llm", "ai"],
@@ -87,7 +87,7 @@ CODE_TEMPLATES: List[Dict[str, Any]] = [
     {
         "id": "ask_user",
         "name": "Запрос у пользователя",
-        "description": "**Категория:** interrupt. Вызывает `ask_user(question)` — выполнение останавливается до ответа пользователя.",
+        "description": "**Категория:** interrupt. `ask_user(question)` — пауза до ответа; для LLM передайте `ask_user_tool` в `tools=[...]`.",
         "category": "interaction",
         "node_type": "tool",
         "tags": ["interrupt", "user", "interaction"],
@@ -108,7 +108,7 @@ CODE_TEMPLATES: List[Dict[str, Any]] = [
     {
         "id": "json_processing",
         "name": "Обработка JSON",
-        "description": "**Категория:** данные. Использует `extract_json(text)` для разбора JSON из текста или MD-блоков.",
+        "description": "**Категория:** данные. `extract_json(text)` — JSON из текста или из markdown-блоков с меткой json.",
         "category": "data",
         "node_type": "tool",
         "tags": ["json", "parsing", "data"],
@@ -134,7 +134,7 @@ CODE_TEMPLATES: List[Dict[str, Any]] = [
     {
         "id": "file_processing",
         "name": "Обработка файлов",
-        "description": "Чтение и обработка файлов из state",
+        "description": "**Категория:** файлы. `get_files` + `reader.read` по каждому вложению; краткий превью-текст в результате.",
         "category": "files",
         "node_type": "tool",
         "tags": ["files", "processing"],
@@ -171,7 +171,7 @@ CODE_TEMPLATES: List[Dict[str, Any]] = [
     {
         "id": "state_manipulation",
         "name": "Работа со state",
-        "description": "Чтение и модификация state",
+        "description": "**Категория:** state. `get_nested` / `set_nested` по пути с точками; `state` — `ExecutionState`.",
         "category": "state",
         "node_type": "tool",
         "tags": ["state", "data"],
@@ -232,7 +232,7 @@ CODE_TEMPLATES: List[Dict[str, Any]] = [
     {
         "id": "llm_with_tools",
         "name": "LLM с tools (ReAct)",
-        "description": "**Категория:** LLM. Вызов LLM с набором tools и ручной ReAct-цикл.",
+        "description": "**Категория:** LLM. `llm.chat` + `@tool`; разбор `tool_calls` вручную (платформа один цикл не крутит).",
         "category": "llm",
         "node_type": "tool",
         "tags": ["llm", "tools", "react"],
@@ -271,7 +271,7 @@ CODE_TEMPLATES: List[Dict[str, Any]] = [
     {
         "id": "service_client_call",
         "name": "Вызов сервиса платформы",
-        "description": "**Категория:** HTTP. Запрос к другому сервису через `ServiceClient`.",
+        "description": "**Категория:** HTTP. `ServiceClient().post(service, path, json=..., params=..., timeout=...)` — kwargs уходят в httpx.",
         "category": "http",
         "node_type": "tool",
         "tags": ["http", "api", "platform"],
@@ -299,7 +299,7 @@ FUNCTION_TEMPLATES: List[Dict[str, Any]] = [
     {
         "id": "fn_http_get",
         "name": "HTTP GET запрос",
-        "description": "Запрос к API и сохранение результата в state",
+        "description": "GET к API; результат в ключах state. `state` — `ExecutionState`.",
         "category": "http",
         "node_type": "function",
         "tags": ["http", "api", "external"],
@@ -320,7 +320,7 @@ FUNCTION_TEMPLATES: List[Dict[str, Any]] = [
     {
         "id": "fn_http_post",
         "name": "HTTP POST запрос",
-        "description": "Отправка данных на API",
+        "description": "POST с телом из state; `state` — `ExecutionState`.",
         "category": "http",
         "node_type": "function",
         "tags": ["http", "api", "external"],
@@ -342,7 +342,7 @@ FUNCTION_TEMPLATES: List[Dict[str, Any]] = [
     {
         "id": "fn_llm_call",
         "name": "LLM вызов",
-        "description": "Вызов LLM и сохранение ответа в state",
+        "description": "LLM по `state.content`; ответ в `state.response`.",
         "category": "llm",
         "node_type": "function",
         "tags": ["llm", "ai"],
@@ -428,7 +428,7 @@ FUNCTION_TEMPLATES: List[Dict[str, Any]] = [
     {
         "id": "fn_file_process",
         "name": "Обработка файлов",
-        "description": "Чтение файлов из state",
+        "description": "Обход вложений `get_files` + `reader` (как в tool-шаблоне file_processing).",
         "category": "files",
         "node_type": "function",
         "tags": ["files", "processing"],
@@ -522,7 +522,7 @@ FUNCTION_TEMPLATES: List[Dict[str, Any]] = [
     {
         "id": "fn_llm_with_tools",
         "name": "LLM с tools",
-        "description": "Вызов LLM с определёнными tools в ноде",
+        "description": "`run(state)` + `llm.chat(..., tools=[...])` + `get_message_text`.",
         "category": "llm",
         "node_type": "function",
         "tags": ["llm", "tools", "react"],

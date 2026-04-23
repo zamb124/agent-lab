@@ -6,7 +6,7 @@
     "description": "Обрабатывает вопросы о заказах",
     "prompt_file": "prompts/order.md",
     "tools": ["ask_user"],
-    "llm": {"model": "gpt-4o", "temperature": 0.2}
+    "llm": {"model": "qwen/qwen3.5-397b-a17b", "temperature": 0.2}
   },
   {
     "id": "example_complaint_agent",
@@ -15,7 +15,7 @@
     "description": "Обрабатывает жалобы пользователей",
     "prompt_file": "prompts/complaint.md",
     "tools": ["ask_user"],
-    "llm": {"model": "gpt-4o", "temperature": 0.3}
+    "llm": {"model": "qwen/qwen3.5-397b-a17b", "temperature": 0.3}
   },
   {
     "id": "graph_tester",
@@ -24,7 +24,7 @@
     "description": "Тестирует графовый flow ведя диалог как пользователь. Завершает диалог маркером [TEST_COMPLETE].",
     "prompt_file": "prompts/graph_tester.md",
     "tools": [],
-    "llm": {"model": "gpt-4o", "temperature": 0.5}
+    "llm": {"model": "qwen/qwen3.5-397b-a17b", "temperature": 0.5}
   },
   {
     "id": "graph_judge",
@@ -33,6 +33,6 @@
     "description": "Оценивает качество диалога с графовым flow. Выставляет оценку по критериям.",
     "prompt_file": "prompts/graph_judge.md",
     "tools": [],
-    "llm": {"model": "gpt-4o", "temperature": 0.1}
+    "llm": {"model": "qwen/qwen3.5-397b-a17b", "temperature": 0.1}
   }
 ]

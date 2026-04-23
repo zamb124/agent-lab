@@ -6,6 +6,7 @@ import { html, css } from 'lit';
 import { PlatformModal } from './glass-modal.js';
 import { formStyles } from '../styles/shared/form.styles.js';
 import { buttonStyles } from '../styles/shared/button.styles.js';
+import { platformConfirm } from './platform-confirm-modal.js';
 
 export class PlatformFormModal extends PlatformModal {
     static styles = [
@@ -34,12 +35,30 @@ export class PlatformFormModal extends PlatformModal {
         this.loading = false;
         this.isDirty = false;
         this.formErrors = {};
+        /** @type {boolean} */
+        this._unsavedCloseDialogActive = false;
     }
 
-    close() {
-        const msg = (this.t('form_modal.unsaved_close') || 'form_modal.unsaved_close');
-        if (this.isDirty && !confirm(msg)) {
+    async close() {
+        if (this._unsavedCloseDialogActive) {
             return;
+        }
+        if (this.isDirty) {
+            this._unsavedCloseDialogActive = true;
+            try {
+                const ok = await platformConfirm(this.t('form_modal.unsaved_close'), {
+                    title: this.t('form_modal.unsaved_confirm_title'),
+                    confirmText: this.t('form_modal.unsaved_confirm_discard'),
+                    cancelText: this.t('form_modal.unsaved_confirm_keep'),
+                    variant: 'warning',
+                    confirmVariant: 'danger',
+                });
+                if (!ok) {
+                    return;
+                }
+            } finally {
+                this._unsavedCloseDialogActive = false;
+            }
         }
         super.close();
     }

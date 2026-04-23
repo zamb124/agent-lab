@@ -5,7 +5,6 @@
 import { html, css } from 'lit';
 import { PlatformModal } from '@platform/lib/components/glass-modal.js';
 import { registerModalKind } from '@platform/lib/utils/modal-registry.js';
-import '@platform/lib/components/platform-button.js';
 import '@platform/lib/components/platform-icon.js';
 import '../components/editors/flows-code-editor.js';
 import { asObject, asString, isPlainObject } from '../_helpers/flows-resolvers.js';
@@ -54,9 +53,15 @@ export class FlowsSpanDetailsModal extends PlatformModal {
 
     renderHeaderActions() {
         return html`
-            <platform-button @click=${() => this._openRaw()}>
-                ${this.t('span_details_modal.action_raw')}
-            </platform-button>
+            <button
+                type="button"
+                class="header-btn"
+                title=${this.t('span_details_modal.action_raw')}
+                aria-label=${this.t('span_details_modal.action_raw')}
+                @click=${() => this._openRaw()}
+            >
+                <platform-icon name="trace-json" size="18"></platform-icon>
+            </button>
         `;
     }
 
@@ -68,7 +73,7 @@ export class FlowsSpanDetailsModal extends PlatformModal {
                 <dt>span_id</dt><dd><code>${asString(span.span_id)}</code></dd>
                 <dt>trace_id</dt><dd><code>${asString(span.trace_id)}</code></dd>
                 <dt>duration</dt><dd>${span.duration_ms != null ? `${span.duration_ms} ms` : ''}</dd>
-                <dt>status</dt><dd>${asString(span.status_code)}</dd>
+                <dt>status</dt><dd>${asString(span.status)}</dd>
             </dl>
             <flows-code-editor
                 language="json"

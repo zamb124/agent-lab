@@ -17,6 +17,9 @@ logger = get_logger(__name__)
 
 _CONNECT_RETRY_EXCEPTIONS = (httpx.ConnectError, httpx.ConnectTimeout)
 
+# Ответы провайдера, при которых имеет смысл повторить запрос через egress proxy (если настроен).
+HTTP_STATUS_RETRY_VIA_PROXY = frozenset({403, 429, 451})
+
 PUBLIC_OAUTH_DIRECT_ATTEMPTS_BEFORE_PROXY = 3
 PUBLIC_OAUTH_DIRECT_ATTEMPTS_AFTER_PROXY = 2
 
@@ -27,6 +30,7 @@ class ProxyStrategy(Enum):
     PROXY_FIRST = "proxy_first"    # Сначала прокси, затем прямое подключение
     DIRECT_ONLY = "direct_only"    # Только прямое подключение
     PROXY_ONLY = "proxy_only"      # Только через прокси
+    SMART = "smart"  # Сначала напрямую; при 403/429/451 — одна серия попыток через platform proxy
 
 
 def _platform_proxy_active() -> bool:
@@ -216,6 +220,10 @@ async def request_with_strategy(
             **kwargs,
         )
 
+    if strategy == ProxyStrategy.SMART:
+        async with get_httpx_client(timeout=timeout, strategy=ProxyStrategy.SMART, **kwargs) as client:
+            return await client.request(method.upper(), url, **kwargs)
+
     raise ValueError(f"Unknown strategy: {strategy}")
 
 
@@ -284,16 +292,7 @@ class SmartProxyClient:
         except Exception:
             return False
 
-    async def _request_with_retry(self, method: str, url: str, **kwargs) -> httpx.Response:
-        """
-        Выполняет запрос с автоматическим retry при таймауте прокси.
-        Локальные адреса (localhost, 192.168.x.x и т.д.) всегда идут напрямую.
-        """
-        http_method = method.upper()
-        if not self.use_proxy or self._is_local_url(url):
-            async with self._create_client() as client:
-                return await client.request(http_method, url, **kwargs)
-
+    async def _request_via_proxy_rotation(self, http_method: str, url: str, **kwargs) -> httpx.Response:
         settings = self._get_settings()
 
         for attempt in range(self.MAX_PROXY_RETRIES):
@@ -316,6 +315,40 @@ class SmartProxyClient:
                 else:
                     logger.error(f"All proxy attempts failed for {url}")
                     raise
+
+    async def _request_with_retry(self, method: str, url: str, **kwargs) -> httpx.Response:
+        """
+        Выполняет запрос с автоматическим retry при таймауте прокси.
+        Локальные адреса (localhost, 192.168.x.x и т.д.) всегда идут напрямую.
+        """
+        http_method = method.upper()
+        strategy = getattr(self, "_strategy", ProxyStrategy.DIRECT_FIRST)
+
+        if self._is_local_url(url):
+            async with self._create_client() as client:
+                return await client.request(http_method, url, **kwargs)
+
+        if strategy == ProxyStrategy.SMART:
+            async with self._create_client() as client:
+                response = await client.request(http_method, url, **kwargs)
+            if (
+                response.status_code in HTTP_STATUS_RETRY_VIA_PROXY
+                and _platform_proxy_active()
+            ):
+                logger.warning(
+                    "HTTP %s для %s, повтор через platform proxy",
+                    response.status_code,
+                    url,
+                )
+                await response.aclose()
+                return await self._request_via_proxy_rotation(http_method, url, **kwargs)
+            return response
+
+        if not self.use_proxy:
+            async with self._create_client() as client:
+                return await client.request(http_method, url, **kwargs)
+
+        return await self._request_via_proxy_rotation(http_method, url, **kwargs)
 
     async def get(self, url: str, **kwargs) -> httpx.Response:
         return await self._request_with_retry("get", url, **kwargs)
@@ -360,7 +393,59 @@ class _StreamContextManager:
         self._stream_cm = None
 
     async def __aenter__(self):
-        if not self._smart_client.use_proxy or self._smart_client._is_local_url(self._url):
+        strategy = getattr(self._smart_client, "_strategy", ProxyStrategy.DIRECT_FIRST)
+
+        if self._smart_client._is_local_url(self._url):
+            self._client = self._smart_client._create_client()
+            self._stream_cm = self._client.stream(self._method, self._url, **self._kwargs)
+            return await self._stream_cm.__aenter__()
+
+        if strategy == ProxyStrategy.SMART:
+            self._client = self._smart_client._create_client()
+            self._stream_cm = self._client.stream(self._method, self._url, **self._kwargs)
+            response = await self._stream_cm.__aenter__()
+            if (
+                response.status_code in HTTP_STATUS_RETRY_VIA_PROXY
+                and _platform_proxy_active()
+            ):
+                logger.warning(
+                    "HTTP %s для stream %s, повтор через platform proxy",
+                    response.status_code,
+                    self._url,
+                )
+                await self._stream_cm.__aexit__(None, None, None)
+                await self._client.aclose()
+                self._client = None
+                self._stream_cm = None
+                settings = self._smart_client._get_settings()
+                for attempt in range(self._smart_client.MAX_PROXY_RETRIES):
+                    proxy_url = settings.proxy.get_next_proxy()
+                    logger.debug(
+                        f"Using proxy for stream: {proxy_url[:40] if proxy_url else 'None'}... -> {self._url}"
+                    )
+                    try:
+                        self._client = self._smart_client._create_client(proxy_url)
+                        self._stream_cm = self._client.stream(
+                            self._method, self._url, **self._kwargs
+                        )
+                        return await self._stream_cm.__aenter__()
+                    except (httpx.ConnectTimeout, httpx.ConnectError) as e:
+                        settings.proxy.mark_last_proxy_failed()
+                        if self._client:
+                            await self._client.aclose()
+                            self._client = None
+                        self._stream_cm = None
+                        if attempt < self._smart_client.MAX_PROXY_RETRIES - 1:
+                            logger.warning(
+                                f"Proxy {proxy_url} failed ({type(e).__name__}), "
+                                f"switching to next proxy (attempt {attempt + 2}/{self._smart_client.MAX_PROXY_RETRIES})"
+                            )
+                        else:
+                            logger.error(f"All proxy attempts failed for {self._url}")
+                            raise
+            return response
+
+        if not self._smart_client.use_proxy:
             self._client = self._smart_client._create_client()
             self._stream_cm = self._client.stream(self._method, self._url, **self._kwargs)
             return await self._stream_cm.__aenter__()
@@ -411,7 +496,7 @@ def get_httpx_client(
 
     Args:
         timeout: Таймаут запросов
-        strategy: Стратегия использования прокси (direct_first, proxy_first, direct_only, proxy_only)
+        strategy: Стратегия (direct_first, proxy_first, direct_only, proxy_only, smart)
         proxy_attempts: Количество попыток через прокси (для proxy_first)
         direct_attempts: Количество попыток прямого подключения (для direct_first)
         **kwargs: Дополнительные параметры для httpx.AsyncClient
@@ -421,7 +506,7 @@ def get_httpx_client(
     """
     use_proxy = strategy in (ProxyStrategy.PROXY_FIRST, ProxyStrategy.PROXY_ONLY)
     client = SmartProxyClient(timeout=timeout, use_proxy=use_proxy, **kwargs)
-    client._strategy = strategy
+    client._strategy = strategy  # SMART читает здесь: сначала прямой запрос, при HTTP_STATUS_RETRY_VIA_PROXY — прокси
     client._proxy_attempts = proxy_attempts
     client._direct_attempts = direct_attempts
     return client

@@ -39,6 +39,8 @@ import '../editors/flows-json-field-editor.js';
 import { asObject, asString, isPlainObject } from '../../_helpers/flows-resolvers.js';
 
 export class FlowsBaseNodeEditor extends PlatformElement {
+    static i18nNamespace = 'flows';
+
     static properties = {
         nodeId: { type: String },
         flowId: { type: String },
@@ -49,9 +51,12 @@ export class FlowsBaseNodeEditor extends PlatformElement {
         graphNodes: { type: Array },
         previewExecutionState: { type: Object },
         expanded: { type: Boolean, reflect: true },
+        /** Редактирование вложенного tool: без смены node id */
+        embedded: { type: Boolean, reflect: true },
         _editingId: { state: true },
         _draftId: { state: true },
         _stateDraft: { state: true },
+        _mappingTab: { state: true },
     };
 
     static styles = [
@@ -311,6 +316,7 @@ export class FlowsBaseNodeEditor extends PlatformElement {
         this.graphNodes = null;
         this.previewExecutionState = null;
         this.expanded = false;
+        this.embedded = false;
         this._editingId = false;
         this._draftId = '';
         this._mappingTab = 'input';
@@ -339,6 +345,9 @@ export class FlowsBaseNodeEditor extends PlatformElement {
     }
 
     _startRenameId() {
+        if (this.embedded) {
+            return;
+        }
         this._editingId = true;
         this._draftId = this.nodeId;
     }
@@ -459,7 +468,11 @@ export class FlowsBaseNodeEditor extends PlatformElement {
                 <div class="section-title">${this.t('base_node_editor.section_basic')}</div>
                 <div class="field">
                     <span class="field-label">${this.t('base_node_editor.node_id')}</span>
-                    ${this._editingId ? html`
+                    ${this.embedded ? html`
+                        <div class="id-row">
+                            <input class="text id-readonly" type="text" readonly .value=${this.nodeId} />
+                        </div>
+                    ` : this._editingId ? html`
                         <div class="id-row">
                             <input
                                 class="id-edit" type="text"
@@ -628,6 +641,8 @@ export class FlowsBaseNodeEditor extends PlatformElement {
                     </button>
                 </div>
                 <flows-state-mapping-editor
+                    syncKey=${String(this.flowId ?? '')}--${String(this.nodeId ?? '')}--imap--${tab}
+                    kind=${tab === 'input' ? 'input' : 'output'}
                     .mapping=${mapping}
                     @change=${(e) => this._onMapping(field, e)}
                 ></flows-state-mapping-editor>

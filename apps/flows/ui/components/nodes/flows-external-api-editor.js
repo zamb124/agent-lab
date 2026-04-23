@@ -39,6 +39,7 @@ export class FlowsExternalApiEditor extends PlatformElement {
         graphNodes: { type: Array },
         previewExecutionState: { type: Object },
         expanded: { type: Boolean, reflect: true },
+        embedded: { type: Boolean, reflect: true },
     };
 
     static styles = [
@@ -95,6 +96,7 @@ export class FlowsExternalApiEditor extends PlatformElement {
         this.graphNodes = null;
         this.previewExecutionState = null;
         this.expanded = false;
+        this.embedded = false;
     }
 
     _emitPatch(patch) {
@@ -209,6 +211,7 @@ export class FlowsExternalApiEditor extends PlatformElement {
                 .graphNodes=${this.graphNodes}
                 .previewExecutionState=${this.previewExecutionState}
                 ?expanded=${this.expanded}
+                ?embedded=${this.embedded}
             >
                 <div slot="settings">
                     <div class="grid">
@@ -253,6 +256,8 @@ export class FlowsExternalApiEditor extends PlatformElement {
                     <details>
                         <summary>${this.t('external_api_editor.response_mapping')}</summary>
                         <flows-state-mapping-editor
+                            syncKey=${String(this.flowId ?? '')}--${String(this.nodeId ?? '')}--extapi-state
+                            kind="output"
                             .mapping=${stateMapping}
                             @change=${this._onStateMapping}
                         ></flows-state-mapping-editor>

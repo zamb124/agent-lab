@@ -8,7 +8,6 @@ import inspect
 from typing import Any, Dict, Optional, Tuple, TYPE_CHECKING
 
 from apps.flows.src.eval.compiler import PythonCompiler
-from apps.flows.src.eval.inline_tool_sanitize import strip_forbidden_platform_import_lines
 from apps.flows.src.eval.namespace import PythonNamespaceBuilder
 from apps.flows.src.runners.base import BaseCodeRunner
 from core.errors import SafeEvalError
@@ -59,7 +58,6 @@ class PythonCodeRunner(BaseCodeRunner):
         Returns:
             Результат выполнения
         """
-        code = strip_forbidden_platform_import_lines(code)
         func = self.compiler.compile(code, func_name, auto_find=True)
         if inspect.iscoroutinefunction(func):
             return await func(state)
@@ -90,7 +88,6 @@ class PythonCodeRunner(BaseCodeRunner):
         if state is not None:
             self.namespace_builder.variables = dict(state.variables)
 
-        code = strip_forbidden_platform_import_lines(code)
         target, is_class = self.compiler.compile_tool(code)
         
         if is_class:

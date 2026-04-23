@@ -1,10 +1,11 @@
 /**
  * Контейнер списка сообщений чата
  */
-import { html, css } from 'lit';
+import { html, css, nothing } from 'lit';
 import { repeat } from 'lit/directives/repeat.js';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
 import { asArray, asString } from '../../_helpers/flows-resolvers.js';
+import './flows-chat-run-trace.js';
 
 export class ChatMessages extends PlatformElement {
     static styles = [
@@ -61,18 +62,25 @@ export class ChatMessages extends PlatformElement {
                 max-width: 300px;
                 line-height: var(--leading-relaxed);
             }
+            .run-trace-slot {
+                max-width: 900px;
+                margin: 0 auto;
+                width: 100%;
+            }
         `
     ];
 
     static properties = {
         messages: { type: Array },
         loading: { type: Boolean },
+        runTrace: { type: Array },
     };
 
     constructor() {
         super();
         this.messages = [];
         this.loading = false;
+        this.runTrace = [];
     }
 
     get listEl() {
@@ -96,12 +104,23 @@ export class ChatMessages extends PlatformElement {
     }
 
     render() {
-        if (this.messages.length === 0 && !this.loading) {
+        const trace = asArray(this.runTrace);
+        if (this.messages.length === 0 && !this.loading && trace.length === 0) {
             return html`
                 <div class="empty-state">
                     <platform-icon class="empty-icon" name="chat" size="64"></platform-icon>
                     <div class="empty-title">${this.t('chat_messages.empty_title')}</div>
                     <div class="empty-text">${this.t('chat_messages.empty_text')}</div>
+                </div>
+            `;
+        }
+
+        if (this.messages.length === 0 && !this.loading && trace.length > 0) {
+            return html`
+                <div class="messages-list">
+                    <div class="run-trace-slot">
+                        <flows-chat-run-trace .entries=${trace}></flows-chat-run-trace>
+                    </div>
                 </div>
             `;
         }
@@ -130,6 +149,13 @@ export class ChatMessages extends PlatformElement {
                         ></chat-message>
                     `
                 )}
+                ${trace.length > 0
+                    ? html`
+                          <div class="run-trace-slot">
+                              <flows-chat-run-trace .entries=${trace}></flows-chat-run-trace>
+                          </div>
+                      `
+                    : nothing}
             </div>
         `;
     }

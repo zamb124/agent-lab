@@ -1,0 +1,87 @@
+{
+  "id": "universal_agent",
+  "name": "Универсальный агент",
+  "description": "Серия ассистентов общего назначения: уточнения, расчёты, код в песочнице (sandbox_codegen); навыки — базовый, усиленный код, RAG.",
+  "version": "1.0.0",
+  "tags": ["store", "assistant", "universal", "eval", "general", "humanitec"],
+  "permission": ["admin", "developers"],
+  "entry": "main",
+  "nodes": {
+    "main": {
+      "type": "llm_node",
+      "name": "Универсальный агент",
+      "prompt": "prompts/main.md",
+      "llm": {
+        "model": "qwen/qwen3.5-397b-a17b",
+        "temperature": 0.2
+      },
+      "tools": [
+        "ask_user",
+        "calculator",
+        "sandbox_codegen"
+      ],
+      "output_key": "response"
+    }
+  },
+  "edges": [
+    {
+      "from": "main",
+      "to": null
+    }
+  ],
+  "variables": {
+    "interface_language_code": "ru",
+    "interface_language_name": "русском"
+  },
+  "skills": {
+    "code_focus": {
+      "name": "Универсальный агент: песочница кода",
+      "description": "Тот же агент с упором на sandbox_codegen и чёткие ТЗ для генерации кода в sandbox.",
+      "tags": ["universal", "eval", "code"],
+      "permission": [],
+      "nodes_mode": "merge",
+      "nodes": {
+        "main": {
+          "name": "Универсальный агент (код)",
+          "prompt": "prompts/code_focus.md",
+          "llm": {
+            "model": "qwen/qwen3.5-397b-a17b",
+            "temperature": 0.15
+          },
+          "tools": [
+            "ask_user",
+            "calculator",
+            "sandbox_codegen"
+          ],
+          "output_key": "response"
+        }
+      }
+    },
+    "with_rag": {
+      "name": "Универсальный агент + RAG",
+      "description": "Базовые возможности плюс семантический поиск и загрузка текста в namespace RAG.",
+      "tags": ["universal", "rag", "knowledge"],
+      "permission": [],
+      "nodes_mode": "merge",
+      "nodes": {
+        "main": {
+          "name": "Универсальный агент (RAG)",
+          "prompt": "prompts/with_rag.md",
+          "llm": {
+            "model": "qwen/qwen3.5-397b-a17b",
+            "temperature": 0.2
+          },
+          "tools": [
+            "ask_user",
+            "calculator",
+            "sandbox_codegen",
+            "rag_create_namespace",
+            "rag_add_text",
+            "rag_search"
+          ],
+          "output_key": "response"
+        }
+      }
+    }
+  }
+}

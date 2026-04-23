@@ -8,23 +8,38 @@ import ast
 import re
 from typing import Any, Callable, Dict, Optional
 
-from apps.flows.src.eval.import_policy import validate_import_nodes
+from apps.flows.src.eval.import_policy import (
+    filtered_namespace_import_roots,
+    validate_import_nodes,
+)
 from apps.flows.src.eval.namespace import PythonNamespaceBuilder
 from core.errors import SafeEvalError
+from core.inline_python_eval_policy import FORBIDDEN_INLINE_DUNDER_ATTRIBUTES
 
 
-def _validate_code(code: str) -> None:
+def _normalize_inline_source(
+    code: str,
+    strip_platform_imports: bool,
+) -> str:
+    if not strip_platform_imports:
+        return code
+    from apps.flows.src.eval.inline_tool_sanitize import strip_forbidden_platform_import_lines
+
+    return strip_forbidden_platform_import_lines(code)
+
+
+def _validate_code(code: str, namespace_keys: frozenset[str]) -> None:
     """Проверяет код на опасные конструкции."""
     try:
         tree = ast.parse(code)
     except SyntaxError as e:
-        raise SafeEvalError(f"Syntax error: {e}")
+        raise SafeEvalError(f"Syntax error: {e}") from e
 
-    validate_import_nodes(tree)
+    validate_import_nodes(tree, namespace_keys)
 
     for node in ast.walk(tree):
         if isinstance(node, ast.Attribute):
-            if node.attr.startswith("__") and node.attr.endswith("__"):
+            if node.attr in FORBIDDEN_INLINE_DUNDER_ATTRIBUTES:
                 raise SafeEvalError(f"Access to '{node.attr}' is not allowed")
 
 
@@ -33,9 +48,21 @@ class PythonCompiler:
     Валидация и компиляция Python кода.
     """
     
-    def __init__(self, namespace_builder: Optional[PythonNamespaceBuilder] = None):
+    def __init__(
+        self,
+        namespace_builder: Optional[PythonNamespaceBuilder] = None,
+        *,
+        strip_platform_imports: bool = True,
+    ):
         self.namespace_builder = namespace_builder or PythonNamespaceBuilder()
-    
+        self._strip_platform_imports = strip_platform_imports
+
+    def _prepare_source(self, code: str) -> str:
+        return _normalize_inline_source(
+            code,
+            self._strip_platform_imports,
+        )
+
     def validate(self, code: str) -> None:
         """
         Проверяет код на безопасность.
@@ -46,7 +73,10 @@ class PythonCompiler:
         Raises:
             SafeEvalError: Если код содержит опасные конструкции
         """
-        _validate_code(code)
+        code = self._prepare_source(code)
+        namespace = self.namespace_builder.build()
+        ns_keys = filtered_namespace_import_roots(namespace)
+        _validate_code(code, ns_keys)
     
     def compile(self, code: str, func_name: str = "run", auto_find: bool = True) -> Callable:
         """
@@ -63,14 +93,15 @@ class PythonCompiler:
         Raises:
             SafeEvalError: Если код невалиден или функция не найдена
         """
-        self.validate(code)
-        
+        code = self._prepare_source(code)
         namespace = self.namespace_builder.build()
-        
+        ns_keys = filtered_namespace_import_roots(namespace)
+        _validate_code(code, ns_keys)
+
         try:
             exec(code, namespace)
         except Exception as e:
-            raise SafeEvalError(f"Compilation error: {e}")
+            raise SafeEvalError(f"Compilation error: {e}") from e
         
         if func_name not in namespace:
             # Автопоиск первой функции только для стандартных имен
@@ -97,14 +128,15 @@ class PythonCompiler:
         Raises:
             SafeEvalError: Если код невалиден или не найдена функция/класс
         """
-        self.validate(code)
-        
+        code = self._prepare_source(code)
         namespace = self.namespace_builder.build()
-        
+        ns_keys = filtered_namespace_import_roots(namespace)
+        _validate_code(code, ns_keys)
+
         try:
             exec(code, namespace)
         except Exception as e:
-            raise SafeEvalError(f"Compilation error: {e}")
+            raise SafeEvalError(f"Compilation error: {e}") from e
         
         # Ищем класс наследующий BaseTool
         base_tool_cls = namespace.get("BaseTool")

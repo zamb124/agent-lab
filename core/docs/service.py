@@ -74,14 +74,17 @@ class DocumentationService:
         if q.include_templates:
             response.templates = provider.get_templates(q)
 
-        if q.platform_tools is not None:
+        if q.include_platform_tools and q.platform_tools is not None:
             response.platform_tools = list(q.platform_tools)
+
+        if q.runtime_namespace_extras is not None:
+            response.runtime_namespace_extras = list(q.runtime_namespace_extras)
 
         return response
 
     def to_markdown(self, q: DocumentationQuery) -> str:
         """Тот же состав данных, что у query(), в виде одного Markdown-документа."""
-        return build_documentation_markdown(self.query(q))
+        return build_documentation_markdown(self.query(q), query=q)
     
     def get_completions(self, language: str = "python", perspective: str = "editor"):
         """Удобный метод для получения данных autocomplete."""

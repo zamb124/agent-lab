@@ -97,7 +97,7 @@ apps/flows/ui/
     flows-integrations-modal.js  ('flows.integrations')
     flows-edge-condition-modal.js   ('flows.edge_condition')
     flows-incoming-policy-modal.js  ('flows.incoming_policy')
-    flows-tool-picker-modal.js   ('flows.tool_picker')
+    flows-library-picker-modal.js   ('flows.tool_picker', 'flows.code_node_templates')
     flows-tool-create-modal.js   ('flows.tool_create')
     flows-code-modal.js          ('flows.code')
     flows-code-docs-modal.js     ('flows.code_docs')
@@ -112,6 +112,13 @@ apps/flows/ui/
 Для подтверждений использует core-helper `platformConfirm({...})` из
 [core/frontend/static/lib/components/platform-confirm-modal.js](core/frontend/static/lib/components/platform-confirm-modal.js)
 — отдельной `flows.confirm` нет.
+
+### Библиотека tools и flows (модалки)
+
+- **Одна реализация** — [`flows-library-picker-modal.js`](apps/flows/ui/modals/flows-library-picker-modal.js): `registerModalKind` для **`flows.tool_picker`** и **`flows.code_node_templates`** на один `customElement`; режим по `el._modalKind` из стека. Одна шапка (полоса тегов или пустой flex + поиск справа), `size: full`, одна сетка карточек; в режиме code-ноды дополнительно вкладки «Каталог / Реестр» и `flows/code_templates`. Описания в Markdown — `embedAssistantMarkdownToHtml` из [`embed-chat-markdown.js`](core/frontend/static/lib/embed-chat/embed-chat-markdown.js).
+- **`flows.tool_picker`**: `useOp('flows/tools_all')` (REST `GET /flows/api/v1/tools/all` в [`tools.resource.js`](apps/flows/ui/events/resources/tools.resource.js)), `onPick({ kind: 'tool'|'flow', tool_id, item })`, иконки — [`flows-registry-item-icon.js`](apps/flows/ui/_helpers/flows-registry-item-icon.js) (tool → иконка ноды `code`, flow → subflow, MCP → `mcp`). Проп **`pickMode`**: `'all'` | `'flow_only'`.
+- **LLM «Из библиотеки»** ([`flows-llm-node-editor.js`](apps/flows/ui/components/nodes/flows-llm-node-editor.js)): для `kind === 'flow'` в `cfg.tools` добавляется `{ type: 'flow', tool_id }`, для tool — `{ tool_id }`.
+- **`flows.code_node_templates`**: вкладки каталог (`flows/code_templates`) и реестр (тот же `flows/tools_all`, без `item_type === 'flow'`). Иконка каталога — тип ноды `code` ([`code-template-card-icon.js`](apps/flows/ui/_helpers/code-template-card-icon.js)).
 
 ### Маршруты (`createRouterEffect(FLOWS_ROUTES)`)
 

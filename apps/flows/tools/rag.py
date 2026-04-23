@@ -102,53 +102,10 @@ class RagSearchArgs(BaseModel):
     filters: Optional[Dict[str, Any]] = Field(None, description="Фильтры по metadata; опционально.")
 
 
-def _rag_create_namespace_mock(args: dict, state: Any = None) -> dict:
-    name = args.get("name") or "mock_ns"
-    return {
-        "success": True,
-        "name": name,
-        "company_id": "mock_company",
-        "description": args.get("description"),
-        "is_default": False,
-    }
-
-
-def _rag_add_text_mock(args: dict, state: Any = None) -> dict:
-    return {
-        "success": True,
-        "document_id": "mock_doc_id",
-        "document_name": args.get("document_name") or "mock_doc",
-        "namespace_id": args.get("namespace_id") or "default",
-        "status": "completed",
-        "provider": "pgvector",
-    }
-
-
-def _rag_search_mock(args: dict, state: Any = None) -> dict:
-    q = args.get("query") or ""
-    return {
-        "success": True,
-        "results": [
-            {
-                "content": f"Mock chunk for: {q[:80]}",
-                "score": 0.99,
-                "document_id": "mock_doc",
-                "document_name": "mock",
-                "metadata": {},
-                "namespace": args.get("namespace_id") or "default",
-            }
-        ],
-        "query": q,
-        "namespace_id": args.get("namespace_id") or "default",
-        "provider": "pgvector",
-    }
-
-
 @tool(
     name="rag_create_namespace",
     description=_RAG_CREATE_NAMESPACE_DESCRIPTION,
     tags=["rag", "knowledge"],
-    mock_response=_rag_create_namespace_mock,
     args_schema=RagCreateNamespaceArgs,
 )
 async def rag_create_namespace(
@@ -167,7 +124,6 @@ async def rag_create_namespace(
     name="rag_add_text",
     description=_RAG_ADD_TEXT_DESCRIPTION,
     tags=["rag", "knowledge"],
-    mock_response=_rag_add_text_mock,
     args_schema=RagAddTextArgs,
 )
 async def rag_add_text(
@@ -195,7 +151,6 @@ async def rag_add_text(
     name="rag_search",
     description=_RAG_SEARCH_DESCRIPTION,
     tags=["rag", "knowledge"],
-    mock_response=_rag_search_mock,
     args_schema=RagSearchArgs,
 )
 async def rag_search(

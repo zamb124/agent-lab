@@ -53,6 +53,32 @@ def test_sync_api_requires_auth() -> None:
     assert rule.auth_required is True
 
 
+def test_sync_api_nested_paths_require_auth() -> None:
+    """Вложенные REST-пути: fnmatch * в ROUTE_RULES совпадает с несколькими сегментами."""
+    matcher = RouteMatcher()
+    for path in (
+        "/sync/api/v1/channels/ch_1",
+        "/sync/api/v1/channels/ch_1/messages",
+    ):
+        rule = matcher.match(path)
+        assert rule is not None, path
+        assert rule.context_type == "api", path
+        assert rule.auth_required is True, path
+
+
+def test_flows_api_nested_paths_require_auth() -> None:
+    matcher = RouteMatcher()
+    for path in (
+        "/flows/api/v1/flows",
+        "/flows/api/v1/flows/flow_123",
+        "/flows/api/v1/flows/flow_123/triggers",
+    ):
+        rule = matcher.match(path)
+        assert rule is not None, path
+        assert rule.context_type == "api", path
+        assert rule.auth_required is True, path
+
+
 def test_sync_ui_static_is_public() -> None:
     matcher = RouteMatcher()
     rule = matcher.match("/sync/ui/static/index.js")

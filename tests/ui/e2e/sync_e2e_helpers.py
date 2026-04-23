@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import httpx
-from playwright.async_api import Locator, Page
+from playwright.async_api import Locator, Page, expect
 
 
 def sync_sidebar_channel_nav(page: Page, channel_name: str) -> Locator:
@@ -18,6 +18,54 @@ def sync_sidebar_channel_settings_gear(page: Page, channel_name: str) -> Locator
     return page.locator("sync-sidebar").locator(".nav-row-wrap").filter(
         has=page.locator("sync-channel-row").filter(has_text=channel_name)
     ).get_by_role("button", name="Настройки канала")
+
+
+async def sync_e2e_click_create_channel(page: Page) -> None:
+    """Открывает модалку создания канала: primary на shell (`sync-channel-picker`) или «+» в секции чатов сайдбара."""
+    picker_ru = page.locator("sync-channel-picker").get_by_role("button", name="Создать канал")
+    picker_en = page.locator("sync-channel-picker").get_by_role("button", name="Create channel")
+    from_picker = picker_ru.or_(picker_en)
+    from_sidebar = page.locator("sync-sidebar .section-action-btn").first
+    target = from_picker.or_(from_sidebar)
+    await expect(target).to_be_visible(timeout=30_000)
+    await target.click()
+
+
+async def sync_e2e_create_topic_channel_and_open(
+    page: Page,
+    unique_id: str,
+    *,
+    channel_prefix: str = "Канал",
+) -> str:
+    """Создаёт групповой канал и открывает чат. Shell уже должен быть загружен."""
+    channel_name = f"{channel_prefix} {unique_id}"
+    await sync_e2e_click_create_channel(page)
+    ch_modal = page.locator("sync-channel-create-modal")
+    await expect(ch_modal).to_be_visible()
+    await ch_modal.locator("input.form-input").first.fill(channel_name)
+    submit = ch_modal.get_by_role("button", name="Создать", exact=True).or_(
+        ch_modal.get_by_role("button", name="Create", exact=True)
+    )
+    await submit.click()
+    await expect(sync_sidebar_channel_nav(page, channel_name)).to_be_visible(timeout=30_000)
+    await sync_sidebar_channel_nav(page, channel_name).click()
+    await expect(page.locator("chat-view")).to_be_visible()
+    return channel_name
+
+
+async def sync_e2e_create_topic_channel_in_current_space(page: Page, unique_id: str, *, channel_prefix: str) -> str:
+    """Второй и следующие каналы в том же UI (кнопка «+» в секции чатов)."""
+    channel_name = f"{channel_prefix} {unique_id}"
+    await sync_e2e_click_create_channel(page)
+    ch_modal = page.locator("sync-channel-create-modal")
+    await expect(ch_modal).to_be_visible()
+    await ch_modal.locator("input.form-input").first.fill(channel_name)
+    submit = ch_modal.get_by_role("button", name="Создать", exact=True).or_(
+        ch_modal.get_by_role("button", name="Create", exact=True)
+    )
+    await submit.click()
+    await expect(sync_sidebar_channel_nav(page, channel_name)).to_be_visible(timeout=30_000)
+    return channel_name
 
 
 def _sync_client(origin: str, auth_token: str) -> httpx.AsyncClient:

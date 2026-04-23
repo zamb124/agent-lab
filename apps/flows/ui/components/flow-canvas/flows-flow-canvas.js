@@ -28,7 +28,7 @@
 import { html, css, svg } from 'lit';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
 import '@platform/lib/components/platform-icon.js';
-import { getNodeTypeMeta, getCategoryToken } from '../../constants/node-icons.js';
+import { getNodeTypeMeta } from '../../constants/node-icons.js';
 import { renderEdgeLabel } from './flows-edge-label.js';
 import './flows-canvas-context-menu.js';
 import './flows-sticky-note.js';
@@ -44,9 +44,19 @@ import {
     getEdgeEndpoints,
     colorOrDefault,
 } from '../../_helpers/flows-resolvers.js';
-
-const NODE_W = 200;
-const NODE_H = 72;
+import {
+    FLOW_NODE_W as NODE_W,
+    FLOW_NODE_H as NODE_H,
+    getNodeCanvasHeight,
+    computeFitViewBox,
+    FLOWS_EDITOR_DEFAULT_VIEWBOX,
+} from '../../_helpers/flows-viewbox.js';
+import {
+    normalizedLlmToolsForCanvas,
+    getToolRefVisualMeta,
+    CANVAS_NODE_TOOLS_MAX_VISIBLE,
+} from '../../_helpers/flows-tool-visual.js';
+import { getBlankCodeNodeConfig } from '../../_helpers/code-node-defaults.js';
 const NODE_RADIUS = 12;
 const PORT_R = 6;
 const SNAP_THRESHOLD = 4;
@@ -135,7 +145,6 @@ export class FlowsFlowCanvas extends PlatformElement {
             g.node[data-state="error"] .node-card {
                 stroke: var(--error);
                 stroke-width: 2;
-                filter: drop-shadow(0 0 8px var(--error));
             }
             g.node[data-state="breakpoint-hit"] .node-card {
                 stroke: var(--warning);
@@ -163,6 +172,62 @@ export class FlowsFlowCanvas extends PlatformElement {
                 width: 100%; height: 100%;
                 box-sizing: border-box;
                 font-family: var(--font-sans);
+            }
+            .node-card-content.has-tools {
+                flex-direction: column;
+                align-items: stretch;
+                gap: var(--space-1);
+            }
+            .node-card-main {
+                display: flex;
+                flex-direction: row;
+                align-items: center;
+                gap: var(--space-2);
+                min-width: 0;
+                flex: 1;
+            }
+            .node-tools-row {
+                display: flex;
+                flex-direction: row;
+                align-items: center;
+                gap: 6px;
+                flex-shrink: 0;
+            }
+            .node-tool-chip {
+                width: 28px;
+                height: 28px;
+                border-radius: 50%;
+                border: 1px solid var(--glass-border-subtle);
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                padding: 0;
+                margin: 0;
+                cursor: pointer;
+                flex-shrink: 0;
+                box-sizing: border-box;
+            }
+            .node-tool-chip[data-cat="core"] {
+                background: var(--accent-subtle);
+                color: var(--accent);
+            }
+            .node-tool-chip[data-cat="integrations"] {
+                background: var(--info-bg);
+                color: var(--info);
+            }
+            .node-tool-chip[data-cat="flow"] {
+                background: var(--accent-secondary-subtle);
+                color: var(--accent-secondary);
+            }
+            .node-tool-chip[data-cat="hitl"] {
+                background: var(--warning-bg);
+                color: var(--warning);
+            }
+            .node-tools-more {
+                font-size: var(--text-xs);
+                color: var(--text-tertiary);
+                padding: 0 4px;
+                flex-shrink: 0;
             }
             .node-meta { display: flex; flex-direction: column; min-width: 0; flex: 1; }
             .node-name {
@@ -357,6 +422,7 @@ export class FlowsFlowCanvas extends PlatformElement {
         this._stickyLinkMode = null;
         this._pointerDownAt = null;
         this._pointerMoved = false;
+        this._lastAutoFitKey = null;
     }
 
     connectedCallback() {
@@ -371,6 +437,23 @@ export class FlowsFlowCanvas extends PlatformElement {
         super.disconnectedCallback();
     }
 
+    updated(changed) {
+        super.updated(changed);
+        const state = this._editor.state;
+        if (!state) return;
+        const fid = state.flowId;
+        if (typeof fid !== 'string' || fid.length === 0) return;
+        const sid = typeof state.currentSkillId === 'string' && state.currentSkillId.length > 0
+            ? state.currentSkillId
+            : 'base';
+        const key = `${fid}:${sid}`;
+        if (this._lastAutoFitKey === key) return;
+        this._lastAutoFitKey = key;
+        requestAnimationFrame(() => {
+            this._fitView();
+        });
+    }
+
     _state() { return asObject(this._editor.state); }
     _skillsData() { return getSkillsData(this._state()); }
     _nodes() { return getSkillsNodes(this._state()); }
@@ -383,7 +466,8 @@ export class FlowsFlowCanvas extends PlatformElement {
     _portCoords(node, side) {
         const px = asNumber(node.pos_x);
         const x = side === 'in' ? px : px + NODE_W;
-        const y = asNumber(node.pos_y) + NODE_H / 2;
+        const h = getNodeCanvasHeight(node);
+        const y = asNumber(node.pos_y) + h / 2;
         return { x, y };
     }
 
@@ -802,7 +886,8 @@ export class FlowsFlowCanvas extends PlatformElement {
             for (const [id, node] of Object.entries(nodes)) {
                 const nx = asNumber(node.pos_x);
                 const ny = asNumber(node.pos_y);
-                if (nx + NODE_W >= minX && nx <= maxX && ny + NODE_H >= minY && ny <= maxY) {
+                const nh = getNodeCanvasHeight(node);
+                if (nx + NODE_W >= minX && nx <= maxX && ny + nh >= minY && ny <= maxY) {
                     ids.push(id);
                 }
             }
@@ -826,24 +911,27 @@ export class FlowsFlowCanvas extends PlatformElement {
         let snappedX = x;
         let snappedY = y;
         const guides = [];
+        const draggedNode = nodes[draggedId];
+        const hSelf = draggedNode ? getNodeCanvasHeight(draggedNode) : NODE_H;
         const right = x + NODE_W;
-        const bottom = y + NODE_H;
+        const bottom = y + hSelf;
         const cx = x + NODE_W / 2;
-        const cy = y + NODE_H / 2;
+        const cy = y + hSelf / 2;
         for (const [id, node] of Object.entries(nodes)) {
             if (id === draggedId) continue;
             const nx = asNumber(node.pos_x);
             const ny = asNumber(node.pos_y);
+            const nh = getNodeCanvasHeight(node);
             const ncx = nx + NODE_W / 2;
-            const ncy = ny + NODE_H / 2;
+            const ncy = ny + nh / 2;
             const nright = nx + NODE_W;
-            const nbottom = ny + NODE_H;
+            const nbottom = ny + nh;
             if (Math.abs(x - nx) <= SNAP_THRESHOLD) { snappedX = nx; guides.push({ axis: 'v', at: nx }); }
             else if (Math.abs(right - nright) <= SNAP_THRESHOLD) { snappedX = nright - NODE_W; guides.push({ axis: 'v', at: nright }); }
             else if (Math.abs(cx - ncx) <= SNAP_THRESHOLD) { snappedX = ncx - NODE_W / 2; guides.push({ axis: 'v', at: ncx }); }
             if (Math.abs(y - ny) <= SNAP_THRESHOLD) { snappedY = ny; guides.push({ axis: 'h', at: ny }); }
-            else if (Math.abs(bottom - nbottom) <= SNAP_THRESHOLD) { snappedY = nbottom - NODE_H; guides.push({ axis: 'h', at: nbottom }); }
-            else if (Math.abs(cy - ncy) <= SNAP_THRESHOLD) { snappedY = ncy - NODE_H / 2; guides.push({ axis: 'h', at: ncy }); }
+            else if (Math.abs(bottom - nbottom) <= SNAP_THRESHOLD) { snappedY = nbottom - hSelf; guides.push({ axis: 'h', at: nbottom }); }
+            else if (Math.abs(cy - ncy) <= SNAP_THRESHOLD) { snappedY = ncy - hSelf / 2; guides.push({ axis: 'h', at: ncy }); }
         }
         return { x: snappedX, y: snappedY, guides };
     }
@@ -898,7 +986,15 @@ export class FlowsFlowCanvas extends PlatformElement {
             if (kind === 'fit_view') { this._fitView(); return; }
             if (kind === 'reset_zoom') {
                 const vb = this._viewBox();
-                this._editor.setViewBox({ viewBox: { x: vb.x, y: vb.y, w: 1600, h: 1000 } });
+                const d = FLOWS_EDITOR_DEFAULT_VIEWBOX;
+                this._editor.setViewBox({
+                    viewBox: {
+                        x: vb.x + vb.w / 2 - d.w / 2,
+                        y: vb.y + vb.h / 2 - d.h / 2,
+                        w: d.w,
+                        h: d.h,
+                    },
+                });
                 return;
             }
             if (kind === 'select_all') { this._selectAll(); return; }
@@ -908,18 +1004,12 @@ export class FlowsFlowCanvas extends PlatformElement {
 
     _fitView() {
         const nodes = Object.values(this._nodes());
-        if (nodes.length === 0) return;
-        let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
-        for (const n of nodes) {
-            const x = asNumber(n.pos_x);
-            const y = asNumber(n.pos_y);
-            if (x < minX) minX = x;
-            if (y < minY) minY = y;
-            if (x + NODE_W > maxX) maxX = x + NODE_W;
-            if (y + NODE_H > maxY) maxY = y + NODE_H;
+        const vb = computeFitViewBox(nodes);
+        if (vb === null) {
+            this._editor.setViewBox({ viewBox: { ...FLOWS_EDITOR_DEFAULT_VIEWBOX } });
+            return;
         }
-        const pad = 80;
-        this._editor.setViewBox({ viewBox: { x: minX - pad, y: minY - pad, w: (maxX - minX) + pad * 2, h: (maxY - minY) + pad * 2 } });
+        this._editor.setViewBox({ viewBox: vb });
     }
 
     /* ===== Drag-and-drop create ===== */
@@ -939,6 +1029,14 @@ export class FlowsFlowCanvas extends PlatformElement {
         const local = this._localPoint(e.clientX, e.clientY);
         const data = this._skillsData();
         if (nodeType) {
+            if (nodeType === 'code') {
+                this._onDropCodeNode({ local });
+                return;
+            }
+            if (nodeType === 'flow') {
+                this._onDropFlowNode({ local });
+                return;
+            }
             const id = genId('n');
             const newNode = {
                 type: nodeType,
@@ -964,6 +1062,92 @@ export class FlowsFlowCanvas extends PlatformElement {
             this._editor.setDirty({ dirty: true });
             this._editor.selectResource({ resourceId: id });
         }
+    }
+
+    _onDropCodeNode(ctx) {
+        const { local } = ctx;
+        const nodeId = genId('n');
+        this.openModal('flows.code_node_drop', {
+            onNew: () => {
+                this._placeCodeNode(
+                    { nodeId, local, name: 'code', config: getBlankCodeNodeConfig() },
+                );
+            },
+            onChooseTemplates: () => {
+                this.openModal('flows.code_node_templates', {
+                    onCommit: (detail) => {
+                        if (!detail || typeof detail !== 'object' || !isPlainObject(detail.config)) {
+                            throw new Error('flows-flow-canvas: code template commit must include config');
+                        }
+                        const nm = typeof detail.nodeName === 'string' && detail.nodeName.length > 0
+                            ? detail.nodeName
+                            : 'code';
+                        this._placeCodeNode(
+                            { nodeId, local, name: nm, config: detail.config },
+                        );
+                    },
+                });
+            },
+        });
+    }
+
+    _placeCodeNode(p) {
+        const { nodeId, local, name, config } = p;
+        const data = this._skillsData();
+        const newNode = {
+            type: 'code',
+            name,
+            pos_x: local.x - NODE_W / 2,
+            pos_y: local.y - NODE_H / 2,
+            config,
+        };
+        const nodes = { ...asObject(data.nodes), [nodeId]: newNode };
+        const next = { ...data, nodes };
+        this._editor.updateSkillsData({ data: next });
+        this._editor.pushHistory({ snapshot: next });
+        this._editor.setDirty({ dirty: true });
+        this._editor.selectNode({ nodeId });
+    }
+
+    _onDropFlowNode(ctx) {
+        const { local } = ctx;
+        const nodeId = genId('n');
+        this.openModal('flows.tool_picker', {
+            pickMode: 'flow_only',
+            onPick: (detail) => {
+                if (!detail || typeof detail !== 'object' || detail.kind !== 'flow') {
+                    return;
+                }
+                const flowId = detail.tool_id;
+                if (typeof flowId !== 'string' || flowId.length === 0) {
+                    return;
+                }
+                const item = detail.item;
+                let name = flowId;
+                if (item && typeof item === 'object' && typeof item.title === 'string' && item.title.length > 0) {
+                    name = item.title;
+                }
+                this._placeFlowNode({ nodeId, local, name, flowId });
+            },
+        });
+    }
+
+    _placeFlowNode(p) {
+        const { nodeId, local, name, flowId } = p;
+        const data = this._skillsData();
+        const newNode = {
+            type: 'flow',
+            name,
+            pos_x: local.x - NODE_W / 2,
+            pos_y: local.y - NODE_H / 2,
+            config: { flow_id: flowId, skill_id: 'default' },
+        };
+        const nodes = { ...asObject(data.nodes), [nodeId]: newNode };
+        const next = { ...data, nodes };
+        this._editor.updateSkillsData({ data: next });
+        this._editor.pushHistory({ snapshot: next });
+        this._editor.setDirty({ dirty: true });
+        this._editor.selectNode({ nodeId });
     }
 
     /* ===== Sticky notes drag/edit/delete ===== */
@@ -1071,7 +1255,8 @@ export class FlowsFlowCanvas extends PlatformElement {
     /* ===== Render ===== */
     _renderFanInBadge(id, node) {
         const policy = node.incoming_policy === 'all' ? 'all' : 'any';
-        const cy = NODE_H / 2;
+        const h = getNodeCanvasHeight(node);
+        const cy = h / 2;
         const r = 11;
         const iconSize = 14;
         const scale = iconSize / 24;
@@ -1114,6 +1299,11 @@ export class FlowsFlowCanvas extends PlatformElement {
     _renderNode(id, node, inDegree) {
         const x = asNumber(node.pos_x);
         const y = asNumber(node.pos_y);
+        const h = getNodeCanvasHeight(node);
+        const canvasTools = normalizedLlmToolsForCanvas(node);
+        const maxVis = CANVAS_NODE_TOOLS_MAX_VISIBLE;
+        const visibleTools = canvasTools.slice(0, maxVis);
+        const moreTools = canvasTools.length - visibleTools.length;
         const meta = getNodeTypeMeta(node.type);
         const state = this._state();
         const multi = asArray(state.multiSelection);
@@ -1128,6 +1318,42 @@ export class FlowsFlowCanvas extends PlatformElement {
         else if (asArray(state.completedNodeIds).includes(id)) runtimeState = 'completed';
         const isInherited = asArray(state.inheritedNodeIds).includes(id);
         const showFanIn = inDegree >= 2;
+        const hasToolStrip = canvasTools.length > 0;
+        const foBody = html`
+            <div xmlns="http://www.w3.org/1999/xhtml" class="node-card-content ${hasToolStrip ? 'has-tools' : ''}">
+                <div class="node-card-main">
+                    <div class="node-icon-wrap" data-cat=${meta.category}>
+                        <platform-icon name=${meta.icon} size="18"></platform-icon>
+                    </div>
+                    <div class="node-meta">
+                        <div class="node-name">${typeof node.name === 'string' && node.name.length > 0 ? node.name : id}</div>
+                        <div class="node-type">${asString(node.type)}</div>
+                    </div>
+                </div>
+                ${hasToolStrip ? html`
+                    <div class="node-tools-row">
+                        ${visibleTools.map((ref) => {
+                            const tm = getToolRefVisualMeta(ref);
+                            const tid = ref.tool_id;
+                            return html`
+                                <button
+                                    type="button"
+                                    class="node-tool-chip"
+                                    data-cat=${tm.category}
+                                    @pointerdown=${(e) => {
+                                        e.stopPropagation();
+                                        this._editor.selectNode({ nodeId: id, openToolId: tid });
+                                    }}
+                                >
+                                    <platform-icon name=${tm.icon} size="14"></platform-icon>
+                                </button>
+                            `;
+                        })}
+                        ${moreTools > 0 ? html`<span class="node-tools-more">+${moreTools}</span>` : ''}
+                    </div>
+                ` : ''}
+            </div>
+        `;
 
         return svg`
             <g
@@ -1141,32 +1367,22 @@ export class FlowsFlowCanvas extends PlatformElement {
                 @contextmenu=${(e) => this._onContextMenu(e, 'node', id)}
                 @dblclick=${() => this._editor.selectNode({ nodeId: id })}
             >
-                <rect class="node-card" x="0" y="0" width=${NODE_W} height=${NODE_H} rx=${NODE_RADIUS} ry=${NODE_RADIUS}></rect>
-                <foreignObject x="0" y="0" width=${NODE_W} height=${NODE_H}>
-                    <div xmlns="http://www.w3.org/1999/xhtml" class="node-card-content">
-                        <div class="node-icon-wrap" data-cat=${meta.category}>
-                            <platform-icon name=${meta.icon} size="18"></platform-icon>
-                        </div>
-                        <div class="node-meta">
-                            <div class="node-name">${typeof node.name === 'string' && node.name.length > 0 ? node.name : id}</div>
-                            <div class="node-type">${asString(node.type)}</div>
-                        </div>
-                    </div>
-                </foreignObject>
+                <rect class="node-card" x="0" y="0" width=${NODE_W} height=${h} rx=${NODE_RADIUS} ry=${NODE_RADIUS}></rect>
+                <foreignObject x="0" y="0" width=${NODE_W} height=${h}>${foBody}</foreignObject>
                 ${hasBp ? svg`<circle class="badge-bp-circle" cx=${NODE_W - 8} cy="8" r="5"></circle>` : ''}
-                ${isInherited ? svg`<text class="badge-inherited" x="6" y=${NODE_H - 6} font-size="10">↑</text>` : ''}
+                ${isInherited ? svg`<text class="badge-inherited" x="6" y=${h - 6} font-size="10">↑</text>` : ''}
                 ${showFanIn
                     ? this._renderFanInBadge(id, node)
                     : svg`
                         <circle
                             class="port in"
-                            cx="0" cy=${NODE_H / 2} r=${PORT_R}
+                            cx="0" cy=${h / 2} r=${PORT_R}
                             data-node-id=${id} data-port-side="in"
                         ></circle>
                     `}
                 <circle
                     class="port"
-                    cx=${NODE_W} cy=${NODE_H / 2} r=${PORT_R}
+                    cx=${NODE_W} cy=${h / 2} r=${PORT_R}
                     data-node-id=${id} data-port-side="out"
                     @pointerdown=${(e) => this._onPointerDownPort(e, id, 'out')}
                 ></circle>
@@ -1314,7 +1530,7 @@ export class FlowsFlowCanvas extends PlatformElement {
             const noteCx = asNumber(note.x) + w / 2;
             const noteCy = asNumber(note.y) + h / 2;
             const nodeCx = asNumber(node.pos_x) + NODE_W / 2;
-            const nodeCy = asNumber(node.pos_y) + NODE_H / 2;
+            const nodeCy = asNumber(node.pos_y) + getNodeCanvasHeight(node) / 2;
             const dx = Math.abs(nodeCx - noteCx) * 0.4;
             const d = `M ${noteCx} ${noteCy} C ${noteCx + (nodeCx > noteCx ? dx : -dx)} ${noteCy} ${nodeCx + (nodeCx > noteCx ? -dx : dx)} ${nodeCy} ${nodeCx} ${nodeCy}`;
             out.push(svg`<path class="sticky-attach-line" d=${d}></path>`);

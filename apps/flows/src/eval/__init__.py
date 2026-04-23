@@ -33,6 +33,11 @@ from apps.flows.src.eval.wrappers import (
     SafeContext,
     SafeLLMClient,
 )
+from apps.flows.src.eval.shim_registry import (
+    INLINE_SHIMS,
+    get_inline_shim,
+    strict_shim_import_roots,
+)
 from apps.flows.src.eval.namespace import PythonNamespaceBuilder
 from apps.flows.src.eval.compiler import PythonCompiler
 from apps.flows.src.eval.safe_eval import (
@@ -66,6 +71,9 @@ __all__ = [
     "SafeContext",
     "SafeChannel",
     "HttpxModule",
+    "INLINE_SHIMS",
+    "get_inline_shim",
+    "strict_shim_import_roots",
     "PythonNamespaceBuilder",
     "PythonCompiler",
     "SafeEval",

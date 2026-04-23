@@ -37,7 +37,7 @@ from apps.flows.src.channels.types import PreparedTaskParams
 from apps.flows.src.container import get_container
 from apps.flows.src.state.cancellation import CANCEL_KEY_TTL
 from core.context import set_current_channel
-from apps.flows.config import settings
+from apps.flows.config import FLOWS_PUBLIC_API_PREFIX, settings
 from apps.flows.src.evaluation.service import EvaluationService
 from apps.flows.src.files import extract_incoming_a2a_files, format_a2a_files_content
 from core.logging import get_logger
@@ -295,7 +295,7 @@ class A2AChannel(BaseChannel):
 
         company_id = self.context.active_company.company_id
         user_id = self.context.user.user_id if self.context.user else None
-        prefix = f"/{settings.server.name}/api/v1/files/download"
+        prefix = f"{FLOWS_PUBLIC_API_PREFIX}/files/download"
         container = get_container()
         files_data: List[Dict[str, Any]] = []
 

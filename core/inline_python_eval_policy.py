@@ -48,9 +48,31 @@ ALLOWED_IMPORT_ROOTS: FrozenSet[str] = frozenset({
     "markdown",
     "types",
     "logging",
+    "urllib",
 })
 
 FUTURE_IMPORT_NAMES: FrozenSet[str] = frozenset({"annotations"})
+
+# Доступ к этим именам атрибутов в исходнике (ast.Attribute) запрещён — обход интроспекцией.
+# Обычные методы вроде __init__ / __enter__ не входят в список.
+FORBIDDEN_INLINE_DUNDER_ATTRIBUTES: FrozenSet[str] = frozenset({
+    "__class__",
+    "__bases__",
+    "__mro__",
+    "__subclasses__",
+    "__globals__",
+    "__builtin__",
+    "__builtins__",
+    "__code__",
+    "__closure__",
+    "__func__",
+    "__self__",
+    "__dict__",
+    "__weakref__",
+    "__import__",
+    "__loader__",
+    "__spec__",
+})
 
 ALLOWED_BUILTINS: FrozenSet[str] = frozenset({
     "abs",

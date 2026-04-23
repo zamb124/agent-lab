@@ -30,12 +30,12 @@ const OPERATOR_ROLES = new Set(['admin', 'owner']);
 function userCanManageOperator(user, activeCompanyId) {
     if (!user || typeof user !== 'object' || typeof activeCompanyId !== 'string') return false;
     const direct = isPlainObject(user.companies) ? user.companies : null;
-    const raw = isPlainObject(user.raw) && isPlainObject(user.raw.companies) ? user.raw.companies : null;
-    const companies = direct !== null ? direct : raw;
+    const rawCompanies = isPlainObject(user.raw) && isPlainObject(user.raw.companies) ? user.raw.companies : null;
+    const companies = direct !== null ? direct : rawCompanies;
     if (!companies) return false;
-    const raw = companies[activeCompanyId];
-    if (!raw) return false;
-    const list = Array.isArray(raw) ? raw : [raw];
+    const entry = companies[activeCompanyId];
+    if (!entry) return false;
+    const list = Array.isArray(entry) ? entry : [entry];
     for (const r of list) {
         if (typeof r !== 'string') continue;
         if (OPERATOR_ROLES.has(r.trim().toLowerCase())) return true;

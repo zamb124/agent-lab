@@ -42,29 +42,43 @@ export class FlowsIncomingPolicyModal extends PlatformModal {
     };
 
     static styles = [
-        ...(PlatformModal.styles ? [PlatformModal.styles] : []),
+        ...PlatformModal.styles,
         css`
             .subtitle {
-                margin: 0 0 var(--space-5);
-                font-family: var(--font-mono);
+                margin: 0 0 var(--space-4);
                 font-size: var(--text-sm);
+                color: var(--text-secondary);
+                line-height: 1.4;
+            }
+            .subtitle-id {
+                font-family: var(--font-mono);
+                font-size: var(--text-xs);
                 color: var(--text-tertiary);
+                display: block;
+                margin-top: var(--space-1);
             }
             .cards {
                 display: grid;
-                grid-template-columns: 1fr 1fr;
-                gap: var(--space-4);
+                grid-template-columns: repeat(2, minmax(0, 1fr));
+                gap: var(--space-3);
+                align-items: stretch;
+                min-width: 0;
             }
             @media (max-width: 520px) {
-                .cards { grid-template-columns: 1fr; }
+                .cards {
+                    grid-template-columns: 1fr;
+                }
             }
             .card {
                 display: flex;
                 flex-direction: column;
                 align-items: center;
-                gap: var(--space-3);
-                padding: var(--space-5);
+                gap: var(--space-2);
+                padding: var(--space-4);
                 margin: 0;
+                min-width: 0;
+                max-width: 100%;
+                box-sizing: border-box;
                 border: 2px solid var(--border-subtle);
                 border-radius: var(--radius-lg);
                 background: var(--glass-tint-subtle);
@@ -95,22 +109,35 @@ export class FlowsIncomingPolicyModal extends PlatformModal {
             .card-title {
                 font-size: var(--text-md);
                 font-weight: var(--font-semibold);
+                min-width: 0;
+                width: 100%;
+                word-break: break-word;
             }
             .card-desc {
                 font-size: var(--text-xs);
                 color: var(--text-tertiary);
                 line-height: 1.45;
+                min-width: 0;
+                width: 100%;
+                word-break: break-word;
             }
         `,
     ];
 
     constructor() {
         super();
-        this.size = 'md';
+        this.size = 'lg';
         this.nodeId = '';
         this._policy = 'any';
         this._hydrated = false;
         this._editor = this.useOp('flows/editor');
+    }
+
+    willUpdate(changed) {
+        super.willUpdate(changed);
+        if (changed.has('nodeId') || (changed.has('open') && this.open)) {
+            this._hydrated = false;
+        }
     }
 
     updated(changed) {
@@ -124,13 +151,29 @@ export class FlowsIncomingPolicyModal extends PlatformModal {
         }
     }
 
+    _displayNodeName() {
+        const n = this._editor.state?.skillsData?.nodes?.[this.nodeId];
+        if (n && typeof n.name === 'string' && n.name.length > 0) {
+            return n.name;
+        }
+        return this.nodeId;
+    }
+
     renderHeader() {
         return html`${this.t('incoming_policy_modal.title')}`;
     }
 
     renderBody() {
+        const showId = this._displayNodeName() !== this.nodeId;
         return html`
-            <p class="subtitle">${this.nodeId}</p>
+            <div>
+                <p class="subtitle">
+                    ${this.t('incoming_policy_modal.subtitle', { name: this._displayNodeName() })}
+                    ${showId
+                        ? html`<span class="subtitle-id">${this.nodeId}</span>`
+                        : null}
+                </p>
+            </div>
             <div class="cards">
                 <button
                     type="button"

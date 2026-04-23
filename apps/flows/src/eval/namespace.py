@@ -13,6 +13,7 @@ import operator
 from typing import Any, Callable, Dict, List, Literal, Optional, Tuple, Union
 from urllib.parse import quote
 
+from core.clients.rag_client import RagClient
 from core.clients.service_client import ServiceClient, ServiceClientError
 from core.context import get_context
 
@@ -37,6 +38,7 @@ from apps.flows.src.eval.platform_services import (
     get_schedule_service,
 )
 from core.clients.google_docs_client import GoogleDocsClient
+from apps.flows.src.eval.shim_registry import apply_inline_shims
 from apps.flows.src.eval.state_utils import (
     add_agent_message,
     add_user_message,
@@ -56,10 +58,8 @@ from apps.flows.src.eval.state_utils import (
     set_nested,
 )
 from apps.flows.src.eval.wrappers import (
-    HttpxModule,
     SafeChannel,
     SafeContext,
-    SafeLLMClient,
 )
 from apps.flows.src.runtime.exceptions import FlowInterrupt
 from core.state.interrupt import (
@@ -170,7 +170,7 @@ class PythonNamespaceBuilder:
         namespace["mimetypes"] = importlib.import_module("mimetypes")
         namespace["base64"] = importlib.import_module("base64")
 
-        namespace["llm"] = SafeLLMClient()
+        apply_inline_shims(self, namespace)
 
         namespace["deep_copy_state"] = deep_copy_state
         namespace["merge_state"] = merge_state
@@ -213,10 +213,9 @@ class PythonNamespaceBuilder:
         namespace["Role"] = Role
         namespace["Artifact"] = Artifact
 
-        namespace["httpx"] = HttpxModule()
-
         namespace["ServiceClient"] = ServiceClient
         namespace["ServiceClientError"] = ServiceClientError
+        namespace["RagClient"] = RagClient
         namespace["get_context"] = get_context
         namespace["get_operator_handoff_service"] = get_operator_handoff_service
         namespace["get_schedule_service"] = get_schedule_service

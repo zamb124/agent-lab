@@ -11,6 +11,10 @@
     "react_main": {
       "type": "llm_node",
       "prompt": "Отвечай на вопросы. Отправь ответ через send_telegram.",
+      "llm": {
+        "model": "qwen/qwen3.5-397b-a17b",
+        "temperature": 0.2
+      },
       "tools": [
         {
           "tool_id": "send_telegram",

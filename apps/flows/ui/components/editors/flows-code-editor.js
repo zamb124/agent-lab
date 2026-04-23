@@ -10,6 +10,8 @@
  *   - language: 'python' | 'json' | 'text'
  *   - readonly: boolean
  *   - placeholder: string (опц.)
+ *   - showToolbar: boolean (шапка: полноэкран, подсказка про сохранение)
+ *   - slot `toolbar-start` — светлый DOM слева в шапке (вкладки «Код»/«Схема» и т.п.).
  *   - completionContext: object (опц.) — передаётся в payload `flows/code_completions`.
  *
  * События (emit, slot-композиция):
@@ -19,6 +21,7 @@
 
 import { html, css } from 'lit';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
+import '@platform/lib/components/glass-button.js';
 import { asObject, asString, isPlainObject } from '../../_helpers/flows-resolvers.js';
 
 const CODEMIRROR_URL = '/static/core/assets/codemirror/codemirror-bundle.js';
@@ -32,11 +35,15 @@ function loadCodeMirror() {
 }
 
 export class FlowsCodeEditor extends PlatformElement {
+    static i18nNamespace = 'flows';
+
     static properties = {
         value: { type: String },
         language: { type: String },
         readonly: { type: Boolean },
         placeholder: { type: String },
+        showToolbar: { type: Boolean, attribute: 'show-toolbar' },
+        fullscreen: { type: Boolean, reflect: true, attribute: 'fullscreen' },
         completionContext: { type: Object, attribute: false },
     };
 
@@ -53,16 +60,96 @@ export class FlowsCodeEditor extends PlatformElement {
                 background: var(--glass-solid-subtle);
                 font-family: var(--font-mono, monospace);
             }
-            #cm-host { height: 100%; min-height: 120px; }
+            :host([fullscreen]) {
+                position: fixed;
+                z-index: 10000;
+                top: 0;
+                right: 0;
+                bottom: 0;
+                left: 0;
+                min-height: 100vh;
+                margin: 0;
+                box-sizing: border-box;
+                padding: var(--space-3);
+                background: var(--bg-primary, var(--glass-solid-elevated));
+            }
+            :host([fullscreen]) .editor-root {
+                height: 100%;
+                display: flex;
+                flex-direction: column;
+                min-height: 0;
+            }
+            :host([fullscreen]) #cm-wrap {
+                flex: 1;
+                min-height: 0;
+            }
+            :host([fullscreen]) #cm-host,
+            :host([fullscreen]) .cm-editor,
+            :host([fullscreen]) .cm-scroller {
+                min-height: 0;
+                height: 100%;
+            }
+            .editor-header {
+                display: flex;
+                flex-wrap: wrap;
+                align-items: center;
+                justify-content: space-between;
+                gap: var(--space-2);
+                padding: var(--space-2) var(--space-3);
+                background: var(--glass-tint-medium);
+                border-bottom: 1px solid var(--border-subtle);
+            }
+            .editor-header-leading {
+                flex: 1 1 auto;
+                min-width: 0;
+                display: flex;
+                align-items: center;
+            }
+            .editor-header-trailing {
+                display: flex;
+                flex-wrap: wrap;
+                align-items: center;
+                gap: var(--space-2);
+                flex: 0 0 auto;
+            }
+            .header-actions {
+                display: flex;
+                flex-wrap: wrap;
+                align-items: center;
+                gap: var(--space-2);
+            }
+            .hint {
+                font-size: var(--text-xs);
+                color: var(--text-tertiary);
+            }
+            .editor-root {
+                display: flex;
+                flex-direction: column;
+                min-height: 120px;
+            }
+            #cm-wrap {
+                flex: 1 1 auto;
+                min-height: 120px;
+            }
+            #cm-host {
+                height: 100%;
+                min-height: 120px;
+            }
             .cm-editor {
                 height: 100%;
                 min-height: 120px;
                 font-size: var(--text-sm);
                 background: transparent;
             }
-            .cm-editor.cm-focused { outline: none; }
-            .cm-content { padding: var(--space-2) var(--space-3); }
-            .cm-scroller { overflow: auto; }
+            .cm-editor.cm-focused {
+                outline: none;
+            }
+            .cm-content {
+                padding: var(--space-2) var(--space-3);
+            }
+            .cm-scroller {
+                overflow: auto;
+            }
         `,
     ];
 
@@ -72,6 +159,8 @@ export class FlowsCodeEditor extends PlatformElement {
         this.language = 'text';
         this.readonly = false;
         this.placeholder = '';
+        this.showToolbar = true;
+        this.fullscreen = false;
         this.completionContext = null;
         this._editorView = null;
         this._cm = null;
@@ -79,25 +168,51 @@ export class FlowsCodeEditor extends PlatformElement {
         this._languageCompartment = null;
         this._themeCompartment = null;
         this._completionsOp = this.useOp('flows/code_completions');
-        this._themeSel = this.select((s) => isPlainObject(s.theme) && s.theme.mode === 'light' ? 'light' : 'dark');
+        this._themeSel = this.select((s) => (isPlainObject(s.theme) && s.theme.mode === 'light' ? 'light' : 'dark'));
+        this._lastTheme = undefined;
+        this._initInFlight = null;
+        this._onWindowKeydown = (e) => {
+            if (e.key === 'Escape' && this.fullscreen) {
+                this.fullscreen = false;
+            }
+        };
     }
 
     connectedCallback() {
         super.connectedCallback();
-        void this._init();
+        window.addEventListener('keydown', this._onWindowKeydown, true);
+        this.updateComplete.then(() => {
+            if (!this.isConnected) {
+                return;
+            }
+            void this._ensureEditorMounted();
+        });
     }
 
     disconnectedCallback() {
+        window.removeEventListener('keydown', this._onWindowKeydown, true);
         if (this._editorView) {
             this._editorView.destroy();
             this._editorView = null;
         }
+        this._initInFlight = null;
         super.disconnectedCallback();
     }
 
     updated(changed) {
         super.updated?.(changed);
-        if (!this._editorView || !this._cm) return;
+        if (this._editorView && this._cm && this._themeCompartment) {
+            const next = this._themeSel.value;
+            if (this._lastTheme !== next) {
+                this._lastTheme = next;
+                this._editorView.dispatch({
+                    effects: this._themeCompartment.reconfigure(this._buildThemeExtension()),
+                });
+            }
+        }
+        if (!this._editorView || !this._cm) {
+            return;
+        }
         if (changed.has('value')) {
             const current = this._editorView.state.doc.toString();
             if (current !== this.value) {
@@ -118,14 +233,42 @@ export class FlowsCodeEditor extends PlatformElement {
         }
     }
 
-    async _init() {
+    _toggleFullscreen() {
+        this.fullscreen = !this.fullscreen;
+    }
+
+    async _ensureEditorMounted() {
+        if (this._editorView) {
+            return;
+        }
+        if (this._initInFlight) {
+            return this._initInFlight;
+        }
+        const host = this.renderRoot.querySelector('#cm-host');
+        if (!host) {
+            queueMicrotask(() => {
+                if (this.isConnected && !this._editorView) {
+                    void this._ensureEditorMounted();
+                }
+            });
+            return;
+        }
+        this._initInFlight = this._init(host).finally(() => {
+            this._initInFlight = null;
+        });
+        return this._initInFlight;
+    }
+
+    async _init(host) {
         const cm = await loadCodeMirror();
+        if (!this.isConnected || this._editorView) {
+            return;
+        }
         this._cm = cm;
         this._readonlyCompartment = new cm.Compartment();
         this._languageCompartment = new cm.Compartment();
         this._themeCompartment = new cm.Compartment();
-        const host = this.shadowRoot.querySelector('#cm-host');
-        if (!host) return;
+        this._lastTheme = this._themeSel.value;
         const extensions = [
             cm.history(),
             cm.lineNumbers(),
@@ -165,35 +308,47 @@ export class FlowsCodeEditor extends PlatformElement {
             }),
             parent: host,
         });
-        this._unsubscribeTheme = () => {};
-        this._themeWatcher = () => {
-            if (!this._editorView || !this._cm || !this._themeCompartment) return;
+        const docText = asString(this.value);
+        if (this._editorView.state.doc.toString() !== docText) {
             this._editorView.dispatch({
-                effects: this._themeCompartment.reconfigure(this._buildThemeExtension()),
+                changes: { from: 0, to: this._editorView.state.doc.length, insert: docText },
             });
-        };
-        this._themeSel.subscribe?.(this._themeWatcher);
+        }
     }
 
     _buildLanguageExtension() {
-        if (!this._cm) return [];
+        if (!this._cm) {
+            return [];
+        }
         const lang = typeof this.language === 'string' && this.language.length > 0 ? this.language : 'text';
-        if (lang === 'python' && this._cm.python) return this._cm.python();
-        if (lang === 'json' && this._cm.json) return this._cm.json();
+        if (lang === 'python' && this._cm.python) {
+            return this._cm.python();
+        }
+        if (lang === 'json' && this._cm.json) {
+            return this._cm.json();
+        }
         return [];
     }
 
     _buildThemeExtension() {
-        if (!this._cm) return [];
+        if (!this._cm) {
+            return [];
+        }
         const isDark = this._themeSel.value !== 'light';
-        if (isDark) return this._cm.oneDark ? this._cm.oneDark : [];
+        if (isDark) {
+            return this._cm.oneDark ? this._cm.oneDark : [];
+        }
         return this._cm.syntaxHighlighting(this._cm.defaultHighlightStyle, { fallback: true });
     }
 
     async _completionSource(ctx) {
-        if (this.language !== 'python') return null;
+        if (this.language !== 'python') {
+            return null;
+        }
         const word = ctx.matchBefore(/\w*/);
-        if (!word || (word.from === word.to && !ctx.explicit)) return null;
+        if (!word || (word.from === word.to && !ctx.explicit)) {
+            return null;
+        }
         const code = ctx.state.doc.toString();
         const cursor = ctx.pos;
         const result = await this._completionsOp.run({
@@ -202,15 +357,18 @@ export class FlowsCodeEditor extends PlatformElement {
             ...asObject(this.completionContext),
         });
         const items = Array.isArray(result?.items) ? result.items : Array.isArray(result) ? result : [];
-        if (items.length === 0) return null;
+        if (items.length === 0) {
+            return null;
+        }
         return {
             from: word.from,
             options: items.map((it) => ({
-                label: typeof it === 'string'
-                    ? it
-                    : (typeof it.label === 'string' && it.label.length > 0
-                        ? it.label
-                        : asString(it.text)),
+                label:
+                    typeof it === 'string'
+                        ? it
+                        : typeof it.label === 'string' && it.label.length > 0
+                          ? it.label
+                          : asString(it.text),
                 type: typeof it === 'object' && it.type ? it.type : 'variable',
                 detail: typeof it === 'object' ? asString(it.detail) : '',
                 info: typeof it === 'object' ? asString(it.info) : '',
@@ -218,8 +376,49 @@ export class FlowsCodeEditor extends PlatformElement {
         };
     }
 
+    _onSaveFromToolbar() {
+        if (this._editorView) {
+            this.emit('save', { value: this._editorView.state.doc.toString() });
+        } else {
+            this.emit('save', { value: asString(this.value) });
+        }
+    }
+
     render() {
-        return html`<div id="cm-host"></div>`;
+        const fsLabel = this.fullscreen
+            ? this.t('code_editor.exit_fullscreen')
+            : this.t('code_editor.fullscreen');
+        return html`
+            <div class="editor-root">
+                ${this.showToolbar
+                    ? html`
+                        <div class="editor-header">
+                            <div class="editor-header-leading">
+                                <slot name="toolbar-start"></slot>
+                            </div>
+                            <div class="editor-header-trailing">
+                                <div class="hint">${this.t('code_editor.save')}</div>
+                                <div class="header-actions">
+                                    <glass-button
+                                        size="sm"
+                                        variant="ghost"
+                                        @click=${this._onSaveFromToolbar}
+                                    >
+                                        ${this.t('editor_header.save')}
+                                    </glass-button>
+                                    <glass-button size="sm" variant="secondary" @click=${this._toggleFullscreen}>
+                                        ${fsLabel}
+                                    </glass-button>
+                                </div>
+                            </div>
+                        </div>
+                    `
+                    : ''}
+                <div id="cm-wrap">
+                    <div id="cm-host"></div>
+                </div>
+            </div>
+        `;
     }
 }
 

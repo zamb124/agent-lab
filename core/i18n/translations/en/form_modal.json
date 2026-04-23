@@ -1,4 +1,7 @@
 {
     "unsaved_close": "You have unsaved changes. Close without saving?",
+    "unsaved_confirm_title": "Unsaved changes",
+    "unsaved_confirm_discard": "Close without saving",
+    "unsaved_confirm_keep": "Keep editing",
     "cancel": "Cancel"
 }

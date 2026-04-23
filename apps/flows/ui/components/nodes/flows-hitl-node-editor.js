@@ -27,6 +27,7 @@ export class FlowsHitlNodeEditor extends PlatformElement {
         graphNodes: { type: Array },
         previewExecutionState: { type: Object },
         expanded: { type: Boolean, reflect: true },
+        embedded: { type: Boolean, reflect: true },
         _queueSearch: { state: true },
     };
 
@@ -76,6 +77,7 @@ export class FlowsHitlNodeEditor extends PlatformElement {
         this.graphNodes = null;
         this.previewExecutionState = null;
         this.expanded = false;
+        this.embedded = false;
         this._queueSearch = '';
         this._queues = this.useResource('flows/operator_queues', { autoload: true });
     }
@@ -127,6 +129,7 @@ export class FlowsHitlNodeEditor extends PlatformElement {
                 .graphNodes=${this.graphNodes}
                 .previewExecutionState=${this.previewExecutionState}
                 ?expanded=${this.expanded}
+                ?embedded=${this.embedded}
             >
                 <div slot="settings">
                     <div class="field">

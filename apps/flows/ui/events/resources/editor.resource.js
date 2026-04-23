@@ -195,6 +195,18 @@ function _stableStringify(value) {
     return `{${keys.map((k) => `${JSON.stringify(k)}:${_stableStringify(value[k])}`).join(',')}}`;
 }
 
+const _INHERIT_NODE_COMPARE_OMIT = new Set(['pos_x', 'pos_y']);
+
+function _nodeSnapshotForInheritCompare(node) {
+    if (!_isPlainObject(node)) return node;
+    const out = {};
+    for (const [k, v] of Object.entries(node)) {
+        if (_INHERIT_NODE_COMPARE_OMIT.has(k)) continue;
+        out[k] = v;
+    }
+    return out;
+}
+
 export const editorResource = createAsyncOp({
     name: 'flows/editor',
     silent: true,
@@ -243,6 +255,7 @@ export const editorResource = createAsyncOp({
         smartGuidesEnabled: true,
         contextMenu: null,
         stickyNotes: [],
+        pendingNodeToolId: null,
     },
     extraEvents: {
         FLOW_LOADED: 'flow_loaded',
@@ -278,6 +291,7 @@ export const editorResource = createAsyncOp({
         BREAKPOINT_TOGGLED: 'breakpoint_toggled',
         NODE_ID_CHANGED: 'node_id_changed',
         NODE_DELETED: 'node_deleted',
+        PENDING_NODE_TOOL_CLEARED: 'pending_node_tool_cleared',
     },
     actions: {
         setFlow: 'flow_loaded',
@@ -313,6 +327,7 @@ export const editorResource = createAsyncOp({
         toggleBreakpoint: 'breakpoint_toggled',
         renameNodeId: 'node_id_changed',
         removeNode: 'node_deleted',
+        clearPendingNodeTool: 'pending_node_tool_cleared',
     },
     extraReducer: (state, event) => {
         const t = event.type;
@@ -347,6 +362,7 @@ export const editorResource = createAsyncOp({
                 entryNodeId: effective.entryNodeId,
                 multiSelection: [],
                 stickyNotes,
+                pendingNodeToolId: null,
             };
         }
 
@@ -362,7 +378,9 @@ export const editorResource = createAsyncOp({
             const nextNodes = _isPlainObject(data.nodes) ? data.nodes : {};
             const inheritedNodeIds = (Array.isArray(state.inheritedNodeIds) ? state.inheritedNodeIds : []).filter((id) => {
                 if (!(id in nextNodes)) return false;
-                return _stableStringify(prevNodes[id]) === _stableStringify(nextNodes[id]);
+                const a = _nodeSnapshotForInheritCompare(prevNodes[id]);
+                const b = _nodeSnapshotForInheritCompare(nextNodes[id]);
+                return _stableStringify(a) === _stableStringify(b);
             });
             const prevEdges = Array.isArray(prev.edges) ? prev.edges : [];
             const nextEdges = Array.isArray(data.edges) ? data.edges : [];
@@ -386,12 +404,14 @@ export const editorResource = createAsyncOp({
 
         if (t === 'flows/editor/node_selected') {
             const nodeId = typeof p.nodeId === 'string' && p.nodeId.length > 0 ? p.nodeId : null;
+            const openToolId = typeof p.openToolId === 'string' && p.openToolId.length > 0 ? p.openToolId : null;
             return {
                 ...state,
                 selectedNodeId: nodeId,
                 selectedResourceId: null,
                 panelOpen: nodeId !== null,
                 multiSelection: nodeId ? [nodeId] : [],
+                pendingNodeToolId: nodeId ? openToolId : null,
             };
         }
 
@@ -403,11 +423,23 @@ export const editorResource = createAsyncOp({
                 selectedNodeId: null,
                 panelOpen: rid !== null,
                 multiSelection: [],
+                pendingNodeToolId: null,
             };
         }
 
         if (t === 'flows/editor/panel_closed') {
-            return { ...state, panelOpen: false, selectedNodeId: null, selectedResourceId: null, multiSelection: [] };
+            return {
+                ...state,
+                panelOpen: false,
+                selectedNodeId: null,
+                selectedResourceId: null,
+                multiSelection: [],
+                pendingNodeToolId: null,
+            };
+        }
+
+        if (t === 'flows/editor/pending_node_tool_cleared') {
+            return { ...state, pendingNodeToolId: null };
         }
 
         if (t === 'flows/editor/panel_expanded') {

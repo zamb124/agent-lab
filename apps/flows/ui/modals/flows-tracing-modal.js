@@ -11,6 +11,7 @@ import { registerModalKind } from '@platform/lib/utils/modal-registry.js';
 import '@platform/lib/components/platform-button.js';
 import '@platform/lib/components/platform-icon.js';
 import '@platform/lib/components/glass-spinner.js';
+import '@platform/lib/components/platform-trace-viewer.js';
 
 export class FlowsTracingModal extends PlatformModal {
     static modalKind = 'flows.tracing';
@@ -27,10 +28,6 @@ export class FlowsTracingModal extends PlatformModal {
         ...PlatformModal.styles,
         css`
             .tracing-empty { padding: var(--space-4); text-align: center; color: var(--text-tertiary); }
-            .span-row { padding: var(--space-1) 0; border-bottom: 1px solid var(--border-subtle); }
-            .span-name { font-weight: var(--font-medium); cursor: pointer; }
-            .span-name:hover { color: var(--accent); }
-            .span-meta { font-size: var(--text-xs); color: var(--text-tertiary); }
         `,
     ];
 
@@ -62,20 +59,13 @@ export class FlowsTracingModal extends PlatformModal {
         return this._bySession.lastResult || this._byTask.lastResult || this._byTrace.lastResult;
     }
 
-    _renderSpan(span, depth = 0) {
-        const children = Array.isArray(span.children) ? span.children : [];
-        return html`
-            <div class="span-row" style="margin-left:${depth * 16}px">
-                <div class="span-name" @click=${() => this.openModal('flows.span_details', { span })}>
-                    ${span.name || span.span_id}
-                </div>
-                <div class="span-meta">
-                    ${span.duration_ms != null ? `${span.duration_ms} ms` : ''}
-                    ${span.status_code ? ` · ${span.status_code}` : ''}
-                </div>
-            </div>
-            ${children.map((c) => this._renderSpan(c, depth + 1))}
-        `;
+    /** @param {CustomEvent<{ span?: unknown }>} e */
+    _onTraceSpanSelect(e) {
+        const d = e.detail;
+        if (d == null || typeof d !== 'object' || !('span' in d)) {
+            throw new Error('flows-tracing-modal: trace-span-select requires detail.span');
+        }
+        this.openModal('flows.span_details', { span: d.span });
     }
 
     renderHeader() {
@@ -92,7 +82,12 @@ export class FlowsTracingModal extends PlatformModal {
         if (spans.length === 0) {
             return html`<div class="tracing-empty">${this.t('tracing_modal.empty')}</div>`;
         }
-        return html`<div>${spans.map((s) => this._renderSpan(s))}</div>`;
+        return html`
+            <platform-trace-viewer
+                .roots=${spans}
+                @trace-span-select=${this._onTraceSpanSelect}
+            ></platform-trace-viewer>
+        `;
     }
 }
 

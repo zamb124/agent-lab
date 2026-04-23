@@ -238,6 +238,7 @@ export class FlowsApp extends PlatformApp {
                 skill-id="flows"
                 .flowsBaseUrl=${'/flows'}
                 ?use-credentials=${true}
+                ?show-launcher=${false}
                 .assistantTitle=${'Lara'}
                 .getExtraMetadataVariables=${this._laraEmbedContextVariables}
                 .getContextVariables=${this._laraEmbedContextVariables}

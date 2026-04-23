@@ -7,8 +7,8 @@ Zero-Guess: все tools принимают ExecutionState.
 from __future__ import annotations
 
 import inspect
-import os
-from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional, Type, get_type_hints
+import re
+from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional, Type, TypeVar, get_type_hints
 
 from pydantic import BaseModel
 
@@ -22,6 +22,9 @@ if TYPE_CHECKING:
     from core.state import ExecutionState
 
 logger = get_logger(__name__)
+
+F = TypeVar("F", bound=Callable[..., Any])
+
 
 def is_test_mode() -> bool:
     """Проверяет запущены ли тесты."""
@@ -194,7 +197,8 @@ def tool(
     free_for_plans: Optional[List[str]] = None,
     tariff_limits: Optional[Dict[str, int]] = None,
     args_schema: Optional[Type[BaseModel]] = None,
-) -> Callable[[Callable], FunctionTool]:
+    listed_in_platform_tool_docs: bool = True,
+) -> Callable[[F], FunctionTool]:
     """
     Декоратор для создания tool из функции.
     
@@ -211,6 +215,7 @@ def tool(
         tariff_limits: Лимиты использования по тарифам
         args_schema: Pydantic-модель аргументов — JSON Schema для LLM (`Field(description=...)`)
             и `model_validate` перед вызовом функции; без схемы — разбор сигнатуры как раньше.
+        listed_in_platform_tool_docs: участие в разделе platform tools у `/code/completions` и markdown-документации.
 
     Использование:
         @tool(
@@ -226,8 +231,16 @@ def tool(
             result = eval(expression, {'__builtins__': {}}, {'sin': math.sin})
             return f"Результат: {result}"
     """
-    def decorator(func: Callable) -> FunctionTool:
-        return FunctionTool(
+    def decorator(func: F) -> FunctionTool:
+        tool_cls: type[FunctionTool] = FunctionTool
+        if not listed_in_platform_tool_docs:
+            safe = re.sub(r"[^0-9a-zA-Z_]", "_", name).strip("_") or "tool"
+            tool_cls = type(
+                f"_FunctionTool_{safe}",
+                (FunctionTool,),
+                {"listed_in_platform_tool_docs": False},
+            )
+        return tool_cls(
             func=func,
             name=name,
             description=description,

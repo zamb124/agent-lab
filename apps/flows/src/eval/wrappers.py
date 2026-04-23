@@ -14,6 +14,7 @@ from core.clients.llm.factory import get_llm, MessageInput
 from core.errors import SafeEvalError
 from core.context import get_current_channel
 from core.http import get_httpx_client
+from core.http.client import ProxyStrategy
 from core.logging import get_logger
 
 logger = get_logger(__name__)
@@ -266,6 +267,32 @@ class SafeChannel:
         await channel.send_to_user(content, buttons=buttons)
 
 
+class _SandboxAsyncClientContext:
+    """
+    `async with httpx.AsyncClient(...) as client` в sandbox: тот же SmartProxyClient,
+    что открывается внутри httpx.get / post (стратегия SMART).
+    """
+
+    __slots__ = ("_timeout", "_cm")
+
+    def __init__(self, *, timeout: float) -> None:
+        self._timeout = timeout
+        self._cm: Any = None
+
+    async def __aenter__(self) -> Any:
+        self._cm = get_httpx_client(timeout=self._timeout, strategy=ProxyStrategy.SMART)
+        return await self._cm.__aenter__()
+
+    async def __aexit__(
+        self,
+        exc_type: Optional[type[BaseException]],
+        exc: Optional[BaseException],
+        tb: Any,
+    ) -> None:
+        if self._cm is not None:
+            await self._cm.__aexit__(exc_type, exc, tb)
+
+
 class HttpxModule:
     """
     Модуль-обертка httpx с функциями верхнего уровня.
@@ -273,6 +300,29 @@ class HttpxModule:
     """
 
     _default_timeout = 30.0
+
+    RequestError = httpx.RequestError
+    HTTPStatusError = httpx.HTTPStatusError
+    TimeoutException = httpx.TimeoutException
+    ConnectError = httpx.ConnectError
+    ConnectTimeout = httpx.ConnectTimeout
+
+    class AsyncClient:
+        """В sandbox только `timeout=...`; остальные аргументы конструктора запрещены."""
+
+        def __new__(cls, **kwargs: Any) -> _SandboxAsyncClientContext:
+            timeout_raw = kwargs.pop("timeout", None)
+            if kwargs:
+                unknown = ", ".join(sorted(kwargs.keys()))
+                raise SafeEvalError(
+                    f"В sandbox httpx.AsyncClient доступен только timeout=...; лишние аргументы: {unknown}",
+                )
+            timeout = (
+                float(timeout_raw)
+                if timeout_raw is not None
+                else float(HttpxModule._default_timeout)
+            )
+            return _SandboxAsyncClientContext(timeout=timeout)
 
     @staticmethod
     async def get(

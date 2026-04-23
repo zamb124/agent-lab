@@ -2,9 +2,11 @@
 Тесты reasoning событий в LLM streaming.
 """
 
+import json
 import uuid
 
 import pytest
+from pydantic import BaseModel, ConfigDict, Field
 from a2a.types import (
     Artifact,
     Message,
@@ -242,3 +244,30 @@ class TestMockLLMReasoning:
                     reasoning_text += part.root.text
 
         assert reasoning_text == "Reasoning text"
+
+    @pytest.mark.asyncio
+    async def test_mock_llm_chat_structured_output_ignores_reasoning_artifacts(self):
+        """chat(response_model=...) парсит только основной контент, без префикса reasoning."""
+
+        class _Gen(BaseModel):
+            model_config = ConfigDict(extra="forbid")
+
+            code: str = Field(..., min_length=1)
+
+        mock = MockLLM()
+        body = {"code": 'async def run(state):\n    return {"ok": true}'}
+        mock.configure(
+            response_queue=[
+                {
+                    "type": "text",
+                    "content": json.dumps(body, ensure_ascii=False),
+                    "reasoning": "Пользователь просит сгенерировать код...",
+                }
+            ]
+        )
+
+        out = await mock.chat(
+            [{"role": "user", "content": "сделай run"}],
+            response_model=_Gen,
+        )
+        assert out.code == body["code"]

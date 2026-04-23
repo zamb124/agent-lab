@@ -140,10 +140,15 @@ export class PlatformConfirmModal extends PlatformModal {
      */
     async confirm(options = {}) {
         Object.assign(this, options);
-        this.showModal();
+        this.open = true;
         return new Promise((resolve) => {
             this._resolvePromise = resolve;
         });
+    }
+
+    /** Модалка без стека (`getOrCreatePlatformConfirmModal`): только `open`, без `UI_MODAL_CLOSE`. */
+    _closeDetached() {
+        this.open = false;
     }
 
     _settle(value) {
@@ -166,7 +171,11 @@ export class PlatformConfirmModal extends PlatformModal {
                 this._settle(false);
             }
         }
-        super.close();
+        if (this._modalId) {
+            super.close();
+        } else {
+            this._closeDetached();
+        }
     }
 
     waitForConfirm() {
@@ -177,7 +186,11 @@ export class PlatformConfirmModal extends PlatformModal {
 
     _onConfirm() {
         if (!this._resolvePromise) {
-            super.close();
+            if (this._modalId) {
+                super.close();
+            } else {
+                this._closeDetached();
+            }
             return;
         }
         this.emit('confirm');
@@ -188,12 +201,20 @@ export class PlatformConfirmModal extends PlatformModal {
         } else {
             this._settle(true);
         }
-        super.close();
+        if (this._modalId) {
+            super.close();
+        } else {
+            this._closeDetached();
+        }
     }
 
     _onCancel() {
         if (!this._resolvePromise) {
-            super.close();
+            if (this._modalId) {
+                super.close();
+            } else {
+                this._closeDetached();
+            }
             return;
         }
         this.emit('cancel');
@@ -202,17 +223,29 @@ export class PlatformConfirmModal extends PlatformModal {
         } else {
             this._settle(false);
         }
-        super.close();
+        if (this._modalId) {
+            super.close();
+        } else {
+            this._closeDetached();
+        }
     }
 
     _onExtra() {
         if (!this._resolvePromise) {
-            super.close();
+            if (this._modalId) {
+                super.close();
+            } else {
+                this._closeDetached();
+            }
             return;
         }
         this.emit('extra');
         this._settle('extra');
-        super.close();
+        if (this._modalId) {
+            super.close();
+        } else {
+            this._closeDetached();
+        }
     }
 
     render() {

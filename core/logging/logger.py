@@ -12,7 +12,7 @@ import logging
 import logging.handlers
 import sys
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any, Dict, Optional
 
 from core.config import get_settings, LoggingConfig
 from core.logging.formatters import JSONFormatter, StructuredConsoleFormatter
@@ -130,10 +130,31 @@ class Logger:
         """Логирует ошибку с traceback"""
         self._logger.exception(msg, *args, **kwargs)
 
-    def log_llm_response(self, response: Any) -> None:
-        """Логирует ответ от LLM"""
-        response_str = json.dumps(response, ensure_ascii=False, indent=2)
-        self._logger.info(f"LLM RESPONSE:\n{response_str}")
+    def log_llm_stream_response(
+        self,
+        url: str,
+        *,
+        content: str,
+        reasoning: Optional[str] = None,
+        tool_calls: Optional[Any] = None,
+        usage: Optional[Dict[str, Any]] = None,
+    ) -> None:
+        """
+        Агрегированный ответ chat/completions по стриму — тот же стиль, что LLM STREAM REQUEST
+        (url + вложенный объект, pretty JSON).
+        """
+        payload: Dict[str, Any] = {
+            "url": url,
+            "aggregated": {
+                "content": content,
+                "reasoning": reasoning if reasoning else None,
+                "tool_calls": tool_calls,
+                "usage": usage if usage is not None else {},
+            },
+        }
+        self._logger.info(
+            "LLM STREAM RESPONSE:\n" + json.dumps(payload, ensure_ascii=False, indent=2)
+        )
 
 
 def get_logger(name: str) -> Logger:

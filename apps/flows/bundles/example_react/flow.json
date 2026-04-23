@@ -92,7 +92,7 @@
           "type": "llm_node",
           "prompt_file": "prompts/main.md",
           "tools": ["calculator", "ask_user"],
-          "llm": {"model": "gpt-4o", "temperature": 0.3}
+          "llm": {"model": "qwen/qwen3.5-397b-a17b", "temperature": 0.3}
         }
       },
       "nodes_mode": "replace"

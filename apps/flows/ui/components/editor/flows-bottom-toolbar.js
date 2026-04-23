@@ -13,10 +13,10 @@
 import { html, css } from 'lit';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
 import '@platform/lib/components/platform-icon.js';
-import { asNumber, asObject, isPlainObject, getSkillsNodes } from '../../_helpers/flows-resolvers.js';
+import { asObject, isPlainObject, getSkillsNodes } from '../../_helpers/flows-resolvers.js';
+import { computeFitViewBox, FLOWS_EDITOR_DEFAULT_VIEWBOX } from '../../_helpers/flows-viewbox.js';
 
 const ZOOM_FACTOR = 1.2;
-const DEFAULT_VIEWBOX = Object.freeze({ x: 0, y: 0, w: 1600, h: 1000 });
 
 export class FlowsBottomToolbar extends PlatformElement {
     static styles = [
@@ -68,7 +68,7 @@ export class FlowsBottomToolbar extends PlatformElement {
 
     _viewBox() {
         const vb = isPlainObject(this._editor.state) ? this._editor.state.viewBox : null;
-        return isPlainObject(vb) ? vb : { ...DEFAULT_VIEWBOX };
+        return isPlainObject(vb) ? vb : { ...FLOWS_EDITOR_DEFAULT_VIEWBOX };
     }
 
     _setViewBox(vb) {
@@ -88,23 +88,18 @@ export class FlowsBottomToolbar extends PlatformElement {
     _zoomOut()   { this._zoom(ZOOM_FACTOR); }
     _zoom100() {
         const vb = this._viewBox();
-        this._setViewBox({ x: vb.x + vb.w / 2 - 800, y: vb.y + vb.h / 2 - 500, w: 1600, h: 1000 });
+        const d = FLOWS_EDITOR_DEFAULT_VIEWBOX;
+        this._setViewBox({ x: vb.x + vb.w / 2 - d.w / 2, y: vb.y + vb.h / 2 - d.h / 2, w: d.w, h: d.h });
     }
 
     _fitView() {
         const nodes = Object.values(getSkillsNodes(this._editor.state));
-        if (nodes.length === 0) return;
-        let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
-        for (const n of nodes) {
-            const x = asNumber(n.pos_x);
-            const y = asNumber(n.pos_y);
-            if (x < minX) minX = x;
-            if (y < minY) minY = y;
-            if (x + 200 > maxX) maxX = x + 200;
-            if (y + 72 > maxY)  maxY = y + 72;
+        const vb = computeFitViewBox(nodes);
+        if (vb === null) {
+            this._setViewBox({ ...FLOWS_EDITOR_DEFAULT_VIEWBOX });
+            return;
         }
-        const pad = 80;
-        this._setViewBox({ x: minX - pad, y: minY - pad, w: (maxX - minX) + pad * 2, h: (maxY - minY) + pad * 2 });
+        this._setViewBox(vb);
     }
 
     _setTool(tool) { this._editor.setActiveTool({ tool }); }

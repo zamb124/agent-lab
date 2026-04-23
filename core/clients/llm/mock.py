@@ -474,27 +474,41 @@ class MockLLM:
         
         content_parts: List[str] = []
         tool_calls: List[Dict[str, Any]] = []
-        
+        last_status_text = ""
+
         async for event in self.stream(
             normalized,
             tools=tools if not response_model else None,
             response_format=response_format,
         ):
             if isinstance(event, TaskArtifactUpdateEvent):
-                if event.artifact and event.artifact.parts:
+                if (
+                    event.artifact
+                    and event.artifact.name != "reasoning"
+                    and event.artifact.parts
+                ):
                     for part in event.artifact.parts:
                         if hasattr(part, "root") and hasattr(part.root, "text"):
                             content_parts.append(part.root.text)
-            if hasattr(event, "status") and event.status:
+            if isinstance(event, TaskStatusUpdateEvent) and event.status:
+                if event.status.message:
+                    txt = get_message_text(event.status.message)
+                    if txt:
+                        last_status_text = txt
                 if event.status.message and event.status.message.metadata:
                     tc = event.status.message.metadata.get("tool_calls")
                     if tc:
                         tool_calls = tc
         
         content = "".join(content_parts)
-        
         if response_model:
-            data = json.loads(content)
+            text_for_json = content if content.strip() else last_status_text
+            if not text_for_json.strip():
+                raise ValueError(
+                    "LLM structured output: пустой ответ (нет текста вне reasoning-артефакта "
+                    "и нет текста в финальном статусе задачи)"
+                )
+            data = json.loads(text_for_json)
             return response_model.model_validate(data)
         
         return Message(

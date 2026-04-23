@@ -311,6 +311,9 @@ ROUTE_RULES: List[RouteRule] = [
     RouteRule("*/v1/files/*", context_type="api", auth_required=True),
     RouteRule("*/v1/files", context_type="api", auth_required=True),
 
+    # Тот же префикс ``/<svc>/api``, что и у WS notifications (например ``GET /crm/api/ws/stats``)
+    RouteRule("*/api/ws/*", context_type="api", auth_required=True),
+
     # API агентов (новый путь)
     RouteRule("/flows/v1/auth/me", context_type="api", auth_required=True),
     RouteRule("/flows/v1/*", context_type="api", auth_required=True),

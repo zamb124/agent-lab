@@ -20,7 +20,7 @@ from typing import Any, Dict, List, Type
 import yaml
 from pydantic import BaseModel
 
-from apps.flows.config import get_settings
+from apps.flows.config import FLOWS_PUBLIC_API_PREFIX, get_settings
 from apps.flows.src.db import NodeRepository, FlowRepository, ToolRepository
 from core.context import get_context
 from core.files import FileReader, ReadOptions, get_default_file_processor
@@ -371,9 +371,8 @@ class FlowsLoader:
 
         processor = await get_default_file_processor()
         reader = FileReader()
-        settings = get_settings()
         company_id = self._resolve_target_company_id()
-        prefix = f"/{settings.server.name}/api/v1/files/download"
+        prefix = f"{FLOWS_PUBLIC_API_PREFIX}/files/download"
 
         materialized: list[dict[str, Any]] = []
         for index, entry in enumerate(files):

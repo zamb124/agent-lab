@@ -67,7 +67,6 @@ export class FlowEditorPage extends PlatformPage {
         this._flows = this.useResource('flows/flows');
         this._editorStateOp = this.useOp('flows/code_editor_state');
         this.useEvent(CoreEvents.ROUTER_ROUTE_CHANGED, () => this._loadFlowIfNeeded());
-        this.useEvent('flows/flow/updated', () => this._reloadFlow());
         this.useEvent('flows/flows/item_loaded', (e) => {
             const item = e && e.payload && e.payload.item;
             if (item && item.flow_id === this.flowId) {
@@ -114,11 +113,6 @@ export class FlowEditorPage extends PlatformPage {
         if (previewExecutionState !== null) {
             this._editor.setPreviewExecutionState({ snapshot: previewExecutionState });
         }
-    }
-
-    _reloadFlow() {
-        if (!this.flowId) return;
-        this._flows.get(this.flowId);
     }
 
     _panelHeader() {

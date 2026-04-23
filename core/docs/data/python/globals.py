@@ -26,16 +26,18 @@ GLOBALS: List[Dict[str, Any]] = [
         "name": "llm",
         "type": "SafeLLMClient",
         "doc": (
-            "await llm.chat(messages, *ключевые_аргументы). Первый аргумент messages:\n"
-            "str | list[str] | Message | list[Message] | dict | list[dict] (роли/контент нормализуются рантаймом).\n"
+            "await llm.chat(messages, *, response_model=None, tools=None, model=None, "
+            "temperature=None, top_p=None, top_k=None, max_tokens=None, "
+            "frequency_penalty=None, presence_penalty=None, seed=None, reasoning_effort=None, "
+            "extra_body=None).\n"
+            "Аргумент messages: str | list[str] | Message | list[Message] | dict | list[dict] "
+            "(роли/контент нормализуются рантаймом).\n"
             "Возврат: Message (текст, tool_calls в metadata) или экземпляр response_model при structured output.\n"
-            "Ключевые параметры (все опциональны, кроме смысла вызова):\n"
-            "- model — имя модели; response_model — Pydantic-модель для JSON по схеме\n"
-            "- tools — список: готовые OpenAI dict ИЛИ результат @tool(...) (имя функции после декоратора — экземпляр tool с to_openai_schema); сырую функцию без @tool передавать нельзя\n"
-            "- temperature, top_p, top_k, max_tokens, frequency_penalty, presence_penalty — семплинг и лимиты\n"
-            "- seed — детерминизм (если провайдер поддерживает); reasoning_effort — строка для reasoning API\n"
-            "- extra_body — dict: произвольные поля тела HTTP-запроса к провайдеру; мержатся последними и перекрывают совпадения\n"
-            "Текст ответа удобно брать: from a2a.utils.message import get_message_text\nget_message_text(msg)"
+            "- model — имя модели; response_model — Pydantic-модель для structured output\n"
+            "- tools — OpenAI dict ИЛИ результат @tool(...) / BaseTool с to_openai_schema(); сырую def без @tool нельзя\n"
+            "- temperature, top_p, top_k, max_tokens, frequency_penalty, presence_penalty\n"
+            "- seed, reasoning_effort; extra_body — dict полей тела запроса к провайдеру (мерж последним)\n"
+            "Текст: from a2a.utils.message import get_message_text; get_message_text(msg)"
         ),
         "perspectives": ["editor", "flow", "tool", "node"],
         "tags": ["llm", "ai"],
@@ -365,11 +367,12 @@ GLOBALS: List[Dict[str, Any]] = [
         "name": "ServiceClient",
         "type": "class",
         "doc": (
-            "HTTP-клиент для вызовов между сервисами платформы:\n"
+            "HTTP между сервисами (заголовки из контекста: trace, auth, company, user, namespace):\n"
             "client = ServiceClient()\n"
-            "data = await client.get('crm', '/crm/api/v1/entities/search', params={'query': 'test'})\n"
-            "result = await client.post('rag', '/rag/api/v1/search', json={'query': 'text'})\n\n"
-            "Методы: get, post, put, patch, delete. Первый аргумент — имя сервиса (crm, rag, flows, sync, frontend)."
+            "await client.get(service, path, **kwargs)  # kwargs → httpx (params, json, timeout, headers, files, ...)\n"
+            "await client.post(service, path, **kwargs)\n"
+            "await client.request(service, method, path, timeout=30.0, **kwargs)\n"
+            "service: crm, rag, flows, sync, frontend, ...; path — путь с ведущим /."
         ),
         "perspectives": ["editor", "flow", "tool", "node"],
         "tags": ["http", "api", "platform"],
@@ -386,6 +389,19 @@ GLOBALS: List[Dict[str, Any]] = [
         ),
         "perspectives": ["editor", "flow", "tool", "node"],
         "tags": ["http", "api", "platform"],
+    },
+    {
+        "name": "RagClient",
+        "type": "class",
+        "doc": (
+            "Типизированный клиент RAG API (контекст компании в заголовках ServiceClient):\n"
+            "client = RagClient()\n"
+            "ns = await client.create_namespace('my_kb', 'описание')\n"
+            "await client.ingest_text('my_kb', 'текст документа')\n"
+            "hits = await client.search('my_kb', 'запрос', limit=5)"
+        ),
+        "perspectives": ["editor", "flow", "tool", "node"],
+        "tags": ["http", "rag", "api"],
     },
     {
         "name": "get_context",
@@ -563,7 +579,8 @@ GLOBALS: List[Dict[str, Any]] = [
         "doc": (
             "Ошибка шаблона DOCX (и подклассы DocxTemplateInvalidError, DocxTemplateSyntaxError и т.д.).\n"
             "У экземпляра: message, code, payload.\n"
-            "В inline-коде нельзя писать .__name__ / .__class__ (валидатор eval); имя типа: "
+            "В inline-коде запрещён доступ к атрибутам интроспекции из политики eval (например __class__, __bases__); "
+            "super().__init__() и обычные методы классов — можно. Имя типа исключения: "
             "getattr(type(exc), \"__name__\", \"\"). Или вызывайте fill_docx_template."
         ),
         "perspectives": ["editor", "flow", "tool", "node"],
@@ -585,7 +602,12 @@ GLOBALS: List[Dict[str, Any]] = [
     {
         "name": "Message",
         "type": "class",
-        "doc": "A2A сообщение:\nmsg = Message(messageId=str(uuid4()), role=Role.user, parts=[Part(root=TextPart(text='Привет'))])",
+        "doc": (
+            "A2A сообщение:\n"
+            "import uuid\n"
+            "msg = Message(messageId=str(uuid.uuid4()), role=Role.user, "
+            "parts=[Part(root=TextPart(text='Привет'))], metadata={})"
+        ),
         "perspectives": ["editor", "flow", "tool", "node"],
         "tags": ["a2a", "types"],
     },
@@ -639,19 +661,28 @@ GLOBALS: List[Dict[str, Any]] = [
         "name": "httpx",
         "type": "module",
         "doc": (
-            "HTTP клиент для внешних API (точно как httpx):\n"
-            "- response = await httpx.get(url, params={...})\n"
-            "- response = await httpx.post(url, json={...})\n"
-            "- response = await httpx.put(url, json={...})\n"
-            "- response = await httpx.patch(url, json={...})\n"
-            "- response = await httpx.delete(url)\n"
-            "- response = await httpx.request(method, url, ...)\n"
-            "- response.json() - получить JSON ответ\n"
-            "- response.text - получить текст ответа\n"
-            "- response.status_code - код статуса\n"
-            "- response.headers - заголовки ответа"
+            "HTTP клиент (обёртка httpx): get/post/put/patch/delete/request.\n"
+            "Частые kwargs: params (query), json, data, content, files, headers, cookies, auth, "
+            "timeout (число или httpx.Timeout), follow_redirects.\n"
+            "Примеры: await httpx.get(url, params={'id': 1}, timeout=30.0); "
+            "await httpx.post(url, json={'a': 1}, headers={'X-Key': 'v'}).\n"
+            "Ответ: .status_code, .json(), .text, .headers"
         ),
         "perspectives": ["editor", "flow", "tool", "node"],
         "tags": ["http", "api"],
+    },
+    {
+        "name": "sandbox_codegen",
+        "type": "tool",
+        "doc": (
+            "Мета-тул платформы: LLM генерирует inline Python по задаче, затем validate/compile/execute "
+            "через `PythonCodeRunner` (оркестрация в `apps/flows/tools/sandbox_codegen.py`, механика прогона в "
+            "`apps/flows/src/eval/codegen_utils.py`). Контракт кода: `async def run(state):` → dict; опционально "
+            "`run_variables` сливается в `state.variables`. Ответ — JSON-строка с полями "
+            "`success`, `result`, `final_code`, `attempts`, `trace`. В документации platform tools не перечисляется "
+            "(`listed_in_platform_tool_docs=False`), чтобы не раздувать промпт мета-тула."
+        ),
+        "perspectives": ["editor", "flow", "tool", "node"],
+        "tags": ["eval", "codegen"],
     },
 ]

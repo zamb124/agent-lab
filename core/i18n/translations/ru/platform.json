@@ -23,26 +23,32 @@
     "apps": {
         "flows": {
             "name": "Flows",
+            "menu_description": "Графы, навыки и интеграции для ИИ-сценариев",
             "description": "Собирайте сценарии ИИ из графов и навыков, подключайте внешние системы — от идеи до запуска без лишней разработки"
         },
         "crm": {
             "name": "NetWorkle",
+            "menu_description": "CRM и граф связей по сделкам",
             "description": "CRM и граф знаний: контакты, связи и контекст сделок в одной сети, чтобы ничего не терялось между командами"
         },
         "rag": {
             "name": "RAG",
+            "menu_description": "Документы и семантический поиск",
             "description": "База знаний компании: загрузка документов, семантический поиск и ответы для ИИ строго по вашим материалам"
         },
         "sync": {
             "name": "Sync",
+            "menu_description": "Чат, Git и звонки для команд",
             "description": "Командный хаб для разработки: чат, Git и звонки рядом с репозиториями — быстрее согласовывать и внедрять"
         },
         "documents": {
             "name": "Документы",
+            "menu_description": "Совместное редактирование Office",
             "description": "Совместное редактирование Office-файлов: список привязок, редактор в iframe, изоляция по namespace, секреты только на BFF"
         },
         "frontend": {
             "name": "Console",
+            "menu_description": "Компания, биллинг, доступ к сервисам",
             "description": "Единая точка входа: компания, биллинг и быстрый доступ ко всем продуктам платформы"
         }
     },
@@ -111,5 +117,24 @@
         "role_owner_locked": "Нельзя снять у владельца компании",
         "error_name_required": "Введите имя",
         "error_role_required": "Нужна хотя бы одна роль"
+    },
+    "trace_viewer": {
+        "empty": "В этом trace нет spans",
+        "mode_group_label": "Режим просмотра trace",
+        "mode_tree": "Дерево",
+        "mode_timeline": "Шкала времени",
+        "search_placeholder": "Фильтр по spans…",
+        "search_no_results": "Нет spans по фильтру",
+        "timeline_unavailable": "Для шкалы времени нужны start_time у spans",
+        "kind_generation": "LLM",
+        "kind_tool": "Tool",
+        "kind_retrieval": "Поиск",
+        "kind_embedding": "Embed",
+        "kind_agent": "Агент",
+        "kind_interrupt": "Прерывание",
+        "kind_flow": "Flow",
+        "kind_span": "Span",
+        "detail_title": "Детали span",
+        "detail_attributes": "Атрибуты (JSON)"
     }
 }

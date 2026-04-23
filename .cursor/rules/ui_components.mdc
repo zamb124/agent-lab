@@ -16,10 +16,11 @@ alwaysApply: true
 1. **Presentational** (`glass-button`, `glass-input`, `glass-textarea`,
    `glass-card`, `glass-spinner`, `platform-button`, `platform-switch`,
    `tag-input`, `platform-icon-picker`, `platform-help-hint`,
-   `platform-shell-page`, `layout/*`, `fields/*`):
+   `platform-trace-viewer`, `platform-shell-page`, `layout/*`, `fields/*`):
    - Не читают state платформы (только `t()` для подписей).
    - Не диспатчат в bus, кроме `CoreEvents.UI_TOAST_SHOW` (через `this.toast(...)`).
-   - Локальные DOM-события `this.emit('change', detail)` для родителя.
+   - Локальные DOM-события `this.emit('change', detail)` для родителя
+     (у `platform-trace-viewer` — см. секцию ниже).
 
 2. **Container** (`platform-icon`, `platform-user`, `platform-user-chip`,
    `platform-user-info-modal`, `platform-notification-manager`,
@@ -88,6 +89,50 @@ render() {
 `this.select` возвращает `SelectController`. Чтение — `.value`. Любая смена
 state триггерит `requestUpdate`. `selectController.value` гарантированно
 определено — `initialSlice` reducer'а core всегда отдаёт нужную форму.
+
+## Platform Trace Viewer (дерево / timeline spans)
+
+**Файлы:** `core/frontend/static/lib/components/platform-trace-viewer.js`,
+нормализация и модель отображения — `core/frontend/static/lib/utils/trace-view-model.js`.
+
+**Назначение:** единый просмотр **одного trace** — иерархия spans в режимах tree и
+timeline, локальный поиск, выбор span для детализации. Данные в форме ответа API
+после `build_span_tree`: массив корневых узлов с вложенным `children[]` и полями
+как у `_serialize_span` / списка traces (например `operation_name`, `start_time`,
+`duration_ms`, `status`, `attributes`).
+
+**Границы ответственности**
+
+- Компонент **не** грузит данные: нет `useOp` / `useResource` / `fetch` / bus dispatch
+  доменных событий.
+- Родитель (страница, модалка, панель): фабрика или `useOp`, затем
+  `.roots=${массивКорней}`.
+- Событие выбора: `this.emit('trace-span-select', { span })` — в `detail` объект
+  того же узла, что пришёл в `roots` (для открытия сервисной модалки деталей и т.д.).
+- i18n: `static i18nNamespace = 'platform'`; строки — секция `trace_viewer` в
+  `core/i18n/translations/{ru,en}/platform.json` (парность обязательна).
+
+**Обязательное применение**
+
+- Любой UI платформы, который показывает **дерево или временную шкалу spans одного
+  trace** (OpenTelemetry / `platform_tracing`, flows traces, админ tracing), **должен**
+  использовать `<platform-trace-viewer>` как единственный способ отображения этого
+  дерева.
+- **Запрещено** в `apps/<svc>/ui/**` добавлять отдельные компоненты уровня
+  «trace tree», «span waterfall», «вложенный список spans с отступами» для того же
+  контракта — только вложение `platform-trace-viewer` или его использование через
+  обёртку без дублирования разметки дерева.
+
+**Если возможностей не хватает**
+
+- Расширять **только в core**: `platform-trace-viewer.js` и при необходимости
+  `trace-view-model.js` (новые поля, режимы, фильтры, визуализация). Не переносить
+  ту же логику в сервис.
+- Отдельная **модалка или блок деталей одного span** может оставаться в сервисе
+  (специфика полей, JSON редактор) — но **список/дерево/trace timeline** остаётся
+  на platform-trace-viewer.
+
+**См. также:** `tracing.mdc` (запись spans, API чтения, админ-страница).
 
 ## Modal canon (registry + stack + dispatch)
 

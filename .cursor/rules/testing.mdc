@@ -85,6 +85,8 @@ alwaysApply: false
 
 **E2E UI (продукт):** сценарии **`tests/ui/e2e/`**, фикстуры и реестр — **`tests/ui/`** (pytest + Playwright, `tests/fixtures/services.py`, cookie `auth_token`, `ui_page_*`). Запуск: **`make test-ui`**. Не смешивать с компонентными JS-тестами. На всех контекстах из `tests/ui/conftest.py` вешается **`install_click_highlight_on_context`**: при каждом клике цель получает зелёную рамку (`outline`), чтобы на скриншотах `scenario.step` было видно, куда кликнули (см. **`tests/ui/click_highlight.py`**).
 
+**Только Playwright Sync:** `uv run pytest tests/ui/e2e/test_sync_*.py -m e2e` — фикстура **`sync_ui`** подключает реальный HTTP **`sync_service`** (порт из реестра, см. `tests/ui/apps.py`) и **`sync_worker`** для TaskIQ; оба объявлены в `tests/ui/conftest.py`.
+
 ### Компонентные UI-тесты (Lit)
 
 | | |

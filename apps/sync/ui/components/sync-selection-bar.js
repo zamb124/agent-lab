@@ -63,7 +63,11 @@ export class SyncSelectionBar extends PlatformElement {
     _onForward() {
         const ids = this._chatUi.value.selectedMessageIds;
         if (!Array.isArray(ids) || ids.length === 0) return;
-        this._chatUi.openForward({ message: { batch_message_ids: ids, channel_id: this.channelId } });
+        const payload =
+            ids.length === 1
+                ? { message: { channel_id: this.channelId, message_id: ids[0] } }
+                : { message: { channel_id: this.channelId, batch_message_ids: ids } };
+        this.openModal('sync.forward', payload);
     }
 
     _onDelete() {

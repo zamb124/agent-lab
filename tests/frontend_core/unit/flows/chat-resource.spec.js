@@ -34,6 +34,7 @@ describe('flows/chat extraReducer: session lifecycle', () => {
         const s = getState().flowsChat;
         expect(s.currentContextId).toBe('ctx1');
         expect(s.messagesByContextId.ctx1.messages).toEqual([]);
+        expect(s.runTraceByContextId.ctx1).toEqual([]);
         expect(s.streaming).toBe(false);
     });
 
@@ -49,13 +50,13 @@ describe('flows/chat extraReducer: session lifecycle', () => {
         expect(s.messagesByContextId.ctx1.messages[0].content).toBe('hello');
     });
 
-    it('chat_send/succeeded ack привязывает task_id к bucket', () => {
+    it('chat_send/succeeded после полного стрима привязывает task_id, streaming false', () => {
         const { bus, getState } = build();
         bus.dispatch('flows/chat/session_init', { flowId: 'demo', contextId: 'ctx1' });
         bus.dispatch('flows/chat_send/succeeded', { result: { task_id: 'tsk1', context_id: 'ctx1' } });
         const s = getState().flowsChat;
         expect(s.currentTaskId).toBe('tsk1');
-        expect(s.streaming).toBe(true);
+        expect(s.streaming).toBe(false);
         expect(s.messagesByContextId.ctx1.taskId).toBe('tsk1');
     });
 });
@@ -135,6 +136,27 @@ describe('flows/chat extraReducer: push-события', () => {
         expect(assistant.error).toBe('bad');
     });
 
+    it('failed до chat_send/succeeded с task_id: при context_id пишет assistant.error', () => {
+        const { bus, getState } = build();
+        bus.dispatch('flows/chat/session_init', { flowId: 'demo', contextId: 'ctx1' });
+        bus.dispatch('flows/chat/user_message_added', {
+            contextId: 'ctx1',
+            message: { id: 'u1', role: 'user', content: 'hi' },
+        });
+        expect(getState().flowsChat.messagesByContextId.ctx1.taskId).toBeNull();
+        bus.dispatch('flows/chat/failed', {
+            task_id: 'tsk1',
+            context_id: 'ctx1',
+            error: '403 Forbidden',
+        });
+        const s = getState().flowsChat;
+        expect(s.streaming).toBe(false);
+        const assistant = s.messagesByContextId.ctx1.messages.find((m) => m.role === 'assistant');
+        expect(assistant).toBeDefined();
+        expect(assistant.error).toBe('403 Forbidden');
+        expect(s.messagesByContextId.ctx1.taskId).toBe('tsk1');
+    });
+
     it('breakpoint снимает streaming и сохраняет breakpoint', () => {
         const { bus, getState } = setup();
         bus.dispatch('flows/chat/breakpoint', {
@@ -177,5 +199,36 @@ describe('flows/chat extraReducer: push-события', () => {
         const op = msgs.filter((m) => m.role === 'operator');
         expect(op.length).toBe(1);
         expect(op[0].fileIds).toEqual(['f1', 'f2']);
+    });
+});
+
+describe('flows/chat extraReducer: run trace', () => {
+    function buildFresh() {
+        const built = build();
+        built.bus.dispatch('flows/chat/session_init', { flowId: 'demo', contextId: 'ctx1' });
+        return built;
+    }
+
+    it('trace_append добавляет запись в runTraceByContextId', () => {
+        const { bus, getState } = buildFresh();
+        bus.dispatch('flows/chat/trace_append', {
+            context_id: 'ctx1',
+            entry: { id: 'e1', kind: 'node_start', ts: 10_000, node_id: 'n1', node_type: 'code' },
+        });
+        const rows = getState().flowsChat.runTraceByContextId.ctx1;
+        expect(rows.length).toBe(1);
+        expect(rows[0].kind).toBe('node_start');
+        expect(rows[0].node_id).toBe('n1');
+    });
+
+    it('task_started очищает ленту для контекста', () => {
+        const { bus, getState } = buildFresh();
+        bus.dispatch('flows/chat/trace_append', {
+            context_id: 'ctx1',
+            entry: { id: 'e1', kind: 'tool_call', ts: 10_000, tool: 'x', tool_call_id: 'c1' },
+        });
+        expect(getState().flowsChat.runTraceByContextId.ctx1.length).toBe(1);
+        bus.dispatch('flows/chat/task_started', { task_id: 'tsk_new', context_id: 'ctx1' });
+        expect(getState().flowsChat.runTraceByContextId.ctx1).toEqual([]);
     });
 });

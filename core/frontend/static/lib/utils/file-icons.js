@@ -148,6 +148,9 @@ export const UI_ICON_MAP = Object.freeze({
     'git-branch': 'git-branch', branch: 'git-branch',
     circle: 'circle', dot: 'fiber-manual-record', record: 'fiber-manual-record',
     zap: 'zap', bolt: 'zap', flash: 'zap',
+    'trace-json': 'trace-json',
+    'trace-tree': 'trace-tree',
+    'trace-timeline': 'trace-timeline',
 });
 
 const UI_ICON_KEYS = new Set([...Object.keys(UI_ICON_MAP), ...Object.values(UI_ICON_MAP)]);

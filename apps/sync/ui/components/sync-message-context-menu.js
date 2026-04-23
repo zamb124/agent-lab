@@ -182,6 +182,15 @@ export class SyncMessageContextMenu extends PlatformElement {
         this._dismiss();
     }
 
+    _onForward() {
+        const t = this._currentTarget();
+        if (!t) return;
+        this.openModal('sync.forward', {
+            message: { channel_id: this.channelId, message_id: t.messageId },
+        });
+        this._dismiss();
+    }
+
     _onCopy() {
         const m = this._currentMessage();
         if (!m || !Array.isArray(m.contents)) return;
@@ -280,6 +289,10 @@ export class SyncMessageContextMenu extends PlatformElement {
                         ${this.t('context_menu.action_copy')}
                     </div>
                 ` : ''}
+                <div class="item" @click=${this._onForward}>
+                    <platform-icon name="forward" size="14"></platform-icon>
+                    ${this.t('context_menu.forward')}
+                </div>
                 <div class="item" @click=${this._onPin}>
                     <platform-icon name="pin" size="14"></platform-icon>
                     ${this.t('context_menu.action_pin')}

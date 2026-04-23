@@ -1,6 +1,6 @@
 .PHONY: build up rebuild down logs clean help docker-build docker-push deploy conf deploy-agents deploy-frontend deploy-crm deploy-worker deploy-rag base stats
 .PHONY: dev-up dev-down dev-logs dev-minio-restart dev-bootstrap-postgres test-runner test-runner-down test-runner-unit test-integration prod-up prod-down prod-logs
-.PHONY: test-frontend test-rag run-rag check-ui-canon check-i18n check-i18n-keys check-ui-factories check-command-rest-mirror check-core-frontend-canon check-events-canon build-i18n
+.PHONY: test-frontend test-rag run-rag check-ui-canon check-i18n check-i18n-keys check-inline-docs check-ui-factories check-command-rest-mirror check-core-frontend-canon check-events-canon build-i18n
 
 # Docker Registry
 DOCKER_REGISTRY ?= zambas/repo
@@ -113,6 +113,10 @@ check-i18n:
 # Опции: --mode missing|unused|all, --app <name>, --strict, --show-skipped.
 check-i18n-keys:
 	@uv run python scripts/check_i18n_keys.py
+
+# Справочник inline Python: whitelist модулей и покрытие sandbox-namespace документацией
+check-inline-docs:
+	@uv run pytest tests/core/test_inline_docs_inventory.py -q
 
 # Удаление common-unused ключей из JSON (см. scripts/clean_i18n_unused.py, scripts/i18n_unused_scan_exclusions.py).
 clean-i18n-unused:

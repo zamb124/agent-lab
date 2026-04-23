@@ -8,9 +8,26 @@ import re
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from playwright.async_api import Page
+from playwright.async_api import Page, TimeoutError as PlaywrightTimeoutError
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
+
+# Ожидание перед скриншотом для инструкций: без networkidle (WS держит соединение открытым).
+_READY_MS = 30_000
+# Lit-корни платформенных SPA в E2E (см. tests/ui/apps.py).
+_SHELL_SELECTOR = "sync-app, crm-app, rag-app, flows-app, frontend-app, office-app"
+
+
+async def _await_page_ready(page: Page) -> None:
+    """Дождаться DOM и document.readyState; при наличии — видимости корневого web component shell."""
+    await page.wait_for_load_state("domcontentloaded", timeout=_READY_MS)
+    await page.wait_for_function(
+        "() => document.readyState === 'complete'",
+        timeout=_READY_MS,
+    )
+    root = page.locator(_SHELL_SELECTOR)
+    if await root.count() > 0:
+        await root.first.wait_for(state="visible", timeout=_READY_MS)
 _DOCS_SCENARIOS = _REPO_ROOT / "docs" / "scenarios"
 _ENV_DISABLE = "UI_SCENARIO_DOCS"
 
@@ -147,16 +164,21 @@ class ScenarioRecorder:
         label: str,
         page: Page | None = None,
         *,
-        full_page: bool = False,
+        full_page: bool = True,
         label_en: str | None = None,
     ) -> None:
-        """Фиксирует шаг; при переданном page делает скриншот текущего состояния. label_en — подпись для README.en.md (при полной паре title_en/description_en)."""
+        """Фиксирует шаг; при переданном page — ожидание готовности UI, затем скриншот (по умолчанию вся страница). label_en — README.en.md при паре title_en/description_en."""
         rel: str | None = None
         if page is not None:
             n = len(self.steps) + 1
             shot_dir = self.out_dir / "screenshots"
             shot_dir.mkdir(parents=True, exist_ok=True)
             fname = f"{n:03d}.png"
+            await _await_page_ready(page)
+            try:
+                await page.wait_for_load_state("networkidle", timeout=4_000)
+            except PlaywrightTimeoutError:
+                pass
             await page.screenshot(path=str(shot_dir / fname), full_page=full_page)
             rel = f"screenshots/{fname}"
         le = _strip_optional(label_en)

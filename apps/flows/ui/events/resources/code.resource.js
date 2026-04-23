@@ -39,8 +39,17 @@ export const codeTemplatesOp = createAsyncOp({
     name: 'flows/code_templates',
     silent: true,
     restMirror: { method: 'GET', path: '/flows/api/v1/code/templates' },
-    request: async () => {
-        return httpRequest({ method: 'GET', url: '/flows/api/v1/code/templates' });
+    request: async ({ payload }) => {
+        const query = payload && typeof payload === 'object' ? payload : {};
+        const params = new URLSearchParams();
+        for (const [k, v] of Object.entries(query)) {
+            if (v === null || v === undefined) continue;
+            params.append(k, String(v));
+        }
+        return httpRequest({
+            method: 'GET',
+            url: `/flows/api/v1/code/templates${params.toString() ? '?' + params.toString() : ''}`,
+        });
     },
 });
 
@@ -97,10 +106,19 @@ export const codeToolSourceOp = createAsyncOp({
     silent: true,
     restMirror: { method: 'GET', path: '/flows/api/v1/code/tool-source' },
     request: async ({ payload }) => {
-        if (!payload || typeof payload.tool_id !== 'string' || payload.tool_id.length === 0) {
-            throw new Error('codeToolSourceOp: { tool_id } required');
+        if (!payload || typeof payload !== 'object') {
+            throw new Error('codeToolSourceOp: payload object required');
         }
-        const params = new URLSearchParams({ tool_id: payload.tool_id });
+        const toolPath =
+            typeof payload.tool_path === 'string' && payload.tool_path.length > 0
+                ? payload.tool_path
+                : typeof payload.tool_id === 'string' && payload.tool_id.length > 0
+                  ? payload.tool_id
+                  : null;
+        if (toolPath === null) {
+            throw new Error('codeToolSourceOp: tool_path (or tool_id as module path) required');
+        }
+        const params = new URLSearchParams({ tool_path: toolPath });
         return httpRequest({
             method: 'GET',
             url: `/flows/api/v1/code/tool-source?${params.toString()}`,

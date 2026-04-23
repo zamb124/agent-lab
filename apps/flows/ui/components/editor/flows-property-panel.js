@@ -14,15 +14,7 @@
 
 import { html, css } from 'lit';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
-import '../nodes/flows-llm-node-editor.js';
-import '../nodes/flows-code-node-editor.js';
-import '../nodes/flows-channel-node-editor.js';
-import '../nodes/flows-flow-node-editor.js';
-import '../nodes/flows-mcp-node-editor.js';
-import '../nodes/flows-hitl-node-editor.js';
-import '../nodes/flows-external-api-editor.js';
-import '../nodes/flows-remote-flow-editor.js';
-import '../nodes/flows-base-node-editor.js';
+import { renderFlowsNodeEditorSurface } from './flows-node-editor-surface.js';
 import { asArray, asObject, asNumber, asString, isPlainObject, getSkillsData, getSkillsNodes } from '../../_helpers/flows-resolvers.js';
 
 export class FlowsPropertyPanel extends PlatformElement {
@@ -141,102 +133,21 @@ export class FlowsPropertyPanel extends PlatformElement {
             : [];
         const previewExecutionState = state.previewExecutionState;
         const expanded = state.panelExpanded === true;
-        const onChange = (e) => this._onChange(e);
-        const onRename = (e) => this._onRenameNode(e);
-        const onDelete = (e) => this._onDeleteNode(e);
-        const onDuplicate = (e) => this._onDuplicateNode(e);
-        switch (node.type) {
-            case 'llm_node':
-                return html`<flows-llm-node-editor
-                    .nodeId=${nodeId} .flowId=${this.flowId} .skillId=${this.skillId}
-                    .nodeConfig=${node} .nodeType=${node.type}
-                    .flowVariables=${flowVariables} .graphNodes=${graphNodes}
-                    .previewExecutionState=${previewExecutionState}
-                    ?expanded=${expanded}
-                    @change=${onChange} @rename-node=${onRename}
-                    @delete-node=${onDelete} @duplicate-node=${onDuplicate}
-                ></flows-llm-node-editor>`;
-            case 'code':
-                return html`<flows-code-node-editor
-                    .nodeId=${nodeId} .flowId=${this.flowId} .skillId=${this.skillId}
-                    .nodeConfig=${node} .nodeType=${node.type}
-                    .flowVariables=${flowVariables} .graphNodes=${graphNodes}
-                    .previewExecutionState=${previewExecutionState}
-                    ?expanded=${expanded}
-                    @change=${onChange} @rename-node=${onRename}
-                    @delete-node=${onDelete} @duplicate-node=${onDuplicate}
-                ></flows-code-node-editor>`;
-            case 'channel':
-                return html`<flows-channel-node-editor
-                    .nodeId=${nodeId} .flowId=${this.flowId} .skillId=${this.skillId}
-                    .nodeConfig=${node} .nodeType=${node.type}
-                    .flowVariables=${flowVariables} .graphNodes=${graphNodes}
-                    .previewExecutionState=${previewExecutionState}
-                    ?expanded=${expanded}
-                    @change=${onChange} @rename-node=${onRename}
-                    @delete-node=${onDelete} @duplicate-node=${onDuplicate}
-                ></flows-channel-node-editor>`;
-            case 'flow':
-                return html`<flows-flow-node-editor
-                    .nodeId=${nodeId} .flowId=${this.flowId} .skillId=${this.skillId}
-                    .nodeConfig=${node} .nodeType=${node.type}
-                    .flowVariables=${flowVariables} .graphNodes=${graphNodes}
-                    .previewExecutionState=${previewExecutionState}
-                    ?expanded=${expanded}
-                    @change=${onChange} @rename-node=${onRename}
-                    @delete-node=${onDelete} @duplicate-node=${onDuplicate}
-                ></flows-flow-node-editor>`;
-            case 'mcp':
-                return html`<flows-mcp-node-editor
-                    .nodeId=${nodeId} .flowId=${this.flowId} .skillId=${this.skillId}
-                    .nodeConfig=${node} .nodeType=${node.type}
-                    .flowVariables=${flowVariables} .graphNodes=${graphNodes}
-                    .previewExecutionState=${previewExecutionState}
-                    ?expanded=${expanded}
-                    @change=${onChange} @rename-node=${onRename}
-                    @delete-node=${onDelete} @duplicate-node=${onDuplicate}
-                ></flows-mcp-node-editor>`;
-            case 'hitl_node':
-                return html`<flows-hitl-node-editor
-                    .nodeId=${nodeId} .flowId=${this.flowId} .skillId=${this.skillId}
-                    .nodeConfig=${node} .nodeType=${node.type}
-                    .flowVariables=${flowVariables} .graphNodes=${graphNodes}
-                    .previewExecutionState=${previewExecutionState}
-                    ?expanded=${expanded}
-                    @change=${onChange} @rename-node=${onRename}
-                    @delete-node=${onDelete} @duplicate-node=${onDuplicate}
-                ></flows-hitl-node-editor>`;
-            case 'external_api':
-                return html`<flows-external-api-editor
-                    .nodeId=${nodeId} .flowId=${this.flowId} .skillId=${this.skillId}
-                    .nodeConfig=${node} .nodeType=${node.type}
-                    .flowVariables=${flowVariables} .graphNodes=${graphNodes}
-                    .previewExecutionState=${previewExecutionState}
-                    ?expanded=${expanded}
-                    @change=${onChange} @rename-node=${onRename}
-                    @delete-node=${onDelete} @duplicate-node=${onDuplicate}
-                ></flows-external-api-editor>`;
-            case 'remote_flow':
-                return html`<flows-remote-flow-editor
-                    .nodeId=${nodeId} .flowId=${this.flowId} .skillId=${this.skillId}
-                    .nodeConfig=${node} .nodeType=${node.type}
-                    .flowVariables=${flowVariables} .graphNodes=${graphNodes}
-                    .previewExecutionState=${previewExecutionState}
-                    ?expanded=${expanded}
-                    @change=${onChange} @rename-node=${onRename}
-                    @delete-node=${onDelete} @duplicate-node=${onDuplicate}
-                ></flows-remote-flow-editor>`;
-            default:
-                return html`<flows-base-node-editor
-                    .nodeId=${nodeId} .flowId=${this.flowId} .skillId=${this.skillId}
-                    .nodeConfig=${node} .nodeType=${asString(node.type)}
-                    .flowVariables=${flowVariables} .graphNodes=${graphNodes}
-                    .previewExecutionState=${previewExecutionState}
-                    ?expanded=${expanded}
-                    @change=${onChange} @rename-node=${onRename}
-                    @delete-node=${onDelete} @duplicate-node=${onDuplicate}
-                ></flows-base-node-editor>`;
-        }
+        return renderFlowsNodeEditorSurface({
+            node,
+            nodeId,
+            flowId: this.flowId,
+            skillId: this.skillId,
+            flowVariables,
+            graphNodes,
+            previewExecutionState,
+            expanded,
+            embedded: false,
+            onChange: (e) => this._onChange(e),
+            onRename: (e) => this._onRenameNode(e),
+            onDelete: (e) => this._onDeleteNode(e),
+            onDuplicate: (e) => this._onDuplicateNode(e),
+        });
     }
 
     render() {

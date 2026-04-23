@@ -13,7 +13,7 @@
     "order_processor": {
       "type": "llm_node",
       "llm": {
-        "model": "gpt-4o",
+        "model": "qwen/qwen3.5-397b-a17b",
         "temperature": 0.2
       },
       "prompt": "Ты обрабатываешь заказы. Спроси номер заказа если не указан.",
@@ -24,7 +24,7 @@
     "complaint_processor": {
       "type": "llm_node",
       "llm": {
-        "model": "gpt-4o",
+        "model": "qwen/qwen3.5-397b-a17b",
         "temperature": 0.2
       },
       "prompt": "Ты обрабатываешь жалобы. Спроси детали если не указаны.",
@@ -35,7 +35,7 @@
     "general_processor": {
       "type": "llm_node",
       "llm": {
-        "model": "gpt-4o",
+        "model": "qwen/qwen3.5-397b-a17b",
         "temperature": 0.2
       },
       "prompt": "Ты отвечаешь на общие вопросы.",
@@ -175,6 +175,10 @@
         "complaint_processor": {
           "type": "llm_node",
           "prompt": "Ты общий процессор. Ответь на вопрос.",
+          "llm": {
+            "model": "qwen/qwen3.5-397b-a17b",
+            "temperature": 0.2
+          },
           "tools": []
         }
       },

@@ -461,6 +461,33 @@ class TestCodeSource:
         assert "not found" in data["error"].lower()
 
 
+class TestCodeToolSource:
+    """Тесты GET /api/v1/code/tool-source?tool_path=..."""
+
+    @pytest.mark.asyncio
+    async def test_get_tool_source_requires_tool_path(self, client, app):
+        """Пустой tool_path — 400 от handler."""
+        response = await client.get(
+            "/flows/api/v1/code/tool-source",
+            params={"tool_path": ""},
+        )
+        assert response.status_code == 400
+        detail = response.json().get("detail", "")
+        assert "tool_path" in str(detail).lower() or "required" in str(detail).lower()
+
+    @pytest.mark.asyncio
+    async def test_get_tool_source_json_loads(self, client, app):
+        """Существующий путь к функции: path + source, либо error для C-реализации."""
+        response = await client.get(
+            "/flows/api/v1/code/tool-source",
+            params={"tool_path": "json.loads"},
+        )
+        assert response.status_code == 200
+        data = response.json()
+        assert data["path"] == "json.loads"
+        assert (data.get("source") is not None) or (data.get("error") is not None)
+
+
 class TestFlowWithInlineCodeAPI:
     """E2E тесты: создание flow с inline function через API."""
 

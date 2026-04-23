@@ -136,7 +136,7 @@ def create_service_app(
         include_auth_middleware: Включать ли AuthMiddleware
         include_crud_routers: Включать ли автоматические CRUD роутеры
         mount_repo_documentation: Смонтировать статическую документацию (Zensical) из корня репозитория ``documentation-dist/`` на ``/documentation/`` (False для flows со своим ``apps/flows/site``).
-        documentation_gateway_prefix: Если задан (например ``frontend``), дублировать документацию на ``/{prefix}/documentation/`` за ingress.
+        documentation_gateway_prefix: Если задан (например ``documents`` для office), первый сегмент публичных путей HTTP API и платформенных роутеров (team, ws, auth, …); плюс дублирование документации на ``/{prefix}/documentation/`` за ingress.
         include_platform_pwa: Маршруты ``/manifest.json``, ``/sw.js``, ``/offline.html``. None: выключено при ``TESTING=true``, иначе включено.
         
     Returns:
@@ -165,7 +165,7 @@ def create_service_app(
                     raise ValueError(
                         "tracing.postgres_enabled требует database.tracing_url (DATABASE__TRACING_URL)"
                     )
-                set_tracing_service_name(settings.server.name)
+                set_tracing_service_name(service_name)
                 set_span_repository(container.span_repository)
             logger.info("Трейсинг инициализирован")
         
@@ -293,17 +293,21 @@ def create_service_app(
     app.add_middleware(DeploymentHeadersMiddleware)
 
     # Локальный dev/test: браузер на :8002 с путём /flows/... без ingress — пересылаем на flows_service_url
-    app.add_middleware(DevInterServiceProxyMiddleware, service_name=settings.server.name)
+    app.add_middleware(DevInterServiceProxyMiddleware, service_name=service_name)
     # Тот же прокси, но для WebSocket-апгрейдов: ASGI-уровневый, BaseHTTPMiddleware WS не покрывает.
-    app.add_middleware(DevInterServiceWsProxyMiddleware, service_name=settings.server.name)
+    app.add_middleware(DevInterServiceWsProxyMiddleware, service_name=service_name)
 
-    # API prefix
-    # api_version="v1" → /flows/api/v1 (REST API)
-    # api_version=None → /frontend (сайт без /api/)
+    # Первый сегмент публичного URL: обычно совпадает с service_name.
+    # Исключение — office (документы): в браузере /documents/..., задаётся
+    # documentation_gateway_prefix (см. office.mdc, SERVICE_PUBLIC_NAME в CI).
+    url_route_segment = documentation_gateway_prefix or service_name
+
+    # api_version="v1" → /{segment}/api/v1 (REST API)
+    # api_version=None → /{segment} (сайт без /api/)
     if api_version:
-        api_prefix = f"/{settings.server.name}/api/{api_version}"
+        api_prefix = f"/{url_route_segment}/api/{api_version}"
     else:
-        api_prefix = f"/{settings.server.name}"
+        api_prefix = f"/{url_route_segment}"
     logger.info(f"API prefix: {api_prefix}")
     
     # Инициализация репозиториев для CRUD роутеров
@@ -326,7 +330,7 @@ def create_service_app(
 
     # Файловый роутер (upload/download/metadata) — единообразный контракт для всех сервисов.
     # Даже когда S3 выключен, upload должен отвечать 503, а не 404.
-    files_api_prefix = f"/{settings.server.name}/api/{api_version or 'v1'}"
+    files_api_prefix = f"/{url_route_segment}/api/{api_version or 'v1'}"
     from core.files.api import build_file_api_router
     _file_router = build_file_api_router(
         get_file_repo=lambda: container.file_repository,
@@ -335,7 +339,7 @@ def create_service_app(
     app.include_router(_file_router, prefix=f"{files_api_prefix}/files")
     logger.info(f"Файловый роутер подключён: {files_api_prefix}/files")
 
-    public_segment = settings.server.name
+    public_segment = url_route_segment
 
     # Core auth роутер (автоматически для всех сервисов)
     auth_prefix = f"/{public_segment}/api/auth"
@@ -383,7 +387,7 @@ def create_service_app(
     if pages_routers:
         for router in pages_routers:
             tags = router.tags or [f"{service_name}-pages"]
-            # Добавляем только префикс публичного пути (server.name), FastAPI сам добавит его к prefix роутера
+            # Добавляем только префикс публичного пути (public_segment), FastAPI сам добавит его к prefix роутера
             if hasattr(router, 'prefix') and router.prefix:
                 app.include_router(router, prefix=f"/{public_segment}", tags=tags)
             else:
@@ -429,7 +433,7 @@ def create_service_app(
     @app.get("/")
     async def root():
         return {
-            "service": settings.server.name,
+            "service": service_name,
             "version": version,
             "status": "running"
         }

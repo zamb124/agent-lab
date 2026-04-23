@@ -38,6 +38,7 @@ import './components/skill-item.js';
 import './components/chat/chat-input.js';
 import './components/chat/chat-message.js';
 import './components/chat/chat-messages.js';
+import './components/chat/flows-chat-run-trace.js';
 
 // Универсальные редакторы
 import './components/editors/flows-code-editor.js';
@@ -83,8 +84,10 @@ import './components/flow-canvas/flows-flow-canvas.js';
 // Editor-related modals
 import './modals/flows-edge-condition-modal.js';
 import './modals/flows-incoming-policy-modal.js';
-import './modals/flows-tool-picker-modal.js';
+import './modals/flows-library-picker-modal.js';
 import './modals/flows-tool-create-modal.js';
+import './modals/flows-embedded-tool-config-modal.js';
+import './modals/flows-code-node-drop-modal.js';
 import './modals/flows-code-modal.js';
 import './modals/flows-code-docs-modal.js';
 import './modals/flows-tracing-modal.js';

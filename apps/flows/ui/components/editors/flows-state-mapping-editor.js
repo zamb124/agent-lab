@@ -1,75 +1,275 @@
 /**
- * flows-state-mapping-editor — таблица маппинга {param: source}.
+ * flows-state-mapping-editor — маппинг для нод.
  *
- * Source поддерживает синтаксис @state:..., @var:..., константа.
- * emit('change', { mapping }).
+ * Бэкенд (apps/flows/src/mapping.py):
+ * - input / input_mapping: { target_param: "@state:path" | "@var:path" | "constant" }
+ * - output / output_mapping и state_mapping (MCP, external_api): { result_key: state_field }
+ *
+ * kind: "input" — три поля: источник (путь), тип (@state / @var / const), параметр ноды.
+ * kind: "output" — два поля + стрелка: ключ результата, поле в state.
  */
 
 import { html, css } from 'lit';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
 
+function _parseInputSource(raw) {
+    const s = String(raw);
+    if (s.startsWith('@state:')) {
+        return { sourceType: 'state', sourcePath: s.slice(7) };
+    }
+    if (s.startsWith('@var:')) {
+        return { sourceType: 'var', sourcePath: s.slice(5) };
+    }
+    return { sourceType: 'const', sourcePath: s };
+}
+
+function _buildInputSource(sourceType, sourcePath) {
+    const p = typeof sourcePath === 'string' ? sourcePath : '';
+    if (sourceType === 'state') {
+        return `@state:${p}`;
+    }
+    if (sourceType === 'var') {
+        return `@var:${p}`;
+    }
+    return p;
+}
+
 export class FlowsStateMappingEditor extends PlatformElement {
+    static i18nNamespace = 'flows';
+
     static properties = {
+        /** Сброс локальных строк при смене ноды или вкладки Input/Output (не при каждом emit). */
+        syncKey: { type: String },
         mapping: { type: Object },
+        /** "input" — input_mapping; "output" — output_mapping / state_mapping. */
+        kind: { type: String },
         title: { type: String },
         _rows: { state: true },
-        _hydrated: { state: true },
     };
 
     static styles = [
         PlatformElement.styles,
         css`
-            :host { display: block; }
-            .row {
-                display: flex; gap: var(--space-2); align-items: center; margin-bottom: var(--space-2);
+            :host {
+                display: block;
             }
-            .row input {
-                flex: 1; padding: var(--space-2);
+            .toolbar {
+                display: flex;
+                flex-wrap: wrap;
+                align-items: center;
+                justify-content: space-between;
+                gap: var(--space-2);
+                margin-bottom: var(--space-3);
+            }
+            .hint {
+                font-size: var(--text-xs);
+                color: var(--text-tertiary);
+            }
+            .add-btn {
+                padding: var(--space-2) var(--space-3);
+                border-radius: var(--radius-md);
+                border: 1px solid var(--accent-subtle);
+                background: var(--accent-subtle);
+                color: var(--accent);
+                font-size: var(--text-sm);
+                font-weight: var(--font-medium);
+                cursor: pointer;
+            }
+            .add-btn:hover {
+                filter: brightness(1.05);
+            }
+            .map-wrap {
+                display: flex;
+                flex-direction: column;
+                gap: var(--space-2);
+            }
+            .map-row {
+                display: grid;
+                align-items: end;
+                gap: var(--space-2);
+                padding: var(--space-3);
+                background: var(--glass-tint-subtle);
+                border: 1px solid var(--glass-border-subtle);
+                border-radius: var(--radius-md);
+                box-sizing: border-box;
+            }
+            .map-row.input-grid {
+                grid-template-columns: 1fr minmax(0, 10px) minmax(100px, 130px) minmax(0, 28px) 1fr minmax(0, 36px);
+            }
+            .map-row.output-grid {
+                grid-template-columns: 1fr minmax(0, 28px) 1fr minmax(0, 36px);
+            }
+            .sep {
+                text-align: center;
+                color: var(--text-tertiary);
+                font-size: var(--text-sm);
+                padding-bottom: var(--space-2);
+            }
+            .arrow {
+                text-align: center;
+                color: var(--text-secondary);
+                font-size: var(--text-lg);
+                padding-bottom: var(--space-1);
+            }
+            .field {
+                display: flex;
+                flex-direction: column;
+                gap: var(--space-1);
+                min-width: 0;
+            }
+            .field label {
+                font-size: var(--text-xs);
+                color: var(--text-tertiary);
+                font-weight: var(--font-normal);
+            }
+            .field input,
+            .field select {
+                width: 100%;
+                box-sizing: border-box;
+                padding: var(--space-2) var(--space-3);
                 border-radius: var(--radius-md);
                 border: 1px solid var(--glass-border-subtle);
-                background: var(--glass-solid-subtle);
-                color: var(--text-primary); font: inherit;
+                background: var(--glass-solid-elevated);
+                color: var(--text-primary);
+                font: inherit;
+                font-size: var(--text-sm);
             }
-            button {
-                padding: var(--space-1) var(--space-2);
-                border-radius: var(--radius-md);
-                border: 1px solid var(--glass-border-subtle);
-                background: var(--glass-solid-subtle);
-                color: var(--text-secondary); cursor: pointer;
+            .field select {
+                cursor: pointer;
             }
-            button:hover { background: var(--glass-solid-medium); color: var(--text-primary); }
-            .empty { color: var(--text-tertiary); font-size: var(--text-sm); padding: var(--space-2); }
+            .remove-btn {
+                width: 32px;
+                height: 32px;
+                padding: 0;
+                border: none;
+                border-radius: var(--radius-sm);
+                background: transparent;
+                color: var(--text-tertiary);
+                font-size: var(--text-xl);
+                line-height: 1;
+                cursor: pointer;
+            }
+            .remove-btn:hover {
+                color: var(--text-primary);
+                background: var(--glass-tint-medium);
+            }
+            .head-row {
+                display: grid;
+                gap: var(--space-2);
+                padding: 0 var(--space-3) var(--space-1);
+            }
+            .head-row.input-grid {
+                grid-template-columns: 1fr minmax(0, 10px) minmax(100px, 130px) minmax(0, 28px) 1fr minmax(0, 36px);
+            }
+            .head-row.output-grid {
+                grid-template-columns: 1fr minmax(0, 28px) 1fr minmax(0, 36px);
+            }
+            .head-row label {
+                font-size: var(--text-xs);
+                color: var(--text-tertiary);
+            }
+            .empty {
+                color: var(--text-tertiary);
+                font-size: var(--text-sm);
+                padding: var(--space-3);
+            }
         `,
     ];
 
     constructor() {
         super();
+        this.syncKey = '';
         this.mapping = null;
+        this.kind = 'input';
         this.title = '';
         this._rows = [];
-        this._hydrated = false;
+        /** Не тянуть `mapping` с родителя после первого init (иначе пропадут незаполненные новые строки). */
+        this._parentMappingSettled = false;
     }
 
-    updated(changed) {
-        super.updated?.(changed);
-        if (!this._hydrated && this.mapping && typeof this.mapping === 'object') {
-            this._rows = Object.entries(this.mapping).map(([k, v]) => ({ key: k, value: String(v) }));
-            this._hydrated = true;
+    willUpdate(changed) {
+        super.willUpdate(changed);
+        if (changed.has('syncKey') || changed.has('kind')) {
+            this._parentMappingSettled = true;
+            this._syncRowsFromMapping();
+            return;
+        }
+        if (changed.has('mapping') && this._parentMappingSettled === false) {
+            this._parentMappingSettled = true;
+            this._syncRowsFromMapping();
+        }
+    }
+
+    firstUpdated() {
+        if (this._parentMappingSettled === false) {
+            this._parentMappingSettled = true;
+            this._syncRowsFromMapping();
+        }
+    }
+
+    get _isOutput() {
+        return this.kind === 'output';
+    }
+
+    _syncRowsFromMapping() {
+        const m = this.mapping;
+        this._rows = [];
+        if (!m || typeof m !== 'object') {
+            return;
+        }
+        if (this._isOutput) {
+            for (const [k, v] of Object.entries(m)) {
+                this._rows.push({
+                    resultKey: k,
+                    stateField: String(v),
+                });
+            }
+        } else {
+            for (const [param, source] of Object.entries(m)) {
+                const parsed = _parseInputSource(source);
+                this._rows.push({
+                    param,
+                    sourceType: parsed.sourceType,
+                    sourcePath: parsed.sourcePath,
+                });
+            }
         }
     }
 
     _emitChange() {
+        if (this._isOutput) {
+            const mapping = {};
+            for (const r of this._rows) {
+                const a = typeof r.resultKey === 'string' ? r.resultKey.trim() : '';
+                const b = typeof r.stateField === 'string' ? r.stateField.trim() : '';
+                if (a.length === 0 || b.length === 0) {
+                    continue;
+                }
+                mapping[a] = b;
+            }
+            this.emit('change', { mapping });
+            return;
+        }
         const mapping = {};
         for (const r of this._rows) {
-            const k = r.key.trim();
-            if (!k) continue;
-            mapping[k] = r.value;
+            const param = typeof r.param === 'string' ? r.param.trim() : '';
+            if (param.length === 0) {
+                continue;
+            }
+            mapping[param] = _buildInputSource(r.sourceType, r.sourcePath);
         }
         this.emit('change', { mapping });
     }
 
     _addRow() {
-        this._rows = [...this._rows, { key: '', value: '' }];
+        if (this._isOutput) {
+            this._rows = [...this._rows, { resultKey: '', stateField: '' }];
+        } else {
+            this._rows = [
+                ...this._rows,
+                { param: '', sourceType: 'state', sourcePath: '' },
+            ];
+        }
     }
 
     _removeRow(idx) {
@@ -77,34 +277,118 @@ export class FlowsStateMappingEditor extends PlatformElement {
         this._emitChange();
     }
 
-    _updateRow(idx, field, value) {
-        this._rows = this._rows.map((r, i) => (i === idx ? { ...r, [field]: value } : r));
+    _updateInputRow(idx, patch) {
+        this._rows = this._rows.map((r, i) => (i === idx ? { ...r, ...patch } : r));
+        this._emitChange();
+    }
+
+    _updateOutputRow(idx, patch) {
+        this._rows = this._rows.map((r, i) => (i === idx ? { ...r, ...patch } : r));
         this._emitChange();
     }
 
     render() {
+        const isOut = this._isOutput;
+        const empty = this._rows.length === 0;
         return html`
-            ${this.title ? html`<div style="margin-bottom: var(--space-1)">${this.title}</div>` : ''}
-            ${this._rows.length === 0
+            ${this.title
+                ? html`<div class="title" style="margin-bottom: var(--space-2); font-weight: var(--font-medium)">${this.title}</div>`
+                : ''}
+            <div class="toolbar">
+                <span class="hint">${isOut
+                    ? this.t('state_mapping_editor.hint_legend_output')
+                    : this.t('state_mapping_editor.hint_legend_input')}</span>
+                <button type="button" class="add-btn" @click=${this._addRow}>
+                    + ${this.t('state_mapping_editor.add')}
+                </button>
+            </div>
+            ${empty
                 ? html`<div class="empty">${this.t('state_mapping_editor.empty')}</div>`
-                : this._rows.map((r, i) => html`
-                    <div class="row">
-                        <input
-                            type="text"
-                            placeholder=${this.t('state_mapping_editor.placeholder_param')}
-                            .value=${r.key}
-                            @input=${(e) => this._updateRow(i, 'key', e.target.value)}
-                        />
-                        <input
-                            type="text"
-                            placeholder=${this.t('state_mapping_editor.placeholder_source')}
-                            .value=${r.value}
-                            @input=${(e) => this._updateRow(i, 'value', e.target.value)}
-                        />
-                        <button type="button" @click=${() => this._removeRow(i)}>×</button>
+                : ''}
+            ${!empty && !isOut
+                ? html`
+                    <div class="head-row input-grid" aria-hidden="true">
+                        <label>${this.t('state_mapping_editor.col_source')}</label>
+                        <span></span>
+                        <label>${this.t('state_mapping_editor.col_type')}</label>
+                        <span></span>
+                        <label>${this.t('state_mapping_editor.col_parameter')}</label>
+                        <span></span>
                     </div>
-                `)}
-            <button type="button" @click=${this._addRow}>+ ${this.t('state_mapping_editor.add')}</button>
+                `
+                : ''}
+            ${!empty && isOut
+                ? html`
+                    <div class="head-row output-grid" aria-hidden="true">
+                        <label>${this.t('state_mapping_editor.col_result_key')}</label>
+                        <span></span>
+                        <label>${this.t('state_mapping_editor.col_state_field')}</label>
+                        <span></span>
+                    </div>
+                `
+                : ''}
+            <div class="map-wrap">
+                ${isOut
+                    ? this._rows.map((r, i) => html`
+                        <div class="map-row output-grid">
+                            <div class="field">
+                                <input
+                                    type="text"
+                                    .value=${r.resultKey}
+                                    @input=${(e) => this._updateOutputRow(i, { resultKey: e.target.value })}
+                                />
+                            </div>
+                            <span class="arrow" title="">→</span>
+                            <div class="field">
+                                <input
+                                    type="text"
+                                    .value=${r.stateField}
+                                    @input=${(e) => this._updateOutputRow(i, { stateField: e.target.value })}
+                                />
+                            </div>
+                            <button
+                                type="button"
+                                class="remove-btn"
+                                @click=${() => this._removeRow(i)}
+                            >×</button>
+                        </div>
+                    `)
+                    : this._rows.map((r, i) => html`
+                        <div class="map-row input-grid">
+                            <div class="field">
+                                <input
+                                    type="text"
+                                    .value=${r.sourcePath}
+                                    @input=${(e) => this._updateInputRow(i, { sourcePath: e.target.value })}
+                                />
+                            </div>
+                            <span class="sep" aria-hidden="true">|</span>
+                            <div class="field">
+                                <select
+                                    .value=${r.sourceType}
+                                    @change=${(e) => this._updateInputRow(i, { sourceType: e.target.value })}
+                                >
+                                    <option value="state">@state</option>
+                                    <option value="var">@var</option>
+                                    <option value="const">${this.t('state_mapping_editor.type_const')}</option>
+                                </select>
+                            </div>
+                            <span class="arrow" aria-hidden="true">→</span>
+                            <div class="field">
+                                <input
+                                    type="text"
+                                    .value=${r.param}
+                                    @input=${(e) => this._updateInputRow(i, { param: e.target.value })}
+                                />
+                            </div>
+                            <button
+                                type="button"
+                                class="remove-btn"
+                                @click=${() => this._removeRow(i)}
+                            >×</button>
+                        </div>
+                    `)}
+            </div>
         `;
     }
 }

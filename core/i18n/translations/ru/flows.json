@@ -287,6 +287,11 @@
     "section_llm": "LLM конфигурация",
     "section_messages_filter": "Фильтр сообщений",
     "section_structured": "Структурированный вывод",
+    "section_output_mode": "Режим вывода",
+    "output_mode_tools": "Инструменты",
+    "output_mode_structured": "Структурированный",
+    "output_mode_hint": "Инструменты: ассистент вызывает tools и отвечает обычным текстом. Структурированный: ответ — JSON по схеме ниже.",
+    "section_output_schema": "JSON-схема вывода",
     "section_react": "ReAct цикл",
     "section_tools": "Инструменты",
     "messages_filter_all": "Весь лог",
@@ -310,12 +315,30 @@
     "field_code": "Код (Python)",
     "field_parameters_schema": "Parameters schema (JSON)",
     "section_code": "Код",
+    "tab_code": "Код",
+    "tab_schema": "Схема",
     "mode_inline": "Inline",
-    "mode_function": "Function reference",
+    "mode_function": "Ссылка на функцию",
     "args_schema": "Схема аргументов",
     "schema_form": "Форма",
     "schema_json": "JSON",
     "docs": "Документация"
+  },
+  "code_node_drop_modal": {
+    "title": "Code-нода",
+    "hint": "Создать пустой код или взять шаблон из каталога / реестра tools.",
+    "action_blank": "Пустая нода",
+    "action_templates": "Из шаблонов"
+  },
+  "code_node_templates_modal": {
+    "title": "Шаблоны code-ноды",
+    "tags_aria": "Фильтр по тегам",
+    "search_placeholder": "Поиск",
+    "tab_catalog": "Каталог",
+    "tab_registry": "Реестр tools",
+    "empty": "Нет шаблонов",
+    "empty_registry": "Нет подходящих tools",
+    "toast_no_code": "У tool нет исходного кода"
   },
   "channel_node_editor": {
     "field_channel_type": "Тип канала",
@@ -457,14 +480,21 @@
     "empty": "Брейкпоинты не выставлены"
   },
   "incoming_policy_modal": {
-    "title": "Incoming policy",
+    "title": "Политика входящих рёбер",
+    "subtitle": "Нода: {name}",
     "field_policy": "Политика",
     "action_cancel": "Отмена",
-    "action_save": "Сохранить"
+    "action_save": "Сохранить",
+    "option_any_title": "Any",
+    "option_any_desc": "Запуск при завершении любого входящего ребра. Обычный вариант без AND-join.",
+    "option_all_title": "All (AND-join)",
+    "option_all_desc": "Ожидание всех входящих рёбер, участвующих в join: нода выполнится один раз, когда все предшественники завершены."
   },
   "tool_picker_modal": {
     "title": "Выбор tool",
-    "empty": "Tool'ов нет"
+    "title_flow": "Выбор flow",
+    "search_placeholder": "Поиск",
+    "empty": "Нет tool или flow"
   },
   "tool_create_modal": {
     "title": "Новый tool",
@@ -477,11 +507,22 @@
     "action_create": "Создать",
     "toast_schema_invalid": "Схема параметров должна быть валидным JSON-объектом"
   },
+  "embedded_tool_config": {
+    "title": "Инструмент",
+    "loading": "Загрузка…",
+    "error": "Не удалось открыть редактор для этого tool.",
+    "cancel": "Отмена",
+    "save": "Сохранить",
+    "toast_cannot_delete": "Удаление из этой модалки недоступно — используйте список tools в родительской ноде."
+  },
   "code_modal": {
     "title": "Код агента"
   },
   "code_docs_modal": {
-    "title": "Документация кода"
+    "title": "Документация кода",
+    "search_placeholder": "Поиск в оглавлении",
+    "toc_aria": "Оглавление документации",
+    "toc_empty": "Нет подходящих заголовков"
   },
   "tracing_modal": {
     "title": "Трейс",
@@ -507,6 +548,13 @@
     "delete_node_confirm": "Удалить"
   },
   "base_node_editor": {
+    "section_basic": "Основное",
+    "node_id": "ID ноды",
+    "section_resources": "Закреплённые ресурсы",
+    "section_input_state": "Входной state (JSON)",
+    "input_state_reset": "Сбросить к превью",
+    "section_mapping": "Маппинг",
+    "section_test": "Тестирование",
     "name": "Имя",
     "description": "Описание",
     "description_hint": "Краткое описание роли ноды",
@@ -536,11 +584,24 @@
     "tab_output": "Выход",
     "tab_test": "Тест"
   },
+  "code_editor": {
+    "fullscreen": "Полноэкранный режим",
+    "exit_fullscreen": "Выйти из полноэкранного режима",
+    "save": "Сохранить (Ctrl+S / Cmd+S)"
+  },
   "state_mapping_editor": {
     "empty": "Нет маппингов",
-    "add": "Добавить маппинг",
+    "add": "Добавить",
     "placeholder_param": "Параметр",
-    "placeholder_source": "@state:..., @var:..., константа"
+    "placeholder_source": "@state:..., @var:..., константа",
+    "hint_legend_input": "путь state / var / константа → параметр ноды",
+    "hint_legend_output": "ключ в ответе → поле в state",
+    "col_source": "Источник",
+    "col_type": "Тип",
+    "col_parameter": "Параметр",
+    "col_result_key": "Ключ результата",
+    "col_state_field": "Поле state",
+    "type_const": "const"
   },
   "flows_sidebar": {
     "section_all_flows": "Все flows",
@@ -648,11 +709,66 @@
     "task_title": "Заголовок задачи",
     "user_message": "Сообщение пользователю"
   },
+  "run_trace": {
+    "section_title": "Ход выполнения",
+    "meta_duration": "{{ms}} мс",
+    "meta_tokens": "{{n}} ток.",
+    "empty": "Пока нет шагов. Запустите flow, чтобы увидеть события.",
+    "expand": "Подробнее",
+    "collapse": "Скрыть",
+    "step_expand_aria": "Показать полные данные шага",
+    "step_collapse_aria": "Скрыть полные данные шага",
+    "node_start": "Старт: {{node}}{{suffix}}",
+    "node_complete": "Готово: {{node}}",
+    "node_error": "Ошибка в {{node}}",
+    "tool_call": "Инструмент: {{tool}}",
+    "tool_result": "Результат: {{tool}}",
+    "reasoning_chunk": "Reasoning +{{chars}} симв.",
+    "operator_files": "Файлы оператора: {{count}}",
+    "ui_event": "UI-событие: {{type}}",
+    "flow_artifact": "Артефакт flow (JSON)",
+    "status_terminal": "Итог: {{state}}",
+    "breakpoint": "Брейкпоинт: {{node}}",
+    "input_required": "Ожидается ввод"
+  },
   "execution_panel": {
+    "title": "Тестовый запуск",
+    "tab_chat": "Чат",
+    "tab_trace": "Трассировка",
+    "tab_state": "Состояние",
+    "status_idle": "Ожидание",
+    "status_running": "Выполняется",
+    "status_passed": "Успех",
+    "status_failed": "Ошибка",
+    "full_trace": "Полный трейс",
+    "full_trace_title": "Открыть просмотр трейса (таймлайн)",
+    "state_tab_hint": "Переменные сессии и снимки нод — в просмотрщике состояния.",
+    "open_state": "Открыть состояние",
+    "error_human_title": "Что пошло не так",
+    "error_technical_title": "Технические детали",
+    "copy_technical": "Копировать",
+    "toast_technical_copied": "Скопировано в буфер",
+    "toast_technical_copy_failed": "Не удалось скопировать",
     "placeholder": "Тестовое сообщение для flow",
+    "placeholder_message": "Тестовое сообщение для flow",
+    "placeholder_answer": "Ваш ответ",
+    "persist_aria": "Сохранять контекст сессии между запусками",
+    "help_hint_label": "Сессия",
+    "persist_context_help": "Если включено, следующий запуск продолжит ту же сессию вместо новой.",
+    "state_title": "Состояние",
+    "tracing_title": "Трейсинг",
+    "mocks_title": "Моки",
+    "reset_chat": "Сбросить чат",
+    "reset_chat_title": "Новая сессия: очистить историю сообщений",
+    "close_panel": "Закрыть",
+    "expand_panel": "Развернуть панель",
+    "collapse_panel": "Обычный размер панели",
+    "attach_files": "Прикрепить файлы",
+    "stop": "Остановить",
     "run_running": "Выполняется…",
     "run_start": "Запустить",
-    "close": "Закрыть"
+    "close": "Закрыть",
+    "output_title": "Ответ"
   },
   "skills_tabs": {
     "base": "Base Flow",

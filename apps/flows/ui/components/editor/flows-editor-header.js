@@ -24,7 +24,14 @@
 import { html, css } from 'lit';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
 import '@platform/lib/components/platform-icon.js';
-import { asArray, asObject, asString, isPlainObject, getEdgeEndpoints } from '../../_helpers/flows-resolvers.js';
+import {
+    asArray,
+    asObject,
+    asString,
+    isPlainObject,
+    getEdgeEndpoints,
+    buildSkillNodeOverride,
+} from '../../_helpers/flows-resolvers.js';
 
 export class FlowsEditorHeader extends PlatformElement {
     static properties = {
@@ -214,9 +221,18 @@ export class FlowsEditorHeader extends PlatformElement {
             const existingSkill = isPlainObject(existingSkills[skillId]) ? existingSkills[skillId] : { name: skillId };
             const inheritedNodeIds = asArray(state.inheritedNodeIds);
             const inheritedEdgeKeys = asArray(state.inheritedEdgeKeys);
+            const baseNodes = isPlainObject(state.flowConfig?.nodes) ? state.flowConfig.nodes : {};
             const ownNodes = {};
             for (const [id, node] of Object.entries(isPlainObject(data.nodes) ? data.nodes : {})) {
-                if (!inheritedNodeIds.includes(id)) ownNodes[id] = node;
+                if (!inheritedNodeIds.includes(id)) {
+                    ownNodes[id] = node;
+                } else {
+                    const baseN = baseNodes[id];
+                    const fragment = buildSkillNodeOverride(baseN, node);
+                    if (isPlainObject(fragment) && Object.keys(fragment).length > 0) {
+                        ownNodes[id] = fragment;
+                    }
+                }
             }
             const ownEdges = asArray(data.edges).filter((edge) => {
                 const { from, to } = getEdgeEndpoints(edge);

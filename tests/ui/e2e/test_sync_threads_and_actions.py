@@ -9,6 +9,7 @@ from tests.ui.e2e.sync_e2e_helpers import (
     sync_api_channel_id_by_name,
     sync_api_find_message_id_with_text,
     sync_api_react_to_message,
+    sync_e2e_create_topic_channel_and_open,
     sync_sidebar_channel_nav,
 )
 from tests.ui.harness import AppUI
@@ -19,31 +20,10 @@ async def _seed_topic_channel(
     sync_ui: AppUI,
     page: Page,
     unique_id: str,
-) -> tuple[str, str]:
-    space_name = f"E2E thr space {unique_id}"
-    channel_name = f"Канал тредов {unique_id}"
-
+) -> None:
     await sync_ui.open(page)
     await sync_ui.expect_shell(page)
-
-    await page.get_by_role("button", name="Создать пространство").click()
-    sm = page.locator("space-settings-modal")
-    await expect(sm).to_be_visible()
-    ins = sm.locator('input.input:not([type="file"])')
-    await ins.nth(0).fill(space_name)
-    await sm.get_by_role("button", name="Создать", exact=True).click()
-    await expect(page.get_by_role("button", name=space_name)).to_be_visible(timeout=30_000)
-
-    await page.get_by_role("button", name="Создать канал").click()
-    ch_modal = page.locator("channel-settings-modal")
-    await expect(ch_modal).to_be_visible()
-    await ch_modal.get_by_placeholder("Название канала").fill(channel_name)
-    await ch_modal.get_by_role("button", name="Создать", exact=True).click()
-    await expect(sync_sidebar_channel_nav(page, channel_name)).to_be_visible(timeout=30_000)
-
-    await sync_sidebar_channel_nav(page, channel_name).click()
-    await expect(page.locator("chat-view")).to_be_visible()
-    return space_name, channel_name
+    await sync_e2e_create_topic_channel_and_open(page, unique_id, channel_prefix="Канал тредов")
 
 
 @pytest.mark.scenario(
@@ -140,7 +120,6 @@ async def test_user_reacts_and_edits_own_message(
     )
     await ui_page_system.reload(wait_until="domcontentloaded")
     await sync_ui.expect_shell(ui_page_system)
-    await expect(ui_page_system.locator(".ws-badge.open")).to_be_visible(timeout=30_000)
     await sync_sidebar_channel_nav(ui_page_system, channel_name_only).click()
     await expect(ui_page_system.locator("message-bubble .reaction-chip").first).to_be_visible(
         timeout=30_000

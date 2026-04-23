@@ -165,3 +165,153 @@ export function resolveSkillId(state) {
     if (!isPlainObject(state)) return null;
     return isNonEmptyString(state.currentSkillId) ? state.currentSkillId : null;
 }
+
+function _deepEqual(a, b) {
+    if (a === b) return true;
+    if (Array.isArray(a) && Array.isArray(b)) {
+        if (a.length !== b.length) return false;
+        for (let i = 0; i < a.length; i += 1) {
+            if (!_deepEqual(a[i], b[i])) return false;
+        }
+        return true;
+    }
+    if (isPlainObject(a) && isPlainObject(b)) {
+        const keysA = Object.keys(a);
+        const keysB = Object.keys(b);
+        if (keysA.length !== keysB.length) return false;
+        for (const k of keysA) {
+            if (!_deepEqual(a[k], b[k])) return false;
+        }
+        return true;
+    }
+    return false;
+}
+
+/**
+ * Фрагмент ноды для `skills[skillId].nodes` при merge: отличия effective от base.
+ * Бэкенд делает deep_merge(base_node, skill_fragment) — см. FlowFactory._merge_nodes.
+ */
+export function buildSkillNodeOverride(baseNode, effectiveNode) {
+    if (!isPlainObject(effectiveNode)) {
+        throw new Error('buildSkillNodeOverride: effectiveNode object required');
+    }
+    if (!isPlainObject(baseNode)) {
+        return { ...effectiveNode };
+    }
+    return _diffForSkillOverride(baseNode, effectiveNode);
+}
+
+function _diffForSkillOverride(base, effective) {
+    const out = {};
+    for (const key of Object.keys(effective)) {
+        const ev = effective[key];
+        if (ev === undefined) continue;
+        if (!(key in base)) {
+            out[key] = ev;
+            continue;
+        }
+        const bv = base[key];
+        if (isPlainObject(ev) && !Array.isArray(ev) && isPlainObject(bv) && !Array.isArray(bv)) {
+            const sub = _diffForSkillOverride(bv, ev);
+            if (isPlainObject(sub) && Object.keys(sub).length > 0) {
+                out[key] = sub;
+            }
+        } else if (Array.isArray(ev)) {
+            if (!_deepEqual(ev, Array.isArray(bv) ? bv : null)) {
+                out[key] = ev;
+            }
+        } else if (!_deepEqual(ev, bv)) {
+            out[key] = ev;
+        }
+    }
+    return out;
+}
+
+/**
+ * Статус панели тестового запуска: idle / running / passed / failed.
+ *
+ * @param {{ runInFlight: boolean, taskId: string | null, activeAssistant: unknown, runTrace: unknown }} params
+ * @returns {'idle'|'running'|'passed'|'failed'}
+ */
+export function deriveRunPanelStatus(params) {
+    if (!isPlainObject(params)) {
+        throw new Error('deriveRunPanelStatus: params object required');
+    }
+    if (params.runInFlight === true) {
+        return 'running';
+    }
+    const taskId = isNonEmptyString(params.taskId) ? params.taskId : null;
+    const assistant = isPlainObject(params.activeAssistant) ? params.activeAssistant : null;
+    if (assistant) {
+        const err = assistant.error;
+        if (typeof err === 'string' && err.length > 0) {
+            return 'failed';
+        }
+    }
+    const trace = Array.isArray(params.runTrace) ? params.runTrace : [];
+    let lastTerminal = null;
+    for (let i = trace.length - 1; i >= 0; i -= 1) {
+        const e = trace[i];
+        if (!isPlainObject(e)) {
+            continue;
+        }
+        if (taskId !== null) {
+            const tid = e.task_id;
+            if (typeof tid === 'string' && tid.length > 0 && tid !== taskId) {
+                continue;
+            }
+        }
+        if (e.kind === 'status_terminal' && typeof e.terminal_state === 'string') {
+            lastTerminal = e.terminal_state;
+            break;
+        }
+    }
+    if (lastTerminal === 'failed' || lastTerminal === 'error') {
+        return 'failed';
+    }
+    if (lastTerminal === 'completed' || lastTerminal === 'finished') {
+        return 'passed';
+    }
+    if (assistant && assistant.streaming === false) {
+        if (assistant.inputRequired != null && isPlainObject(assistant.inputRequired)) {
+            return 'idle';
+        }
+        const content = typeof assistant.content === 'string' ? assistant.content : '';
+        if (content.length > 0) {
+            return 'passed';
+        }
+    }
+    return 'idle';
+}
+
+/**
+ * Короткое описание ошибки для блока «для человека» (HTTP или первая строка).
+ *
+ * @param {string} text
+ */
+export function humanReadableErrorSummary(text) {
+    if (typeof text !== 'string') {
+        throw new Error('humanReadableErrorSummary: string required');
+    }
+    if (text.length === 0) {
+        throw new Error('humanReadableErrorSummary: non-empty string required');
+    }
+    const idx = text.indexOf('\n');
+    const firstLine = idx >= 0 ? text.slice(0, idx).trim() : text.trim();
+    const line = firstLine.length > 0 ? firstLine : text.trim();
+    if (line.length === 0) {
+        throw new Error('humanReadableErrorSummary: no readable line');
+    }
+    const clientErr = line.match(/Client error\s+'(\d+)\s+([^']+)'/i);
+    if (clientErr) {
+        return `HTTP ${clientErr[1]}: ${clientErr[2].trim()}`;
+    }
+    const httpPlain = line.match(/^HTTP\s+(\d{3})\s+(.+)$/i);
+    if (httpPlain) {
+        return `HTTP ${httpPlain[1]}: ${httpPlain[2].trim()}`;
+    }
+    if (line.length > 200) {
+        return `${line.slice(0, 200)}…`;
+    }
+    return line;
+}

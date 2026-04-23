@@ -109,7 +109,7 @@ alwaysApply: false
 - HTTP API сервиса **frontend**: префикс **`/frontend/api/platform-tracing`** (роутер `apps/frontend/api/platform_tracing.py`): `GET /facets/companies`, `/facets/users` — ответ **`items: [{ value, label }]`** (имя из shared + короткий id); остальные фасеты — **`items: string[]`**; `GET /spans` и **`GET /traces/{trace_id}`** добавляют к каждому span **`company_name`**, **`user_display_name`** (резолв через репозитории; для пользователя без записи в БД — fallback на колонку **`user_name`** span); `namespace_query`, `service_name_query` и прочие фильтры из `admin_search_spans`.
 - UI **`tracing-page.js`**: таблица показывает имя компании/пользователя и вторичную строку с id; фасеты company/user показывают **`label`**, в фильтр уходит **`value`**.
 - Если **`database.tracing_url` пустой** или **`tracing.postgres_enabled=false`** — эндпоинты отвечают **503** (без пустых данных).
-- Страница консоли: **`apps/frontend/ui/pages/admin/tracing-page.js`**, пункт меню в сайдбаре только для `system`.
+- Страница консоли: **`apps/frontend/ui/pages/admin/tracing-page.js`**, пункт меню в сайдбаре только для `system`; дерево одного trace в drawer — **`platform-trace-viewer`** (канон и строгие правила — **`ui_components.mdc`**, секция Platform Trace Viewer).
 - Пути **`/frontend/api/platform-tracing/*`** и **`/platform-tracing`** зарегистрированы в **`core/middleware/auth/route_config.py`** (иначе AuthMiddleware отдаёт 404).
 
 Сериализация строки репозитория — плоский dict с полями модели + `flow_id`/`task_id`/… из `attributes` (см. `_serialize_span`).

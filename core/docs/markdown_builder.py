@@ -6,6 +6,7 @@ from __future__ import annotations
 
 from core.docs.models import (
     CodeTemplate,
+    DocumentationQuery,
     DocumentationResponse,
     GlobalVariable,
     ModuleMethod,
@@ -42,6 +43,7 @@ def build_documentation_markdown(
     response: DocumentationResponse,
     *,
     title: str | None = None,
+    query: DocumentationQuery | None = None,
 ) -> str:
     """
     Формирует Markdown по ответу DocumentationService (тот же состав, что у completions).
@@ -50,17 +52,27 @@ def build_documentation_markdown(
     persp = response.perspective
     h1 = title or f"Документация inline-кода ({lang}, ракурс: {persp})"
 
+    toc: list[str] = [
+        "- [Глобальные объекты](#doc-globals)",
+    ]
+    if response.runtime_namespace_extras is not None:
+        toc.append("- [Доп. символы sandbox](#doc-runtime-namespace)")
+    toc_tail = [
+        "- [Модули](#doc-modules)",
+        "- [Поля state](#doc-state)",
+        "- [Встроенные имена (builtins)](#doc-builtins)",
+    ]
+    if query is None or query.include_platform_tools:
+        toc_tail.append("- [Platform tools (реестр и БД)](#doc-platform-tools)")
+    toc_tail.append("- [Шаблоны](#doc-templates)")
+    toc.extend(toc_tail)
+
     lines: list[str] = [
         f"# {h1}",
         "",
         "## Оглавление",
         "",
-        "- [Глобальные объекты](#doc-globals)",
-        "- [Модули](#doc-modules)",
-        "- [Поля state](#doc-state)",
-        "- [Встроенные имена (builtins)](#doc-builtins)",
-        "- [Platform tools (реестр и БД)](#doc-platform-tools)",
-        "- [Шаблоны](#doc-templates)",
+        *toc,
         "",
     ]
 
@@ -74,9 +86,36 @@ def build_documentation_markdown(
             lines.extend(_global_to_md(g))
         lines.append("")
 
+    if response.runtime_namespace_extras is not None:
+        lines.append('<h2 id="doc-runtime-namespace">Дополнительные символы sandbox</h2>')
+        lines.append("")
+        lines.append(
+            "Имена из фактического `PythonNamespaceBuilder.build()`, которых нет в статическом `GLOBALS`."
+        )
+        lines.append("")
+        if not response.runtime_namespace_extras:
+            lines.append("_Список пуст._")
+            lines.append("")
+        else:
+            for g in response.runtime_namespace_extras:
+                lines.extend(_global_to_md(g))
+            lines.append("")
+
     lines.append('<h2 id="doc-modules">Модули</h2>')
     lines.append("")
-    if not response.modules and not response.module_methods:
+    if query is not None and not query.markdown_expand_module_methods:
+        if response.modules:
+            lines.append("**Доступные модули:** " + ", ".join(f"`{m}`" for m in response.modules))
+            lines.append("")
+            lines.append(
+                "В sandbox разрешено подмножество API этих модулей. "
+                "Полный перечень методов и сигнатур — в справке редактора кода платформы."
+            )
+            lines.append("")
+        else:
+            lines.append("_Нет доступных модулей._")
+            lines.append("")
+    elif not response.modules and not response.module_methods:
         lines.append("_Нет доступных модулей._")
         lines.append("")
     else:
@@ -111,7 +150,13 @@ def build_documentation_markdown(
 
     lines.append('<h2 id="doc-builtins">Встроенные имена (builtins)</h2>')
     lines.append("")
-    if not response.builtins:
+    if query is not None and not query.markdown_expand_builtins:
+        lines.append(
+            "В inline-коде доступен ограниченный whitelist встроенных имён Python "
+            "(политика платформы). Полный перечень — в справке редактора кода."
+        )
+        lines.append("")
+    elif not response.builtins:
         lines.append("_Нет доступных builtins._")
         lines.append("")
     else:
@@ -125,20 +170,21 @@ def build_documentation_markdown(
             lines.append(", ".join(chunk))
         lines.append("")
 
-    lines.append('<h2 id="doc-platform-tools">Platform tools (реестр и БД)</h2>')
-    lines.append("")
-    if not response.platform_tools:
-        lines.append("_Нет зарегистрированных platform tools (пустой реестр и БД)._")
+    if query is None or query.include_platform_tools:
+        lines.append('<h2 id="doc-platform-tools">Platform tools (реестр и БД)</h2>')
         lines.append("")
-    else:
-        lines.append(
-            "Тулы для `llm.chat(..., tools=[...])` и конфигов нод: записи из **БД компании** "
-            "и дополнение экземплярами только из **процессного ToolRegistry** (`registry_only`)."
-        )
-        lines.append("")
-        for pt in response.platform_tools:
-            lines.extend(_platform_tool_to_md(pt))
-        lines.append("")
+        if not response.platform_tools:
+            lines.append("_Нет зарегистрированных platform tools (пустой реестр и БД)._")
+            lines.append("")
+        else:
+            lines.append(
+                "Тулы для `llm.chat(..., tools=[...])` и конфигов нод: записи из **БД компании** "
+                "и дополнение экземплярами только из **процессного ToolRegistry** (`registry_only`)."
+            )
+            lines.append("")
+            for pt in response.platform_tools:
+                lines.extend(_platform_tool_to_md(pt))
+            lines.append("")
 
     lines.append('<h2 id="doc-templates">Шаблоны</h2>')
     lines.append("")

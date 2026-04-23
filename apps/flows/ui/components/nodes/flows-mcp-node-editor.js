@@ -31,6 +31,8 @@ export class FlowsMcpNodeEditor extends PlatformElement {
         flowVariables: { type: Object },
         graphNodes: { type: Array },
         previewExecutionState: { type: Object },
+        expanded: { type: Boolean, reflect: true },
+        embedded: { type: Boolean, reflect: true },
     };
 
     static styles = [
@@ -70,6 +72,8 @@ export class FlowsMcpNodeEditor extends PlatformElement {
         this.flowVariables = null;
         this.graphNodes = null;
         this.previewExecutionState = null;
+        this.expanded = false;
+        this.embedded = false;
         this._servers = this.useResource('flows/mcp_servers', { autoload: true });
         this._sync = this.useOp('flows/mcp_server_sync');
     }
@@ -147,6 +151,8 @@ export class FlowsMcpNodeEditor extends PlatformElement {
                 .flowVariables=${this.flowVariables}
                 .graphNodes=${this.graphNodes}
                 .previewExecutionState=${this.previewExecutionState}
+                ?expanded=${this.expanded}
+                ?embedded=${this.embedded}
                 @change=${(e) => this.emit('change', e.detail)}
                 @rename-node=${(e) => this.emit('rename-node', e.detail)}
                 @delete-node=${(e) => this.emit('delete-node', e.detail)}
@@ -198,6 +204,8 @@ export class FlowsMcpNodeEditor extends PlatformElement {
                     <details>
                         <summary>${this.t('external_api_editor.response_mapping')}</summary>
                         <flows-state-mapping-editor
+                            syncKey=${String(this.flowId ?? '')}--${String(this.nodeId ?? '')}--mcp-state
+                            kind="output"
                             .mapping=${stateMapping}
                             @change=${this._onStateMapping}
                         ></flows-state-mapping-editor>

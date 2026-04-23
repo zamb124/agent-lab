@@ -90,6 +90,8 @@ def compile_function(
     variables: Optional[Dict[str, Any]] = None,
     auto_find: bool = False,
     base_tool_class: Optional[type] = None,
+    *,
+    strip_platform_imports: bool = True,
 ) -> Callable:
     """Компилирует код и возвращает функцию."""
     namespace_builder = PythonNamespaceBuilder(
@@ -97,7 +99,10 @@ def compile_function(
         variables=variables or {},
         base_tool_class=base_tool_class,
     )
-    compiler = PythonCompiler(namespace_builder=namespace_builder)
+    compiler = PythonCompiler(
+        namespace_builder=namespace_builder,
+        strip_platform_imports=strip_platform_imports,
+    )
     return compiler.compile(code, func_name, auto_find=auto_find)
 
 

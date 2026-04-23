@@ -45,4 +45,49 @@ describe('PlatformFormModal', () => {
         expect(modal.isDirty).to.be.false;
         expect(getPlatformBus().getState().modals.stack.find((m) => m.id === id)).to.be.undefined;
     });
+
+    it('close() при isDirty: platform-confirm, подтверждение снимает модалку со стека', async () => {
+        const stack = await fixture(html`<platform-modal-stack></platform-modal-stack>`);
+        getPlatformBus().dispatch(CoreEvents.UI_MODAL_OPEN, { kind: 'platform.form_test', props: {} });
+        await elementUpdated(stack);
+        const modal = document.querySelector('frontend-core-form-modal');
+        expect(modal, 'modal mounted').to.exist;
+        const id = modal._modalId;
+        modal.isDirty = true;
+        await elementUpdated(modal);
+        const closePromise = modal.close();
+        await elementUpdated(document.body);
+        const confirmEl = document.querySelector('platform-confirm-modal');
+        expect(confirmEl, 'platform-confirm mounted').to.exist;
+        expect(confirmEl.open).to.be.true;
+        await elementUpdated(confirmEl);
+        const confirmBtn = confirmEl.shadowRoot.querySelector('.btn-danger');
+        expect(confirmBtn, 'discard button').to.exist;
+        confirmBtn.click();
+        await closePromise;
+        await elementUpdated(stack);
+        expect(getPlatformBus().getState().modals.stack.find((m) => m.id === id)).to.be.undefined;
+    });
+
+    it('close() при isDirty: отмена в platform-confirm оставляет модалку на стеке', async () => {
+        const stack = await fixture(html`<platform-modal-stack></platform-modal-stack>`);
+        getPlatformBus().dispatch(CoreEvents.UI_MODAL_OPEN, { kind: 'platform.form_test', props: {} });
+        await elementUpdated(stack);
+        const modal = document.querySelector('frontend-core-form-modal');
+        expect(modal, 'modal mounted').to.exist;
+        const id = modal._modalId;
+        modal.isDirty = true;
+        await elementUpdated(modal);
+        const closePromise = modal.close();
+        await elementUpdated(document.body);
+        const confirmEl = document.querySelector('platform-confirm-modal');
+        expect(confirmEl, 'platform-confirm mounted').to.exist;
+        await elementUpdated(confirmEl);
+        const cancelBtn = confirmEl.shadowRoot.querySelector('.btn-secondary');
+        expect(cancelBtn, 'keep editing button').to.exist;
+        cancelBtn.click();
+        await closePromise;
+        await elementUpdated(stack);
+        expect(getPlatformBus().getState().modals.stack.find((m) => m.id === id)).to.exist;
+    });
 });

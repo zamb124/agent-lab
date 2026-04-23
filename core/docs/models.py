@@ -53,8 +53,26 @@ class DocumentationQuery(BaseModel):
     include_state_fields: bool = True
     include_builtins: bool = True
 
+    # Сборка Markdown (to_markdown): полный перечень методов модулей и builtins
+    markdown_expand_module_methods: bool = Field(
+        default=True,
+        description="False — в Markdown только список имён модулей, без методов.",
+    )
+    markdown_expand_builtins: bool = Field(
+        default=True,
+        description="False — в Markdown краткая отсылка к whitelist builtins, без списка имён.",
+    )
+
+    # Секция «Platform tools» в Markdown; для codegen (sandbox_codegen) обычно False — без каталога тулов
+    include_platform_tools: bool = True
+
     # Заполняется вызывающим кодом (flows API): реестр + БД компании
     platform_tools: Optional[List[PlatformToolDoc]] = None
+    # Заполняется только из apps/flows (там же строится список без импорта core→apps)
+    runtime_namespace_extras: Optional[List[GlobalVariable]] = Field(
+        default=None,
+        description="Символы sandbox-namespace, отсутствующие в статическом GLOBALS (обычно из PythonNamespaceBuilder).",
+    )
 
 
 class GlobalVariable(BaseModel):
@@ -112,3 +130,4 @@ class DocumentationResponse(BaseModel):
     state_fields: List[StateField] = []
     templates: List[CodeTemplate] = []
     platform_tools: List[PlatformToolDoc] = Field(default_factory=list)
+    runtime_namespace_extras: Optional[List[GlobalVariable]] = None

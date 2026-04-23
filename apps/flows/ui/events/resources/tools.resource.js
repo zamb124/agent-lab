@@ -23,10 +23,16 @@ export const toolsAllOp = createAsyncOp({
     name: 'flows/tools_all',
     silent: true,
     restMirror: { method: 'GET', path: '/flows/api/v1/tools/all' },
-    request: async () => {
+    request: async ({ payload }) => {
+        const src = payload && typeof payload === 'object' ? payload : {};
+        const limit = typeof src.limit === 'number' && src.limit > 0 ? src.limit : 2000;
+        const offset = typeof src.offset === 'number' && src.offset >= 0 ? src.offset : 0;
+        const q = new URLSearchParams();
+        q.set('limit', String(limit));
+        q.set('offset', String(offset));
         return httpRequest({
             method: 'GET',
-            url: '/flows/api/v1/tools/all',
+            url: `/flows/api/v1/tools/all?${q.toString()}`,
         });
     },
 });

@@ -23,26 +23,32 @@
     "apps": {
         "flows": {
             "name": "Flows",
+            "menu_description": "AI flows: graphs, skills, integrations",
             "description": "Design AI flows with graphs and skills, connect external systems — ship automation from idea to production with less custom code"
         },
         "crm": {
             "name": "NetWorkle",
+            "menu_description": "CRM and deal knowledge graph",
             "description": "CRM plus a knowledge graph: contacts, relationships, and deal context in one network so nothing falls through the cracks"
         },
         "rag": {
             "name": "RAG",
+            "menu_description": "Documents and semantic search",
             "description": "Your company knowledge base: upload documents, run semantic search, and give AI answers grounded in your own content"
         },
         "sync": {
             "name": "Sync",
+            "menu_description": "Chat, Git, and calls for teams",
             "description": "The engineering team hub: chat, Git, and calls alongside repos — align faster and ship with less friction"
         },
         "documents": {
             "name": "Documents",
+            "menu_description": "Collaborative Office editing",
             "description": "Collaborative Office editing: binding list, editor in iframe, namespace isolation, secrets only on the BFF"
         },
         "frontend": {
             "name": "Console",
+            "menu_description": "Company, billing, app hub",
             "description": "Your platform home: company settings, billing, and one-click access to every product"
         }
     },
@@ -111,5 +117,24 @@
         "role_owner_locked": "Cannot remove from company owner",
         "error_name_required": "Name is required",
         "error_role_required": "At least one role required"
+    },
+    "trace_viewer": {
+        "empty": "No spans in this trace",
+        "mode_group_label": "Trace view mode",
+        "mode_tree": "Tree",
+        "mode_timeline": "Timeline",
+        "search_placeholder": "Filter spans…",
+        "search_no_results": "No spans match the filter",
+        "timeline_unavailable": "Timeline needs span start times",
+        "kind_generation": "LLM",
+        "kind_tool": "Tool",
+        "kind_retrieval": "Retrieve",
+        "kind_embedding": "Embed",
+        "kind_agent": "Agent",
+        "kind_interrupt": "Interrupt",
+        "kind_flow": "Flow",
+        "kind_span": "Span",
+        "detail_title": "Span details",
+        "detail_attributes": "Attributes (JSON)"
     }
 }

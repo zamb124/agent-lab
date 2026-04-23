@@ -48,6 +48,10 @@ flows:
     public: true
     description: "Агент заполнения договора стажировки по DOCX-шаблону с выдачей готового файла"
 
+  - id: universal_agent
+    public: true
+    description: "Серия «Универсальный агент»: общий ассистент с калькулятором, уточнениями и мета-тулом sandbox_codegen; навыки RAG и упор на код"
+
 
 # Тулы
 # ВСЕ тулы загружаются в system namespace при старте
@@ -61,7 +65,11 @@ tools:
   - id: calculator
     public: true
     description: "Калькулятор для математических вычислений"
-  
+
+  - id: sandbox_codegen
+    public: true
+    description: "Мета-тул: LLM генерирует inline Python, платформа валидирует и выполняет в sandbox; JSON-ответ с result/trace"
+
   - id: search
     public: true
     description: "Поиск информации"

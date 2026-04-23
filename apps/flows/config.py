@@ -4,12 +4,14 @@
 Расширяет BaseSettings полями, специфичными для flows и runtime.
 """
 
-from typing import Optional, Dict, List
-from pydantic import BaseModel, Field
+from typing import Dict, List, Optional, Self
+from pydantic import BaseModel, Field, model_validator
 
 from core.config import BaseSettings
 from core.config.loader import load_merged_config
 from core.config.models import LLMConfig, PushConfig as CorePushConfig, S3Config
+
+FLOWS_PUBLIC_API_PREFIX = "/flows/api/v1"
 
 
 class ExternalFlowConfig(BaseModel):
@@ -109,6 +111,23 @@ class FlowSettings(BaseSettings):
         default=True,
         description="Включает dynamic CORS для /flows/api/v1/embed/{embed_id} по EmbedConfig.allowed_origins",
     )
+
+    @model_validator(mode="after")
+    def _public_http_prefix_must_be_flows(self) -> Self:
+        """
+        create_service_app вешает REST/WS на /{server.name}/api/...; фронт и
+        фабрики всегда дергают /flows/api/... . Без этого совпадения GET
+        /flows/api/v1/flows не попадает в API (часто из-за SERVER__NAME=core
+        в окружении или дефолта ServerConfig) и отдаётся SPA-роут, который
+        для сегмента api возвращает 404.
+        """
+        if self.server.name != "flows":
+            object.__setattr__(
+                self,
+                "server",
+                self.server.model_copy(update={"name": "flows"}),
+            )
+        return self
 
 
 _settings: Optional[FlowSettings] = None

@@ -21,6 +21,10 @@ from apps.flows.src.tools.mcp_wrapper import MCPTool
 
 logger = get_logger(__name__)
 
+# Тулы, чей исходник кладётся в tool_repository для документации/шаблона, но исполнять
+# их как CodeTool нельзя: тело опирается на модули вне sandbox (импорты режутся).
+_TOOL_IDS_PROCESS_BUILTIN_ONLY = frozenset({"sandbox_codegen"})
+
 
 class ToolRegistry:
     """
@@ -66,6 +70,7 @@ class ToolRegistry:
         from apps.flows.tools import (
             calculator,
             create_file,
+            sandbox_codegen,
             gdocs_append_text,
             gdocs_create_document,
             gdocs_delete_range,
@@ -99,6 +104,7 @@ class ToolRegistry:
         builtin_tools = [
             calculator,
             create_file,
+            sandbox_codegen,
             gdocs_append_text,
             gdocs_create_document,
             gdocs_delete_range,
@@ -152,7 +158,8 @@ class ToolRegistry:
         2. ``tool_id`` без инлайн ``code`` → если есть процессный builtin (``register_builtin_tools``), он имеет приоритет над шаблоном в ``tool_repository`` (Python-реализация, не sandbox).
         3. иначе ``tool_id`` без ``code``/``prompt`` (не ``mcp:``), тип не нода-as-tool → merge из ``tool_repository``
         4. Поле ``type`` (flow / llm_node / …) или ``prompt`` → NodeAsToolWrapper
-        5. Непустой ``code`` → CodeTool
+        5. Непустой ``code`` → CodeTool, кроме ``tool_id`` из
+           ``_TOOL_IDS_PROCESS_BUILTIN_ONLY`` (процессный FunctionTool).
         6. ``type=code`` без кода → NodeAsToolWrapper
         7. иначе ValueError
         """
@@ -229,6 +236,16 @@ class ToolRegistry:
             return self._create_node_as_tool(ref)
 
         if _has_nonempty_inline_code(ref):
+            tid_builtin = _tool_lookup_id(ref)
+            if tid_builtin and tid_builtin in _TOOL_IDS_PROCESS_BUILTIN_ONLY:
+                if not self._initialized:
+                    self.register_builtin_tools()
+                process_tool = self.get(tid_builtin)
+                if process_tool is None:
+                    raise ValueError(
+                        f"Tool '{tid_builtin}': требуется процессный builtin (register_builtin_tools)"
+                    )
+                return process_tool
             code_text = ref["code"]
             if not isinstance(code_text, str):
                 raise ValueError(f"Tool 'code' must be str, got {type(code_text)}")

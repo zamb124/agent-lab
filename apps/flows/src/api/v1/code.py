@@ -31,6 +31,7 @@ from apps.flows.src.api.v1.flows import _inline_tools_list
 from apps.flows.src.container import FlowContainer
 from apps.flows.src.dependencies import ContainerDep
 from apps.flows.src.services.platform_tool_docs import collect_platform_tool_docs
+from apps.flows.src.services.runtime_namespace_doc import build_runtime_namespace_global_variables
 from apps.flows.src.state import collect_flow_node_files, create_initial_state
 
 router = APIRouter(tags=["code"])
@@ -46,6 +47,7 @@ class CodeCompletionsResponse(BaseModel):
     state_fields: List[StateField] = []
     templates: List[CodeTemplate] = []
     platform_tools: List[PlatformToolDoc] = []
+    runtime_namespace_extras: Optional[List[GlobalVariable]] = None
 
 
 @router.get("/completions", response_model=CodeCompletionsResponse)
@@ -53,6 +55,7 @@ async def get_code_completions(
     container: ContainerDep,
     language: str = "python",
     perspective: str = "editor",
+    include_runtime_namespace_extras: bool = False,
 ) -> CodeCompletionsResponse:
     """
     Возвращает данные для autocomplete в редакторе кода.
@@ -72,10 +75,15 @@ async def get_code_completions(
     service = get_documentation_service()
     platform_tools = await collect_platform_tool_docs(container)
 
+    runtime_extras = None
+    if include_runtime_namespace_extras and language == "python":
+        runtime_extras = build_runtime_namespace_global_variables()
+
     query = DocumentationQuery(
         language=language,
         perspective=perspective,
         platform_tools=platform_tools,
+        runtime_namespace_extras=runtime_extras,
     )
 
     response = service.query(query)
@@ -94,6 +102,7 @@ async def get_code_completions(
         state_fields=response.state_fields,
         templates=response.templates,
         platform_tools=response.platform_tools,
+        runtime_namespace_extras=response.runtime_namespace_extras,
     )
 
 
@@ -102,6 +111,7 @@ async def get_code_documentation(
     container: ContainerDep,
     language: str = "python",
     perspective: str = "editor",
+    include_runtime_namespace_extras: bool = False,
 ) -> Response:
     """
     Полная документация для редактора inline-кода в формате Markdown
@@ -109,10 +119,14 @@ async def get_code_documentation(
     """
     service = get_documentation_service()
     platform_tools = await collect_platform_tool_docs(container)
+    runtime_extras = None
+    if include_runtime_namespace_extras and language == "python":
+        runtime_extras = build_runtime_namespace_global_variables()
     query = DocumentationQuery(
         language=language,
         perspective=perspective,
         platform_tools=platform_tools,
+        runtime_namespace_extras=runtime_extras,
     )
     body = service.to_markdown(query)
     return Response(

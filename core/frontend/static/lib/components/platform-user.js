@@ -466,7 +466,7 @@ export class PlatformUser extends PlatformElement {
                                         <platform-icon class="app-go-icon" name="arrow-right" size="16"></platform-icon>
                                     </span>
                                     <span class="app-card-name">${this.t(`${service.i18n}.name`)}</span>
-                                    <span class="app-card-description">${this.t(`${service.i18n}.description`)}</span>
+                                    <span class="app-card-description">${this.t(`${service.i18n}.menu_description`)}</span>
                                 </button>
                             `)}
                         </div>

@@ -187,6 +187,23 @@ export class ChatPage extends PlatformPage {
         return bucket !== null && Array.isArray(bucket.messages) ? bucket.messages : [];
     }
 
+    _currentRunTrace() {
+        const state = this._chat.state;
+        if (!isPlainObject(state)) {
+            return [];
+        }
+        const ctx = typeof state.currentContextId === 'string' ? state.currentContextId : null;
+        if (!ctx) {
+            return [];
+        }
+        const by = state.runTraceByContextId;
+        if (!isPlainObject(by)) {
+            return [];
+        }
+        const list = by[ctx];
+        return Array.isArray(list) ? list : [];
+    }
+
     _currentFlow() {
         const items = asArray(this._flows.items);
         const found = items.find((f) => f && f.flow_id === this.flowId);
@@ -302,6 +319,7 @@ export class ChatPage extends PlatformPage {
             flowName = this.t('platform_chat.no_flow');
         }
         const messages = this._currentMessages();
+        const runTrace = this._currentRunTrace();
         const streaming = Boolean(this._chat.state?.streaming);
 
         return html`
@@ -326,7 +344,7 @@ export class ChatPage extends PlatformPage {
                 </div>
             </div>
             <div class="chat-body">
-                <chat-messages .messages=${messages}></chat-messages>
+                <chat-messages .messages=${messages} .runTrace=${runTrace}></chat-messages>
                 <chat-input
                     ?streaming=${streaming}
                     @send-message=${this._onSendMessage}

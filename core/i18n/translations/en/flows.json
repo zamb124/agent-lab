@@ -287,6 +287,11 @@
     "section_llm": "LLM config",
     "section_messages_filter": "Messages filter",
     "section_structured": "Structured output",
+    "section_output_mode": "Output mode",
+    "output_mode_tools": "Tools",
+    "output_mode_structured": "Structured",
+    "output_mode_hint": "Tools: the assistant may call tools and respond in natural language. Structured: the reply is a JSON object validated against the output schema below.",
+    "section_output_schema": "Output JSON schema",
     "section_react": "ReAct loop",
     "section_tools": "Tools",
     "messages_filter_all": "All messages",
@@ -310,12 +315,30 @@
     "field_code": "Code (Python)",
     "field_parameters_schema": "Parameters schema (JSON)",
     "section_code": "Code",
+    "tab_code": "Code",
+    "tab_schema": "Schema",
     "mode_inline": "Inline",
     "mode_function": "Function reference",
     "args_schema": "Args schema",
     "schema_form": "Form",
     "schema_json": "JSON",
     "docs": "Documentation"
+  },
+  "code_node_drop_modal": {
+    "title": "Code node",
+    "hint": "Start empty, or pick a template from the catalog or tool registry.",
+    "action_blank": "Empty node",
+    "action_templates": "From templates"
+  },
+  "code_node_templates_modal": {
+    "title": "Code node templates",
+    "tags_aria": "Filter by tag",
+    "search_placeholder": "Search",
+    "tab_catalog": "Catalog",
+    "tab_registry": "Tool registry",
+    "empty": "No templates",
+    "empty_registry": "No matching tools",
+    "toast_no_code": "This tool has no code"
   },
   "channel_node_editor": {
     "field_channel_type": "Channel type",
@@ -458,13 +481,20 @@
   },
   "incoming_policy_modal": {
     "title": "Incoming policy",
+    "subtitle": "Node: {name}",
     "field_policy": "Policy",
     "action_cancel": "Cancel",
-    "action_save": "Save"
+    "action_save": "Save",
+    "option_any_title": "Any",
+    "option_any_desc": "Start the node when any one incoming edge completes. Default for fan-in without an AND join.",
+    "option_all_title": "All (AND join)",
+    "option_all_desc": "Wait until every incoming edge that participates in the join has completed, then run once."
   },
   "tool_picker_modal": {
     "title": "Pick a tool",
-    "empty": "No tools"
+    "title_flow": "Pick a flow",
+    "search_placeholder": "Search",
+    "empty": "No tools or flows"
   },
   "tool_create_modal": {
     "title": "New tool",
@@ -477,11 +507,22 @@
     "action_create": "Create",
     "toast_schema_invalid": "Parameters schema must be a valid JSON object"
   },
+  "embedded_tool_config": {
+    "title": "Tool",
+    "loading": "Loading…",
+    "error": "Could not open the editor for this tool.",
+    "cancel": "Cancel",
+    "save": "Save",
+    "toast_cannot_delete": "You cannot remove the tool from here — use the parent node tool list."
+  },
   "code_modal": {
     "title": "Agent code"
   },
   "code_docs_modal": {
-    "title": "Code documentation"
+    "title": "Code documentation",
+    "search_placeholder": "Search in outline",
+    "toc_aria": "Documentation outline",
+    "toc_empty": "No matching headings"
   },
   "tracing_modal": {
     "title": "Trace",
@@ -507,6 +548,13 @@
     "delete_node_confirm": "Delete"
   },
   "base_node_editor": {
+    "section_basic": "Basic",
+    "node_id": "Node ID",
+    "section_resources": "Attached resources",
+    "section_input_state": "Input state (JSON)",
+    "input_state_reset": "Reset to preview",
+    "section_mapping": "Mapping",
+    "section_test": "Testing",
     "name": "Name",
     "description": "Description",
     "description_hint": "Brief description of node's role",
@@ -536,11 +584,24 @@
     "tab_output": "Output",
     "tab_test": "Test"
   },
+  "code_editor": {
+    "fullscreen": "Fullscreen",
+    "exit_fullscreen": "Exit fullscreen",
+    "save": "Save (Ctrl+S / Cmd+S)"
+  },
   "state_mapping_editor": {
     "empty": "No mappings",
-    "add": "Add mapping",
+    "add": "Add",
     "placeholder_param": "Parameter",
-    "placeholder_source": "@state:..., @var:..., constant"
+    "placeholder_source": "@state:..., @var:..., constant",
+    "hint_legend_input": "state / var / constant → node parameter",
+    "hint_legend_output": "response key → state field",
+    "col_source": "Source",
+    "col_type": "Type",
+    "col_parameter": "Parameter",
+    "col_result_key": "Result key",
+    "col_state_field": "State field",
+    "type_const": "const"
   },
   "flows_sidebar": {
     "section_all_flows": "All flows",
@@ -648,11 +709,66 @@
     "task_title": "Task title",
     "user_message": "User message"
   },
+  "run_trace": {
+    "section_title": "Run activity",
+    "meta_duration": "{{ms}} ms",
+    "meta_tokens": "{{n}} tokens",
+    "empty": "No steps yet. Start a run to see execution events.",
+    "expand": "Details",
+    "collapse": "Hide",
+    "step_expand_aria": "Show full step data",
+    "step_collapse_aria": "Hide full step data",
+    "node_start": "Started: {{node}}{{suffix}}",
+    "node_complete": "Completed: {{node}}",
+    "node_error": "Error in {{node}}",
+    "tool_call": "Tool: {{tool}}",
+    "tool_result": "Tool result: {{tool}}",
+    "reasoning_chunk": "Reasoning stream +{{chars}} chars",
+    "operator_files": "Operator files: {{count}}",
+    "ui_event": "UI event: {{type}}",
+    "flow_artifact": "Flow artifact (JSON)",
+    "status_terminal": "Finished: {{state}}",
+    "breakpoint": "Breakpoint: {{node}}",
+    "input_required": "Waiting for input"
+  },
   "execution_panel": {
+    "title": "Test run",
+    "tab_chat": "Chat",
+    "tab_trace": "Trace",
+    "tab_state": "State",
+    "status_idle": "Idle",
+    "status_running": "Running",
+    "status_passed": "Passed",
+    "status_failed": "Failed",
+    "full_trace": "Full trace",
+    "full_trace_title": "Open trace viewer (timeline)",
+    "state_tab_hint": "Inspect session variables and node snapshots in the state viewer.",
+    "open_state": "Open state",
+    "error_human_title": "What went wrong",
+    "error_technical_title": "Technical details",
+    "copy_technical": "Copy",
+    "toast_technical_copied": "Copied to clipboard",
+    "toast_technical_copy_failed": "Could not copy",
     "placeholder": "Test message for the flow",
+    "placeholder_message": "Test message for the flow",
+    "placeholder_answer": "Your answer",
+    "persist_aria": "Keep session context between runs",
+    "help_hint_label": "Session",
+    "persist_context_help": "When enabled, the next run continues in the same context instead of starting a new session.",
+    "state_title": "State",
+    "tracing_title": "Tracing",
+    "mocks_title": "Mocks",
+    "reset_chat": "Reset chat",
+    "reset_chat_title": "New session: clear message history",
+    "close_panel": "Close",
+    "expand_panel": "Expand panel",
+    "collapse_panel": "Restore panel size",
+    "attach_files": "Attach files",
+    "stop": "Stop",
     "run_running": "Running…",
     "run_start": "Run",
-    "close": "Close"
+    "close": "Close",
+    "output_title": "Output"
   },
   "skills_tabs": {
     "base": "Base Flow",

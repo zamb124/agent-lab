@@ -1,27 +1,22 @@
 /**
  * flows-code-node-editor — редактор code-ноды.
  *
- * Поля точно по `NodeConfig` (apps/flows/src/models/node_config.py) и
- * `CodeNode` (apps/flows/src/runtime/nodes.py):
- *   - code (str): inline Python код
- *   - args_schema (object): схема аргументов
- *   - tool_id (str, опционально): ID code-tool из реестра (mode='function')
- *
- * Toggle inline ↔ function reference: в режиме function редактор
- * подгружает исходник через useOp('flows/code_tool_source') (read-only).
+ * Поля: `code`, `args_schema` (NodeConfig / CodeNode).
+ * Вкладки «Код» / «Схема» — одинаковая шапка `flows-code-editor` (slot toolbar-start + Save / Fullscreen).
+ * Если в данных был только `tool_id` без `code`, при открытии подставляется исходник из реестра, `tool_id` сбрасывается.
  */
 
 import { html, css } from 'lit';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
 import './flows-base-node-editor.js';
 import '../editors/flows-code-editor.js';
-import '../editors/flows-args-schema-form.js';
-import '../editors/flows-json-field-editor.js';
 import '@platform/lib/components/glass-button.js';
 import '@platform/lib/components/platform-icon.js';
-import { asObject, asString } from '../../_helpers/flows-resolvers.js';
+import { asString } from '../../_helpers/flows-resolvers.js';
 
 export class FlowsCodeNodeEditor extends PlatformElement {
+    static i18nNamespace = 'flows';
+
     static properties = {
         nodeId: { type: String },
         flowId: { type: String },
@@ -32,45 +27,62 @@ export class FlowsCodeNodeEditor extends PlatformElement {
         graphNodes: { type: Array },
         previewExecutionState: { type: Object },
         expanded: { type: Boolean, reflect: true },
-        _showSchemaJson: { state: true },
+        embedded: { type: Boolean, reflect: true },
+        _mainTab: { state: true },
+        _schemaInvalid: { state: true },
+        _schemaError: { state: true },
     };
 
     static styles = [
         PlatformElement.styles,
         css`
-            :host { display: block; height: 100%; min-height: 0; }
-            details {
-                margin-bottom: var(--space-3);
-                padding: var(--space-2) var(--space-3);
+            :host {
+                display: block;
+                height: 100%;
+                min-height: 0;
+            }
+            .settings-wrap {
+                display: flex;
+                flex-direction: column;
+                gap: 0;
+            }
+            .toolbar-start-wrap {
+                display: flex;
+                flex-wrap: wrap;
+                align-items: center;
+                justify-content: space-between;
+                gap: var(--space-2);
+                width: 100%;
+                box-sizing: border-box;
+            }
+            .main-tabs {
+                display: flex;
+                gap: var(--space-1);
+                flex-wrap: wrap;
+            }
+            .main-tab {
+                padding: 6px 14px;
+                background: var(--glass-solid-subtle);
                 border: 1px solid var(--glass-border-subtle);
                 border-radius: var(--radius-md);
-                background: var(--glass-solid-subtle);
-            }
-            summary { cursor: pointer; font-size: var(--text-sm); font-weight: var(--font-semibold); }
-            .row { display: flex; align-items: center; gap: var(--space-2); margin-bottom: var(--space-2); }
-            label { font-size: var(--text-sm); color: var(--text-secondary); }
-            input {
-                padding: var(--space-2);
-                border-radius: var(--radius-md);
-                border: 1px solid var(--glass-border-subtle);
-                background: var(--glass-solid-subtle);
-                color: var(--text-primary); font: inherit;
-                width: 100%; box-sizing: border-box;
-            }
-            .toggle button {
-                padding: 4px 12px;
-                background: var(--glass-solid-subtle);
                 color: var(--text-secondary);
-                border: 1px solid var(--glass-border-subtle);
-                border-radius: var(--radius-full);
-                font-size: var(--text-xs);
+                font-size: var(--text-sm);
+                font-weight: var(--font-medium);
                 cursor: pointer;
             }
-            .toggle button[active] {
-                background: var(--accent-subtle); color: var(--accent);
+            .main-tab[active] {
+                background: var(--accent-subtle);
+                color: var(--accent);
                 border-color: var(--accent-subtle);
             }
-            .docs-btn { margin-left: auto; }
+            .schema-editor-wrap[data-invalid] flows-code-editor {
+                border-color: var(--error);
+            }
+            .schema-error {
+                color: var(--error);
+                font-size: var(--text-xs);
+                margin-top: var(--space-1);
+            }
         `,
     ];
 
@@ -85,75 +97,120 @@ export class FlowsCodeNodeEditor extends PlatformElement {
         this.graphNodes = null;
         this.previewExecutionState = null;
         this.expanded = false;
-        this._showSchemaJson = false;
+        this.embedded = false;
+        this._mainTab = 'code';
+        this._schemaInvalid = false;
+        this._schemaError = '';
         this._toolSource = this.useOp('flows/code_tool_source');
+        this._hydrateKey = '';
+    }
+
+    willUpdate(changed) {
+        super.willUpdate?.(changed);
+        if (changed.has('nodeId')) {
+            this._mainTab = 'code';
+            this._hydrateKey = '';
+            this._schemaInvalid = false;
+            this._schemaError = '';
+        }
+    }
+
+    updated(changed) {
+        super.updated?.(changed);
+        if (changed.has('nodeConfig') || changed.has('nodeId')) {
+            void this._maybeHydrateCodeFromTool();
+        }
+    }
+
+    async _maybeHydrateCodeFromTool() {
+        const cfg = this.nodeConfig;
+        if (!cfg || typeof cfg !== 'object') {
+            return;
+        }
+        const tid = cfg.tool_id;
+        const c = typeof cfg.code === 'string' ? cfg.code : '';
+        if (typeof tid !== 'string' || tid.length === 0) {
+            return;
+        }
+        if (c.trim().length > 0) {
+            return;
+        }
+        const key = `${asString(this.nodeId)}:${tid}`;
+        if (this._hydrateKey === key) {
+            return;
+        }
+        this._hydrateKey = key;
+        const result = await this._toolSource.run({ tool_path: tid });
+        const source = result && typeof result === 'object' && result !== null && 'source' in result
+            ? asString(result.source)
+            : '';
+        if (source.length > 0) {
+            this._emitPatch({ code: source, tool_id: null });
+        }
     }
 
     _emitPatch(patch) {
         this.emit('change', { nodeId: this.nodeId, patch });
     }
 
-    _mode() {
-        return typeof this.nodeConfig?.tool_id === 'string' && this.nodeConfig.tool_id.length > 0
-            ? 'function'
-            : 'inline';
-    }
-
-    _setMode(mode) {
-        if (mode === 'function') {
-            this._emitPatch({ tool_id: '' });
-        } else {
-            this._emitPatch({ tool_id: null });
-        }
-    }
-
     _onCodeChange(e) {
-        this._emitPatch({ code: asString(e.detail?.value) });
+        this._emitPatch({ code: asString(e.detail?.value), tool_id: null });
     }
 
-    _onToolIdChange(e) {
-        const v = e.target.value;
-        this._emitPatch({ tool_id: v });
-        if (v) {
-            void this._toolSource.run({ tool_id: v });
+    _onSchemaEditorChange(e) {
+        const value = asString(e.detail?.value);
+        try {
+            const parsed = value.trim().length === 0 ? null : JSON.parse(value);
+            this._schemaInvalid = false;
+            this._schemaError = '';
+            this._emitPatch({ args_schema: parsed });
+        } catch (err) {
+            this._schemaInvalid = true;
+            this._schemaError = err.message;
         }
-    }
-
-    _onSchemaJsonChange(e) {
-        if (!e.detail || !('parsed' in e.detail)) return;
-        this._emitPatch({ args_schema: e.detail.parsed });
-    }
-
-    _onSchemaFormChange(e) {
-        const values = e.detail?.values && typeof e.detail.values === 'object' ? e.detail.values : {};
-        const merged = {};
-        const current = this.nodeConfig?.args_schema && typeof this.nodeConfig.args_schema === 'object'
-            ? this.nodeConfig.args_schema
-            : {};
-        for (const [key, def] of Object.entries(current)) {
-            const defObj = def && typeof def === 'object' ? def : {};
-            merged[key] = { ...defObj, default: values[key] };
-        }
-        this._emitPatch({ args_schema: merged });
     }
 
     _openDocs() {
         this.openModal('flows.code_docs', { language: 'python' });
     }
 
+    _renderToolbarStart() {
+        return html`
+            <div class="toolbar-start-wrap">
+                <div class="main-tabs" role="tablist">
+                    <button
+                        type="button"
+                        class="main-tab"
+                        role="tab"
+                        ?active=${this._mainTab === 'code'}
+                        @click=${() => { this._mainTab = 'code'; }}
+                    >
+                        ${this.t('code_node_editor.tab_code')}
+                    </button>
+                    <button
+                        type="button"
+                        class="main-tab"
+                        role="tab"
+                        ?active=${this._mainTab === 'schema'}
+                        @click=${() => { this._mainTab = 'schema'; }}
+                    >
+                        ${this.t('code_node_editor.tab_schema')}
+                    </button>
+                </div>
+                <glass-button size="sm" variant="ghost" @click=${this._openDocs}>
+                    <platform-icon name="info"></platform-icon>
+                    ${this.t('code_node_editor.docs')}
+                </glass-button>
+            </div>
+        `;
+    }
+
     render() {
-        const mode = this._mode();
         const code = typeof this.nodeConfig?.code === 'string' ? this.nodeConfig.code : '';
-        const toolId = typeof this.nodeConfig?.tool_id === 'string' ? this.nodeConfig.tool_id : '';
         const argsSchema = this.nodeConfig?.args_schema && typeof this.nodeConfig.args_schema === 'object'
             ? this.nodeConfig.args_schema
             : {};
-        const argsValues = Object.fromEntries(
-            Object.entries(argsSchema).map(([k, v]) => [k, v && typeof v === 'object' && 'default' in v ? v.default : undefined])
-        );
-        const toolSource = mode === 'function' && toolId
-            ? asString(this._toolSource.lastResult?.code)
-            : '';
+        const schemaText = JSON.stringify(argsSchema, null, 2);
         return html`
             <flows-base-node-editor
                 .nodeId=${this.nodeId}
@@ -165,69 +222,29 @@ export class FlowsCodeNodeEditor extends PlatformElement {
                 .graphNodes=${this.graphNodes}
                 .previewExecutionState=${this.previewExecutionState}
                 ?expanded=${this.expanded}
+                ?embedded=${this.embedded}
             >
-                <div slot="settings">
-                    <details open>
-                        <summary>${this.t('code_node_editor.section_code')}</summary>
-                        <div class="row toggle">
-                            <button ?active=${mode === 'inline'} @click=${() => this._setMode('inline')}>
-                                ${this.t('code_node_editor.mode_inline')}
-                            </button>
-                            <button ?active=${mode === 'function'} @click=${() => this._setMode('function')}>
-                                ${this.t('code_node_editor.mode_function')}
-                            </button>
-                            <glass-button class="docs-btn" size="sm" variant="ghost" @click=${this._openDocs}>
-                                <platform-icon name="info"></platform-icon>
-                                ${this.t('code_node_editor.docs')}
-                            </glass-button>
-                        </div>
-                        ${mode === 'inline' ? html`
+                <div slot="settings" class="settings-wrap">
+                    ${this._mainTab === 'code' ? html`
+                        <flows-code-editor
+                            language="python"
+                            .value=${code}
+                            @change=${this._onCodeChange}
+                        >
+                            <div slot="toolbar-start">${this._renderToolbarStart()}</div>
+                        </flows-code-editor>
+                    ` : html`
+                        <div class="schema-editor-wrap" ?data-invalid=${this._schemaInvalid}>
                             <flows-code-editor
-                                language="python"
-                                .value=${code}
-                                @change=${this._onCodeChange}
-                            ></flows-code-editor>
-                        ` : html`
-                            <div class="row">
-                                <input
-                                    type="text"
-                                    placeholder="module.func"
-                                    .value=${toolId}
-                                    @input=${this._onToolIdChange}
-                                />
-                            </div>
-                            ${toolSource ? html`
-                                <flows-code-editor
-                                    language="python"
-                                    readonly
-                                    .value=${toolSource}
-                                ></flows-code-editor>
-                            ` : ''}
-                        `}
-                    </details>
-                    <details>
-                        <summary>${this.t('code_node_editor.args_schema')}</summary>
-                        <div class="row toggle">
-                            <button ?active=${!this._showSchemaJson} @click=${() => { this._showSchemaJson = false; }}>
-                                ${this.t('code_node_editor.schema_form')}
-                            </button>
-                            <button ?active=${this._showSchemaJson} @click=${() => { this._showSchemaJson = true; }}>
-                                ${this.t('code_node_editor.schema_json')}
-                            </button>
+                                language="json"
+                                .value=${schemaText}
+                                @change=${this._onSchemaEditorChange}
+                            >
+                                <div slot="toolbar-start">${this._renderToolbarStart()}</div>
+                            </flows-code-editor>
+                            ${this._schemaInvalid ? html`<div class="schema-error">${this._schemaError}</div>` : ''}
                         </div>
-                        ${this._showSchemaJson ? html`
-                            <flows-json-field-editor
-                                .value=${JSON.stringify(argsSchema, null, 2)}
-                                @change=${this._onSchemaJsonChange}
-                            ></flows-json-field-editor>
-                        ` : html`
-                            <flows-args-schema-form
-                                .schema=${argsSchema}
-                                .values=${argsValues}
-                                @change=${this._onSchemaFormChange}
-                            ></flows-args-schema-form>
-                        `}
-                    </details>
+                    `}
                 </div>
             </flows-base-node-editor>
         `;

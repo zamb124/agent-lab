@@ -20,6 +20,7 @@ from typing import Any, Dict, List
 
 import pytest
 import redis.asyncio as redis_asyncio
+import redis.exceptions as redis_exceptions
 from filelock import FileLock
 
 from tests.fixtures.test_database_env import TEST_DATABASE_ENV
@@ -60,7 +61,13 @@ def _clear_taskiq_stream(stream_name: str, redis_url: str) -> None:
         groups = await client.xinfo_groups(stream_name)
         group_names = {str(group["name"]) for group in groups}
         if "taskiq" not in group_names:
-            await client.xgroup_create(name=stream_name, groupname="taskiq", id="$", mkstream=True)
+            try:
+                await client.xgroup_create(
+                    name=stream_name, groupname="taskiq", id="$", mkstream=True
+                )
+            except redis_exceptions.ResponseError as exc:
+                if "BUSYGROUP" not in str(exc).upper():
+                    raise
         await client.aclose()
         return 1
 

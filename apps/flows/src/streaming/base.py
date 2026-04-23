@@ -76,7 +76,11 @@ class BaseEmitter(ABC):
         )
         
         await self._publish(event)
-    
+
+    async def emit_reasoning(self, text: str) -> None:
+        """Публикует чанк reasoning (тот же контракт, что emit_text с именем артефакта reasoning)."""
+        await self.emit_text(text, append=True, last_chunk=False, artifact_name="reasoning")
+
     async def emit_tool_call(
         self,
         tool_name: str,

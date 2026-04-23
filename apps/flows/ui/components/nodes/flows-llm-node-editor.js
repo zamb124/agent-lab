@@ -10,8 +10,8 @@
  *   3. Фильтр сообщений (`cfg.messages_filter`: 'all' | 'own' | string[]).
  *   4. Режим вывода — toggle Tools / Structured Output (`cfg.structured_output`).
  *   5a. Tools-режим (`structured_output=false`):
- *       - ReAct loop (`cfg.react`: loop_mode, max_iterations, exit_tool, strict,
- *         reminder_message);
+ *       - ReAct loop (`cfg.react`: loop_mode + max_iterations в одной строке;
+ *         при explicit — exit_tool + strict в одной строке; reminder_message);
  *       - Инструменты (`cfg.tools: ToolReference[]`): chips + picker + create.
  *   5b. Structured-режим (`structured_output=true`):
  *       - Output JSON Schema (`cfg.output_schema`).
@@ -31,9 +31,28 @@ import '../editors/flows-llm-config-editor.js';
 import '../editors/flows-json-field-editor.js';
 import '@platform/lib/components/glass-button.js';
 import '@platform/lib/components/platform-icon.js';
+import '@platform/lib/components/platform-switch.js';
 import { asObject, isPlainObject } from '../../_helpers/flows-resolvers.js';
+import { normalizeToolRef } from '../../_helpers/flows-tool-ref.js';
 
 const REACT_LOOP_MODES = Object.freeze(['auto', 'explicit']);
+
+function _toolListEntryKey(t) {
+    if (typeof t === 'string') {
+        return `tool:${t}`;
+    }
+    if (!t || typeof t !== 'object') {
+        return '';
+    }
+    const id = t.tool_id;
+    if (typeof id !== 'string' || id.length === 0) {
+        return '';
+    }
+    if (t.type === 'flow') {
+        return `flow:${id}`;
+    }
+    return `tool:${id}`;
+}
 
 export class FlowsLlmNodeEditor extends PlatformElement {
     static properties = {
@@ -46,6 +65,7 @@ export class FlowsLlmNodeEditor extends PlatformElement {
         graphNodes: { type: Array },
         previewExecutionState: { type: Object },
         expanded: { type: Boolean, reflect: true },
+        embedded: { type: Boolean, reflect: true },
         _addToolMenuOpen: { state: true },
     };
 
@@ -149,6 +169,34 @@ export class FlowsLlmNodeEditor extends PlatformElement {
                 color: var(--accent);
                 border-color: var(--accent);
             }
+            .react-composite-row {
+                display: flex;
+                flex-wrap: wrap;
+                align-items: flex-end;
+                gap: var(--space-3);
+            }
+            .react-composite-row > .field {
+                min-width: 0;
+            }
+            .react-field-grow {
+                flex: 1 1 160px;
+            }
+            .react-field-tight {
+                flex: 0 1 112px;
+            }
+            .react-field-tight input[type="number"] {
+                width: 100%;
+                box-sizing: border-box;
+            }
+            .react-exit-strict-row {
+                display: grid;
+                grid-template-columns: minmax(0, 1fr) auto;
+                gap: var(--space-3);
+                align-items: end;
+            }
+            .react-exit-strict-row platform-switch {
+                max-width: min(100%, 320px);
+            }
         `,
     ];
 
@@ -163,7 +211,49 @@ export class FlowsLlmNodeEditor extends PlatformElement {
         this.graphNodes = null;
         this.previewExecutionState = null;
         this.expanded = false;
+        this.embedded = false;
         this._addToolMenuOpen = false;
+        this._editor = this.useOp('flows/editor');
+        this._pendingFromCanvas = this.select((s) => {
+            const ed = s.flowsEditor;
+            if (!ed || typeof ed !== 'object') {
+                return { pendingNodeToolId: null, selectedNodeId: null };
+            }
+            const p = ed.pendingNodeToolId;
+            const pendingNodeToolId = typeof p === 'string' && p.length > 0 ? p : null;
+            const sid = ed.selectedNodeId;
+            const selectedNodeId = typeof sid === 'string' && sid.length > 0 ? sid : null;
+            return { pendingNodeToolId, selectedNodeId };
+        });
+    }
+
+    updated(changedProperties) {
+        super.updated(changedProperties);
+        this._consumePendingCanvasTool();
+    }
+
+    _consumePendingCanvasTool() {
+        const { pendingNodeToolId, selectedNodeId } = this._pendingFromCanvas.value;
+        if (pendingNodeToolId === null) return;
+        if (selectedNodeId !== this.nodeId) return;
+        if (typeof this.nodeId !== 'string' || this.nodeId.length === 0) return;
+        const tools = Array.isArray(this.nodeConfig?.tools) ? this.nodeConfig.tools : [];
+        let toolRef = null;
+        for (const t of tools) {
+            if (typeof t === 'string') {
+                if (t === pendingNodeToolId) {
+                    toolRef = { tool_id: t };
+                    break;
+                }
+            } else if (t && typeof t === 'object' && t.tool_id === pendingNodeToolId) {
+                toolRef = t;
+                break;
+            }
+        }
+        this._editor.clearPendingNodeTool({});
+        if (toolRef !== null) {
+            this._onEditTool(toolRef);
+        }
     }
 
     _emitPatch(patch) {
@@ -243,7 +333,11 @@ export class FlowsLlmNodeEditor extends PlatformElement {
     }
 
     _onReactStrict(e) {
-        this._reactPatch({ strict: Boolean(e.target.checked) });
+        const v = e.detail && typeof e.detail === 'object' && 'value' in e.detail ? e.detail.value : undefined;
+        if (typeof v !== 'boolean') {
+            throw new Error('react strict: expected platform-switch change detail.value boolean');
+        }
+        this._reactPatch({ strict: v });
     }
 
     _onReactReminder(e) {
@@ -252,10 +346,23 @@ export class FlowsLlmNodeEditor extends PlatformElement {
 
     _onPickTool() {
         this.openModal('flows.tool_picker', {
-            onPick: (toolId) => {
+            pickMode: 'all',
+            onPick: (detail) => {
+                if (!detail || typeof detail !== 'object' || typeof detail.tool_id !== 'string') {
+                    return;
+                }
+                const toolId = detail.tool_id;
+                const kind = detail.kind === 'flow' ? 'flow' : 'tool';
                 const tools = Array.isArray(this.nodeConfig?.tools) ? [...this.nodeConfig.tools] : [];
-                if (tools.some((t) => t && t.tool_id === toolId)) return;
-                tools.push({ tool_id: toolId });
+                const newKey = kind === 'flow' ? `flow:${toolId}` : `tool:${toolId}`;
+                if (tools.some((t) => _toolListEntryKey(t) === newKey)) {
+                    return;
+                }
+                if (kind === 'flow') {
+                    tools.push({ type: 'flow', tool_id: toolId });
+                } else {
+                    tools.push({ tool_id: toolId });
+                }
                 this._emitPatch({ tools });
             },
         });
@@ -275,13 +382,30 @@ export class FlowsLlmNodeEditor extends PlatformElement {
     }
 
     _onEditTool(toolRef) {
-        this.openModal('flows.tool_create', {
-            mode: 'edit',
-            tool: toolRef,
-            onUpdated: (updated) => {
-                if (!updated || typeof updated.tool_id !== 'string') return;
+        const { tool_id: toolId, raw } = normalizeToolRef(toolRef);
+        const st = asObject(this._editor.state);
+        const skillsData = isPlainObject(st.skillsData) ? st.skillsData : {};
+        const graphNodes = isPlainObject(skillsData.nodes) ? skillsData.nodes : {};
+        if (graphNodes[toolId] !== undefined) {
+            this._editor.selectNode({ nodeId: toolId });
+            return;
+        }
+        this.openModal('flows.embedded_tool_config', {
+            toolRef: raw,
+            flowId: this.flowId,
+            skillId: this.skillId,
+            onSave: (updated) => {
+                if (updated === null || updated === undefined || typeof updated !== 'object') {
+                    return;
+                }
+                if (typeof updated.tool_id !== 'string' || updated.tool_id.length === 0) {
+                    return;
+                }
                 const tools = Array.isArray(this.nodeConfig?.tools) ? [...this.nodeConfig.tools] : [];
-                const next = tools.map((t) => (t && t.tool_id === updated.tool_id ? updated : t));
+                const next = tools.map((t) => {
+                    const id = typeof t === 'string' ? t : t.tool_id;
+                    return id === updated.tool_id ? updated : t;
+                });
                 this._emitPatch({ tools: next });
             },
         });
@@ -424,25 +548,31 @@ export class FlowsLlmNodeEditor extends PlatformElement {
             <section class="block">
                 <h4 class="block-title">${this.t('llm_node_editor.section_react')}</h4>
                 <div class="block-card">
-                    <div class="field">
-                        <label>${this.t('llm_node_editor.react_loop_mode')}</label>
-                        <select .value=${loopMode} @change=${this._onReactLoopMode}>
-                            ${REACT_LOOP_MODES.map((m) => html`<option value=${m} ?selected=${m === loopMode}>${m}</option>`)}
-                        </select>
-                    </div>
-                    <div class="field">
-                        <label>${this.t('llm_node_editor.react_max_iterations')}</label>
-                        <input type="number" min="1" step="1" .value=${String(maxIter)} @input=${this._onReactMaxIter} />
+                    <div class="react-composite-row">
+                        <div class="field react-field-grow">
+                            <label>${this.t('llm_node_editor.react_loop_mode')}</label>
+                            <select .value=${loopMode} @change=${this._onReactLoopMode}>
+                                ${REACT_LOOP_MODES.map((m) => html`<option value=${m} ?selected=${m === loopMode}>${m}</option>`)}
+                            </select>
+                        </div>
+                        <div class="field react-field-tight">
+                            <label>${this.t('llm_node_editor.react_max_iterations')}</label>
+                            <input type="number" min="1" step="1" .value=${String(maxIter)} @input=${this._onReactMaxIter} />
+                        </div>
                     </div>
                     ${loopMode === 'explicit' ? html`
-                        <div class="field">
-                            <label>${this.t('llm_node_editor.react_exit_tool')}</label>
-                            <input type="text" .value=${exitTool} @input=${this._onReactExitTool} />
+                        <div class="react-exit-strict-row">
+                            <div class="field react-field-grow">
+                                <label>${this.t('llm_node_editor.react_exit_tool')}</label>
+                                <input type="text" .value=${exitTool} @input=${this._onReactExitTool} />
+                            </div>
+                            <platform-switch
+                                size="sm"
+                                ?checked=${strict}
+                                .label=${this.t('llm_node_editor.react_strict')}
+                                @change=${this._onReactStrict}
+                            ></platform-switch>
                         </div>
-                        <label class="filter-row">
-                            <input type="checkbox" .checked=${strict} @change=${this._onReactStrict} />
-                            ${this.t('llm_node_editor.react_strict')}
-                        </label>
                         <div class="field">
                             <label>${this.t('llm_node_editor.react_reminder')}</label>
                             <input type="text" .value=${reminder} @input=${this._onReactReminder} />
@@ -505,6 +635,7 @@ export class FlowsLlmNodeEditor extends PlatformElement {
                 .graphNodes=${this.graphNodes}
                 .previewExecutionState=${this.previewExecutionState}
                 ?expanded=${this.expanded}
+                ?embedded=${this.embedded}
             >
                 <div slot="settings" class="stack">
                     ${this._renderPromptSection()}

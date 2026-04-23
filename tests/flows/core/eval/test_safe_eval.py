@@ -58,6 +58,18 @@ async def run(state):
         result = asyncio.run(func({}))
         assert result["result"] == '{"key": "value"}'
 
+    def test_compile_with_urllib_parse(self):
+        code = """
+from urllib.parse import urljoin
+
+async def run(state):
+    state["u"] = urljoin("https://a/", "b")
+    return state
+"""
+        func = compile_function(code)
+        result = asyncio.run(func({}))
+        assert result["u"] == "https://a/b"
+
     def test_compile_with_math(self):
         """Компиляция с math модулем."""
         code = """
@@ -70,6 +82,53 @@ async def run(state):
         func = compile_function(code)
         result = asyncio.run(func({}))
         assert result["result"] == 4.0
+
+    def test_import_namespace_top_level_same_object_as_globals(self):
+        code = """
+import httpx as hx
+async def run(state):
+    import httpx
+    state["same"] = hx is httpx
+    return state
+"""
+        func = compile_function(code)
+        result = asyncio.run(func({}))
+        assert result["same"] is True
+
+    def test_import_httpx_submodule_blocked(self):
+        code = """
+import httpx._client
+async def run(state):
+    return state
+"""
+        with pytest.raises(SafeEvalError, match="платформенная подмена"):
+            compile_function(code)
+
+    def test_import_submodule_when_root_in_namespace_and_in_allowlist(self):
+        code = """
+import json.encoder
+async def run(state):
+    state["ok"] = json.encoder.JSONEncoder is not None
+    return state
+"""
+        func = compile_function(code)
+        result = asyncio.run(func({}))
+        assert result["ok"] is True
+
+    def test_super_init_allowed_in_subclass(self):
+        code = """
+from html.parser import HTMLParser
+
+class P(HTMLParser):
+    def __init__(self):
+        super().__init__()
+
+async def run(state):
+    P()
+    return state
+"""
+        func = compile_function(code)
+        asyncio.run(func({}))
 
     def test_compile_function_not_found(self):
         """Функция не найдена в коде."""
@@ -167,7 +226,7 @@ async def run(state):
     return state
 """
         with pytest.raises(SafeEvalError, match="нельзя подключать внутренние модули платформы"):
-            compile_function(code)
+            compile_function(code, strip_platform_imports=False)
 
     def test_block_core_import(self):
         code = """
@@ -177,7 +236,7 @@ async def run(state):
     return state
 """
         with pytest.raises(SafeEvalError, match="нельзя подключать внутренние модули платформы"):
-            compile_function(code)
+            compile_function(code, strip_platform_imports=False)
 
     def test_block_pathlib_import(self):
         code = """
@@ -989,5 +1048,5 @@ async def run(state):
     return state
 """
     with pytest.raises(SafeEvalError, match="нельзя подключать внутренние модули платформы"):
-        compile_function(code)
+        compile_function(code, strip_platform_imports=False)
 

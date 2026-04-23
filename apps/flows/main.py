@@ -23,7 +23,7 @@ from core.models.identity_models import User, Company
 from core.utils.tokens import get_token_service
 from apps.flows.src.api import a2a_router, chat_router, registry_router, websocket_router
 from apps.flows.src.api.v1 import api_v1_router
-from apps.flows.config import FlowSettings, get_settings
+from apps.flows.config import FlowSettings, FLOWS_PUBLIC_API_PREFIX, get_settings
 from apps.flows.src.container import get_container
 from apps.flows.src.services.flows_loader import load_flows_to_db, load_tools_to_db
 from apps.flows.src.middleware.embed_dynamic_cors import EmbedDynamicCorsMiddleware
@@ -82,7 +82,7 @@ async def on_startup(app: FastAPI, container, settings: FlowSettings):
 
     FileWriter.configure_process_upload(
         file_processor=container.file_processor,
-        download_url_prefix=f"/{settings.server.name}/api/v1/files/download",
+        download_url_prefix=f"{FLOWS_PUBLIC_API_PREFIX}/files/download",
     )
 
     # Подключаемся к Redis с retry

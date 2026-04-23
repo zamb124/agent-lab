@@ -693,6 +693,48 @@ async def run(state):
         assert result["fact_length"] > 0
 
     @pytest.mark.asyncio
+    async def test_inline_node_with_httpx_async_client(self, monkeypatch):
+        from apps.flows.src.eval import wrappers
+
+        class FakeSmart:
+            async def __aenter__(self):
+                return self
+
+            async def __aexit__(self, *args: object) -> None:
+                pass
+
+            async def get(self, url: str, **kwargs: object) -> object:
+                class R:
+                    status_code = 200
+
+                    def json(self) -> dict[str, int]:
+                        return {"k": 2}
+
+                return R()
+
+        def _fake_get_httpx_client(**kwargs: object) -> FakeSmart:
+            return FakeSmart()
+
+        monkeypatch.setattr(wrappers, "get_httpx_client", _fake_get_httpx_client)
+
+        code = """
+async def run(state):
+    async with httpx.AsyncClient(timeout=30.0) as client:
+        r = await client.get("https://example.com/")
+    return {"s": r.status_code, "j": r.json()}
+"""
+        node = CodeNode(node_id="httpx_async_client", config={"code": code})
+        state = ExecutionState(
+            task_id="test-task",
+            context_id="test-context",
+            user_id="test-user",
+            session_id="test-agent:test-context",
+        )
+        result = await node.run(state)
+        assert result["s"] == 200
+        assert result["j"] == {"k": 2}
+
+    @pytest.mark.asyncio
     async def test_inline_node_with_httpx_post(self):
         """Функциональная нода с httpx.post() — ответ из стаба."""
         code = """

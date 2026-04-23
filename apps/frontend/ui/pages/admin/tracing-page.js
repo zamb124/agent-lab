@@ -9,6 +9,7 @@ import { PlatformPage } from '@platform/lib/base/PlatformPage.js';
 import '@platform/lib/components/layout/page-header.js';
 import '@platform/lib/components/glass-spinner.js';
 import '@platform/lib/components/platform-user-chip.js';
+import '@platform/lib/components/platform-trace-viewer.js';
 
 const FACETS = Object.freeze([
     { key: 'companies',   field: 'company_id',     labelKey: 'tracing_page.filter_company' },
@@ -23,6 +24,7 @@ export class FrontendTracingPage extends PlatformPage {
     static properties = {
         _activeFacet: { state: true },
         _draftFilters: { state: true },
+        _traceDrawerSpan: { state: true },
     };
 
     static styles = [
@@ -156,25 +158,45 @@ export class FrontendTracingPage extends PlatformPage {
                 border-bottom: 1px solid var(--glass-border-subtle);
                 display: flex; justify-content: space-between; align-items: center;
             }
-            .drawer-body { padding: var(--space-4); overflow-y: auto; flex: 1; }
-
-            .span-node {
-                margin-left: var(--indent, 0);
-                padding: var(--space-2) var(--space-3);
-                border-left: 2px solid var(--glass-border-subtle);
-                margin-bottom: var(--space-1);
-                background: var(--glass-solid-subtle);
-                border-radius: var(--radius-sm);
-            }
-            .span-node-title {
+            .drawer-trace-title {
                 font-weight: var(--font-medium);
                 font-size: var(--text-sm);
                 color: var(--text-primary);
             }
-            .span-node-meta {
+            .drawer-trace-id {
                 font-size: var(--text-xs);
                 color: var(--text-tertiary);
                 margin-top: var(--space-1);
+            }
+            .drawer-body { padding: var(--space-4); overflow-y: auto; flex: 1; }
+
+            .drawer-detail {
+                margin-top: var(--space-4);
+                padding-top: var(--space-4);
+                border-top: 1px solid var(--glass-border-subtle);
+            }
+            .drawer-detail h4 {
+                margin: 0 0 var(--space-2);
+                font-size: var(--text-sm);
+                color: var(--text-primary);
+            }
+            .drawer-detail dl {
+                display: grid;
+                grid-template-columns: max-content 1fr;
+                gap: var(--space-1) var(--space-3);
+                font-size: var(--text-xs);
+                color: var(--text-secondary);
+                margin: 0 0 var(--space-3);
+            }
+            .drawer-detail dt { color: var(--text-tertiary); }
+            .drawer-detail pre {
+                margin: 0;
+                padding: var(--space-3);
+                background: var(--glass-solid-subtle);
+                border-radius: var(--radius-md);
+                font-size: var(--text-xs);
+                overflow: auto;
+                max-height: 36vh;
             }
         `,
     ];
@@ -186,6 +208,7 @@ export class FrontendTracingPage extends PlatformPage {
         this._trace = this.useOp('frontend/tracing_trace_load');
         this._activeFacet = null;
         this._draftFilters = {};
+        this._traceDrawerSpan = null;
     }
 
     _filters() {
@@ -320,16 +343,55 @@ export class FrontendTracingPage extends PlatformPage {
         `;
     }
 
-    _renderSpan(node, depth = 0) {
+    /** @param {CustomEvent<{ span?: unknown }>} e */
+    _onDrawerTraceSpanSelect(e) {
+        const d = e.detail;
+        if (d == null || typeof d !== 'object' || !('span' in d)) {
+            throw new Error('frontend-tracing-page: trace-span-select requires detail.span');
+        }
+        this._traceDrawerSpan = d.span;
+    }
+
+    /** @param {unknown} span */
+    _renderDrawerSpanDetail(span) {
+        if (span == null) {
+            return null;
+        }
+        if (typeof span !== 'object' || span === null) {
+            throw new Error('frontend-tracing-page: span must be an object');
+        }
+        const s = /** @type {Record<string, unknown>} */ (span);
+        const sid = typeof s.span_id === 'string' ? s.span_id : '';
+        const tid = typeof s.trace_id === 'string' ? s.trace_id : '';
+        const op = typeof s.operation_name === 'string' ? s.operation_name : '';
+        const dur = typeof s.duration_ms === 'number' ? `${s.duration_ms} ms` : '';
+        const st = typeof s.status === 'string' ? s.status : '';
+        const rawAttrs = s.attributes;
+        const attrs =
+            typeof rawAttrs === 'object' && rawAttrs !== null && !Array.isArray(rawAttrs)
+                ? rawAttrs
+                : {};
+        const json = JSON.stringify(attrs, null, 2);
         return html`
-            <div class="span-node" style="--indent: ${depth * 16}px">
-                <div class="span-node-title">${node.operation_name || node.span_id}</div>
-                <div class="span-node-meta">
-                    ${node.service_name || ''} · ${node.event_type || ''}
-                    ${node.duration_ms != null ? html` · ${node.duration_ms} ms` : null}
+            <div class="drawer-detail">
+                <h4>${this.t('trace_viewer.detail_title', undefined, 'platform')}</h4>
+                <dl>
+                    <dt>span_id</dt>
+                    <dd>${sid}</dd>
+                    <dt>trace_id</dt>
+                    <dd>${tid}</dd>
+                    <dt>operation</dt>
+                    <dd>${op}</dd>
+                    <dt>duration</dt>
+                    <dd>${dur}</dd>
+                    <dt>status</dt>
+                    <dd>${st}</dd>
+                </dl>
+                <div style="font-size:var(--text-xs);color:var(--text-tertiary);margin-bottom:var(--space-1);">
+                    ${this.t('trace_viewer.detail_attributes', undefined, 'platform')}
                 </div>
+                <pre>${json}</pre>
             </div>
-            ${Array.isArray(node.children) ? node.children.map((c) => this._renderSpan(c, depth + 1)) : ''}
         `;
     }
 
@@ -344,8 +406,8 @@ export class FrontendTracingPage extends PlatformPage {
             <div class="drawer">
                 <div class="drawer-header">
                     <div>
-                        <div class="span-node-title">${this.t('tracing_page.col_trace')}</div>
-                        <div class="span-node-meta">${trace ? trace.trace_id : ''}</div>
+                        <div class="drawer-trace-title">${this.t('tracing_page.col_trace')}</div>
+                        <div class="drawer-trace-id">${trace ? trace.trace_id : ''}</div>
                     </div>
                     <button class="btn" @click=${() => this._close()}>${this.t('tracing_page.close')}</button>
                 </div>
@@ -357,7 +419,13 @@ export class FrontendTracingPage extends PlatformPage {
                                 <div class="state-title">${this.t('tracing_page.trace_load_error')}</div>
                                 <div class="state-desc">${error}</div>
                             </div>`
-                            : tree.map((n) => this._renderSpan(n, 0)))}
+                            : html`
+                                  <platform-trace-viewer
+                                      .roots=${tree}
+                                      @trace-span-select=${this._onDrawerTraceSpanSelect}
+                                  ></platform-trace-viewer>
+                                  ${this._renderDrawerSpanDetail(this._traceDrawerSpan)}
+                              `)}
                 </div>
             </div>
         `;
@@ -365,10 +433,12 @@ export class FrontendTracingPage extends PlatformPage {
 
     _open(traceId) {
         if (!traceId) return;
+        this._traceDrawerSpan = null;
         this._trace.run({ trace_id: traceId });
     }
 
     _close() {
+        this._traceDrawerSpan = null;
         this._trace.closeTrace();
     }
 

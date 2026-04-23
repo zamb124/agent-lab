@@ -15,7 +15,7 @@ from typing import Any, AsyncGenerator, Dict, List, Optional, Type, TypeVar, Uni
 import httpx
 from pydantic import BaseModel
 
-from core.http import get_httpx_client
+from core.http.client import ProxyStrategy, get_httpx_client
 from core.variables import VarResolver, VariableResolutionError
 from a2a.types import (
     Artifact,
@@ -455,7 +455,7 @@ class LLMClient:
         tool_calls_buffer: Dict[int, Dict[str, Any]] = {}
         usage_data: Dict[str, Any] = {"input_tokens": 0, "output_tokens": 0, "total_tokens": 0}
 
-        async with get_httpx_client(timeout=self.timeout, proxy=True) as client:
+        async with get_httpx_client(timeout=self.timeout, strategy=ProxyStrategy.SMART) as client:
             try:
                 async with client.stream(
                     "POST", f"{self.base_url}/chat/completions", headers=headers, json=body
@@ -513,7 +513,30 @@ class LLMClient:
                         if not chunk.get("choices"):
                             continue
 
-                        delta = chunk["choices"][0].get("delta", {})
+                        choice = chunk["choices"][0]
+                        delta = choice.get("delta", {}) or {}
+
+                        # Некоторые шлюзы отдают весь текст только в message.content финального чанка (delta пустой).
+                        msg = choice.get("message")
+                        if isinstance(msg, dict):
+                            mc = msg.get("content")
+                            if (
+                                isinstance(mc, str)
+                                and mc
+                                and not delta.get("content")
+                                and not full_content
+                            ):
+                                full_content = mc
+                                yield TaskArtifactUpdateEvent(
+                                    contextId=context_id,
+                                    taskId=task_id,
+                                    artifact=Artifact(
+                                        artifactId=str(uuid.uuid4()),
+                                        parts=[Part(root=TextPart(text=mc))],
+                                    ),
+                                    append=True,
+                                    last_chunk=False,
+                                )
                         
                         # Логируем delta для отладки reasoning (только если есть подозрительные поля)
                         if delta.get("reasoning") or delta.get("reasoning_content") or delta.get("type") == "reasoning":
@@ -546,7 +569,6 @@ class LLMClient:
                         elif delta.get("type") == "reasoning" and delta.get("content"):
                             reasoning_text = delta["content"]
                         # Проверяем также в самом choice (для некоторых провайдеров)
-                        choice = chunk["choices"][0]
                         if not reasoning_text and choice.get("delta", {}).get("reasoning"):
                             reasoning_text = choice["delta"]["reasoning"]
                         
@@ -635,13 +657,12 @@ class LLMClient:
             final=False,
         )
 
-        logger.log_llm_response(
-            {
-                "content": full_content,
-                "reasoning": full_reasoning if full_reasoning else None,
-                "tool_calls": list(tool_calls_buffer.values()) if tool_calls_buffer else None,
-                "usage": usage_data,
-            }
+        logger.log_llm_stream_response(
+            f"{self.base_url}/chat/completions",
+            content=full_content,
+            reasoning=full_reasoning if full_reasoning else None,
+            tool_calls=list(tool_calls_buffer.values()) if tool_calls_buffer else None,
+            usage=usage_data,
         )
 
     async def invoke(
@@ -687,7 +708,7 @@ class LLMClient:
             f"{_pretty_json({'url': f'{self.base_url}/chat/completions', 'headers': _masked_headers(headers), 'body': body})}"
         )
         
-        async with get_httpx_client(timeout=self.timeout, proxy=True) as client:
+        async with get_httpx_client(timeout=self.timeout, strategy=ProxyStrategy.SMART) as client:
             response = await client.post(
                 f"{self.base_url}/chat/completions",
                 headers=headers,
@@ -829,7 +850,8 @@ class LLMClient:
         
         content_parts: List[str] = []
         tool_calls: List[Dict[str, Any]] = []
-        
+        last_status_text = ""
+
         async for event in self.stream(
             normalized,
             tools=tools if not response_model else None,
@@ -845,20 +867,33 @@ class LLMClient:
             extra_body=extra_body,
         ):
             if isinstance(event, TaskArtifactUpdateEvent):
-                if event.artifact and event.artifact.parts:
+                if (
+                    event.artifact
+                    and event.artifact.name != "reasoning"
+                    and event.artifact.parts
+                ):
                     for part in event.artifact.parts:
                         if hasattr(part, "root") and hasattr(part.root, "text"):
                             content_parts.append(part.root.text)
-            if hasattr(event, "status") and event.status:
+            if isinstance(event, TaskStatusUpdateEvent) and event.status:
+                if event.status.message:
+                    txt = get_message_text(event.status.message)
+                    if txt:
+                        last_status_text = txt
                 if event.status.message and event.status.message.metadata:
                     tc = event.status.message.metadata.get("tool_calls")
                     if tc:
                         tool_calls = tc
         
         content = "".join(content_parts)
-        
         if response_model:
-            data = json.loads(content)
+            text_for_json = content if content.strip() else last_status_text
+            if not text_for_json.strip():
+                raise ValueError(
+                    "LLM structured output: пустой ответ (нет текста вне reasoning-артефакта "
+                    "и нет текста в финальном статусе задачи)"
+                )
+            data = json.loads(text_for_json)
             return response_model.model_validate(data)
         
         return Message(

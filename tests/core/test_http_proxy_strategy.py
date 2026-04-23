@@ -3,7 +3,7 @@
 import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
 
-from core.http.client import ProxyStrategy, request_with_strategy
+from core.http.client import ProxyStrategy, get_httpx_client, request_with_strategy
 
 
 class TestProxyStrategy:
@@ -243,6 +243,124 @@ class TestProxyStrategy:
 
                 assert response.status_code == 200
                 mock_direct.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_smart_direct_200_no_proxy_rotation(self):
+        """SMART: при 200 сразу возвращаем ответ, без второй фазы."""
+        with patch("core.http.client.SmartProxyClient._request_via_proxy_rotation") as mock_proxy_path:
+            mock_resp = MagicMock()
+            mock_resp.status_code = 200
+
+            class FakeAsyncClient:
+                def __init__(self, *args, **kwargs):
+                    pass
+
+                async def __aenter__(self):
+                    return self
+
+                async def __aexit__(self, *args):
+                    return None
+
+                async def request(self, method, url, **kwargs):
+                    return mock_resp
+
+            with patch("core.http.client.httpx.AsyncClient", FakeAsyncClient):
+                async with get_httpx_client(timeout=10.0, strategy=ProxyStrategy.SMART) as client:
+                    r = await client.request("GET", "https://api.example.com/x")
+
+            assert r.status_code == 200
+            mock_proxy_path.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_smart_403_retries_via_proxy_when_configured(self):
+        """SMART: 403 напрямую, затем успех через platform proxy."""
+        first = MagicMock()
+        first.status_code = 403
+        first.aclose = AsyncMock()
+
+        second = MagicMock()
+        second.status_code = 200
+
+        class FakeAsyncClient:
+            def __init__(self, *args, **kwargs):
+                self.proxy_kw = kwargs.get("proxy")
+
+            async def __aenter__(self):
+                return self
+
+            async def __aexit__(self, *args):
+                return None
+
+            async def request(self, method, url, **kwargs):
+                if self.proxy_kw is None:
+                    return first
+                return second
+
+        mock_settings = MagicMock()
+        mock_settings.proxy.get_next_proxy.return_value = "http://127.0.0.1:1"
+        mock_settings.proxy.connect_timeout = 15.0
+        mock_settings.proxy.mark_last_proxy_failed = MagicMock()
+
+        with patch("core.http.client.httpx.AsyncClient", FakeAsyncClient):
+            with patch("core.http.client._platform_proxy_active", return_value=True):
+                with patch(
+                    "core.http.client.SmartProxyClient._get_settings",
+                    return_value=mock_settings,
+                ):
+                    async with get_httpx_client(timeout=10.0, strategy=ProxyStrategy.SMART) as client:
+                        r = await client.request("GET", "https://api.example.com/x")
+
+        assert r.status_code == 200
+        first.aclose.assert_awaited_once()
+
+    @pytest.mark.asyncio
+    async def test_smart_403_no_proxy_when_not_configured(self):
+        """SMART: 403 и прокси выключен — отдаём первый ответ."""
+        first = MagicMock()
+        first.status_code = 403
+        first.aclose = AsyncMock()
+
+        class FakeAsyncClient:
+            def __init__(self, *args, **kwargs):
+                pass
+
+            async def __aenter__(self):
+                return self
+
+            async def __aexit__(self, *args):
+                return None
+
+            async def request(self, method, url, **kwargs):
+                return first
+
+        with patch("core.http.client.httpx.AsyncClient", FakeAsyncClient):
+            with patch("core.http.client._platform_proxy_active", return_value=False):
+                async with get_httpx_client(timeout=10.0, strategy=ProxyStrategy.SMART) as client:
+                    r = await client.request("GET", "https://api.example.com/x")
+
+        assert r.status_code == 403
+        first.aclose.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_request_with_strategy_smart_delegates(self):
+        """request_with_strategy(SMART) дергает get_httpx_client со стратегией SMART."""
+        with patch("core.http.client.get_httpx_client") as mock_get:
+            mock_inner = AsyncMock()
+            mock_resp = MagicMock()
+            mock_resp.status_code = 200
+            mock_inner.request.return_value = mock_resp
+            mock_get.return_value.__aenter__.return_value = mock_inner
+
+            response = await request_with_strategy(
+                "GET",
+                "https://example.com",
+                strategy=ProxyStrategy.SMART,
+                timeout=10.0,
+            )
+
+            assert response.status_code == 200
+            mock_get.assert_called_once()
+            assert mock_get.call_args[1]["strategy"] == ProxyStrategy.SMART
 
     @pytest.mark.asyncio
     async def test_unknown_strategy(self):

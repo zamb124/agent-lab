@@ -14,6 +14,7 @@ from .agent_session_tools import (
     self_check,
 )
 from .docx_template import fill_docx_template
+from .sandbox_codegen import sandbox_codegen
 from .files import create_file, read_file
 from .google_docs import (
     gdocs_append_text,
@@ -57,6 +58,7 @@ __all__ = [
     "flows_read_context",
     "cancel_scheduled_task",
     "create_file",
+    "sandbox_codegen",
     "fill_docx_template",
     "final_answer",
     "gdocs_append_text",
