@@ -77,23 +77,15 @@ class LocalRerankerEngine:
         return model
 
     def rerank(self, query: str, passages: list[str], requested_model: str | None = None) -> dict[str, Any]:
-        if requested_model is not None:
-            model_id = requested_model.strip()
-            if model_id not in self.allowed_model_ids():
-                raise HTTPException(
-                    status_code=422,
-                    detail={
-                        "reason": "unknown_rerank_model",
-                        "model": requested_model,
-                        "allowed": sorted(self.allowed_model_ids()),
-                    },
-                )
         canonical_model = requested_model.strip() if requested_model is not None else self._cfg.rerank_openai_model_id
         hf_model_id = resolve_hf_model_id("rerank", canonical_model, self._cfg)
         if hf_model_id is None:
+            detail: dict[str, Any] = {"reason": "unknown_rerank_model", "model": canonical_model}
+            if requested_model is not None:
+                detail["allowed"] = sorted(self.allowed_model_ids())
             raise HTTPException(
                 status_code=422,
-                detail={"reason": "unknown_rerank_model", "model": canonical_model},
+                detail=detail,
             )
         if not passages:
             return {"scores": []}

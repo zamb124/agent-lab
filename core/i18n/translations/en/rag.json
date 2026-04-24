@@ -2,7 +2,10 @@
     "sidebar": {
         "title": "RAG Service",
         "provider_label": "Provider",
-        "providers_loading": "Loading providers..."
+        "providers_loading": "Loading providers...",
+        "menu_namespaces": "Namespaces",
+        "menu_search": "Search",
+        "menu_settings": "Settings"
     },
     "namespace_list": {
         "header_title": "Namespaces",

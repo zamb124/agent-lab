@@ -14,61 +14,61 @@ export class SelectCompanyPage extends PlatformPage {
         PlatformPage.styles,
         css`
             :host {
+                box-sizing: border-box;
                 display: flex;
+                flex-direction: column;
                 align-items: center;
-                justify-content: center;
                 min-height: 100vh;
-                padding: var(--space-6);
+                padding: max(var(--space-10), var(--platform-safe-top)) var(--space-6) var(--space-8);
                 background: var(--bg-gradient);
             }
-            .card {
-                width: 100%;
-                max-width: 960px;
-                padding: var(--space-8) var(--space-7);
-                background: var(--glass-solid-medium);
-                border: 1px solid var(--glass-border-medium);
-                border-radius: var(--radius-2xl);
-                box-shadow: 0 24px 64px rgba(0, 0, 0, 0.35);
-            }
-            :host-context([data-theme="light"]) .card {
-                box-shadow: 0 16px 48px rgba(15, 23, 42, 0.12);
-            }
-            h1 {
-                color: var(--text-primary);
+            .page-title {
+                flex: 0 0 auto;
                 margin: 0 0 var(--space-6);
+                width: 100%;
+                max-width: 40rem;
                 text-align: center;
+                color: var(--text-primary);
                 font-size: var(--text-2xl, 1.5rem);
                 font-weight: 600;
                 letter-spacing: -0.02em;
             }
             .empty {
+                flex: 1 1 auto;
+                display: flex;
+                align-items: center;
+                justify-content: center;
                 color: var(--text-secondary);
                 text-align: center;
                 margin: 0;
+                max-width: 28rem;
+            }
+            .grid-main {
+                flex: 1 1 auto;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                width: 100%;
+                min-height: 0;
             }
             .grid {
-                display: grid;
-                grid-template-columns: repeat(auto-fill, minmax(168px, 1fr));
-                gap: var(--space-4);
-                width: 100%;
-            }
-            @media (min-width: 600px) {
-                .grid {
-                    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
-                    gap: var(--space-5);
-                }
+                display: flex;
+                flex-wrap: wrap;
+                justify-content: center;
+                align-content: center;
+                gap: var(--space-5);
             }
             .company-card {
                 position: relative;
                 box-sizing: border-box;
                 display: flex;
+                flex: 0 0 auto;
                 flex-direction: column;
                 align-items: center;
                 justify-content: center;
                 gap: var(--space-4);
-                width: 100%;
-                min-height: 0;
-                aspect-ratio: 1 / 1;
+                width: 13rem;
+                height: 13rem;
                 padding: var(--space-5) var(--space-4);
                 margin: 0;
                 border: 1px solid var(--glass-border-subtle);
@@ -82,6 +82,12 @@ export class SelectCompanyPage extends PlatformPage {
                     border-color 0.15s ease,
                     background 0.15s ease,
                     transform 0.12s ease;
+            }
+            @media (min-width: 480px) {
+                .company-card {
+                    width: 14.5rem;
+                    height: 14.5rem;
+                }
             }
             .company-card:hover {
                 background: var(--glass-solid-strong);
@@ -178,11 +184,11 @@ export class SelectCompanyPage extends PlatformPage {
             }
         }
         return html`
-            <div class="card">
-                <h1>${this.t('select_company.title')}</h1>
-                ${companies.length === 0
-                    ? html`<p class="empty">${this.t('select_company.empty_text')}</p>`
-                    : html`
+            <h1 class="page-title">${this.t('select_company.title')}</h1>
+            ${companies.length === 0
+                ? html`<p class="empty">${this.t('select_company.empty_text')}</p>`
+                : html`
+                    <div class="grid-main">
                         <div class="grid" role="list">
                             ${companies.map(
                                 (c) => html`
@@ -200,8 +206,8 @@ export class SelectCompanyPage extends PlatformPage {
                                 `,
                             )}
                         </div>
-                    `}
-            </div>
+                    </div>
+                `}
         `;
     }
 }

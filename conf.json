@@ -390,17 +390,13 @@
           "embedding_model_id": "BAAI/bge-m3",
           "embedding_openai_model_id": "baai/bge-m3",
           "rerank_openai_model_id": "baai/bge-reranker-v2-gemma",
-          "embedding_model_ids": [
-            "baai/bge-m3"
-          ],
+          "embedding_model_ids": [],
           "llm_model_id": "Qwen/Qwen2.5-1.5B-Instruct",
           "llm_model_ids": [
             "Qwen/Qwen2.5-1.5B-Instruct"
           ],
           "sqlite_path": "./data/provider_litserve/registry.db",
-          "rerank_model_ids": [
-            "baai/bge-reranker-v2-gemma"
-          ],
+          "rerank_model_ids": [],
           "use_fp16": true,
           "use_bf16": false,
           "normalize_scores": true

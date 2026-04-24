@@ -38,18 +38,24 @@
     "backend": "placeholder",
     "model_id": "BAAI/bge-reranker-v2-gemma",
     "embedding_model_id": "BAAI/bge-m3",
+    "embedding_openai_model_id": "baai/bge-m3",
+    "rerank_openai_model_id": "baai/bge-reranker-v2-gemma",
     "llm_model_id": "Qwen/Qwen2.5-1.5B-Instruct",
-    "embedding_model_ids": ["baai/bge-m3", "text-embedding-3-small"],
-    "rerank_model_ids": ["baai/bge-reranker-v2-gemma"],
+    "embedding_model_ids": ["text-embedding-3-small"],
+    "rerank_model_ids": [],
     "llm_model_ids": ["Qwen/Qwen2.5-1.5B-Instruct"]
   }
 }
 ```
 
+**`embedding_model_id`** — HuggingFace id весов; **`embedding_openai_model_id`** (и аналог **`rerank_openai_model_id`**) — имя поля `model` в OpenAI-совместимых запросах. Для одной пары весов не дублируйте в **`embedding_model_ids`** / **`rerank_model_ids`** тот же id в другом регистре: каждая уникальная строка `api_model_id` при первом сиде реестра ([`model_registry.py`](model_registry.py), SQLite `infra.sqlite_path`) даёт **отдельную** строку в UI «Model registry»; лишние алиасные строки = лишние карточки. Дополнительные модели — отдельные строки в списках (как `text-embedding-3-small` в примере).
+
+Запросы **POST /v1/embeddings** и **POST /v1/rerank** принимают `model` без учёта регистра: значение сопоставляется с зарегистрированными идентификаторами (реестр + дефолты из конфига, пока каталог в памяти не загружен из БД).
+
 Переопределение деплоя: **`services.provider_litserve`**. ENV: **`PROVIDER_LITSERVE__API__*`**, **`PROVIDER_LITSERVE__INFRA__*`** (например **`PROVIDER_LITSERVE__INFRA__MODEL_ID`**, **`PROVIDER_LITSERVE__INFRA__EMBEDDING_MODEL_ID`**, **`PROVIDER_LITSERVE__INFRA__GATEWAY_PORT`**).
 Токен Hugging Face для скачивания приватных/ограниченных моделей: **`HF_TOKEN`** (env) или `services.provider_litserve.provider_litserve.infra.hf_token` в `conf.local.json`.
 
-Идентификаторы моделей в **GET /v1/models** берутся из списков: **`infra.embedding_model_ids`**, **`infra.rerank_model_ids`**, **`infra.llm_model_ids`**.
+Пока runtime-каталог не поднят с SQLite, идентификаторы в **GET /v1/models** строятся из той же схемы, что сид **infra**: **`llm_model_ids`** / **`llm_model_id`**, пары **embedding** / **rerank** (дефолтные `*_openai_model_id` + списки **`embedding_model_ids`**, **`rerank_model_ids`**). После загрузки воркеров — из строк реестра с `status=ready`.
 
 ## Сценарии
 

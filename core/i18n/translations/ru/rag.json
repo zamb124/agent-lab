@@ -2,7 +2,10 @@
     "sidebar": {
         "title": "RAG Service",
         "provider_label": "Провайдер",
-        "providers_loading": "Загрузка провайдеров..."
+        "providers_loading": "Загрузка провайдеров...",
+        "menu_namespaces": "Неймспейсы",
+        "menu_search": "Поиск",
+        "menu_settings": "Настройки"
     },
     "namespace_list": {
         "header_title": "Неймспейсы",

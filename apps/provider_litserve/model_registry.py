@@ -31,6 +31,55 @@ def _now_iso() -> str:
     return datetime.now(UTC).isoformat()
 
 
+def _api_key_norm(s: str) -> str:
+    return s.strip().lower()
+
+
+def build_embedding_api_pairs(cfg: ProviderLitserveInfraConfig) -> dict[str, str]:
+    """
+    OpenAI-имя model -> HF id для весов.
+    Без дублей: не добавляем hf->hf, если уже есть алиас (api) на тот же hf;
+    в embedding_model_ids не дублируем ключ, совпадающий с существующим по регистру.
+    """
+    out: dict[str, str] = {}
+    hf = cfg.embedding_model_id.strip()
+    api = cfg.embedding_openai_model_id.strip()
+    if api:
+        out[api] = hf
+    if hf and not any(v.strip().lower() == hf.lower() for v in out.values()):
+        out[hf] = hf
+    for model_id in cfg.embedding_model_ids:
+        n = model_id.strip()
+        if not n:
+            continue
+        if n in out:
+            continue
+        if any(_api_key_norm(n) == _api_key_norm(k) for k in out):
+            continue
+        out[n] = n
+    return out
+
+
+def build_rerank_api_pairs(cfg: ProviderLitserveInfraConfig) -> dict[str, str]:
+    out: dict[str, str] = {}
+    hf = cfg.model_id.strip()
+    api = cfg.rerank_openai_model_id.strip()
+    if api:
+        out[api] = hf
+    if hf and not any(v.strip().lower() == hf.lower() for v in out.values()):
+        out[hf] = hf
+    for model_id in cfg.rerank_model_ids:
+        n = model_id.strip()
+        if not n:
+            continue
+        if n in out:
+            continue
+        if any(_api_key_norm(n) == _api_key_norm(k) for k in out):
+            continue
+        out[n] = n
+    return out
+
+
 def _db_path(cfg: ProviderLitserveInfraConfig) -> Path:
     db_path = Path(cfg.sqlite_path).expanduser()
     if not db_path.is_absolute():
@@ -93,31 +142,15 @@ def bootstrap_defaults_if_empty(cfg: ProviderLitserveInfraConfig) -> None:
             llm_ids = [cfg.llm_model_id.strip()]
         seed_models.extend(("llm", model_id, model_id) for model_id in llm_ids if model_id)
 
-        embedding_pairs: dict[str, str] = {}
-        embedding_hf = cfg.embedding_model_id.strip()
-        embedding_api = cfg.embedding_openai_model_id.strip()
-        if embedding_api:
-            embedding_pairs[embedding_api] = embedding_hf
-        if embedding_hf:
-            embedding_pairs[embedding_hf] = embedding_hf
-        for model_id in cfg.embedding_model_ids:
-            normalized = model_id.strip()
-            if normalized:
-                embedding_pairs[normalized] = normalized
-        seed_models.extend(("embedding", hf_model_id, api_model_id) for api_model_id, hf_model_id in embedding_pairs.items())
+        embedding_pairs = build_embedding_api_pairs(cfg)
+        seed_models.extend(
+            ("embedding", hf_model_id, api_model_id) for api_model_id, hf_model_id in embedding_pairs.items()
+        )
 
-        rerank_pairs: dict[str, str] = {}
-        rerank_hf = cfg.model_id.strip()
-        rerank_api = cfg.rerank_openai_model_id.strip()
-        if rerank_api:
-            rerank_pairs[rerank_api] = rerank_hf
-        if rerank_hf:
-            rerank_pairs[rerank_hf] = rerank_hf
-        for model_id in cfg.rerank_model_ids:
-            normalized = model_id.strip()
-            if normalized:
-                rerank_pairs[normalized] = normalized
-        seed_models.extend(("rerank", hf_model_id, api_model_id) for api_model_id, hf_model_id in rerank_pairs.items())
+        rerank_pairs = build_rerank_api_pairs(cfg)
+        seed_models.extend(
+            ("rerank", hf_model_id, api_model_id) for api_model_id, hf_model_id in rerank_pairs.items()
+        )
 
         for kind, hf_model_id, api_model_id in seed_models:
             conn.execute(

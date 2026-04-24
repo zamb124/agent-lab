@@ -266,7 +266,8 @@ export class PlatformUser extends PlatformElement {
     }
 
     _buildServiceUrl(serviceId) {
-        const servicePath = `/${serviceId}`;
+        // Консоль (apps/frontend) монтируется в корне сервиса: /dashboard, а не /frontend.
+        const servicePath = serviceId === 'frontend' ? '/dashboard' : `/${serviceId}`;
         const hostname = window.location.hostname;
         if (!PlatformUser._isLocalHost(hostname)) {
             return servicePath;

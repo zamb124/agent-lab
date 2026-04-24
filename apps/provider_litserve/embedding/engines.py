@@ -65,7 +65,8 @@ class LocalEmbeddingEngine:
 
     def embed(self, requested_model: str, inp: str | list[str]) -> dict[str, Any]:
         rid = requested_model.strip()
-        if rid not in self.allowed_model_ids():
+        hf_model_id = resolve_hf_model_id("embedding", rid, self._cfg)
+        if hf_model_id is None:
             raise HTTPException(
                 status_code=422,
                 detail={
@@ -74,9 +75,6 @@ class LocalEmbeddingEngine:
                     "allowed": sorted(self.allowed_model_ids()),
                 },
             )
-        hf_model_id = resolve_hf_model_id("embedding", rid, self._cfg)
-        if hf_model_id is None:
-            raise HTTPException(status_code=422, detail={"reason": "unknown_embedding_model", "model": requested_model})
         texts = normalize_embedding_inputs(inp)
         canonical = rid
         if not texts:

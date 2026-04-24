@@ -7,7 +7,11 @@ from typing import Any, Literal
 
 from core.config.models import ProviderLitserveInfraConfig
 
-from apps.provider_litserve.model_registry import list_ready_active_models
+from apps.provider_litserve.model_registry import (
+    build_embedding_api_pairs,
+    build_rerank_api_pairs,
+    list_ready_active_models,
+)
 
 ModelKind = Literal["llm", "embedding", "rerank"]
 
@@ -66,6 +70,16 @@ def runtime_catalog_snapshot(kind: ModelKind) -> dict[str, str]:
         return dict(_catalog[kind])
 
 
+def _hf_from_api_map(map_: dict[str, str], api_model_id: str) -> str | None:
+    if api_model_id in map_:
+        return map_[api_model_id]
+    lower = api_model_id.lower()
+    for k, v in map_.items():
+        if k.lower() == lower:
+            return v
+    return None
+
+
 def _default_api_to_hf(kind: ModelKind, cfg: ProviderLitserveInfraConfig) -> dict[str, str]:
     if kind == "llm":
         llm_ids = [model_id.strip() for model_id in cfg.llm_model_ids if model_id.strip()]
@@ -73,30 +87,10 @@ def _default_api_to_hf(kind: ModelKind, cfg: ProviderLitserveInfraConfig) -> dic
             llm_ids = [cfg.llm_model_id.strip()]
         return {model_id: model_id for model_id in llm_ids if model_id}
     if kind == "embedding":
-        result: dict[str, str] = {}
-        canonical_hf = cfg.embedding_model_id.strip()
-        canonical_api = cfg.embedding_openai_model_id.strip()
-        if canonical_api:
-            result[canonical_api] = canonical_hf
-        if canonical_hf:
-            result[canonical_hf] = canonical_hf
-        for model_id in cfg.embedding_model_ids:
-            normalized = model_id.strip()
-            if normalized:
-                result[normalized] = normalized
-        return result
-    result = {}
-    rerank_hf = cfg.model_id.strip()
-    rerank_api = cfg.rerank_openai_model_id.strip()
-    if rerank_api:
-        result[rerank_api] = rerank_hf
-    if rerank_hf:
-        result[rerank_hf] = rerank_hf
-    for model_id in cfg.rerank_model_ids:
-        normalized = model_id.strip()
-        if normalized:
-            result[normalized] = normalized
-    return result
+        return build_embedding_api_pairs(cfg)
+    if kind == "rerank":
+        return build_rerank_api_pairs(cfg)
+    return {}
 
 
 def allowed_api_model_ids(kind: ModelKind, cfg: ProviderLitserveInfraConfig) -> frozenset[str]:
@@ -114,14 +108,15 @@ def resolve_hf_model_id(kind: ModelKind, api_model_id: str, cfg: ProviderLitserv
     if not normalized:
         return None
     runtime_map = runtime_catalog_snapshot(kind)
-    if normalized in runtime_map:
-        return runtime_map[normalized]
+    hf = _hf_from_api_map(runtime_map, normalized)
+    if hf is not None:
+        return hf
     with _catalog_lock:
         initialized = _catalog_initialized
     if initialized:
         return None
     default_map = _default_api_to_hf(kind, cfg)
-    return default_map.get(normalized)
+    return _hf_from_api_map(default_map, normalized)
 
 
 def runtime_api_model_ids(kind: ModelKind, cfg: ProviderLitserveInfraConfig) -> list[str]:
