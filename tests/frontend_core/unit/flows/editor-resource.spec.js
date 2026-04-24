@@ -48,6 +48,24 @@ describe('flows/editor extraReducer', () => {
         expect(s.historyStack).toEqual([]);
     });
 
+    it('flow_loaded: авто-раскладка нод 0,0 (>=2) ставит isDirty', () => {
+        const { bus, getState } = build();
+        bus.dispatch('flows/editor/flow_loaded', {
+            flow: {
+                flow_id: 'lay',
+                name: 'Lay',
+                nodes: { a: { type: 'code' }, b: { type: 'code' } },
+                edges: [{ from: 'a', to: 'b' }],
+                entry: 'a',
+                variables: {},
+            },
+            skillId: 'base',
+        });
+        const s = getState().flowsEditor;
+        expect(s.isDirty).toBe(true);
+        expect(s.skillsData.nodes.b.pos_x).toBeGreaterThan(0);
+    });
+
     it('node_selected открывает panel и сбрасывает resource', () => {
         const { bus, getState } = build();
         bus.dispatch('flows/editor/node_selected', { nodeId: 'a' });

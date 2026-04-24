@@ -168,6 +168,11 @@ registerModalKind(FrontendCreateApiKeyModal.modalKind, 'frontend-create-api-key-
 `[a-z][a-z0-9_]*\.[a-z][a-z0-9_]*`): `auth.login`, `frontend.embed_create`,
 `crm.entity_share`.
 
+Ширина панели `glass-modal`: на корне модалки (`:host` в `static styles`
+наследника) можно задать `--modal-width` (например `min(1280px, calc(100vw - 24px))`).
+`max-width` панели — `var(--modal-width, <лимит по size>)` для классов
+`.sm` / `.md` / `.lg` / `.xl` и без класса. Без переменной поведение как раньше.
+
 ### Закрытие из формы
 
 `PlatformFormModal.closeAfterSave()` сбрасывает `isDirty` и вызывает

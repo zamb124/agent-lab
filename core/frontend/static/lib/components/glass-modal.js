@@ -120,7 +120,7 @@ export class GlassModal extends PlatformElement {
                 top: 50%;
                 z-index: 1;
                 width: 90%;
-                max-width: min(500px, 100%);
+                max-width: var(--modal-width, min(500px, 100%));
                 max-height: min(90vh, 100dvh);
                 display: flex;
                 flex-direction: column;
@@ -211,10 +211,10 @@ export class GlassModal extends PlatformElement {
                 z-index: 0;
             }
 
-            .modal.sm { max-width: min(400px, 100%); }
-            .modal.md { max-width: min(500px, 100%); }
-            .modal.lg { max-width: min(640px, 100%); }
-            .modal.xl { max-width: min(900px, 100%); }
+            .modal.sm { max-width: var(--modal-width, min(400px, 100%)); }
+            .modal.md { max-width: var(--modal-width, min(500px, 100%)); }
+            .modal.lg { max-width: var(--modal-width, min(640px, 100%)); }
+            .modal.xl { max-width: var(--modal-width, min(900px, 100%)); }
             .modal.full {
                 width: min(95vw, 100% - 2rem);
                 max-width: min(95vw, 100% - 2rem);

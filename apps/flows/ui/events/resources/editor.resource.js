@@ -16,6 +16,7 @@
 
 import { createAsyncOp } from '@platform/lib/events/index.js';
 import { httpRequest } from '@platform/lib/events/http.js';
+import { applyAutoLayoutToSkillsData, canvasNeedsAutoLayout } from '../../_helpers/flow-graph-auto-layout.js';
 
 const HISTORY_LIMIT = 50;
 const DEFAULT_VIEWBOX = Object.freeze({ x: 0, y: 0, w: 1600, h: 1000 });
@@ -355,17 +356,26 @@ export const editorResource = createAsyncOp({
             const effective = _buildEffectiveSkillData(flow, requestedSkillId);
             const meta = _resolveFlowMetadata(flow);
             const stickyNotes = Array.isArray(meta.sticky_notes) ? meta.sticky_notes : [];
+            let nextSkillsData = effective.skillsData;
+            let loadLayoutDirty = false;
+            if (canvasNeedsAutoLayout(nextSkillsData)) {
+                const laid = applyAutoLayoutToSkillsData(nextSkillsData);
+                if (laid !== nextSkillsData) {
+                    nextSkillsData = laid;
+                    loadLayoutDirty = true;
+                }
+            }
             return {
                 ...state,
                 flowId: typeof flow.flow_id === 'string' ? flow.flow_id : state.flowId,
                 flowConfig: flow,
-                skillsData: effective.skillsData,
+                skillsData: nextSkillsData,
                 currentSkillId: requestedSkillId,
                 inheritedNodeIds: effective.inheritedNodeIds,
                 inheritedEdgeKeys: effective.inheritedEdgeKeys,
                 previewExecutionState: p.previewExecutionState && typeof p.previewExecutionState === 'object' ? p.previewExecutionState : null,
                 agentExecutionRunning: false,
-                isDirty: false,
+                isDirty: loadLayoutDirty,
                 historyStack: [],
                 historyPosition: -1,
                 canUndo: false,
