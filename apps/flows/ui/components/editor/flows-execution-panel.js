@@ -921,6 +921,10 @@ export class FlowsExecutionPanel extends PlatformElement {
                                                 .files=${asArray(message.files)}
                                                 .fileIds=${asArray(message.fileIds)}
                                                 .taskId=${asString(message.taskId)}
+                                                .error=${asString(message.error)}
+                                                .errorI18nKey=${message.errorI18nKey != null && typeof message.errorI18nKey === 'string'
+                                                    ? message.errorI18nKey
+                                                    : null}
                                             ></chat-message>
                                         `,
                                     )}

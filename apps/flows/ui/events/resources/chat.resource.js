@@ -21,6 +21,9 @@ import { createResourceCollection, createAsyncOp, HttpError, httpRequest, httpSt
 const EMPTY_LIST = Object.freeze([]);
 const EMPTY_OBJECT = Object.freeze({});
 
+/** Ключ i18n `flows.chat_message.*` при обрыве SSE без терминального status-update. */
+const STREAM_INCOMPLETE_I18N_KEY = 'stream_incomplete';
+
 let _traceSeq = 0;
 
 function _nextTraceId() {
@@ -196,6 +199,8 @@ function _findOrCreateAssistantMessage(messages, taskId) {
         content: '',
         reasoning: '',
         activity: '',
+        error: '',
+        errorI18nKey: null,
         toolCalls: [],
         toolResults: [],
         streaming: true,
@@ -282,6 +287,44 @@ function _applyToBucketMessages(state, taskId, mutator, fallbackContextId) {
         messagesByContextId: {
             ...state.messagesByContextId,
             [contextId]: { ...bucket, taskId: mergedTaskId, messages: nextMessages },
+        },
+    };
+}
+
+/**
+ * Закрывает «висящий» ассистентский streaming, если HTTP вернулся без
+ * терминального A2A-события (например, обрыв до диспатча failed).
+ */
+function _sweepOrphanStreamingInContext(state, contextId) {
+    if (typeof contextId !== 'string' || contextId.length === 0) {
+        return state;
+    }
+    const bucket = state.messagesByContextId[contextId];
+    if (!bucket || !Array.isArray(bucket.messages)) {
+        return state;
+    }
+    let changed = false;
+    const nextMessages = bucket.messages.map((m) => {
+        if (m && m.role === 'assistant' && m.streaming === true) {
+            changed = true;
+            return {
+                ...m,
+                streaming: false,
+                error: '',
+                errorI18nKey: STREAM_INCOMPLETE_I18N_KEY,
+                activity: '',
+            };
+        }
+        return m;
+    });
+    if (!changed) {
+        return state;
+    }
+    return {
+        ...state,
+        messagesByContextId: {
+            ...state.messagesByContextId,
+            [contextId]: { ...bucket, messages: nextMessages },
         },
     };
 }
@@ -808,6 +851,21 @@ async function _consumeA2aStream(req, ctx, contextId, causationId) {
     } finally {
         ctx.dispatch('flows/run/flow_done', {}, meta);
     }
+    if (!terminal) {
+        const effectiveCid =
+            typeof contextId === 'string' && contextId.length > 0 ? contextId : null;
+        if (typeof taskId === 'string' && taskId.length > 0) {
+            ctx.dispatch(
+                'flows/chat/failed',
+                {
+                    task_id: taskId,
+                    context_id: effectiveCid,
+                    error_i18n_key: STREAM_INCOMPLETE_I18N_KEY,
+                },
+                meta,
+            );
+        }
+    }
     return { task_id: taskId, context_id: contextId };
 }
 
@@ -1032,24 +1090,36 @@ export const chatResource = createResourceCollection({
             const result = event.payload && typeof event.payload === 'object' ? event.payload.result : null;
             const p = result && typeof result === 'object' ? result : null;
             // request() ждёт полный SSE; к этому моменту terminal-события уже в bus — streaming: false.
-            if (!p) return { ...state, streaming: false };
+            if (!p) {
+                return { ...state, streaming: false };
+            }
             const taskId = typeof p.task_id === 'string' ? p.task_id : null;
             const contextId = typeof p.context_id === 'string'
                 ? p.context_id
                 : state.currentContextId;
             const next = { ...state, streaming: false };
-            if (!taskId || !contextId) return next;
+            if (!contextId) {
+                return next;
+            }
+            if (!taskId) {
+                return _sweepOrphanStreamingInContext(next, contextId);
+            }
             const bucket = next.messagesByContextId[contextId];
-            if (!bucket) return next;
-            return {
-                ...next,
-                currentContextId: contextId,
-                currentTaskId: taskId,
-                messagesByContextId: {
-                    ...next.messagesByContextId,
-                    [contextId]: { ...bucket, taskId },
+            if (!bucket) {
+                return _sweepOrphanStreamingInContext(next, contextId);
+            }
+            return _sweepOrphanStreamingInContext(
+                {
+                    ...next,
+                    currentContextId: contextId,
+                    currentTaskId: taskId,
+                    messagesByContextId: {
+                        ...next.messagesByContextId,
+                        [contextId]: { ...bucket, taskId },
+                    },
                 },
-            };
+                contextId,
+            );
         }
         if (type === 'flows/chat_send/failed') {
             return { ...state, streaming: false };
@@ -1219,7 +1289,13 @@ export const chatResource = createResourceCollection({
             const next = _applyToBucketMessages(
                 state,
                 taskId,
-                _setMessageFields(taskId, { breakpoint, streaming: false, activity: '' }),
+                _setMessageFields(taskId, {
+                    breakpoint,
+                    streaming: false,
+                    activity: '',
+                    error: '',
+                    errorI18nKey: null,
+                }),
                 ctxHint,
             );
             return { ...next, streaming: false };
@@ -1248,7 +1324,13 @@ export const chatResource = createResourceCollection({
             const next = _applyToBucketMessages(
                 state,
                 taskId,
-                _setMessageFields(taskId, { inputRequired, streaming: false, activity: '' }),
+                _setMessageFields(taskId, {
+                    inputRequired,
+                    streaming: false,
+                    activity: '',
+                    error: '',
+                    errorI18nKey: null,
+                }),
                 ctxHint,
             );
             return { ...next, streaming: false };
@@ -1267,7 +1349,14 @@ export const chatResource = createResourceCollection({
                 (messages) => {
                     const { messages: nextMsgs, idx } = _findOrCreateAssistantMessage(messages, taskId);
                     return _replaceMessage(nextMsgs, idx, (m) => {
-                        const updated = { ...m, streaming: false, inputRequired: null, activity: '' };
+                        const updated = {
+                            ...m,
+                            streaming: false,
+                            inputRequired: null,
+                            activity: '',
+                            error: '',
+                            errorI18nKey: null,
+                        };
                         if (content && (!m.content || m.content.trim() === '')) {
                             updated.content = content;
                         }
@@ -1283,18 +1372,25 @@ export const chatResource = createResourceCollection({
             const p = event.payload;
             if (!p || typeof p !== 'object') return state;
             const taskId = typeof p.task_id === 'string' ? p.task_id : null;
-            const errorText = typeof p.error === 'string' ? p.error : 'error';
+            const hasI18n = typeof p.error_i18n_key === 'string' && p.error_i18n_key.length > 0;
+            const errFromPayload = typeof p.error === 'string' ? p.error : null;
+            const errorText = hasI18n ? '' : (errFromPayload !== null ? errFromPayload : 'error');
             const ctxHint = typeof p.context_id === 'string' ? p.context_id : null;
             if (!taskId) return { ...state, streaming: false };
+            const i18nKey = hasI18n ? p.error_i18n_key : null;
             const next = _applyToBucketMessages(
                 state,
                 taskId,
-                _setMessageFields(taskId, {
-                    streaming: false,
-                    inputRequired: null,
-                    error: errorText,
-                    activity: '',
-                }),
+                (messages) => {
+                    const { messages: nextMsgs, idx } = _findOrCreateAssistantMessage(messages, taskId);
+                    return _replaceMessage(nextMsgs, idx, (m) => {
+                        const base = { ...m, streaming: false, inputRequired: null, activity: '' };
+                        if (i18nKey !== null) {
+                            return { ...base, error: '', errorI18nKey: i18nKey };
+                        }
+                        return { ...base, error: errorText, errorI18nKey: null };
+                    });
+                },
                 ctxHint,
             );
             return { ...next, streaming: false };

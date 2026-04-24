@@ -257,6 +257,17 @@ export class ChatMessage extends PlatformElement {
                 color: var(--text-tertiary);
             }
             
+            .chat-line-error {
+                margin-top: var(--space-2);
+                padding: var(--space-3) var(--space-4);
+                border-radius: var(--radius-lg);
+                font-size: var(--text-sm);
+                line-height: var(--leading-relaxed);
+                color: var(--error, #ef4444);
+                background: var(--error-bg, rgba(239, 68, 68, 0.1));
+                border: 1px solid var(--error-border, rgba(239, 68, 68, 0.35));
+            }
+            
             .stream-placeholder-shimmer {
                 position: relative;
                 flex: 1;
@@ -517,6 +528,8 @@ export class ChatMessage extends PlatformElement {
         activity: { type: String },
         toolCalls: { type: Array },
         toolResults: { type: Array },
+        error: { type: String },
+        errorI18nKey: { type: String },
         inputRequired: { type: Object },
         operatorReply: { type: String },
         breakpoint: { type: Object },
@@ -539,6 +552,8 @@ export class ChatMessage extends PlatformElement {
         this.activity = '';
         this.toolCalls = [];
         this.toolResults = [];
+        this.error = '';
+        this.errorI18nKey = null;
         this.inputRequired = null;
         this.operatorReply = '';
         this.breakpoint = null;
@@ -775,6 +790,29 @@ export class ChatMessage extends PlatformElement {
             <div class="activity-line">
                 <platform-icon name="search" size="16"></platform-icon>
                 <span>${a}</span>
+            </div>
+        `;
+    }
+
+    _renderAssistantError() {
+        if (this.role !== 'assistant') {
+            return nothing;
+        }
+        const k = this.errorI18nKey;
+        if (typeof k === 'string' && k.length > 0) {
+            return html`
+                <div class="chat-line-error" role="alert">
+                    ${this.t(`chat_message.${k}`)}
+                </div>
+            `;
+        }
+        const e = asString(this.error);
+        if (e.length === 0) {
+            return nothing;
+        }
+        return html`
+            <div class="chat-line-error" role="alert">
+                ${e}
             </div>
         `;
     }
@@ -1053,7 +1091,7 @@ export class ChatMessage extends PlatformElement {
                         ${this._renderReasoning()}
                         ${this.content ? html`<div class="text">${this._renderContent()}</div>` : ''}
                         ${this._renderStreamPending()}
-                        
+                        ${this._renderAssistantError()}
                         ${this._renderInputRequired()}
                         ${this._renderOperatorReply()}
                         ${this._renderBreakpoint()}

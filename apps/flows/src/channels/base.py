@@ -59,6 +59,22 @@ from apps.flows.src.channels.request_context_variables import flow_variables_fro
 logger = get_logger(__name__)
 
 
+def effective_stream_task_id_for_session(
+    params_task_id: str,
+    saved_state: Optional[ExecutionState],
+) -> str:
+    """
+    Task id для Pub/Sub `stream:{id}`: совпадает с тем, что в prepare, если
+    state и context те же. Единая точка с `_prepare_task_params`, чтобы
+    A2A-подписка и Emitter в воркере ссылались на один канал.
+    """
+    if saved_state is not None and saved_state.interrupt is not None:
+        sid = saved_state.interrupt.system.task_id
+        if sid:
+            return sid
+    return params_task_id
+
+
 class PermissionDenied(Exception):
     """
     Исключение для отсутствия прав доступа.
@@ -307,15 +323,12 @@ class BaseChannel(ABC):
             skill_id = state.skill_id
             # Resume если есть interrupt ИЛИ breakpoint_hit
             is_resume = bool(state.interrupt) or bool(state.breakpoint_hit)
-            
-            if state.interrupt:
-                saved_task_id = state.interrupt.system.task_id
-                if saved_task_id:
-                    task_id = saved_task_id
+            task_id = effective_stream_task_id_for_session(task_id, state)
 
-                # A2A input-required follow-up: при активном takeover
-                # реплика пользователя маршрутизируется в dialog_log,
-                # flow НЕ возобновляется до complete_handoff оператором.
+            # A2A input-required follow-up: при активном takeover
+            # реплика пользователя маршрутизируется в dialog_log,
+            # flow НЕ возобновляется до complete_handoff оператором.
+            if state.interrupt is not None:
                 if (
                     isinstance(state.interrupt.body, OperatorTaskInterrupt)
                     and state.interrupt.body.handoff_mode == HandoffMode.TAKEOVER
@@ -478,11 +491,7 @@ class BaseChannel(ABC):
         container = get_container()
         saved_state = await container.state_manager.get_state(params.session_id)
         
-        saved_task_id = None
-        if saved_state and saved_state.interrupt is not None:
-            ir = saved_state.interrupt
-            saved_task_id = ir.system.task_id
-        effective_task_id = saved_task_id or params.task_id
+        effective_task_id = effective_stream_task_id_for_session(params.task_id, saved_state)
         
         logger.debug(f"[process_task] Starting task_id={effective_task_id} (from params: {params.task_id})")
         

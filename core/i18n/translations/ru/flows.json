@@ -410,7 +410,8 @@
     "interrupt_oauth_banner": "Требуется авторизация во внешнем сервисе",
     "interrupt_oauth_button": "Авторизоваться",
     "operator_reply_heading": "Оператор",
-    "streaming_placeholder": "Формирую ответ…"
+    "streaming_placeholder": "Формирую ответ…",
+    "stream_incomplete": "Поток ответа оборван без завершения. Попробуйте отправить сообщение снова."
   },
   "flows_empty_state": {
     "title": "Выберите flow слева",
