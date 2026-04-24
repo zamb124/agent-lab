@@ -294,6 +294,34 @@ Domain-effect в `getServiceEffects()` допустим **только** как 
  `reloadAfterMutation` (default `true`), `extraInitial`, `extraReducer`,
  `extraEvents`, `actions`.
 
+#### Сериализованный create (идемпотентность в UI, не в HTTP)
+
+Платформенный ответ на повторные клики / повторные вызовы `create` при одном
+запросе, незавершённом до `CREATED` / `create_failed`, в рамках event-driven
+модели (`ui_events.mdc`): state только через **reducer**, сеть — только
+**effect** после dispatch.
+
+| Слой | Поведение |
+|---|---|
+| **Reducer** | Первый `.../create_requested` (если в `operations` есть `create`): `createInFlight: true`, `createLockEventId: event.id`. Второй `create_requested` при уже `createInFlight` **не** меняет lock (дубликат в логе не получает владельца effect). `CREATED` и `create_failed` сбрасывают lock. Если `create` нет в `operations` — `createInFlight` не трогается. |
+| **Effect** | Перед `POST` (или WS) читает `ctx.getState()[sliceKey]`: если `createLockEventId` задан и **не** равен `event.id` — выход **без** HTTP (второй параллельный effect-запуск не бьёт API). |
+| **ResourceController** | После первого `dispatch` reducer обновил slice в **том же** тике; `create()` снова: если `createInFlight` — **return** (второй `.../create_requested` **не** создаётся). |
+
+Инвентарь slice (помимо `items`, `byId`, `loading` для list): `createInFlight:
+boolean`, `createLockEventId: string | null`. Селектор: `selectors.createInFlight`.
+Поле `loading` **только** для `list` — кнопку «создать» блокируй через
+`this._resource.createInFlight` (из `useResource`), не через `loading`.
+
+**Границы:** одна незавершённая `create` на **всю** коллекцию с данным
+`name` (например `crm/entities`); параллельные create разных сущностей
+через тот же ресурс в один момент не допускаются. **Серверный** idempotency
+(заголовок, Redis) — отдельный слой, не заменяет UI-lock.
+
+**Канон тестов (Vitest, unit):** `tests/frontend_core/unit/factories/resource-collection.spec.js`
+(reducer, effect, селектор) и
+`tests/frontend_core/unit/factories/resource-controller-create-idempotency.spec.js`
+(`ResourceController.create` + bus).
+
 ### `createCursorList`
 
 - `name`, `baseUrl`, `buildQuery(filters) -> query` (чистая функция),

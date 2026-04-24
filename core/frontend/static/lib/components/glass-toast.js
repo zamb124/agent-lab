@@ -61,6 +61,14 @@ export class GlassToast extends PlatformElement {
                 flex-shrink: 0;
                 width: 20px;
                 height: 20px;
+                display: inline-flex;
+                align-items: center;
+                justify-content: center;
+            }
+
+            .toast.error .icon {
+                color: var(--error);
+                font-weight: 600;
             }
             
             .message {
@@ -164,7 +172,7 @@ export class GlassToast extends PlatformElement {
     _getIcon() {
         const icons = {
             success: '✓',
-            error: '✕',
+            error: '!',
             warning: '⚠',
             info: 'ℹ',
         };

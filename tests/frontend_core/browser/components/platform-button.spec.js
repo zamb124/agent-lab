@@ -56,4 +56,14 @@ describe('glass-toast', () => {
         const el = await fixture(html`<glass-toast type="success" .message=${'Hello'} .duration=${0}></glass-toast>`);
         expect(el.shadowRoot).to.exist;
     });
+
+    it('type=error: одна кнопка close, индикатор в span.icon (не вторая кнопка)', async () => {
+        const el = await fixture(html`<glass-toast type="error" .message=${'Failed to switch provider'} .duration=${0}></glass-toast>`);
+        const root = el.shadowRoot;
+        const closeButtons = root.querySelectorAll('button.close');
+        expect(closeButtons).to.have.length(1);
+        const icon = root.querySelector('.icon');
+        expect(icon).to.exist;
+        expect(icon.textContent).to.equal('!');
+    });
 });

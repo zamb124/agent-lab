@@ -42,7 +42,7 @@ function _bindActions(target, actions, controllerName, factoryName) {
  * useResource(host, resource, opts) — для createResourceCollection.
  *
  *   const ctl = new ResourceController(this, apiKeysResource, { autoload: true });
- *   ctl.items, ctl.byId, ctl.loading, ctl.error, ctl.busyIds
+ *   ctl.items, ctl.byId, ctl.loading, ctl.createInFlight, ctl.error, ctl.busyIds
  *   ctl.load(query?), ctl.create(payload), ctl.update(id, payload), ctl.remove(id)
  */
 export class ResourceController {
@@ -62,6 +62,7 @@ export class ResourceController {
     get items() { return this.state.items; }
     get byId() { return this.state.byId; }
     get loading() { return Boolean(this.state.loading); }
+    get createInFlight() { return Boolean(this.state.createInFlight); }
     get error() { return this.state.error; }
     get busyIds() { return this.state.busyIds; }
     get lastError() { return this.state.lastError; }
@@ -86,6 +87,9 @@ export class ResourceController {
     create(payload) {
         if (!payload || typeof payload !== 'object') {
             throw new Error(`ResourceController(${this.resource.name}).create: payload object required`);
+        }
+        if (this.resource.operations.includes('create') && this.createInFlight) {
+            return undefined;
         }
         return this.bus.dispatch(this.resource.events.CREATE_REQUESTED, payload, { source: 'local' });
     }

@@ -60,6 +60,14 @@ Reply-типы выводятся механически: `<type без _request
 Реакция на событие = либо мутация slice через reducer, либо побочный
 эффект через effect фабрики. Других каналов состояния нет.
 
+**Создание сущности без дублей (UI):** для `createResourceCollection` с
+операцией `create` действует механизм сериализованного `create` (lock по
+`event.id`, `createInFlight`, повтор `ResourceController.create` без второго
+`dispatch` до завершения). Это **не** отмена события в bus для первого
+запроса; дубликат гасится reducer+effect+controller согласно
+`ui_factories.mdc` (раздел «Сериализованный create»). Тесты: см. пути в
+том разделе.
+
 ## Где живёт код
 
 - **Ядро:** `core/frontend/static/lib/events/`

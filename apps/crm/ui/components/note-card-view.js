@@ -2524,7 +2524,7 @@ export class CRMNoteCardView extends PlatformElement {
 
     _renderEdit() {
         const isCreate = this.note === null;
-        const busy = isCreate ? this._entities.loading : this._updateOp.busy;
+        const busy = isCreate ? this._entities.createInFlight : this._updateOp.busy;
         const uploading = this._fileUpload.busy;
 
         return html`

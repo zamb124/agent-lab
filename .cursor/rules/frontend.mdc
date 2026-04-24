@@ -55,7 +55,7 @@ reducer фабрики.
 | `this.useEvent(type, handler)`         | подписка на отдельный тип события |
 | `this.select(selector, opts?)`         | реактивная подписка на срез state |
 | `this.t(key, vars?, namespace?)`       | перевод; ns берётся из явного аргумента → `static i18nNamespace` → `defaultI18nNamespace` PlatformApp; иначе `throw` |
-| `this.useResource(name, opts?)`        | `ResourceController` поверх `createResourceCollection` |
+| `this.useResource(name, opts?)`        | `ResourceController` поверх `createResourceCollection` (для `create` см. `createInFlight` в `ui_factories.mdc`, не путать с `loading` от list) |
 | `this.useOp(name)`                     | `OpController` поверх `createAsyncOp` |
 | `this.useForm(name)`                   | `FormController` поверх `createForm` |
 | `this.useCursorList(name, opts?)`      | `CursorListController` поверх `createCursorList` |

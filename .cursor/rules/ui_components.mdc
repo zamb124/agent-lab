@@ -36,6 +36,11 @@ alwaysApply: true
      реализация helpers `PlatformElement`).
    - Никаких `this.services.*`, `BaseStore`, `ServiceRegistry`, `AppEvents`.
 
+**Apps (`apps/<svc>/ui/**` container-компоненты с create):** кнопка сабмита
+для `useResource` + `create` должна дизейблиться от
+`this._<resource>.createInFlight` (не от `loading`, если это только
+загрузка list). См. `ui_factories.mdc` — «Сериализованный create».
+
 ## CoreEvents в core vs apps
 
 | Зона | Прямой `dispatch(CoreEvents.X)` | Импорт `CoreEvents` |

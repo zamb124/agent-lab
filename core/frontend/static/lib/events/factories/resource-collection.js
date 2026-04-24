@@ -65,6 +65,8 @@ const INITIAL_SLICE = freeze({
     error: null,
     busyIds: freeze({}),
     lastError: freeze({}),
+    createInFlight: false,
+    createLockEventId: null,
 });
 
 export function createResourceCollection(options) {
@@ -177,6 +179,8 @@ export function createResourceCollection(options) {
     const actions = freeze(actionsMap);
     const initialSlice = freeze(extraInitial ? { ...INITIAL_SLICE, ...extraInitial } : { ...INITIAL_SLICE });
 
+    const hasCreate = operations.includes('create');
+
     function _withItems(state, items) {
         const list = items.map(mapItem);
         const byId = {};
@@ -281,12 +285,42 @@ export function createResourceCollection(options) {
                 return freeze({ ...state, loading: false, error: _requireMessage(event, 'LIST_FAILED') });
             case events.ITEM_LOADED:
                 return _withItem(state, _requireItem(event, 'ITEM_LOADED'));
-            case events.CREATE_REQUESTED:
-                return _setLastError(state, 'create', null);
-            case events.CREATED:
-                return _withItem(state, _requireItem(event, 'CREATED'));
-            case events.CREATE_FAILED:
-                return _setLastError(state, 'create', _requireMessage(event, 'CREATE_FAILED'));
+            case events.CREATE_REQUESTED: {
+                const next = _setLastError(state, 'create', null);
+                if (!hasCreate) {
+                    return freeze(next);
+                }
+                if (state.createInFlight) {
+                    return freeze(next);
+                }
+                return freeze({
+                    ...next,
+                    createInFlight: true,
+                    createLockEventId: event.id,
+                });
+            }
+            case events.CREATED: {
+                const withItem = _withItem(state, _requireItem(event, 'CREATED'));
+                if (!hasCreate) {
+                    return withItem;
+                }
+                return freeze({
+                    ...withItem,
+                    createInFlight: false,
+                    createLockEventId: null,
+                });
+            }
+            case events.CREATE_FAILED: {
+                const next = _setLastError(state, 'create', _requireMessage(event, 'CREATE_FAILED'));
+                if (!hasCreate) {
+                    return next;
+                }
+                return freeze({
+                    ...next,
+                    createInFlight: false,
+                    createLockEventId: null,
+                });
+            }
             case events.UPDATE_REQUESTED:
                 return _setLastError(_setBusy(state, _requireId(event, 'UPDATE_REQUESTED')), 'update', null);
             case events.UPDATED:
@@ -333,6 +367,7 @@ export function createResourceCollection(options) {
             return slice.byId[id] === undefined ? null : slice.byId[id];
         },
         isBusy:   (id) => (state) => Boolean(_readSlice(state).busyIds[id]),
+        createInFlight: (state) => Boolean(_readSlice(state).createInFlight),
     });
 
     function _requestPayload(event) {
@@ -435,6 +470,14 @@ export function createResourceCollection(options) {
             }
             case events.CREATE_REQUESTED: {
                 if (!operations.includes('create')) return;
+                const st = ctx.getState();
+                const rawSlice = st[sliceKey];
+                if (rawSlice != null) {
+                    const lock = rawSlice.createLockEventId;
+                    if (lock != null && lock !== event.id) {
+                        return;
+                    }
+                }
                 const payload = _requestPayload(event);
                 try {
                     const item = await _doRequest({
