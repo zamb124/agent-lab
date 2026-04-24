@@ -76,12 +76,23 @@ class TestAuthMeFrontend:
         print("✅ /api/auth/me с истекшим токеном корректно возвращает 401")
     
     @pytest.mark.asyncio
-    async def test_auth_me_with_subdomain(self, frontend_client, auth_token):
-        """Запрос с субдоменом (полноценный контекст компании)"""
+    async def test_auth_me_with_subdomain(
+        self, frontend_client, auth_token, frontend_container
+    ):
+        """Запрос с субдоменом: Host должен соответствовать маппингу компании в storage."""
+        from core.utils.tokens import get_token_service
+
         frontend_client.cookies.set("auth_token", auth_token)
+        token_service = get_token_service()
+        td = token_service.validate_token(auth_token)
+        if td is None or not td.company_id:
+            raise AssertionError("auth_token: ожидается валидный company_id")
+        company = await frontend_container.company_repository.get(td.company_id)
+        if company is None or not company.subdomain:
+            raise AssertionError("Компания из токена с subdomain")
         response = await frontend_client.get(
             "/frontend/api/auth/me",
-            headers={"Host": f"test.localhost:8002"},
+            headers={"Host": f"{company.subdomain}.localhost:8002"},
         )
         
         assert response.status_code == 200

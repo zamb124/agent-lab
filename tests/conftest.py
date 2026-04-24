@@ -1309,6 +1309,7 @@ async def auth_token(frontend_container):
     )
     
     await frontend_container.user_repository.set(user)
+    await frontend_container.subdomain_repository.set_mapping(company_subdomain, company_id)
     
     # Генерируем токен
     token_service = get_token_service()

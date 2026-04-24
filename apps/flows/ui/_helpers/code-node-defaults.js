@@ -1,10 +1,11 @@
 /**
- * Дефолтный конфиг новой code-ноды: валидный `execute` для python runner.
+ * Дефолтный конфиг новой code-ноды: минимальный async-обработчик для Python runner
+ * (одна top-level функция — точка входа для execute_tool).
  */
 
 /** @returns {string} */
 export function getBlankCodeNodeCode() {
-    return `async def execute(state=None):
+    return `async def main(query=None, state=None):
     """Map inputs in the node panel (Input mapping)."""
     return {}
 `;

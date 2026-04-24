@@ -15,6 +15,25 @@ export const baseStyles = css`
     :host([hidden]) {
         display: none !important;
     }
+
+    /* Ссылки внутри Shadow DOM не наследуют reset.css у document — иначе UA / :visited дают низкий контраст в тёмной теме. */
+    :host a:any-link {
+        color: var(--accent);
+        text-decoration: none;
+        transition: color var(--duration-fast) var(--easing-default);
+    }
+
+    :host a:any-link:hover {
+        color: var(--accent-hover);
+    }
+
+    :host a:any-link:visited {
+        color: var(--accent);
+    }
+
+    :host a:any-link:active {
+        color: var(--accent-active);
+    }
 `;
 
 export { formStyles } from '../styles/shared/form.styles.js';

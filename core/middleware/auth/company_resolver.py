@@ -4,6 +4,7 @@
 
 import logging
 from typing import Optional
+
 from fastapi import Request, HTTPException
 
 from core.config import settings
@@ -22,10 +23,10 @@ _INVITE_ACCEPT_PATHS = frozenset({
 
 class CompanyResolver:
     """Определяет компанию из запроса"""
-    
-    def __init__(self, container):
+
+    def __init__(self, container) -> None:
         self.container = container
-    
+
     async def resolve(
         self,
         request: Request,
@@ -33,142 +34,171 @@ class CompanyResolver:
         context_type: str = "frontend",
     ) -> Optional[Company]:
         """
-        Определяет компанию для запроса.
-        
-        Приоритет для FRONTEND (ggg.humanitec.ru):
-        1. Субдомен (пользователь явно зашел на этот домен)
-        
-        Приоритет для API (service-to-service):
-        1. X-Company-Id header (сервис указывает компанию)
-        2. Токен
-        3. Субдомен
-        
-        X-Company-Id позволяет переключить активную компанию:
-        - В local env - без проверок (для разработки)
-        - На проде - только если у пользователя есть доступ к компании
+        Субдомен Host кодирует тенант: для всех не-anonymous контекстов компания субдомена
+        имеет приоритет над JWT / X-Company-Id, с проверкой membership.
+
+        Публичные anonymous-роуты: компания с субдомена по возможности, без membership.
         """
+        if context_type == "anonymous":
+            return await self._resolve_anonymous(request)
+        return await self._resolve_tenant(request, token_data, context_type)
+
+    async def _resolve_anonymous(self, request: Request) -> Optional[Company]:
         company_repo = self.container.company_repository
         subdomain_repo = self.container.subdomain_repository
         host = request.headers.get("host", "")
-        
-        # Для FRONTEND - ТОЛЬКО субдомен! Токен игнорируется.
-        if context_type == "frontend":
-            subdomain = self._extract_subdomain(host)
-            logger.info(f"🔍 CompanyResolver: context_type=frontend, host={host}, subdomain={subdomain}")
-            if not subdomain:
-                # Нет субдомена -> middleware сделает редирект на select-company
-                logger.info(f"🚨 Frontend без субдомена (host={host}) -> возвращаю None")
-                return None
-            
+
+        override_company_id = request.headers.get("X-Company-Id")
+        if override_company_id:
+            if settings.server.env != "production":
+                company = await company_repo.get(override_company_id)
+                if company:
+                    logger.debug("Anonymous: компания из X-Company-Id (dev)")
+                    return company
+                logger.warning("Anonymous: X-Company-Id указывает на несуществующую компанию")
+
+        subdomain = self._extract_subdomain(host)
+        if not subdomain:
+            logger.debug("Anonymous: нет субдомена в Host")
+            return None
+
+        company_id = await subdomain_repo.get_company_id(subdomain)
+        if not company_id:
+            logger.debug(
+                "Anonymous: субдомен в Host без записи в subdomain_repo — контекст без компании"
+            )
+            return None
+
+        company = await company_repo.get(company_id)
+        if company:
+            logger.debug(f"Anonymous: компания из субдомена {subdomain}")
+            return company
+        logger.debug("Anonymous: company_id в реестре, запись company не найдена")
+        return None
+
+    async def _assert_subdomain_tenant(
+        self,
+        request: Request,
+        company_id: str,
+        subdomain: str,
+        token_data: Optional[TokenData],
+    ) -> None:
+        if not token_data or not token_data.user_id:
+            return
+        user = await self.container.user_repository.get(token_data.user_id)
+        if not user:
+            return
+        if company_id in user.companies:
+            return
+        if request.method == "POST" and request.url.path in _INVITE_ACCEPT_PATHS:
+            logger.info(
+                f"Принятие инвайта: {token_data.user_id} ещё не участник {company_id}, "
+                f"проверку membership пропускаем (path={request.url.path})"
+            )
+            return
+        logger.warning(
+            f"Пользователь {token_data.user_id} не имеет доступа к компании {company_id} (субдомен: {subdomain})"
+        )
+        raise HTTPException(
+            status_code=403,
+            detail=f"У вас нет доступа к компании {subdomain}",
+        )
+
+    def _x_company_id_must_match_tenant(
+        self, request: Request, tenant_company_id: str
+    ) -> None:
+        override = request.headers.get("X-Company-Id")
+        if not override:
+            return
+        if override != tenant_company_id:
+            logger.warning(
+                f"X-Company-Id ({override}) не совпадает с компанией субдомена ({tenant_company_id})"
+            )
+            raise HTTPException(
+                status_code=403,
+                detail="X-Company-Id не соответствует хосту субдомена",
+            )
+
+    async def _resolve_tenant(
+        self,
+        request: Request,
+        token_data: Optional[TokenData],
+        context_type: str,
+    ) -> Optional[Company]:
+        company_repo = self.container.company_repository
+        subdomain_repo = self.container.subdomain_repository
+        host = request.headers.get("host", "")
+        subdomain = self._extract_subdomain(host)
+
+        if subdomain:
             company_id = await subdomain_repo.get_company_id(subdomain)
             if not company_id:
-                raise HTTPException(status_code=404, detail=f"Company not found for subdomain: {subdomain}")
-            
-            # Проверяем что у пользователя есть доступ к этой компании
-            if token_data and token_data.user_id:
-                user = await self.container.user_repository.get(token_data.user_id)
-                if user and company_id not in user.companies:
-                    path = request.url.path
-                    if (
-                        request.method == "POST"
-                        and path in _INVITE_ACCEPT_PATHS
-                    ):
-                        logger.info(
-                            f"Принятие инвайта: {token_data.user_id} ещё не участник {company_id}, "
-                            f"проверку membership пропускаем (path={path})"
-                        )
-                    else:
-                        logger.warning(
-                            f"Пользователь {token_data.user_id} не имеет доступа к компании {company_id} (субдомен: {subdomain})"
-                        )
-                        raise HTTPException(
-                            status_code=403,
-                            detail=f"У вас нет доступа к компании {subdomain}"
-                        )
-            
+                raise HTTPException(
+                    status_code=404,
+                    detail=f"Company not found for subdomain: {subdomain}",
+                )
+            self._x_company_id_must_match_tenant(request, company_id)
+            await self._assert_subdomain_tenant(
+                request, company_id, subdomain, token_data
+            )
             company = await company_repo.get(company_id)
             if company:
                 logger.debug(f"Компания из субдомена {subdomain}: {company_id}")
                 return company
-            raise HTTPException(status_code=404, detail=f"Company not found for subdomain: {subdomain}")
-        
-        # === Ниже - только для НЕ-frontend контекстов (API, webhooks, anonymous) ===
-        
-        # X-Company-Id header - переключение активной компании
+            raise HTTPException(
+                status_code=404, detail=f"Company not found for subdomain: {subdomain}"
+            )
+
+        if context_type == "frontend":
+            logger.info(f"Тенант frontend без субдомена (host={host}) -> None")
+            return None
+
         override_company_id = request.headers.get("X-Company-Id")
         if override_company_id:
-            # В dev/local разрешаем без проверок (для удобства разработки)
-            # В production проверяем права доступа
             if settings.server.env != "production":
                 company = await company_repo.get(override_company_id)
                 if company:
                     logger.debug(f"Компания из X-Company-Id (dev): {override_company_id}")
                     return company
                 logger.warning(f"Компания {override_company_id} из X-Company-Id не найдена")
-            
-            # Production: проверяем доступ пользователя
+
             elif token_data and token_data.user_id:
                 user = await self.container.user_repository.get(token_data.user_id)
                 if not user:
                     logger.warning(f"Пользователь {token_data.user_id} не найден")
                     raise HTTPException(status_code=403, detail="Пользователь не найден")
-                
+
                 if override_company_id not in user.companies:
                     logger.warning(
                         f"Пользователь {token_data.user_id} не имеет доступа к компании {override_company_id}"
                     )
                     raise HTTPException(
-                        status_code=403, 
-                        detail=f"У вас нет доступа к компании {override_company_id}"
+                        status_code=403,
+                        detail=f"У вас нет доступа к компании {override_company_id}",
                     )
-                
+
                 company = await company_repo.get(override_company_id)
                 if company:
                     logger.debug(f"Компания из X-Company-Id: {override_company_id}")
                     return company
                 logger.warning(f"Компания {override_company_id} из X-Company-Id не найдена")
-        
-        # Токен - fallback если X-Company-Id не указан
+
         if token_data and token_data.company_id:
             company = await company_repo.get(token_data.company_id)
             if company:
                 logger.debug(f"Компания из токена: {token_data.company_id}")
                 return company
-            raise HTTPException(status_code=403, detail=f"Company {token_data.company_id} not found")
-        
-        # Субдомен для НЕ-frontend контекста
-        subdomain = self._extract_subdomain(host)
-        if subdomain:
-            company_id = await subdomain_repo.get_company_id(subdomain)
-            if company_id:
-                company = await company_repo.get(company_id)
-                if company:
-                    logger.debug(f"Компания из субдомена {subdomain}: {company_id}")
-                    return company
-            if context_type == "anonymous":
-                logger.debug(
-                    "Anonymous: в Host есть субдомен, но компания не найдена — публичная страница без компании"
-                )
-                return None
-            raise HTTPException(status_code=404, detail=f"Company not found for subdomain: {subdomain}")
+            raise HTTPException(
+                status_code=403, detail=f"Company {token_data.company_id} not found"
+            )
 
-        if context_type == "anonymous":
-            logger.debug("Anonymous контекст - компания не требуется, возвращаем None")
-            return None
-        
-        # Нет субдомена для frontend - редирект на выбор компании
         return None
-    
+
     def _extract_subdomain(self, host: str) -> Optional[str]:
-        """Извлекает субдомен из Host header"""
         return extract_subdomain(host)
-    
+
     def has_subdomain(self, request: Request) -> bool:
-        """Проверяет наличие субдомена в запросе"""
         host = request.headers.get("host", "")
-        
-        # X-Company-Id считается как субдомен (для API и dev)
         if request.headers.get("X-Company-Id"):
             return True
-        
         return extract_subdomain(host) is not None

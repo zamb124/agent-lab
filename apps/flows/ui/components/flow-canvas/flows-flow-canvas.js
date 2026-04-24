@@ -1127,7 +1127,7 @@ export class FlowsFlowCanvas extends PlatformElement {
             name,
             pos_x: local.x - NODE_W / 2,
             pos_y: local.y - NODE_H / 2,
-            config,
+            ...config,
         };
         const nodes = { ...asObject(data.nodes), [nodeId]: newNode };
         const next = { ...data, nodes };

@@ -62,6 +62,14 @@ def browser_request_allows_spa_fallback(request: Request) -> bool:
     return False
 
 
+def browser_request_accepts_tenant_error_html(request: Request) -> bool:
+    """
+    Та же эвристика, что и для SPA-fallback: когда ответ-ошибка лучше отдать
+    как HTML, а не JSON.
+    """
+    return browser_request_allows_spa_fallback(request)
+
+
 @dataclass
 class RouteRule:
     """Правило маршрутизации"""
