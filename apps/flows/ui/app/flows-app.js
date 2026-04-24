@@ -45,6 +45,8 @@ import { operatorQueuesResource, operatorQueueAddMemberOp, operatorQueueRemoveMe
 import { editorResource, editorBulkDeleteOp, stickyNoteUpsertOp } from '../events/resources/editor.resource.js';
 import { executionUiSlice } from '../events/resources/execution-ui.resource.js';
 import { asObject, asString, isPlainObject } from '../_helpers/flows-resolvers.js';
+import { applyTenantHostRedirectIfNeeded } from '@platform/lib/utils/tenant-host-guard.js';
+import { COMPANIES_EVENTS } from '@platform/lib/events/reducers/companies.js';
 
 const FLOWS_ROUTES = [
     { key: 'list',                path: '' },
@@ -182,6 +184,22 @@ export class FlowsApp extends PlatformApp {
                 this._flows.get(id);
             }
         });
+        this._companiesListSel = this.select((s) => s.companies.list);
+        this._companiesLoadingSel = this.select((s) => s.companies.loading);
+    }
+
+    updated(changed) {
+        super.updated(changed);
+        if (!this._bootstrapped) {
+            return;
+        }
+        const auth = this._authSelect.value;
+        applyTenantHostRedirectIfNeeded(
+            auth,
+            this._companiesListSel.value,
+            this._companiesLoadingSel.value,
+            { loadCompanies: () => this.dispatch(COMPANIES_EVENTS.LOAD_REQUESTED, null) },
+        );
     }
 
     getBaseUrl() {

@@ -162,6 +162,7 @@
         "stat_namespaces_count": "Пространств имён: {{count}}",
         "stat_spaces_count": "Пространств: {{count}}",
         "stat_files_count": "Файлов: {{count}}",
+        "stat_models_count": "Моделей: {{count}}",
         "quick_invite_title": "Команда и приглашения",
         "quick_invite_desc": "Страница команды и ссылка-приглашение",
         "quick_api_title": "Создать API-ключ",

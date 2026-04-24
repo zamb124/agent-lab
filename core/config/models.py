@@ -115,6 +115,7 @@ class ServerConfig(BaseModel):
     sync_service_url: Optional[str] = None
     scheduler_service_url: Optional[str] = None
     office_service_url: Optional[str] = None
+    provider_litserve_service_url: Optional[str] = None
     platform_public_base_url: Optional[str] = Field(
         default="https://humanitec.ru",
         description="Публичный origin без завершающего слэша для deep link (календарь, Sync join).",
@@ -137,6 +138,7 @@ class ServerConfig(BaseModel):
         "sync": 8005,
         "scheduler": 8006,
         "office": 8008,
+        "provider_litserve": 8014,
     }
 
     def get_service_url(self, service: Optional[str] = None) -> str:
@@ -155,6 +157,8 @@ class ServerConfig(BaseModel):
             return url
 
         default_port = self._default_ports.get(service, 8001)
+        if service == "provider_litserve":
+            return f"http://127.0.0.1:{default_port}"
         return f"http://localhost:{default_port}"
 
     def get_flows_service_url(self) -> str:

@@ -428,6 +428,7 @@ def build_app() -> FastAPI:
         on_startup=_on_startup,
         on_shutdown=_on_shutdown,
         include_crud_routers=False,
+        documentation_gateway_prefix="litserve",
         static_mounts=[
             ("/static/core", str(CORE_STATIC_PATH), "litserve-core-static"),
             (f"{UI_PREFIX}/ui/static", str(UI_ROOT_PATH), "litserve-ui-static"),

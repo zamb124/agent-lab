@@ -27,6 +27,8 @@ import {
 } from '../events/resources/documents.resource.js';
 import { documentStatusResource } from '../events/resources/document-status.resource.js';
 import { searchOp } from '../events/resources/search.resource.js';
+import { applyTenantHostRedirectIfNeeded } from '@platform/lib/utils/tenant-host-guard.js';
+import { COMPANIES_EVENTS } from '@platform/lib/events/reducers/companies.js';
 
 import '@platform/lib/components/layout/platform-island.js';
 import '../components/rag-sidebar.js';
@@ -45,6 +47,12 @@ const RAG_ROUTES = [
 
 export class RagApp extends PlatformApp {
     static defaultI18nNamespace = 'rag';
+
+    constructor() {
+        super();
+        this._companiesListSel = this.select((s) => s.companies.list);
+        this._companiesLoadingSel = this.select((s) => s.companies.loading);
+    }
 
     static factories = [
         providersResource,
@@ -104,6 +112,17 @@ export class RagApp extends PlatformApp {
         return [
             createRouterEffect({ baseUrl: '/rag', routes: RAG_ROUTES }),
         ];
+    }
+
+    updated(changed) {
+        super.updated(changed);
+        const auth = this._authSelect.value;
+        applyTenantHostRedirectIfNeeded(
+            auth,
+            this._companiesListSel.value,
+            this._companiesLoadingSel.value,
+            { loadCompanies: () => this.dispatch(COMPANIES_EVENTS.LOAD_REQUESTED, null) },
+        );
     }
 
     renderRoute(routeKey, params) {

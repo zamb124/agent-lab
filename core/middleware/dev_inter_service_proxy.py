@@ -31,11 +31,20 @@ from core.utils.domain import is_local
 
 logger = logging.getLogger(__name__)
 
-_SERVICE_PREFIXES: tuple[str, ...] = ("flows", "crm", "rag", "sync", "documents", "frontend")
+_SERVICE_PREFIXES: tuple[str, ...] = (
+    "flows",
+    "crm",
+    "rag",
+    "sync",
+    "documents",
+    "frontend",
+    "litserve",
+)
 
 # Где публичный первый сегмент пути не совпадает с ключом get_service_url / SERVER__*_SERVICE_URL.
 _PREFIX_TO_SERVICE_URL_KEY: dict[str, str] = {
     "documents": "office",
+    "litserve": "provider_litserve",
 }
 
 _ONLYOFFICE_STATIC_SEGMENTS: frozenset[str] = frozenset(
@@ -132,15 +141,32 @@ class DevInterServiceProxyMiddleware(BaseHTTPMiddleware):
 
         body = await request.body()
 
-        async with httpx.AsyncClient(
-            timeout=httpx.Timeout(120.0),
-            trust_env=False,
-        ) as client:
-            upstream_response = await client.request(
-                request.method,
+        try:
+            async with httpx.AsyncClient(
+                timeout=httpx.Timeout(120.0),
+                trust_env=False,
+            ) as client:
+                upstream_response = await client.request(
+                    request.method,
+                    upstream,
+                    headers=dict(forward_headers),
+                    content=body if body else None,
+                )
+        except httpx.RequestError as e:
+            logger.warning(
+                "DevInterServiceProxy: upstream %s: %s",
                 upstream,
-                headers=dict(forward_headers),
-                content=body if body else None,
+                e,
+            )
+            hint = (
+                f"Inter-service dev proxy: нет HTTP-ответа от {base}.\n"
+                f"Проверьте, что целевой сервис запущен (для /litserve — provider_litserve на 8014: "
+                f'"uv run python scripts/run.py provider_litserve" или `make app`).\n'
+            )
+            return Response(
+                content=hint.encode("utf-8"),
+                status_code=502,
+                media_type="text/plain; charset=utf-8",
             )
 
         out_headers: dict[str, str] = {}

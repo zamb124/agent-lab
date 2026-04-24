@@ -52,6 +52,8 @@ import { gitResourceUpsertOp, gitResourceGetOp } from '../events/resources/git-r
 import { chatUiResource } from '../events/resources/chat-ui.resource.js';
 import { createSyncPersistEffect } from '../events/sync-persist.effect.js';
 import { createSyncCallPrefsEffect } from '../events/sync-call-prefs.effect.js';
+import { applyTenantHostRedirectIfNeeded } from '@platform/lib/utils/tenant-host-guard.js';
+import { COMPANIES_EVENTS } from '@platform/lib/events/reducers/companies.js';
 
 const SYNC_ROUTES = [
     { key: 'shell',           path: '' },
@@ -71,6 +73,8 @@ export class SyncApp extends PlatformApp {
         this._typingPruneTimer = null;
         this._authUserSel = this.select((s) => s.auth && s.auth.user ? s.auth.user : null);
         this._channelsSliceSel = this.select((s) => s.syncChannels);
+        this._companiesListSel = this.select((s) => s.companies.list);
+        this._companiesLoadingSel = this.select((s) => s.companies.loading);
         this.useEvent('sync/call/incoming', (event) => this._onIncomingCall(event));
         this.useEvent('sync/call/ended', (event) => this._onCallEnded(event));
         this.useEvent(CoreEvents.WS_CONNECTED, () => this._onWsConnected());
@@ -93,6 +97,20 @@ export class SyncApp extends PlatformApp {
         // No-op: list уже загружен; фильтрация на UI. Если backend в будущем
         // начнёт фильтровать по namespace, здесь можно перезапросить
         // `channelsResource.events.LIST_REQUESTED`.
+    }
+
+    updated(changed) {
+        super.updated(changed);
+        if (this.rendersUnauthenticated()) {
+            return;
+        }
+        const auth = this._authSelect.value;
+        applyTenantHostRedirectIfNeeded(
+            auth,
+            this._companiesListSel.value,
+            this._companiesLoadingSel.value,
+            { loadCompanies: () => this.dispatch(COMPANIES_EVENTS.LOAD_REQUESTED, null) },
+        );
     }
 
     connectedCallback() {

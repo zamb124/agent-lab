@@ -1,5 +1,5 @@
 /**
- * dashboard-services-grid — витрина из 5 сервисных карточек.
+ * dashboard-services-grid — витрина из сервисных карточек.
  *
  * Container: дёргает counts ops по каждому сервису и общий health,
  * собирает props для пресентейшнл-карточек. Сервисы и их бренд-цвета —
@@ -71,6 +71,18 @@ const SERVICES = Object.freeze([
         countOp: 'frontend/dashboard_documents_files_count',
         metricKey: 'console_home.stat_files_count',
         healthName: 'office',
+    }),
+    Object.freeze({
+        svcId: 'litserve',
+        nameKey: 'apps.litserve.name',
+        descriptionKey: 'apps.litserve.description',
+        logoSrc: '/static/core/assets/service_logos/rag_logo.svg',
+        href: '/litserve',
+        brandFrom: '#8b5cf6',
+        brandTo: '#d946ef',
+        countOp: 'frontend/dashboard_litserve_models_count',
+        metricKey: 'console_home.stat_models_count',
+        healthName: 'provider_litserve',
     }),
 ]);
 

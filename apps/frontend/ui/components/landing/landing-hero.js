@@ -4,6 +4,9 @@
 import { html, css } from 'lit';
 import { unsafeHTML } from 'lit/directives/unsafe-html.js';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
+import { applyTenantHostRedirectIfNeeded, extractSubdomainFromHostname } from '@platform/lib/utils/tenant-host-guard.js';
+import { COMPANIES_EVENTS } from '@platform/lib/events/reducers/companies.js';
+
 export class LandingHero extends PlatformElement {
     static i18nNamespace = 'landing';
 
@@ -217,14 +220,32 @@ export class LandingHero extends PlatformElement {
     constructor() {
         super();
         this._authSel = this.select((s) => s.auth.status);
+        this._authStateSel = this.select((s) => ({ status: s.auth.status, user: s.auth.user }));
+        this._companiesSel = this.select((s) => s.companies.list);
+        this._companiesLoadingSel = this.select((s) => s.companies.loading);
     }
 
     _handleCTA = () => {
-        if (this._authSel.value === 'authenticated') {
+        if (this._authSel.value !== 'authenticated') {
+            this.openModal('auth.login');
+            return;
+        }
+        if (typeof window !== 'undefined' && extractSubdomainFromHostname(window.location.hostname) !== null) {
             this.navigate('dashboard');
             return;
         }
-        this.openModal('auth.login');
+        const a = this._authStateSel.value;
+        if (a.status !== 'authenticated' || !a.user) {
+            this.openModal('auth.login');
+            return;
+        }
+        applyTenantHostRedirectIfNeeded(
+            a,
+            this._companiesSel.value,
+            this._companiesLoadingSel.value,
+            { loadCompanies: () => this.dispatch(COMPANIES_EVENTS.LOAD_REQUESTED, null) },
+            '/dashboard',
+        );
     };
 
     get isAuthenticated() {

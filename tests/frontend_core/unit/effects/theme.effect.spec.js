@@ -30,12 +30,13 @@ describe('themeEffect: bootstrap', () => {
         expect(changed.payload).toEqual({ mode: 'light', source: 'storage' });
     });
 
-    it('без storage берёт системную', async () => {
+    it('без storage — тёмная тема (не из системы)', async () => {
         dom.uninstall();
-        dom = installDomShim({ systemDark: true });
+        dom = installDomShim({ systemDark: false });
         const effect = createThemeEffect();
         const dispatched = [];
         await effect(ev(CoreEvents.APP_BOOTSTRAP_STARTED), buildCtx(() => ({ theme: { mode: 'dark', source: 'system' } }), dispatched));
+        expect(dom.documentElement.getAttribute('data-theme')).toBe('dark');
         const changed = dispatched.find((d) => d.type === CoreEvents.THEME_CHANGED);
         expect(changed.payload).toEqual({ mode: 'dark', source: 'system' });
     });

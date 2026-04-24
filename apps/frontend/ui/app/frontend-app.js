@@ -12,6 +12,8 @@
 import { html, css } from 'lit';
 import { PlatformApp } from '@platform/lib/base/PlatformApp.js';
 import { createRouterEffect } from '@platform/lib/events/effects/router.effect.js';
+import { applyTenantHostRedirectIfNeeded } from '@platform/lib/utils/tenant-host-guard.js';
+import { COMPANIES_EVENTS } from '@platform/lib/events/reducers/companies.js';
 
 import { apiKeysResource } from '../events/resources/api-keys.resource.js';
 import { teamMembersResource, inviteGenerateOp } from '../events/resources/team.resource.js';
@@ -58,6 +60,7 @@ import {
     dashboardRagNamespacesCountOp,
     dashboardSyncSpacesCountOp,
     dashboardDocumentsFilesCountOp,
+    dashboardLitserveModelsCountOp,
 } from '../events/resources/dashboard-stats.resource.js';
 
 import '@platform/lib/components/layout/platform-island.js';
@@ -168,7 +171,14 @@ export class FrontendApp extends PlatformApp {
         dashboardRagNamespacesCountOp,
         dashboardSyncSpacesCountOp,
         dashboardDocumentsFilesCountOp,
+        dashboardLitserveModelsCountOp,
     ];
+
+    constructor() {
+        super();
+        this._companiesSel = this.select((s) => s.companies.list);
+        this._companiesLoadingSel = this.select((s) => s.companies.loading);
+    }
 
     static styles = [
         PlatformApp.styles,
@@ -235,6 +245,17 @@ export class FrontendApp extends PlatformApp {
             && routeKey && !PUBLIC_ROUTE_KEYS.has(routeKey)
         ) {
             this.navigate('login');
+        }
+
+        if (
+            auth && auth.status === 'authenticated'
+            && routeKey && !PUBLIC_ROUTE_KEYS.has(routeKey)
+        ) {
+            const companies = this._companiesSel ? this._companiesSel.value : [];
+            const loading = this._companiesLoadingSel ? this._companiesLoadingSel.value : false;
+            applyTenantHostRedirectIfNeeded(auth, companies, loading, {
+                loadCompanies: () => this.dispatch(COMPANIES_EVENTS.LOAD_REQUESTED, null),
+            });
         }
     }
 

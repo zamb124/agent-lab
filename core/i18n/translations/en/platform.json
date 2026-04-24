@@ -46,6 +46,11 @@
             "menu_description": "Collaborative Office editing",
             "description": "Collaborative Office editing: binding list, editor in iframe, namespace isolation, secrets only on the BFF"
         },
+        "litserve": {
+            "name": "Humanitec Models",
+            "menu_description": "Local embeddings and rerank",
+            "description": "LitServe model registry: embeddings and rerank on your hardware for RAG and flows without external inference APIs"
+        },
         "frontend": {
             "name": "Console",
             "menu_description": "Company, billing, app hub",

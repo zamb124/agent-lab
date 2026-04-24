@@ -126,6 +126,8 @@ import '../modals/knowledge-import-modal.js';
 import { graphUiSlice } from '../events/resources/graph-ui.resource.js';
 import { dailyNotesUiSlice } from '../events/resources/daily-notes-ui.resource.js';
 import { createCrmPersistEffect } from '../events/crm-persist.effect.js';
+import { applyTenantHostRedirectIfNeeded } from '@platform/lib/utils/tenant-host-guard.js';
+import { COMPANIES_EVENTS } from '@platform/lib/events/reducers/companies.js';
 
 import '@platform/lib/components/layout/platform-island.js';
 
@@ -148,6 +150,12 @@ const CRM_ROUTES = [
 
 export class CRMApp extends PlatformApp {
     static defaultI18nNamespace = 'crm';
+
+    constructor() {
+        super();
+        this._companiesListSel = this.select((s) => s.companies.list);
+        this._companiesLoadingSel = this.select((s) => s.companies.loading);
+    }
 
     static factories = [
         namespacesResource,
@@ -265,6 +273,17 @@ export class CRMApp extends PlatformApp {
             createRouterEffect({ baseUrl: '/crm', routes: CRM_ROUTES }),
             createCrmPersistEffect(),
         ];
+    }
+
+    updated(changed) {
+        super.updated(changed);
+        const auth = this._authSelect.value;
+        applyTenantHostRedirectIfNeeded(
+            auth,
+            this._companiesListSel.value,
+            this._companiesLoadingSel.value,
+            { loadCompanies: () => this.dispatch(COMPANIES_EVENTS.LOAD_REQUESTED, null) },
+        );
     }
 
     renderRoute(routeKey, params) {

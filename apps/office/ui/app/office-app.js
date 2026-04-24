@@ -44,6 +44,8 @@ import {
     documentRenameForm,
 } from '../events/resources/documents.resource.js';
 import { documentEditorConfigOp } from '../events/resources/editor.resource.js';
+import { applyTenantHostRedirectIfNeeded } from '@platform/lib/utils/tenant-host-guard.js';
+import { COMPANIES_EVENTS } from '@platform/lib/events/reducers/companies.js';
 
 import '@platform/lib/components/layout/platform-island.js';
 import '../components/office-sidebar.js';
@@ -71,6 +73,12 @@ const OFFICE_ROUTES = [
 
 export class OfficeApp extends PlatformApp {
     static defaultI18nNamespace = 'documents';
+
+    constructor() {
+        super();
+        this._companiesListSel = this.select((s) => s.companies.list);
+        this._companiesLoadingSel = this.select((s) => s.companies.loading);
+    }
 
     static factories = [
         integrationStatusOp,
@@ -148,6 +156,17 @@ export class OfficeApp extends PlatformApp {
         return [
             createRouterEffect({ baseUrl: '/documents', routes: OFFICE_ROUTES }),
         ];
+    }
+
+    updated(changed) {
+        super.updated(changed);
+        const auth = this._authSelect.value;
+        applyTenantHostRedirectIfNeeded(
+            auth,
+            this._companiesListSel.value,
+            this._companiesLoadingSel.value,
+            { loadCompanies: () => this.dispatch(COMPANIES_EVENTS.LOAD_REQUESTED, null) },
+        );
     }
 
     renderRoute(routeKey, params) {

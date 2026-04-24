@@ -46,6 +46,11 @@
             "menu_description": "Совместное редактирование Office",
             "description": "Совместное редактирование Office-файлов: список привязок, редактор в iframe, изоляция по namespace, секреты только на BFF"
         },
+        "litserve": {
+            "name": "Humanitec Models",
+            "menu_description": "Локальные эмбеддинги и реранк",
+            "description": "Реестр моделей LitServe: эмбеддинги и реранк на своём железе для RAG и сценариев без внешних API"
+        },
         "frontend": {
             "name": "Console",
             "menu_description": "Компания, биллинг, доступ к сервисам",

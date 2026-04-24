@@ -4,8 +4,6 @@ API для проверки статуса микросервисов
 import asyncio
 import logging
 import time
-from typing import List
-
 import httpx
 from fastapi import APIRouter, Query
 
@@ -24,6 +22,7 @@ SERVICES = [
     {"name": "rag", "url": "/rag/api/health"},
     {"name": "sync", "url": "/sync/api/health"},
     {"name": "office", "url": "/documents/api/health"},
+    {"name": "provider_litserve", "url": "/litserve/health"},
 ]
 
 _NETWORK_ERRORS = (
@@ -36,8 +35,16 @@ _NETWORK_ERRORS = (
 )
 
 
+def _service_status_display_url(name: str) -> str:
+    if name == "flows":
+        return "/flows"
+    if name == "provider_litserve":
+        return "/litserve"
+    return f"/{name}"
+
+
 async def _check_service(service_client: object, name: str, health_url: str) -> ServiceStatus:
-    display_url = "/flows" if name == "flows" else f"/{name}"
+    display_url = _service_status_display_url(name)
     start = time.time()
     await service_client.get(name, health_url)
     elapsed_ms = (time.time() - start) * 1000
@@ -69,7 +76,7 @@ async def get_services_status(
             statuses.append(result)
         elif isinstance(result, _NETWORK_ERRORS):
             logger.warning("Сервис %s недоступен: %s", svc["name"], result)
-            display_url = "/flows" if svc["name"] == "flows" else f"/{svc['name']}"
+            display_url = _service_status_display_url(svc["name"])
             statuses.append(ServiceStatus(
                 name=svc["name"],
                 status="unhealthy",

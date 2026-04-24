@@ -162,6 +162,7 @@
         "stat_namespaces_count": "Namespaces: {{count}}",
         "stat_spaces_count": "Spaces: {{count}}",
         "stat_files_count": "Files: {{count}}",
+        "stat_models_count": "Models: {{count}}",
         "quick_invite_title": "Team & invites",
         "quick_invite_desc": "Open the team page and share an invite link",
         "quick_api_title": "Create API key",

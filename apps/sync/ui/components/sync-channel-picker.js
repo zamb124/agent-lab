@@ -8,9 +8,7 @@
  *
  * Действия:
  *   - клик по карточке канала → navigate('channel', { channelId })
- *   - "Создать канал" → openModal('sync.channel_create', { namespace })
- *   - "Создать встречу" → dispatch('sync/calls/adhoc_create_requested') —
- *     sync-shell-page открывает модалку создания канала (без auto-invite).
+ * Создание канала / встречи — в сайдбаре (`sync-sidebar`).
  *
  * Активный namespace — `getPlatformNamespaceSidebarSelection(company_id)`
  * (тот же глобальный селект, что и в CRM); фильтрация — по
@@ -24,8 +22,6 @@ import { html, css } from 'lit';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
 import { getPlatformNamespaceSidebarSelection } from '@platform/lib/utils/platform-namespace.js';
 import '@platform/lib/components/glass-card.js';
-import '@platform/lib/components/platform-button.js';
-import '@platform/lib/components/platform-icon.js';
 import { resolveAvatarImageSrc } from '@platform/lib/utils/placeholder-avatar.js';
 import { channelDisplayTitle } from './_helpers/sync-channel-display.js';
 import { syncChannelPlaceholderCollection } from '../_helpers/sync-channel-placeholder-collection.js';
@@ -45,24 +41,13 @@ export class SyncChannelPicker extends PlatformElement {
             box-sizing: border-box;
         }
         .header {
-            display: flex;
-            align-items: center;
-            gap: var(--space-3);
             margin-bottom: var(--space-5);
-            flex-wrap: wrap;
         }
         h2 {
             margin: 0;
             font-size: var(--text-2xl);
             font-weight: var(--font-bold);
             color: var(--text-primary);
-            flex: 1;
-            min-width: 0;
-        }
-        .actions {
-            display: flex;
-            align-items: center;
-            gap: var(--space-2);
         }
         .filters {
             display: flex;
@@ -181,16 +166,6 @@ export class SyncChannelPicker extends PlatformElement {
         return this._namespaces.items.find((ns) => ns.name === activeNs) || null;
     }
 
-    _onCreateChannel() {
-        const ns = this._activeNamespaceItem();
-        const namespace = ns ? ns.name : null;
-        this.openModal('sync.channel_create', { namespace });
-    }
-
-    _onAdhocCall() {
-        this.dispatch('sync/calls/adhoc_create_requested', null);
-    }
-
     _filteredChannels() {
         const activeNs = this._activeNamespace();
         const all = this._channels.items.filter((c) => c.type !== 'direct');
@@ -239,16 +214,6 @@ export class SyncChannelPicker extends PlatformElement {
         return html`
             <div class="header">
                 <h2>${headerTitle}</h2>
-                <div class="actions">
-                    <platform-button variant="secondary" @click=${this._onAdhocCall}>
-                        <platform-icon name="phone-plus" size="16"></platform-icon>
-                        ${this.t('channel_picker.action_adhoc_call')}
-                    </platform-button>
-                    <platform-button variant="primary" @click=${this._onCreateChannel}>
-                        <platform-icon name="plus" size="16"></platform-icon>
-                        ${this.t('channel_picker.action_create_channel')}
-                    </platform-button>
-                </div>
             </div>
             <div class="filters">
                 ${activeNs === 'all'

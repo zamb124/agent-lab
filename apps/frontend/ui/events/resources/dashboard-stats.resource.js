@@ -61,11 +61,11 @@ export const dashboardRagNamespacesCountOp = createAsyncOp({
 export const dashboardSyncSpacesCountOp = createAsyncOp({
     name: 'frontend/dashboard_sync_spaces_count',
     silent: true,
-    restMirror: { method: 'GET', path: '/sync/api/v1/spaces/', service: 'sync' },
+    restMirror: { method: 'GET', path: '/sync/api/v1/namespaces', service: 'sync' },
     request: async () => {
         const data = await httpRequest({
             method: 'GET',
-            url: '/sync/api/v1/spaces/?limit=1&offset=0',
+            url: '/sync/api/v1/namespaces?limit=1&offset=0',
         });
         return { total: Number(data.total) };
     },
@@ -83,5 +83,19 @@ export const dashboardDocumentsFilesCountOp = createAsyncOp({
         const items = Array.isArray(data.items) ? data.items : [];
         const total = items.reduce((acc, c) => acc + Number(c.file_count), 0);
         return { total };
+    },
+});
+
+export const dashboardLitserveModelsCountOp = createAsyncOp({
+    name: 'frontend/dashboard_litserve_models_count',
+    silent: true,
+    restMirror: { method: 'GET', path: '/litserve/api/models', service: 'provider_litserve' },
+    request: async () => {
+        const data = await httpRequest({
+            method: 'GET',
+            url: '/litserve/api/models',
+        });
+        const items = Array.isArray(data.items) ? data.items : [];
+        return { total: items.length };
     },
 });

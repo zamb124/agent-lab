@@ -42,7 +42,7 @@ export function createThemeEffect() {
                     mode = stored;
                     source = 'storage';
                 } else {
-                    mode = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+                    mode = 'dark';
                     source = 'system';
                 }
                 _applyToDom(mode);

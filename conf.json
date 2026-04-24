@@ -8,6 +8,7 @@
     "rag_service_url": "http://localhost:8004",
     "sync_service_url": "http://localhost:8005",
     "office_service_url": "http://localhost:8008",
+    "provider_litserve_service_url": "http://127.0.0.1:8014",
     "platform_public_base_url": "https://humanitec.ru",
     "document_server_dev_upstream_url": "http://localhost:8088"
   },
