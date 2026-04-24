@@ -564,7 +564,11 @@ export class FlowsTriggerEditorModal extends PlatformFormModal {
         if (!isPlainObject(this._config)) {
             throw new Error('flows-trigger-editor-modal: _config must be a plain object');
         }
-        const body = { type: this._type, config: { ...this._config } };
+        const body = {
+            type: this._type,
+            config: { ...this._config },
+            skill_id: this._skillId,
+        };
         const tid = asString(this._triggerId);
         if (tid.length > 0) {
             body.trigger_id = tid;

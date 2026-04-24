@@ -160,24 +160,38 @@ async def on_startup(app: FastAPI, container, settings: FlowSettings):
     finally:
         clear_context()
 
-    # Синхронизация LLM моделей от провайдера
+    # Синхронизация LLM у провайдеров: не блокирует lifespan — иначе HTTP (в т.ч. /health)
+    # недоступен, пока не отработают все внешние запросы (несколько провайдеров × ретраи).
     if not is_testing():
-        try:
-            scheduler_context = await _build_scheduler_auth_context(
-                container=container,
-                trace_id="system:scheduler-sync",
-                session_id="system-scheduler-sync",
-            )
-            set_context(scheduler_context)
-            synced_counts = await container.llm_models_service.sync_all_providers()
-            total_synced = sum(synced_counts.values())
-            logger.info(f"Синхронизировано LLM моделей: {total_synced} ({synced_counts})")
-            # Запуск фоновой синхронизации каждые 60 секунд
-            await container.llm_models_service.start_background_sync(interval=60)
-        except Exception as e:
-            logger.error(f"Ошибка при синхронизации LLM моделей: {e}")
-        finally:
-            clear_context()
+
+        async def _llm_models_startup_background() -> None:
+            try:
+                scheduler_context = await _build_scheduler_auth_context(
+                    container=container,
+                    trace_id="system:scheduler-sync",
+                    session_id="system-scheduler-sync",
+                )
+                set_context(scheduler_context)
+                try:
+                    synced_counts = await container.llm_models_service.sync_all_providers()
+                    total_synced = sum(synced_counts.values())
+                    logger.info(
+                        "Синхронизировано LLM моделей: %s (%s)",
+                        total_synced,
+                        synced_counts,
+                    )
+                    await container.llm_models_service.start_background_sync(interval=60)
+                finally:
+                    clear_context()
+            except Exception as e:
+                logger.error(
+                    "Ошибка при синхронизации LLM моделей: %s",
+                    e,
+                    exc_info=True,
+                )
+
+        asyncio.create_task(_llm_models_startup_background())
+        logger.info("Синхронизация LLM моделей запущена в фоне")
     else:
         logger.info("Пропускаем синхронизацию LLM моделей (TESTING)")
         from core.clients.llm.factory import get_llm

@@ -25,6 +25,7 @@ import { mcpServersResource, mcpServerSyncOp, mcpServerUpdateOp, mcpServerTestOp
 import { operatorQueuesResource } from '../../../../apps/flows/ui/events/resources/operator.resource.js';
 import { promptRenderOp } from '../../../../apps/flows/ui/events/resources/prompts.resource.js';
 import { variablesResource } from '../../../../apps/flows/ui/events/resources/variables.resource.js';
+import { toolsResource } from '../../../../apps/flows/ui/events/resources/tools.resource.js';
 
 import '../../../../apps/flows/ui/components/nodes/flows-base-node-editor.js';
 import '../../../../apps/flows/ui/components/nodes/flows-llm-node-editor.js';
@@ -50,6 +51,7 @@ const FACTORIES = [
     operatorQueuesResource,
     promptRenderOp,
     variablesResource,
+    toolsResource,
 ];
 
 function bootstrap() {
@@ -91,7 +93,7 @@ describe('node editors — top-level NodeConfig contract', () => {
         expect(titles.length).to.be.lessThanOrEqual(5);
     });
 
-    it('flows-code-node-editor — toggle inline ↔ function', async () => {
+    it('flows-code-node-editor — вкладки Код / Схема', async () => {
         const node = { node_id: 'a', type: 'code', name: 'A', code: 'print(1)' };
         const el = await fixture(html`
             <flows-code-node-editor .nodeId=${'a'} .flowId=${'demo'} .skillId=${'base'}
@@ -99,12 +101,12 @@ describe('node editors — top-level NodeConfig contract', () => {
             </flows-code-node-editor>
         `);
         await elementUpdated(el);
-        let last = null;
-        el.addEventListener('change', (e) => { last = e.detail; });
-        const buttons = el.shadowRoot.querySelector('flows-base-node-editor').querySelectorAll('.toggle button');
-        expect(buttons.length).to.be.greaterThanOrEqual(2);
-        buttons[1].click();
-        expect(last).to.deep.equal({ nodeId: 'a', patch: { tool_id: '' } });
+        const tabs = el.shadowRoot.querySelectorAll('.main-tab');
+        expect(tabs.length).to.be.greaterThanOrEqual(2);
+        tabs[1].click();
+        await elementUpdated(el);
+        const jsonEditor = el.shadowRoot.querySelector('flows-code-editor[language="json"]');
+        expect(jsonEditor).to.not.be.null;
     });
 
     it('flows-channel-node-editor — поля channel/action', async () => {

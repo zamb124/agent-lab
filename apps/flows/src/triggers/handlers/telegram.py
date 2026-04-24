@@ -77,7 +77,7 @@ class TelegramTriggerHandler(BaseTriggerHandler):
         
         # Резолвим @var:key если нужно
         if bot_token.startswith("@var:"):
-            bot_token = await self._resolve_variable(bot_token)
+            bot_token = await self._resolve_variable(bot_token, flow_id, trigger.skill_id)
         
         # Генерируем secret_token для верификации
         secret_token = secrets.token_urlsafe(32)
@@ -159,7 +159,7 @@ class TelegramTriggerHandler(BaseTriggerHandler):
         
         # Резолвим @var:key если нужно
         if bot_token.startswith("@var:"):
-            bot_token = await self._resolve_variable(bot_token)
+            bot_token = await self._resolve_variable(bot_token, flow_id, trigger.skill_id)
         
         from core.config import get_settings
         api_url = f"{get_settings().telegram.api_base}/bot{bot_token}/deleteWebhook"
@@ -280,24 +280,27 @@ class TelegramTriggerHandler(BaseTriggerHandler):
             "context.message_id": "@trigger:message.message_id",
         }
     
-    async def _resolve_variable(self, var_ref: str) -> str:
-        """Резолвит @var:key ссылку."""
+    async def _resolve_variable(self, var_ref: str, flow_id: str, skill_id: str) -> str:
+        """Резолвит @var:key через тот же словарь, что у runtime flow (см. FlowFactory)."""
         from apps.flows.src.container import get_container
-        
+        from apps.flows.src.triggers.config_var_resolve import resolve_at_var_for_flow
+        from core.variables.resolver import VariableResolutionError
+
         container = get_container()
-        var_key = var_ref[5:]  # Убираем "@var:"
-        
-        value = await container.variables_service.get_var(var_key)
-        
-        if value is None:
+        try:
+            return await resolve_at_var_for_flow(
+                container,
+                flow_id,
+                var_ref,
+                skill_id=skill_id,
+            )
+        except VariableResolutionError as e:
             raise TriggerRegistrationError(
                 trigger_type="telegram",
-                flow_id="",
+                flow_id=flow_id,
                 trigger_id="",
-                message=f"Variable not found: {var_key}",
-            )
-        
-        return str(value)
+                message=str(e),
+            ) from e
     
     def verify_secret_token(
         self,

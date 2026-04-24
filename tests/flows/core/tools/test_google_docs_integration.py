@@ -12,7 +12,7 @@ delete_range, share), документ создаётся ПЕРЕД flow чер
   - env GOOGLE_IMPERSONATE_EMAIL — email пользователя Google Workspace
     для domain-wide delegation (SA работает от его имени)
 
-Без файла `google_service_account.json` и `GOOGLE_IMPERSONATE_EMAIL` тесты падают с `pytest.fail`.
+Без файла `google_service_account.json` и `GOOGLE_IMPERSONATE_EMAIL` тесты пропускаются (`pytest.skip`).
 
 Запуск:
     GOOGLE_IMPERSONATE_EMAIL=user@domain.ru \\
@@ -66,7 +66,7 @@ if _impersonate_email is None:
 @pytest.fixture(autouse=True)
 def _require_google_docs_credentials() -> None:
     if _skip_reason_parts:
-        pytest.fail("; ".join(_skip_reason_parts))
+        pytest.skip("; ".join(_skip_reason_parts))
 
 
 @pytest.fixture()

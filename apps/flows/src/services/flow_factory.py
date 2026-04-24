@@ -137,6 +137,27 @@ class FlowFactory:
             nodes = repair_effective_nodes_from_bundle(config.flow_id, source, nodes)
         return nodes
 
+    async def get_resolved_variables_map(
+        self,
+        flow_id: str,
+        skill_id: str = "default",
+        *,
+        config_version: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """
+        Словарь resolved variables для flow+skill — тот же, что попадает в ``Flow.variables``
+        (после ``_apply_skill`` и ``_resolve_variables``), без сборки графа.
+        """
+        config = await self.get_flow_config_snapshot(flow_id, config_version)
+        if config is None:
+            if config_version:
+                raise ValueError(
+                    f"Flow '{flow_id}' версия '{config_version}' не найдена в flows_versions"
+                )
+            raise ValueError(f"Flow '{flow_id}' не найден")
+        effective = self._apply_skill(config, skill_id)
+        return await self._resolve_variables(effective["variables"])
+
     async def _create_flow(self, config: FlowConfig, skill_id: str = "default") -> Flow:
         """
         Создаёт Flow из FlowConfig с применением skill.

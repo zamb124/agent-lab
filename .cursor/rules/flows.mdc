@@ -316,26 +316,27 @@ API `traces` (`task`, `session`, `trace_id`): дерево в `apps/flows/src/ap
 
 ### TriggerConfig
 
+Ключи слева в **`output_mapping`**: только **`content`** и/или пути под **`context.*`**. `variables.*` в ключах слева запрещены. Справа — путь в payload входящего события (строка с точками, без префикса `@trigger:`). Устаревшее поле **`input_mapping`** в новых конфигах не используется. Полный контракт: [`trigger_config.py`](../../apps/flows/src/models/trigger_config.py).
+
     "triggers": {
         "telegram_bot": {
             "trigger_id": "telegram_bot",
+            "name": "Support bot",
             "type": "telegram",
+            "skill_id": "default",
             "config": {
                 "bot_token": "@var:telegram_token",
                 "secret_token": "webhook_secret"
             },
-            "input_mapping": {
-                "content": "@trigger:message.text",
-                "variables.chat_id": "@trigger:message.chat.id"
+            "output_mapping": {
+                "content": "message.text",
+                "context.chat_id": "message.chat.id"
             },
             "output_actions": [...]
         }
     }
 
-### input_mapping для триггеров
-
-- @trigger:path - данные из payload триггера (JSONPath)
-- @const:value - константа
+**`skill_id`**: id сценария из `FlowConfig.skills` — при срабатывании триггера запускается этот skill; резолв `@var` в `config` привязан к той же паре `flow_id` + `skill_id` (см. ниже «`@var` в триггерах и verify»).
 
 ### output_actions
 
@@ -495,6 +496,12 @@ output_mapping:
   - нельзя auto-create пустых переменных
   - нельзя неявно подставлять дефолты при ошибке резолва
 
+### `@var` в триггерах и verify
+
+Резолв `@var:...` в полях **`triggers.*.config`** и в запросе проверки черновика (**`POST /flows/api/v1/triggers/verify`**) — не отдельный ручной merge переменных компании и сырых значений из JSON flow: тот же словарь эффективных variables, что и у рантайма для выбранного сценария — **`FlowFactory.get_resolved_variables_map`** (тот же путь, что `_resolve_variables` при сборке flow), далее **`VarResolver.resolve_ref`** через [`apps/flows/src/triggers/config_var_resolve.py`](../../apps/flows/src/triggers/config_var_resolve.py) (`resolve_at_var_for_flow`).
+
+**`skill_id`** в verify и в UI редактора должен совпадать с сценарием триггера; иначе токены и переменные skill-level не совпадут с рантаймом.
+
 ## Resources
 
 Ресурсы = переиспользуемые компоненты (RAG, S3, LLM, Cache, HTTP, Code модули).
@@ -604,8 +611,10 @@ Flow (конфиг) → Skill → Node (каждый уровень переоп
 - apps/flows/src/models/trigger_config.py - TriggerConfig
 - apps/flows/src/models/channel_config.py - ChannelConfig, OutputAction
 - apps/flows/src/triggers/handlers/ - обработчики триггеров (telegram.py, webhook.py)
+- apps/flows/src/triggers/config_var_resolve.py - резолв `@var` для конфига триггеров (через `FlowFactory.get_resolved_variables_map`)
 - apps/flows/src/triggers/executor.py - TriggerExecutor
 - apps/flows/src/triggers/registry.py - TriggerRegistry
+- apps/flows/src/api/v1/triggers.py - HTTP API триггеров, в т.ч. verify черновика
 - apps/flows/src/channels/telegram.py - TelegramChannelHandler
 - apps/flows/src/channels/webhook.py - WebhookChannelHandler
 - apps/flows/src/channels/registry.py - ChannelRegistry

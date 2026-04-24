@@ -723,11 +723,12 @@ class TestLLMModelsServiceRealAPI:
         from apps.flows.config import get_settings
         
         settings = get_settings()
-        assert settings.llm.openai and settings.llm.openai.api_key, "OpenAI API key не настроен в конфиге"
-        
+        if not (settings.llm.openai and settings.llm.openai.api_key):
+            pytest.skip("OpenAI не настроен: в LLMConfig нет openai или api_key")
+
         mock_repo = MagicMock(spec=LLMModelRepository)
         service = LLMModelsService(mock_repo, AsyncMock())
-        
+
         models = await service._fetch_openai_models()
         
         # OpenAI должен вернуть список моделей

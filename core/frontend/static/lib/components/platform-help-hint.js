@@ -240,7 +240,7 @@ export class PlatformHelpHint extends PlatformElement {
             return anchor.top >= 100;
         }
         const topEdgeIfAbove = anchor.top - PORTAL_GAP_PX - bubbleH;
-        return topEdgeIfAbove >= VIEWPORT_TOP_INSET;
+        return topEdgeIfAbove >= VIEWPORT_TOP_INSET_PX;
     }
 
     _syncPortalPosition() {

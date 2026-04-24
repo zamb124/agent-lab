@@ -135,11 +135,14 @@ output_mapping - куда пишем результат:
     "triggers": {
       "tg": {
         "type": "telegram",
+        "skill_id": "default",
         "config": {"bot_token": "@var:bot_token"},
-        "input_mapping": {"content": "@trigger:message.text"},
+        "output_mapping": {"content": "message.text"},
         "output_actions": [...]
       }
     }
+
+У триггера задаётся **`skill_id`**: какой сценарий стартует; резолв `@var` в `config` идёт для той же пары `flow_id` + `skill_id`, что и рантайм (см. **`flows.mdc`**, `FlowFactory.get_resolved_variables_map`).
 
 ## ChannelNode (отправка сообщений)
 

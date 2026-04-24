@@ -23,7 +23,9 @@ from apps.flows.src.triggers.trigger_type_contract import (
     default_post_flow_output_enabled,
     effective_output_actions_for_trigger,
 )
+from apps.flows.src.triggers.config_var_resolve import resolve_at_var_for_flow
 from apps.flows.src.triggers.webhook_inbound import check_webhook_rate_limit, client_ip_allowed
+from core.variables.resolver import VariableResolutionError
 from core.context import get_context, set_context
 from core.logging import get_logger
 from core.models.context_models import Context, Language
@@ -47,23 +49,6 @@ def _public_trigger_config(config: Dict[str, Any]) -> Dict[str, Any]:
         else:
             out[k] = v
     return out
-
-
-async def _resolve_config_secret_value(container: Any, raw: str) -> str:
-    """Резолвит @var:key для secret_token в конфиге webhook."""
-    if not raw:
-        return ""
-    s = str(raw)
-    if s.startswith("@var:"):
-        var_key = s[5:]
-        value = await container.variables_service.get_var(var_key)
-        if value is None:
-            raise HTTPException(
-                status_code=500,
-                detail=f"Variable not found: {var_key}",
-            )
-        return str(value)
-    return s
 
 
 def _webhook_secret_from_request(request: Request) -> Optional[str]:
@@ -143,6 +128,10 @@ class TriggerVerifyRequest(BaseModel):
     trigger_id: Optional[str] = Field(
         default=None,
         description="Черновой ID триггера (для подсказки пути webhook)",
+    )
+    skill_id: str = Field(
+        default="default",
+        description="Skill для резолва @var: (как при выполнении flow с этим skill)",
     )
 
 
@@ -232,15 +221,18 @@ async def verify_trigger_draft(
         raw_token = cfg.get("bot_token")
         if isinstance(raw_token, str) and raw_token.startswith("@var:"):
             try:
-                cfg["bot_token"] = await _resolve_config_secret_value(container, raw_token)
-            except HTTPException as e:
-                detail = e.detail
-                msg = detail if isinstance(detail, str) else str(detail)
+                cfg["bot_token"] = await resolve_at_var_for_flow(
+                    container,
+                    flow_id,
+                    raw_token,
+                    skill_id=request.skill_id,
+                )
+            except VariableResolutionError as e:
                 return TriggerVerifyResponse(
                     ok=False,
                     metadata={},
                     error_code="variable_not_found",
-                    error_message=msg,
+                    error_message=str(e),
                 )
 
     ok, metadata, err_code, err_msg = await run_verify(
@@ -560,7 +552,15 @@ async def generic_webhook(
 
     raw_secret = trigger.config.get("secret_token")
     if raw_secret is not None and str(raw_secret).strip() != "":
-        expected = await _resolve_config_secret_value(container, str(raw_secret))
+        try:
+            expected = await resolve_at_var_for_flow(
+                container,
+                flow_id,
+                str(raw_secret),
+                skill_id=trigger.skill_id,
+            )
+        except VariableResolutionError as e:
+            raise HTTPException(status_code=500, detail=str(e)) from e
         received = _webhook_secret_from_request(request)
         if not received:
             raise HTTPException(status_code=403, detail="Secret required")
