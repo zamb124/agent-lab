@@ -13,6 +13,7 @@ from typing import Any, Dict
 from apps.flows.src.models import TriggerConfig, TriggerStatus, TriggerType
 from core.http import get_httpx_client
 from apps.flows.src.triggers.executor import TriggerExecutor
+from apps.flows.src.triggers.verify_draft import normalize_telegram_bot_token_for_api
 from apps.flows.src.triggers.handlers.base import (
     BaseTriggerHandler,
     TriggerRegistrationError,
@@ -75,10 +76,17 @@ class TelegramTriggerHandler(BaseTriggerHandler):
                 message="bot_token is required",
             )
         
-        # Резолвим @var:key если нужно
-        if bot_token.startswith("@var:"):
-            bot_token = await self._resolve_variable(bot_token, flow_id, trigger.skill_id)
-        
+        if isinstance(bot_token, str) and bot_token.strip().startswith("@var:"):
+            bot_token = await self._resolve_variable(bot_token.strip(), flow_id, trigger.skill_id)
+        bot_token = normalize_telegram_bot_token_for_api(str(bot_token))
+        if not bot_token:
+            raise TriggerRegistrationError(
+                trigger_type="telegram",
+                flow_id=flow_id,
+                trigger_id=trigger.trigger_id,
+                message="bot_token is empty after resolve",
+            )
+
         # Генерируем secret_token для верификации
         secret_token = secrets.token_urlsafe(32)
         
@@ -157,10 +165,16 @@ class TelegramTriggerHandler(BaseTriggerHandler):
             )
             return
         
-        # Резолвим @var:key если нужно
-        if bot_token.startswith("@var:"):
-            bot_token = await self._resolve_variable(bot_token, flow_id, trigger.skill_id)
-        
+        if isinstance(bot_token, str) and bot_token.strip().startswith("@var:"):
+            bot_token = await self._resolve_variable(bot_token.strip(), flow_id, trigger.skill_id)
+        bot_token = normalize_telegram_bot_token_for_api(str(bot_token))
+        if not bot_token:
+            logger.warning(
+                f"No usable bot_token for unregister: flow_id={flow_id}, "
+                f"trigger={trigger.trigger_id}"
+            )
+            return
+
         from core.config import get_settings
         api_url = f"{get_settings().telegram.api_base}/bot{bot_token}/deleteWebhook"
         

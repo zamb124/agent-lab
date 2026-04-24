@@ -20,6 +20,14 @@ logger = get_logger(__name__)
 VerifyResult = Tuple[bool, Dict[str, Any], Optional[str], Optional[str]]
 
 
+def normalize_telegram_bot_token_for_api(value: str) -> str:
+    """
+    URL Telegram вида /bot<token>/getMe не должен содержать пробелов и переносов
+    (часто попадают при копировании из @BotFather или из записи в БД).
+    """
+    return "".join(str(value).split())
+
+
 async def verify_telegram_config(config: Dict[str, Any]) -> VerifyResult:
     token = config.get("bot_token")
     if not token or not str(token).strip():
@@ -33,6 +41,10 @@ async def verify_telegram_config(config: Dict[str, Any]) -> VerifyResult:
             "bot_token_unresolved",
             "Сервер не подставил значение @var: для токена. Проверьте имя переменной и вызов проверки.",
         )
+
+    token_s = normalize_telegram_bot_token_for_api(token_s)
+    if not token_s:
+        return False, {}, "bot_token_required", "Укажите токен бота (bot_token)."
 
     base = get_settings().telegram.api_base
     url = f"{base.rstrip('/')}/bot{token_s}/getMe"
@@ -51,8 +63,11 @@ async def verify_telegram_config(config: Dict[str, Any]) -> VerifyResult:
     if not data.get("ok"):
         if response.status_code == 404:
             msg = (
-                "Токен бота не найден (неверный токен или бот удалён). "
-                "Проверьте токен в @BotFather."
+                "Telegram вернул HTTP 404 на getMe: бот с таким токеном не найден. "
+                "Проверьте токен в @BotFather (не отозван ли, нет ли опечатки). "
+                "Если токен задан как @var:, значение подставляется из сохранённого "
+                "flow в БД — сохраните flow и снова нажмите «Проверить»; для значения в "
+                "переменных компании проверьте override на уровне компании."
             )
             return False, {
                 "http_status": response.status_code,

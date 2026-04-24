@@ -350,6 +350,11 @@ export class FlowsTriggerEditorModal extends PlatformFormModal {
                 border-radius: var(--radius-md);
                 font-size: var(--text-sm);
             }
+            .header-trigger-actions {
+                display: flex;
+                gap: var(--space-1);
+                align-items: center;
+            }
         `,
     ];
 
@@ -376,6 +381,7 @@ export class FlowsTriggerEditorModal extends PlatformFormModal {
         this._updateOp = this.useOp('flows/trigger_update');
         this._listOp = this.useOp('flows/triggers_list');
         this._verifyOp = this.useOp('flows/trigger_verify');
+        this._reregisterOp = this.useOp('flows/trigger_reregister');
         this._editor = this.useOp('flows/editor');
         this._flowsCat = this.useResource('flows/flows', { autoload: false });
     }
@@ -493,6 +499,12 @@ export class FlowsTriggerEditorModal extends PlatformFormModal {
     }
 
     renderHeaderActions() {
+        const canReregister = Boolean(this.trigger)
+            && asString(this._triggerId).length > 0
+            && this._enabled;
+        const reregisterDisabled = !canReregister
+            || this._reregisterOp.busy
+            || this._verifyOp.busy;
         return html`
             <platform-help-hint
                 class="trigger-verify-hint"
@@ -500,19 +512,34 @@ export class FlowsTriggerEditorModal extends PlatformFormModal {
                 .text=${this._verifyHintText}
                 .label=${this.t('trigger_editor_modal.verify_tooltip_label')}
             >
-                <button
-                    type="button"
-                    class="header-btn verify-trigger-hint-btn"
-                    ?disabled=${this._verifyOp.busy}
-                    title=${this.t('trigger_editor_modal.verify_btn_title')}
-                    aria-label=${this.t('trigger_editor_modal.verify_btn_title')}
-                    @click=${(e) => {
+                <div class="header-trigger-actions">
+                    <button
+                        type="button"
+                        class="header-btn verify-trigger-hint-btn"
+                        ?disabled=${this._verifyOp.busy || this._reregisterOp.busy}
+                        title=${this.t('trigger_editor_modal.verify_btn_title')}
+                        aria-label=${this.t('trigger_editor_modal.verify_btn_title')}
+                        @click=${(e) => {
             e.stopPropagation();
             void this._onTriggerVerify();
         }}
-                >
-                    <platform-icon name="check" size="16"></platform-icon>
-                </button>
+                    >
+                        <platform-icon name="check" size="16"></platform-icon>
+                    </button>
+                    <button
+                        type="button"
+                        class="header-btn"
+                        ?disabled=${reregisterDisabled}
+                        title=${this.t('trigger_editor_modal.reregister_btn_title')}
+                        aria-label=${this.t('trigger_editor_modal.reregister_btn_title')}
+                        @click=${(e) => {
+            e.stopPropagation();
+            void this._onTriggerReregister();
+        }}
+                    >
+                        <platform-icon name="rotate-ccw" size="16"></platform-icon>
+                    </button>
+                </div>
             </platform-help-hint>
         `;
     }
@@ -585,6 +612,23 @@ export class FlowsTriggerEditorModal extends PlatformFormModal {
         this.requestUpdate();
         await this.updateComplete;
         this._focusVerifyHintButton();
+    }
+
+    async _onTriggerReregister() {
+        if (typeof this.flowId !== 'string' || this.flowId.length === 0) {
+            return;
+        }
+        if (!this.trigger) {
+            return;
+        }
+        const tid = asString(this._triggerId);
+        if (tid.length === 0) {
+            return;
+        }
+        if (!this._enabled) {
+            return;
+        }
+        await this._reregisterOp.run({ flow_id: this.flowId, trigger_id: tid });
     }
 
     renderBody() {

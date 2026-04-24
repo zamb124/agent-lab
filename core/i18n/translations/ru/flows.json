@@ -171,6 +171,7 @@
     "field_type": "Тип",
     "field_enabled": "Включён",
     "verify_btn_title": "Проверить конфигурацию",
+    "reregister_btn_title": "Перерегистрировать внешние хуки (вебхук и т.п.)",
     "verify_tooltip_label": "Результат проверки",
     "verify_error_no_flow": "Откройте модал из карточки flow: не задан flow.",
     "verify_error_no_type": "Выберите тип триггера.",
@@ -1138,6 +1139,8 @@
     "trigger_removed": "Триггер удалён",
     "trigger_remove_error": "Не удалось удалить триггер",
     "trigger_tested": "Тест триггера выполнен",
-    "trigger_test_error": "Не удалось выполнить тест триггера"
+    "trigger_test_error": "Не удалось выполнить тест триггера",
+    "trigger_reregistered": "Хуки триггера обновлены",
+    "trigger_reregister_error": "Не удалось обновить хуки триггера"
   }
 }

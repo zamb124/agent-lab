@@ -59,7 +59,15 @@
         "col_operation": "Operation",
         "col_company": "Company",
         "col_user": "User",
-        "col_event": "Event"
+        "col_event": "Event",
+        "filter_company": "Company",
+        "filter_user": "User",
+        "filter_service": "Service",
+        "filter_namespace": "Namespace",
+        "filter_operation": "Operation",
+        "filter_event": "Event",
+        "filter_from": "From",
+        "filter_to": "To"
     },
     "platform_billing_page": {
         "tabs_region_label": "Billing admin sections",
@@ -149,7 +157,21 @@
         "services_subtitle": "Open any product on the platform — status, metrics and one-click access",
         "stat_latency_ms": "{{ms}} ms",
         "stat_unavailable": "Unavailable",
-        "stat_loading": "—"
+        "stat_loading": "—",
+        "stat_flows_count": "Flows: {{count}}",
+        "stat_namespaces_count": "Namespaces: {{count}}",
+        "stat_spaces_count": "Spaces: {{count}}",
+        "stat_files_count": "Files: {{count}}",
+        "quick_invite_title": "Team & invites",
+        "quick_invite_desc": "Open the team page and share an invite link",
+        "quick_api_title": "Create API key",
+        "quick_api_desc": "Issue a key for API and integrations",
+        "quick_embed_title": "Embed widget",
+        "quick_embed_desc": "Configure the chat widget for your site",
+        "quick_topup_title": "Top up balance",
+        "quick_topup_desc": "Add funds to the company balance",
+        "quick_settings_title": "Settings",
+        "quick_settings_desc": "Company profile, security, integrations"
     },
     "select_company": {
         "title": "Choose a company",

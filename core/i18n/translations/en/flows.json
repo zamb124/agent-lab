@@ -171,6 +171,7 @@
     "field_type": "Type",
     "field_enabled": "Enabled",
     "verify_btn_title": "Verify configuration",
+    "reregister_btn_title": "Re-register external hooks (webhook, etc.)",
     "verify_tooltip_label": "Verification result",
     "verify_error_no_flow": "Open this dialog from a flow: no flow_id.",
     "verify_error_no_type": "Select a trigger type.",
@@ -1138,6 +1139,8 @@
     "trigger_removed": "Trigger removed",
     "trigger_remove_error": "Failed to remove trigger",
     "trigger_tested": "Trigger tested",
-    "trigger_test_error": "Failed to test trigger"
+    "trigger_test_error": "Failed to test trigger",
+    "trigger_reregistered": "Trigger hooks updated",
+    "trigger_reregister_error": "Failed to update trigger hooks"
   }
 }

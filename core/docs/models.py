@@ -25,6 +25,16 @@ class PlatformToolDoc(BaseModel):
     code_preview: Optional[str] = None
 
 
+class GlobalVariable(BaseModel):
+    """Глобальная переменная доступная в inline коде."""
+
+    name: str
+    type: str
+    doc: str
+    perspective: Optional[List[str]] = None  # в каких ракурсах доступна
+    tags: Optional[List[str]] = None
+
+
 class DocumentationQuery(BaseModel):
     """Запрос документации с фильтрами и ракурсами."""
 
@@ -73,15 +83,6 @@ class DocumentationQuery(BaseModel):
         default=None,
         description="Символы sandbox-namespace, отсутствующие в статическом GLOBALS (обычно из PythonNamespaceBuilder).",
     )
-
-
-class GlobalVariable(BaseModel):
-    """Глобальная переменная доступная в inline коде."""
-    name: str
-    type: str
-    doc: str
-    perspective: Optional[List[str]] = None  # в каких ракурсах доступна
-    tags: Optional[List[str]] = None
 
 
 class StateField(BaseModel):

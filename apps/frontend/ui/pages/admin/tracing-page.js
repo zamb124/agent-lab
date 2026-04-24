@@ -8,7 +8,6 @@ import { html, css } from 'lit';
 import { PlatformPage } from '@platform/lib/base/PlatformPage.js';
 import '@platform/lib/components/layout/page-header.js';
 import '@platform/lib/components/glass-spinner.js';
-import '@platform/lib/components/platform-user-chip.js';
 import '@platform/lib/components/platform-trace-viewer.js';
 
 const FACETS = Object.freeze([
@@ -124,6 +123,11 @@ export class FrontendTracingPage extends PlatformPage {
             tr.row { cursor: pointer; }
             tr.row:hover { background: var(--glass-solid-medium); }
             td.mono { font-family: var(--font-mono); color: var(--text-secondary); }
+            .user-col-name {
+                font-size: var(--text-xs);
+                color: var(--text-primary);
+                word-break: break-word;
+            }
 
             .state {
                 padding: var(--space-8) var(--space-6);
@@ -314,6 +318,30 @@ export class FrontendTracingPage extends PlatformPage {
         `;
     }
 
+    /**
+     * Колонка user: API уже кладёт user_display_name (UserRepository + fallback user_name из span).
+     * platform-user-chip смотрит только state.team.members активной компании — для админского
+     * спан-листа это даёт «Unknown» для чужих компаний и несистемных id (например канал).
+     */
+    _spanUserColumn(row) {
+        if (row === null || typeof row !== 'object') {
+            throw new Error('frontend-tracing-page: row must be an object');
+        }
+        const rec = /** @type {Record<string, unknown>} */ (row);
+        const rawName = rec.user_display_name;
+        const rawId = rec.user_id;
+        const hasName = typeof rawName === 'string' && rawName.length > 0;
+        const hasId = typeof rawId === 'string' && rawId.length > 0;
+        if (hasName) {
+            const title = hasId ? rawId : rawName;
+            return html`<span class="user-col-name" title=${title}>${rawName}</span>`;
+        }
+        if (hasId) {
+            return html`<span class="mono" title=${rawId}>${rawId}</span>`;
+        }
+        return '';
+    }
+
     _renderTable(records) {
         return html`
             <table>
@@ -334,7 +362,7 @@ export class FrontendTracingPage extends PlatformPage {
                             <td>${r.operation_name || ''}</td>
                             <td>${r.event_type || ''}</td>
                             <td>${r.company_name || r.company_id || ''}</td>
-                            <td>${r.user_id ? html`<platform-user-chip user-id=${r.user_id} size="sm"></platform-user-chip>` : ''}</td>
+                            <td>${this._spanUserColumn(r)}</td>
                             <td class="mono">${r.trace_id ? r.trace_id.slice(0, 16) : ''}</td>
                         </tr>
                     `)}

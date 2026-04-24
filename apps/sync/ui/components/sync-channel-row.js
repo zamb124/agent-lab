@@ -44,7 +44,7 @@ export class SyncChannelRow extends PlatformElement {
         }
         :host(:hover) {
             background: var(--sync-channel-row-bg-hover, var(--glass-solid-strong));
-            border-color: var(--glass-border);
+            border-color: var(--sync-channel-row-border-hover, var(--accent));
             box-shadow: 0 2px 10px rgba(15, 23, 42, 0.1);
         }
         :host([data-selected]) {

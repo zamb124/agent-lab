@@ -502,6 +502,8 @@ output_mapping:
 
 **`skill_id`** в verify и в UI редактора должен совпадать с сценарием триггера; иначе токены и переменные skill-level не совпадут с рантаймом.
 
+**Перерегистрация внешних хуков:** `POST /flows/api/v1/flows/{flow_id}/triggers/{trigger_id}/reregister` — снятие и повторная регистрация по текущему конфигу из БД (`TriggerRegistry.reregister_trigger`: unregister → register). Триггер должен быть **включён**. Внешняя логика сейчас реализована для **Telegram** (deleteWebhook + setWebhook); для типов без handler в реестре ответ **409**.
+
 ## Resources
 
 Ресурсы = переиспользуемые компоненты (RAG, S3, LLM, Cache, HTTP, Code модули).

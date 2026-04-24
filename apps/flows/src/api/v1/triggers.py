@@ -37,6 +37,10 @@ _SENSITIVE_TRIGGER_CONFIG_KEYS = frozenset(
     {"bot_token", "secret_token", "imap_password", "password"},
 )
 
+# Сообщение list/get/SINGLE и POST verify не должны путать: UI подставляет это в _config
+# и иначе verify шлёт буквально .../bot(redacted)/getMe (HTTP 404).
+_REDACTED_CONFIG_SECRET = "(redacted)"
+
 
 def _public_trigger_config(config: Dict[str, Any]) -> Dict[str, Any]:
     """Убирает служебные ключи и скрывает секреты в ответах API."""
@@ -45,7 +49,7 @@ def _public_trigger_config(config: Dict[str, Any]) -> Dict[str, Any]:
         if k.startswith("_"):
             continue
         if k in _SENSITIVE_TRIGGER_CONFIG_KEYS and v not in (None, ""):
-            out[k] = "(redacted)"
+            out[k] = _REDACTED_CONFIG_SECRET
         else:
             out[k] = v
     return out
@@ -219,6 +223,25 @@ async def verify_trigger_draft(
     cfg: Dict[str, Any] = dict(request.config)
     if request.type == TriggerType.TELEGRAM:
         raw_token = cfg.get("bot_token")
+        if isinstance(raw_token, str) and raw_token == _REDACTED_CONFIG_SECRET:
+            tid = request.trigger_id
+            if isinstance(tid, str) and tid.strip() != "":
+                stored = flow_config.triggers.get(tid)
+                if stored is not None:
+                    st = stored.config.get("bot_token")
+                    if st is not None and str(st).strip() != "":
+                        cfg["bot_token"] = st
+            raw_token = cfg.get("bot_token")
+        if isinstance(raw_token, str) and raw_token == _REDACTED_CONFIG_SECRET:
+            return TriggerVerifyResponse(
+                ok=False,
+                metadata={},
+                error_code="bot_token_required",
+                error_message=(
+                    "В запросе подставлена заглушка (redacted) из ответа API: укажите токен "
+                    "вручную (@var:имя_переменной) или откройте проверку из сохранённого триггера с trigger_id."
+                ),
+            )
         if isinstance(raw_token, str) and raw_token.startswith("@var:"):
             try:
                 cfg["bot_token"] = await resolve_at_var_for_flow(
@@ -389,6 +412,68 @@ async def update_trigger(
         webhook_url=updated_trigger.webhook_url,
         status=updated_trigger.status,
         last_error=updated_trigger.last_error,
+    )
+
+
+@router.post("/flows/{flow_id}/triggers/{trigger_id}/reregister", response_model=TriggerResponse)
+async def reregister_flow_trigger(
+    flow_id: str, trigger_id: str, container: ContainerDep
+) -> TriggerResponse:
+    """
+    Снимает триггер с внешней стороны и регистрирует заново (для Telegram — deleteWebhook + setWebhook).
+    """
+    from apps.flows.src.triggers.registry import (
+        TriggerReregisterDisabledError,
+        TriggerReregisterUnsupportedError,
+    )
+
+    old_config = await container.flow_repository.get(flow_id)
+    if not old_config:
+        raise HTTPException(status_code=404, detail=f"Flow not found: {flow_id}")
+    if trigger_id not in old_config.triggers:
+        raise HTTPException(status_code=404, detail=f"Trigger not found: {trigger_id}")
+
+    flow_config = old_config.model_copy(deep=True)
+    trigger = flow_config.triggers[trigger_id]
+    try:
+        updated = await container.trigger_registry.reregister_trigger(flow_id, trigger)
+    except TriggerReregisterDisabledError as e:
+        raise HTTPException(
+            status_code=400,
+            detail="Включите триггер перед перерегистрацией хуков.",
+        ) from e
+    except TriggerReregisterUnsupportedError as e:
+        tstr = (
+            e.trigger_type.value
+            if hasattr(e.trigger_type, "value")
+            else str(e.trigger_type)
+        )
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                f"Перерегистрация внешних хуков для типа {tstr} "
+                "не реализована. Сейчас поддерживается только Telegram (setWebhook)."
+            ),
+        ) from e
+
+    flow_config.triggers[trigger_id] = updated
+    await container.flow_repository.set(flow_config)
+    out = flow_config.triggers[trigger_id]
+    logger.info("Trigger reregistered: flow_id=%s trigger=%s", flow_id, trigger_id)
+    return TriggerResponse(
+        trigger_id=out.trigger_id,
+        name=out.name,
+        type=out.type,
+        enabled=out.enabled,
+        config=_public_trigger_config(out.config),
+        output_mapping=out.output_mapping,
+        input_mapping=out.input_mapping,
+        output_actions=effective_output_actions_for_trigger(out),
+        post_flow_output_enabled=out.post_flow_output_enabled,
+        skill_id=out.skill_id,
+        webhook_url=out.webhook_url,
+        status=out.status,
+        last_error=out.last_error,
     )
 
 

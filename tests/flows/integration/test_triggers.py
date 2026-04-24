@@ -545,6 +545,142 @@ class TestTriggersAPI:
         await container.flow_repository.delete(flow_id)
 
     @pytest.mark.asyncio
+    async def test_verify_telegram_substitutes_api_redacted_placeholder_from_stored_trigger(
+        self, app, client, container, unique_id
+    ):
+        """POST verify: если UI прислал (redacted) из list/get, подставляем bot_token из БД."""
+        from unittest.mock import AsyncMock, patch
+
+        flow_id = f"api_test_{unique_id}"
+        trigger = TriggerConfig(
+            trigger_id="tg_one",
+            name="TG",
+            type=TriggerType.TELEGRAM,
+            config={"bot_token": "@var:bot_tok"},
+        )
+        agent = FlowConfig(
+            flow_id=flow_id,
+            name="Test Agent",
+            entry="main",
+            nodes={"main": {"type": "llm_node", "prompt": "Test"}},
+            variables={"bot_tok": "123456:RESOLVED_TOKEN_X"},
+            triggers={"tg_one": trigger},
+        )
+        await container.flow_repository.set(agent)
+        with patch(
+            "apps.flows.src.triggers.verify_draft.verify_telegram_config",
+            new_callable=AsyncMock,
+        ) as m:
+            m.return_value = (True, {"api": "getMe", "http_status": 200}, None, None)
+            response = await client.post(
+                f"/flows/api/v1/flows/{flow_id}/triggers/verify",
+                json={
+                    "type": "telegram",
+                    "config": {"bot_token": "(redacted)"},
+                    "trigger_id": "tg_one",
+                    "skill_id": "default",
+                },
+            )
+        assert response.status_code == 200
+        body = response.json()
+        assert body["ok"] is True
+        m.assert_awaited_once()
+        call_cfg = m.await_args[0][0]
+        assert call_cfg.get("bot_token") == "123456:RESOLVED_TOKEN_X"
+        await container.flow_repository.delete(flow_id)
+
+    @pytest.mark.asyncio
+    async def test_reregister_telegram_ok_with_mocked_httpx(self, app, client, container, unique_id):
+        from contextlib import asynccontextmanager
+        from unittest.mock import AsyncMock, MagicMock, patch
+
+        @asynccontextmanager
+        async def _mock_httpx():
+            c = MagicMock()
+            r = MagicMock()
+            r.status_code = 200
+            r.json = MagicMock(return_value={"ok": True, "result": True})
+            c.post = AsyncMock(return_value=r)
+            yield c
+
+        flow_id = f"api_test_{unique_id}"
+        trigger = TriggerConfig(
+            trigger_id="tg_reg",
+            name="TG",
+            type=TriggerType.TELEGRAM,
+            enabled=True,
+            config={"bot_token": "123456:TEST_REREG_TOKEN"},
+        )
+        agent = FlowConfig(
+            flow_id=flow_id,
+            name="Test Agent",
+            entry="main",
+            nodes={"main": {"type": "llm_node", "prompt": "Test"}},
+            triggers={"tg_reg": trigger},
+        )
+        await container.flow_repository.set(agent)
+        with patch(
+            "apps.flows.src.triggers.handlers.telegram.get_httpx_client",
+            lambda *a, **k: _mock_httpx(),
+        ):
+            response = await client.post(
+                f"/flows/api/v1/flows/{flow_id}/triggers/tg_reg/reregister",
+            )
+        assert response.status_code == 200
+        data = response.json()
+        assert data["trigger_id"] == "tg_reg"
+        assert data["status"] == "active"
+        await container.flow_repository.delete(flow_id)
+
+    @pytest.mark.asyncio
+    async def test_reregister_409_without_handler(self, app, client, container, unique_id):
+        flow_id = f"api_test_{unique_id}"
+        trigger = TriggerConfig(
+            trigger_id="cron_t",
+            name="C",
+            type=TriggerType.CRON,
+            enabled=True,
+            config={"expr": "0 0 * * *"},
+        )
+        agent = FlowConfig(
+            flow_id=flow_id,
+            name="Test Agent",
+            entry="main",
+            nodes={"main": {"type": "llm_node", "prompt": "Test"}},
+            triggers={"cron_t": trigger},
+        )
+        await container.flow_repository.set(agent)
+        response = await client.post(
+            f"/flows/api/v1/flows/{flow_id}/triggers/cron_t/reregister",
+        )
+        assert response.status_code == 409
+        await container.flow_repository.delete(flow_id)
+
+    @pytest.mark.asyncio
+    async def test_reregister_400_when_disabled(self, app, client, container, unique_id):
+        flow_id = f"api_test_{unique_id}"
+        trigger = TriggerConfig(
+            trigger_id="tg_off",
+            name="TG",
+            type=TriggerType.TELEGRAM,
+            enabled=False,
+            config={"bot_token": "123:abc"},
+        )
+        agent = FlowConfig(
+            flow_id=flow_id,
+            name="Test Agent",
+            entry="main",
+            nodes={"main": {"type": "llm_node", "prompt": "Test"}},
+            triggers={"tg_off": trigger},
+        )
+        await container.flow_repository.set(agent)
+        response = await client.post(
+            f"/flows/api/v1/flows/{flow_id}/triggers/tg_off/reregister",
+        )
+        assert response.status_code == 400
+        await container.flow_repository.delete(flow_id)
+
+    @pytest.mark.asyncio
     async def test_generic_webhook_requires_secret_header(self, app, client, container, unique_id):
         """Generic webhook: при secret_token в конфиге — заголовок; затем 501 до реализации."""
         flow_id = f"api_test_{unique_id}"

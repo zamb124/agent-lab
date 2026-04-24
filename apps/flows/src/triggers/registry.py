@@ -16,6 +16,27 @@ from core.logging import get_logger
 logger = get_logger(__name__)
 
 
+def _trigger_type_str(trigger_type: TriggerType) -> str:
+    return trigger_type.value if hasattr(trigger_type, "value") else str(trigger_type)
+
+
+class TriggerReregisterUnsupportedError(Exception):
+    """Нет handler для типа триггера — внешняя перерегистрация не применима."""
+
+    def __init__(self, trigger_type: TriggerType) -> None:
+        self.trigger_type = trigger_type
+        super().__init__(
+            f"No trigger handler for type {_trigger_type_str(trigger_type)}; reregister not supported"
+        )
+
+
+class TriggerReregisterDisabledError(Exception):
+    """Триггер выключен — перерегистрация снаружи не выполняется."""
+
+    def __init__(self) -> None:
+        super().__init__("Trigger is disabled; enable it before reregistering hooks")
+
+
 class TriggerRegistry:
     """
     Реестр и менеджер триггеров.
@@ -162,6 +183,24 @@ class TriggerRegistry:
         for trigger_id, trigger in config.triggers.items():
             if trigger.status == TriggerStatus.ACTIVE:
                 await self._unregister_trigger(flow_id, trigger)
+
+    async def reregister_trigger(
+        self,
+        flow_id: str,
+        trigger: TriggerConfig,
+    ) -> TriggerConfig:
+        """
+        Снимает триггер с внешней стороны и регистрирует заново (например Telegram setWebhook).
+
+        Требует зарегистрированный handler и trigger.enabled.
+        """
+        if not trigger.enabled:
+            raise TriggerReregisterDisabledError()
+        handler = self.get_handler(trigger.type)
+        if handler is None:
+            raise TriggerReregisterUnsupportedError(trigger.type)
+        await self._unregister_trigger(flow_id, trigger)
+        return await self._register_trigger(flow_id, trigger)
     
     async def _register_trigger(
         self,
@@ -266,4 +305,8 @@ class TriggerRegistry:
         return False
 
 
-__all__ = ["TriggerRegistry"]
+__all__ = [
+    "TriggerRegistry",
+    "TriggerReregisterUnsupportedError",
+    "TriggerReregisterDisabledError",
+]

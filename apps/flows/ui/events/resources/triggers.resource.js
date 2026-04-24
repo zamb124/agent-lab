@@ -105,6 +105,27 @@ export const triggerVerifyOp = createAsyncOp({
     },
 });
 
+export const triggerReregisterOp = createAsyncOp({
+    name: 'flows/trigger_reregister',
+    successToastKey: 'flows:toast.trigger_reregistered',
+    errorToastKey: 'flows:toast.trigger_reregister_error',
+    restMirror: {
+        method: 'POST',
+        path: '/flows/api/v1/flows/{flow_id}/triggers/{trigger_id}/reregister',
+    },
+    request: async ({ payload }) => {
+        if (!payload
+            || typeof payload.flow_id !== 'string'
+            || typeof payload.trigger_id !== 'string') {
+            throw new Error('triggerReregisterOp: { flow_id, trigger_id } required');
+        }
+        return httpRequest({
+            method: 'POST',
+            url: `${triggersBase(payload.flow_id)}/${encodeURIComponent(payload.trigger_id)}/reregister`,
+        });
+    },
+});
+
 export const triggerTestOp = createAsyncOp({
     name: 'flows/trigger_test',
     successToastKey: 'flows:toast.trigger_tested',

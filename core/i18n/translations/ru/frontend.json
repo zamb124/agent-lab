@@ -59,7 +59,15 @@
         "col_operation": "Операция",
         "col_company": "Компания",
         "col_user": "Пользователь",
-        "col_event": "Событие"
+        "col_event": "Событие",
+        "filter_company": "Компания",
+        "filter_user": "Пользователь",
+        "filter_service": "Сервис",
+        "filter_namespace": "Пространство имён",
+        "filter_operation": "Операция",
+        "filter_event": "Событие",
+        "filter_from": "С",
+        "filter_to": "По"
     },
     "platform_billing_page": {
         "tabs_region_label": "Разделы админки биллинга",
@@ -149,7 +157,21 @@
         "services_subtitle": "Откройте любой продукт платформы — статус, метрики и переход в один клик",
         "stat_latency_ms": "{{ms}} мс",
         "stat_unavailable": "Недоступен",
-        "stat_loading": "—"
+        "stat_loading": "—",
+        "stat_flows_count": "Сценариев: {{count}}",
+        "stat_namespaces_count": "Пространств имён: {{count}}",
+        "stat_spaces_count": "Пространств: {{count}}",
+        "stat_files_count": "Файлов: {{count}}",
+        "quick_invite_title": "Команда и приглашения",
+        "quick_invite_desc": "Страница команды и ссылка-приглашение",
+        "quick_api_title": "Создать API-ключ",
+        "quick_api_desc": "Ключ для API и интеграций",
+        "quick_embed_title": "Виджет на сайт",
+        "quick_embed_desc": "Настройка чат-виджета",
+        "quick_topup_title": "Пополнить баланс",
+        "quick_topup_desc": "Зачисление на баланс компании",
+        "quick_settings_title": "Настройки",
+        "quick_settings_desc": "Профиль компании, безопасность, интеграции"
     },
     "select_company": {
         "title": "Выберите компанию",
