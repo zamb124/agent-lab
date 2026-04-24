@@ -206,6 +206,7 @@ class DatabaseStateRepository(BaseRepository[StateData], BaseStateRepository):
         self,
         user_id: Optional[str] = None,
         flow_id: Optional[str] = None,
+        skill_id: Optional[str] = None,
         date_from: Optional[datetime] = None,
         date_to: Optional[datetime] = None,
         limit: int = 100,
@@ -250,6 +251,12 @@ class DatabaseStateRepository(BaseRepository[StateData], BaseStateRepository):
             param_name = f"param{param_idx}"
             conditions.append(f"key LIKE :{param_name}")
             params[param_name] = f"%{flow_id}:%"
+            param_idx += 1
+
+        if skill_id:
+            param_name = f"param{param_idx}"
+            conditions.append(f"(value->'data'->>'skill_id') = :{param_name}")
+            params[param_name] = skill_id
             param_idx += 1
 
         if date_from:

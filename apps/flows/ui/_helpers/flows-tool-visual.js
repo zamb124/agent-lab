@@ -36,6 +36,16 @@ export function getToolRefVisualMeta(ref) {
     if (typeof t === 'string' && t.length > 0) {
         return getNodeTypeMeta(t);
     }
+    const toolIdForVisual = ref.tool_id;
+    if (typeof toolIdForVisual === 'string' && toolIdForVisual.startsWith('mcp:')) {
+        return getNodeTypeMeta('mcp');
+    }
+    if (typeof ref.prompt === 'string' && ref.prompt.trim().length > 0) {
+        const c = ref.code;
+        if (!(typeof c === 'string' && c.trim().length > 0)) {
+            return getNodeTypeMeta('llm_node');
+        }
+    }
     const codeMode = ref.code_mode;
     if (codeMode === MCP_CODE_MODE || (typeof ref.mcp_server_id === 'string' && ref.mcp_server_id.length > 0)) {
         return getNodeTypeMeta('mcp');

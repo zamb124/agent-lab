@@ -13,6 +13,7 @@ from typing import Any, Dict, List, Optional
 from apps.flows.src.models import TriggerConfig
 from apps.flows.src.models.channel_config import OutputAction
 from apps.flows.src.triggers.input_mapper import InputMapper
+from apps.flows.src.triggers.output_condition import evaluate_output_action_condition
 from core.context import Context, User, get_context, set_context
 from core.logging import get_logger
 
@@ -200,9 +201,8 @@ class OutputActionExecutor:
         variables = state.get("variables", {})
         
         for action in output_actions:
-            # Проверяем условие используя MappingResolver
             if action.condition:
-                if not self._check_condition(action.condition, state):
+                if not evaluate_output_action_condition(action.condition, state):
                     logger.debug(
                         f"Output action {action.action} skipped: condition not met"
                     )
@@ -240,68 +240,6 @@ class OutputActionExecutor:
                 results.append({"action": action.action, "error": str(e)})
         
         return results
-    
-    def _check_condition(self, condition: str, state: Dict[str, Any]) -> bool:
-        """
-        Проверяет условие выполнения используя MappingResolver.
-        
-        Формат: "@state:field == value" или "@state:field"
-        """
-        from apps.flows.src.mapping import MappingResolver
-        
-        if not condition:
-            return True
-        
-        # Простая проверка наличия поля
-        if "==" not in condition and "!=" not in condition:
-            value = MappingResolver.resolve_value(condition, state)
-            return bool(value)
-        
-        # Парсим сравнение
-        for op in ["==", "!="]:
-            if op in condition:
-                parts = condition.split(op)
-                if len(parts) != 2:
-                    return True
-                
-                left = MappingResolver.resolve_value(parts[0].strip(), state)
-                right = self._parse_literal(parts[1].strip())
-                
-                if op == "==":
-                    return left == right
-                else:
-                    return left != right
-        
-        return True
-    
-    def _parse_literal(self, value: str) -> Any:
-        """Парсит литерал (true, false, число, строку)."""
-        value = value.strip()
-        
-        if value.lower() == "true":
-            return True
-        if value.lower() == "false":
-            return False
-        if value.lower() in ("null", "none"):
-            return None
-        
-        # Строка в кавычках
-        if (value.startswith('"') and value.endswith('"')) or \
-           (value.startswith("'") and value.endswith("'")):
-            return value[1:-1]
-        
-        # Число
-        try:
-            return int(value)
-        except ValueError:
-            pass
-        
-        try:
-            return float(value)
-        except ValueError:
-            pass
-        
-        return value
     
     def _resolve_mapping(
         self,

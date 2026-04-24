@@ -48,6 +48,7 @@ class ToolResponse(BaseModel):
     react_role: Optional[str] = None
     code_mode: Optional[str] = None  # inline_code или mcp_tool
     mcp_server_id: Optional[str] = None  # ID MCP сервера
+    mcp_tool_name: Optional[str] = None  # имя tool на MCP (если id не mcp:…)
 
 
 _TOOLS_MAX_LIMIT = 2000
@@ -77,6 +78,9 @@ async def list_tools(
                 permission=t.permission,
                 item_type="tool",
                 react_role=t.react_role.value,
+                code_mode=t.code_mode.value if t.code_mode else None,
+                mcp_server_id=t.mcp_server_id,
+                mcp_tool_name=t.mcp_tool_name,
             )
             for t in tools
         ],
@@ -114,6 +118,7 @@ async def list_all_tools_and_flows(
             react_role=t.react_role.value,
             code_mode=t.code_mode.value if t.code_mode else None,
             mcp_server_id=t.mcp_server_id,
+            mcp_tool_name=t.mcp_tool_name,
         ))
     for flow_row in flows_list:
         items.append(ToolResponse(
@@ -177,21 +182,34 @@ async def draft_parameters_schema(
 async def get_tool(
     tool_id: str, container: ContainerDep
 ) -> ToolResponse:
-    """Получает tool по ID"""
+    """Получает tool по ID; при отсутствии в репозитории — flow с тем же id."""
     tool = await container.tool_repository.get(tool_id)
-    if tool is None:
+    if tool is not None:
+        return ToolResponse(
+            tool_id=tool.tool_id,
+            title=tool.title,
+            description=tool.description,
+            code=tool.code,
+            args_schema=tool.args_schema if tool.args_schema else None,
+            parameters_schema=tool.parameters_schema,
+            tags=tool.tags or ["misc"],
+            permission=tool.permission,
+            item_type="tool",
+            react_role=tool.react_role.value,
+            code_mode=tool.code_mode.value if tool.code_mode else None,
+            mcp_server_id=tool.mcp_server_id,
+            mcp_tool_name=tool.mcp_tool_name,
+        )
+    flow_cfg = await container.flow_repository.get(tool_id)
+    if flow_cfg is None:
         raise HTTPException(status_code=404, detail="Tool not found")
     return ToolResponse(
-        tool_id=tool.tool_id,
-        title=tool.title,
-        description=tool.description,
-        code=tool.code,
-        args_schema=tool.args_schema if tool.args_schema else None,
-        parameters_schema=tool.parameters_schema,
-        tags=tool.tags or ["misc"],
-        permission=tool.permission,
-        item_type="tool",
-        react_role=tool.react_role.value,
+        tool_id=flow_cfg.flow_id,
+        title=flow_cfg.name,
+        description=flow_cfg.description,
+        tags=list(flow_cfg.tags) if flow_cfg.tags else ["flow"],
+        permission=list(flow_cfg.permission) if flow_cfg.permission else None,
+        item_type="flow",
     )
 
 

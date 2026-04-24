@@ -96,6 +96,33 @@ class FlowRepository(BaseRepository[FlowConfig]):
             return None
         return _flow_config_from_storage_json(data)
 
+    async def get_latest_by_flow_id_unscoped(
+        self, flow_id: str
+    ) -> Optional[tuple[FlowConfig, str]]:
+        """
+        Ищет актуальный flow по flow_id по всем ключам company:*:flow:* без контекста компании.
+
+        Нужен для публичного POST Telegram (в запросе нет tenant-а, как у серверов Telegram).
+        Возвращает (config, company_identifier) — идентификатор сегмента company:* из ключа.
+        """
+        table_name = self._get_table_name()
+        all_data = await self._storage._get_all_by_prefix_and_table(
+            "company:", table_name, 10_000, 0
+        )
+        for key, raw in all_data.items():
+            if f"flow:{flow_id}_v" in key:
+                continue
+            if not key.endswith(f"flow:{flow_id}"):
+                continue
+            parts = key.split(":")
+            if len(parts) < 4 or parts[0] != "company" or parts[2] != "flow":
+                continue
+            if parts[3] != flow_id:
+                continue
+            company_identifier = parts[1]
+            return (_flow_config_from_storage_json(raw), company_identifier)
+        return None
+
     async def get_version(self, flow_id: str, version: str) -> Optional[FlowConfig]:
         """
         Получает конкретную версию из flows_versions.

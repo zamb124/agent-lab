@@ -212,11 +212,13 @@ async def test_sandbox_codegen_run_variables_json_string_for_llm_caller():
         user_id="u_eval_syn_str",
         session_id="flow_eval_syn:c_eval_syn_str",
     )
-    raw = await sandbox_codegen._func(
-        task="Сложи a и b",
-        run_variables='{"a": 3, "b": 5}',
-        max_iterations=3,
-        state=state,
+    raw = await sandbox_codegen.run(
+        {
+            "task": "Сложи a и b",
+            "run_variables": '{"a": 3, "b": 5}',
+            "max_iterations": 3,
+        },
+        state,
     )
     payload = json.loads(raw)
     assert payload["success"] is True

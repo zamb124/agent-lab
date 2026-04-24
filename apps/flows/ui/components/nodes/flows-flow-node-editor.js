@@ -70,6 +70,72 @@ export class FlowsFlowNodeEditor extends PlatformElement {
         this._flows = this.useResource('flows/flows', { autoload: true });
     }
 
+    willUpdate(changed) {
+        super.willUpdate(changed);
+        if (changed.has('nodeConfig')) {
+            const cfg = asObject(this.nodeConfig);
+            const fid = this._resolvedFlowId(cfg);
+            if (typeof fid === 'string' && fid.length > 0) {
+                void this._flows.get(fid);
+            }
+        }
+    }
+
+    /**
+     * Канвас и вложенный tool могут хранить поля в `config`; runtime читает с корня или из `config`.
+     */
+    _resolvedFlowId(cfg) {
+        if (cfg === null) {
+            return '';
+        }
+        const root = typeof cfg.flow_id === 'string' && cfg.flow_id.length > 0 ? cfg.flow_id : '';
+        if (root.length > 0) {
+            return root;
+        }
+        const inner = asObject(cfg.config);
+        return typeof inner.flow_id === 'string' && inner.flow_id.length > 0 ? inner.flow_id : '';
+    }
+
+    _resolvedSkillId(cfg) {
+        if (cfg === null) {
+            return 'default';
+        }
+        const root = typeof cfg.skill_id === 'string' && cfg.skill_id.length > 0 ? cfg.skill_id : '';
+        if (root.length > 0) {
+            return root;
+        }
+        const inner = asObject(cfg.config);
+        return typeof inner.skill_id === 'string' && inner.skill_id.length > 0 ? inner.skill_id : 'default';
+    }
+
+    _skillIdOptions(resolvedFlowId, skillId) {
+        const detail = this._flows.byId && typeof this._flows.byId === 'object' && resolvedFlowId.length > 0
+            ? this._flows.byId[resolvedFlowId]
+            : null;
+        const sk = detail !== null && detail !== undefined && typeof detail === 'object'
+            && detail.skills !== null && detail.skills !== undefined && typeof detail.skills === 'object'
+            ? Object.keys(detail.skills)
+            : [];
+        if (sk.length === 0) {
+            return skillId.length > 0 ? [skillId] : ['default'];
+        }
+        const set = new Set(sk);
+        if (skillId.length > 0) {
+            set.add(skillId);
+        }
+        const arr = Array.from(set);
+        arr.sort((a, b) => {
+            if (a === 'default') {
+                return -1;
+            }
+            if (b === 'default') {
+                return 1;
+            }
+            return a.localeCompare(b, undefined, { sensitivity: 'base' });
+        });
+        return arr;
+    }
+
     _emitPatch(patch) {
         this.emit('change', { nodeId: this.nodeId, patch });
     }
@@ -84,11 +150,12 @@ export class FlowsFlowNodeEditor extends PlatformElement {
 
     render() {
         const cfg = asObject(this.nodeConfig);
-        const flowId = typeof cfg.flow_id === 'string' ? cfg.flow_id : '';
-        const skillId = typeof cfg.skill_id === 'string' ? cfg.skill_id : 'default';
+        const flowId = this._resolvedFlowId(cfg);
+        const skillId = this._resolvedSkillId(cfg);
+        const skillOptions = this._skillIdOptions(flowId, skillId);
         const flows = Array.isArray(this._flows.items) ? this._flows.items.filter((f) => f && f.flow_id !== this.flowId) : [];
         const isInList = flows.some((f) => f.flow_id === flowId);
-        const useCustom = this._showCustom || (flowId && !isInList);
+        const useCustom = this._showCustom || (flowId.length > 0 && !isInList);
         return html`
             <flows-base-node-editor
                 .nodeId=${this.nodeId}
@@ -125,7 +192,15 @@ export class FlowsFlowNodeEditor extends PlatformElement {
                     </div>
                     <div class="field">
                         <label>${this.t('flow_node_editor.skill_id')}</label>
-                        <input type="text" placeholder="default" .value=${skillId} @input=${this._onSkillId} />
+                        <select
+                            .value=${skillId}
+                            ?disabled=${flowId.length === 0}
+                            @change=${this._onSkillId}
+                        >
+                            ${skillOptions.map(
+                                (sid) => html`<option value=${sid}>${sid}</option>`,
+                            )}
+                        </select>
                     </div>
                 </div>
             </flows-base-node-editor>

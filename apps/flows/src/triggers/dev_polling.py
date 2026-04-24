@@ -2,7 +2,8 @@
 Telegram Dev Polling - корутина для polling в dev окружении.
 
 В production Telegram шлёт updates через webhook.
-В dev localhost недоступен - используем polling через getUpdates.
+В dev localhost недоступен для setWebhook - используем getUpdates, затем POST на тот же
+HTTP-эндпоинт, что и в проде: /flows/api/v1/triggers/telegram/{flow_id}/{trigger_id}.
 """
 
 import asyncio
@@ -10,7 +11,7 @@ from typing import Any, Dict, List, Optional, Set
 
 import httpx
 
-from core.config import get_settings
+from apps.flows.config import get_settings
 from core.http import get_httpx_client
 from core.logging import get_logger
 
@@ -234,11 +235,11 @@ class TelegramDevPolling:
         return triggers
     
     async def _get_all_subdomains(self, container) -> List[str]:
-        """Уникальные subdomains по префиксу ключей в хранилище flows."""
+        """Уникальные идентификаторы tenant (сегмент company:*:flow:*) по ключам в таблице flows."""
         try:
-            # Ключи company:{subdomain}:...
+            flows_table = container.flow_repository._get_table_name()
             all_data = await container.flow_repository._storage._get_all_by_prefix_and_table(
-                "company:", "storage", 1000
+                "company:", flows_table, 10_000, 0
             )
             
             subdomains = set()
@@ -262,32 +263,48 @@ class TelegramDevPolling:
         payload: Dict[str, Any],
         subdomain: str,
     ):
-        """Обрабатывает update через TelegramTriggerHandler."""
-        from apps.flows.src.triggers.handlers.telegram import TelegramTriggerHandler
+        """
+        Пробрасывает Update в тот же POST /flows/api/v1/triggers/telegram/.../...,
+        что обрабатывает внешний Telegram в production (AuthMiddleware, хендлер, executor).
+        """
         from apps.flows.src.container import get_container
-        from core.context import set_context, clear_context, Context
-        from core.models.identity_models import Company, User
-        
-        # Устанавливаем контекст для handler
-        company = Company(company_id=f"dev-{subdomain}", subdomain=subdomain, name=subdomain)
-        dev_user = User(user_id="system", email="system@dev.local", name="System")
-        context = Context(
-            user=dev_user,
-            active_company=company,
-            user_companies=[company],
-            channel="system",
-        )
-        set_context(context)
-        
-        try:
-            settings = get_settings()
-            base_url = settings.server.get_service_url("flows")
-            
-            handler = TelegramTriggerHandler(base_url)
-            
-            await handler.handle(flow_id, trigger_id, payload)
-        finally:
-            clear_context()
+
+        _ = subdomain
+
+        settings = get_settings()
+        base = settings.server.get_service_url("flows").rstrip("/")
+        svc = settings.server.name
+        path = f"/{svc}/api/v1/triggers/telegram/{flow_id}/{trigger_id}"
+        url = f"{base}{path}"
+
+        container = get_container()
+        secret: Optional[str] = None
+        unscoped = await container.flow_repository.get_latest_by_flow_id_unscoped(flow_id)
+        if unscoped is not None:
+            flow_config, _ = unscoped
+            trig = flow_config.triggers.get(trigger_id)
+            if trig is not None:
+                secret = trig.config.get("_secret_token")
+
+        headers: Dict[str, str] = {}
+        if secret:
+            headers["X-Telegram-Bot-Api-Secret-Token"] = secret
+
+        async with get_httpx_client(timeout=120.0, proxy=True) as client:
+            response = await client.post(url, json=payload, headers=headers)
+
+        if response.status_code >= 500:
+            logger.error(
+                f"Dev polling POST {path} failed: {response.status_code} {response.text[:500]}"
+            )
+        elif response.status_code >= 400:
+            logger.warning(
+                f"Dev polling POST {path}: {response.status_code} {response.text[:500]}"
+            )
+        else:
+            logger.debug(
+                f"Dev polling POST {path} ok: {response.status_code} {response.text[:200]}"
+            )
     
     async def _sync_bots(self):
         """Синхронизирует polling боты с текущими триггерами."""

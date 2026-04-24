@@ -21,7 +21,6 @@
 import { html, css } from 'lit';
 import { PlatformFormModal } from '@platform/lib/components/glass-form-modal.js';
 import { registerModalKind } from '@platform/lib/utils/modal-registry.js';
-import '@platform/lib/components/platform-button.js';
 import '@platform/lib/components/platform-icon.js';
 import '../components/editors/flows-code-editor.js';
 import { getEdgeEndpoints } from '../_helpers/flows-resolvers.js';
@@ -139,15 +138,21 @@ export class FlowsEdgeConditionModal extends PlatformFormModal {
 
             .builder-row {
                 display: grid;
-                grid-template-columns: 1fr 110px 1fr;
+                grid-template-columns: minmax(0, 1fr) minmax(88px, 120px) minmax(0, 1fr);
                 gap: var(--space-3);
                 align-items: end;
             }
-            .form-field { display: flex; flex-direction: column; gap: var(--space-1); }
+            .form-field {
+                display: flex;
+                flex-direction: column;
+                gap: var(--space-1);
+                min-width: 0;
+            }
             .form-field label {
                 font-size: var(--text-xs);
                 font-weight: var(--font-medium);
                 color: var(--text-secondary);
+                overflow-wrap: anywhere;
             }
             select, input {
                 width: 100%;
@@ -531,14 +536,7 @@ export class FlowsEdgeConditionModal extends PlatformFormModal {
     }
 
     renderFooter() {
-        return html`
-            <platform-button variant="secondary" @click=${() => this.close()}>
-                ${this.t('edge_condition_modal.action_cancel')}
-            </platform-button>
-            <platform-button variant="primary" ?loading=${this.loading} @click=${() => this._performSave()}>
-                ${this.t('edge_condition_modal.action_save')}
-            </platform-button>
-        `;
+        return html``;
     }
 }
 

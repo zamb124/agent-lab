@@ -66,7 +66,7 @@ export class FlowsSidebar extends PlatformElement {
             .create-btn {
                 width: 22px; height: 22px;
                 display: flex; align-items: center; justify-content: center;
-                border-radius: var(--radius-md);
+                border-radius: var(--radius-lg);
                 color: white;
                 background: var(--accent);
                 border: none;
@@ -129,6 +129,10 @@ export class FlowsSidebar extends PlatformElement {
         this._currentFlowSel = this.select((s) => {
             const params = isPlainObject(s.router) && isPlainObject(s.router.params) ? s.router.params : {};
             return typeof params.flowId === 'string' ? params.flowId : null;
+        });
+        this._routeKeySel = this.select((s) => {
+            const r = isPlainObject(s.router) && typeof s.router.routeKey === 'string' ? s.router.routeKey : '';
+            return r;
         });
         this._authSel = this.select((s) => ({
             user: isPlainObject(s.auth) && isPlainObject(s.auth.user) ? s.auth.user : null,
@@ -226,13 +230,14 @@ export class FlowsSidebar extends PlatformElement {
     }
 
     _openVariables() {
-        this.openModal('flows.variables', { scope: 'company' });
-    }
-
-    _openTriggers() {
         const flowId = this._currentFlowSel.value;
-        if (!flowId) return;
-        this.openModal('flows.triggers', { flowId });
+        const routeKey = this._routeKeySel.value;
+        const inFlowEditor = routeKey === 'flow_editor' || routeKey === 'flow_editor_skill';
+        if (inFlowEditor && typeof flowId === 'string' && flowId.length > 0) {
+            this.openModal('flows.variables', { scope: 'flow', flowId });
+            return;
+        }
+        this.openModal('flows.variables', { scope: 'company' });
     }
 
     _openIntegrations() {
@@ -312,14 +317,6 @@ export class FlowsSidebar extends PlatformElement {
                             <platform-icon name="key" size="16"></platform-icon>
                             <span>${this.t('flows_sidebar.footer_vars')}</span>
                         </button>
-                        ${currentFlowId
-                            ? html`
-                                <button type="button" class="footer-link" @click=${this._openTriggers}>
-                                    <platform-icon name="zap" size="16"></platform-icon>
-                                    <span>${this.t('flows_sidebar.footer_triggers')}</span>
-                                </button>
-                            `
-                            : ''}
                         <button type="button" class="footer-link" @click=${this._openIntegrations}>
                             <platform-icon name="link" size="16"></platform-icon>
                             <span>${this.t('flows_sidebar.footer_integrations')}</span>

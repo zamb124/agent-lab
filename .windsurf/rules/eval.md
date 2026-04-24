@@ -15,12 +15,12 @@ globs:
 
 Доступ из тула к платформе — **только через узкие фасады** (`platform_services.py`), зарегистрированные в namespace.
 
-## АБСОЛЮТНЫЕ ЗАПРЕТЫ в коде тулов
+## АБСОЛЮТНЫЕ ЗАПРЕТЫ в пользовательском коде тулов
 
-1. **`get_container()`** — дыра: даёт доступ ко всем репозиториям и данным всех компаний.
-2. **Импорты `apps.*` / `core.*`** — строки `from apps.` / `from core.` / `import apps` / `import core` вырезаются `strip_forbidden_platform_import_lines` при сохранении в БД. Код с такими импортами **молча сломается** в sandbox.
-3. **Импорты между модулями тулов** (`from apps.flows.tools.files import _find_file`) — вырезаются вместе с остальными `apps.*`. Хелпер не попадёт в namespace → `NameError` в рантайме.
-4. **Прямой `httpx.AsyncClient` к сервисам платформы** — только `ServiceClient` (уже в namespace).
+1. **Прямой обход `platform_services` в кастомном коде** (хранимом в БД): не импортировать `get_container` к DI. Платформа регистрирует `get_code_runner` (без `FlowContainer`) в sandbox ради паритета `sandbox_codegen`; это не разрешение обходить фасады в новом кастомном туле. Канон: **`.cursor/rules/eval.mdc`**.
+2. **Импорты `apps.*` / `core.*`** — вырезаются; без strip ломается sandbox.
+3. **Импорты между модулями тулов** — вырезаются как `apps.*`.
+4. **Прямой `httpx.AsyncClient` к сервисам платформы** — только `ServiceClient`.
 
 ## Жизненный цикл кода тула
 
@@ -75,45 +75,14 @@ async def my_tool(arg: str, state: Optional[dict] = None) -> dict:
 2. Зарегистрировать в `namespace.py`
 3. Вызывать из тула по имени фасада
 
-Существующие фасады: `get_oauth_service`, `get_file_bytes`, `get_schedule_service`, `get_operator_handoff_service`, `get_google_oauth_token`.
+Существующие фасады: `get_oauth_service`, `get_file_bytes`, `get_schedule_service`, `get_operator_handoff_service`, `get_google_oauth_token`, `get_lara_facade`, `get_code_runner`.
 
-## Whitelist namespace (что доступно в sandbox)
+## Состав namespace (SSOT)
 
-### Модули
-`math`, `ast`, `operator`, `json`, `mimetypes`, `base64`, `datetime` (только `datetime.datetime`)
+Не дублировать длинные списки здесь. Канон и таблица ссылок: **`.cursor/rules/eval.mdc`**, код: `apps/flows/src/eval/namespace.py`, проверка: `make check-inline-docs`, справка: `core/docs/data/python/globals.py`.
 
-### Типы
-`Optional`, `List`, `Dict`, `Any`, `Union`, `Tuple`, `Callable`, `Literal`
-
-### Утилиты состояния (`state_utils`)
-`deep_copy_state`, `merge_state`, `get_nested`, `set_nested`, `get_files`, `find_file`, `get_user`, `get_tool_result`, `get_messages`, `add_user_message`, `add_agent_message`, `extract_json`, `ask_user`
-
-### Файлы
-`FileReader`, `FileReadError`, `reader` (экземпляр), `FileWriter`, `FileWriteError`, `FileResponse`, `writer` (экземпляр), `DocxTemplater`, `DocxTemplateError` (базовый класс ошибок DOCX-шаблонов; подклассы — `DocxTemplateInvalidError` и т.д.)
-
-### Interrupt / State
-`FlowInterrupt`, `InterruptKind`, `HandoffMode`, `UserMessageInterrupt`, `OperatorTaskInterrupt`
-
-### A2A-типы
-`Message`, `Part`, `TextPart`, `FilePart`, `DataPart`, `Role`, `Artifact`
-
-### Интеграции
-`ServiceClient`, `ServiceClientError`, `get_context`, `GoogleDocsClient`, `quote`, `httpx` (обёртка `HttpxModule`), `ContentType`
-
-### Фасады (`platform_services`)
-`get_oauth_service`, `get_file_bytes`, `get_schedule_service`, `get_operator_handoff_service`, `get_google_oauth_token`
-
-### Все публичные тулы
-Все имена из `apps.flows.tools.__all__` доступны по имени.
-
-### Декоратор и базовый класс
-`tool`, `BaseTool` — для создания тулов из inline-кода.
-
-### Builtins
-Урезанный набор из `core/inline_python_eval_policy.py`: `ALLOWED_BUILTINS` + `__import__` (через `safe_inline_import`) + `__build_class__`.
-
-### НЕТ в namespace
-`get_container`, `get_settings`, `Path`, `os`, `sys`, `subprocess`, `socket`, `importlib` (кроме whitelist).
+### Чего нет (кроме whitelist)
+`get_settings`, `Path`, `os`, `sys`, `subprocess`, `socket` и т.д. `get_code_runner` / codegen-имена могут быть в namespace как платформенная регистрация — см. **`.cursor/rules/eval.mdc`**.
 
 ### Валидация AST (`compiler._validate_code`)
 Доступ к атрибутам вида `__*__` (например `obj.__name__`, `obj.__class__`) в коде тулов **запрещён**. Имя типа исключения: `getattr(type(exc), "__name__", "")` (имя атрибута — строковый литерал, не `ast.Attribute`).

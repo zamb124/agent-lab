@@ -492,12 +492,75 @@ class TestTriggersAPI:
         
         await container.flow_repository.delete(flow_id)
 
+    @pytest.mark.asyncio
+    async def test_get_trigger_redacts_secrets_in_response(self, app, client, container, unique_id):
+        """GET триггера: secret_token в ответе заменён, остальные поля — нет."""
+        flow_id = f"api_test_{unique_id}"
+        trigger = TriggerConfig(
+            trigger_id="redact_t",
+            name="R",
+            type=TriggerType.WEBHOOK,
+            config={"secret_token": "raw-secret-xyz", "plain": "visible"},
+        )
+        agent = FlowConfig(
+            flow_id=flow_id,
+            name="Test Agent",
+            entry="main",
+            nodes={"main": {"type": "llm_node", "prompt": "Test"}},
+            triggers={"redact_t": trigger},
+        )
+        await container.flow_repository.set(agent)
+        response = await client.get(f"/flows/api/v1/flows/{flow_id}/triggers/redact_t")
+        assert response.status_code == 200
+        data = response.json()
+        assert data["config"]["secret_token"] == "(redacted)"
+        assert data["config"]["plain"] == "visible"
+        await container.flow_repository.delete(flow_id)
+
+    @pytest.mark.asyncio
+    async def test_generic_webhook_requires_secret_header(self, app, client, container, unique_id):
+        """Generic webhook: при secret_token в конфиге — заголовок; затем 501 до реализации."""
+        flow_id = f"api_test_{unique_id}"
+        trigger = TriggerConfig(
+            trigger_id="gh",
+            name="G",
+            type=TriggerType.WEBHOOK,
+            enabled=True,
+            config={"secret_token": "my-shared-secret"},
+        )
+        agent = FlowConfig(
+            flow_id=flow_id,
+            name="Test Agent",
+            entry="main",
+            nodes={"main": {"type": "llm_node", "prompt": "Test"}},
+            triggers={"gh": trigger},
+        )
+        await container.flow_repository.set(agent)
+        r1 = await client.post(
+            f"/flows/api/v1/triggers/webhook/{flow_id}/gh",
+            json={"a": 1},
+        )
+        assert r1.status_code == 403
+        r2 = await client.post(
+            f"/flows/api/v1/triggers/webhook/{flow_id}/gh",
+            json={"a": 1},
+            headers={"X-Trigger-Secret": "wrong"},
+        )
+        assert r2.status_code == 403
+        r3 = await client.post(
+            f"/flows/api/v1/triggers/webhook/{flow_id}/gh",
+            json={"a": 1},
+            headers={"X-Trigger-Secret": "my-shared-secret"},
+        )
+        assert r3.status_code == 501
+        await container.flow_repository.delete(flow_id)
+
 
 class TestTriggerExecutor:
     """Тесты TriggerExecutor."""
 
     @pytest.mark.asyncio
-    async def test_executor_creates_correct_state(self, app, container, unique_id, mock_llm_with_queue):
+    async def test_executor_creates_correct_state(self, app, client, container, unique_id, mock_llm_with_queue):
         """TriggerExecutor создает правильный ExecutionState."""
         from apps.flows.src.triggers.executor import TriggerExecutor
         
@@ -1316,26 +1379,22 @@ class TestOutputActionExecutor:
     @pytest.mark.asyncio
     async def test_check_condition_true(self):
         """Проверка условия - true."""
-        from apps.flows.src.triggers.executor import OutputActionExecutor
-        
-        executor = OutputActionExecutor()
-        
+        from apps.flows.src.triggers.output_condition import evaluate_output_action_condition
+
         state = {"has_file": True, "response": "Hello"}
-        
-        assert executor._check_condition("@state:has_file == true", state) is True
-        assert executor._check_condition("@state:has_file", state) is True
-    
+
+        assert evaluate_output_action_condition("@state:has_file == true", state) is True
+        assert evaluate_output_action_condition("@state:has_file", state) is True
+
     @pytest.mark.asyncio
     async def test_check_condition_false(self):
         """Проверка условия - false."""
-        from apps.flows.src.triggers.executor import OutputActionExecutor
-        
-        executor = OutputActionExecutor()
-        
+        from apps.flows.src.triggers.output_condition import evaluate_output_action_condition
+
         state = {"has_file": False, "response": "Hello"}
-        
-        assert executor._check_condition("@state:has_file == true", state) is False
-        assert executor._check_condition("@state:has_file == false", state) is True
+
+        assert evaluate_output_action_condition("@state:has_file == true", state) is False
+        assert evaluate_output_action_condition("@state:has_file == false", state) is True
     
     @pytest.mark.asyncio
     async def test_resolve_mapping(self):

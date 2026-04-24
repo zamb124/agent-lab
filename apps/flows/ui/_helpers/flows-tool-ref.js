@@ -4,6 +4,7 @@
  */
 
 import { asString, isPlainObject } from './flows-resolvers.js';
+import { isMcpToolRegistryItem, parseMcpToolIdToNodeConfig } from './flows-mcp-tool-registry.js';
 
 /**
  * @param {unknown} ref
@@ -78,7 +79,12 @@ export function toolRefToInitialNode(raw, toolId) {
         return { ...raw, node_id: rid, type: 'mcp' };
     }
     if (explicitType === 'flow') {
-        return { ...raw, node_id: rid, type: 'flow' };
+        const base = { ...raw, node_id: rid, type: 'flow' };
+        const fid = asString(base.flow_id);
+        const outFlowId = fid.length > 0 ? fid : toolId;
+        const sid = asString(base.skill_id);
+        const outSkill = sid.length > 0 ? sid : 'default';
+        return { ...base, flow_id: outFlowId, skill_id: outSkill };
     }
     if (explicitType === 'channel') {
         return { ...raw, node_id: rid, type: 'channel' };
@@ -111,10 +117,50 @@ export function registryToolItemToNode(t) {
     if (toolId.length === 0) {
         throw new Error('flows-tool-ref: tool item missing tool_id');
     }
+    const displayTitle = asString(t.title).length > 0 ? t.title : toolId;
+    const itemType = asString(t.item_type);
+    if (itemType === 'flow') {
+        return {
+            node_id: toolId,
+            type: 'flow',
+            name: displayTitle,
+            description: typeof t.description === 'string' ? t.description : '',
+            flow_id: toolId,
+            skill_id: 'default',
+        };
+    }
+    if (isMcpToolRegistryItem(t)) {
+        let serverId = typeof t.mcp_server_id === 'string' && t.mcp_server_id.length > 0 ? t.mcp_server_id : '';
+        let toolName =
+            typeof t.mcp_tool_name === 'string' && t.mcp_tool_name.length > 0 ? t.mcp_tool_name : '';
+        if (toolId.startsWith('mcp:')) {
+            const parsed = parseMcpToolIdToNodeConfig(toolId);
+            if (serverId.length === 0) {
+                serverId = parsed.server_id;
+            }
+            if (toolName.length === 0) {
+                toolName = parsed.tool_name;
+            }
+        }
+        if (serverId.length === 0 || toolName.length === 0) {
+            throw new Error('flows-tool-ref: MCP tool item missing server_id or tool_name');
+        }
+        return {
+            node_id: toolId,
+            type: 'mcp',
+            name: displayTitle,
+            description: typeof t.description === 'string' ? t.description : '',
+            server_id: serverId,
+            tool_name: toolName,
+            headers: {},
+            input_mapping: {},
+            state_mapping: {},
+        };
+    }
     return {
         node_id: toolId,
         type: 'code',
-        name: asString(t.title).length > 0 ? t.title : toolId,
+        name: displayTitle,
         description: typeof t.description === 'string' ? t.description : '',
         code: typeof t.code === 'string' ? t.code : '',
         tool_id: '',

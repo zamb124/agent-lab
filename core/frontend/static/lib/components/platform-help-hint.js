@@ -1,8 +1,7 @@
 /**
- * Кнопка «?» со всплывающей подсказкой (hover / focus).
- * Пузырёк рендерится в document.body (position: fixed + z-index из nextModalLayerZIndex),
- * чтобы не оказываться под сайдбаром и прочими слоями shell.
- * Свойство strategy сохранено для совместимости; local/fixed больше не меняют поведение.
+ * Подсказка по hover / focus. По умолчанию — кнопка «?»; опционально слот-контент
+ * (кастомный триггер). Пузырёк в document.body (z-index из nextModalLayerZIndex).
+ * Свойство strategy для совместимости; `wide` — широкий моноширинный режим (JSON).
  */
 import { html, css } from 'lit';
 import { PlatformElement } from '../platform-element/index.js';
@@ -36,6 +35,17 @@ function ensurePortalBubbleStyles() {
             pointer-events: auto;
             box-sizing: border-box;
         }
+        .platform-help-hint-portal-bubble--wide {
+            min-width: 200px;
+            max-width: min(560px, 92vw);
+            max-height: 50vh;
+            overflow: auto;
+            font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+            font-size: 11px;
+            line-height: 1.4;
+            white-space: pre-wrap;
+            word-break: break-word;
+        }
     `;
     document.head.appendChild(style);
 }
@@ -53,6 +63,7 @@ export class PlatformHelpHint extends PlatformElement {
                 position: relative;
                 display: inline-flex;
                 align-items: center;
+                cursor: help;
             }
 
             .hint-btn {
@@ -83,6 +94,7 @@ export class PlatformHelpHint extends PlatformElement {
                 background: rgba(255, 255, 255, 0.1);
                 border-color: var(--border-default, rgba(255, 255, 255, 0.14));
             }
+
         `,
     ];
 
@@ -90,6 +102,7 @@ export class PlatformHelpHint extends PlatformElement {
         text: { type: String },
         label: { type: String },
         strategy: { type: String },
+        wide: { type: Boolean, reflect: true },
         _open: { state: true },
     };
 
@@ -98,6 +111,7 @@ export class PlatformHelpHint extends PlatformElement {
         this.text = '';
         this.label = 'Справка';
         this.strategy = 'portal';
+        this.wide = false;
         this._open = false;
         this._bubbleId = `platform-help-hint-${Math.random().toString(36).slice(2, 10)}`;
         this._closeTimer = null;
@@ -130,6 +144,9 @@ export class PlatformHelpHint extends PlatformElement {
             }
         } else if (this._open && changed.has('text') && this._portalBubble) {
             this._portalBubble.textContent = this.text;
+        }
+        if (this._open && this._portalBubble && changed.has('wide')) {
+            this._applyWideClass();
         }
     }
 
@@ -176,15 +193,26 @@ export class PlatformHelpHint extends PlatformElement {
         this._open = false;
     }
 
+    _applyWideClass() {
+        if (!this._portalBubble) {
+            return;
+        }
+        if (this.wide) {
+            this._portalBubble.classList.add('platform-help-hint-portal-bubble--wide');
+        } else {
+            this._portalBubble.classList.remove('platform-help-hint-portal-bubble--wide');
+        }
+    }
+
     _syncPortalPosition() {
         if (!this._portalBubble) {
             return;
         }
-        const btn = this.renderRoot?.querySelector('.hint-btn');
-        if (!btn) {
+        const root = this.renderRoot?.querySelector('.hint-root');
+        if (!root) {
             return;
         }
-        const r = btn.getBoundingClientRect();
+        const r = root.getBoundingClientRect();
         this._portalBubble.style.left = `${r.left + r.width / 2}px`;
         this._portalBubble.style.top = `${r.top}px`;
     }
@@ -194,8 +222,8 @@ export class PlatformHelpHint extends PlatformElement {
             return;
         }
         this._teardownPortal();
-        const btn = this.renderRoot?.querySelector('.hint-btn');
-        if (!btn) {
+        const root = this.renderRoot?.querySelector('.hint-root');
+        if (!root) {
             return;
         }
         ensurePortalBubbleStyles();
@@ -210,6 +238,7 @@ export class PlatformHelpHint extends PlatformElement {
         bubble.addEventListener('mouseleave', this._onPortalBubbleLeave);
         document.body.appendChild(bubble);
         this._portalBubble = bubble;
+        this._applyWideClass();
         this._syncPortalPosition();
         requestAnimationFrame(() => {
             requestAnimationFrame(() => this._syncPortalPosition());
@@ -230,21 +259,21 @@ export class PlatformHelpHint extends PlatformElement {
         this._open = true;
     }
 
-    _onBtnEnter() {
+    _onRootEnter() {
         this._cancelClose();
         this._openBubble();
     }
 
-    _onBtnLeave() {
+    _onRootLeave() {
         this._scheduleClose();
     }
 
-    _onBtnFocusIn() {
+    _onRootFocusIn() {
         this._cancelClose();
         this._openBubble();
     }
 
-    _onBtnFocusOut(e) {
+    _onRootFocusOut(e) {
         const related = e.relatedTarget;
         if (related && this._portalBubble?.contains(related)) {
             return;
@@ -254,20 +283,18 @@ export class PlatformHelpHint extends PlatformElement {
 
     render() {
         return html`
-            <span class="hint-root">
-                <button
-                    type="button"
-                    class="hint-btn"
-                    aria-label=${this.label}
-                    aria-expanded=${this._open ? 'true' : 'false'}
-                    aria-describedby=${this._open ? this._bubbleId : ''}
-                    @mouseenter=${this._onBtnEnter}
-                    @mouseleave=${this._onBtnLeave}
-                    @focusin=${this._onBtnFocusIn}
-                    @focusout=${this._onBtnFocusOut}
-                >
-                    ?
-                </button>
+            <span
+                class="hint-root"
+                aria-expanded=${this._open ? 'true' : 'false'}
+                aria-describedby=${this._open ? this._bubbleId : ''}
+                @mouseenter=${this._onRootEnter}
+                @mouseleave=${this._onRootLeave}
+                @focusin=${this._onRootFocusIn}
+                @focusout=${this._onRootFocusOut}
+            >
+                <slot>
+                    <button type="button" class="hint-btn" aria-label=${this.label}>?</button>
+                </slot>
             </span>
         `;
     }

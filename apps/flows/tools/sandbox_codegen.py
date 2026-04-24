@@ -11,7 +11,6 @@ from typing import Any, Dict, List, Optional
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
-from apps.flows.src.container import get_container
 from apps.flows.src.eval.codegen_utils import (
     CodegenStagesFailure,
     CodegenStagesSuccess,
@@ -23,23 +22,11 @@ from apps.flows.src.eval.codegen_utils import (
     sandbox_feedback_hint,
     syntax_retry_hint,
 )
+from apps.flows.src.eval.platform_services import get_code_runner
 from apps.flows.src.tools import tool
 from core.clients.llm import get_llm
-from core.state import ExecutionState
 
 SANDBOX_CODEGEN_DEFAULT_MODEL = "qwen/qwen3.5-397b-a17b"
-
-
-def _exec_state_for_sandbox_run(
-    flow_state: Any,
-    run_variables: Optional[Dict[str, Any]],
-) -> ExecutionState:
-    """Копия state для прогона; `run_variables` сливается в `state.variables` (доступ в `run` через `state.variables`)."""
-    base = execution_state_for_codegen(flow_state)
-    if not run_variables:
-        return base
-    merged = {**base.variables, **run_variables}
-    return base.model_copy(update={"variables": merged})
 
 
 class LLMGeneratedCode(BaseModel):
@@ -176,44 +163,43 @@ async def sandbox_codegen(
     output_json_schema: Optional[str] = None,
     max_iterations: int = 5,
     max_doc_chars: int = 120_000,
-    model: str = SANDBOX_CODEGEN_DEFAULT_MODEL,
+    model: str = "qwen/qwen3.5-397b-a17b",
     state: Optional[Any] = None,
 ) -> str:
-    params = SandboxCodegenArgs.model_validate(
-        {
-            "task": task,
-            "run_variables": run_variables,
-            "output_json_schema": output_json_schema,
-            "max_iterations": max_iterations,
-            "max_doc_chars": max_doc_chars,
-            "model": model,
-        },
-    )
-    exec_state = _exec_state_for_sandbox_run(state, params.run_variables)
+    # FunctionTool._run_impl уже валидирует args через SandboxCodegenArgs и передаёт сюда keyword-аргументы.
+    # Логика копии state — внутри тела: при code/execute весь туль исполняется как отдельная строка (<string>);
+    # воркер не подмешивает в namespace функции с уровня модуля (например бывший _exec_state_for_sandbox_run).
+    base = execution_state_for_codegen(state)
+    if run_variables:
+        exec_state = base.model_copy(
+            update={"variables": {**base.variables, **run_variables}},
+        )
+    else:
+        exec_state = base
     doc_md = await build_sandbox_docs_markdown()
-    if len(doc_md) > params.max_doc_chars:
+    if len(doc_md) > max_doc_chars:
         doc_md = (
-            doc_md[: params.max_doc_chars]
+            doc_md[:max_doc_chars]
             + "\n\n# ... [documentation truncated by max_doc_chars]\n"
         )
 
     system_rules = _system_rules_block()
     schema_hint = ""
-    if params.output_json_schema and params.output_json_schema.strip():
-        schema_hint = f"\nОриентир формы ответа (JSON Schema):\n{params.output_json_schema.strip()}\n"
+    if output_json_schema and output_json_schema.strip():
+        schema_hint = f"\nОриентир формы ответа (JSON Schema):\n{output_json_schema.strip()}\n"
 
     doc_block = "## Документация sandbox\n\n" + doc_md
     system_content = system_rules + schema_hint + doc_block
 
-    exec_runner = get_container().get_code_runner(language="python")
-    llm = get_llm(model_name=params.model, state=exec_state)
+    exec_runner = get_code_runner(language="python")
+    llm = get_llm(model_name=model, state=exec_state)
 
     trace: List[Dict[str, Any]] = []
     last_code = ""
     feedback: Optional[str] = None
 
-    for attempt in range(1, params.max_iterations + 1):
-        user_parts: List[str] = [f"Задача:\n{params.task}"]
+    for attempt in range(1, max_iterations + 1):
+        user_parts: List[str] = [f"Задача:\n{task}"]
         if last_code:
             user_parts.append(f"Текущий код:\n```python\n{last_code}\n```")
         if feedback:
@@ -226,7 +212,7 @@ async def sandbox_codegen(
                 {"role": "user", "content": user_content},
             ],
             response_model=LLMGeneratedCode,
-            model=params.model,
+            model=model,
         )
         code = "\n".join(gen.code_lines).strip()
         last_code = code
@@ -285,7 +271,7 @@ async def sandbox_codegen(
             "success": False,
             "result": None,
             "final_code": last_code,
-            "attempts": params.max_iterations,
+            "attempts": max_iterations,
             "trace": trace,
             "error": "max_iterations_exhausted",
         },

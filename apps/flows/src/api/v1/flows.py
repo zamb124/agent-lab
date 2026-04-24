@@ -18,7 +18,12 @@ from core.context import get_context
 from core.logging import get_logger
 from core.pagination import OffsetPage, ListResponse
 from core.ui_events import publish_ui_event_to_user
-from apps.flows.src.models import Edge, FlowConfig, SkillConfig, NodeConfig, FlowType, ExternalAgentStatus, TriggerConfig
+from apps.flows.src.models import Edge, FlowConfig, SkillConfig, NodeConfig, FlowType, ExternalAgentStatus, TriggerConfig, MergeMode
+from apps.flows.src.services.bundle_node_repair import (
+    get_bundle_base_nodes_for_flow,
+    repair_node_map_with_canonical_top_level,
+)
+from apps.flows.src.services.flow_node_merge import merge_incoming_node_dict_for_persist
 from apps.flows.src.services.flow_validator import FlowValidator
 
 logger = get_logger(__name__)
@@ -291,8 +296,11 @@ class SkillRequest(BaseModel):
     tags: List[str] = []
     entry: Optional[str] = None
     nodes: Optional[Dict[str, Any]] = None
+    nodes_mode: Optional[str] = None
     edges: Optional[List[Dict[str, Any]]] = None
+    edges_mode: Optional[str] = None
     variables: Dict[str, Any] = {}
+    variables_mode: Optional[str] = None
 
 
 class SkillResponse(BaseModel):
@@ -353,7 +361,11 @@ def _skill_config_to_response(skill: SkillConfig) -> SkillResponse:
     )
 
 
-def _skill_request_to_config(skill_id: str, skill: SkillRequest) -> SkillConfig:
+def _skill_request_to_config(
+    skill_id: str,
+    skill: SkillRequest,
+    existing: Optional[SkillConfig] = None,
+) -> SkillConfig:
     """Конвертирует SkillRequest в SkillConfig."""
     edges = None
     if skill.edges:
@@ -365,6 +377,21 @@ def _skill_request_to_config(skill_id: str, skill: SkillRequest) -> SkillConfig:
             )
             for e in skill.edges
         ]
+
+    def _mode(
+        raw: Optional[str],
+        ex: Optional[MergeMode],
+        default: MergeMode,
+    ) -> MergeMode:
+        if raw is not None and raw != "":
+            return MergeMode(raw)
+        if ex is not None:
+            return ex
+        return default
+
+    ex_n = existing.nodes_mode if existing is not None else None
+    ex_e = existing.edges_mode if existing is not None else None
+    ex_v = existing.variables_mode if existing is not None else None
     return SkillConfig(
         name=skill.name,
         description=skill.description,
@@ -373,6 +400,9 @@ def _skill_request_to_config(skill_id: str, skill: SkillRequest) -> SkillConfig:
         nodes=skill.nodes,
         edges=edges,
         variables=skill.variables,
+        nodes_mode=_mode(skill.nodes_mode, ex_n, MergeMode.REPLACE),
+        edges_mode=_mode(skill.edges_mode, ex_e, MergeMode.REPLACE),
+        variables_mode=_mode(skill.variables_mode, ex_v, MergeMode.MERGE),
     )
 
 
@@ -746,7 +776,7 @@ async def create_flow(
     ]
 
     skills = {
-        skill_id: _skill_request_to_config(skill_id, skill)
+        skill_id: _skill_request_to_config(skill_id, skill, None)
         for skill_id, skill in request.skills.items()
     }
 
@@ -923,8 +953,29 @@ async def update_flow(
     if existing is None:
         raise HTTPException(status_code=404, detail="Flow not found")
 
+    # Патч только с координатами не затирает семантику ноды, сохранённую ранее
+    merged_top_nodes = merge_incoming_node_dict_for_persist(
+        dict(request.nodes), existing.nodes or {}
+    )
+    skills: Dict[str, SkillConfig] = {}
+    for skill_id, sk in request.skills.items():
+        ex = (existing.skills or {}).get(skill_id)
+        ex_n = (ex.nodes if ex else None) or {}
+        if sk.nodes is None:
+            merged_n = sk.nodes
+        else:
+            merged_n = merge_incoming_node_dict_for_persist(dict(sk.nodes), ex_n)
+        ex_cfg = (existing.skills or {}).get(skill_id)
+        skills[skill_id] = _skill_request_to_config(
+            skill_id, sk.model_copy(update={"nodes": merged_n}), ex_cfg
+        )
+
     # Инлайним tools - заменяем tool_id на полные конфиги с кодом
-    nodes = await _inline_tools_in_nodes(dict(request.nodes), container)
+    nodes = await _inline_tools_in_nodes(merged_top_nodes, container)
+    if (getattr(existing, "source", None) or "manual") == "file":
+        b_nodes = get_bundle_base_nodes_for_flow(flow_id)
+        if b_nodes:
+            nodes = repair_node_map_with_canonical_top_level(nodes, b_nodes)
 
     edges = [
         Edge(
@@ -934,11 +985,6 @@ async def update_flow(
         )
         for e in request.edges
     ]
-
-    skills = {
-        skill_id: _skill_request_to_config(skill_id, skill)
-        for skill_id, skill in request.skills.items()
-    }
 
     triggers = {
         trigger_id: TriggerConfig(**trigger_data) if isinstance(trigger_data, dict) else trigger_data

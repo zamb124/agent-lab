@@ -6,9 +6,12 @@ import { classMap } from 'lit/directives/class-map.js';
 import { unsafeHTML } from 'lit/directives/unsafe-html.js';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
 import '@platform/lib/components/platform-icon.js';
-import { asObject, asString, isPlainObject } from '../../_helpers/flows-resolvers.js';
+import '@platform/lib/components/platform-help-hint.js';
+import { asArray, asString, isPlainObject, toolCallIconName } from '../../_helpers/flows-resolvers.js';
+import './flows-chat-run-trace.js';
 
 export class ChatMessage extends PlatformElement {
+    static i18nNamespace = 'flows';
     static styles = [
         PlatformElement.styles,
         css`
@@ -106,6 +109,46 @@ export class ChatMessage extends PlatformElement {
             
             .message.user .header {
                 justify-content: flex-end;
+            }
+            .message.user .header.has-inline-tools {
+                display: flex;
+                align-items: flex-start;
+                justify-content: space-between;
+                gap: var(--space-2);
+                width: 100%;
+            }
+            .user-header-meta {
+                display: flex;
+                flex-direction: row;
+                flex-wrap: wrap;
+                align-items: center;
+                justify-content: flex-end;
+                gap: var(--space-2);
+                min-width: 0;
+            }
+            .user-run-trace-embed {
+                margin-top: var(--space-2);
+                margin-bottom: var(--space-2);
+                max-height: min(220px, 38vh);
+                overflow: auto;
+                border-radius: var(--radius-lg);
+            }
+            .user-run-trace-embed flows-chat-run-trace {
+                display: block;
+            }
+            .message.user .tracing-btn.user-bubble-tool {
+                background: rgba(255, 255, 255, 0.2);
+                border: 1px solid rgba(255, 255, 255, 0.4);
+                color: white;
+            }
+            .message.user .tracing-btn.user-bubble-tool:hover {
+                background: rgba(255, 255, 255, 0.35);
+                border-color: white;
+                color: white;
+            }
+            .message.user .tracing-btn.user-bubble-tool[aria-pressed='true'] {
+                background: rgba(255, 255, 255, 0.35);
+                border-color: white;
             }
             
             .header-actions {
@@ -205,6 +248,119 @@ export class ChatMessage extends PlatformElement {
                 animation: blink 1s infinite;
             }
             
+            .stream-pending {
+                display: flex;
+                align-items: center;
+                gap: var(--space-2);
+                min-height: 1.5em;
+                font-size: var(--text-sm);
+                color: var(--text-tertiary);
+            }
+            
+            .stream-placeholder-shimmer {
+                position: relative;
+                flex: 1;
+                min-width: 120px;
+                max-width: 220px;
+                height: 10px;
+                border-radius: var(--radius-pill, 999px);
+                background: linear-gradient(
+                    90deg,
+                    var(--glass-tint-subtle) 0%,
+                    var(--glass-solid-strong) 50%,
+                    var(--glass-tint-subtle) 100%
+                );
+                background-size: 200% 100%;
+                animation: stream-shimmer 1.4s ease-in-out infinite;
+            }
+            
+            @keyframes stream-shimmer {
+                0% {
+                    background-position: 100% 0;
+                }
+                100% {
+                    background-position: -100% 0;
+                }
+            }
+            
+            .activity-line {
+                display: flex;
+                align-items: flex-start;
+                gap: var(--space-2);
+                margin-bottom: var(--space-3);
+                padding: var(--space-2) var(--space-3);
+                font-size: var(--text-sm);
+                color: var(--text-secondary);
+                background: var(--glass-tint-subtle);
+                border: 1px solid var(--glass-border-subtle);
+                border-radius: var(--radius-lg);
+            }
+            
+            .activity-line platform-icon {
+                flex-shrink: 0;
+                margin-top: 2px;
+                color: var(--accent);
+            }
+
+            .thinking-row-compact {
+                display: inline-flex;
+                align-items: center;
+                gap: var(--space-2);
+                margin-top: var(--space-3);
+                font-size: var(--text-sm);
+                color: var(--text-secondary);
+            }
+
+            .thinking-row-compact.thinking-live {
+                color: var(--accent);
+            }
+
+            .thinking-row-compact .tool-orb-inner {
+                display: inline-flex;
+                align-items: center;
+                gap: var(--space-2);
+                cursor: help;
+            }
+
+            .tool-stack {
+                display: flex;
+                flex-wrap: wrap;
+                align-items: center;
+                margin-top: var(--space-3);
+            }
+
+            .tool-orb {
+                position: relative;
+                display: inline-flex;
+                align-items: center;
+                justify-content: center;
+                width: 30px;
+                height: 30px;
+                margin-left: -10px;
+                border-radius: 50%;
+                background: var(--glass-solid-subtle);
+                border: 1px solid var(--glass-border-subtle);
+                box-shadow: var(--glass-shadow-subtle);
+            }
+
+            .tool-orb:first-child {
+                margin-left: 0;
+            }
+
+            .tool-orb platform-help-hint {
+                display: inline-flex;
+                align-items: center;
+                justify-content: center;
+            }
+
+            .tool-orb-inner {
+                display: inline-flex;
+                align-items: center;
+                justify-content: center;
+                width: 100%;
+                height: 100%;
+            }
+            
             @keyframes message-enter {
                 from {
                     opacity: 0;
@@ -218,81 +374,6 @@ export class ChatMessage extends PlatformElement {
             
             @keyframes blink {
                 50% { opacity: 0; }
-            }
-            
-            .reasoning-container {
-                margin-top: var(--space-4);
-                padding: var(--space-4);
-                background: var(--glass-solid-subtle);
-                border: 1px solid var(--border-subtle);
-                border-radius: var(--radius-lg);
-            }
-            
-            .reasoning-header {
-                display: flex;
-                align-items: center;
-                justify-content: space-between;
-                margin-bottom: var(--space-3);
-                cursor: pointer;
-                user-select: none;
-            }
-            
-            .reasoning-title {
-                font-size: var(--text-sm);
-                font-weight: var(--font-semibold);
-                color: var(--text-secondary);
-            }
-            
-            .reasoning-toggle {
-                font-size: var(--text-sm);
-                color: var(--text-tertiary);
-            }
-            
-            .reasoning-content {
-                font-size: var(--text-sm);
-                line-height: var(--leading-relaxed);
-                color: var(--text-secondary);
-            }
-            
-            .reasoning-content.collapsed {
-                display: none;
-            }
-            
-            .tool-call, .tool-result {
-                margin-top: var(--space-3);
-                padding: var(--space-3);
-                background: var(--glass-solid-subtle);
-                border: 1px solid var(--border-subtle);
-                border-radius: var(--radius-md);
-            }
-            
-            .tool-header {
-                display: flex;
-                align-items: center;
-                justify-content: space-between;
-                margin-bottom: var(--space-2);
-                cursor: pointer;
-            }
-            
-            .tool-name {
-                font-size: var(--text-sm);
-                font-weight: var(--font-medium);
-                color: var(--accent);
-            }
-            
-            .tool-content {
-                font-family: var(--font-mono);
-                font-size: var(--text-xs);
-                background: var(--bg-primary);
-                padding: var(--space-3);
-                border-radius: var(--radius-sm);
-                overflow-x: auto;
-                max-height: 300px;
-                overflow-y: auto;
-            }
-            
-            .tool-content.collapsed {
-                display: none;
             }
             
             .input-required {
@@ -433,6 +514,7 @@ export class ChatMessage extends PlatformElement {
         timestamp: { type: String },
         streaming: { type: Boolean },
         reasoning: { type: String },
+        activity: { type: String },
         toolCalls: { type: Array },
         toolResults: { type: Array },
         inputRequired: { type: Object },
@@ -440,8 +522,11 @@ export class ChatMessage extends PlatformElement {
         breakpoint: { type: Object },
         files: { type: Array },
         fileIds: { type: Array },
-        expandedStates: { type: Object },
         taskId: { type: String },
+        isLastUserMessage: { type: Boolean, attribute: 'is-last-user-message' },
+        runTraceEntries: { type: Array },
+        traceTaskId: { type: String },
+        _runTracePanelOpen: { type: Boolean, state: true },
     };
 
     constructor() {
@@ -451,6 +536,7 @@ export class ChatMessage extends PlatformElement {
         this.timestamp = '';
         this.streaming = false;
         this.reasoning = '';
+        this.activity = '';
         this.toolCalls = [];
         this.toolResults = [];
         this.inputRequired = null;
@@ -458,13 +544,18 @@ export class ChatMessage extends PlatformElement {
         this.breakpoint = null;
         this.files = [];
         this.fileIds = [];
-        this.expandedStates = new Map();
-        this.expandedStates.set('reasoning', false);
         this.taskId = '';
+        this.isLastUserMessage = false;
+        this.runTraceEntries = [];
+        this.traceTaskId = '';
+        this._runTracePanelOpen = false;
     }
 
-    _escapeRegex(s) {
-        return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    willUpdate(changed) {
+        super.willUpdate(changed);
+        if (changed.has('isLastUserMessage') && !this.isLastUserMessage) {
+            this._runTracePanelOpen = false;
+        }
     }
 
     _getRoleName() {
@@ -494,113 +585,217 @@ export class ChatMessage extends PlatformElement {
         return this.content;
     }
 
-    _toggleReasoning() {
-        const current = this.expandedStates.has('reasoning') ? Boolean(this.expandedStates.get('reasoning')) : false;
-        this.expandedStates.set('reasoning', !current);
-        this.expandedStates = new Map(this.expandedStates);
+    _streamPendingSuppressed() {
+        if (this.role !== 'assistant') {
+            return false;
+        }
+        if (asString(this.activity).length > 0) {
+            return true;
+        }
+        if (asString(this.reasoning).length > 0) {
+            return true;
+        }
+        if (asArray(this.toolCalls).length > 0) {
+            return true;
+        }
+        if (asArray(this.toolResults).length > 0) {
+            return true;
+        }
+        return false;
     }
 
-    _parseReasoningStructure(text) {
-        if (!text) return '';
-
-        const labelKeys = [
-            'chat_message.reasoning_section_observation',
-            'chat_message.reasoning_section_analysis',
-            'chat_message.reasoning_section_plan',
-            'chat_message.reasoning_section_action',
-        ];
-
-        let html = text;
-
-        for (const labelKey of labelKeys) {
-            const label = this.t(labelKey);
-            const regex = new RegExp(`\\*\\*${this._escapeRegex(label)}:\\*\\*\\s*`, 'g');
-            html = html.replace(
-                regex,
-                `<div style="font-weight: bold; margin-top: 12px; color: var(--accent);">${label}</div>`
-            );
+    _pairToolCallsAndResults() {
+        const calls = asArray(this.toolCalls);
+        const results = asArray(this.toolResults);
+        const used = new Set();
+        const paired = [];
+        for (let i = 0; i < calls.length; i++) {
+            const call = calls[i];
+            let res = null;
+            if (isPlainObject(call) && typeof call.id === 'string' && call.id.length > 0) {
+                const callId = call.id;
+                for (let j = 0; j < results.length; j++) {
+                    if (used.has(j)) {
+                        continue;
+                    }
+                    const item = results[j];
+                    if (
+                        isPlainObject(item) &&
+                        (item.tool_call_id === callId || item.id === callId)
+                    ) {
+                        res = item;
+                        used.add(j);
+                        break;
+                    }
+                }
+            }
+            if (res === null && !used.has(i) && i < results.length) {
+                res = results[i];
+                used.add(i);
+            }
+            paired.push({ call, result: res });
         }
-
-        if (window.marked) {
-            return unsafeHTML(window.marked.parse(html));
+        for (let j = 0; j < results.length; j++) {
+            if (used.has(j)) {
+                continue;
+            }
+            paired.push({ call: null, result: results[j] });
         }
-        return html;
+        return paired;
     }
 
-    _renderReasoning() {
-        if (!this.reasoning) return '';
-        
+    _toolArgsObject(call) {
+        if (!isPlainObject(call)) {
+            return {};
+        }
+        if (isPlainObject(call.arguments)) {
+            return call.arguments;
+        }
+        if (isPlainObject(call.args)) {
+            return call.args;
+        }
+        return {};
+    }
+
+    _toolResultBody(result) {
+        if (!isPlainObject(result) || !Object.prototype.hasOwnProperty.call(result, 'result')) {
+            return '';
+        }
+        const r = result.result;
+        if (typeof r === 'string') {
+            return r;
+        }
+        if (r === null || r === undefined) {
+            return '';
+        }
+        return JSON.stringify(r, null, 2);
+    }
+
+    _toolRowDisplayName(call, result) {
+        if (isPlainObject(call) && typeof call.name === 'string' && call.name.length > 0) {
+            return call.name;
+        }
+        if (isPlainObject(result) && typeof result.name === 'string' && result.name.length > 0) {
+            return result.name;
+        }
+        return this.t('chat_message.tool_default_name');
+    }
+
+    _formatToolPairHintText(call, result) {
+        const displayName = this._toolRowDisplayName(call, result);
+        const parts = [this.t('chat_message.tool_hint_tool_name', { name: displayName })];
+        if (isPlainObject(call)) {
+            const argsLine = JSON.stringify(this._toolArgsObject(call), null, 2);
+            parts.push('');
+            parts.push(this.t('chat_message.tool_hint_args_label'));
+            parts.push(argsLine);
+        }
+        if (isPlainObject(result)) {
+            const body = this._toolResultBody(result);
+            if (body.length > 0) {
+                parts.push('');
+                parts.push(this.t('chat_message.tool_hint_result_label'));
+                parts.push(body);
+            }
+        }
+        return parts.join('\n');
+    }
+
+    _renderToolOrbs() {
+        const rows = this._pairToolCallsAndResults();
+        if (rows.length === 0) {
+            return nothing;
+        }
+        const nameList = rows.map((row) => this._toolRowDisplayName(row.call, row.result)).join(', ');
         return html`
-            <div class="reasoning-container">
-                <div class="reasoning-header" @click=${this._toggleReasoning}>
-                    <span class="reasoning-title">${this.t('chat_message.reasoning_title')}</span>
-                    <span class="reasoning-toggle">${this.expandedStates.get('reasoning') ? '▼' : '▶'}</span>
-                </div>
-                <div class="reasoning-content ${this.expandedStates.get('reasoning') ? '' : 'collapsed'}">
-                    ${this._parseReasoningStructure(this.reasoning)}
-                </div>
+            <div
+                class="tool-stack"
+                role="group"
+                aria-label=${this.t('chat_message.tool_stack_aria', { names: nameList })}
+            >
+                ${rows.map((row, index) => {
+                    const name = this._toolRowDisplayName(row.call, row.result);
+                    const icon = toolCallIconName(name);
+                    const hint = this._formatToolPairHintText(row.call, row.result);
+                    const z = index + 1;
+                    return html`
+                        <span class="tool-orb" style="z-index: ${z};">
+                            <platform-help-hint
+                                .text=${hint}
+                                .label=${name}
+                                ?wide=${true}
+                            >
+                                <span class="tool-orb-inner" tabindex="0" role="img" aria-label=${name}>
+                                    <platform-icon name=${icon} size="16"></platform-icon>
+                                </span>
+                            </platform-help-hint>
+                        </span>
+                    `;
+                })}
             </div>
         `;
     }
 
-    _renderToolCalls() {
-        if (!this.toolCalls || this.toolCalls.length === 0) return '';
-        
-        return this.toolCalls.map((toolCall, index) => {
-            const isExpanded = this.expandedStates.get(`toolCall${index}`) !== false;
-            
-            return html`
-                <div class="tool-call">
-                    <div class="tool-header" @click=${() => this._toggleToolCall(index)}>
-                        <span class="tool-name">${this.t('chat_message.tool_call_label', { name: typeof toolCall.name === 'string' && toolCall.name.length > 0 ? toolCall.name : 'Tool' })}</span>
-                        <span class="reasoning-toggle">${isExpanded ? '▼' : '▶'}</span>
-                    </div>
-                    <div class="tool-content ${isExpanded ? '' : 'collapsed'}">
-                        ${JSON.stringify(
-                            isPlainObject(toolCall.arguments)
-                                ? toolCall.arguments
-                                : (isPlainObject(toolCall.args) ? toolCall.args : {}),
-                            null,
-                            2,
-                        )}
-                    </div>
-                </div>
-            `;
-        });
+    _renderReasoning() {
+        const plain = asString(this.reasoning);
+        if (plain.length === 0) {
+            return nothing;
+        }
+        const isLive = this.role === 'assistant' && this.streaming;
+        return html`
+            <div
+                class=${classMap({
+                    'thinking-row-compact': true,
+                    'thinking-live': isLive,
+                })}
+            >
+                <platform-help-hint
+                    .text=${plain}
+                    .label=${this.t('chat_message.thinking_aria')}
+                    ?wide=${true}
+                >
+                    <span class="tool-orb-inner" tabindex="0">
+                        <platform-icon name="message-circle" size="16"></platform-icon>
+                        <span>${this.t('chat_message.thinking_status')}</span>
+                    </span>
+                </platform-help-hint>
+            </div>
+        `;
     }
 
-    _toggleToolCall(index) {
-        const key = `toolCall${index}`;
-        const current = this.expandedStates.get(key);
-        this.expandedStates.set(key, current === false ? true : false);
-        this.expandedStates = new Map(this.expandedStates);
+    _renderActivity() {
+        if (this.role !== 'assistant') {
+            return nothing;
+        }
+        const a = asString(this.activity);
+        if (a.length === 0) {
+            return nothing;
+        }
+        return html`
+            <div class="activity-line">
+                <platform-icon name="search" size="16"></platform-icon>
+                <span>${a}</span>
+            </div>
+        `;
     }
 
-    _renderToolResults() {
-        if (!this.toolResults || this.toolResults.length === 0) return '';
-        
-        return this.toolResults.map((result, index) => {
-            const isExpanded = this.expandedStates.get(`toolResult${index}`) !== false;
-            
-            return html`
-                <div class="tool-result">
-                    <div class="tool-header" @click=${() => this._toggleToolResult(index)}>
-                        <span class="tool-name">${this.t('chat_message.tool_result_label', { name: typeof result.name === 'string' && result.name.length > 0 ? result.name : 'Result' })}</span>
-                        <span class="reasoning-toggle">${isExpanded ? '▼' : '▶'}</span>
-                    </div>
-                    <div class="tool-content ${isExpanded ? '' : 'collapsed'}">
-                        ${typeof result.result === 'string' ? result.result : JSON.stringify(result.result, null, 2)}
-                    </div>
-                </div>
-            `;
-        });
-    }
-
-    _toggleToolResult(index) {
-        const key = `toolResult${index}`;
-        const current = this.expandedStates.get(key);
-        this.expandedStates.set(key, current === false ? true : false);
-        this.expandedStates = new Map(this.expandedStates);
+    _renderStreamPending() {
+        if (this.role !== 'assistant' || !this.streaming) {
+            return nothing;
+        }
+        if (this._streamPendingSuppressed()) {
+            return nothing;
+        }
+        const c = asString(this.content);
+        if (c.length > 0) {
+            return nothing;
+        }
+        return html`
+            <div class="text stream-pending" aria-live="polite">
+                <span>${this.t('chat_message.streaming_placeholder')}</span>
+                <span class="stream-placeholder-shimmer" aria-hidden="true"></span>
+            </div>
+        `;
     }
 
     _renderInputRequired() {
@@ -685,9 +880,17 @@ export class ChatMessage extends PlatformElement {
     }
 
     _showTracing() {
-        if (this.taskId) {
-            this.emit('show-tracing', { taskId: this.taskId });
+        const fromTask = asString(this.taskId);
+        if (fromTask.length > 0) {
+            this.emit('show-tracing', { taskId: fromTask });
+            return;
         }
+        const fromArg = asString(this.traceTaskId);
+        this.emit('show-tracing', { taskId: fromArg.length > 0 ? fromArg : '' });
+    }
+
+    _toggleUserRunTrace() {
+        this._runTracePanelOpen = !this._runTracePanelOpen;
     }
 
     _renderOperatorFiles() {
@@ -747,6 +950,86 @@ export class ChatMessage extends PlatformElement {
         return Math.round((bytes / Math.pow(k, i)) * 100) / 100 + ' ' + sizes[i];
     }
 
+    _renderUserInlineRunTrace() {
+        if (this.role !== 'user' || !this.isLastUserMessage) {
+            return nothing;
+        }
+        if (!this._runTracePanelOpen) {
+            return nothing;
+        }
+        return html`
+            <div class="user-run-trace-embed">
+                <flows-chat-run-trace
+                    .entries=${asArray(this.runTraceEntries)}
+                    ?compact=${true}
+                    ?showSectionHeader=${true}
+                ></flows-chat-run-trace>
+            </div>
+        `;
+    }
+
+    _renderUserHeader() {
+        const hasTools = this.isLastUserMessage;
+        if (!hasTools) {
+            return html`
+                <div class="header">
+                    <span class="role">${this._getRoleName()}</span>
+                    ${this.timestamp ? html`<span class="timestamp">${this.timestamp}</span>` : ''}
+                </div>
+            `;
+        }
+        return html`
+            <div class="header has-inline-tools">
+                <div class="user-header-meta">
+                    <span class="role">${this._getRoleName()}</span>
+                    ${this.timestamp ? html`<span class="timestamp">${this.timestamp}</span>` : ''}
+                </div>
+                <div class="header-actions">
+                    <button
+                        type="button"
+                        class="tracing-btn user-bubble-tool"
+                        @click=${this._toggleUserRunTrace}
+                        title=${this.t('run_trace.section_title')}
+                        aria-pressed=${this._runTracePanelOpen ? 'true' : 'false'}
+                    >
+                        <platform-icon name="chart" size="14"></platform-icon>
+                    </button>
+                    <button
+                        type="button"
+                        class="tracing-btn user-bubble-tool"
+                        @click=${this._showTracing}
+                        title=${this.t('chat_message.show_tracing_title')}
+                    >
+                        <platform-icon name="terminal" size="14"></platform-icon>
+                    </button>
+                </div>
+            </div>
+        `;
+    }
+
+    _renderDefaultHeader() {
+        return html`
+            <div class="header">
+                <span class="role">${this._getRoleName()}</span>
+                ${this.timestamp ? html`<span class="timestamp">${this.timestamp}</span>` : ''}
+                ${this.role === 'assistant' && this.taskId && !this.streaming
+                    ? html`
+                          <div class="header-actions">
+                              <button
+                                  type="button"
+                                  class="tracing-btn"
+                                  @click=${this._showTracing}
+                                  title=${this.t('chat_message.show_tracing_title')}
+                              >
+                                  <platform-icon name="terminal" size="14"></platform-icon>
+                              </button>
+                          </div>
+                      `
+                    : nothing}
+            </div>
+        `;
+    }
+
     render() {
         const classes = {
             'message': true,
@@ -761,25 +1044,15 @@ export class ChatMessage extends PlatformElement {
                 </div>
                 <div class="bubble">
                     <div class="content">
-                        <div class="header">
-                            <span class="role">${this._getRoleName()}</span>
-                            ${this.timestamp ? html`<span class="timestamp">${this.timestamp}</span>` : ''}
-                            ${this.role === 'assistant' && this.taskId && !this.streaming ? html`
-                                <div class="header-actions">
-                                    <button class="tracing-btn" @click=${this._showTracing} title=${this.t('chat_message.show_tracing_title')}>
-                                        <platform-icon name="terminal" size="14"></platform-icon>
-                                    </button>
-                                </div>
-                            ` : ''}
-                        </div>
-                        
+                        ${this.role === 'user' ? this._renderUserHeader() : this._renderDefaultHeader()}
+                        ${this._renderUserInlineRunTrace()}
                         ${this._renderFiles()}
                         ${this._renderOperatorFiles()}
+                        ${this._renderActivity()}
+                        ${this._renderToolOrbs()}
                         ${this._renderReasoning()}
-                        ${this._renderToolCalls()}
-                        ${this._renderToolResults()}
-                        
                         ${this.content ? html`<div class="text">${this._renderContent()}</div>` : ''}
+                        ${this._renderStreamPending()}
                         
                         ${this._renderInputRequired()}
                         ${this._renderOperatorReply()}

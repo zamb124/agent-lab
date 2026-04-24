@@ -102,7 +102,7 @@ export class FlowsStickyNote extends PlatformElement {
                 border: none;
                 color: var(--text-tertiary);
                 cursor: pointer;
-                border-radius: var(--radius-sm);
+                border-radius: var(--radius-md);
                 padding: 0;
             }
             .icon-btn:hover { color: var(--text-primary); background: rgba(0, 0, 0, 0.06); }

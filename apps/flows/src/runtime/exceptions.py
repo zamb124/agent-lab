@@ -84,3 +84,23 @@ class NodeCallLimitError(Exception):
         self.message = message
         self.limit = limit
         super().__init__(message)
+
+
+class EdgeConditionError(Exception):
+    """
+    Сбой при вычислении условия исходящего ребра.
+    Сохраняет индекс ребра для emit edge_error в UI.
+    """
+
+    def __init__(
+        self,
+        edge_index: int,
+        from_node: str,
+        to_node: str,
+        original: Exception,
+    ) -> None:
+        self.edge_index = edge_index
+        self.from_node = from_node
+        self.to_node = to_node
+        self.original = original
+        super().__init__(str(original))

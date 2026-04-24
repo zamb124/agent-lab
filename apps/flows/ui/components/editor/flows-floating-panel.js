@@ -7,6 +7,8 @@
  *   - подсветка `lara-glow` при push-событии `flows/lara/node_updated` (3.2s).
  *
  * Заголовок берёт icon + colorToken (CSS-переменная) из родителя.
+ * В `.header-actions-host` (слева от «свернуть») `flows-base-node-editor`
+ * монтирует `flows-node-run-control`.
  *
  * Слот по умолчанию для содержимого (property-panel или resource-property-panel).
  */
@@ -96,11 +98,11 @@ export class FlowsFloatingPanel extends PlatformElement {
             .panel-icon {
                 width: 32px; height: 32px;
                 display: flex; align-items: center; justify-content: center;
-                border-radius: var(--radius-sm);
+                border-radius: var(--radius-md);
             }
             :host([expanded]) .panel-icon {
                 width: 40px; height: 40px;
-                border-radius: var(--radius-md);
+                border-radius: var(--radius-lg);
             }
             .panel-name {
                 font-size: var(--text-base);
@@ -114,11 +116,19 @@ export class FlowsFloatingPanel extends PlatformElement {
                 display: flex; align-items: center; gap: var(--space-1);
                 flex-shrink: 0;
             }
+            .header-actions-host {
+                display: flex;
+                align-items: center;
+                flex-shrink: 0;
+            }
+            .header-actions-host:empty {
+                display: none;
+            }
             .panel-btn {
                 width: 32px; height: 32px;
                 display: flex; align-items: center; justify-content: center;
                 background: transparent; border: none;
-                border-radius: var(--radius-sm);
+                border-radius: var(--radius-lg);
                 color: var(--text-tertiary);
                 cursor: pointer;
                 transition: background var(--duration-fast), color var(--duration-fast);
@@ -194,6 +204,7 @@ export class FlowsFloatingPanel extends PlatformElement {
                     <div class="panel-name">${this.headerTitle}</div>
                 </div>
                 <div class="panel-actions">
+                    <div class="header-actions-host"></div>
                     <button class="panel-btn expand" type="button" title=${this.t(this.expanded ? 'floating_panel.collapse' : 'floating_panel.expand')} @click=${this._toggleExpand}>
                         <platform-icon name=${this.expanded ? 'minimize' : 'fullscreen'} size="14"></platform-icon>
                     </button>

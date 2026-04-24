@@ -38,6 +38,7 @@ from apps.flows.src.eval.platform_services import (
     get_schedule_service,
 )
 from core.clients.google_docs_client import GoogleDocsClient
+from apps.flows.src.eval.sandbox_codegen_namespace import register_sandbox_codegen_namespace
 from apps.flows.src.eval.shim_registry import apply_inline_shims
 from apps.flows.src.eval.state_utils import (
     add_agent_message,
@@ -246,5 +247,7 @@ class PythonNamespaceBuilder:
 
         for resource_id, resource in self.resources.items():
             namespace[resource_id] = resource
+
+        register_sandbox_codegen_namespace(namespace)
 
         return namespace

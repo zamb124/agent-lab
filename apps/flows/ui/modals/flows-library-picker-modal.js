@@ -1,8 +1,10 @@
 /**
- * Единая модалка библиотеки: выбор tool/flow (LLM, дроп subflow) и шаблонов code-ноды.
+ * Единая модалка библиотеки: выбор tool/flow (LLM, дроп subflow/MCP) и шаблонов code-ноды.
  * Различается только источником данных и фильтрами (`_modalKind` из стека модалок).
  *
  * kinds: `flows.tool_picker` | `flows.code_node_templates` → один tagName.
+ * `flows.tool_picker`: `pickMode` = `all` | `flow_only` | `mcp_only`; при `all` — вкладки
+ * Все / Code / Flows / MCP (фильтр по `flows/tools_all` без лишних запросов).
  */
 
 import { html, css, nothing } from 'lit';
@@ -15,6 +17,7 @@ import '@platform/lib/components/platform-icon.js';
 import { embedAssistantMarkdownToHtml } from '@platform/lib/embed-chat/embed-chat-markdown.js';
 import { registryItemIconName, registryItemTitle } from '../_helpers/flows-registry-item-icon.js';
 import { isPlainObject } from '../_helpers/flows-resolvers.js';
+import { isMcpToolRegistryItem } from '../_helpers/flows-mcp-tool-registry.js';
 import { getNodeTypeMeta } from '../constants/node-icons.js';
 
 function _templatesFromResult(result) {
@@ -49,6 +52,7 @@ export class FlowsLibraryPickerModal extends PlatformModal {
         _search: { state: true },
         _sourceTab: { state: true },
         _activeTag: { state: true },
+        _toolCategoryTab: { state: true },
     };
 
     static styles = [
@@ -235,6 +239,7 @@ export class FlowsLibraryPickerModal extends PlatformModal {
         this._search = '';
         this._sourceTab = 'catalog';
         this._activeTag = '';
+        this._toolCategoryTab = 'all';
         this._toolsAll = this.useOp('flows/tools_all');
         this._codeTemplates = this.useOp('flows/code_templates');
     }
@@ -249,6 +254,7 @@ export class FlowsLibraryPickerModal extends PlatformModal {
             this._search = '';
             this._activeTag = '';
             this._sourceTab = 'catalog';
+            this._toolCategoryTab = 'all';
             this.size = 'full';
             if (this._isCodeNodeTemplates()) {
                 void this._codeTemplates.run({
@@ -346,6 +352,19 @@ export class FlowsLibraryPickerModal extends PlatformModal {
         let rows = list;
         if (mode === 'flow_only') {
             rows = rows.filter((t) => t.item_type === 'flow');
+        } else if (mode === 'mcp_only') {
+            rows = rows.filter((t) => isMcpToolRegistryItem(t));
+        } else {
+            const tab = this._toolCategoryTab;
+            if (tab === 'code') {
+                rows = rows.filter(
+                    (t) => t.item_type === 'tool' && !isMcpToolRegistryItem(t),
+                );
+            } else if (tab === 'flow') {
+                rows = rows.filter((t) => t.item_type === 'flow');
+            } else if (tab === 'mcp') {
+                rows = rows.filter((t) => isMcpToolRegistryItem(t));
+            }
         }
         const q = _lower(this._search);
         if (q.length === 0) {
@@ -378,7 +397,7 @@ export class FlowsLibraryPickerModal extends PlatformModal {
         if (item.item_type === 'flow') {
             return 'flow';
         }
-        if (typeof item.mcp_server_id === 'string' && item.mcp_server_id.length > 0) {
+        if (isMcpToolRegistryItem(item)) {
             return 'mcp';
         }
         return 'code';
@@ -403,6 +422,46 @@ export class FlowsLibraryPickerModal extends PlatformModal {
             return nothing;
         }
         return html`<div class="lib-md">${unsafeHTML(htmlStr)}</div>`;
+    }
+
+    _showToolCategoryTabs() {
+        const m = this.pickMode;
+        return m !== 'flow_only' && m !== 'mcp_only';
+    }
+
+    _renderToolCategoryTabs() {
+        if (!this._showToolCategoryTabs()) {
+            return nothing;
+        }
+        const t = this._toolCategoryTab;
+        return html`
+            <div class="tabs" role="tablist" aria-label=${this.t('tool_picker_modal.tabs_aria')}>
+                <button
+                    type="button"
+                    role="tab"
+                    class="tab ${t === 'all' ? 'is-on' : ''}"
+                    @click=${() => { this._toolCategoryTab = 'all'; }}
+                >${this.t('tool_picker_modal.tab_all')}</button>
+                <button
+                    type="button"
+                    role="tab"
+                    class="tab ${t === 'code' ? 'is-on' : ''}"
+                    @click=${() => { this._toolCategoryTab = 'code'; }}
+                >${this.t('tool_picker_modal.tab_code')}</button>
+                <button
+                    type="button"
+                    role="tab"
+                    class="tab ${t === 'flow' ? 'is-on' : ''}"
+                    @click=${() => { this._toolCategoryTab = 'flow'; }}
+                >${this.t('tool_picker_modal.tab_flows')}</button>
+                <button
+                    type="button"
+                    role="tab"
+                    class="tab ${t === 'mcp' ? 'is-on' : ''}"
+                    @click=${() => { this._toolCategoryTab = 'mcp'; }}
+                >${this.t('tool_picker_modal.tab_mcp')}</button>
+            </div>
+        `;
     }
 
     _renderFilterBar() {
@@ -542,16 +601,22 @@ export class FlowsLibraryPickerModal extends PlatformModal {
         const busy = this._toolsAll.busy;
         const rows = this._pickModeRows();
         if (busy && this._toolsAllItems().length === 0) {
-            return html`${this._renderFilterBar()}<glass-spinner></glass-spinner>`;
+            return html`
+                ${this._renderFilterBar()}
+                ${this._renderToolCategoryTabs()}
+                <glass-spinner></glass-spinner>
+            `;
         }
         if (rows.length === 0) {
             return html`
                 ${this._renderFilterBar()}
+                ${this._renderToolCategoryTabs()}
                 <div class="lib-empty">${this.t('tool_picker_modal.empty')}</div>
             `;
         }
         return html`
             ${this._renderFilterBar()}
+            ${this._renderToolCategoryTabs()}
             <div class="lib-grid" role="list">
                 ${rows.map((t) => this._renderRegistryCard(t, { onSelect: () => this._pickToolLike(t) }))}
             </div>
@@ -631,6 +696,9 @@ export class FlowsLibraryPickerModal extends PlatformModal {
     renderHeader() {
         if (this._isCodeNodeTemplates()) {
             return this.t('code_node_templates_modal.title');
+        }
+        if (this.pickMode === 'mcp_only') {
+            return this.t('tool_picker_modal.title_mcp');
         }
         if (this.pickMode === 'flow_only') {
             return this.t('tool_picker_modal.title_flow');

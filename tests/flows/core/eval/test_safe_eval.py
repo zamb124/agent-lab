@@ -1019,12 +1019,11 @@ async def run(state):
         assert result["product"] == 42
 
 
-def test_python_namespace_has_no_get_container() -> None:
-    """В inline namespace нет DI, произвольного FS и настроек сервиса."""
+def test_python_namespace_security_and_codegen_exec_parity() -> None:
+    """Inline namespace: запрет лишнего DI/FS; плюс символы для exec-строки встроенных codegen-тулов."""
     from apps.flows.src.eval.namespace import PythonNamespaceBuilder
 
     ns = PythonNamespaceBuilder().build()
-    assert "get_container" not in ns
     assert "get_settings" not in ns
     assert "Path" not in ns
     assert "read_path_bytes" not in ns
@@ -1038,6 +1037,39 @@ def test_python_namespace_has_no_get_container() -> None:
     assert "create_file" in ns
     assert "ask_user_tool" in ns
     assert ns["ask_user_tool"] is not ns["ask_user"]
+
+    assert callable(ns["get_code_runner"])
+    assert callable(ns["get_llm"])
+    assert callable(ns["execution_state_for_codegen"])
+    assert callable(ns["build_sandbox_docs_markdown"])
+    assert callable(ns["run_codegen_stages"])
+    assert ns["CodegenStagesSuccess"] is not None
+    assert ns["CodegenStagesFailure"] is not None
+    assert callable(ns["sandbox_feedback_hint"])
+    assert callable(ns["syntax_retry_hint"])
+    assert callable(ns["_system_rules_block"])
+    assert ns["LLMGeneratedCode"] is not None
+
+
+@pytest.mark.asyncio
+async def test_execute_tool_string_uses_eval_namespace_for_codegen_helpers() -> None:
+    """Путь CodeNode: exec(code, namespace) — глобалы только из PythonNamespaceBuilder, не из модуля тула."""
+    from apps.flows.src.runners.python import PythonCodeRunner
+
+    runner = PythonCodeRunner()
+    code = """
+async def probe_exec_path(state):
+    base = execution_state_for_codegen(state)
+    return {"probe": True, "vars_len": len(base.variables)}
+"""
+    state = ExecutionState(
+        task_id="t_probe_exec_ns",
+        context_id="c_probe_exec_ns",
+        user_id="u_probe_exec_ns",
+        session_id="flow_probe_exec_ns:c_probe_exec_ns",
+    )
+    out = await runner.execute_tool(code, {}, state)
+    assert out == {"probe": True, "vars_len": len(state.variables)}
 
 
 def test_compile_rejects_container_import_in_source() -> None:

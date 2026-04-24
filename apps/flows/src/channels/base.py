@@ -40,6 +40,7 @@ from core.logging import get_logger
 from apps.flows.src.mock import check_mock_permission, resolve_mock_config
 from apps.flows.src.models.flow_config import Edge, SkillConfig
 from apps.flows.src.models.enums import MergeMode, NodeType
+from apps.flows.src.services.flow_node_merge import merge_incoming_node_dict_for_persist
 from apps.flows.src.services.flow_validator import FlowValidator, ValidationSeverity
 from apps.flows.src.state import collect_flow_node_files, create_initial_state
 from apps.flows.src.state.cancellation import CancellationToken, FlowCancelled, set_cancellation_token
@@ -1024,12 +1025,21 @@ class BaseChannel(ABC):
             else (existing_skill.variables_mode if existing_skill else "merge")
         )
 
+        raw_skill_nodes = skill_body.get("nodes")
+        if raw_skill_nodes is not None and isinstance(raw_skill_nodes, dict):
+            prev_skill_nodes = (existing_skill.nodes or {}) if existing_skill else {}
+            skill_nodes = merge_incoming_node_dict_for_persist(
+                dict(raw_skill_nodes), prev_skill_nodes
+            )
+        else:
+            skill_nodes = raw_skill_nodes
+
         skill_config = SkillConfig(
             name=data.get("name", skill_id),
             description=data.get("description", ""),
             tags=data.get("tags", []),
             entry=skill_body.get("entry"),
-            nodes=skill_body.get("nodes"),
+            nodes=skill_nodes,
             nodes_mode=nodes_mode,
             edges=edges,
             edges_mode=edges_mode,

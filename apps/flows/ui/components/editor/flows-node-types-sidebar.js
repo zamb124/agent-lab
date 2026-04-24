@@ -14,11 +14,12 @@
  * Drag: dataTransfer `application/x-flow-node-type` для нод и
  * `application/x-flow-resource-type` для ресурсов.
  *
- * UI-actions: клик по «+» в секции «Триггеры» — `this.openModal('flows.trigger_editor', { flowId })`.
+ * UI-actions: «+» — новый триггер; карандаш/мусор в строке — редактирование / удаление.
  */
 
 import { html, css } from 'lit';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
+import { platformConfirm } from '@platform/lib/components/platform-confirm-modal.js';
 import '@platform/lib/components/platform-icon.js';
 import '@platform/lib/components/glass-spinner.js';
 import { getNodeTypeMeta, getCategoryToken } from '../../constants/node-icons.js';
@@ -35,6 +36,8 @@ const CATEGORY_TO_TOKEN_KEY = Object.freeze({
 });
 
 export class FlowsNodeTypesSidebar extends PlatformElement {
+    static i18nNamespace = 'flows';
+
     static properties = {
         flowId: { type: String, attribute: 'flow-id' },
         _query: { state: true },
@@ -71,7 +74,7 @@ export class FlowsNodeTypesSidebar extends PlatformElement {
                 font-weight: var(--font-semibold);
             }
             .add-btn {
-                width: 22px; height: 22px;
+                width: 24px; height: 24px;
                 display: flex; align-items: center; justify-content: center;
                 border-radius: var(--radius-full);
                 border: 1px solid var(--border-subtle);
@@ -86,17 +89,63 @@ export class FlowsNodeTypesSidebar extends PlatformElement {
                 color: var(--text-tertiary);
                 padding: var(--space-2);
                 text-align: center;
-                border-radius: var(--radius-sm);
+                border-radius: var(--radius-lg);
                 background: var(--glass-solid-subtle);
             }
             .trigger-row {
-                display: flex; align-items: center; gap: var(--space-2);
-                padding: var(--space-2);
-                border-radius: var(--radius-sm);
+                display: flex; align-items: center; justify-content: space-between;
+                gap: var(--space-2);
+                padding: var(--space-2) var(--space-2);
+                border-radius: var(--radius-lg);
                 background: var(--glass-solid-subtle);
-                border: 1px solid var(--border-subtle);
+                border: 1px solid var(--glass-border-subtle);
                 font-size: var(--text-sm);
+                line-height: 1.25;
                 color: var(--text-primary);
+                min-width: 0;
+                box-sizing: border-box;
+            }
+            .trigger-row-main {
+                display: flex; align-items: center; gap: var(--space-2);
+                min-width: 0;
+                flex: 1;
+            }
+            .trigger-row-label {
+                overflow: hidden;
+                text-overflow: ellipsis;
+                white-space: nowrap;
+                line-height: 1.25;
+            }
+            .trigger-row-actions {
+                display: inline-flex;
+                align-items: center;
+                flex-shrink: 0;
+                gap: var(--space-1);
+            }
+            .trigger-row-actions .icon-btn {
+                display: inline-flex;
+                align-items: center;
+                justify-content: center;
+                width: 22px;
+                height: 22px;
+                min-width: 22px;
+                min-height: 22px;
+                box-sizing: border-box;
+                padding: 0;
+                border: 1px solid var(--border-subtle);
+                border-radius: var(--radius-md);
+                background: var(--glass-solid-subtle);
+                color: var(--text-secondary);
+                cursor: pointer;
+                transition: all var(--duration-fast);
+            }
+            .trigger-row-actions .icon-btn:hover {
+                background: var(--glass-solid-strong);
+                color: var(--text-primary);
+            }
+            .trigger-row-actions .icon-btn.danger:hover {
+                color: var(--error, #f43f5e);
+                border-color: var(--error, #f43f5e);
             }
 
             /* Search */
@@ -116,12 +165,13 @@ export class FlowsNodeTypesSidebar extends PlatformElement {
                 width: 100%;
                 box-sizing: border-box;
                 padding: var(--space-2) var(--space-2) var(--space-2) calc(var(--space-2) + 22px);
-                border-radius: var(--radius-md);
+                border-radius: var(--radius-lg);
                 border: 1px solid var(--glass-border-subtle);
                 background: var(--glass-solid-subtle);
                 color: var(--text-primary);
                 font: inherit;
                 font-size: var(--text-sm);
+                line-height: 1.25;
             }
             .search-input:focus {
                 outline: none;
@@ -192,6 +242,7 @@ export class FlowsNodeTypesSidebar extends PlatformElement {
         this._nodeTypesOp = this.useOp('flows/node_types');
         this._resourceTypesOp = this.useOp('flows/resource_types');
         this._triggersOp = this.useOp('flows/triggers_list');
+        this._removeTriggerOp = this.useOp('flows/trigger_remove');
     }
 
     connectedCallback() {
@@ -232,7 +283,35 @@ export class FlowsNodeTypesSidebar extends PlatformElement {
 
     _addTrigger() {
         if (!this.flowId) return;
-        this.openModal('flows.trigger_editor', { flowId: this.flowId });
+        this.openModal('flows.trigger_editor', { flowId: this.flowId, trigger: null });
+    }
+
+    _editTrigger(tr) {
+        if (!this.flowId) return;
+        if (!tr || typeof tr.trigger_id !== 'string' || tr.trigger_id.length === 0) {
+            throw new Error('FlowsNodeTypesSidebar._editTrigger: trigger with trigger_id required');
+        }
+        this.openModal('flows.trigger_editor', { flowId: this.flowId, trigger: tr });
+    }
+
+    async _deleteTrigger(tr) {
+        if (!this.flowId) return;
+        if (!tr || typeof tr.trigger_id !== 'string' || tr.trigger_id.length === 0) {
+            throw new Error('FlowsNodeTypesSidebar._deleteTrigger: trigger with trigger_id required');
+        }
+        const ok = await platformConfirm(
+            this.t('triggers_modal.delete_message', { id: tr.trigger_id }),
+            {
+                title: this.t('triggers_modal.delete_title'),
+                variant: 'danger',
+                confirmVariant: 'danger',
+                confirmText: this.t('triggers_modal.action_delete'),
+                cancelText: this.t('triggers_modal.action_cancel'),
+            },
+        );
+        if (!ok) return;
+        await this._removeTriggerOp.run({ flow_id: this.flowId, trigger_id: tr.trigger_id });
+        void this._triggersOp.run({ flow_id: this.flowId });
     }
 
     _renderTriggers() {
@@ -252,8 +331,30 @@ export class FlowsNodeTypesSidebar extends PlatformElement {
                     ? html`<div class="triggers-empty">${this.t('node_types_sidebar.no_triggers')}</div>`
                     : triggerItems.map((tr) => html`
                         <div class="trigger-row">
-                            <platform-icon name="bell-ring" size="14"></platform-icon>
-                            <span>${tr.name || tr.trigger_id}</span>
+                            <div class="trigger-row-main">
+                                <platform-icon name="bell-ring" size="14"></platform-icon>
+                                <span class="trigger-row-label">${tr.name || tr.trigger_id}</span>
+                            </div>
+                            <div class="trigger-row-actions" @click=${(e) => e.stopPropagation()}>
+                                <button
+                                    type="button"
+                                    class="icon-btn"
+                                    title=${this.t('triggers_modal.action_edit')}
+                                    aria-label=${this.t('triggers_modal.action_edit')}
+                                    @click=${() => this._editTrigger(tr)}
+                                >
+                                    <platform-icon name="edit" size="12"></platform-icon>
+                                </button>
+                                <button
+                                    type="button"
+                                    class="icon-btn danger"
+                                    title=${this.t('triggers_modal.action_delete')}
+                                    aria-label=${this.t('triggers_modal.action_delete')}
+                                    @click=${() => this._deleteTrigger(tr)}
+                                >
+                                    <platform-icon name="trash" size="12"></platform-icon>
+                                </button>
+                            </div>
                         </div>
                     `)}
             </div>

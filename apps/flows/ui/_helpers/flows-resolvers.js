@@ -228,6 +228,64 @@ function _diffForSkillOverride(base, effective) {
 }
 
 /**
+ * Тело flow для публикации (тот же объект, что уходит в PATCH) из slice редактора.
+ *
+ * @param {unknown} state
+ * @returns {Record<string, unknown> | null}
+ */
+export function buildFlowPublishBody(state) {
+    if (!isPlainObject(state) || !isPlainObject(state.flowConfig)) {
+        return null;
+    }
+    const data = isPlainObject(state.skillsData) ? state.skillsData : {};
+    const skillId = state.currentSkillId;
+    const isBase = !skillId || skillId === 'base';
+    const body = { ...state.flowConfig };
+    if (isBase) {
+        body.nodes = data.nodes;
+        body.edges = data.edges;
+        body.entry = data.entry;
+        body.variables = data.variables;
+        body.resources = data.resources;
+    } else {
+        const existingSkills = body.skills && typeof body.skills === 'object' ? body.skills : {};
+        const existingSkill = isPlainObject(existingSkills[skillId]) ? existingSkills[skillId] : { name: skillId };
+        const inheritedNodeIds = asArray(state.inheritedNodeIds);
+        const inheritedEdgeKeys = asArray(state.inheritedEdgeKeys);
+        const baseNodes = isPlainObject(state.flowConfig?.nodes) ? state.flowConfig.nodes : {};
+        const ownNodes = {};
+        for (const [id, node] of Object.entries(isPlainObject(data.nodes) ? data.nodes : {})) {
+            if (!inheritedNodeIds.includes(id)) {
+                ownNodes[id] = node;
+            } else {
+                const baseN = baseNodes[id];
+                const fragment = buildSkillNodeOverride(baseN, node);
+                if (isPlainObject(fragment) && Object.keys(fragment).length > 0) {
+                    ownNodes[id] = fragment;
+                }
+            }
+        }
+        const ownEdges = asArray(data.edges).filter((edge) => {
+            const { from, to } = getEdgeEndpoints(edge);
+            const key = `${from}->${to}`;
+            return !inheritedEdgeKeys.includes(key);
+        });
+        body.skills = {
+            ...existingSkills,
+            [skillId]: {
+                ...existingSkill,
+                nodes: ownNodes,
+                edges: ownEdges,
+                entry: data.entry,
+                variables: data.variables,
+            },
+        };
+        body.resources = data.resources;
+    }
+    return body;
+}
+
+/**
  * Статус панели тестового запуска: idle / running / passed / failed.
  *
  * @param {{ runInFlight: boolean, taskId: string | null, activeAssistant: unknown, runTrace: unknown }} params
@@ -314,4 +372,45 @@ export function humanReadableErrorSummary(text) {
         return `${line.slice(0, 200)}…`;
     }
     return line;
+}
+
+/**
+ * Имя иконки platform-icon для визуализации tool call по полю `name` (эвристика).
+ *
+ * @param {string} name
+ * @returns {string}
+ */
+export function toolCallIconName(name) {
+    if (typeof name !== 'string') {
+        throw new Error('toolCallIconName: string required');
+    }
+    const lower = name.toLowerCase();
+    if (lower.length === 0) {
+        return 'zap';
+    }
+    if (lower.includes('search') || lower.includes('rag') || lower.includes('retriev')) {
+        return 'search';
+    }
+    if (lower.includes('file') || lower.includes('read') || lower.includes('upload') || lower.includes('download')) {
+        return 'file';
+    }
+    if (lower.includes('contract') || lower.includes('draft') || lower.includes('write') || lower.includes('edit')) {
+        return 'edit';
+    }
+    if (lower.includes('http') || lower.includes('fetch') || lower.includes('web') || lower.includes('request')) {
+        return 'search';
+    }
+    if (lower.includes('code') || lower.includes('run') || lower.includes('exec') || lower.includes('shell')) {
+        return 'terminal';
+    }
+    if (lower.includes('mail') || lower.includes('message') || lower.includes('chat')) {
+        return 'message-circle';
+    }
+    if (lower.includes('calendar') || lower.includes('schedule') || lower.includes('time')) {
+        return 'calendar';
+    }
+    if (lower.includes('image') || lower.includes('photo') || lower.includes('vision')) {
+        return 'image';
+    }
+    return 'zap';
 }

@@ -27,10 +27,8 @@ import '@platform/lib/components/platform-icon.js';
 import {
     asArray,
     asObject,
-    asString,
     isPlainObject,
-    getEdgeEndpoints,
-    buildSkillNodeOverride,
+    buildFlowPublishBody,
 } from '../../_helpers/flows-resolvers.js';
 
 export class FlowsEditorHeader extends PlatformElement {
@@ -60,7 +58,7 @@ export class FlowsEditorHeader extends PlatformElement {
             .icon-btn {
                 width: 34px; height: 34px;
                 display: flex; align-items: center; justify-content: center;
-                border-radius: var(--radius-md);
+                border-radius: var(--radius-lg);
                 border: 1px solid var(--border-subtle);
                 background: var(--glass-solid-subtle);
                 color: var(--text-secondary);
@@ -147,7 +145,7 @@ export class FlowsEditorHeader extends PlatformElement {
             .header-btn {
                 display: inline-flex; align-items: center; gap: var(--space-1);
                 padding: 6px var(--space-3);
-                border-radius: var(--radius-md);
+                border-radius: var(--radius-lg);
                 border: 1px solid var(--border-subtle);
                 background: var(--glass-solid-subtle);
                 color: var(--text-secondary);
@@ -158,6 +156,7 @@ export class FlowsEditorHeader extends PlatformElement {
             .header-btn:hover { background: var(--glass-solid-strong); color: var(--text-primary); }
             .header-btn.icon-only { padding: 6px; width: 34px; height: 34px; justify-content: center; }
             .header-btn.primary {
+                border-radius: var(--radius-full);
                 background: var(--accent);
                 color: var(--text-inverse);
                 border-color: var(--accent);
@@ -205,52 +204,9 @@ export class FlowsEditorHeader extends PlatformElement {
     async _save() {
         const state = this._editor.state;
         if (!state || !state.flowConfig || !this.flowId) return;
+        const body = buildFlowPublishBody(state);
+        if (!body) return;
         this._editor.setSaving({ saving: true });
-        const data = isPlainObject(state.skillsData) ? state.skillsData : {};
-        const skillId = state.currentSkillId;
-        const isBase = !skillId || skillId === 'base';
-        const body = { ...state.flowConfig };
-        if (isBase) {
-            body.nodes = data.nodes;
-            body.edges = data.edges;
-            body.entry = data.entry;
-            body.variables = data.variables;
-            body.resources = data.resources;
-        } else {
-            const existingSkills = body.skills && typeof body.skills === 'object' ? body.skills : {};
-            const existingSkill = isPlainObject(existingSkills[skillId]) ? existingSkills[skillId] : { name: skillId };
-            const inheritedNodeIds = asArray(state.inheritedNodeIds);
-            const inheritedEdgeKeys = asArray(state.inheritedEdgeKeys);
-            const baseNodes = isPlainObject(state.flowConfig?.nodes) ? state.flowConfig.nodes : {};
-            const ownNodes = {};
-            for (const [id, node] of Object.entries(isPlainObject(data.nodes) ? data.nodes : {})) {
-                if (!inheritedNodeIds.includes(id)) {
-                    ownNodes[id] = node;
-                } else {
-                    const baseN = baseNodes[id];
-                    const fragment = buildSkillNodeOverride(baseN, node);
-                    if (isPlainObject(fragment) && Object.keys(fragment).length > 0) {
-                        ownNodes[id] = fragment;
-                    }
-                }
-            }
-            const ownEdges = asArray(data.edges).filter((edge) => {
-                const { from, to } = getEdgeEndpoints(edge);
-                const key = `${from}->${to}`;
-                return !inheritedEdgeKeys.includes(key);
-            });
-            body.skills = {
-                ...existingSkills,
-                [skillId]: {
-                    ...existingSkill,
-                    nodes: ownNodes,
-                    edges: ownEdges,
-                    entry: data.entry,
-                    variables: data.variables,
-                },
-            };
-            body.resources = data.resources;
-        }
         await this._update.run({ flow_id: this.flowId, body });
         this._editor.setSaving({ saving: false });
         this._editor.setDirty({ dirty: false });
@@ -262,11 +218,29 @@ export class FlowsEditorHeader extends PlatformElement {
     }
 
     _openCodeView() {
-        this.dispatch('flows/code_view/open_requested', { flowId: this.flowId, skillId: this.skillId });
+        if (typeof this.flowId !== 'string' || this.flowId.length === 0) {
+            return;
+        }
+        const state = asObject(this._editor.state);
+        const body = buildFlowPublishBody(state);
+        if (!body) {
+            return;
+        }
+        this.openModal('flows.raw_json', {
+            value: body,
+            downloadFileName: `${this.flowId}.json`,
+        });
     }
 
     _openLara() {
         this.dispatch('flows/lara/open_requested', { flowId: this.flowId, skillId: this.skillId });
+    }
+
+    _openTriggers() {
+        if (typeof this.flowId !== 'string' || this.flowId.length === 0) {
+            return;
+        }
+        this.openModal('flows.triggers', { flowId: this.flowId });
     }
 
     render() {
@@ -315,6 +289,15 @@ export class FlowsEditorHeader extends PlatformElement {
             </div>
 
             <div class="header-right">
+                <button
+                    class="header-btn icon-only"
+                    type="button"
+                    title=${this.t('flows_sidebar.footer_triggers')}
+                    aria-label=${this.t('flows_sidebar.footer_triggers')}
+                    @click=${this._openTriggers}
+                >
+                    <platform-icon name="zap" size="16"></platform-icon>
+                </button>
                 <button class="header-btn icon-only" type="button" title=${this.t('editor_header.lara')} @click=${this._openLara}>
                     <platform-icon name="ai" size="16"></platform-icon>
                 </button>

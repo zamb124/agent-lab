@@ -12,7 +12,7 @@
  *   5a. Tools-режим (`structured_output=false`):
  *       - ReAct loop (`cfg.react`: loop_mode + max_iterations в одной строке;
  *         при explicit — exit_tool + strict в одной строке; reminder_message);
- *       - Инструменты (`cfg.tools: ToolReference[]`): chips + picker + create.
+ *       - Инструменты (`cfg.tools: ToolReference[]`): chips (иконка + имя) + выбор из библиотеки.
  *   5b. Structured-режим (`structured_output=true`):
  *       - Output JSON Schema (`cfg.output_schema`).
  *
@@ -33,6 +33,8 @@ import '@platform/lib/components/glass-button.js';
 import '@platform/lib/components/platform-icon.js';
 import '@platform/lib/components/platform-switch.js';
 import { asObject, isPlainObject } from '../../_helpers/flows-resolvers.js';
+import { getNodeTypeMeta } from '../../constants/node-icons.js';
+import { getToolRefVisualMeta, normalizeToolRef as normalizeVisualToolRef } from '../../_helpers/flows-tool-visual.js';
 import { normalizeToolRef } from '../../_helpers/flows-tool-ref.js';
 
 const REACT_LOOP_MODES = Object.freeze(['auto', 'explicit']);
@@ -66,7 +68,6 @@ export class FlowsLlmNodeEditor extends PlatformElement {
         previewExecutionState: { type: Object },
         expanded: { type: Boolean, reflect: true },
         embedded: { type: Boolean, reflect: true },
-        _addToolMenuOpen: { state: true },
     };
 
     static styles = [
@@ -117,33 +118,13 @@ export class FlowsLlmNodeEditor extends PlatformElement {
                 border-radius: var(--radius-full);
                 cursor: pointer;
             }
+            .chip .chip-label { min-width: 0; }
             .chip button {
                 background: none; border: none; padding: 0; margin: 0;
                 color: var(--accent); cursor: pointer;
                 font-size: var(--text-base); line-height: 1;
             }
             .add-tools { display: flex; gap: var(--space-2); flex-wrap: wrap; }
-            .menu {
-                position: relative; display: inline-block;
-            }
-            .menu-list {
-                position: absolute; top: 100%; left: 0; margin-top: 4px;
-                z-index: var(--z-dropdown);
-                min-width: 180px;
-                background: var(--glass-solid-strong);
-                border: 1px solid var(--border-default);
-                border-radius: var(--radius-md);
-                box-shadow: var(--glass-shadow-medium);
-                padding: var(--space-1);
-            }
-            .menu-item {
-                padding: var(--space-1) var(--space-2);
-                cursor: pointer;
-                font-size: var(--text-sm);
-                color: var(--text-primary);
-                border-radius: var(--radius-sm);
-            }
-            .menu-item:hover { background: var(--glass-solid-medium); }
             .filter-list {
                 display: flex; flex-direction: column; gap: var(--space-1);
                 max-height: 180px; overflow-y: auto;
@@ -212,7 +193,6 @@ export class FlowsLlmNodeEditor extends PlatformElement {
         this.previewExecutionState = null;
         this.expanded = false;
         this.embedded = false;
-        this._addToolMenuOpen = false;
         this._editor = this.useOp('flows/editor');
         this._pendingFromCanvas = this.select((s) => {
             const ed = s.flowsEditor;
@@ -368,19 +348,6 @@ export class FlowsLlmNodeEditor extends PlatformElement {
         });
     }
 
-    _openCreateTool(kind) {
-        this._addToolMenuOpen = false;
-        this.openModal('flows.tool_create', {
-            kind,
-            onCreated: (toolRef) => {
-                if (!toolRef || typeof toolRef.tool_id !== 'string') return;
-                const tools = Array.isArray(this.nodeConfig?.tools) ? [...this.nodeConfig.tools] : [];
-                tools.push(toolRef);
-                this._emitPatch({ tools });
-            },
-        });
-    }
-
     _onEditTool(toolRef) {
         const { tool_id: toolId, raw } = normalizeToolRef(toolRef);
         const st = asObject(this._editor.state);
@@ -411,17 +378,49 @@ export class FlowsLlmNodeEditor extends PlatformElement {
         });
     }
 
+    _toolEntryId(t) {
+        if (typeof t === 'string' && t.length > 0) {
+            return t;
+        }
+        if (t && typeof t === 'object' && typeof t.tool_id === 'string' && t.tool_id.length > 0) {
+            return t.tool_id;
+        }
+        return '';
+    }
+
+    _toolChipVisualMeta(t) {
+        const ref = normalizeVisualToolRef(t);
+        if (ref === null) {
+            return getNodeTypeMeta('code');
+        }
+        return getToolRefVisualMeta(ref);
+    }
+
     _onRemoveTool(toolId) {
+        if (typeof toolId !== 'string' || toolId.length === 0) {
+            throw new Error('flows-llm-node-editor: remove tool requires tool_id');
+        }
         const tools = Array.isArray(this.nodeConfig?.tools) ? this.nodeConfig.tools : [];
-        const next = tools.filter((t) => t && t.tool_id !== toolId);
+        const next = tools.filter((entry) => {
+            if (typeof entry === 'string') {
+                return entry !== toolId;
+            }
+            return entry && entry.tool_id !== toolId;
+        });
         this._emitPatch({ tools: next });
     }
 
     _toolLabel(t) {
-        if (!t) return '';
+        if (typeof t === 'string' && t.length > 0) {
+            return t;
+        }
+        if (!t || typeof t !== 'object') {
+            return '';
+        }
         if (typeof t.name === 'string' && t.name.length > 0) return t.name;
         if (typeof t.title === 'string' && t.title.length > 0) return t.title;
-        return t.tool_id;
+        if (typeof t.tool_id === 'string' && t.tool_id.length > 0) return t.tool_id;
+        return '';
     }
 
     _renderPromptSection() {
@@ -591,32 +590,23 @@ export class FlowsLlmNodeEditor extends PlatformElement {
                 <h4 class="block-title">${this.t('llm_node_editor.section_tools')}</h4>
                 <div class="block-card">
                     <div class="row">
-                        ${tools.map((t) => html`
+                        ${tools.map((t) => {
+                            const vm = this._toolChipVisualMeta(t);
+                            const tid = this._toolEntryId(t);
+                            return html`
                             <span class="chip" @click=${() => this._onEditTool(t)}>
-                                ${this._toolLabel(t)}
-                                <button type="button" @click=${(e) => { e.stopPropagation(); this._onRemoveTool(t.tool_id); }}>×</button>
+                                <platform-icon name=${vm.icon} size="14"></platform-icon>
+                                <span class="chip-label">${this._toolLabel(t)}</span>
+                                <button type="button" @click=${(e) => { e.stopPropagation(); this._onRemoveTool(tid); }}>×</button>
                             </span>
-                        `)}
+                        `;
+                        })}
                     </div>
                     <div class="add-tools">
                         <glass-button size="sm" variant="secondary" @click=${this._onPickTool}>
                             <platform-icon name="plus"></platform-icon>
                             ${this.t('llm_node_editor.tools_add_library')}
                         </glass-button>
-                        <div class="menu">
-                            <glass-button size="sm" variant="secondary" @click=${() => { this._addToolMenuOpen = !this._addToolMenuOpen; }}>
-                                <platform-icon name="plus"></platform-icon>
-                                ${this.t('llm_node_editor.tools_add_create')}
-                            </glass-button>
-                            ${this._addToolMenuOpen ? html`
-                                <div class="menu-list" @click=${(e) => e.stopPropagation()}>
-                                    <div class="menu-item" @click=${() => this._openCreateTool('code')}>${this.t('llm_node_editor.tools_create_code')}</div>
-                                    <div class="menu-item" @click=${() => this._openCreateTool('llm')}>${this.t('llm_node_editor.tools_create_llm')}</div>
-                                    <div class="menu-item" @click=${() => this._openCreateTool('api')}>${this.t('llm_node_editor.tools_create_api')}</div>
-                                    <div class="menu-item" @click=${() => this._openCreateTool('subflow')}>${this.t('llm_node_editor.tools_create_subflow')}</div>
-                                </div>
-                            ` : ''}
-                        </div>
                     </div>
                 </div>
             </section>

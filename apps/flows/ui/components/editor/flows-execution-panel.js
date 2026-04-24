@@ -912,6 +912,7 @@ export class FlowsExecutionPanel extends PlatformElement {
                                                 .timestamp=${asString(message.timestamp)}
                                                 ?streaming=${Boolean(message.streaming)}
                                                 .reasoning=${asString(message.reasoning)}
+                                                .activity=${asString(message.activity)}
                                                 .toolCalls=${asArray(message.toolCalls)}
                                                 .toolResults=${asArray(message.toolResults)}
                                                 .inputRequired=${message.inputRequired != null ? message.inputRequired : null}

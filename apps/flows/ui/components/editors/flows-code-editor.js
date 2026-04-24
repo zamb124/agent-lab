@@ -17,6 +17,7 @@
  * События (emit, slot-композиция):
  *   - 'change' { value }
  *   - 'save' { value }    — Cmd/Ctrl+S
+ * Tab в фокусе редактора вставляет четыре пробела (без ухода фокуса в форму).
  */
 
 import { html, css } from 'lit';
@@ -43,6 +44,7 @@ export class FlowsCodeEditor extends PlatformElement {
         readonly: { type: Boolean },
         placeholder: { type: String },
         showToolbar: { type: Boolean, attribute: 'show-toolbar' },
+        fillParent: { type: Boolean, reflect: true, attribute: 'fill-parent' },
         fullscreen: { type: Boolean, reflect: true, attribute: 'fullscreen' },
         completionContext: { type: Object, attribute: false },
     };
@@ -88,6 +90,47 @@ export class FlowsCodeEditor extends PlatformElement {
             :host([fullscreen]) .cm-scroller {
                 min-height: 0;
                 height: 100%;
+            }
+            :host([fill-parent]) {
+                min-height: 0;
+                flex: 1 1 auto;
+                display: flex;
+                flex-direction: column;
+                max-height: 100%;
+            }
+            :host([fill-parent]) .editor-root {
+                flex: 1 1 auto;
+                min-height: 0;
+                display: flex;
+                flex-direction: column;
+                max-height: 100%;
+            }
+            :host([fill-parent]) #cm-wrap {
+                flex: 1 1 auto;
+                min-height: 0;
+                overflow: hidden;
+                display: flex;
+                flex-direction: column;
+            }
+            :host([fill-parent]) #cm-host {
+                flex: 1 1 auto;
+                min-height: 0;
+                overflow: hidden;
+                display: flex;
+                flex-direction: column;
+            }
+            :host([fill-parent]) .cm-editor {
+                min-height: 0;
+                flex: 1 1 auto;
+                display: flex;
+                flex-direction: column;
+                height: 100%;
+                max-height: 100%;
+            }
+            :host([fill-parent]) .cm-scroller {
+                flex: 1 1 auto;
+                min-height: 0;
+                overflow: auto;
             }
             .editor-header {
                 display: flex;
@@ -160,6 +203,7 @@ export class FlowsCodeEditor extends PlatformElement {
         this.readonly = false;
         this.placeholder = '';
         this.showToolbar = true;
+        this.fillParent = false;
         this.fullscreen = false;
         this.completionContext = null;
         this._editorView = null;
@@ -201,6 +245,13 @@ export class FlowsCodeEditor extends PlatformElement {
 
     updated(changed) {
         super.updated?.(changed);
+        if (this._editorView && (changed.has('fillParent') || changed.has('fullscreen'))) {
+            queueMicrotask(() => {
+                if (this._editorView) {
+                    this._editorView.requestMeasure();
+                }
+            });
+        }
         if (this._editorView && this._cm && this._themeCompartment) {
             const next = this._themeSel.value;
             if (this._lastTheme !== next) {
@@ -269,24 +320,37 @@ export class FlowsCodeEditor extends PlatformElement {
         this._languageCompartment = new cm.Compartment();
         this._themeCompartment = new cm.Compartment();
         this._lastTheme = this._themeSel.value;
+        const fourSpaces = '    ';
+        const keymapForTab = [
+            {
+                key: 'Tab',
+                run: (view) => {
+                    if (view.state.readOnly) {
+                        return false;
+                    }
+                    view.dispatch(view.state.replaceSelection(fourSpaces));
+                    return true;
+                },
+            },
+            ...cm.defaultKeymap,
+            ...cm.historyKeymap,
+            {
+                key: 'Mod-s',
+                run: () => {
+                    this.emit('save', { value: this._editorView.state.doc.toString() });
+                    return true;
+                },
+            },
+        ];
         const extensions = [
             cm.history(),
             cm.lineNumbers(),
             this._readonlyCompartment.of(cm.EditorState.readOnly.of(this.readonly)),
             this._languageCompartment.of(this._buildLanguageExtension()),
             this._themeCompartment.of(this._buildThemeExtension()),
+            cm.EditorState.tabSize.of(4),
             cm.autocompletion({ override: [(ctx) => this._completionSource(ctx)] }),
-            cm.keymap.of([
-                ...cm.defaultKeymap,
-                ...cm.historyKeymap,
-                {
-                    key: 'Mod-s',
-                    run: () => {
-                        this.emit('save', { value: this._editorView.state.doc.toString() });
-                        return true;
-                    },
-                },
-            ]),
+            cm.keymap.of(keymapForTab),
             cm.EditorView.updateListener.of((update) => {
                 if (update.docChanged) {
                     const next = update.state.doc.toString();
@@ -312,6 +376,13 @@ export class FlowsCodeEditor extends PlatformElement {
         if (this._editorView.state.doc.toString() !== docText) {
             this._editorView.dispatch({
                 changes: { from: 0, to: this._editorView.state.doc.length, insert: docText },
+            });
+        }
+        if (this.fillParent) {
+            queueMicrotask(() => {
+                if (this._editorView) {
+                    this._editorView.requestMeasure();
+                }
             });
         }
     }

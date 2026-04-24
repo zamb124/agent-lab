@@ -92,7 +92,7 @@ API `traces` (`task`, `session`, `trace_id`): дерево в `apps/flows/src/ap
 
 - **Импорты — whitelist**: разрешённые корни модулей в **`core/inline_python_eval_policy.py`** (`ALLOWED_IMPORT_ROOTS`); **`apps.*`** и **`core.*`** запрещены. Проверка при компиляции (AST в **`apps/flows/src/eval/compiler.py`**) и в **`__import__`** (**`apps/flows/src/eval/import_policy.py`**, `safe_inline_import`).
 - **Builtins — whitelist**: **`ALLOWED_BUILTINS`** в том же модуле; нет **`open`**, **`eval`**, **`exec`**; **`__import__`** заменён на безопасный.
-- В namespace **нет** **`get_container`**, **`get_settings`**, **`pathlib.Path`**, **`read_path_bytes`** / **`read_path_base64`**. Файлы: **`get_files(state)`**, **`find_file(files, name)`**, **`await reader.read(...)`** — **`source`** как запись вложения, путь или bytes; именованные параметры без отдельного объекта опций (импорт из `core` в inline-коде недоступен).
+- **`get_settings`**, **`pathlib.Path`**, **`read_path_bytes`** / **`read_path_base64`** в user-facing eval нет. Платформенно в namespace: **`get_code_runner`** (фасад `platform_services`) / codegen-символы (паритет `exec`); в кастомном туле в БД не обходить фасады — **`.cursor/rules/eval.mdc`**. Файлы: **`get_files`**, **`find_file`**, **`await reader.read(...)`**.
 - **`BaseTool`**: в **`PythonNamespaceBuilder`** задаётся **`base_tool_class`** снаружи (**`PythonCodeRunner`** из **`FlowContainer.get_code_runner`**, **`CodeResourceProvider`** через **`get_container().base_tool_class`**); **`namespace.py`** не импортирует контейнер.
 - Объекты из **`resources`** попадают в namespace по ключу — провайдеры должны отдавать только безопасные обёртки, не сырые репозитории/DI.
 

@@ -286,6 +286,61 @@ class BaseEmitter(ABC):
         
         await self._publish(event)
 
+    async def emit_edge_executed(
+        self,
+        edge_index: int,
+        from_node: str,
+        to_node: str,
+    ) -> None:
+        """Публикует факт прохождения ребра (для подсветки графа в UI)."""
+        artifact = Artifact(
+            artifact_id=str(uuid.uuid4()),
+            name=f"edge_executed_{edge_index}_{from_node}_{to_node}",
+            parts=[DataPart(data={
+                "event": "edge_executed",
+                "edge_index": edge_index,
+                "from_node": from_node,
+                "to_node": to_node,
+            })],
+        )
+
+        event = TaskArtifactUpdateEvent(
+            task_id=self.state.task_id,
+            context_id=self.state.context_id,
+            artifact=artifact,
+        )
+
+        await self._publish(event)
+
+    async def emit_edge_error(
+        self,
+        edge_index: int,
+        from_node: str,
+        to_node: str,
+        error: str,
+    ) -> None:
+        """Публикует ошибку вычисления условия ребра (подсветка в UI)."""
+        err = error if len(error) <= 500 else error[:500]
+        artifact = Artifact(
+            artifact_id=str(uuid.uuid4()),
+            name=f"edge_error_{edge_index}_{from_node}_{to_node}",
+            parts=[DataPart(data={
+                "event": "edge_error",
+                "edge_index": edge_index,
+                "from_node": from_node,
+                "to_node": to_node,
+                "error": err,
+            })],
+        )
+
+        event = TaskArtifactUpdateEvent(
+            task_id=self.state.task_id,
+            context_id=self.state.context_id,
+            artifact=artifact,
+        )
+
+        await self._publish(event)
+
     async def emit_file_artifact(
         self,
         file_ids: List[str],

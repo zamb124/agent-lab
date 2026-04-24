@@ -133,9 +133,9 @@ obj.field  # прямое обращение
 
 Перед любой реализацией ОБЯЗАТЕЛЬНО проверить, нет ли уже в платформе такого же или очень похожего функционала. Дублирование функционала запрещено.
 
-### 10. НИКАКИХ `get_container()` в тулах и eval-коде
+### 10. `platform_services` / codegen и custom-код в тулах / eval
 
-Тулы (`apps/flows/tools/`) и inline Python-код исполняются в eval-песочнице с контролируемым namespace (`PythonNamespaceBuilder`). Доступ к сервисам платформы — только через узкие фасады `apps/flows/src/eval/platform_services.py` (`get_oauth_service`, `get_file_bytes`, `get_schedule_service`, `get_operator_handoff_service`). `get_container` в теле тула = дыра в безопасности: код получает доступ ко всем репозиториям и данным всех компаний.
+Тулы и inline Python по умолчанию в песочнице `PythonNamespaceBuilder`. Пользовательский код в БД не должен обходить фасады через полный DI. Платформа регистрирует `get_code_runner` (без `FlowContainer`) и codegen-символы для паритета встроенного кода с `FunctionTool`. Канон формулировок: **`.cursor/rules/eval.mdc`**.
 
 ## Zero-Guess
 

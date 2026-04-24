@@ -129,8 +129,10 @@ async def test_premature_completion_on_incomplete_and_join(make_test_state) -> N
 
 
 @pytest.mark.asyncio
-async def test_all_conditional_outgoing_false_is_valid_terminal(make_test_state) -> None:
-    """Все исходы к нодам условные и ни одно не сработало — допустимое завершение (роутер / skill)."""
+async def test_all_conditional_outgoing_false_raises_no_conditional_match(
+    make_test_state,
+) -> None:
+    """Все исходы с to!=null с условием, ни одно не выполнилось — FlowPrematureCompletionError."""
     nodes = {
         "0": CodeNode("0", {"type": "code", "code": _bump_node_code("0")}),
         "1": CodeNode("1", {"type": "code", "code": _bump_node_code("1")}),
@@ -157,11 +159,58 @@ async def test_all_conditional_outgoing_false_is_valid_terminal(make_test_state)
         ],
     )
     state = make_test_state(variables={"route": "stop"})
+    with pytest.raises(FlowPrematureCompletionError) as exc_info:
+        await flow.run(state)
+    assert exc_info.value.payload.get("reason") == "no_conditional_match"
+
+
+@pytest.mark.asyncio
+async def test_router_with_second_branch_reaches_end(make_test_state) -> None:
+    """Покрытие альтернативной ветки: маршрут ведёт в 3, затем END (to: null)."""
+    nodes = {
+        "0": CodeNode("0", {"type": "code", "code": _bump_node_code("0")}),
+        "1": CodeNode("1", {"type": "code", "code": _bump_node_code("1")}),
+        "2": CodeNode("2", {"type": "code", "code": _bump_node_code("2")}),
+        "3": CodeNode("3", {"type": "code", "code": _bump_node_code("3")}),
+    }
+    flow = Flow(
+        flow_id="router_ok",
+        name="router_ok",
+        entry="0",
+        nodes=nodes,
+        edges=[
+            {"from": "0", "to": "1"},
+            {
+                "from": "1",
+                "to": "2",
+                "condition": {
+                    "type": "simple",
+                    "variable": "variables.route",
+                    "operator": "==",
+                    "value": "go",
+                },
+            },
+            {
+                "from": "1",
+                "to": "3",
+                "condition": {
+                    "type": "simple",
+                    "variable": "variables.route",
+                    "operator": "==",
+                    "value": "stop",
+                },
+            },
+            {"from": "2", "to": None},
+            {"from": "3", "to": None},
+        ],
+    )
+    state = make_test_state(variables={"route": "stop"})
     out = await flow.run(state)
     hits = out.variables.get("hits") or {}
     assert hits.get("0") == 1
     assert hits.get("1") == 1
     assert hits.get("2") is None
+    assert hits.get("3") == 1
 
 
 def test_join_required_skips_edge_with_contributes_to_join_false() -> None:

@@ -672,6 +672,96 @@ GLOBALS: List[Dict[str, Any]] = [
         "tags": ["http", "api"],
     },
     {
+        "name": "get_code_runner",
+        "type": "callable",
+        "doc": (
+            "Фасад `platform_services.get_code_runner`: `get_code_runner(language=..., resources=...)` — "
+            "`PythonCodeRunner` или runner для выбранного языка, без `FlowContainer` в namespace. "
+            "В sandbox зарегистрирован для **паритета** `sandbox_codegen` (та же `exec`/`FunctionTool` строка). "
+            "Полный DI в кастомном туле в БД — только через остальные фасады `platform_services` + `namespace`."
+        ),
+        "perspectives": ["editor", "flow", "tool", "node"],
+        "tags": ["eval", "codegen", "runtime"],
+    },
+    {
+        "name": "get_llm",
+        "type": "callable",
+        "doc": (
+            "Фабрика LLM (`core.clients.llm.get_llm`): `get_llm(model_name=..., state=...)`. Для мета-тула codegen в sandbox."
+        ),
+        "perspectives": ["editor", "flow", "tool", "node"],
+        "tags": ["eval", "codegen", "llm"],
+    },
+    {
+        "name": "execution_state_for_codegen",
+        "type": "callable",
+        "doc": (
+            "Копия `state` для прогона сгенерированного `async def run(state):` "
+            "(`ExecutionState` или dict → валидированный `ExecutionState`, deep copy)."
+        ),
+        "perspectives": ["editor", "flow", "tool", "node"],
+        "tags": ["eval", "codegen"],
+    },
+    {
+        "name": "run_codegen_stages",
+        "type": "callable",
+        "doc": (
+            "Прогон сгенерированного кода песочницы: validate → compile → execute → проверка dict "
+            "(`apps.flows.src.eval.codegen_utils`). Возвращает `CodegenStagesSuccess` / `CodegenStagesFailure`."
+        ),
+        "perspectives": ["editor", "flow", "tool", "node"],
+        "tags": ["eval", "codegen"],
+    },
+    {
+        "name": "build_sandbox_docs_markdown",
+        "type": "callable",
+        "doc": "Async: Markdown документации API sandbox для промпта codegen (без каталога platform tools при `include_platform_tools=False`).",
+        "perspectives": ["editor", "flow", "tool", "node"],
+        "tags": ["eval", "codegen", "docs"],
+    },
+    {
+        "name": "CodegenStagesSuccess",
+        "type": "class",
+        "doc": "Результат успешного `run_codegen_stages`: поле `result: dict`.",
+        "perspectives": ["editor", "flow", "tool", "node"],
+        "tags": ["eval", "codegen"],
+    },
+    {
+        "name": "CodegenStagesFailure",
+        "type": "class",
+        "doc": "Ошибка стадии: `phase` (validate|compile|execute|result), `detail`, `traceback`.",
+        "perspectives": ["editor", "flow", "tool", "node"],
+        "tags": ["eval", "codegen"],
+    },
+    {
+        "name": "sandbox_feedback_hint",
+        "type": "callable",
+        "doc": "Эвристика подсказки LLM по тексту ошибки sandbox (импорты, интроспекция).",
+        "perspectives": ["editor", "flow", "tool", "node"],
+        "tags": ["eval", "codegen"],
+    },
+    {
+        "name": "syntax_retry_hint",
+        "type": "callable",
+        "doc": "Эвристика для retry при синтаксической ошибке и «склеенных» строках в сгенерированном коде.",
+        "perspectives": ["editor", "flow", "tool", "node"],
+        "tags": ["eval", "codegen"],
+    },
+    {
+        "name": "_system_rules_block",
+        "type": "callable",
+        "doc": "Текст системных правил промпта для мета-тула codegen (без вызова LLM).",
+        "perspectives": ["editor", "flow", "tool", "node"],
+        "tags": ["eval", "codegen"],
+    },
+    {
+        "name": "LLMGeneratedCode",
+        "type": "class",
+        "doc": "Pydantic-модель structured output: `code_lines: list[str]` — по одной физической строке .py на элемент.",
+        "perspectives": ["editor", "flow", "tool", "node"],
+        "tags": ["eval", "codegen"],
+    },
+    {
         "name": "sandbox_codegen",
         "type": "tool",
         "doc": (
@@ -680,7 +770,9 @@ GLOBALS: List[Dict[str, Any]] = [
             "`apps/flows/src/eval/codegen_utils.py`). Контракт кода: `async def run(state):` → dict; опционально "
             "`run_variables` сливается в `state.variables`. Ответ — JSON-строка с полями "
             "`success`, `result`, `final_code`, `attempts`, `trace`. В документации platform tools не перечисляется "
-            "(`listed_in_platform_tool_docs=False`), чтобы не раздувать промпт мета-тула."
+            "(`listed_in_platform_tool_docs=False`), чтобы не раздувать промпт мета-тула. "
+            "Если тело тула копируют в редактор как отдельный фрагмент, значения по умолчанию в сигнатуре "
+            "должны быть литералами или именами из whitelist sandbox — иначе при `exec` в песочнице будет NameError."
         ),
         "perspectives": ["editor", "flow", "tool", "node"],
         "tags": ["eval", "codegen"],

@@ -195,6 +195,7 @@ function _findOrCreateAssistantMessage(messages, taskId) {
         role: 'assistant',
         content: '',
         reasoning: '',
+        activity: '',
         toolCalls: [],
         toolResults: [],
         streaming: true,
@@ -204,6 +205,20 @@ function _findOrCreateAssistantMessage(messages, taskId) {
         operatorReplies: [],
     };
     return { messages: [...messages, message], message, idx: messages.length };
+}
+
+function _ensurePlaceholderAssistant(messages, taskId) {
+    if (!Array.isArray(messages) || typeof taskId !== 'string' || taskId.length === 0) {
+        return messages;
+    }
+    const has = messages.some(
+        (m) => m && m.role === 'assistant' && m.taskId === taskId && m.streaming !== false,
+    );
+    if (has) {
+        return messages;
+    }
+    const { messages: withAssistant } = _findOrCreateAssistantMessage(messages, taskId);
+    return withAssistant;
 }
 
 function _replaceMessage(messages, idx, updater) {
@@ -356,7 +371,7 @@ function _isTerminalState(state, final) {
     return false;
 }
 
-/** События нод из A2A artifact (parts[].data.event) — те же типы, что push flows/run/* для канваса. */
+/** События нод/рёбер из A2A artifact (parts[].data.event) — те же типы, что push flows/run/* для канваса. */
 function _dispatchNodeRuntimeFromArtifact(ctx, artifact, causationId, streamContextId, taskId) {
     if (!artifact || typeof artifact !== 'object' || !Array.isArray(artifact.parts)) return;
     const meta = { causation_id: causationId, source: 'http' };
@@ -364,6 +379,50 @@ function _dispatchNodeRuntimeFromArtifact(ctx, artifact, causationId, streamCont
         if (!part || part.kind !== 'data' || !part.data || typeof part.data !== 'object') continue;
         const d = part.data;
         const ev = d.event;
+        if (ev === 'edge_executed') {
+            const edgeIndex = typeof d.edge_index === 'number' && Number.isFinite(d.edge_index)
+                ? Math.floor(d.edge_index)
+                : -1;
+            if (edgeIndex < 0) {
+                continue;
+            }
+            const fromN = typeof d.from_node === 'string' ? d.from_node : '';
+            const toN = typeof d.to_node === 'string' ? d.to_node : '';
+            if (fromN.length === 0 || toN.length === 0) {
+                continue;
+            }
+            ctx.dispatch(
+                'flows/run/edge_executed',
+                { edge_index: edgeIndex, from_node: fromN, to_node: toN },
+                meta,
+            );
+            continue;
+        }
+        if (ev === 'edge_error') {
+            const edgeIndex = typeof d.edge_index === 'number' && Number.isFinite(d.edge_index)
+                ? Math.floor(d.edge_index)
+                : -1;
+            if (edgeIndex < 0) {
+                continue;
+            }
+            const fromN = typeof d.from_node === 'string' ? d.from_node : '';
+            const toN = typeof d.to_node === 'string' ? d.to_node : '';
+            if (fromN.length === 0 || toN.length === 0) {
+                continue;
+            }
+            const errText = typeof d.error === 'string' ? d.error : '';
+            ctx.dispatch(
+                'flows/run/edge_error',
+                {
+                    edge_index: edgeIndex,
+                    from_node: fromN,
+                    to_node: toN,
+                    error: errText,
+                },
+                meta,
+            );
+            continue;
+        }
         const nodeId = d.node_id;
         if (typeof nodeId !== 'string' || nodeId.length === 0) continue;
         if (ev === 'node_start') {
@@ -520,6 +579,28 @@ function _dispatchA2aEvent(ctx, contextId, currentTaskId, result, causationId) {
             _dispatchMessageMetadata(ctx, taskId, message, causationId);
         }
 
+        const statusStr = typeof state === 'string' ? state : '';
+        const activityTerminal =
+            final
+            || statusStr === 'completed'
+            || statusStr === 'finished'
+            || statusStr === 'failed'
+            || statusStr === 'error'
+            || statusStr === 'input-required'
+            || statusStr === 'input_required'
+            || statusStr === 'canceled'
+            || statusStr === 'cancelled';
+        if (!activityTerminal && taskId && message && typeof message === 'object' && message.parts) {
+            const actText = _extractTextFromParts(message.parts);
+            if (actText.length > 0) {
+                ctx.dispatch(
+                    'flows/chat/activity',
+                    { task_id: taskId, text: actText },
+                    { causation_id: causationId, source: 'http' },
+                );
+            }
+        }
+
         if (state === 'input-required' || state === 'input_required') {
             const handoffContinue = metadata && metadata.platform_handoff_continue === true;
             const oauthContinue = metadata && metadata.platform_oauth_continue === true;
@@ -672,10 +753,16 @@ function _dispatchTerminal(ctx, contextId, taskId, state, message, metadata, cau
  * прогоняет `result` через `_dispatchA2aEvent`. Возвращает
  * `{ task_id, context_id }` после первого терминального state или
  * исчерпания стрима.
+ *
+ * Первый фрейм с `taskId` и `contextId` (часто `artifact-update`, без
+ * отдельного `kind: task`) диспатчит `flows/chat/task_started`, иначе
+ * `streaming` в слайсе остаётся false и `reasoning_chunk` / `content_chunk`
+ * не сопоставляются с корзиной.
  */
 async function _consumeA2aStream(req, ctx, contextId, causationId) {
     let taskId = null;
     let terminal = false;
+    let streamTaskPrimed = false;
     const meta = { causation_id: causationId, source: 'http' };
     ctx.dispatch('flows/run/flow_started', {}, meta);
     try {
@@ -693,6 +780,19 @@ async function _consumeA2aStream(req, ctx, contextId, causationId) {
             }
             const result = frame.result;
             if (!result) return;
+            if (!streamTaskPrimed) {
+                const primedTaskId = _resolveTaskId(result, taskId);
+                const primedCid = _resolveStreamContextId(result, contextId);
+                if (typeof primedTaskId === 'string' && primedTaskId.length > 0
+                    && typeof primedCid === 'string' && primedCid.length > 0) {
+                    ctx.dispatch(
+                        'flows/chat/task_started',
+                        { task_id: primedTaskId, context_id: primedCid },
+                        { causation_id: causationId, source: 'http' },
+                    );
+                    streamTaskPrimed = true;
+                }
+            }
             const nextTaskId = _dispatchA2aEvent(ctx, contextId, taskId, result, causationId);
             if (nextTaskId) taskId = nextTaskId;
             let stateValue = null;
@@ -792,7 +892,7 @@ export const chatCancelOp = createAsyncOp({
 
 export const chatResource = createResourceCollection({
     name: 'flows/chat',
-    baseUrl: '/flows/api/v1/sessions',
+    baseUrl: '/flows/api/v1/sessions/',
     idField: 'session_id',
     operations: ['list'],
     extraInitial: {
@@ -982,7 +1082,32 @@ export const chatResource = createResourceCollection({
                 typeof contextId === 'string' && contextId.length > 0
                     ? { ...next.runTraceByContextId, [contextId]: EMPTY_LIST }
                     : next.runTraceByContextId;
-            return { ...next, currentTaskId: taskId, streaming: true, runTraceByContextId: tracePatch };
+            let withTask = { ...next, currentTaskId: taskId, streaming: true, runTraceByContextId: tracePatch };
+            if (typeof contextId === 'string' && contextId.length > 0) {
+                withTask = _applyToBucketMessages(
+                    withTask,
+                    taskId,
+                    (messages) => _ensurePlaceholderAssistant(messages, taskId),
+                    contextId,
+                );
+            }
+            return withTask;
+        }
+
+        if (type === 'flows/chat/activity') {
+            const p = event.payload;
+            if (!p || typeof p !== 'object') return state;
+            const taskId = typeof p.task_id === 'string' ? p.task_id : null;
+            const text = typeof p.text === 'string' ? p.text : '';
+            if (!taskId) return state;
+            return _applyToBucketMessages(
+                state,
+                taskId,
+                (messages) => {
+                    const { messages: nextMsgs, idx } = _findOrCreateAssistantMessage(messages, taskId);
+                    return _replaceMessage(nextMsgs, idx, (m) => ({ ...m, activity: text }));
+                },
+            );
         }
 
         if (type === 'flows/chat/content_chunk') {
@@ -1094,7 +1219,7 @@ export const chatResource = createResourceCollection({
             const next = _applyToBucketMessages(
                 state,
                 taskId,
-                _setMessageFields(taskId, { breakpoint, streaming: false }),
+                _setMessageFields(taskId, { breakpoint, streaming: false, activity: '' }),
                 ctxHint,
             );
             return { ...next, streaming: false };
@@ -1123,7 +1248,7 @@ export const chatResource = createResourceCollection({
             const next = _applyToBucketMessages(
                 state,
                 taskId,
-                _setMessageFields(taskId, { inputRequired, streaming: false }),
+                _setMessageFields(taskId, { inputRequired, streaming: false, activity: '' }),
                 ctxHint,
             );
             return { ...next, streaming: false };
@@ -1142,7 +1267,7 @@ export const chatResource = createResourceCollection({
                 (messages) => {
                     const { messages: nextMsgs, idx } = _findOrCreateAssistantMessage(messages, taskId);
                     return _replaceMessage(nextMsgs, idx, (m) => {
-                        const updated = { ...m, streaming: false, inputRequired: null };
+                        const updated = { ...m, streaming: false, inputRequired: null, activity: '' };
                         if (content && (!m.content || m.content.trim() === '')) {
                             updated.content = content;
                         }
@@ -1168,6 +1293,7 @@ export const chatResource = createResourceCollection({
                     streaming: false,
                     inputRequired: null,
                     error: errorText,
+                    activity: '',
                 }),
                 ctxHint,
             );

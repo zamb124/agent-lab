@@ -83,6 +83,7 @@ export class GlassInput extends PlatformElement {
         prefix: { type: String },
         suffix: { type: String },
         autocomplete: { type: String },
+        inputTitle: { type: String, attribute: 'input-title' },
     };
 
     constructor() {
@@ -97,6 +98,7 @@ export class GlassInput extends PlatformElement {
         this.error = false;
         this.prefix = '';
         this.suffix = '';
+        this.inputTitle = '';
     }
 
     get inputEl() {
@@ -143,6 +145,7 @@ export class GlassInput extends PlatformElement {
                     name=${this.name}
                     .value=${this.value}
                     placeholder=${this.placeholder}
+                    title=${typeof this.inputTitle === 'string' && this.inputTitle.length > 0 ? this.inputTitle : nothing}
                     autocomplete=${this.autocomplete != null && this.autocomplete !== '' ? this.autocomplete : nothing}
                     ?disabled=${this.disabled}
                     ?required=${this.required}

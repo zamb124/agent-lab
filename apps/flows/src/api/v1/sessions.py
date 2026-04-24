@@ -35,7 +35,8 @@ class SessionResponse(BaseModel):
 async def list_sessions(
     container: ContainerDep,
     user_id: Optional[str] = Query(None, description="Фильтр по пользователю"),
-    flow_id: Optional[str] = Query(None, description="Фильтр по агенту"),
+    flow_id: Optional[str] = Query(None, description="Фильтр по flow"),
+    skill_id: Optional[str] = Query(None, description="Фильтр по skill"),
     date_from: Optional[datetime] = Query(None, description="Начало периода"),
     date_to: Optional[datetime] = Query(None, description="Конец периода"),
     limit: int = Query(50, ge=1, le=200, description="Максимум записей"),
@@ -59,6 +60,7 @@ async def list_sessions(
     sessions, total = await container.state_repository.search_sessions(
         user_id=user_id,
         flow_id=flow_id,
+        skill_id=skill_id,
         date_from=date_from,
         date_to=date_to,
         limit=limit,

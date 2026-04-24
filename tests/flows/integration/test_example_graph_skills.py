@@ -89,7 +89,7 @@ class TestFastTrackSkill:
 
     @pytest.mark.asyncio
     async def test_route_greeting_in_fast_track(self, app):
-        """fast_track skill содержит edge для greeting и завершается без formatter."""
+        """fast_track: greeting -> greeting_node -> formatter (полное покрытие маршрутов)."""
         container = get_container()
         agent = await container.flow_factory.get_flow("example_graph", skill_id="fast_track")
 
@@ -102,12 +102,9 @@ class TestFastTrackSkill:
         )
         result = await agent.run(state)
 
-        # classifier устанавливает route=greeting
         assert result.get("route") == "greeting"
-        # fast_track edges не содержит greeting - поэтому greeting_node не выполняется
-        # Для привет в fast_track нет маршрута - выполняется только classifier
-        # Проверяем что formatter НЕ выполняется 
-        assert result.get("processed") is None
+        assert result.get("processed") is True
+        assert "GREETING" in (result.get("response") or "")
 
 
 class TestOrdersOnlySkill:

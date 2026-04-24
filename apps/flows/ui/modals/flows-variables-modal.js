@@ -79,9 +79,47 @@ export class FlowsVariablesModal extends PlatformModal {
                 font-size: var(--text-sm);
                 line-height: 1.4;
             }
-            .flows-vars-table { width: 100%; border-collapse: collapse; color: var(--text-secondary); }
-            .flows-vars-table th, .flows-vars-table td { padding: var(--space-2); text-align: left; border-bottom: 1px solid var(--border-subtle); vertical-align: middle; }
-            .flows-vars-table th { color: var(--text-tertiary); font-size: var(--text-xs); text-transform: uppercase; letter-spacing: 0.05em; font-weight: var(--font-medium); }
+            :host .modal.lg {
+                width: fit-content;
+                max-width: min(96vw, 960px);
+                min-width: 0;
+            }
+            :host .modal.fullscreen.lg {
+                width: min(96vw, 100vw - 1.5rem);
+                max-width: min(96vw, 100vw - 1.5rem);
+            }
+            :host .modal-content {
+                min-width: 0;
+                max-width: 100%;
+                overflow-x: auto;
+                -webkit-overflow-scrolling: touch;
+            }
+            .flows-vars-table {
+                width: max-content;
+                min-width: 100%;
+                max-width: 100%;
+                border-collapse: collapse;
+                color: var(--text-secondary);
+                table-layout: auto;
+            }
+            .flows-vars-table th,
+            .flows-vars-table td {
+                padding: var(--space-2);
+                text-align: left;
+                border-bottom: 1px solid var(--border-subtle);
+                vertical-align: middle;
+            }
+            .flows-vars-table th {
+                color: var(--text-tertiary);
+                font-size: var(--text-xs);
+                text-transform: uppercase;
+                letter-spacing: 0.05em;
+                font-weight: var(--font-medium);
+            }
+            .flows-vars-table td:not(.actions) {
+                max-width: min(420px, 40vw);
+                overflow-wrap: anywhere;
+            }
             .flows-vars-table td.actions { width: 1%; white-space: nowrap; text-align: right; }
             .flows-vars-empty { padding: var(--space-4); text-align: center; color: var(--text-tertiary); }
             .flows-vars-badge {
@@ -93,6 +131,33 @@ export class FlowsVariablesModal extends PlatformModal {
             }
             .flows-vars-badge.flow { color: var(--accent); border-color: var(--accent); }
             .flows-vars-badge.company { color: var(--info, var(--accent)); border-color: var(--info, var(--accent)); }
+            .flows-header-action-create {
+                width: 28px;
+                height: 28px;
+                display: inline-flex;
+                align-items: center;
+                justify-content: center;
+                padding: 0;
+                border: none;
+                border-radius: var(--radius-full, 50%);
+                flex-shrink: 0;
+                cursor: pointer;
+                color: var(--platform-btn-primary-text, #ffffff);
+                background: var(--platform-btn-primary-bg, #99a6f9);
+                box-shadow: var(--platform-btn-primary-shadow, none);
+                transition: all var(--duration-fast, 0.15s) var(--easing-default, ease);
+            }
+            .flows-header-action-create platform-icon {
+                display: flex;
+            }
+            .flows-header-action-create:hover:not(:disabled) {
+                background: var(--platform-btn-primary-bg-hover, #8794f0);
+                box-shadow: var(--platform-btn-primary-shadow-hover, 0 0 10px rgba(153, 166, 249, 0.6));
+            }
+            .flows-header-action-create:disabled {
+                opacity: 0.5;
+                cursor: not-allowed;
+            }
         `,
     ];
 
@@ -266,11 +331,17 @@ export class FlowsVariablesModal extends PlatformModal {
     }
 
     renderHeaderActions() {
+        const createLabel = this.t('variables_modal.action_create');
         return html`
-            <platform-button variant="primary" @click=${() => this._create()}>
-                <platform-icon name="plus" size="14"></platform-icon>
-                ${this.t('variables_modal.action_create')}
-            </platform-button>
+            <button
+                type="button"
+                class="flows-header-action-create"
+                title=${createLabel}
+                aria-label=${createLabel}
+                @click=${() => this._create()}
+            >
+                <platform-icon name="plus" size="16"></platform-icon>
+            </button>
         `;
     }
 

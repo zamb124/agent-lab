@@ -114,6 +114,8 @@ event = TaskArtifactUpdateEvent(
 - Одно UI событие = одно stream-сообщение (`one-event-per-message`).
 - Новый `kind` в A2A для UI не вводится.
 
+**Граф (ноды и рёбра) в `DataPart`:** помимо `node_start` / `node_complete` / `node_error` с `node_id`, рантайн публикует `event: "edge_executed"` с полями `edge_index` (0-based, тот же порядок, что у рёбер исполняемого flow), `from_node`, `to_node` — при выборе перехода к следующей волне нод. UI сопоставляет `edge_index` с элементом `edges[i]` в данных редактора. При исключении при вычислении `condition` ребра публикуется `event: "edge_error"` с теми же полями плюс `error` (текст).
+
 ## Полный поток выполнения
 
 ```python

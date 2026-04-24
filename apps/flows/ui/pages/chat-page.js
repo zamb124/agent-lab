@@ -9,9 +9,11 @@
 
 import { html, css } from 'lit';
 import { PlatformPage } from '@platform/lib/base/PlatformPage.js';
+import '@platform/lib/components/platform-icon.js';
 import '../components/chat/chat-input.js';
 import '../components/chat/chat-messages.js';
 import { asArray, asString, isPlainObject } from '../_helpers/flows-resolvers.js';
+import { a2aStateMessagesToChatMessages } from '../_helpers/chat-session-messages.js';
 
 export class ChatPage extends PlatformPage {
     static properties = {
@@ -134,40 +136,7 @@ export class ChatPage extends PlatformPage {
         const result = await this._sessionState.run({ session_id: sessionId });
         const rawMessages = isPlainObject(result) && Array.isArray(result.messages) ? result.messages : [];
         const resultTaskId = isPlainObject(result) && typeof result.task_id === 'string' ? result.task_id : null;
-        const messages = rawMessages.map((msg, idx) => {
-            let role;
-            if (typeof msg.role === 'string') {
-                role = msg.role.toLowerCase();
-            } else if (isPlainObject(msg.role) && typeof msg.role.value === 'string') {
-                role = msg.role.value;
-            } else {
-                role = 'assistant';
-            }
-            let content = asString(msg.content);
-            if (content === '' && Array.isArray(msg.parts)) {
-                content = msg.parts
-                    .filter((p) => p && (p.kind === 'text' || p.text))
-                    .map((p) => asString(p.text))
-                    .join('');
-            }
-            const id = typeof msg.messageId === 'string' && msg.messageId.length > 0
-                ? msg.messageId
-                : (typeof msg.id === 'string' && msg.id.length > 0 ? msg.id : `msg-${idx}`);
-            const timestamp = typeof msg.timestamp === 'string' && msg.timestamp.length > 0
-                ? msg.timestamp
-                : new Date().toISOString();
-            const taskId = typeof msg.taskId === 'string' && msg.taskId.length > 0
-                ? msg.taskId
-                : resultTaskId;
-            return {
-                id,
-                role: role === 'user' ? 'user' : 'assistant',
-                content,
-                timestamp,
-                taskId,
-                streaming: false,
-            };
-        });
+        const messages = a2aStateMessagesToChatMessages(rawMessages, resultTaskId);
         this._chat.loadSession({
             sessionId,
             flowId: this.flowId,
@@ -294,11 +263,37 @@ export class ChatPage extends PlatformPage {
         this.openModal('flows.sessions', { flowId: this.flowId });
     }
 
-    _openTracing() {
+    _openTriggers() {
+        if (typeof this.flowId !== 'string' || this.flowId.length === 0) {
+            return;
+        }
+        this.openModal('flows.triggers', { flowId: this.flowId });
+    }
+
+    _openTracingModalFromDetail(detail) {
         const state = this._chat.state;
         const ctxId = state?.currentContextId;
-        if (!ctxId || !this.flowId) return;
-        this.openModal('flows.tracing', { sessionId: `${this.flowId}:${ctxId}` });
+        if (!ctxId || !this.flowId) {
+            return;
+        }
+        const sessionId = `${this.flowId}:${ctxId}`;
+        const taskId =
+            detail && typeof detail === 'object' && typeof detail.taskId === 'string' && detail.taskId.length > 0
+                ? detail.taskId
+                : '';
+        const props = { sessionId };
+        if (taskId.length > 0) {
+            props.taskId = taskId;
+        }
+        this.openModal('flows.tracing', props);
+    }
+
+    _openTracing() {
+        this._openTracingModalFromDetail(null);
+    }
+
+    _onChatShowTracing(e) {
+        this._openTracingModalFromDetail(e.detail);
     }
 
     _openState() {
@@ -321,6 +316,7 @@ export class ChatPage extends PlatformPage {
         const messages = this._currentMessages();
         const runTrace = this._currentRunTrace();
         const streaming = Boolean(this._chat.state?.streaming);
+        const currentTaskId = asString(this._chat.state?.currentTaskId);
 
         return html`
             <div class="chat-header">
@@ -329,6 +325,19 @@ export class ChatPage extends PlatformPage {
                     <span class="chat-skill">${this.skillId === 'base' ? this.t('platform_chat.base_skill') : this.skillId}</span>
                 </div>
                 <div class="chat-actions">
+                    ${typeof this.flowId === 'string' && this.flowId.length > 0
+                        ? html`
+                            <button
+                                type="button"
+                                class="action-btn"
+                                title=${this.t('flows_sidebar.footer_triggers')}
+                                aria-label=${this.t('flows_sidebar.footer_triggers')}
+                                @click=${this._openTriggers}
+                            >
+                                <platform-icon name="zap" size="16"></platform-icon>
+                            </button>
+                        `
+                        : ''}
                     <button type="button" class="action-btn" title=${this.t('platform_chat.btn_sessions')} @click=${this._openSessions}>
                         <platform-icon name="clipboard" size="16"></platform-icon>
                     </button>
@@ -344,11 +353,16 @@ export class ChatPage extends PlatformPage {
                 </div>
             </div>
             <div class="chat-body">
-                <chat-messages .messages=${messages} .runTrace=${runTrace}></chat-messages>
+                <chat-messages
+                    .messages=${messages}
+                    .runTrace=${runTrace}
+                    .currentTaskId=${currentTaskId}
+                    @show-tracing=${this._onChatShowTracing}
+                ></chat-messages>
                 <chat-input
                     ?streaming=${streaming}
-                    @send-message=${this._onSendMessage}
-                    @stop-stream=${this._onStop}
+                    @send=${this._onSendMessage}
+                    @stop=${this._onStop}
                 ></chat-input>
             </div>
         `;

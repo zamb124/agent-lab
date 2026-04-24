@@ -1,6 +1,11 @@
 /**
  * PlatformConfirmModal — диалог подтверждения (glass-стек платформы).
  *
+ * Кнопки футера — одна строка; ширина панели `fit-content` до `min(96vw, 720px)`,
+ * чтобы длинные подписи не обрезались. Перекрывает `width: 90%` и `max-width` sm
+ * у `glass-modal`. Если после этого ряд не влезает во вьюпорт — горизонтальный
+ * скролл у `.modal-actions`.
+ *
  * Режимы:
  * - Две кнопки: Promise<boolean>
  * - Три кнопки (extraText): Promise<'confirm'|'cancel'|'extra'>
@@ -18,6 +23,20 @@ export class PlatformConfirmModal extends PlatformModal {
         css`
             :host .fullscreen-btn {
                 display: none !important;
+            }
+
+            .modal.platform-confirm-panel.modal.sm,
+            .modal.platform-confirm-panel.modal.md,
+            .modal.platform-confirm-panel.modal.lg,
+            .modal.platform-confirm-panel.modal.xl {
+                width: fit-content;
+                max-width: min(96vw, 720px);
+                min-width: 0;
+            }
+
+            .modal.platform-confirm-panel .modal-header,
+            .modal.platform-confirm-panel .modal-content {
+                min-width: 0;
             }
 
             .confirm-header-leading {
@@ -77,12 +96,27 @@ export class PlatformConfirmModal extends PlatformModal {
                 line-height: 1.5;
             }
 
+            .modal-actions,
+            .modal.fullscreen .modal-actions {
+                flex-direction: row;
+                flex-wrap: nowrap;
+                overflow-x: auto;
+                -webkit-overflow-scrolling: touch;
+            }
+
             .confirm-actions {
                 display: flex;
-                flex-wrap: wrap;
+                flex-direction: row;
+                flex-wrap: nowrap;
                 gap: var(--space-3, 12px);
                 justify-content: flex-end;
+                align-items: center;
                 width: 100%;
+                min-width: min-content;
+            }
+
+            .confirm-actions .btn {
+                flex-shrink: 0;
             }
 
             .modal-actions .confirm-actions {
@@ -251,6 +285,7 @@ export class PlatformConfirmModal extends PlatformModal {
     render() {
         const modalClasses = [
             'modal',
+            'platform-confirm-panel',
             this.size,
             this._isFullscreen ? 'fullscreen' : '',
             this._isDragging ? 'dragging' : '',

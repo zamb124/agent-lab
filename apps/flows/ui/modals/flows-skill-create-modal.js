@@ -56,6 +56,10 @@ export class FlowsSkillCreateModal extends PlatformFormModal {
         return html`<h3>${this.t('skill_create_modal.title')}</h3>`;
     }
 
+    renderSaveHeaderButton() {
+        return html``;
+    }
+
     renderBody() {
         const validId = SKILL_ID_PATTERN.test(this._skillId);
         return html`

@@ -120,8 +120,8 @@ output_mapping - куда пишем результат:
 ## Завершение flow (терминал)
 
 - Тихий выход из цикла без следующей волны **недопустим**, если остался незакрытый AND-join (`state.join_arrived_preds` не пуст) → `FlowPrematureCompletionError` (`incomplete_and_join`).
-- Если у завершившейся ноды есть **безусловное** исходящее ребро к ноде (`to` не null, `condition` отсутствует) и ни один переход не активен — `FlowPrematureCompletionError` (`no_active_outgoing_edge`).
-- Если **все** исходы **к нодам** (`to` не null) только **с условием** и ни одно не выполнено — допустимое завершение (роутер / skill без ветки), без ошибки.
+- Если у завершившейся ноды есть **исходящие рёбра к нодам** (`to` не `null`) и **ни одно** не активно, причём **все** эти рёбра **с** условием — `FlowPrematureCompletionError` (`no_conditional_match`, в `payload` есть `stuck_at`). Нужны явные ветки, покрывающие сценарии (второе условие, отдельная default-нода, перенос ветвления в code-ноде).
+- В смешанном случае (часть рёбер без `condition` к `to` не `null`, но нет ни одного активного перехода) — `FlowPrematureCompletionError` (`no_active_outgoing_edge`).
 
 ## Triggers (точки входа)
 

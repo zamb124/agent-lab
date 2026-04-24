@@ -7,13 +7,15 @@ from __future__ import annotations
 import asyncio
 from typing import Any, List, Optional, Set
 
+from a2a.types import Message
+from a2a.utils.message import get_message_text
 from fastapi import APIRouter, HTTPException, Query
 
-from apps.flows.src.dependencies import ContainerDep
+from apps.flows.src.container import FlowContainer
 from apps.flows.src.db.models import OperatorQueues, OperatorTasks
 from apps.flows.src.db.operator_repository import OperatorRepository
+from apps.flows.src.dependencies import ContainerDep
 from apps.flows.src.models.flow_config import FlowConfig
-from apps.flows.src.services.operator_tasks_broadcast import publish_operator_tasks_refresh
 from apps.flows.src.models.operator_schemas import (
     OperatorMemberAdd,
     OperatorQueueCreate,
@@ -26,6 +28,7 @@ from apps.flows.src.models.operator_schemas import (
     OperatorTaskStatus,
 )
 from apps.flows.src.services.operator_handoff_service import parse_handoff_mode
+from apps.flows.src.services.operator_tasks_broadcast import publish_operator_tasks_refresh
 from core.context import get_context
 from core.logging import get_logger
 from core.pagination import OffsetPage
@@ -35,6 +38,18 @@ logger = get_logger(__name__)
 HANDOFF_PREVIEW_MAX_LEN = 200
 
 router = APIRouter(tags=["operator"])
+
+
+def _dialog_message_entry_for_api(m: Any) -> dict[str, Any]:
+    """Сериализация A2A Message + плоский текст для UI (get_message_text)."""
+    if hasattr(m, "model_dump"):
+        raw: dict[str, Any] = m.model_dump(mode="json")
+    elif isinstance(m, dict):
+        raw = dict(m)
+    else:
+        raise TypeError("dialog message must be Message or dict")
+    text = get_message_text(Message.model_validate(raw))
+    return {**raw, "message_text": text}
 
 
 def _company_and_user() -> tuple[str, str]:
@@ -338,10 +353,7 @@ async def get_operator_task(
     saved = await container.state_manager.get_state(task.session_id)
     if saved is not None and saved.messages:
         for m in saved.messages:
-            if hasattr(m, "model_dump"):
-                dialog_messages.append(m.model_dump(mode="json"))
-            elif isinstance(m, dict):
-                dialog_messages.append(m)
+            dialog_messages.append(_dialog_message_entry_for_api(m))
     flow_cfg = await container.flow_repository.get(task.flow_id)
     return {
         "task": _task_to_out(task, flow_cfg=flow_cfg).model_dump(mode="json"),

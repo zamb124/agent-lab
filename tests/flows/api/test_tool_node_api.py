@@ -322,3 +322,108 @@ class TestUpdateFlowWithCodeNode:
         # Cleanup
         await client.delete(f"/flows/api/v1/{flow_id}", headers=auth_headers_system)
 
+
+    @pytest.mark.asyncio
+    async def test_update_flow_does_not_wipe_node_on_pos_only(self, client, app, unique_id, auth_headers_system):
+        """PUT с { pos_x, pos_y } на ноде не должен удалять type/code (регресс save из канваса)."""
+        flow_id = f"test_pos_only_{unique_id}"
+        code = "async def run(state):\n    state['k'] = 1\n    return state"
+        await client.post(
+            "/flows/api/v1/flows/",
+            headers=auth_headers_system,
+            json={
+                "flow_id": flow_id,
+                "name": "P",
+                "entry": "formatter",
+                "nodes": {
+                    "formatter": {
+                        "type": "code",
+                        "code": code,
+                    }
+                },
+                "edges": [{"from": "formatter", "to": None}],
+            },
+        )
+
+        response = await client.put(
+            f"/flows/api/v1/flows/{flow_id}",
+            headers=auth_headers_system,
+            json={
+                "flow_id": flow_id,
+                "name": "P2",
+                "entry": "formatter",
+                "nodes": {
+                    "formatter": {
+                        "pos_x": 400,
+                        "pos_y": 200,
+                    }
+                },
+                "edges": [{"from": "formatter", "to": None}],
+            },
+        )
+        assert response.status_code == 200, response.text
+        n = response.json()["nodes"]["formatter"]
+        assert n["type"] == "code"
+        assert n["code"] == code
+        assert n["pos_x"] == 400
+        assert n["pos_y"] == 200
+
+        await client.delete(f"/flows/api/v1/{flow_id}", headers=auth_headers_system)
+
+    @pytest.mark.asyncio
+    async def test_update_flow_preserves_skill_nodes_mode_merge(
+        self, client, app, unique_id, auth_headers_system
+    ):
+        """PUT сохраняет nodes_mode/edges_mode/variables_mode у skill (иначе UI мержит ноды как replace)."""
+        flow_id = f"test_skill_modes_{unique_id}"
+        await client.post(
+            "/flows/api/v1/flows/",
+            headers=auth_headers_system,
+            json={
+                "flow_id": flow_id,
+                "name": "S",
+                "entry": "a",
+                "nodes": {
+                    "a": {"type": "code", "code": "async def run(s):\n    return s"},
+                    "b": {"type": "code", "code": "async def run(s):\n    return s"},
+                },
+                "edges": [{"from": "a", "to": "b"}, {"from": "b", "to": None}],
+            },
+        )
+
+        response = await client.put(
+            f"/flows/api/v1/flows/{flow_id}",
+            headers=auth_headers_system,
+            json={
+                "flow_id": flow_id,
+                "name": "S2",
+                "entry": "a",
+                "nodes": {
+                    "a": {"type": "code", "code": "async def run(s):\n    return s"},
+                    "b": {"type": "code", "code": "async def run(s):\n    return s"},
+                },
+                "edges": [{"from": "a", "to": "b"}, {"from": "b", "to": None}],
+                "skills": {
+                    "sk1": {
+                        "name": "Skill",
+                        "description": "",
+                        "tags": [],
+                        "entry": "a",
+                        "nodes": {"a": {"pos_x": 10, "pos_y": 20}},
+                        "nodes_mode": "merge",
+                        "edges": [{"from": "a", "to": "b"}, {"from": "b", "to": None}],
+                        "edges_mode": "merge",
+                        "variables": {},
+                        "variables_mode": "merge",
+                    }
+                },
+            },
+        )
+        assert response.status_code == 200, response.text
+        body = response.json()
+        assert body["skills"]["sk1"]["nodes_mode"] == "merge"
+        assert body["skills"]["sk1"]["edges_mode"] == "merge"
+        assert body["skills"]["sk1"]["variables_mode"] == "merge"
+
+        await client.delete(f"/flows/api/v1/{flow_id}", headers=auth_headers_system)
+

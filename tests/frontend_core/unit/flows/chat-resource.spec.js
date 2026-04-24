@@ -61,6 +61,66 @@ describe('flows/chat extraReducer: session lifecycle', () => {
     });
 });
 
+describe('flows/chat extraReducer: task_started placeholder', () => {
+    it('task_started создаёт плейсхолдер ассистента со streaming', () => {
+        const { bus, getState } = build();
+        bus.dispatch('flows/chat/session_init', { flowId: 'demo', contextId: 'ctx1' });
+        bus.dispatch('flows/chat/user_message_added', {
+            contextId: 'ctx1',
+            message: { id: 'u1', role: 'user', content: 'hello' },
+        });
+        bus.dispatch('flows/chat/task_started', { task_id: 'tsk1', context_id: 'ctx1' });
+        const s = getState().flowsChat;
+        expect(s.streaming).toBe(true);
+        const msgs = s.messagesByContextId.ctx1.messages;
+        const assistant = msgs.find((m) => m.role === 'assistant' && m.taskId === 'tsk1');
+        expect(assistant).toBeDefined();
+        expect(assistant.id).toBe('assistant_tsk1');
+        expect(assistant.streaming).toBe(true);
+        expect(assistant.content).toBe('');
+        expect(assistant.activity).toBe('');
+    });
+
+    it('reasoning_chunk после task_started накапливается в том же сообщении', () => {
+        const { bus, getState } = build();
+        bus.dispatch('flows/chat/session_init', { flowId: 'demo', contextId: 'ctx1' });
+        bus.dispatch('flows/chat/user_message_added', {
+            contextId: 'ctx1',
+            message: { id: 'u1', role: 'user', content: 'hello' },
+        });
+        bus.dispatch('flows/chat/task_started', { task_id: 'tsk1', context_id: 'ctx1' });
+        bus.dispatch('flows/chat/reasoning_chunk', { task_id: 'tsk1', text: 'a' });
+        const assistants = getState().flowsChat.messagesByContextId.ctx1.messages.filter(
+            (m) => m && m.role === 'assistant' && m.taskId === 'tsk1',
+        );
+        expect(assistants.length).toBe(1);
+        expect(assistants[0].reasoning).toBe('a');
+    });
+
+    it('activity обновляет поле ассистента', () => {
+        const { bus, getState } = build();
+        bus.dispatch('flows/chat/session_init', { flowId: 'demo', contextId: 'ctx1' });
+        bus.dispatch('flows/chat/task_started', { task_id: 'tsk1', context_id: 'ctx1' });
+        bus.dispatch('flows/chat/activity', { task_id: 'tsk1', text: 'Status line' });
+        const assistant = getState().flowsChat.messagesByContextId.ctx1.messages.find(
+            (m) => m.role === 'assistant' && m.taskId === 'tsk1',
+        );
+        expect(assistant.activity).toBe('Status line');
+    });
+
+    it('reasoning_chunk без task_started и со streaming false не пишет в messages', () => {
+        const { bus, getState } = build();
+        bus.dispatch('flows/chat/session_init', { flowId: 'demo', contextId: 'ctx1' });
+        bus.dispatch('flows/chat/user_message_added', {
+            contextId: 'ctx1',
+            message: { id: 'u1', role: 'user', content: 'hi' },
+        });
+        bus.dispatch('flows/chat/reasoning_chunk', { task_id: 'tsk1', text: 'x' });
+        const msgs = getState().flowsChat.messagesByContextId.ctx1.messages;
+        expect(msgs.find((m) => m && m.role === 'assistant')).toBeUndefined();
+    });
+});
+
 describe('flows/chat extraReducer: push-события', () => {
     function setup() {
         const built = build();

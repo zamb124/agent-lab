@@ -2,7 +2,14 @@
 Тесты API операторских очередей /flows/api/v1/operator/...
 """
 
+import uuid
+
 import pytest
+from a2a.types import Message, Part, Role, TextPart
+
+from apps.flows.src.db.models import OperatorTasks
+from apps.flows.src.models.operator_schemas import OperatorTaskStatus
+from core.state import ExecutionState
 
 
 async def _list_all_operator_queues(client, headers: dict) -> list[dict]:
@@ -144,3 +151,70 @@ async def test_operator_list_tasks_empty_for_non_member(
     body = other.json()
     assert body["items"] == []
     assert body["total"] == 0
+
+
+@pytest.mark.asyncio
+async def test_operator_get_task_includes_message_text_for_a2a_messages(
+    client,
+    app,
+    container,
+    unique_id,
+    auth_headers_system,
+    system_user_id,
+) -> None:
+    slug = f"opq_msg_{unique_id}"
+    create = await client.post(
+        "/flows/api/v1/operator/queues",
+        headers=auth_headers_system,
+        json={"name": "Msg test", "slug": slug},
+    )
+    assert create.status_code == 200, create.text
+    qid = create.json()["id"]
+
+    flow_id = f"fl_op_{unique_id}"
+    ctx_id = f"ctx_{unique_id}"
+    session_id = f"{flow_id}:{ctx_id}"
+    a2a_tid = f"a2a_{unique_id}"
+    line = "user line for operator"
+
+    user_msg = Message(
+        messageId=str(uuid.uuid4()),
+        role=Role.user,
+        parts=[Part(root=TextPart(text=line))],
+    )
+    state = ExecutionState(
+        task_id=a2a_tid,
+        context_id=ctx_id,
+        user_id=system_user_id,
+        session_id=session_id,
+        messages=[user_msg],
+    )
+    await container.state_manager.save_state(session_id, state)
+
+    op_task_id = str(uuid.uuid4())
+    cor_id = str(uuid.uuid4())
+    row = OperatorTasks(
+        id=op_task_id,
+        company_id="system",
+        queue_id=qid,
+        status=OperatorTaskStatus.OPEN.value,
+        session_id=session_id,
+        end_user_id=system_user_id,
+        flow_id=flow_id,
+        skill_id="default",
+        a2a_task_id=a2a_tid,
+        context_id=ctx_id,
+        correlation_id=cor_id,
+    )
+    await container.operator_repository.insert_task(row)
+
+    r = await client.get(
+        f"/flows/api/v1/operator/tasks/{op_task_id}",
+        headers=auth_headers_system,
+    )
+    assert r.status_code == 200, r.text
+    data = r.json()
+    dms: list[dict] = data["dialog_messages"]
+    assert len(dms) == 1
+    assert dms[0]["message_text"] == line
+    assert dms[0]["role"] == "user"

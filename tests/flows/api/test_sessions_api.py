@@ -18,6 +18,7 @@ def create_test_state(
     flow_id: str,
     first_message: str = None,
     message_count: int = 0,
+    skill_id: str = "default",
 ) -> Dict[str, Any]:
     """
     Создает тестовый state для сессии.
@@ -37,6 +38,7 @@ def create_test_state(
         context_id=context_id,
         user_id=user_id,
         session_id=session_id,
+        skill_id=skill_id,
     )
     
     # Добавляем сообщения
@@ -180,6 +182,46 @@ class TestSessionsAPI:
         assert data["total"] == 1
         assert len(data["items"]) == 1
         assert data["items"][0]["flow_id"] == target_flow
+
+        await repo.delete(session1_id)
+        await repo.delete(session2_id)
+
+    @pytest.mark.asyncio
+    async def test_list_sessions_with_skill_filter(self, client, app, unique_id):
+        """GET /api/v1/sessions с фильтром по skill_id."""
+        container = get_container()
+        repo = container.state_repository
+
+        flow_id = f"flow_skill_{unique_id}"
+        target_skill = f"skill_a_{unique_id}"
+        other_skill = f"skill_b_{unique_id}"
+
+        session1_id = f"{flow_id}:context1_{unique_id}"
+        session2_id = f"{flow_id}:context2_{unique_id}"
+
+        state1 = create_test_state(
+            session_id=session1_id,
+            user_id=f"user1_{unique_id}",
+            flow_id=flow_id,
+            skill_id=target_skill,
+        )
+        state2 = create_test_state(
+            session_id=session2_id,
+            user_id=f"user2_{unique_id}",
+            flow_id=flow_id,
+            skill_id=other_skill,
+        )
+
+        await repo.set(session1_id, state1)
+        await repo.set(session2_id, state2)
+
+        response = await client.get(f"/flows/api/v1/sessions/?skill_id={target_skill}")
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["total"] == 1
+        assert len(data["items"]) == 1
+        assert data["items"][0]["session_id"] == session1_id
 
         await repo.delete(session1_id)
         await repo.delete(session2_id)

@@ -141,7 +141,7 @@ export class FlowCard extends PlatformElement {
                 display: flex;
                 align-items: center;
                 justify-content: center;
-                border-radius: var(--radius-md);
+                border-radius: var(--radius-lg);
                 color: var(--text-tertiary);
                 background: var(--glass-solid-subtle);
                 border: none;

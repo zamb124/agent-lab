@@ -207,6 +207,18 @@ function _nodeSnapshotForInheritCompare(node) {
     return out;
 }
 
+function _incomingEdgeIndicesToNode(edges, nodeId) {
+    if (!Array.isArray(edges) || typeof nodeId !== 'string' || nodeId.length === 0) return [];
+    const out = [];
+    for (let i = 0; i < edges.length; i += 1) {
+        const e = edges[i];
+        if (!_isPlainObject(e)) continue;
+        const to = e.to_node != null && e.to_node !== '' ? e.to_node : e.to;
+        if (to === nodeId) out.push(i);
+    }
+    return out;
+}
+
 export const editorResource = createAsyncOp({
     name: 'flows/editor',
     silent: true,
@@ -243,6 +255,9 @@ export const editorResource = createAsyncOp({
         canRedo: false,
         runningNodeIds: [],
         completedNodeIds: [],
+        runningEdgeIndices: [],
+        completedEdgeIndices: [],
+        failedEdgeIndices: [],
         erroredNodes: {},
         breakpointNodeIds: [],
         breakpointHitNodeId: null,
@@ -357,6 +372,9 @@ export const editorResource = createAsyncOp({
                 canRedo: false,
                 runningNodeIds: [],
                 completedNodeIds: [],
+                runningEdgeIndices: [],
+                completedEdgeIndices: [],
+                failedEdgeIndices: [],
                 erroredNodes: {},
                 breakpointHitNodeId: null,
                 entryNodeId: effective.entryNodeId,
@@ -625,6 +643,9 @@ export const editorResource = createAsyncOp({
                 ...state,
                 runningNodeIds: [],
                 completedNodeIds: [],
+                runningEdgeIndices: [],
+                completedEdgeIndices: [],
+                failedEdgeIndices: [],
                 erroredNodes: {},
                 breakpointHitNodeId: null,
                 agentExecutionRunning: true,
@@ -635,16 +656,62 @@ export const editorResource = createAsyncOp({
             return { ...state, agentExecutionRunning: false };
         }
 
+        if (t === 'flows/run/edge_executed') {
+            const idx = typeof p.edge_index === 'number' && Number.isFinite(p.edge_index)
+                ? Math.floor(p.edge_index)
+                : -1;
+            if (idx < 0) return state;
+            const completedSet = new Set(Array.isArray(state.completedEdgeIndices) ? state.completedEdgeIndices : []);
+            if (completedSet.has(idx)) return state;
+            const runningSet = new Set(Array.isArray(state.runningEdgeIndices) ? state.runningEdgeIndices : []);
+            runningSet.add(idx);
+            return { ...state, runningEdgeIndices: Array.from(runningSet) };
+        }
+
+        if (t === 'flows/run/edge_error') {
+            const idx = typeof p.edge_index === 'number' && Number.isFinite(p.edge_index)
+                ? Math.floor(p.edge_index)
+                : -1;
+            if (idx < 0) return state;
+            const runSet = new Set(Array.isArray(state.runningEdgeIndices) ? state.runningEdgeIndices : []);
+            const compSet = new Set(Array.isArray(state.completedEdgeIndices) ? state.completedEdgeIndices : []);
+            const failSet = new Set(Array.isArray(state.failedEdgeIndices) ? state.failedEdgeIndices : []);
+            runSet.delete(idx);
+            compSet.delete(idx);
+            failSet.add(idx);
+            return {
+                ...state,
+                runningEdgeIndices: Array.from(runSet),
+                completedEdgeIndices: Array.from(compSet),
+                failedEdgeIndices: Array.from(failSet),
+            };
+        }
+
         if (t === 'flows/run/node_started') {
             const nodeId = p.node_id;
             if (typeof nodeId !== 'string' || nodeId.length === 0) return state;
             const erroredCopy = { ...state.erroredNodes };
             delete erroredCopy[nodeId];
+            const edges = state.skillsData && Array.isArray(state.skillsData.edges)
+                ? state.skillsData.edges
+                : [];
+            const incomingIdx = _incomingEdgeIndicesToNode(edges, nodeId);
+            const runSet = new Set(Array.isArray(state.runningEdgeIndices) ? state.runningEdgeIndices : []);
+            const compSet = new Set(Array.isArray(state.completedEdgeIndices) ? state.completedEdgeIndices : []);
+            for (let i = 0; i < incomingIdx.length; i += 1) {
+                const ei = incomingIdx[i];
+                if (runSet.has(ei)) {
+                    runSet.delete(ei);
+                    compSet.add(ei);
+                }
+            }
             return {
                 ...state,
                 runningNodeIds: _withId(state.runningNodeIds, nodeId),
                 completedNodeIds: _withoutId(state.completedNodeIds, nodeId),
                 erroredNodes: erroredCopy,
+                runningEdgeIndices: Array.from(runSet),
+                completedEdgeIndices: Array.from(compSet),
             };
         }
 
@@ -662,10 +729,23 @@ export const editorResource = createAsyncOp({
             const nodeId = p.node_id;
             if (typeof nodeId !== 'string' || nodeId.length === 0) return state;
             const erroredCopy = { ...state.erroredNodes, [nodeId]: typeof p.error === 'string' ? p.error : '' };
+            const edges = state.skillsData && Array.isArray(state.skillsData.edges)
+                ? state.skillsData.edges
+                : [];
+            const incomingIdx = _incomingEdgeIndicesToNode(edges, nodeId);
+            const runSet = new Set(Array.isArray(state.runningEdgeIndices) ? state.runningEdgeIndices : []);
+            const failSet = new Set(Array.isArray(state.failedEdgeIndices) ? state.failedEdgeIndices : []);
+            for (let i = 0; i < incomingIdx.length; i += 1) {
+                const ei = incomingIdx[i];
+                if (runSet.has(ei)) runSet.delete(ei);
+                failSet.add(ei);
+            }
             return {
                 ...state,
                 runningNodeIds: _withoutId(state.runningNodeIds, nodeId),
                 erroredNodes: erroredCopy,
+                runningEdgeIndices: Array.from(runSet),
+                failedEdgeIndices: Array.from(failSet),
             };
         }
 

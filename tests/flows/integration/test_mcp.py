@@ -14,6 +14,29 @@ from apps.flows.src.clients.mcp_client import MCPClient, MCPClientError, clear_m
 from apps.flows.src.models.mcp import MCPServerConfig, MCPTransportType
 
 
+class TestMCPJsonrpcBodyParse:
+    """Разбор JSON-RPC тела: чистый JSON и SSE `data:`."""
+
+    def test_plain_json(self):
+        text = '{"jsonrpc":"2.0","id":1,"result":{"capabilities":{}}}'
+        out = MCPClient._jsonrpc_envelope_from_body(text)
+        assert out is not None
+        assert out.get("result") == {"capabilities": {}}
+
+    def test_sse_data_line(self):
+        text = (
+            "event: message\n"
+            'data: {"jsonrpc":"2.0","id":1,"result":{"serverInfo":{"name":"x"}}}\n\n'
+        )
+        out = MCPClient._jsonrpc_envelope_from_body(text)
+        assert out is not None
+        assert out.get("result", {}).get("serverInfo", {}).get("name") == "x"
+
+    def test_empty_none(self):
+        assert MCPClient._jsonrpc_envelope_from_body("") is None
+        assert MCPClient._jsonrpc_envelope_from_body("   ") is None
+
+
 def _local_mcp_config(url: str, server_id: str = "local-mcp-http") -> MCPServerConfig:
     return MCPServerConfig(
         server_id=server_id,

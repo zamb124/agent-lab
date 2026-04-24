@@ -781,9 +781,25 @@ class FlowNode(BaseNode):
     def __init__(self, node_id: str, config: Optional[Dict[str, Any]] = None):
         super().__init__(node_id, config)
         cfg = self.config
-        
-        self.flow_id = cfg.get("flow_id")
-        self.skill_id = cfg.get("skill_id", "default")
+        inner = cfg.get("config")
+        if not isinstance(inner, dict):
+            inner = {}
+        r_f = cfg.get("flow_id")
+        i_f = inner.get("flow_id")
+        if isinstance(r_f, str) and r_f.strip():
+            self.flow_id = r_f
+        elif isinstance(i_f, str) and i_f.strip():
+            self.flow_id = i_f
+        else:
+            self.flow_id = None
+        r_s = cfg.get("skill_id")
+        i_s = inner.get("skill_id")
+        if isinstance(r_s, str) and r_s.strip():
+            self.skill_id = r_s
+        elif isinstance(i_s, str) and i_s.strip():
+            self.skill_id = i_s
+        else:
+            self.skill_id = "default"
         self._nested_flow = None
 
     async def _run_impl(self, state: ExecutionState, inputs: Dict[str, Any]) -> Any:
@@ -1194,6 +1210,49 @@ class HitlNode(BaseNode):
         )
 
 
+def _infer_node_type_from_fields(node_config: Dict[str, Any]) -> None:
+    """
+    Выставляет type по полям, если type отсутствует (частичные данные в БД / мердж skills).
+    """
+    if node_config.get("type"):
+        return
+    code = node_config.get("code")
+    if isinstance(code, str) and code.strip():
+        node_config["type"] = NodeType.CODE.value
+        return
+    fn = node_config.get("function")
+    if isinstance(fn, str) and fn.strip():
+        node_config["type"] = NodeType.CODE.value
+        return
+    if node_config.get("server_id") and node_config.get("tool_name"):
+        node_config["type"] = NodeType.MCP.value
+        return
+    if node_config.get("operator_queue_slug") or node_config.get("operator_queue_id"):
+        node_config["type"] = NodeType.HITL_NODE.value
+        return
+    ch = node_config.get("channel")
+    if ch is not None and ch != "":
+        node_config["type"] = NodeType.CHANNEL.value
+        return
+    url = node_config.get("url")
+    if isinstance(url, str) and url.strip():
+        if node_config.get("method"):
+            node_config["type"] = NodeType.EXTERNAL_API.value
+        else:
+            node_config["type"] = NodeType.REMOTE_FLOW.value
+        return
+    if node_config.get("flow_id"):
+        node_config["type"] = NodeType.FLOW.value
+        return
+    if node_config.get("llm") is not None:
+        node_config["type"] = NodeType.LLM_NODE.value
+        return
+    prompt = node_config.get("prompt")
+    if isinstance(prompt, str) and prompt.strip():
+        node_config["type"] = NodeType.LLM_NODE.value
+        return
+
+
 async def create_node(node_id: str, node_config: Dict[str, Any]) -> BaseNode:
     """
     Создаёт ноду через NodeRegistry.
@@ -1201,9 +1260,28 @@ async def create_node(node_id: str, node_config: Dict[str, Any]) -> BaseNode:
     Zero-Guess: неизвестный тип = исключение.
     """
     node_config = dict(node_config)
+    t = node_config.get("type")
+    if isinstance(t, str) and not t.strip():
+        node_config.pop("type", None)
+
+    if not node_config.get("type"):
+        if not (isinstance(node_config.get("code"), str) and node_config.get("code", "").strip()):
+            tool_id = node_config.get("tool_id")
+            if tool_id:
+                container = get_container()
+                stored = await container.tool_repository.get(str(tool_id))
+                if stored is not None:
+                    c = getattr(stored, "code", None)
+                    if isinstance(c, str) and c.strip():
+                        node_config["code"] = c
+        _infer_node_type_from_fields(node_config)
+
     node_type_value = node_config.get("type")
-    if node_type_value is None:
-        raise ValueError(f"Node '{node_id}': type is required")
+    if not node_type_value:
+        keys = sorted(node_config.keys())
+        raise ValueError(
+            f"Node '{node_id}': type is required (поля: {keys})"
+        )
     
     try:
         node_type = NodeType(node_type_value) if isinstance(node_type_value, str) else node_type_value

@@ -152,6 +152,8 @@ ROUTE_RULES: List[RouteRule] = [
     # Вебхуки (без JWT, используют свою аутентификацию)
     RouteRule("/flows/api/v1/webhook/telegram/*", auth_required=False, context_type="webhook", channel="telegram"),
     RouteRule("/flows/api/v1/webhook/whatsapp/*", auth_required=False, context_type="webhook", channel="whatsapp"),
+    # Telegram Bot API: тот же путь, что в generate_webhook_url (setWebhook) — публичный POST без JWT
+    RouteRule("/flows/api/v1/triggers/telegram/*", auth_required=False, context_type="anonymous"),
     RouteRule("/api/v1/payments/webhook/*", skip=True),
     RouteRule("/frontend/api/v1/payments/webhook/*", skip=True),
 

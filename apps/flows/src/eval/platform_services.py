@@ -41,6 +41,13 @@ def get_lara_facade() -> "LaraFacade":
     return get_container().lara_facade
 
 
+def get_code_runner(language: str = "python", resources: dict | None = None) -> Any:
+    """PythonCodeRunner (или runner для `language`) без доступа к `FlowContainer` из namespace."""
+    from apps.flows.src.container import get_container
+
+    return get_container().get_code_runner(language=language, resources=resources)
+
+
 async def get_file_bytes(file_id: str) -> bytes:
     """Скачивает содержимое файла по ID из хранилища платформы (FileRepository + S3)."""
     from apps.flows.src.container import get_container

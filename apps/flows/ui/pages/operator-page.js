@@ -5,8 +5,8 @@
  *   - Шапка: ссылка обратно в /flows, переключатель темы, заголовок.
  *   - Полоса очередей: chips с join/leave, форма создания (admin/owner).
  *   - Канбан задач по статусам STATUSES (open/claimed/user_dialog/awaiting_agent/completed/cancelled).
- *   - Панель деталей выбранной задачи: history (a2a messages) + dialog_log
- *     (operator dialog), composer с аттачем файлов и smart-кнопками.
+ *   - Панель деталей (~половина ширины) только при выбранной карточке: заголовок, статус,
+ *     (i) — JSON, закрыть; history, dialog_log, composer.
  *
  * Фабрики:
  *   - useResource('flows/operator_queues')        — list/create
@@ -25,7 +25,6 @@
 import { html, css } from 'lit';
 import { PlatformPage } from '@platform/lib/base/PlatformPage.js';
 import '@platform/lib/components/glass-button.js';
-import '@platform/lib/components/glass-input.js';
 import '@platform/lib/components/glass-spinner.js';
 import '@platform/lib/components/platform-icon.js';
 import { asArray, asString, isPlainObject } from '../_helpers/flows-resolvers.js';
@@ -59,6 +58,7 @@ export class OperatorPage extends PlatformPage {
         _pendingFiles: { state: true },
         _queueName: { state: true },
         _queueSlug: { state: true },
+        _showTaskData: { state: true },
     };
 
     static styles = [
@@ -81,7 +81,7 @@ export class OperatorPage extends PlatformPage {
             .header-icon-btn {
                 display: inline-flex; align-items: center; gap: var(--space-2);
                 padding: var(--space-2) var(--space-3);
-                border-radius: var(--radius-md);
+                border-radius: var(--radius-lg);
                 background: var(--glass-solid-subtle);
                 border: 1px solid var(--border-subtle);
                 color: var(--text-secondary); cursor: pointer; text-decoration: none;
@@ -122,7 +122,7 @@ export class OperatorPage extends PlatformPage {
                 flex: 1; min-height: 0; display: flex;
             }
             .kanban {
-                flex: 1; min-width: 0; overflow-x: auto;
+                flex: 1 1 0; min-width: 0; overflow-x: auto;
                 display: flex; gap: var(--space-2); padding: var(--space-3);
             }
             .column {
@@ -143,16 +143,88 @@ export class OperatorPage extends PlatformPage {
             }
             .task-card:hover { background: var(--glass-solid-medium); }
             .task-card[active] { border-color: var(--accent); background: var(--accent-subtle); color: var(--accent); }
-            .task-card-title { font-weight: var(--font-medium); }
+            .task-card[active] .task-card-status { color: var(--accent); opacity: 0.9; }
+            .task-card-head {
+                display: flex; align-items: flex-start; justify-content: space-between; gap: var(--space-2);
+                margin-bottom: 2px;
+            }
+            .task-card-title { flex: 1; min-width: 0; font-weight: var(--font-medium); }
+            .task-card-status {
+                flex-shrink: 0; max-width: 48%; text-align: right;
+                font-size: 10px; line-height: var(--leading-tight);
+                text-transform: uppercase; letter-spacing: 0.04em;
+                color: var(--text-tertiary);
+            }
             .task-card-meta { font-size: var(--text-xs); color: var(--text-tertiary); margin-top: 2px; }
             .detail-panel {
-                width: 420px; min-width: 420px; max-width: 50%;
+                flex: 0 0 50%;
+                min-width: 0;
+                max-width: 50%;
+                min-height: 0;
                 display: flex; flex-direction: column;
                 border-left: 1px solid var(--border-subtle);
-                padding: var(--space-3);
-                overflow-y: auto; gap: var(--space-3);
+                box-sizing: border-box;
+                padding-top: var(--space-3);
+                padding-inline: var(--space-3);
+                padding-bottom: max(var(--space-4), env(safe-area-inset-bottom, 0px));
+                overflow-y: auto;
+                overflow-x: hidden;
+                gap: var(--space-3);
+                scroll-padding-bottom: var(--space-3);
+            }
+            .panel-head {
+                display: flex; align-items: flex-start; justify-content: space-between;
+                gap: var(--space-2);
             }
             .panel-title { font-size: var(--text-xs); font-weight: var(--font-semibold); text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-tertiary); }
+            .panel-title--main { flex: 1; min-width: 0; text-align: left; line-height: var(--leading-tight); }
+            .panel-head-right {
+                flex-shrink: 0; display: flex; flex-direction: row; align-items: center; gap: var(--space-2);
+            }
+            .panel-status {
+                max-width: 9rem; text-align: right;
+                font-size: 10px; font-weight: var(--font-semibold);
+                line-height: var(--leading-tight);
+                text-transform: uppercase; letter-spacing: 0.04em;
+                color: var(--text-tertiary);
+            }
+            .detail-info-btn {
+                flex-shrink: 0;
+                display: inline-flex; align-items: center; justify-content: center;
+                width: 36px; height: 36px; padding: 0; margin: 0;
+                border: 1px solid var(--border-subtle); border-radius: var(--radius-md);
+                background: var(--glass-solid-subtle); color: var(--text-secondary);
+                cursor: pointer;
+                transition: background var(--duration-fast), color var(--duration-fast);
+            }
+            .detail-info-btn:hover { background: var(--glass-solid-medium); color: var(--text-primary); }
+            .detail-info-btn:focus-visible { outline: none; box-shadow: var(--focus-ring, 0 0 0 3px rgba(153, 166, 249, 0.4)); }
+            .detail-close-btn {
+                flex-shrink: 0;
+                display: inline-flex; align-items: center; justify-content: center;
+                width: 36px; height: 36px; padding: 0; margin: 0;
+                border: 1px solid var(--border-subtle); border-radius: var(--radius-lg);
+                background: var(--glass-solid-subtle); color: var(--text-secondary);
+                cursor: pointer;
+                transition: background var(--duration-fast), color var(--duration-fast);
+            }
+            .detail-close-btn:hover { background: var(--glass-solid-medium); color: var(--text-primary); }
+            .detail-close-btn:focus-visible { outline: none; box-shadow: var(--focus-ring, 0 0 0 3px rgba(153, 166, 249, 0.4)); }
+            .task-data-section { display: flex; flex-direction: column; gap: var(--space-2); flex-shrink: 0; }
+            .task-data-label { font-size: var(--text-xs); font-weight: var(--font-semibold); text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-tertiary); }
+            .task-data-json {
+                margin: 0; padding: var(--space-2) var(--space-3);
+                max-height: min(50vh, 360px);
+                overflow: auto;
+                font-family: var(--font-mono, ui-monospace, monospace);
+                font-size: var(--text-xs);
+                line-height: var(--leading-normal);
+                white-space: pre;
+                color: var(--text-primary);
+                background: var(--bg-secondary, var(--glass-solid-subtle));
+                border: 1px solid var(--border-subtle);
+                border-radius: var(--radius-md);
+            }
             .dialog-entry {
                 display: flex; flex-direction: column; gap: 2px;
                 padding: var(--space-2); border-radius: var(--radius-md);
@@ -161,9 +233,46 @@ export class OperatorPage extends PlatformPage {
             .dialog-entry--user { background: var(--accent-subtle); }
             .dialog-entry--operator { background: var(--glass-solid-medium); }
             .dialog-role { font-size: var(--text-xs); color: var(--text-tertiary); font-weight: var(--font-semibold); }
-            .composer { display: flex; flex-direction: column; gap: var(--space-2); margin-top: auto; }
-            .composer-row { display: flex; gap: var(--space-2); align-items: center; }
-            .composer-row glass-input { flex: 1; }
+            .operator-composer {
+                display: flex; flex-direction: column; gap: var(--space-2);
+                margin-top: auto;
+                flex-shrink: 0;
+                padding-top: var(--space-1);
+            }
+            .operator-claim {
+                display: flex; justify-content: flex-end; align-items: center;
+                width: 100%; box-sizing: border-box;
+                padding-top: var(--space-2);
+            }
+            .composer {
+                box-sizing: border-box;
+                display: flex; align-items: center; gap: var(--space-2);
+                padding: var(--space-2) var(--space-3);
+                border-radius: var(--radius-full);
+                background: var(--glass-solid-subtle);
+                border: 1px solid var(--border-subtle);
+                transition: border-color var(--duration-fast);
+            }
+            .composer:focus-within { border-color: var(--border-focus, var(--accent)); }
+            .composer-input {
+                flex: 1; min-width: 0; border: none; background: transparent;
+                color: var(--text-primary); font: inherit; font-size: var(--text-sm);
+                line-height: var(--leading-tight); padding: var(--space-1) 0; outline: none;
+            }
+            .composer-input::placeholder { color: var(--text-tertiary); }
+            .composer-btn {
+                display: inline-flex; align-items: center; justify-content: center;
+                flex-shrink: 0; width: 40px; height: 40px; padding: 0; margin: 0;
+                border: none; border-radius: var(--radius-full); cursor: pointer;
+                background: var(--glass-solid-medium); color: var(--accent);
+                transition: background var(--duration-fast), opacity var(--duration-fast);
+            }
+            .composer-btn:hover:not([disabled]) { background: var(--glass-solid-strong); }
+            .composer-btn:focus-visible { outline: none; box-shadow: var(--focus-ring, 0 0 0 3px rgba(153, 166, 249, 0.4)); }
+            .composer-btn[disabled] { opacity: 0.45; cursor: not-allowed; }
+            .composer-btn--send { color: var(--accent); }
+            .composer-btn--complete { color: var(--success); background: var(--success-bg); }
+            .composer-btn--complete:hover:not([disabled]) { background: var(--success-border); }
             .pending-files { display: flex; gap: var(--space-2); flex-wrap: wrap; }
             .pending-file {
                 display: inline-flex; align-items: center; gap: 4px;
@@ -182,6 +291,7 @@ export class OperatorPage extends PlatformPage {
         this._pendingFiles = [];
         this._queueName = '';
         this._queueSlug = '';
+        this._showTaskData = false;
         this._queues = this.useResource('flows/operator_queues', { autoload: true });
         this._tasksList = this.useOp('flows/operator_tasks_list');
         this._taskGet = this.useOp('flows/operator_task_get');
@@ -222,11 +332,23 @@ export class OperatorPage extends PlatformPage {
     _selectQueue(queueId) {
         this._selectedQueueId = queueId === this._selectedQueueId ? '' : queueId;
         this._selectedTaskId = '';
+        this._showTaskData = false;
         this._refreshTasks();
+    }
+
+    _labelForTaskStatus(statusRaw) {
+        const s = typeof statusRaw === 'string' && STATUSES.includes(statusRaw) ? statusRaw : 'open';
+        return this.t(`operator.status_${s}`);
+    }
+
+    _onCloseDetail() {
+        this._selectedTaskId = '';
+        this._showTaskData = false;
     }
 
     _selectTask(taskId) {
         this._selectedTaskId = taskId;
+        this._showTaskData = false;
         void this._taskGet.run({ task_id: taskId });
     }
 
@@ -371,45 +493,57 @@ export class OperatorPage extends PlatformPage {
                 <div class="column-title">${this.t(`operator.status_${status}`)}</div>
                 ${byStatus[status].length === 0
                     ? html`<div class="empty">${this.t('operator.empty_column')}</div>`
-                    : byStatus[status].map((task) => html`
+                    : byStatus[status].map((task) => {
+                        const cardStatus = typeof task.status === 'string' && STATUSES.includes(task.status) ? task.status : 'open';
+                        return html`
                         <div
                             class="task-card"
                             ?active=${this._selectedTaskId === task.id}
                             @click=${() => this._selectTask(task.id)}
                         >
-                            <div class="task-card-title">${
-                                typeof task.handoff_title === 'string' && task.handoff_title.length > 0
-                                    ? task.handoff_title
-                                    : (typeof task.flow_display_name === 'string' && task.flow_display_name.length > 0
-                                        ? task.flow_display_name
-                                        : task.id)
-                            }</div>
+                            <div class="task-card-head">
+                                <div class="task-card-title">${
+                                    typeof task.handoff_title === 'string' && task.handoff_title.length > 0
+                                        ? task.handoff_title
+                                        : (typeof task.flow_display_name === 'string' && task.flow_display_name.length > 0
+                                            ? task.flow_display_name
+                                            : task.id)
+                                }</div>
+                                <span class="task-card-status" role="status">${this._labelForTaskStatus(cardStatus)}</span>
+                            </div>
                             <div class="task-card-meta">${asString(task.handoff_message_preview)}</div>
                             <div class="task-card-meta"><code>${task.flow_id}</code> / ${
                                 typeof task.skill_id === 'string' && task.skill_id.length > 0 ? task.skill_id : 'base'
                             }</div>
                         </div>
-                    `)}
+                    `;
+                    })}
             </div>
         `)}`;
     }
 
     _detailHandoffMode(detail) {
-        const taskMeta = isPlainObject(detail?.task) && isPlainObject(detail.task.metadata) ? detail.task.metadata : null;
+        const task = isPlainObject(detail?.task) ? detail.task : null;
+        if (task !== null && typeof task.handoff_mode === 'string' && task.handoff_mode.trim() === 'takeover') {
+            return 'takeover';
+        }
+        const taskMeta = task !== null && isPlainObject(task.metadata) ? task.metadata : null;
         const directMeta = isPlainObject(detail?.metadata) ? detail.metadata : null;
-        const meta = taskMeta !== null ? taskMeta : (directMeta !== null ? directMeta : {});
-        const mode = meta.handoff_mode;
-        return mode === 'takeover' ? 'takeover' : 'single_reply';
+        const meta = taskMeta !== null ? taskMeta : directMeta;
+        if (meta !== null && typeof meta.handoff_mode === 'string' && meta.handoff_mode.trim() === 'takeover') {
+            return 'takeover';
+        }
+        return 'single_reply';
     }
 
     _renderDialog(detail) {
         const dialogMessages = isPlainObject(detail) && Array.isArray(detail.dialog_messages) ? detail.dialog_messages : [];
         const history = dialogMessages
             .filter((m) => (m.role === 'user' || m.role === 'agent'))
-            .map((m) => ({
-                role: m.role,
-                text: asArray(m.parts).filter((p) => p.kind === 'text' && p.text).map((p) => p.text).join('\n'),
-            }))
+            .map((m) => {
+                const text = typeof m.message_text === 'string' ? m.message_text : '';
+                return { role: m.role, text };
+            })
             .filter((e) => e.text.trim());
         const log = Array.isArray(detail?.dialog_log) ? detail.dialog_log : [];
         if (history.length === 0 && log.length === 0) {
@@ -447,11 +581,24 @@ export class OperatorPage extends PlatformPage {
     }
 
     _renderComposer(detail) {
-        const status = detail?.task?.status;
+        const tsk = isPlainObject(detail) && isPlainObject(detail.task) ? detail.task : null;
+        const status = tsk !== null && typeof tsk.status === 'string' ? tsk.status : '';
         if (status === 'open') {
-            return html`<glass-button @click=${this._onClaim}>${this.t('operator.btn_claim')}</glass-button>`;
+            return html`
+                <div class="operator-claim">
+                    <glass-button @click=${(e) => { e.stopPropagation(); void this._onClaim(); }}>${this.t('operator.btn_claim')}</glass-button>
+                </div>
+            `;
         }
         const mode = this._detailHandoffMode(detail);
+        const textOk = this._composerDraft.trim().length > 0;
+        const postBusy = this._postMessage.busy;
+        const completeBusy = this._complete.busy;
+        const uploadBusy = this._upload.busy;
+        const sendDisabled = !textOk || postBusy || uploadBusy;
+        const completeTitle = mode === 'takeover'
+            ? this.t('operator.tooltip_reply_and_close')
+            : this.t('operator.btn_complete');
         return html`
             ${this._pendingFiles.length > 0
                 ? html`
@@ -469,37 +616,73 @@ export class OperatorPage extends PlatformPage {
                 `
                 : ''}
             <input type="file" id="op-file-input" multiple hidden @change=${this._onFilesSelected} />
-            <div class="composer-row">
-                <glass-button title=${this.t('operator.tooltip_attach_file')} @click=${() => this.shadowRoot.getElementById('op-file-input').click()}>
-                    <platform-icon name="paperclip" size="16"></platform-icon>
-                </glass-button>
-                <glass-input
-                    .value=${this._composerDraft}
+            <div class="composer">
+                <button
+                    type="button"
+                    class="composer-btn"
+                    title=${this.t('operator.tooltip_attach_file')}
+                    aria-label=${this.t('operator.tooltip_attach_file')}
+                    ?disabled=${uploadBusy}
+                    @click=${() => this.shadowRoot.getElementById('op-file-input').click()}
+                >
+                    <platform-icon name="paperclip" size="18"></platform-icon>
+                </button>
+                <input
+                    type="text"
+                    class="composer-input"
                     placeholder=${mode === 'takeover'
+                        ? this.t('operator.placeholder_composer')
+                        : this.t('operator.placeholder_single_reply')}
+                    .value=${this._composerDraft}
+                    aria-label=${mode === 'takeover'
                         ? this.t('operator.placeholder_composer')
                         : this.t('operator.placeholder_single_reply')}
                     @input=${(e) => { this._composerDraft = asString(e.target.value); }}
                     @keydown=${(e) => {
                         if (e.key === 'Enter' && !e.shiftKey) {
                             e.preventDefault();
-                            void this._onSendMessage();
+                            if (!sendDisabled) void this._onSendMessage();
                         }
                     }}
-                ></glass-input>
-                <glass-button @click=${() => void this._onSendMessage()}>${this.t('operator.btn_send')}</glass-button>
-                <glass-button variant="primary" @click=${() => void this._onComplete()}>
-                    ${mode === 'takeover'
-                        ? this.t('operator.tooltip_reply_and_close')
-                        : this.t('operator.btn_complete')}
-                </glass-button>
+                />
+                <button
+                    type="button"
+                    class="composer-btn composer-btn--send"
+                    title=${this.t('operator.btn_send')}
+                    aria-label=${this.t('operator.btn_send')}
+                    ?disabled=${sendDisabled}
+                    @click=${() => void this._onSendMessage()}
+                >
+                    <platform-icon name="send" size="18"></platform-icon>
+                </button>
+                <button
+                    type="button"
+                    class="composer-btn composer-btn--complete"
+                    title=${completeTitle}
+                    aria-label=${completeTitle}
+                    ?disabled=${completeBusy}
+                    @click=${() => void this._onComplete()}
+                >
+                    <platform-icon name="check" size="18"></platform-icon>
+                </button>
             </div>
         `;
     }
 
-    _renderDetail() {
-        if (!this._selectedTaskId) {
-            return html`<div class="empty">${this.t('operator.select_task')}</div>`;
+    _taskDetailJsonPayload(detail) {
+        if (!isPlainObject(detail)) {
+            throw new Error('operator: task detail must be a plain object');
         }
+        return {
+            task: detail.task,
+            interrupt_snapshot: detail.interrupt_snapshot,
+            resolution_payload: detail.resolution_payload,
+            dialog_log: detail.dialog_log,
+            dialog_messages: detail.dialog_messages,
+        };
+    }
+
+    _renderDetail() {
         const detail = this._taskGet.lastResult;
         if (this._taskGet.busy && !detail) {
             return html`<div class="empty"><glass-spinner></glass-spinner></div>`;
@@ -507,14 +690,50 @@ export class OperatorPage extends PlatformPage {
         if (!detail) {
             return html`<div class="empty">${this.t('operator.no_detail')}</div>`;
         }
+        const titleText = isPlainObject(detail.task) && typeof detail.task.handoff_title === 'string' && detail.task.handoff_title.length > 0
+            ? detail.task.handoff_title
+            : (isPlainObject(detail.task) ? detail.task.id : '');
+        const detailStatus = isPlainObject(detail.task) && typeof detail.task.status === 'string' ? detail.task.status : 'open';
+        const detailStatusLabel = this._labelForTaskStatus(detailStatus);
+        const infoShow = this.t('operator.task_data_show');
+        const infoHide = this.t('operator.task_data_hide');
+        const infoBtnTitle = this._showTaskData ? infoHide : infoShow;
+        const closeLabel = this.t('operator.close_detail');
+        const jsonText = JSON.stringify(this._taskDetailJsonPayload(detail), null, 2);
         return html`
-            <div class="panel-title">${
-                isPlainObject(detail.task) && typeof detail.task.handoff_title === 'string' && detail.task.handoff_title.length > 0
-                    ? detail.task.handoff_title
-                    : (isPlainObject(detail.task) ? detail.task.id : '')
-            }</div>
+            <div class="panel-head">
+                <div class="panel-title panel-title--main">${titleText}</div>
+                <div class="panel-head-right">
+                    <span class="panel-status" role="status">${detailStatusLabel}</span>
+                    <button
+                        type="button"
+                        class="detail-info-btn"
+                        title=${infoBtnTitle}
+                        aria-label=${infoBtnTitle}
+                        aria-pressed=${this._showTaskData ? 'true' : 'false'}
+                        @click=${() => { this._showTaskData = !this._showTaskData; }}
+                    >
+                        <platform-icon name="info" size="18"></platform-icon>
+                    </button>
+                    <button
+                        type="button"
+                        class="detail-close-btn"
+                        title=${closeLabel}
+                        aria-label=${closeLabel}
+                        @click=${() => { this._onCloseDetail(); }}
+                    >
+                        <platform-icon name="close" size="18"></platform-icon>
+                    </button>
+                </div>
+            </div>
+            ${this._showTaskData ? html`
+                <section class="task-data-section" aria-label=${this.t('operator.task_data_title')}>
+                    <div class="task-data-label">${this.t('operator.task_data_title')}</div>
+                    <pre class="task-data-json">${jsonText}</pre>
+                </section>
+            ` : ''}
             ${this._renderDialog(detail)}
-            <div class="composer">${this._renderComposer(detail)}</div>
+            <div class="operator-composer">${this._renderComposer(detail)}</div>
         `;
     }
 
@@ -538,7 +757,9 @@ export class OperatorPage extends PlatformPage {
             <div class="queues-bar">${this._renderQueues()}</div>
             <div class="body">
                 <div class="kanban">${this._renderKanban()}</div>
-                <div class="detail-panel">${this._renderDetail()}</div>
+                ${this._selectedTaskId
+                    ? html`<div class="detail-panel">${this._renderDetail()}</div>`
+                    : ''}
             </div>
         `;
     }

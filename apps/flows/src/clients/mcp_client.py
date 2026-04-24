@@ -82,44 +82,52 @@ class MCPClient:
         
         return headers
     
-    async def _parse_sse_response(self, response: httpx.Response) -> Any:
+    @staticmethod
+    def _jsonrpc_envelope_from_body(text: str) -> Optional[Dict[str, Any]]:
         """
-        Парсит SSE response и извлекает JSON-RPC результат.
-        
-        SSE формат:
-        event: message
-        data: {"jsonrpc": "2.0", "id": 1, "result": {...}}
+        Извлекает один JSON-RPC 2.0 envelope из тела ответа.
+
+        Поддерживает:
+        - целиком application/json;
+        - SSE: строки `data: {...}` (Streamable HTTP / совместимые прокси);
+        - несколько `data:` — берётся первое валидное с result/error/jsonrpc.
         """
-        result = None
-        buffer = ""
-        
-        async for line in response.aiter_lines():
-            line = line.strip()
-            
-            if line.startswith("data:"):
-                data = line[5:].strip()
-                if data:
-                    buffer = data
-            elif line == "" and buffer:
-                try:
-                    parsed = json.loads(buffer)
-                    if "result" in parsed:
-                        result = parsed
-                    elif "error" in parsed:
-                        result = parsed
-                except json.JSONDecodeError:
-                    pass
-                buffer = ""
-        
-        if buffer:
+        if not text or not str(text).strip():
+            return None
+        s = str(text).strip()
+        if s.startswith("{"):
             try:
-                parsed = json.loads(buffer)
-                if "result" in parsed or "error" in parsed:
-                    result = parsed
+                o = json.loads(s)
             except json.JSONDecodeError:
-                pass
-        
-        return result
+                o = None
+            else:
+                if isinstance(o, dict) and (
+                    o.get("jsonrpc") == "2.0" or "result" in o or "error" in o
+                ):
+                    return o
+        for line in str(text).splitlines():
+            line = line.strip()
+            if not line:
+                continue
+            low = line.lower()
+            if not low.startswith("data:"):
+                continue
+            payload = line[5:].lstrip()
+            if not payload or payload == "[DONE]":
+                continue
+            try:
+                o = json.loads(payload)
+            except json.JSONDecodeError:
+                continue
+            if isinstance(o, dict) and (
+                o.get("jsonrpc") == "2.0" or "result" in o or "error" in o
+            ):
+                return o
+        return None
+
+    async def _read_response_text(self, response: httpx.Response) -> str:
+        await response.aread()
+        return response.text
     
     async def _rpc_call(
         self,
@@ -162,21 +170,20 @@ class MCPClient:
             )
             
             response_headers = response.headers
+            text = await self._read_response_text(response)
             
             if response.status_code >= 400:
                 raise MCPClientError(
-                    f"MCP HTTP error: {response.status_code} {response.text}"
+                    f"MCP HTTP error: {response.status_code} {text}"
                 )
             
-            content_type = response.headers.get("content-type", "")
-            
-            if "text/event-stream" in content_type or self.config.transport_type == MCPTransportType.SSE:
-                result = await self._parse_sse_response(response)
-            else:
-                result = response.json()
-        
-        if result is None:
-            raise MCPClientError(f"MCP: empty response for {method}")
+            result = self._jsonrpc_envelope_from_body(text)
+            if result is None:
+                snippet = text[:500] if text else ""
+                ct = response.headers.get("content-type", "")
+                raise MCPClientError(
+                    f"MCP: empty response for {method} (content-type={ct!r}, body={snippet!r})"
+                )
         
         if "error" in result:
             error = result["error"]

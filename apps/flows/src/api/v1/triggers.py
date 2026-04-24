@@ -5,6 +5,7 @@ CRUD для триггеров + webhook endpoints для приема вход�
 """
 
 import json
+import secrets
 from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, Header, HTTPException, Request
@@ -12,12 +13,67 @@ from pydantic import BaseModel, Field
 
 from apps.flows.src.dependencies import ContainerDep
 from apps.flows.src.models import TriggerConfig, TriggerStatus, TriggerType
-from apps.flows.src.models.channel_config import OutputAction
+from apps.flows.src.models.channel_config import (
+    OutputAction,
+    default_output_actions_for_trigger_type,
+)
 from apps.flows.src.triggers import TriggerRegistry, TriggerValidationError
 from apps.flows.src.triggers.handlers.telegram import TelegramTriggerHandler
+from apps.flows.src.triggers.webhook_inbound import check_webhook_rate_limit, client_ip_allowed
+from core.context import get_context, set_context
 from core.logging import get_logger
+from core.models.context_models import Context, Language
+from core.models.identity_models import Company, User
 
 logger = get_logger(__name__)
+
+_SENSITIVE_TRIGGER_CONFIG_KEYS = frozenset(
+    {"bot_token", "secret_token", "imap_password", "password"},
+)
+
+
+def _trigger_response_output_actions(trigger: TriggerConfig) -> List[OutputAction]:
+    if trigger.output_actions:
+        return trigger.output_actions
+    return default_output_actions_for_trigger_type(trigger.type)
+
+
+def _public_trigger_config(config: Dict[str, Any]) -> Dict[str, Any]:
+    """Убирает служебные ключи и скрывает секреты в ответах API."""
+    out: Dict[str, Any] = {}
+    for k, v in config.items():
+        if k.startswith("_"):
+            continue
+        if k in _SENSITIVE_TRIGGER_CONFIG_KEYS and v not in (None, ""):
+            out[k] = "(redacted)"
+        else:
+            out[k] = v
+    return out
+
+
+async def _resolve_config_secret_value(container: Any, raw: str) -> str:
+    """Резолвит @var:key для secret_token в конфиге webhook."""
+    if not raw:
+        return ""
+    s = str(raw)
+    if s.startswith("@var:"):
+        var_key = s[5:]
+        value = await container.variables_service.get_var(var_key)
+        if value is None:
+            raise HTTPException(
+                status_code=500,
+                detail=f"Variable not found: {var_key}",
+            )
+        return str(value)
+    return s
+
+
+def _webhook_secret_from_request(request: Request) -> Optional[str]:
+    for header in ("X-Trigger-Secret", "X-Webhook-Secret"):
+        v = request.headers.get(header)
+        if v:
+            return v
+    return request.query_params.get("secret")
 
 router = APIRouter(tags=["triggers"])
 
@@ -86,10 +142,10 @@ async def list_triggers(flow_id: str, container: ContainerDep) -> list[TriggerRe
             name=t.name,
             type=t.type,
             enabled=t.enabled,
-            config={k: v for k, v in t.config.items() if not k.startswith("_")},
+            config=_public_trigger_config(t.config),
             output_mapping=t.output_mapping,
             input_mapping=t.input_mapping,
-            output_actions=t.output_actions,
+            output_actions=_trigger_response_output_actions(t),
             webhook_url=t.webhook_url,
             status=t.status,
             last_error=t.last_error,
@@ -116,10 +172,10 @@ async def get_trigger(flow_id: str, trigger_id: str, container: ContainerDep) ->
         name=trigger.name,
         type=trigger.type,
         enabled=trigger.enabled,
-        config={k: v for k, v in trigger.config.items() if not k.startswith("_")},
+        config=_public_trigger_config(trigger.config),
         output_mapping=trigger.output_mapping,
         input_mapping=trigger.input_mapping,
-        output_actions=trigger.output_actions,
+        output_actions=_trigger_response_output_actions(trigger),
         webhook_url=trigger.webhook_url,
         status=trigger.status,
         last_error=trigger.last_error,
@@ -140,6 +196,10 @@ async def create_trigger(flow_id: str, request: TriggerCreateRequest, container:
             detail=f"Trigger already exists: {request.trigger_id}"
         )
     
+    out_actions = request.output_actions
+    if len(out_actions) == 0:
+        out_actions = default_output_actions_for_trigger_type(request.type)
+    
     trigger = TriggerConfig(
         trigger_id=request.trigger_id,
         name=request.name,
@@ -148,7 +208,7 @@ async def create_trigger(flow_id: str, request: TriggerCreateRequest, container:
         config=request.config,
         output_mapping=request.output_mapping,
         input_mapping=request.input_mapping,
-        output_actions=request.output_actions,
+        output_actions=out_actions,
     )
     
     # Сохраняем старый конфиг для sync
@@ -176,10 +236,10 @@ async def create_trigger(flow_id: str, request: TriggerCreateRequest, container:
         name=updated_trigger.name,
         type=updated_trigger.type,
         enabled=updated_trigger.enabled,
-        config={k: v for k, v in updated_trigger.config.items() if not k.startswith("_")},
+        config=_public_trigger_config(updated_trigger.config),
         output_mapping=updated_trigger.output_mapping,
         input_mapping=updated_trigger.input_mapping,
-        output_actions=updated_trigger.output_actions,
+        output_actions=_trigger_response_output_actions(updated_trigger),
         webhook_url=updated_trigger.webhook_url,
         status=updated_trigger.status,
         last_error=updated_trigger.last_error,
@@ -243,10 +303,10 @@ async def update_trigger(
         name=updated_trigger.name,
         type=updated_trigger.type,
         enabled=updated_trigger.enabled,
-        config={k: v for k, v in updated_trigger.config.items() if not k.startswith("_")},
+        config=_public_trigger_config(updated_trigger.config),
         output_mapping=updated_trigger.output_mapping,
         input_mapping=updated_trigger.input_mapping,
-        output_actions=updated_trigger.output_actions,
+        output_actions=_trigger_response_output_actions(updated_trigger),
         webhook_url=updated_trigger.webhook_url,
         status=updated_trigger.status,
         last_error=updated_trigger.last_error,
@@ -300,7 +360,38 @@ async def telegram_webhook(
     
     Telegram посылает Update сюда после setWebhook.
     """
-    flow_config = await container.flow_repository.get(flow_id)
+    ctx = get_context()
+    if ctx and ctx.active_company:
+        flow_config = await container.flow_repository.get(flow_id)
+    else:
+        unscoped = await container.flow_repository.get_latest_by_flow_id_unscoped(flow_id)
+        if not unscoped:
+            flow_config = None
+        else:
+            flow_config, company_identifier = unscoped
+            comp = Company(
+                company_id=company_identifier,
+                subdomain=company_identifier,
+                name=company_identifier,
+            )
+            inbound_user = User(
+                user_id="telegram_inbound",
+                name="Telegram Inbound",
+                groups=["guest"],
+            )
+            set_context(
+                Context(
+                    user=inbound_user,
+                    host=ctx.host if ctx else "",
+                    session_id=ctx.session_id if ctx and ctx.session_id else "telegram_inbound",
+                    channel="triggers/telegram",
+                    language=ctx.language if ctx else Language.RU,
+                    active_company=comp,
+                    user_companies=[comp],
+                    trace_id=ctx.trace_id if ctx else None,
+                    metadata={**(ctx.metadata if ctx else {}), "inbound": "telegram"},
+                )
+            )
     
     if not flow_config:
         logger.warning(f"Telegram webhook: flow not found: {flow_id}")
@@ -372,16 +463,40 @@ async def generic_webhook(
     
     if not trigger.enabled:
         raise HTTPException(status_code=400, detail="Trigger is disabled")
+
+    client = request.client
+    client_host = client.host if client else "unknown"
+    if not check_webhook_rate_limit(flow_id, trigger_id, client_host):
+        raise HTTPException(status_code=429, detail="Too many requests")
+    if not client_ip_allowed(client_host, trigger.config.get("allowed_ips")):
+        raise HTTPException(status_code=403, detail="Client IP not allowed")
+
+    raw_secret = trigger.config.get("secret_token")
+    if raw_secret is not None and str(raw_secret).strip() != "":
+        expected = await _resolve_config_secret_value(container, str(raw_secret))
+        received = _webhook_secret_from_request(request)
+        if not received:
+            raise HTTPException(status_code=403, detail="Secret required")
+        if not secrets.compare_digest(expected, received):
+            raise HTTPException(status_code=403, detail="Invalid secret")
     
     try:
         payload = await request.json()
     except json.JSONDecodeError as e:
         raise HTTPException(status_code=400, detail=f"Invalid JSON body: {e}") from e
 
-    payload_keys = list(payload.keys()) if isinstance(payload, dict) else None
-    logger.info(
-        f"Webhook received: flow_id={flow_id}, trigger={trigger_id}, payload_type={type(payload).__name__}, keys={payload_keys}"
-    )
+    if isinstance(payload, dict):
+        keys = list(payload.keys())
+        n = len(keys)
+        if n > 24:
+            keys = keys[:24] + ["..."]
+        logger.info(
+            f"Webhook received: flow_id={flow_id}, trigger={trigger_id}, key_count={n}, top_keys={keys}"
+        )
+    else:
+        logger.info(
+            f"Webhook received: flow_id={flow_id}, trigger={trigger_id}, payload_type={type(payload).__name__}"
+        )
 
     raise HTTPException(
         status_code=501,

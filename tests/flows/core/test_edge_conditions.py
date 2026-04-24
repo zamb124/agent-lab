@@ -8,6 +8,7 @@
 """
 
 import pytest
+from core.errors import FlowPrematureCompletionError
 from core.state import ExecutionState
 from apps.flows.src.runtime.flow import Flow
 from apps.flows.src.runtime.nodes import create_node
@@ -135,7 +136,7 @@ class TestLegacyStringConditions:
 
     @pytest.mark.asyncio
     async def test_string_condition_false_no_transition(self, app):
-        """Если условие false - перехода нет."""
+        """Если условие false — единственный исход условный: FlowPrematureCompletionError."""
         agent = await Flow.from_config({
             "id": "test",
             "name": "Test",
@@ -150,10 +151,9 @@ class TestLegacyStringConditions:
         })
         
         state = make_state()
-        result = await agent.run(state)
-        
-        # order_node не выполнился - нет подходящего edge
-        assert not hasattr(result, 'result') or result.result is None
+        with pytest.raises(FlowPrematureCompletionError) as exc_info:
+            await agent.run(state)
+        assert exc_info.value.payload.get("reason") == "no_conditional_match"
 
 
 class TestSimpleObjectConditions:
@@ -373,7 +373,7 @@ class TestPythonConditions:
 
     @pytest.mark.asyncio
     async def test_python_condition_returns_false(self, app):
-        """Python условие возвращает False - переход не происходит."""
+        """Python условие возвращает False — единственный исход условный: FlowPrematureCompletionError."""
         agent = await Flow.from_config({
             "id": "test",
             "name": "Test",
@@ -395,10 +395,9 @@ class TestPythonConditions:
         })
         
         state = make_state()
-        result = await agent.run(state)
-        
-        # target node не выполнился
-        assert not hasattr(result, 'result') or result.result is None
+        with pytest.raises(FlowPrematureCompletionError) as exc_info:
+            await agent.run(state)
+        assert exc_info.value.payload.get("reason") == "no_conditional_match"
 
     @pytest.mark.asyncio
     async def test_python_invalid_code_raises(self, app):

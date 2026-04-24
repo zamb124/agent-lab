@@ -44,6 +44,20 @@ export class FlowsEmbeddedToolConfigModal extends PlatformFormModal {
                 max-height: min(90vh, 1400px);
                 overflow: auto;
             }
+            .embedded-tool-run-host {
+                display: inline-flex;
+                align-items: center;
+            }
+            /* Как у flows-floating-panel: без лишней высоты от text-xl + вложенного h3. */
+            .modal-header {
+                padding: var(--space-3) var(--space-4) var(--space-2) var(--space-4);
+                gap: var(--space-2);
+            }
+            .modal-title {
+                font-size: var(--text-base);
+                font-weight: var(--font-semibold);
+                line-height: 1.3;
+            }
         `,
     ];
 
@@ -60,7 +74,6 @@ export class FlowsEmbeddedToolConfigModal extends PlatformFormModal {
         this._registryToolId = null;
         this._editor = this.useOp('flows/editor');
         this._tools = this.useResource('flows/tools');
-        this._flowTools = this.select((s) => s.flowsTools);
         this.useEvent('flows/tools/item_failed', (ev) => {
             const p = ev.payload;
             if (!isPlainObject(p)) {
@@ -128,9 +141,7 @@ export class FlowsEmbeddedToolConfigModal extends PlatformFormModal {
     updated(changed) {
         super.updated(changed);
         if (this._loadPhase === 'loading' && this._registryToolId) {
-            const byId = this._flowTools.value && typeof this._flowTools.value === 'object'
-                ? this._flowTools.value.byId
-                : null;
+            const byId = this._tools.byId;
             const item = byId && isPlainObject(byId) ? byId[this._registryToolId] : null;
             if (item) {
                 this._node = registryToolItemToNode(item);
@@ -165,6 +176,10 @@ export class FlowsEmbeddedToolConfigModal extends PlatformFormModal {
         this.closeAfterSave();
     }
 
+    renderHeaderActions() {
+        return html`<span class="embedded-tool-run-host" aria-hidden="true"></span>`;
+    }
+
     renderSaveHeaderButton() {
         const canSave = this._loadPhase === 'ready' && this._node !== null;
         return this._renderHeaderSaveIcon({
@@ -181,7 +196,7 @@ export class FlowsEmbeddedToolConfigModal extends PlatformFormModal {
     }
 
     renderHeader() {
-        return html`<h3>${this.t('embedded_tool_config.title')}</h3>`;
+        return this.t('embedded_tool_config.title');
     }
 
     renderBody() {

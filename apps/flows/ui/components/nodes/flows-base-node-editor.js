@@ -3,21 +3,11 @@
  *
  * Два режима рендера, выбираются атрибутом `expanded`:
  *
- * 1. compact (узкая боковая панель) — стек секций сверху вниз:
- *    Header (имя ноды) → Основное (Node ID, Имя, Описание, Теги,
- *    Закреплённые файлы, Incoming policy) → Закреплённые ресурсы →
- *    slot=settings (type-specific) → Input/Output mapping →
- *    Тестирование (Execute / Result) → Input State (JSON preview).
- *
- * 2. expanded (master-detail на полный экран) — две колонки:
- *    .panel-sidebar:
- *      - section "Основное"
- *      - section "Закреплённые ресурсы"
- *      - section "Input State (JSON)" + кнопка «Сбросить»
- *    .panel-main:
- *      - slot=settings (type-specific)
- *      - state-mapping (Input/Output)
- *      - flows-test-panel (hide-input-state)
+ * 1. compact: Header (имя) → … → «Запустить» в шапке `flows-floating-panel`
+ *    (поиск панели — обход DOM с переходом ShadowRoot→host; иначе fallback).
+ * 2. модалка «Инструмент» в LLM: `.embedded-tool-run-host` в шапке `flows-embedded-tool-config-modal`.
+ * 3. expanded: .panel-main — fallback для Run без floating-panel и без этой модалки.
+ * Запуск: `useOp('flows/code_execute')`, UI — `flows-node-run-control` (imperative mount).
  *
  * Эмитит наружу:
  *   - change { nodeId, patch } — patch с top-level полями NodeConfig
@@ -33,10 +23,15 @@ import { resolveFileIconKey } from '@platform/lib/utils/file-icons.js';
 import '@platform/lib/components/glass-button.js';
 import '@platform/lib/components/platform-icon.js';
 import '../editors/flows-state-mapping-editor.js';
-import '../editors/flows-test-panel.js';
 import '../editors/flows-tag-input.js';
 import '../editors/flows-json-field-editor.js';
+import '../flows-node-run-control.js';
+import {
+    nextCodeExecuteClientId,
+    setCodeExecuteRequestClientId,
+} from '../../_helpers/flows-code-execute-run-gate.js';
 import { asObject, asString, isPlainObject } from '../../_helpers/flows-resolvers.js';
+import { formatExecuteViewModel } from '../../_helpers/flows-execute-preview.js';
 
 export class FlowsBaseNodeEditor extends PlatformElement {
     static i18nNamespace = 'flows';
@@ -66,6 +61,7 @@ export class FlowsBaseNodeEditor extends PlatformElement {
                 display: block;
                 color: var(--text-primary);
                 height: 100%;
+                min-height: 0;
                 box-sizing: border-box;
             }
             :host(:not([expanded])) {
@@ -132,6 +128,16 @@ export class FlowsBaseNodeEditor extends PlatformElement {
                 display: flex; align-items: center; gap: var(--space-2);
                 flex-wrap: wrap;
             }
+            .header-run-fallback:empty { display: none; }
+            .panel-run-fallback:empty { display: none; }
+            .panel-run-fallback:not(:empty) {
+                display: flex;
+                justify-content: flex-end;
+                align-items: center;
+                padding-bottom: var(--space-2);
+                margin-bottom: var(--space-2);
+                border-bottom: 1px solid var(--border-subtle);
+            }
             input.name {
                 flex: 1; min-width: 0;
                 padding: var(--space-2);
@@ -184,7 +190,7 @@ export class FlowsBaseNodeEditor extends PlatformElement {
                 background: none; border: none; padding: 4px;
                 display: inline-flex; align-items: center;
                 color: var(--text-tertiary); cursor: pointer;
-                border-radius: var(--radius-sm);
+                border-radius: var(--radius-md);
             }
             .icon-btn:hover { color: var(--accent); background: var(--glass-solid-medium); }
 
@@ -322,7 +328,182 @@ export class FlowsBaseNodeEditor extends PlatformElement {
         this._mappingTab = 'input';
         this._stateDraft = null;
         this._fileUpload = this.useOp('flows/file_upload');
+        this._nodeExecute = this.useOp('flows/code_execute');
+        this._codeExecuteClientId = nextCodeExecuteClientId();
         this._resources = this.useResource('flows/resources', { autoload: true });
+        this._nodeRunControlEl = null;
+        this._onNodeRunFired = () => { void this._runNodeTest(); };
+        this._onNodeRunOpenFullEvent = (e) => { this._onOpenExecuteFull(e); };
+    }
+
+    connectedCallback() {
+        super.connectedCallback();
+        queueMicrotask(() => this._placeNodeRunControl());
+        requestAnimationFrame(() => this._placeNodeRunControl());
+    }
+
+    disconnectedCallback() {
+        if (this._nodeRunControlEl) {
+            this._nodeRunControlEl.removeEventListener('run', this._onNodeRunFired);
+            this._nodeRunControlEl.removeEventListener('open-full', this._onNodeRunOpenFullEvent);
+            this._nodeRunControlEl.remove();
+            this._nodeRunControlEl = null;
+        }
+        super.disconnectedCallback();
+    }
+
+    updated(changed) {
+        super.updated(changed);
+        this._placeNodeRunControl();
+    }
+
+    _ensureNodeRunControl() {
+        if (this._nodeRunControlEl) {
+            return this._nodeRunControlEl;
+        }
+        const el = document.createElement('flows-node-run-control');
+        el.requestClientId = this._codeExecuteClientId;
+        el.addEventListener('run', this._onNodeRunFired);
+        el.addEventListener('open-full', this._onNodeRunOpenFullEvent);
+        this._nodeRunControlEl = el;
+        return el;
+    }
+
+    _syncNodeRunControlProps() {
+        const el = this._nodeRunControlEl;
+        if (!el) {
+            return;
+        }
+        el.requestClientId = this._codeExecuteClientId;
+        el.viewModel = this._executeViewModel();
+        el.busy = this._nodeExecute.busy;
+    }
+
+    /**
+     * `closest` не везде поднимается сквозь границы вложенных shadow root; до flows-floating-panel
+     * идём вручную: parent, либо ShadowRoot -> host.
+     */
+    _findFlowsFloatingPanel() {
+        let n = this;
+        for (let d = 0; d < 128; d += 1) {
+            if (!n) {
+                return null;
+            }
+            if (n.nodeName === 'FLOWS-FLOATING-PANEL') {
+                return n;
+            }
+            const p = n.parentNode;
+            if (p instanceof ShadowRoot) {
+                n = p.host;
+            } else {
+                n = p;
+            }
+        }
+        return null;
+    }
+
+    _floatingPanelHeaderRunHost(panel) {
+        const root = panel.shadowRoot;
+        if (!root) {
+            return null;
+        }
+        return root.querySelector('.header-actions-host');
+    }
+
+    /**
+     * Редактор вложенного tool (модалка с canvas): play в шапке модалки, не в теле редактора.
+     */
+    _findEmbeddedToolConfigModal() {
+        let n = this;
+        for (let d = 0; d < 128; d += 1) {
+            if (!n) {
+                return null;
+            }
+            if (n.nodeName === 'FLOWS-EMBEDDED-TOOL-CONFIG-MODAL') {
+                return n;
+            }
+            const p = n.parentNode;
+            if (p instanceof ShadowRoot) {
+                n = p.host;
+            } else {
+                n = p;
+            }
+        }
+        return null;
+    }
+
+    _embeddedToolModalHeaderRunHost(modal) {
+        const root = modal.shadowRoot;
+        if (!root) {
+            return null;
+        }
+        return root.querySelector('.embedded-tool-run-host');
+    }
+
+    _placeNodeRunControl() {
+        if (!this.nodeConfig) {
+            return;
+        }
+        if (!this.isConnected) {
+            return;
+        }
+        const el = this._ensureNodeRunControl();
+        this._syncNodeRunControlProps();
+        const panel = this._findFlowsFloatingPanel();
+        const embeddedModal = this._findEmbeddedToolConfigModal();
+        const hostFromPanel = panel ? this._floatingPanelHeaderRunHost(panel) : null;
+        const hostFromEmbedded = embeddedModal ? this._embeddedToolModalHeaderRunHost(embeddedModal) : null;
+        let target = null;
+        if (hostFromPanel) {
+            target = hostFromPanel;
+        } else if (hostFromEmbedded) {
+            target = hostFromEmbedded;
+        } else if (this.expanded) {
+            target = this.renderRoot?.querySelector?.('[data-node-run-fallback="expanded"]') ?? null;
+        } else {
+            target = this.renderRoot?.querySelector?.('[data-node-run-fallback="compact"]') ?? null;
+        }
+        if (target && el.parentElement !== target) {
+            target.appendChild(el);
+        }
+    }
+
+    _executeViewModel() {
+        return formatExecuteViewModel({
+            opError: this._nodeExecute.error,
+            lastResult: this._nodeExecute.lastResult,
+        });
+    }
+
+    async _runNodeTest() {
+        let state;
+        try {
+            state = JSON.parse(this._stateValue());
+        } catch {
+            this.toast('flows:test_panel.toast_state_invalid', { type: 'error' });
+            return;
+        }
+        if (state === null || typeof state !== 'object' || Array.isArray(state)) {
+            this.toast('flows:test_panel.toast_state_invalid', { type: 'error' });
+            return;
+        }
+        const skill = typeof this.skillId === 'string' && this.skillId.length > 0 ? this.skillId : 'base';
+        setCodeExecuteRequestClientId(this._codeExecuteClientId);
+        await this._nodeExecute.run({
+            node_type: this.nodeType,
+            node_config: asObject(this.nodeConfig),
+            state,
+            flow_id: this.flowId,
+            skill_id: skill,
+        });
+    }
+
+    _onOpenExecuteFull(e) {
+        const d = e.detail;
+        if (!d || typeof d.value !== 'object' || d.value === null) {
+            throw new Error('flows-base-node-editor: open-full event requires detail.value object');
+        }
+        this.openModal('flows.raw_json', { value: d.value });
     }
 
     _emitPatch(patch) {
@@ -453,6 +634,7 @@ export class FlowsBaseNodeEditor extends PlatformElement {
                         @input=${this._onName}
                     />
                 </div>
+                <div class="header-run-fallback" data-node-run-fallback="compact"></div>
             </div>
         `;
     }
@@ -624,9 +806,21 @@ export class FlowsBaseNodeEditor extends PlatformElement {
     _renderMapping() {
         const cfg = asObject(this.nodeConfig);
         const tab = this._mappingTab;
-        const rawMapping = tab === 'input' ? cfg.input_mapping : cfg.output_mapping;
+        const isMcp = this.nodeType === 'mcp';
+        let rawMapping;
+        let field;
+        if (tab === 'input') {
+            rawMapping = cfg.input_mapping;
+            field = 'input_mapping';
+        } else if (isMcp) {
+            rawMapping = cfg.state_mapping;
+            field = 'state_mapping';
+        } else {
+            rawMapping = cfg.output_mapping;
+            field = 'output_mapping';
+        }
         const mapping = isPlainObject(rawMapping) ? rawMapping : {};
-        const field = tab === 'input' ? 'input_mapping' : 'output_mapping';
+        const syncKey = `${String(this.flowId ?? '')}--${String(this.nodeId ?? '')}--imap--${isMcp ? 'mcp-' : ''}${tab}`;
         return html`
             <div class="section">
                 <div class="section-title">${this.t('base_node_editor.section_mapping')}</div>
@@ -641,27 +835,11 @@ export class FlowsBaseNodeEditor extends PlatformElement {
                     </button>
                 </div>
                 <flows-state-mapping-editor
-                    syncKey=${String(this.flowId ?? '')}--${String(this.nodeId ?? '')}--imap--${tab}
+                    syncKey=${syncKey}
                     kind=${tab === 'input' ? 'input' : 'output'}
                     .mapping=${mapping}
                     @change=${(e) => this._onMapping(field, e)}
                 ></flows-state-mapping-editor>
-            </div>
-        `;
-    }
-
-    _renderTest() {
-        return html`
-            <div class="section">
-                <div class="section-title">${this.t('base_node_editor.section_test')}</div>
-                <flows-test-panel
-                    .nodeType=${this.nodeType}
-                    .nodeConfig=${asObject(this.nodeConfig)}
-                    .flowId=${this.flowId}
-                    .skillId=${typeof this.skillId === 'string' && this.skillId.length > 0 ? this.skillId : 'base'}
-                    .previewExecutionState=${this.previewExecutionState}
-                    ?hide-input-state=${this.expanded}
-                ></flows-test-panel>
             </div>
         `;
     }
@@ -685,9 +863,9 @@ export class FlowsBaseNodeEditor extends PlatformElement {
                         ${this._renderInputState()}
                     </div>
                     <div class="panel-main">
+                        <div class="panel-run-fallback" data-node-run-fallback="expanded"></div>
                         ${this._renderSettingsSlot()}
                         ${this._renderMapping()}
-                        ${this._renderTest()}
                     </div>
                 </div>
             `;
@@ -699,7 +877,6 @@ export class FlowsBaseNodeEditor extends PlatformElement {
                 ${this._renderResources()}
                 ${this._renderSettingsSlot()}
                 ${this._renderMapping()}
-                ${this._renderTest()}
                 ${this._renderInputState()}
             </div>
         `;

@@ -381,10 +381,15 @@ class TestExampleGraphAgent:
             if processor_edges:
                 assert processor_edges[0].to_node is None
 
-        # hitl-ноды сохраняют путь через formatter
+        # hitl, cat, greeting ведут в formatter (см. fast_track edges)
         edges_to_formatter = [e for e in effective["edges"] if e.to_node == "formatter"]
         hitl_sources = {e.from_node for e in edges_to_formatter}
-        assert hitl_sources == {"hitl_queue_demo", "hitl_takeover_demo"}
+        assert hitl_sources >= {
+            "hitl_queue_demo",
+            "hitl_takeover_demo",
+            "cat_fact_api",
+            "greeting_node",
+        }
 
     @pytest.mark.asyncio
     async def test_skill_orders_only_merges_nodes(self, flow_config, container):

@@ -137,6 +137,55 @@ describe('flows/editor extraReducer', () => {
         expect(getState().flowsEditor.agentExecutionRunning).toBe(false);
     });
 
+    it('flows/run/edge_executed и node_started обновляют runningEdgeIndices / completedEdgeIndices', () => {
+        const { bus, getState } = build();
+        bus.dispatch('flows/editor/flow_loaded', {
+            flow: {
+                flow_id: 'e1',
+                name: 'E',
+                nodes: { a: { type: 'code' }, b: { type: 'code' } },
+                edges: [{ from: 'a', to: 'b' }],
+                variables: {},
+            },
+            skillId: 'base',
+        });
+        bus.dispatch('flows/run/flow_started', { task_id: 't1' });
+        bus.dispatch('flows/run/edge_executed', { edge_index: 0, from_node: 'a', to_node: 'b' });
+        let s = getState().flowsEditor;
+        expect(s.runningEdgeIndices).toEqual([0]);
+        expect(s.completedEdgeIndices).toEqual([]);
+
+        bus.dispatch('flows/run/node_started', { node_id: 'b', task_id: 't1' });
+        s = getState().flowsEditor;
+        expect(s.runningEdgeIndices).toEqual([]);
+        expect(s.completedEdgeIndices).toEqual([0]);
+    });
+
+    it('flows/run/edge_error помечает ребро в failedEdgeIndices', () => {
+        const { bus, getState } = build();
+        bus.dispatch('flows/editor/flow_loaded', {
+            flow: {
+                flow_id: 'e2',
+                name: 'E2',
+                nodes: { a: { type: 'code' }, b: { type: 'code' } },
+                edges: [{ from: 'a', to: 'b' }],
+                variables: {},
+            },
+            skillId: 'base',
+        });
+        bus.dispatch('flows/run/flow_started', { task_id: 't1' });
+        bus.dispatch('flows/run/edge_error', {
+            edge_index: 0,
+            from_node: 'a',
+            to_node: 'b',
+            error: 'division by zero',
+        });
+        const s = getState().flowsEditor;
+        expect(s.failedEdgeIndices).toEqual([0]);
+        expect(s.runningEdgeIndices).toEqual([]);
+        expect(s.completedEdgeIndices).toEqual([]);
+    });
+
     it('flows/breakpoint/hit и breakpoint_toggled', () => {
         const { bus, getState } = build();
         bus.dispatch('flows/editor/breakpoint_toggled', { nodeId: 'a' });

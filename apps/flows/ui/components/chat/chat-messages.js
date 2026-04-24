@@ -62,11 +62,6 @@ export class ChatMessages extends PlatformElement {
                 max-width: 300px;
                 line-height: var(--leading-relaxed);
             }
-            .run-trace-slot {
-                max-width: 900px;
-                margin: 0 auto;
-                width: 100%;
-            }
         `
     ];
 
@@ -74,6 +69,7 @@ export class ChatMessages extends PlatformElement {
         messages: { type: Array },
         loading: { type: Boolean },
         runTrace: { type: Array },
+        currentTaskId: { type: String, attribute: 'current-task-id' },
     };
 
     constructor() {
@@ -81,6 +77,18 @@ export class ChatMessages extends PlatformElement {
         this.messages = [];
         this.loading = false;
         this.runTrace = [];
+        this.currentTaskId = '';
+    }
+
+    _lastUserMessageId() {
+        const list = asArray(this.messages);
+        for (let i = list.length - 1; i >= 0; i -= 1) {
+            const m = list[i];
+            if (m && m.role === 'user') {
+                return asString(m.id);
+            }
+        }
+        return '';
     }
 
     get listEl() {
@@ -118,25 +126,28 @@ export class ChatMessages extends PlatformElement {
         if (this.messages.length === 0 && !this.loading && trace.length > 0) {
             return html`
                 <div class="messages-list">
-                    <div class="run-trace-slot">
-                        <flows-chat-run-trace .entries=${trace}></flows-chat-run-trace>
-                    </div>
+                    <flows-chat-run-trace .entries=${trace}></flows-chat-run-trace>
                 </div>
             `;
         }
 
+        const lastUserId = this._lastUserMessageId();
         return html`
             <div class="messages-list">
                 ${repeat(
                     this.messages,
                     (m) => m.id,
-                    (message) => html`
+                    (message) => {
+                        const mid = asString(message.id);
+                        const isLastUser = lastUserId.length > 0 && message.role === 'user' && mid === lastUserId;
+                        return html`
                         <chat-message
                             .role=${message.role}
                             .content=${message.content}
                             .timestamp=${asString(message.timestamp)}
                             ?streaming=${message.streaming}
                             .reasoning=${asString(message.reasoning)}
+                            .activity=${asString(message.activity)}
                             .toolCalls=${asArray(message.toolCalls)}
                             .toolResults=${asArray(message.toolResults)}
                             .inputRequired=${message.inputRequired}
@@ -145,17 +156,14 @@ export class ChatMessages extends PlatformElement {
                             .files=${asArray(message.files)}
                             .fileIds=${asArray(message.fileIds)}
                             .taskId=${asString(message.taskId)}
+                            ?isLastUserMessage=${isLastUser}
+                            .runTraceEntries=${isLastUser ? trace : []}
+                            .traceTaskId=${isLastUser ? asString(this.currentTaskId) : ''}
                             @show-tracing=${this._onShowTracing}
                         ></chat-message>
-                    `
+                    `;
+                    }
                 )}
-                ${trace.length > 0
-                    ? html`
-                          <div class="run-trace-slot">
-                              <flows-chat-run-trace .entries=${trace}></flows-chat-run-trace>
-                          </div>
-                      `
-                    : nothing}
             </div>
         `;
     }

@@ -15,10 +15,9 @@
  * `flows:trigger_editor_modal.*`.
  */
 
-import { html, css } from 'lit';
+import { html, css, nothing } from 'lit';
 import { PlatformFormModal } from '@platform/lib/components/glass-form-modal.js';
 import { registerModalKind } from '@platform/lib/utils/modal-registry.js';
-import '@platform/lib/components/platform-button.js';
 import '@platform/lib/components/platform-icon.js';
 import '@platform/lib/components/platform-switch.js';
 import { asString } from '../_helpers/flows-resolvers.js';
@@ -39,11 +38,71 @@ const CHANNEL_TYPES = Object.freeze([
     { id: 'webhook',  labelKey: 'channel_webhook' },
 ]);
 
+/**
+ * Куда доставлять ответ flow — привязываем к типу входа: Telegram-вход = только ответ в Telegram
+ * (отдельные сценарии: cron / webhook / redis с другими графами).
+ */
+function outputChannelTypesForTrigger(triggerType) {
+    if (triggerType === 'telegram') {
+        return CHANNEL_TYPES.filter((c) => c.id === 'telegram');
+    }
+    if (triggerType === 'email') {
+        return CHANNEL_TYPES.filter((c) => c.id === 'email');
+    }
+    return [...CHANNEL_TYPES];
+}
+
 const OUTPUT_ACTIONS = Object.freeze([
     { id: 'send_message',  labelKey: 'action_send_message' },
     { id: 'send_photo',    labelKey: 'action_send_photo' },
     { id: 'send_document', labelKey: 'action_send_document' },
 ]);
+
+function defaultTelegramOutputAction() {
+    return {
+        channel: 'telegram',
+        action: 'send_message',
+        mapping: {
+            recipient: '@state:variables.chat_id',
+            text: '@state:response',
+        },
+        config: { parse_mode: 'HTML' },
+        condition: '',
+    };
+}
+
+/**
+ * @param {Record<string, string>} a
+ * @param {Record<string, string>} b
+ */
+function _mappingEqual(a, b) {
+    const ka = Object.keys(a);
+    const kb = Object.keys(b);
+    if (ka.length !== kb.length) return false;
+    for (const k of ka) {
+        if (a[k] !== b[k]) return false;
+    }
+    return true;
+}
+
+/**
+ * @param {object} a
+ * @param {string} a.channel
+ * @param {string} a.action
+ * @param {Record<string, string>} a.mapping
+ * @param {Record<string, string>} a.config
+ * @param {string} a.condition
+ */
+function isDefaultTelegramOutputActionForm(a) {
+    if (a.channel !== 'telegram' || a.action !== 'send_message') return false;
+    if (String(a.condition).trim().length > 0) return false;
+    const d = defaultTelegramOutputAction();
+    if (!_mappingEqual(a.mapping, d.mapping)) return false;
+    const c = a.config;
+    if (Object.keys(c).length === 0) return true;
+    if (Object.keys(c).length === 1 && c.parse_mode === 'HTML') return true;
+    return false;
+}
 
 const MAPPING_EXAMPLES = Object.freeze({
     telegram: [
@@ -87,6 +146,7 @@ export class FlowsTriggerEditorModal extends PlatformFormModal {
         _config: { state: true },
         _outputMapping: { state: true },
         _outputActions: { state: true },
+        _outputTelegramExpanded: { state: true },
         _hydrated: { state: true },
         _validationError: { state: true },
     };
@@ -136,6 +196,7 @@ export class FlowsTriggerEditorModal extends PlatformFormModal {
             .field textarea { min-height: 96px; resize: vertical; font-family: var(--font-mono); font-size: var(--text-xs); }
 
             .checkbox-row { display: flex; align-items: center; gap: var(--space-2); margin-bottom: var(--space-3); }
+            .switch-row { display: flex; align-items: center; margin-bottom: var(--space-3); }
 
             .trigger-type-selector {
                 display: grid;
@@ -238,9 +299,20 @@ export class FlowsTriggerEditorModal extends PlatformFormModal {
             .output-action-content { flex: 1; min-width: 0; }
             .output-action-header {
                 display: flex; gap: var(--space-2); margin-bottom: var(--space-2);
+                flex-wrap: wrap;
             }
-            .output-action-header select { width: auto; min-width: 140px; }
-
+            .output-action-header select {
+                width: auto;
+                min-width: 160px;
+                max-width: 100%;
+                padding: var(--space-2) var(--space-3);
+                border-radius: var(--radius-md);
+                border: 1px solid var(--glass-border-subtle);
+                background: var(--glass-tint-subtle);
+                color: var(--text-primary);
+                font: inherit;
+                box-sizing: border-box;
+            }
             .add-btn {
                 display: flex;
                 align-items: center;
@@ -281,6 +353,7 @@ export class FlowsTriggerEditorModal extends PlatformFormModal {
         this._config = {};
         this._outputMapping = [];
         this._outputActions = [];
+        this._outputTelegramExpanded = false;
         this._hydrated = false;
         this._validationError = '';
         this._createOp = this.useOp('flows/trigger_create');
@@ -322,6 +395,10 @@ export class FlowsTriggerEditorModal extends PlatformFormModal {
             this._outputMapping = [];
             this._outputActions = [];
         }
+        if (this._type === 'telegram' && this._outputActions.length === 0) {
+            this._outputActions = [defaultTelegramOutputAction()];
+        }
+        this._outputTelegramExpanded = false;
         this._hydrated = true;
     }
 
@@ -391,14 +468,12 @@ export class FlowsTriggerEditorModal extends PlatformFormModal {
                 </div>
             </div>
 
-            <div class="checkbox-row">
-                <input
-                    type="checkbox"
-                    id="flows-trigger-enabled"
+            <div class="switch-row">
+                <platform-switch
                     .checked=${this._enabled}
-                    @change=${(e) => { this._enabled = e.target.checked; this.isDirty = true; }}
-                />
-                <label for="flows-trigger-enabled">${this.t('trigger_editor_modal.field_enabled')}</label>
+                    .label=${this.t('trigger_editor_modal.field_enabled')}
+                    @change=${(e) => { this._enabled = e.detail.value; this.isDirty = true; }}
+                ></platform-switch>
             </div>
 
             ${this._renderTypeSpecificConfig()}
@@ -665,10 +740,33 @@ export class FlowsTriggerEditorModal extends PlatformFormModal {
     }
 
     _renderOutputTab() {
+        const showGeneralOutputIntro
+            = Boolean(this._type)
+            && this._type !== 'telegram'
+            && (this._type === 'email' || ['webhook', 'cron', 'redis'].includes(this._type));
+        const compactTelegram
+            = this._type === 'telegram'
+            && this._outputActions.length === 1
+            && isDefaultTelegramOutputActionForm(this._outputActions[0])
+            && !this._outputTelegramExpanded;
+        if (compactTelegram) {
+            return html`
+                <div class="config-section-title">${this.t('trigger_editor_modal.output_section_title')}</div>
+                <p class="config-intro">${this.t('trigger_editor_modal.output_telegram_auto')}</p>
+                <button
+                    type="button"
+                    class="add-btn"
+                    @click=${() => { this._outputTelegramExpanded = true; this.isDirty = true; }}
+                >
+                    ${this.t('trigger_editor_modal.output_telegram_customize')}
+                </button>
+            `;
+        }
         return html`
             <div class="config-section-title">${this.t('trigger_editor_modal.output_section_title')}</div>
-            <p class="config-intro">${this.t('trigger_editor_modal.output_intro')}</p>
-
+            ${showGeneralOutputIntro
+                ? html`<p class="config-intro">${this.t('trigger_editor_modal.output_intro')}</p>`
+                : nothing}
             ${this._outputActions.map((action, idx) => this._renderOutputAction(action, idx))}
 
             <button type="button" class="add-btn" @click=${this._addOutputAction}>
@@ -679,6 +777,9 @@ export class FlowsTriggerEditorModal extends PlatformFormModal {
     }
 
     _renderOutputAction(action, idx) {
+        const channelOptions = outputChannelTypesForTrigger(this._type);
+        const allowedIds = new Set(channelOptions.map((c) => c.id));
+        const showLegacyChannel = !allowedIds.has(action.channel);
         const mappingEntries = Object.entries(action.mapping);
         return html`
             <div class="output-action-item">
@@ -688,8 +789,13 @@ export class FlowsTriggerEditorModal extends PlatformFormModal {
                             .value=${action.channel}
                             @change=${(e) => this._updateOutputAction(idx, 'channel', e.target.value)}
                         >
-                            ${CHANNEL_TYPES.map((ch) => html`
-                                <option value=${ch.id} ?selected=${ch.id === action.channel}>
+                            ${showLegacyChannel
+                                ? html`<option value=${action.channel} ?selected=${true}>
+                                    ${action.channel} (${this.t('trigger_editor_modal.output_channel_legacy')})
+                                </option>`
+                                : nothing}
+                            ${channelOptions.map((ch) => html`
+                                <option value=${ch.id} ?selected=${ch.id === action.channel && !showLegacyChannel}>
                                     ${this.t(`trigger_editor_modal.${ch.labelKey}`)}
                                 </option>
                             `)}
@@ -750,6 +856,7 @@ export class FlowsTriggerEditorModal extends PlatformFormModal {
                             placeholder=${this.t('trigger_editor_modal.output_condition_placeholder')}
                             @input=${(e) => this._updateOutputAction(idx, 'condition', e.target.value)}
                         />
+                        <span class="hint">${this.t('trigger_editor_modal.output_condition_hint')}</span>
                     </div>
                 </div>
                 <button
@@ -765,22 +872,16 @@ export class FlowsTriggerEditorModal extends PlatformFormModal {
     }
 
     renderFooter() {
-        return html`
-            <div class="form-actions">
-                <platform-button @click=${() => this.close()}>
-                    ${this.t('trigger_editor_modal.action_cancel')}
-                </platform-button>
-                <platform-button
-                    variant="primary"
-                    ?disabled=${this._createOp.busy || this._updateOp.busy}
-                    @click=${this._performSave}
-                >
-                    ${this.trigger
-                        ? this.t('trigger_editor_modal.action_save')
-                        : this.t('trigger_editor_modal.action_create')}
-                </platform-button>
-            </div>
-        `;
+        return html``;
+    }
+
+    renderSaveHeaderButton() {
+        const busy = this._createOp.busy || this._updateOp.busy;
+        return this._renderHeaderSaveIcon({
+            onClick: () => this._performSave(),
+            disabled: busy,
+            title: busy ? this.t('modal.saving') : this._saveHeaderTitle(),
+        });
     }
 
     _setTab(tab) {
@@ -789,6 +890,10 @@ export class FlowsTriggerEditorModal extends PlatformFormModal {
 
     _selectType(typeId) {
         this._type = typeId;
+        this._outputTelegramExpanded = false;
+        if (typeId === 'telegram' && this._outputActions.length === 0) {
+            this._outputActions = [defaultTelegramOutputAction()];
+        }
         this.isDirty = true;
     }
 
@@ -822,10 +927,14 @@ export class FlowsTriggerEditorModal extends PlatformFormModal {
     }
 
     _addOutputAction() {
-        this._outputActions = [
-            ...this._outputActions,
-            { channel: 'telegram', action: 'send_message', mapping: {}, config: {}, condition: '' },
-        ];
+        const ch = outputChannelTypesForTrigger(this._type);
+        const defaultChannel = ch[0] ? ch[0].id : 'telegram';
+        const next
+            = this._type === 'telegram' && defaultChannel === 'telegram'
+                ? defaultTelegramOutputAction()
+                : { channel: defaultChannel, action: 'send_message', mapping: {}, config: {}, condition: '' };
+        this._outputActions = [...this._outputActions, next];
+        this._outputTelegramExpanded = true;
         this.isDirty = true;
     }
 
@@ -909,13 +1018,16 @@ export class FlowsTriggerEditorModal extends PlatformFormModal {
             }
         }
 
-        const outputActions = this._outputActions.map((a) => ({
-            channel: a.channel,
-            action: a.action,
-            mapping: a.mapping,
-            config: a.config,
-            condition: a.condition.trim(),
-        }));
+        const outputActions = this._outputActions.map((a) => {
+            const c = a.condition.trim();
+            return {
+                channel: a.channel,
+                action: a.action,
+                mapping: a.mapping,
+                config: a.config,
+                condition: c.length > 0 ? c : null,
+            };
+        });
 
         const body = {
             trigger_id: this._triggerId.trim(),

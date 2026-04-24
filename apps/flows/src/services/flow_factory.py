@@ -16,6 +16,7 @@ from apps.flows.src.variables import VariablesService
 from core.variables import VarResolver
 from core.compiler import GraphCompiler
 from core.logging import get_logger
+from apps.flows.src.services.bundle_node_repair import repair_effective_nodes_from_bundle
 
 logger = get_logger(__name__)
 
@@ -130,7 +131,11 @@ class FlowFactory:
                 )
             raise ValueError(f"Flow '{flow_id}' не найден")
         effective = self._apply_skill(config, skill_id)
-        return effective["nodes"]
+        nodes = effective["nodes"]
+        source = getattr(config, "source", None) or "manual"
+        if source == "file":
+            nodes = repair_effective_nodes_from_bundle(config.flow_id, source, nodes)
+        return nodes
 
     async def _create_flow(self, config: FlowConfig, skill_id: str = "default") -> Flow:
         """
@@ -146,6 +151,14 @@ class FlowFactory:
             Flow
         """
         effective = self._apply_skill(config, skill_id)
+        source = getattr(config, "source", None) or "manual"
+        if source == "file":
+            effective = {
+                **effective,
+                "nodes": repair_effective_nodes_from_bundle(
+                    config.flow_id, source, effective["nodes"]
+                ),
+            }
 
         # Валидация графа через GraphCompiler
         self.compiler.compile(config, skill_config=None, variables=effective["variables"])

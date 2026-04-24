@@ -16,9 +16,9 @@ alwaysApply: false
 
 **Принцип in-process sandbox:** по возможности **подмена безопасными объектами** (реестр `apps/flows/src/eval/shim_registry.py`: `httpx`, `llm` и т.д.) вместо запрета по имени, если семантика совместима. Полный CPython/произвольный `os`/`subprocess` в одном процессе с платформой **недоступны**; для этого нужна отдельная out-of-process песочница (другой эпик). Нормализация исходника (`удаление строк import apps|core*`) встроена в [`PythonCompiler`](apps/flows/src/eval/compiler.py) при `strip_platform_imports=True` (по умолчанию в [`PythonCodeRunner`](apps/flows/src/runners/python.py)).
 
-## АБСОЛЮТНЫЕ ЗАПРЕТЫ в коде тулов
+## АБСОЛЮТНЫЕ ЗАПРЕТЫ в пользовательском коде тулов
 
-1. **`get_container()`** — дыра: даёт доступ ко всем репозиториям и данным всех компаний.
+1. **Прямой обход `platform_services` в новом/кастомном коде** (то, что пишет внешний разработчик в БД): не импортировать `get_container` и не ссылаться на внутренний DI. Используй фасады из `platform_services` + регистрация в `namespace`. В sandbox register для **codegen** лежит `get_code_runner` (без `FlowContainer`) — паритет `exec` со встроенным `sandbox_codegen`; не путать с «разрешено обходить фасады в своём кастомном туле».
 2. **Импорты `apps.*` / `core.*`** — при сохранении в БД строки вырезаются `strip_forbidden_platform_import_lines` ([`inline_tool_sanitize.py`](apps/flows/src/eval/inline_tool_sanitize.py)). Перед `validate`/`exec` тот же смысл встраивает [`PythonCompiler._prepare_source`](apps/flows/src/eval/compiler.py) (по умолчанию `strip_platform_imports=True` в раннере). Проверка на запрет без strip — только при явной настройке компилятора/тестах.
 3. **Импорты между модулями тулов** (`from apps.flows.tools.files import _find_file`) — вырезаются вместе с остальными `apps.*`. Хелпер не попадёт в namespace → `NameError` в рантайме.
 4. **Прямой `httpx.AsyncClient` к сервисам платформы** — только `ServiceClient` (уже в namespace).
@@ -45,6 +45,8 @@ exec(code, namespace)           ← код тула исполняется С Э
 ```
 
 **Следствие:** любая зависимость, которой нет в namespace, даст `NameError`. Импорты `apps.*`/`core.*` вырезаны. Тул должен быть **самодостаточен** в рамках namespace.
+
+**Значения по умолчанию в сигнатуре** (`def f(x: T = NAME)`): имя `NAME` разрешается **в момент определения функции** при `exec` в sandbox. Допустимы только **литералы** или идентификаторы, уже присутствующие в `namespace` (например константа модуля верхнего уровня в **том же** фрагменте `code`, если он целиком попадает в БД). Ссылка на константу только из исходника в `apps/...` без включения в строку кода — даст `NameError` при предпросмотре `code/execute` или inline-копии.
 
 ## Паттерн: как писать тул
 
@@ -76,47 +78,21 @@ async def my_tool(arg: str, state: Optional[dict] = None) -> dict:
 2. Зарегистрировать в `namespace.py`
 3. Вызывать из тула по имени фасада
 
-Существующие фасады: `get_oauth_service`, `get_file_bytes`, `get_schedule_service`, `get_operator_handoff_service`, `get_google_oauth_token`, `get_lara_facade`.
+Существующие фасады: `get_oauth_service`, `get_file_bytes`, `get_schedule_service`, `get_operator_handoff_service`, `get_google_oauth_token`, `get_lara_facade`, `get_code_runner`.
 
-## Whitelist namespace (что доступно в sandbox)
+## Состав namespace (SSOT, без дублирования в правилах)
 
-### Модули
-Полный whitelist импортов: `core/inline_python_eval_policy.py` (`ALLOWED_IMPORT_ROOTS`). Список для редактора и карточки API: `core/docs/data/python/modules.py` (`COMMON_MODULES`, `MODULE_METHODS`). В namespace дополнительно инжектируются `math`, `ast`, `operator`, `json`, `mimetypes`, `base64` и класс `datetime.datetime`.
+| Что | Где смотреть |
+|-----|----------------|
+| Фактический набор имён + регистрация shims/тулов | [`apps/flows/src/eval/namespace.py`](apps/flows/src/eval/namespace.py) |
+| Символы codegen / паритет `code/execute` | тот же файл, `register_sandbox_codegen_namespace` |
+| Whitelist `import` | [`core/inline_python_eval_policy.py`](core/inline_python_eval_policy.py) (`ALLOWED_IMPORT_ROOTS`); shims: [`shim_registry.py`](apps/flows/src/eval/shim_registry.py) |
+| Описания для редактора (globals) | [`core/docs/data/python/globals.py`](core/docs/data/python/globals.py) |
+| Модули и методы в справке | [`core/docs/data/python/modules.py`](core/docs/data/python/modules.py) |
+| CI: модули и namespace покрыты докой | `make check-inline-docs` — [`tests/core/test_inline_docs_inventory.py`](tests/core/test_inline_docs_inventory.py) |
 
-**Inline shims** (не пакеты из site-packages, а объекты платформы): перечень и фабрики в `apps/flows/src/eval/shim_registry.py` (`INLINE_SHIMS`), в `PythonNamespaceBuilder` через `apply_inline_shims`. Для таких имён `import name.sub` запрещён (см. `strict_shim_import_roots` и `import_policy`).
-
-### Типы
-`Optional`, `List`, `Dict`, `Any`, `Union`, `Tuple`, `Callable`, `Literal`
-
-### Утилиты состояния (`state_utils`)
-`deep_copy_state`, `merge_state`, `get_nested`, `set_nested`, `get_files`, `find_file`, `get_user`, `get_tool_result`, `get_messages`, `add_user_message`, `add_agent_message`, `extract_json`, `ask_user`
-
-### Файлы
-`FileReader`, `FileReadError`, `reader` (экземпляр), `FileWriter`, `FileWriteError`, `FileResponse`, `writer` (экземпляр), `DocxTemplater`, `DocxTemplateError` (базовый класс ошибок DOCX-шаблонов; подклассы — `DocxTemplateInvalidError` и т.д.)
-
-### Interrupt / State
-`FlowInterrupt`, `InterruptKind`, `HandoffMode`, `UserMessageInterrupt`, `OperatorTaskInterrupt`
-
-### A2A-типы
-`Message`, `Part`, `TextPart`, `FilePart`, `DataPart`, `Role`, `Artifact`
-
-### Интеграции
-`ServiceClient`, `ServiceClientError`, `RagClient`, `get_context`, `GoogleDocsClient`, `quote`, `httpx` (обёртка `HttpxModule`: верхнеуровневые `get`/`post`/… , `AsyncClient(timeout=...)` как контекст, алиасы `RequestError` и др.), `ContentType`
-
-### Фасады (`platform_services`)
-`get_oauth_service`, `get_file_bytes`, `get_schedule_service`, `get_operator_handoff_service`, `get_google_oauth_token`, `get_lara_facade`
-
-### Все публичные тулы
-Все имена из `apps.flows.tools.__all__` доступны по имени.
-
-### Декоратор и базовый класс
-`tool`, `BaseTool` — для создания тулов из inline-кода.
-
-### Builtins
-Урезанный набор из `core/inline_python_eval_policy.py`: `ALLOWED_BUILTINS` + `__import__` (через `safe_inline_import`) + `__build_class__`.
-
-### НЕТ в namespace
-`get_container`, `get_settings`, `Path`, `os`, `sys`, `subprocess`, `socket`, `importlib` (кроме whitelist).
+### Чего нет в sandbox (кроме whitelist)
+`get_settings`, `Path`, `os`, `sys`, `subprocess`, `socket`, произвольный `importlib` (кроме политики). **`get_code_runner` / `get_llm` / codegen-хелперы** могут присутствовать как платформенная регистрация — см. раздел о запретах выше; не путать с «можно в кастомном туле обойти фасады».
 
 ### Валидация AST (`compiler._validate_code`)
 Запрещён доступ к атрибутам из `FORBIDDEN_INLINE_DUNDER_ATTRIBUTES` в `core/inline_python_eval_policy.py` (интроспекция: `__class__`, `__bases__`, `__subclasses__` и т.д.). Вызовы `super().__init__()`, `__enter__`/`__exit__` и прочие обычные dunder-методы **разрешены**. Имя типа исключения без обхода валидатора: `getattr(type(exc), "__name__", "")` (строковый литерал, не `ast.Attribute`).
@@ -157,6 +133,7 @@ async def my_tool(arg: str, state: Optional[dict] = None) -> dict:
 | Файл | Назначение |
 |------|-----------|
 | `apps/flows/src/eval/namespace.py` | `PythonNamespaceBuilder` — whitelist namespace |
+| `apps/flows/src/eval/sandbox_codegen_namespace.py` | `register_sandbox_codegen_namespace` — символы для паритета `exec` / `sandbox_codegen` |
 | `apps/flows/src/eval/state_utils.py` | Утилиты для inline-кода (find_file, get_files, ask_user, ...) |
 | `apps/flows/src/eval/platform_services.py` | Узкие фасады к платформенным сервисам |
 | `apps/flows/src/eval/compiler.py` | Компиляция и валидация кода |

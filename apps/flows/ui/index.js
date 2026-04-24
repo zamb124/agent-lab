@@ -47,7 +47,7 @@ import './components/editors/flows-llm-config-editor.js';
 import './components/editors/flows-llm-mocks-editor.js';
 import './components/editors/flows-state-mapping-editor.js';
 import './components/editors/flows-variable-input.js';
-import './components/editors/flows-test-panel.js';
+import './components/editors/flows-searchable-combobox.js';
 
 // Редакторы нод
 import './components/nodes/flows-base-node-editor.js';

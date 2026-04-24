@@ -9,6 +9,7 @@
  *   - useOp('flows/editor').state.viewBox — pan/zoom;
  *   - useOp('flows/editor').state.selectedNodeId / multiSelection;
  *   - useOp('flows/editor').state.{runningNodeIds,completedNodeIds,erroredNodes} — push из flows/run/*;
+ *   - useOp('flows/editor').state.{runningEdgeIndices,completedEdgeIndices,failedEdgeIndices} — edge_executed / node_*;
  *   - useOp('flows/editor').state.breakpointNodeIds / breakpointHitNodeId — flows/breakpoint/hit;
  *   - useOp('flows/editor').state.entryNodeId — entry-нода;
  *   - useOp('flows/editor').state.stickyNotes / smartGuides / smartGuidesEnabled.
@@ -44,6 +45,7 @@ import {
     getEdgeEndpoints,
     colorOrDefault,
 } from '../../_helpers/flows-resolvers.js';
+import { parseMcpToolIdToNodeConfig } from '../../_helpers/flows-mcp-tool-registry.js';
 import {
     FLOW_NODE_W as NODE_W,
     FLOW_NODE_H as NODE_H,
@@ -314,6 +316,26 @@ export class FlowsFlowCanvas extends PlatformElement {
                 stroke-dasharray: 6 4;
                 opacity: 0.6;
             }
+            .edge[data-run-state='running'] {
+                stroke: var(--info);
+                stroke-width: 2.5;
+                opacity: 1;
+                animation: canvasEdgeRunPulse 1.2s ease-in-out infinite;
+            }
+            .edge[data-run-state='completed'] {
+                stroke: var(--success);
+                stroke-width: 2.5;
+                opacity: 1;
+            }
+            .edge[data-run-state='failed'] {
+                stroke: var(--error);
+                stroke-width: 2.5;
+                opacity: 1;
+            }
+            @keyframes canvasEdgeRunPulse {
+                0%, 100% { stroke-opacity: 1; }
+                50% { stroke-opacity: 0.55; }
+            }
             .edge-end-marker {
                 fill: var(--text-tertiary);
                 opacity: 0.7;
@@ -355,7 +377,9 @@ export class FlowsFlowCanvas extends PlatformElement {
                 fill: var(--text-secondary);
                 pointer-events: none;
             }
-            .edge-label { cursor: pointer; }
+            .edge-label { cursor: pointer; pointer-events: all; }
+            .edge-label .label-bg { pointer-events: all; }
+            .edge-label--empty .label-text { fill: var(--text-tertiary); }
             .edge-label:hover .label-bg { stroke: var(--accent); }
 
             /* Selection rect */
@@ -1037,6 +1061,10 @@ export class FlowsFlowCanvas extends PlatformElement {
                 this._onDropFlowNode({ local });
                 return;
             }
+            if (nodeType === 'mcp') {
+                this._onDropMcpNode({ local });
+                return;
+            }
             const id = genId('n');
             const newNode = {
                 type: nodeType,
@@ -1141,6 +1169,76 @@ export class FlowsFlowCanvas extends PlatformElement {
             pos_x: local.x - NODE_W / 2,
             pos_y: local.y - NODE_H / 2,
             config: { flow_id: flowId, skill_id: 'default' },
+        };
+        const nodes = { ...asObject(data.nodes), [nodeId]: newNode };
+        const next = { ...data, nodes };
+        this._editor.updateSkillsData({ data: next });
+        this._editor.pushHistory({ snapshot: next });
+        this._editor.setDirty({ dirty: true });
+        this._editor.selectNode({ nodeId });
+    }
+
+    _onDropMcpNode(ctx) {
+        const { local } = ctx;
+        const nodeId = genId('n');
+        this.openModal('flows.tool_picker', {
+            pickMode: 'mcp_only',
+            onPick: (detail) => {
+                if (!detail || typeof detail !== 'object') {
+                    return;
+                }
+                if (detail.kind !== 'tool') {
+                    return;
+                }
+                const toolId = detail.tool_id;
+                if (typeof toolId !== 'string' || toolId.length === 0) {
+                    return;
+                }
+                const parsed = parseMcpToolIdToNodeConfig(toolId);
+                const item = detail.item;
+                let name = 'mcp';
+                if (isPlainObject(item) && typeof item.title === 'string' && item.title.length > 0) {
+                    name = item.title;
+                } else if (parsed.tool_name.length > 0) {
+                    name = parsed.tool_name;
+                }
+                this._placeMcpNode({
+                    nodeId,
+                    local,
+                    name,
+                    server_id: parsed.server_id,
+                    tool_name: parsed.tool_name,
+                    headers: {},
+                    state_mapping: {},
+                });
+            },
+        });
+    }
+
+    _placeMcpNode(p) {
+        const { nodeId, local, name, server_id, tool_name, headers, state_mapping } = p;
+        if (typeof server_id !== 'string' || server_id.length === 0) {
+            throw new Error('flows-flow-canvas: _placeMcpNode server_id required');
+        }
+        if (typeof tool_name !== 'string' || tool_name.length === 0) {
+            throw new Error('flows-flow-canvas: _placeMcpNode tool_name required');
+        }
+        if (!isPlainObject(headers)) {
+            throw new Error('flows-flow-canvas: _placeMcpNode headers must be a plain object');
+        }
+        if (!isPlainObject(state_mapping)) {
+            throw new Error('flows-flow-canvas: _placeMcpNode state_mapping must be a plain object');
+        }
+        const data = this._skillsData();
+        const newNode = {
+            type: 'mcp',
+            name,
+            pos_x: local.x - NODE_W / 2,
+            pos_y: local.y - NODE_H / 2,
+            server_id,
+            tool_name,
+            headers,
+            state_mapping,
         };
         const nodes = { ...asObject(data.nodes), [nodeId]: newNode };
         const next = { ...data, nodes };
@@ -1404,13 +1502,23 @@ export class FlowsFlowCanvas extends PlatformElement {
         const start = this._portCoords(fromNode, 'out');
         const end = this._portCoords(toNode, 'in');
         const condition = edge.condition === undefined ? null : edge.condition;
-        const hasCondition = condition !== null && condition !== '' && !(typeof condition === 'object' && condition !== null && Object.keys(condition).length === 0);
         const mid = midpoint(start.x, start.y, end.x, end.y);
         const editorState = this._state();
         const inheritedKeys = Array.isArray(editorState.inheritedEdgeKeys) ? editorState.inheritedEdgeKeys : [];
         const edgeKey = `${fromId}->${toId}`;
         const isInherited = inheritedKeys.includes(edgeKey);
         const edgeClass = isInherited ? 'edge inherited' : 'edge';
+        const failE = asArray(editorState.failedEdgeIndices);
+        const runE = asArray(editorState.runningEdgeIndices);
+        const compE = asArray(editorState.completedEdgeIndices);
+        let runState = null;
+        if (failE.includes(i)) {
+            runState = 'failed';
+        } else if (compE.includes(i)) {
+            runState = 'completed';
+        } else if (runE.includes(i)) {
+            runState = 'running';
+        }
         const d = pathFor(start.x, start.y, end.x, end.y);
         return svg`
             <g class="edge-group">
@@ -1422,14 +1530,18 @@ export class FlowsFlowCanvas extends PlatformElement {
                     @pointerenter=${() => { this._hoverEdgeIndex = i; }}
                     @pointerleave=${() => { this._hoverEdgeIndex = -1; }}
                 ></path>
-                <path class=${edgeClass} d=${d}></path>
-                ${hasCondition ? renderEdgeLabel({
+                <path
+                    class=${edgeClass}
+                    d=${d}
+                    data-run-state=${runState != null ? runState : ''}
+                ></path>
+                ${renderEdgeLabel({
                     edgeId: i,
                     x: mid.x,
                     y: mid.y,
                     condition,
-                    onClick: () => this.openModal('flows.edge_condition', { edgeIndex: i }),
-                }) : ''}
+                    onOpen: () => this.openModal('flows.edge_condition', { edgeIndex: i }),
+                })}
             </g>
         `;
     }

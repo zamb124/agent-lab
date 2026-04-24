@@ -6,9 +6,10 @@
  * (см. `apps/flows/src/services/operator_tasks_broadcast.py`) триггерит
  * перезагрузку списка задач — подписку оформляет страница оператора.
  *
- * `claim`/`postMessage`/`complete` — `transport: 'ws'` (через
- * `core.websocket.command_router`), REST-зеркала живут на тех же путях,
- * что и handler'ы в `command_router.py`.
+ * `claim`/`postMessage`/`complete` — `transport: 'ws'`; для каждой задан
+ * `commandType` как в `apps/flows/src/realtime/command_router.py` (иначе
+ * из имени фабрики получился бы невалидный WS-тип вида
+ * `flows/operator_task_claim/requested` без суффикса `_requested` на третьем сегменте).
  */
 
 import { createResourceCollection, createAsyncOp } from '@platform/lib/events/index.js';
@@ -104,6 +105,7 @@ export const operatorTaskClaimOp = createAsyncOp({
     name: 'flows/operator_task_claim',
     transport: 'ws',
     wsTimeoutMs: 5_000,
+    commandType: 'flows/operator_task/claim_requested',
     successToastKey: 'flows:toast.operator_task_claimed',
     errorToastKey: 'flows:toast.operator_task_claim_error',
     restMirror: { method: 'POST', path: '/flows/api/v1/operator/tasks/{task_id}/claim' },
@@ -113,6 +115,7 @@ export const operatorTaskPostMessageOp = createAsyncOp({
     name: 'flows/operator_task_post_message',
     transport: 'ws',
     wsTimeoutMs: 5_000,
+    commandType: 'flows/operator_task/post_message_requested',
     silent: true,
     restMirror: { method: 'POST', path: '/flows/api/v1/operator/tasks/{task_id}/messages' },
 });
@@ -121,6 +124,7 @@ export const operatorTaskCompleteOp = createAsyncOp({
     name: 'flows/operator_task_complete',
     transport: 'ws',
     wsTimeoutMs: 5_000,
+    commandType: 'flows/operator_task/complete_requested',
     successToastKey: 'flows:toast.operator_task_completed',
     errorToastKey: 'flows:toast.operator_task_complete_error',
     restMirror: { method: 'POST', path: '/flows/api/v1/operator/tasks/{task_id}/complete' },

@@ -125,7 +125,7 @@ async def run_codegen_stages(
     code: str,
     exec_state: ExecutionState,
 ) -> CodegenStagesResult:
-    """Ожидается `PythonCodeRunner` из `get_code_runner(language=\"python\")`. Код — `async def run(state):` → dict."""
+    """Ожидается `PythonCodeRunner` из `get_code_runner(\"python\")` (фасад `platform_services`). Код — `async def run(state):` → dict."""
     try:
         runner.compiler.validate(code)
     except Exception as e:

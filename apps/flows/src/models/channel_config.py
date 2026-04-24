@@ -6,12 +6,12 @@ ChannelConfig - конфигурация каналов для отправки 
 - TriggerConfig.output_actions (автоматическая отправка после агента)
 """
 
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional
 
 from pydantic import Field
 
 from core.models import StrictBaseModel
-from .enums import ChannelType
+from .enums import ChannelType, TriggerType
 
 
 class OutputAction(StrictBaseModel):
@@ -84,8 +84,26 @@ class ChannelNodeConfig(StrictBaseModel):
     )
 
 
+def default_output_actions_for_trigger_type(trigger_type: TriggerType) -> List[OutputAction]:
+    if trigger_type == TriggerType.TELEGRAM:
+        return [
+            OutputAction(
+                channel=ChannelType.TELEGRAM,
+                action="send_message",
+                mapping={
+                    "recipient": "@state:variables.chat_id",
+                    "text": "@state:response",
+                },
+                config={"parse_mode": "HTML"},
+                condition=None,
+            )
+        ]
+    return []
+
+
 __all__ = [
     "OutputAction",
     "ChannelNodeConfig",
     "ChannelType",
+    "default_output_actions_for_trigger_type",
 ]

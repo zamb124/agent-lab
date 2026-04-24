@@ -4,18 +4,18 @@ from __future__ import annotations
 
 import pytest
 
-from apps.flows.src.container import get_container
 from apps.flows.src.eval.codegen_utils import (
     CodegenStagesFailure,
     CodegenStagesSuccess,
     run_codegen_stages,
 )
+from apps.flows.src.eval.platform_services import get_code_runner
 from core.state import ExecutionState
 
 
 @pytest.mark.asyncio
 async def test_run_codegen_stages_run_success(unique_id):
-    runner = get_container().get_code_runner(language="python")
+    runner = get_code_runner(language="python")
     state = ExecutionState.create(
         task_id=f"t_codegen_ok_{unique_id}",
         context_id=f"c_codegen_{unique_id}",
@@ -30,7 +30,7 @@ async def test_run_codegen_stages_run_success(unique_id):
 
 @pytest.mark.asyncio
 async def test_run_codegen_stages_validate_failure(unique_id):
-    runner = get_container().get_code_runner(language="python")
+    runner = get_code_runner(language="python")
     state = ExecutionState.create(
         task_id=f"t_codegen_val_{unique_id}",
         context_id=f"c_codegen_v_{unique_id}",

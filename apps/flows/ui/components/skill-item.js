@@ -67,7 +67,7 @@ export class SkillItem extends PlatformElement {
                 display: flex;
                 align-items: center;
                 justify-content: center;
-                border-radius: var(--radius-sm);
+                border-radius: var(--radius-md);
                 color: var(--text-tertiary);
                 background: var(--glass-solid-subtle);
                 border: none;

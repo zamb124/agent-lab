@@ -79,6 +79,15 @@ def test_flows_api_nested_paths_require_auth() -> None:
         assert rule.auth_required is True, path
 
 
+def test_flows_telegram_trigger_webhook_is_public_anonymous() -> None:
+    """POST Telegram Bot update: тот же путь, что setWebhook, без JWT (как у серверов Telegram)."""
+    matcher = RouteMatcher()
+    rule = matcher.match("/flows/api/v1/triggers/telegram/flow_x/trigger_y")
+    assert rule is not None
+    assert rule.context_type == "anonymous"
+    assert rule.auth_required is False
+
+
 def test_sync_ui_static_is_public() -> None:
     matcher = RouteMatcher()
     rule = matcher.match("/sync/ui/static/index.js")

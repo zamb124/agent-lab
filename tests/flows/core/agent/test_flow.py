@@ -79,6 +79,25 @@ class TestCreateNode:
         assert isinstance(node, CodeNode)
 
     @pytest.mark.asyncio
+    async def test_create_node_infers_code_when_type_missing(self):
+        """Нода с inline code без type (устаревшие записи в БД) — как code."""
+        config = {
+            "code": "async def run(state):\n    return state",
+        }
+
+        node = await create_node("legacy", config)
+
+        assert isinstance(node, CodeNode)
+
+    def test_infer_node_type_from_function_field(self):
+        """Поле function без type — эвристика даёт code."""
+        from apps.flows.src.runtime import nodes as nodes_mod
+
+        cfg = {"function": "math.sqrt"}
+        nodes_mod._infer_node_type_from_fields(cfg)
+        assert cfg.get("type") == "code"
+
+    @pytest.mark.asyncio
     async def test_create_llm_node_node(self):
         """create_node создает LlmNode."""
         config = {

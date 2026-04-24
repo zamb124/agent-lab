@@ -138,11 +138,16 @@ class TestNodeEventsStreaming:
         ready_event = asyncio.Event()
         collected_events = []
         
+        def _has_step3_complete() -> bool:
+            for e in collected_events:
+                if isinstance(e, TaskArtifactUpdateEvent) and e.artifact.name == "node_complete_step3":
+                    return True
+            return False
+
         async def collect():
             async for event in subscriber.subscribe(task_id, timeout=5.0, ready_event=ready_event):
                 collected_events.append(event)
-                # 3 ноды * 2 события (start + complete) = 6 событий
-                if len(collected_events) >= 6:
+                if _has_step3_complete():
                     break
         
         async def execute():
