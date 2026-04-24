@@ -436,7 +436,15 @@
     "seed": "Seed",
     "reasoning_effort": "Reasoning effort",
     "extra_request_body": "Extra request body (JSON)",
-    "advanced": "Advanced"
+    "advanced": "Advanced",
+    "placeholder_model": "e.g. gpt-4o",
+    "placeholder_temperature": "e.g. 0.7",
+    "placeholder_max_tokens": "e.g. 4096",
+    "placeholder_top_p": "0-1, e.g. 0.95",
+    "placeholder_top_k": "Integer",
+    "placeholder_frequency_penalty": "-2 to 2",
+    "placeholder_presence_penalty": "-2 to 2",
+    "placeholder_seed": "Integer"
   },
   "prompt_editor": {
     "var_hint": "Use @var:KEY to insert flow variables"

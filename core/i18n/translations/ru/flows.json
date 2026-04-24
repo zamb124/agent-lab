@@ -436,7 +436,15 @@
     "seed": "Seed",
     "reasoning_effort": "Reasoning effort",
     "extra_request_body": "Дополнительные поля запроса (JSON)",
-    "advanced": "Дополнительно"
+    "advanced": "Дополнительно",
+    "placeholder_model": "Например gpt-4o",
+    "placeholder_temperature": "Например 0.7",
+    "placeholder_max_tokens": "Например 4096",
+    "placeholder_top_p": "0-1, например 0.95",
+    "placeholder_top_k": "Целое число",
+    "placeholder_frequency_penalty": "От -2 до 2",
+    "placeholder_presence_penalty": "От -2 до 2",
+    "placeholder_seed": "Целое число"
   },
   "prompt_editor": {
     "var_hint": "Используйте @var:KEY для подстановки переменных flow"

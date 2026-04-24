@@ -37,14 +37,19 @@ export class FlowsLlmConfigEditor extends PlatformElement {
             :host {
                 display: block;
                 container-type: inline-size;
+                min-width: 0;
+                width: 100%;
+                box-sizing: border-box;
             }
             .grid {
                 display: grid;
                 grid-template-columns: repeat(2, minmax(0, 1fr));
-                column-gap: var(--space-3);
-                row-gap: var(--space-3);
+                gap: var(--space-3, 12px);
+                width: 100%;
+                min-width: 0;
+                box-sizing: border-box;
             }
-            @container (max-width: 420px) {
+            @container (max-width: 480px) {
                 .grid {
                     grid-template-columns: minmax(0, 1fr);
                 }
@@ -54,6 +59,7 @@ export class FlowsLlmConfigEditor extends PlatformElement {
                 flex-direction: column;
                 gap: 4px;
                 min-width: 0;
+                max-width: 100%;
             }
             .full { grid-column: 1 / -1; }
             label {
@@ -73,6 +79,7 @@ export class FlowsLlmConfigEditor extends PlatformElement {
                 font-family: inherit;
                 width: 100%;
                 min-width: 0;
+                max-width: 100%;
                 box-sizing: border-box;
             }
             input::placeholder {
@@ -89,6 +96,9 @@ export class FlowsLlmConfigEditor extends PlatformElement {
                 border: 1px solid var(--glass-border-subtle);
                 border-radius: var(--radius-sm);
                 background: var(--glass-solid-subtle);
+                width: 100%;
+                min-width: 0;
+                box-sizing: border-box;
             }
             summary {
                 cursor: pointer;
