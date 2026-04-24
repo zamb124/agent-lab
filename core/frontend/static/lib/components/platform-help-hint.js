@@ -2,12 +2,15 @@
  * Подсказка по hover / focus. По умолчанию — кнопка «?»; опционально слот-контент
  * (кастомный триггер). Пузырёк в document.body (z-index из nextModalLayerZIndex).
  * Свойство strategy для совместимости; `wide` — широкий моноширинный режим (JSON).
+ * `placement`: `auto` — не вылезать за верх вьюпорта (снизу от якоря), `top` / `bottom` — жёстко.
  */
 import { html, css } from 'lit';
 import { PlatformElement } from '../platform-element/index.js';
 import { nextModalLayerZIndex } from '../utils/modal-z-stack.js';
 
-const PORTAL_STYLE_ID = 'platform-help-hint-portal-styles';
+const PORTAL_STYLE_ID = 'platform-help-hint-portal-styles-v2';
+const PORTAL_GAP_PX = 8;
+const VIEWPORT_TOP_INSET_PX = 4;
 
 function ensurePortalBubbleStyles() {
     if (typeof document === 'undefined' || document.getElementById(PORTAL_STYLE_ID)) {
@@ -18,7 +21,6 @@ function ensurePortalBubbleStyles() {
     style.textContent = `
         .platform-help-hint-portal-bubble {
             position: fixed;
-            transform: translate(-50%, calc(-100% - 8px));
             min-width: 200px;
             max-width: min(280px, 70vw);
             padding: 10px 12px;
@@ -34,6 +36,12 @@ function ensurePortalBubbleStyles() {
             box-shadow: var(--glass-shadow-strong, 0 8px 28px rgba(0, 0, 0, 0.35));
             pointer-events: auto;
             box-sizing: border-box;
+        }
+        .platform-help-hint-portal-bubble--above {
+            transform: translate(-50%, calc(-100% - ${PORTAL_GAP_PX}px));
+        }
+        .platform-help-hint-portal-bubble--below {
+            transform: translate(-50%, 0);
         }
         .platform-help-hint-portal-bubble--wide {
             min-width: 200px;
@@ -102,6 +110,8 @@ export class PlatformHelpHint extends PlatformElement {
         text: { type: String },
         label: { type: String },
         strategy: { type: String },
+        /** @type {'auto'|'top'|'bottom'} */
+        placement: { type: String, reflect: true },
         wide: { type: Boolean, reflect: true },
         _open: { state: true },
     };
@@ -111,6 +121,7 @@ export class PlatformHelpHint extends PlatformElement {
         this.text = '';
         this.label = 'Справка';
         this.strategy = 'portal';
+        this.placement = 'auto';
         this.wide = false;
         this._open = false;
         this._bubbleId = `platform-help-hint-${Math.random().toString(36).slice(2, 10)}`;
@@ -144,9 +155,18 @@ export class PlatformHelpHint extends PlatformElement {
             }
         } else if (this._open && changed.has('text') && this._portalBubble) {
             this._portalBubble.textContent = this.text;
+            requestAnimationFrame(() => {
+                requestAnimationFrame(() => this._syncPortalPosition());
+            });
         }
         if (this._open && this._portalBubble && changed.has('wide')) {
             this._applyWideClass();
+            requestAnimationFrame(() => {
+                requestAnimationFrame(() => this._syncPortalPosition());
+            });
+        }
+        if (this._open && this._portalBubble && changed.has('placement')) {
+            this._syncPortalPosition();
         }
     }
 
@@ -204,6 +224,25 @@ export class PlatformHelpHint extends PlatformElement {
         }
     }
 
+    /**
+     * @param {DOMRect} anchor
+     * @param {number} bubbleH
+     * @returns {boolean}
+     */
+    _shouldPlaceAbove(anchor, bubbleH) {
+        if (this.placement === 'top') {
+            return true;
+        }
+        if (this.placement === 'bottom') {
+            return false;
+        }
+        if (bubbleH <= 0) {
+            return anchor.top >= 100;
+        }
+        const topEdgeIfAbove = anchor.top - PORTAL_GAP_PX - bubbleH;
+        return topEdgeIfAbove >= VIEWPORT_TOP_INSET;
+    }
+
     _syncPortalPosition() {
         if (!this._portalBubble) {
             return;
@@ -213,8 +252,17 @@ export class PlatformHelpHint extends PlatformElement {
             return;
         }
         const r = root.getBoundingClientRect();
+        const bubbleH = this._portalBubble.getBoundingClientRect().height;
+        const above = this._shouldPlaceAbove(r, bubbleH);
+        this._portalBubble.classList.remove('platform-help-hint-portal-bubble--above', 'platform-help-hint-portal-bubble--below');
+        if (above) {
+            this._portalBubble.classList.add('platform-help-hint-portal-bubble--above');
+            this._portalBubble.style.top = `${r.top}px`;
+        } else {
+            this._portalBubble.classList.add('platform-help-hint-portal-bubble--below');
+            this._portalBubble.style.top = `${r.bottom + PORTAL_GAP_PX}px`;
+        }
         this._portalBubble.style.left = `${r.left + r.width / 2}px`;
-        this._portalBubble.style.top = `${r.top}px`;
     }
 
     _mountPortal() {

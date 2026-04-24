@@ -49,6 +49,15 @@ async def verify_telegram_config(config: Dict[str, Any]) -> VerifyResult:
         return False, {}, "invalid_response", f"Некорректный JSON ответа: {e}"
 
     if not data.get("ok"):
+        if response.status_code == 404:
+            msg = (
+                "Токен бота не найден (неверный токен или бот удалён). "
+                "Проверьте токен в @BotFather."
+            )
+            return False, {
+                "http_status": response.status_code,
+                "response": data,
+            }, "telegram_error", msg
         desc = data.get("description")
         if isinstance(desc, str) and desc:
             return False, {

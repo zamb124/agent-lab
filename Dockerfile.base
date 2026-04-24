@@ -9,6 +9,9 @@ WORKDIR /app
 # Системные зависимости для всех сервисов
 RUN apt-get update && apt-get install -y \
     curl \
+    build-essential \
+    pkg-config \
+    libcairo2-dev \
     poppler-utils \
     tesseract-ocr \
     tesseract-ocr-rus \
