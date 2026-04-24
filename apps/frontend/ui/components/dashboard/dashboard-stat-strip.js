@@ -42,6 +42,7 @@ export class DashboardStatStrip extends PlatformElement {
         this._subscription = this.useOp('frontend/billing_subscription');
         this._usage = this.useOp('frontend/billing_usage');
         this._status = this.useOp('frontend/services_status_load');
+        this._activeCompanyId = this.select((s) => s.auth.activeCompanyId);
         this._loaded = false;
     }
 
@@ -72,18 +73,24 @@ export class DashboardStatStrip extends PlatformElement {
         return `${formatted} ${this.t('console_home.currency_rub')}`;
     }
 
-    _servicesValue(statusResult) {
+    _servicesValue(statusResult, activeCompanyId) {
         if (!statusResult || !Array.isArray(statusResult.items)) {
             return this.t('console_home.stat_loading');
         }
-        const total = statusResult.items.length;
-        const healthy = statusResult.items.filter((s) => s.status === 'healthy').length;
-        return `${healthy} / ${total}`;
+        const items = statusResult.items;
+        const total = items.length;
+        if (activeCompanyId === 'system') {
+            return `${total} / ${total}`;
+        }
+        const hasLitserve = items.some((s) => s.name === 'provider_litserve');
+        const online = hasLitserve ? total - 1 : total;
+        return `${online} / ${total}`;
     }
 
     render() {
         const subscription = this._subscription.lastResult;
         const statusResult = this._status.lastResult;
+        const activeCompanyId = this._activeCompanyId.value;
         return html`
             <div class="strip">
                 <dashboard-stat-tile
@@ -108,7 +115,7 @@ export class DashboardStatStrip extends PlatformElement {
                     icon="server"
                     tone="info"
                     label=${this.t('console_home.stat_services_online')}
-                    value=${this._servicesValue(statusResult)}
+                    value=${this._servicesValue(statusResult, activeCompanyId)}
                 ></dashboard-stat-tile>
             </div>
         `;

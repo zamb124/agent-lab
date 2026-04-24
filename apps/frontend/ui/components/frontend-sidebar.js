@@ -96,7 +96,9 @@ export class FrontendSidebar extends PlatformElement {
         this.collapsed = readShellSidebarCollapsed();
         this.mobileOpen = false;
         this._routeKeySel = this.select((s) => s.router && s.router.routeKey);
-        this._authSel = this.select((s) => s.auth.user);
+        this._authSel = this.select((s) => ({
+            activeCompanyId: s.auth.activeCompanyId,
+        }));
     }
 
     _shell() { return this.renderRoot?.querySelector('platform-service-sidebar'); }
@@ -109,8 +111,8 @@ export class FrontendSidebar extends PlatformElement {
 
     render() {
         const currentView = this._routeKeySel.value || 'dashboard';
-        const user = this._authSel.value;
-        const isSystem = !!user && (user.company_id === 'system' || (user.raw && user.raw.company_id === 'system'));
+        const auth = this._authSel.value;
+        const isSystem = auth.activeCompanyId === 'system';
         const t = (k, fallback) => this.t(k) || fallback;
 
         return html`

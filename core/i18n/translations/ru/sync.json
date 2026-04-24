@@ -423,6 +423,7 @@
         "transcribe_voice_label": "Автоматически транскрибировать голосовые сообщения",
         "speech_to_chat_label": "Речь в ленту во время звонка",
         "field_name": "Название",
+        "field_direct_chat": "Личные сообщения",
         "placeholder_name": "Название канала",
         "field_avatar": "Аватар",
         "avatar_change": "Изменить",

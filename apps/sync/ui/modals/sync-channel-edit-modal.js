@@ -16,6 +16,7 @@ import '@platform/lib/components/platform-switch.js';
 import '@platform/lib/components/platform-user-chip.js';
 import { compressImageFileToJpeg } from '../_helpers/sync-avatar-image-compress.js';
 import { syncChannelPlaceholderCollection } from '../_helpers/sync-channel-placeholder-collection.js';
+import { resolveChannelTitle } from '../_helpers/sync-id-resolvers.js';
 
 const FILE_DOWNLOAD_BASE = '/sync/api/v1/files/download';
 
@@ -233,7 +234,7 @@ export class SyncChannelEditModal extends PlatformFormModal {
         if (!this._hydrated && this.channelId) {
             const item = this._channels.items.find((c) => c.id === this.channelId);
             if (item) {
-                if (typeof item.name === 'string') this._name = item.name;
+                this._name = typeof item.name === 'string' ? item.name : '';
                 if (typeof item.avatar_url === 'string' && item.avatar_url !== '') {
                     this._initialAvatarUrl = item.avatar_url;
                     this._avatarDraftUrl = item.avatar_url;
@@ -430,17 +431,8 @@ export class SyncChannelEditModal extends PlatformFormModal {
                   `
                 : html`
                       <div class="form-group">
-                          <label class="form-label">${this.t('channel_settings.field_name')}</label>
-                          <input
-                              class="form-input"
-                              type="text"
-                              .value=${this._name}
-                              placeholder=${this.t('channel_settings.placeholder_name')}
-                              @input=${(e) => {
-                                  this._name = e.target.value;
-                                  this.isDirty = true;
-                              }}
-                          />
+                          <label class="form-label">${this.t('channel_settings.field_direct_chat')}</label>
+                          <div class="form-hint">${resolveChannelTitle(item)}</div>
                       </div>
                   `}
 
@@ -547,15 +539,17 @@ export class SyncChannelEditModal extends PlatformFormModal {
             return;
         }
         const trimmed = this._name.trim();
-        if (trimmed === '') {
+        if (item.type !== 'direct' && trimmed === '') {
             this.toast('sync:channel_settings.err_name_required', { type: 'error' });
             return;
         }
         const body = {
-            name: trimmed,
             transcribe_voice_messages: this._transcribe,
             speech_to_chat_enabled: this._speechToChat,
         };
+        if (item.type !== 'direct') {
+            body.name = trimmed;
+        }
         if (item.type !== 'direct') {
             if (this._avatarIntent === 'removed') {
                 body.avatar_url = null;

@@ -4,7 +4,7 @@
  * Источники (apps/frontend/api/billing.py):
  *   - subscription: BillingSubscription (plan, balance, monthly_budget, current_month_spent, billing_period_start)
  *   - usage:        BillingUsage (total_cost, total_calls, by_resource, by_user)
- *   - history:      list of TransactionResponse (created_at, amount, status, payment_provider)
+ *   - history:      list of TransactionResponse (created_at, amount, status, payment_provider, metadata)
  *
  * Действия:
  *   - кнопка «Top up» открывает FrontendTopupModal
@@ -36,6 +36,7 @@ function _percent(spent, budget) {
     if (!budget || budget <= 0) return null;
     return Math.min(100, Math.round((Number(spent) / Number(budget)) * 100));
 }
+
 
 export class FrontendBillingPage extends PlatformPage {
     static i18nNamespace = 'billing';
@@ -281,6 +282,35 @@ export class FrontendBillingPage extends PlatformPage {
         `;
     }
 
+    _historyProviderLabel(p) {
+        const key = p.payment_provider;
+        if (typeof key !== 'string' || key === '') {
+            return '—';
+        }
+        if (key === 'yoomoney') {
+            return this.t('history_table.provider_yoomoney');
+        }
+        if (key === 'yukassa') {
+            return this.t('history_table.provider_yukassa');
+        }
+        if (key === 'grant') {
+            return this.t('history_table.provider_grant');
+        }
+        return key;
+    }
+
+    _historyNote(p) {
+        const m = p.metadata;
+        if (!m || typeof m !== 'object') {
+            return '';
+        }
+        const n = m.note;
+        if (typeof n !== 'string' || n === '') {
+            return '';
+        }
+        return n;
+    }
+
     _renderHistory(history) {
         if (history.length === 0) {
             return html`
@@ -301,17 +331,21 @@ export class FrontendBillingPage extends PlatformPage {
                         <th>${this.t('history_table.date')}</th>
                         <th class="num">${this.t('history_table.amount')}</th>
                         <th>${this.t('history_table.provider')}</th>
+                        <th>${this.t('history_table.comment')}</th>
                         <th>${this.t('history_table.status')}</th>
                     </tr></thead>
                     <tbody>
                         ${history.map((p) => {
-                            const status = (p.status || '').toLowerCase();
+                            const st = p.status;
+                            const status = typeof st === 'string' && st !== '' ? st.toLowerCase() : 'error';
                             const statusLabel = this.t(`status.${status}`);
+                            const note = this._historyNote(p);
                             return html`
                                 <tr>
                                     <td>${p.created_at ? new Date(p.created_at).toLocaleString() : '—'}</td>
                                     <td class="num">${_formatCurrency(p.amount)}</td>
-                                    <td>${p.payment_provider || '—'}</td>
+                                    <td>${this._historyProviderLabel(p)}</td>
+                                    <td>${note === '' ? '—' : note}</td>
                                     <td><span class="status-tag ${status}">${statusLabel}</span></td>
                                 </tr>
                             `;

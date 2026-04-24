@@ -16,6 +16,7 @@
  *   PUT  /api/platform-billing/settlement-rules/{company_id}
  *   GET  /api/platform-billing/default-settlement-rules
  *   GET  /api/platform-billing/usage-report?...
+ *   POST /api/platform-billing/balance-grant
  *   POST   /api/companies/{company_id}/system-access
  *   DELETE /api/companies/{company_id}/system-access
  *
@@ -299,6 +300,34 @@ export const billingAdminFacets = createFacets({
     debounceMs: 200,
     minQueryLength: 2,
     pageSize: 20,
+});
+
+export const balanceGrantOp = createAsyncOp({
+    name: 'frontend/admin_billing_balance_grant',
+    successToastKey: 'frontend:platform_billing_page.balance_grant_toast_ok',
+    errorToastKey: 'frontend:platform_billing_page.balance_grant_toast_error',
+    restMirror: { method: 'POST', path: '/frontend/api/platform-billing/balance-grant' },
+    request: async ({ payload }) => {
+        const id = payload && payload.company_id;
+        if (!id) throw new Error('balance_grant: company_id required');
+        const amount = payload && payload.amount;
+        if (typeof amount !== 'number' || Number.isNaN(amount)) {
+            throw new Error('balance_grant: amount must be a number');
+        }
+        const body = { company_id: id, amount };
+        const note = payload && payload.note;
+        if (typeof note === 'string' && note.length > 0) {
+            body.note = note;
+        }
+        return await httpRequest({
+            method: 'POST',
+            url: `${BASE_BILLING}/balance-grant`,
+            body,
+        });
+    },
+    onSuccess: (ctx) => {
+        ctx.dispatch(companiesOverviewLoadOp.events.REQUESTED, { offset: 0, append: false }, { source: 'local' });
+    },
 });
 
 export const systemAccessEnterOp = createAsyncOp({

@@ -180,3 +180,28 @@ class PlatformBillingCompaniesOverviewResponse(BaseModel):
     items: List[PlatformBillingCompanyOverviewItem]
     has_more: bool
 
+
+class PlatformBillingBalanceGrantRequest(BaseModel):
+    """Начисление гранта на баланс (только компания system)."""
+
+    company_id: str = Field(min_length=1, description="ID компании-получателя")
+    amount: float = Field(
+        ge=0.01,
+        le=10_000_000.0,
+        description="Сумма в RUB",
+    )
+    note: Optional[str] = Field(
+        default=None,
+        max_length=2000,
+        description="Комментарий к гранту (аудит)",
+    )
+
+
+class PlatformBillingBalanceGrantResponse(BaseModel):
+    """Результат начисления гранта."""
+
+    transaction_id: str
+    company_id: str
+    amount: float
+    balance: float
+

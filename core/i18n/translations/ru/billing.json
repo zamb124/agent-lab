@@ -61,7 +61,11 @@
         "date": "Дата",
         "amount": "Сумма",
         "status": "Статус",
-        "provider": "Провайдер"
+        "provider": "Источник",
+        "comment": "Примечание",
+        "provider_yoomoney": "YooMoney",
+        "provider_yukassa": "YooKassa",
+        "provider_grant": "Грант (без оплаты)"
     },
     "frontend_console": {
         "page_title": "Биллинг",

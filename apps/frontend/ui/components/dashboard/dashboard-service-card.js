@@ -29,13 +29,14 @@ export class DashboardServiceCard extends PlatformElement {
         metricValue: { type: String, attribute: 'metric-value' },
         healthState: { type: String, attribute: 'health-state' },
         latencyMs: { type: Number, attribute: 'latency-ms' },
+        disabled: { type: Boolean },
     };
 
     static styles = [
         PlatformElement.styles,
         css`
             :host { display: block; }
-            a.card {
+            .card {
                 position: relative;
                 display: flex;
                 flex-direction: column;
@@ -43,7 +44,6 @@ export class DashboardServiceCard extends PlatformElement {
                 padding: var(--space-6);
                 min-height: 220px;
                 border-radius: var(--radius-2xl);
-                text-decoration: none;
                 color: inherit;
                 background: var(--glass-solid-medium);
                 backdrop-filter: blur(var(--glass-blur-medium));
@@ -55,7 +55,8 @@ export class DashboardServiceCard extends PlatformElement {
                 transition: transform var(--duration-normal) var(--easing-default),
                             box-shadow var(--duration-normal) var(--easing-default);
             }
-            a.card::before {
+            a.card { text-decoration: none; }
+            .card::before {
                 content: '';
                 position: absolute;
                 inset: 0 0 auto 0;
@@ -63,7 +64,7 @@ export class DashboardServiceCard extends PlatformElement {
                 background: linear-gradient(90deg, var(--brand-from) 0%, var(--brand-to) 100%);
                 pointer-events: none;
             }
-            a.card::after {
+            .card::after {
                 content: '';
                 position: absolute;
                 inset: -40% -20% auto auto;
@@ -74,8 +75,14 @@ export class DashboardServiceCard extends PlatformElement {
                 pointer-events: none;
                 z-index: -1;
             }
-            a.card > * { position: relative; z-index: 1; }
+            .card > * { position: relative; z-index: 1; }
             a.card:hover { transform: translateY(-4px); box-shadow: var(--glass-shadow-strong); }
+            .card--disabled {
+                cursor: not-allowed;
+                pointer-events: none;
+                opacity: 0.82;
+            }
+            .card--disabled:hover { transform: none; box-shadow: var(--glass-shadow-medium); }
             .head { display: flex; align-items: center; gap: var(--space-4); }
             .logo {
                 width: 56px;
@@ -149,11 +156,12 @@ export class DashboardServiceCard extends PlatformElement {
         this.metricValue = '';
         this.healthState = 'loading';
         this.latencyMs = 0;
+        this.disabled = false;
     }
 
     _healthLabel() {
         if (this.healthState === 'healthy') {
-            return this.t('console_home.stat_latency_ms', { ms: Math.round(this.latencyMs) });
+            return this.t('console_home.stat_available');
         }
         if (this.healthState === 'unhealthy') {
             return this.t('console_home.stat_unavailable');
@@ -166,8 +174,7 @@ export class DashboardServiceCard extends PlatformElement {
         const cardStyle = `--brand-from: ${this.brandFrom}; --brand-to: ${this.brandTo}; --health-tone: ${tone};`;
         const title = this.t(this.nameKey, null, 'platform');
         const description = this.t(this.descriptionKey, null, 'platform');
-        return html`
-            <a class="card" href=${this.href} aria-label=${title} style=${cardStyle}>
+        const body = html`
                 <div class="head">
                     <div class="logo"><img src=${this.logoSrc} alt=${title}></div>
                     <div class="title">${title}</div>
@@ -180,6 +187,16 @@ export class DashboardServiceCard extends PlatformElement {
                         <span>${this._healthLabel()}</span>
                     </span>
                 </div>
+        `;
+        if (this.disabled) {
+            return html`
+            <div class="card card--disabled" aria-label=${title} style=${cardStyle}>
+                ${body}
+            </div>`;
+        }
+        return html`
+            <a class="card" href=${this.href} aria-label=${title} style=${cardStyle}>
+                ${body}
             </a>
         `;
     }

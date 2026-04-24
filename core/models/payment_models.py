@@ -20,9 +20,10 @@ class PaymentStatus(str, Enum):
 
 
 class PaymentProviderType(str, Enum):
-    """Типы платежных провайдеров"""
+    """Типы источника пополнения: платёжные провайдеры или начисление гранта из админки platform."""
     YOOMONEY = "yoomoney"
     YUKASSA = "yukassa"
+    GRANT = "grant"
 
 
 class Transaction(BaseModel):
@@ -167,6 +168,10 @@ class TransactionResponse(BaseModel):
     external_payment_id: Optional[str]
     created_at: datetime
     completed_at: Optional[datetime]
+    metadata: Dict[str, Any] = Field(
+        default_factory=dict,
+        description="Аудит и комментарии (для гранта: granted_by_user_id, note)",
+    )
 
 
 

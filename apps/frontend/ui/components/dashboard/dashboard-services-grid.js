@@ -117,29 +117,46 @@ export class DashboardServicesGrid extends PlatformElement {
         super();
         this._status = this.useOp('frontend/services_status_load');
         this._countOps = SERVICES.map((svc) => this.useOp(svc.countOp));
-        this._loaded = false;
+        this._activeCompanyId = this.select((s) => s.auth.activeCompanyId);
+        this._countsBootstrapped = false;
+        this._prevCompanyId = null;
     }
 
     updated() {
-        if (this._loaded) return;
-        this._loaded = true;
-        this._status.run(null);
-        for (const op of this._countOps) op.run(null);
+        const cid = this._activeCompanyId.value;
+        if (!this._countsBootstrapped) {
+            this._countsBootstrapped = true;
+            this._status.run(null);
+            for (let i = 0; i < this._countOps.length; i++) {
+                const svc = SERVICES[i];
+                if (svc.svcId === 'litserve' && cid !== 'system') {
+                    continue;
+                }
+                this._countOps[i].run(null);
+            }
+            this._prevCompanyId = cid;
+            return;
+        }
+        if (cid !== this._prevCompanyId) {
+            this._prevCompanyId = cid;
+            const litIdx = SERVICES.findIndex((s) => s.svcId === 'litserve');
+            if (litIdx >= 0 && cid === 'system') {
+                this._countOps[litIdx].run(null);
+            }
+        }
     }
 
-    _healthForService(statusResult, healthName) {
-        if (!statusResult || !Array.isArray(statusResult.items)) {
-            return { state: 'loading', latencyMs: 0 };
+    _healthForService(_statusResult, healthName, activeCompanyId) {
+        if (healthName === 'provider_litserve' && activeCompanyId !== 'system') {
+            return { state: 'unhealthy', latencyMs: 0 };
         }
-        const found = statusResult.items.find((s) => s.name === healthName);
-        if (!found) return { state: 'loading', latencyMs: 0 };
-        if (found.status === 'healthy') {
-            return { state: 'healthy', latencyMs: Number(found.response_time) };
-        }
-        return { state: 'unhealthy', latencyMs: 0 };
+        return { state: 'healthy', latencyMs: 0 };
     }
 
-    _metricValue(idx, metricKey) {
+    _metricValue(idx, metricKey, svcId, activeCompanyId) {
+        if (svcId === 'litserve' && activeCompanyId !== 'system') {
+            return this.t('console_home.stat_loading');
+        }
         const op = this._countOps[idx];
         const result = op.lastResult;
         if (!result) return this.t('console_home.stat_loading');
@@ -148,6 +165,7 @@ export class DashboardServicesGrid extends PlatformElement {
 
     render() {
         const statusResult = this._status.lastResult;
+        const activeCompanyId = this._activeCompanyId.value;
         return html`
             <div class="header">
                 <h2 class="title">${this.t('console_home.services_title')}</h2>
@@ -155,7 +173,8 @@ export class DashboardServicesGrid extends PlatformElement {
             </div>
             <div class="grid">
                 ${SERVICES.map((svc, idx) => {
-                    const health = this._healthForService(statusResult, svc.healthName);
+                    const health = this._healthForService(statusResult, svc.healthName, activeCompanyId);
+                    const litserveLocked = svc.svcId === 'litserve' && activeCompanyId !== 'system';
                     return html`
                         <dashboard-service-card
                             svc-id=${svc.svcId}
@@ -165,9 +184,10 @@ export class DashboardServicesGrid extends PlatformElement {
                             href=${svc.href}
                             brand-from=${svc.brandFrom}
                             brand-to=${svc.brandTo}
-                            metric-value=${this._metricValue(idx, svc.metricKey)}
+                            metric-value=${this._metricValue(idx, svc.metricKey, svc.svcId, activeCompanyId)}
                             health-state=${health.state}
                             latency-ms=${health.latencyMs}
+                            ?disabled=${litserveLocked}
                         ></dashboard-service-card>
                     `;
                 })}

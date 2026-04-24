@@ -61,7 +61,11 @@
         "date": "Date",
         "amount": "Amount",
         "status": "Status",
-        "provider": "Provider"
+        "provider": "Source",
+        "comment": "Note",
+        "provider_yoomoney": "YooMoney",
+        "provider_yukassa": "YooKassa",
+        "provider_grant": "Grant (no payment)"
     },
     "frontend_console": {
         "page_title": "Billing",

@@ -153,6 +153,7 @@ async def get_payment_history(
             external_payment_id=t.external_payment_id,
             created_at=t.created_at,
             completed_at=t.completed_at,
+            metadata=t.metadata,
         )
         for t in transactions
     ]

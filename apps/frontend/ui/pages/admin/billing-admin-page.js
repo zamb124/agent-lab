@@ -9,6 +9,7 @@ import { PlatformPage } from '@platform/lib/base/PlatformPage.js';
 import '@platform/lib/components/layout/page-header.js';
 import '@platform/lib/components/glass-spinner.js';
 import { FrontendSystemAccessModal } from '../../modals/system-access-modal.js';
+import { FrontendBalanceGrantModal } from '../../modals/balance-grant-modal.js';
 
 const TABS = Object.freeze(['companies', 'prices_rules', 'usage']);
 
@@ -347,6 +348,9 @@ export class FrontendBillingAdminPage extends PlatformPage {
                                         <td>${r.monthly_budget ?? ''}</td>
                                         <td>${r.current_month_spent ?? ''}</td>
                                         <td>
+                                            <button class="btn" @click=${() => this.openModal(FrontendBalanceGrantModal, { company_id: r.company_id })}>
+                                                ${this.t('platform_billing_page.balance_grant_button')}
+                                            </button>
                                             <button class="btn" @click=${() => this.openModal(FrontendSystemAccessModal, { company_id: r.company_id })}>
                                                 ${this.t('platform_billing_page.system_access_enter')}
                                             </button>

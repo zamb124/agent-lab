@@ -140,7 +140,16 @@
         "prices_save_failed": "Failed to save prices",
         "rules_save_failed": "Failed to save rules",
         "system_access_leave_success": "Left the company",
-        "system_access_user_context_invalid": "Could not detect current system user"
+        "system_access_user_context_invalid": "Could not detect current system user",
+        "balance_grant_button": "Grant",
+        "balance_grant_modal_title": "Issue balance grant",
+        "balance_grant_modal_subtitle": "Company {{company_id}}. Funds are credited without a payment provider; history shows this as a grant.",
+        "balance_grant_label_amount": "Amount (RUB)",
+        "balance_grant_label_note": "Comment (audit, optional)",
+        "balance_grant_submit": "Apply grant",
+        "balance_grant_amount_invalid": "Enter an amount from 0.01 to 10,000,000 RUB",
+        "balance_grant_toast_ok": "Grant credited",
+        "balance_grant_toast_error": "Could not apply grant"
     },
     "console_home": {
         "welcome_title": "Welcome",
@@ -156,6 +165,7 @@
         "welcome_company_badge": "Active company: {{name}}",
         "services_subtitle": "Open any product on the platform — status, metrics and one-click access",
         "stat_latency_ms": "{{ms}} ms",
+        "stat_available": "Available",
         "stat_unavailable": "Unavailable",
         "stat_loading": "—",
         "stat_flows_count": "Flows: {{count}}",

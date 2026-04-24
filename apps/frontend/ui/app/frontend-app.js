@@ -49,6 +49,7 @@ import {
     defaultSettlementRulesLoadOp,
     usageReportLoadOp,
     billingAdminFacets,
+    balanceGrantOp,
     systemAccessEnterOp,
     systemAccessLeaveOp,
 } from '../events/resources/billing-admin.resource.js';
@@ -162,6 +163,7 @@ export class FrontendApp extends PlatformApp {
         defaultSettlementRulesLoadOp,
         usageReportLoadOp,
         billingAdminFacets,
+        balanceGrantOp,
         systemAccessEnterOp,
         systemAccessLeaveOp,
         acceptInviteOp,

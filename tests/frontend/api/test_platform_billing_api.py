@@ -12,6 +12,7 @@ from httpx import ASGITransport, AsyncClient
 
 from core.billing.service import company_resource_prices_storage_key, company_settlement_rules_storage_key
 from core.models.identity_models import Company
+from core.models.payment_models import PaymentProviderType
 
 
 @pytest_asyncio.fixture
@@ -369,3 +370,62 @@ async def test_platform_billing_default_settlement_rules_template(frontend_clien
     assert doc.get("application_mode") == "first_win"
     assert isinstance(doc.get("rules"), list)
     assert len(doc["rules"]) >= 5
+
+
+@pytest.mark.asyncio
+async def test_platform_billing_balance_grant_forbidden_non_system(frontend_client_with_auth):
+    response = await frontend_client_with_auth.post(
+        "/frontend/api/platform-billing/balance-grant",
+        json={"company_id": "system", "amount": 1.0},
+    )
+    assert response.status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_platform_billing_balance_grant_unknown_company_404(
+    frontend_client_system, unique_id: str,
+):
+    cid = f"no_co_{unique_id}"
+    response = await frontend_client_system.post(
+        "/frontend/api/platform-billing/balance-grant",
+        json={"company_id": cid, "amount": 1.0},
+    )
+    assert response.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_platform_billing_balance_grant_creates_grant_transaction(
+    frontend_client_system,
+    frontend_container,
+    unique_id: str,
+    system_user_id: str,
+) -> None:
+    cid = f"co_grant_{unique_id}"
+    company = Company(
+        company_id=cid,
+        name=f"Grant test {unique_id}",
+        owner_user_id=system_user_id,
+        members={system_user_id: ["owner"]},
+        balance=10.0,
+    )
+    await frontend_container.company_repository.set(company)
+    try:
+        r = await frontend_client_system.post(
+            "/frontend/api/platform-billing/balance-grant",
+            json={"company_id": cid, "amount": 2.5, "note": f"n-{unique_id}"},
+        )
+        assert r.status_code == 200
+        data = r.json()
+        assert data["amount"] == 2.5
+        assert data["company_id"] == cid
+        assert data["balance"] == 12.5
+        co2 = await frontend_container.company_repository.get(cid)
+        assert co2 is not None
+        assert co2.balance == 12.5
+        txs = await frontend_container.payment_service.get_company_transactions(cid, limit=20)
+        by_id = [t for t in txs if t.transaction_id == data["transaction_id"]]
+        assert len(by_id) == 1
+        assert by_id[0].payment_provider == PaymentProviderType.GRANT
+        assert by_id[0].metadata["note"] == f"n-{unique_id}"
+    finally:
+        await frontend_container.company_repository.delete(cid)

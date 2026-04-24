@@ -117,6 +117,59 @@ class PaymentService:
             "payment_url": payment_response.payment_url,
             "amount": amount
         }
+
+    async def apply_balance_grant(
+        self,
+        *,
+        company_id: str,
+        amount: float,
+        grantor_user_id: str,
+        note: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """
+        Начисление баланса без платёжного провайдера (грант из админки system).
+        Транзакция сразу success; источник — payment_provider=grant.
+        """
+        if amount < 0.01:
+            raise ValueError("amount must be at least 0.01")
+        now = datetime.now(timezone.utc)
+        transaction_id = f"{company_id}:txn_{uuid.uuid4().hex[:16]}"
+        meta: Dict[str, Any] = {
+            "granted_by_user_id": grantor_user_id,
+        }
+        if note is not None and note != "":
+            meta["note"] = note
+        transaction = Transaction(
+            transaction_id=transaction_id,
+            company_id=company_id,
+            user_id=grantor_user_id,
+            amount=amount,
+            status=PaymentStatus.SUCCESS,
+            payment_provider=PaymentProviderType.GRANT,
+            external_payment_id=None,
+            payment_url=None,
+            created_at=now,
+            completed_at=now,
+            metadata=meta,
+        )
+        await self._save_transaction(transaction)
+        await self._update_company_balance(company_id, amount)
+        company = await self._company_repository.get(company_id)
+        if not company:
+            raise ValueError(f"Company {company_id} not found after grant")
+        logger.info(
+            "Грант баланса: company=%s amount=%.2f RUB by=%s txn=%s",
+            company_id,
+            amount,
+            grantor_user_id,
+            transaction_id,
+        )
+        return {
+            "transaction_id": transaction_id,
+            "company_id": company_id,
+            "amount": amount,
+            "balance": company.balance,
+        }
     
     async def process_webhook(
         self,

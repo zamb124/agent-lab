@@ -16,6 +16,8 @@ from apps.frontend.dependencies import ContainerDep
 if TYPE_CHECKING:
     from apps.frontend.container import FrontendContainer
 from apps.frontend.models import (
+    PlatformBillingBalanceGrantRequest,
+    PlatformBillingBalanceGrantResponse,
     PlatformBillingCompaniesOverviewResponse,
     PlatformBillingCompanyOverviewItem,
     PlatformBillingCompanyPricesResponse,
@@ -163,6 +165,37 @@ async def companies_billing_overview(
         for c in page
     ]
     return PlatformBillingCompaniesOverviewResponse(items=items, has_more=has_more)
+
+
+@router.post(
+    "/balance-grant",
+    response_model=PlatformBillingBalanceGrantResponse,
+)
+async def post_balance_grant(
+    request: Request,
+    container: ContainerDep,
+    body: PlatformBillingBalanceGrantRequest,
+) -> PlatformBillingBalanceGrantResponse:
+    _require_system(request)
+    user = request.state.user
+    cid = body.company_id.strip()
+    if not cid:
+        raise HTTPException(status_code=422, detail="company_id не может быть пустым")
+    company = await container.company_repository.get(cid)
+    if company is None:
+        raise HTTPException(status_code=404, detail=f"Компания {cid} не найдена")
+    out = await container.payment_service.apply_balance_grant(
+        company_id=cid,
+        amount=body.amount,
+        grantor_user_id=user.user_id,
+        note=body.note,
+    )
+    return PlatformBillingBalanceGrantResponse(
+        transaction_id=out["transaction_id"],
+        company_id=out["company_id"],
+        amount=out["amount"],
+        balance=out["balance"],
+    )
 
 
 @router.get(

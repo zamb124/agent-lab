@@ -423,6 +423,7 @@
         "transcribe_voice_label": "Automatically transcribe voice messages",
         "speech_to_chat_label": "Speech to channel during calls",
         "field_name": "Name",
+        "field_direct_chat": "Direct messages",
         "placeholder_name": "Channel name",
         "field_avatar": "Avatar",
         "avatar_change": "Change",

@@ -117,6 +117,18 @@ class AuthMiddleware(BaseHTTPMiddleware):
             request.state.language = context.language.value
             request.state.user_companies = context.user_companies
             request.state.token_data = token_data
+
+            if (
+                rule.context_type == "frontend"
+                and path.startswith("/litserve")
+                and not path.startswith("/litserve/ui/static")
+            ):
+                ac = context.active_company
+                if ac is None or ac.company_id != "system":
+                    raise HTTPException(
+                        status_code=403,
+                        detail="Интерфейс LitServe доступен только при активной компании system.",
+                    )
             
             response = await call_next(request)
             return response
