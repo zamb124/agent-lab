@@ -34,9 +34,19 @@ class TestTriggerModels:
         assert trigger.trigger_id == f"trigger_{unique_id}"
         assert trigger.type == TriggerType.TELEGRAM
         assert trigger.enabled is True
+        assert trigger.post_flow_output_enabled is True
         assert trigger.status == TriggerStatus.INACTIVE
         assert trigger.webhook_url is None
         assert trigger.input_mapping == {}
+
+    def test_trigger_cron_forces_post_flow_output_off(self, unique_id):
+        trigger = TriggerConfig(
+            trigger_id=f"cron_{unique_id}",
+            name="Cron",
+            type=TriggerType.CRON,
+            config={"cron": "0 * * * *"},
+        )
+        assert trigger.post_flow_output_enabled is False
 
     def test_agent_config_with_triggers(self, unique_id):
         """FlowConfig поддерживает triggers dict."""
@@ -68,11 +78,11 @@ class TestInputMapper:
     """Тесты InputMapper."""
 
     def test_map_simple_fields(self):
-        """InputMapper маппит простые поля и сохраняет payload в triggers."""
+        """InputMapper маппит content и context.*, сырой вход в triggers[id].payload."""
         from apps.flows.src.triggers.input_mapper import InputMapper
-        
+
         mapper = InputMapper()
-        
+
         payload = {
             "message": {
                 "text": "Hello world",
@@ -80,48 +90,50 @@ class TestInputMapper:
                 "chat": {"id": 67890},
             }
         }
-        
+
         mapping = {
             "content": "message.text",
-            "variables.user_id": "message.from.id",
-            "variables.username": "message.from.username",
-            "variables.chat_id": "message.chat.id",
+            "context.user_id": "message.from.id",
+            "context.username": "message.from.username",
+            "context.chat_id": "message.chat.id",
         }
-        
+
         result = mapper.map("tg_trigger", payload, mapping)
-        
+
         assert result["content"] == "Hello world"
-        assert result["variables"]["user_id"] == 12345
-        assert result["variables"]["username"] == "testuser"
-        assert result["variables"]["chat_id"] == 67890
-        assert result["triggers"]["tg_trigger"] == payload
+        snap = result["triggers"]["tg_trigger"]
+        assert snap["payload"] == payload
+        assert snap["context"]["user_id"] == 12345
+        assert snap["context"]["username"] == "testuser"
+        assert snap["context"]["chat_id"] == 67890
 
     def test_map_with_const(self):
-        """InputMapper поддерживает @const."""
+        """InputMapper поддерживает @const в context."""
         from apps.flows.src.triggers.input_mapper import InputMapper
-        
+
         mapper = InputMapper()
-        
+
         payload = {"text": "test"}
         mapping = {
             "content": "text",
-            "variables.source": "@const:telegram",
-            "variables.priority": "@const:1",
+            "context.source": "@const:telegram",
+            "context.priority": "@const:1",
         }
-        
+
         result = mapper.map("tg_trigger", payload, mapping)
-        
+
         assert result["content"] == "test"
-        assert result["variables"]["source"] == "telegram"
-        assert result["variables"]["priority"] == "1"
-        assert result["triggers"]["tg_trigger"] == payload
+        snap = result["triggers"]["tg_trigger"]
+        assert snap["payload"] == payload
+        assert snap["context"]["source"] == "telegram"
+        assert snap["context"]["priority"] == "1"
 
     def test_map_nested_path(self):
         """InputMapper маппит вложенные пути."""
         from apps.flows.src.triggers.input_mapper import InputMapper
-        
+
         mapper = InputMapper()
-        
+
         payload = {
             "data": {
                 "nested": {
@@ -131,38 +143,52 @@ class TestInputMapper:
                 }
             }
         }
-        
+
         mapping = {"content": "data.nested.deep.value"}
-        
+
         result = mapper.map("webhook_trigger", payload, mapping)
-        
+
         assert result["content"] == "found"
-        assert result["triggers"]["webhook_trigger"] == payload
+        assert result["triggers"]["webhook_trigger"]["payload"] == payload
 
     def test_map_missing_path_returns_none(self):
         """InputMapper возвращает None для отсутствующего пути."""
         from apps.flows.src.triggers.input_mapper import InputMapper
-        
+
         mapper = InputMapper()
-        
+
         payload = {"text": "hello"}
         mapping = {"content": "missing.path"}
-        
+
         result = mapper.map("test_trigger", payload, mapping)
-        
+
         assert result["content"] is None
-        assert result["triggers"]["test_trigger"] == payload
+        assert result["triggers"]["test_trigger"]["payload"] == payload
 
     def test_map_empty_mapping(self):
-        """InputMapper с пустым mapping сохраняет payload в triggers."""
+        """Пустой mapping: только payload и пустой context."""
         from apps.flows.src.triggers.input_mapper import InputMapper
-        
+
         mapper = InputMapper()
-        
+
         payload = {"text": "hello"}
         result = mapper.map("empty_trigger", payload, {})
-        
-        assert result["triggers"]["empty_trigger"] == payload
+
+        snap = result["triggers"]["empty_trigger"]
+        assert snap["payload"] == payload
+        assert snap["context"] == {}
+        assert result["content"] == ""
+
+    def test_trigger_mapping_rejects_variables_prefix(self):
+        """Конфиг триггера с variables.* в маппинге — ошибка валидации."""
+        with pytest.raises(ValueError, match="variables"):
+            TriggerConfig(
+                trigger_id="tg_x",
+                name="x",
+                type=TriggerType.TELEGRAM,
+                config={"bot_token": "t"},
+                output_mapping={"variables.chat_id": "message.chat.id"},
+            )
 
 
 class TestTriggerRegistry:
@@ -458,9 +484,10 @@ class TestTriggersAPI:
             trigger_id="test_mapping",
             name="Test Mapping",
             type=TriggerType.TELEGRAM,
+            config={"bot_token": "t"},
             output_mapping={
                 "content": "message.text",
-                "variables.chat_id": "message.chat.id",
+                "context.chat_id": "message.chat.id",
             },
         )
         
@@ -486,7 +513,7 @@ class TestTriggersAPI:
         assert response.status_code == 200
         data = response.json()
         assert data["mapped_data"]["content"] == "Hello from test"
-        assert data["mapped_data"]["variables"]["chat_id"] == 12345
+        assert data["mapped_data"]["triggers"]["test_mapping"]["context"]["chat_id"] == 12345
         assert "triggers" in data["mapped_data"]
         assert "test_mapping" in data["mapped_data"]["triggers"]
         
@@ -585,9 +612,10 @@ class TestTriggerExecutor:
             trigger_id="exec_trigger",
             name="Executor Trigger",
             type=TriggerType.WEBHOOK,
+            config={},
             input_mapping={
                 "content": "@trigger:body.text",
-                "variables.source": "@const:webhook",
+                "context.source": "@const:webhook",
             },
         )
         
@@ -895,9 +923,7 @@ class TestTelegramTriggerE2E:
                 "main": {
                     "type": "llm_node",
                     "prompt": """Ты помощник в Telegram.
-Пользователь написал: {{content}}
-Chat ID: {{variables.chat_id}}
-Username: {{variables.username}}
+Пользователь написал: {content}
 
 Отвечай кратко и по делу.""",
                 }
@@ -908,13 +934,13 @@ Username: {{variables.username}}
                     name="Main Telegram",
                     type=TriggerType.TELEGRAM,
                     enabled=True,
-                    config={},
+                    config={"bot_token": "test_t"},
                     input_mapping={
                         "content": "@trigger:message.text",
-                        "variables.chat_id": "@trigger:message.chat.id",
-                        "variables.user_id": "@trigger:message.from.id",
-                        "variables.username": "@trigger:message.from.username",
-                        "variables.message_id": "@trigger:message.message_id",
+                        "context.chat_id": "@trigger:message.chat.id",
+                        "context.user_id": "@trigger:message.from.id",
+                        "context.username": "@trigger:message.from.username",
+                        "context.message_id": "@trigger:message.message_id",
                     },
                 ),
             },
@@ -994,10 +1020,10 @@ Username: {{variables.username}}
                     name="Calculator Trigger",
                     type=TriggerType.TELEGRAM,
                     enabled=True,
-                    config={},
+                    config={"bot_token": "test_t"},
                     input_mapping={
                         "content": "@trigger:message.text",
-                        "variables.chat_id": "@trigger:message.chat.id",
+                        "context.chat_id": "@trigger:message.chat.id",
                     },
                 ),
             },
@@ -1180,18 +1206,18 @@ Username: {{variables.username}}
                     name="Full Mapping",
                     type=TriggerType.TELEGRAM,
                     enabled=True,
-                    config={},
+                    config={"bot_token": "t"},
                     output_mapping={
                         "content": "message.text",
-                        "variables.update_id": "update_id",
-                        "variables.message_id": "message.message_id",
-                        "variables.user_id": "message.from.id",
-                        "variables.username": "message.from.username",
-                        "variables.first_name": "message.from.first_name",
-                        "variables.chat_id": "message.chat.id",
-                        "variables.chat_type": "message.chat.type",
-                        "variables.date": "message.date",
-                        "variables.source": "@const:telegram",
+                        "context.update_id": "update_id",
+                        "context.message_id": "message.message_id",
+                        "context.user_id": "message.from.id",
+                        "context.username": "message.from.username",
+                        "context.first_name": "message.from.first_name",
+                        "context.chat_id": "message.chat.id",
+                        "context.chat_type": "message.chat.type",
+                        "context.date": "message.date",
+                        "context.source": "@const:telegram",
                     },
                 ),
             },
@@ -1227,18 +1253,17 @@ Username: {{variables.username}}
         
         mapped = data["mapped_data"]
         
-        # Проверяем все поля
+        ctx = mapped["triggers"]["full_mapping"]["context"]
         assert mapped["content"] == "Тестовое сообщение"
-        assert mapped["variables"]["update_id"] == 999888
-        assert mapped["variables"]["message_id"] == 777
-        assert mapped["variables"]["user_id"] == 12345
-        assert mapped["variables"]["username"] == "ivan_test"
-        assert mapped["variables"]["first_name"] == "Иван"
-        assert mapped["variables"]["chat_id"] == 12345
-        assert mapped["variables"]["chat_type"] == "private"
-        assert mapped["variables"]["date"] == 1705512345
-        assert mapped["variables"]["source"] == "telegram"
-        # Проверяем что payload сохранен в triggers
+        assert ctx["update_id"] == 999888
+        assert ctx["message_id"] == 777
+        assert ctx["user_id"] == 12345
+        assert ctx["username"] == "ivan_test"
+        assert ctx["first_name"] == "Иван"
+        assert ctx["chat_id"] == 12345
+        assert ctx["chat_type"] == "private"
+        assert ctx["date"] == 1705512345
+        assert ctx["source"] == "telegram"
         assert "full_mapping" in mapped["triggers"]
         
         await container.flow_repository.delete(flow_id)
@@ -1267,6 +1292,16 @@ class TestChannelRegistry:
         
         assert isinstance(handler, TelegramChannelHandler)
         assert handler.channel_type == ChannelType.TELEGRAM
+
+    def test_get_telegram_handler_by_string(self):
+        """get принимает строковый id канала (например из JSON output_actions)."""
+        from apps.flows.src.channels import create_default_channel_registry, TelegramChannelHandler
+
+        registry = create_default_channel_registry()
+        handler = registry.get("telegram")
+
+        assert isinstance(handler, TelegramChannelHandler)
+        assert registry.has("telegram")
     
     def test_unknown_channel_raises(self):
         """Неизвестный канал вызывает ошибку."""
@@ -1291,7 +1326,7 @@ class TestOutputAction:
             channel=ChannelType.TELEGRAM,
             action="send_message",
             mapping={
-                "recipient": "@state:variables.chat_id",
+                "recipient": "@state:triggers.t1.context.chat_id",
                 "text": "@state:response",
             },
         )
@@ -1308,7 +1343,7 @@ class TestOutputAction:
         action = OutputAction(
             channel=ChannelType.TELEGRAM,
             action="send_document",
-            mapping={"recipient": "@state:variables.chat_id"},
+            mapping={"recipient": "@state:triggers.t1.context.chat_id"},
             condition="@state:has_file == true",
         )
         
@@ -1327,7 +1362,7 @@ class TestTriggerConfigOutputActions:
             channel=ChannelType.TELEGRAM,
             action="send_message",
             mapping={
-                "recipient": "@state:variables.chat_id",
+                "recipient": "@state:triggers.t1.context.chat_id",
                 "text": "@state:response",
             },
         )
@@ -1352,12 +1387,12 @@ class TestTriggerConfigOutputActions:
             OutputAction(
                 channel=ChannelType.TELEGRAM,
                 action="send_message",
-                mapping={"recipient": "@state:variables.chat_id", "text": "@state:response"},
+                mapping={"recipient": "@state:triggers.t1.context.chat_id", "text": "@state:response"},
             ),
             OutputAction(
                 channel=ChannelType.TELEGRAM,
                 action="send_document",
-                mapping={"recipient": "@state:variables.chat_id", "document": "@state:file_url"},
+                mapping={"recipient": "@state:triggers.t1.context.chat_id", "document": "@state:file_url"},
                 condition="@state:has_file == true",
             ),
         ]
@@ -1405,14 +1440,19 @@ class TestOutputActionExecutor:
         
         state = {
             "response": "Hello world",
-            "variables": {"chat_id": 12345},
+            "triggers": {
+                "t1": {
+                    "payload": {},
+                    "context": {"chat_id": 12345},
+                }
+            },
         }
         
         payload = {"message": {"from": {"id": 67890}}}
         
         mapping = {
             "text": "@state:response",
-            "recipient": "@state:variables.chat_id",
+            "recipient": "@state:triggers.t1.context.chat_id",
             "user_id": "@trigger:message.from.id",
         }
         
@@ -1553,7 +1593,7 @@ class TestTriggerWithOutputActionsE2E:
             channel=ChannelType.TELEGRAM,
             action="send_message",
             mapping={
-                "recipient": "@state:variables.chat_id",
+                "recipient": "@state:triggers.tg_with_output.context.chat_id",
                 "text": "@state:response",
             },
         )
@@ -1565,7 +1605,7 @@ class TestTriggerWithOutputActionsE2E:
             config={"bot_token": "test_token"},
             input_mapping={
                 "content": "@trigger:message.text",
-                "variables.chat_id": "@trigger:message.chat.id",
+                "context.chat_id": "@trigger:message.chat.id",
             },
             output_actions=[output_action],
         )
@@ -2181,15 +2221,15 @@ class TestTriggerOutputActionsE2E:
         executor = TriggerExecutor()
         
         payload = {"message": "Hello agent!"}
-        
+        server.clear()
         result = await executor.execute(
             flow_id=flow_id,
             trigger=trigger,
             payload=payload,
         )
-        
-        # Агент выполнился
-        assert result is not None
+        assert result.get("status") == "started"
+        notif = server.get_requests("notify")
+        assert len(notif) >= 1
         
         # Cleanup
         await container.flow_repository.delete(flow_id)
@@ -2223,7 +2263,7 @@ class TestTriggerOutputActionsE2E:
                 channel=ChannelType.TELEGRAM,
                 action="send_message",
                 mapping={
-                    "recipient": "@state:variables.chat_id",
+                    "recipient": "@state:triggers.multi_trigger.context.chat_id",
                     "text": "@state:response",
                 },
                 config={
@@ -2240,7 +2280,7 @@ class TestTriggerOutputActionsE2E:
             config={},
             input_mapping={
                 "content": "@trigger:message",
-                "variables.chat_id": "@trigger:chat_id",
+                "context.chat_id": "@trigger:chat_id",
             },
             output_actions=actions,
         )
@@ -2299,7 +2339,7 @@ class TestTriggerOutputActionsE2E:
                 "recipient": f"@const:{base_url}/notify",
                 "text": "@state:response",
             },
-            condition="@state:variables.should_notify",
+            condition="@state:triggers.cond_trigger.context.should_notify",
         )
         
         trigger = TriggerConfig(
@@ -2309,7 +2349,7 @@ class TestTriggerOutputActionsE2E:
             config={},
             input_mapping={
                 "content": "@trigger:message",
-                "variables.should_notify": "@trigger:notify",
+                "context.should_notify": "@trigger:notify",
             },
             output_actions=[action],
         )
@@ -2338,6 +2378,175 @@ class TestTriggerOutputActionsE2E:
         await container.flow_repository.delete(flow_id)
 
 
+class TestProcessTaskTriggerOutput:
+    """
+    process_flow_task + metadata триггера: OutputActionExecutor после завершения flow.
+    """
+
+    @pytest.mark.asyncio
+    async def test_telegram_output_after_trigger_metadata(
+        self, app, container, unique_id, mock_context, mock_llm_with_queue, notification_server
+    ):
+        from core.context import set_context
+
+        from apps.flows.src.tasks.flow_tasks import process_flow_task
+
+        mock_llm_with_queue(["Ответ агента для output."])
+        server, base_url = notification_server
+        flow_id = f"pt_tg_out_{unique_id}"
+        context_id = f"ctx_pt_{unique_id}"
+        session_id = f"{flow_id}:{context_id}"
+        trigger_id = "tg_pt"
+
+        trigger = TriggerConfig(
+            trigger_id=trigger_id,
+            name="PT",
+            type=TriggerType.TELEGRAM,
+            config={
+                "bot_token": "pt_bot_tok",
+                "api_base": f"{base_url}/telegram",
+            },
+            output_mapping={
+                "content": "message.text",
+                "context.chat_id": "message.chat.id",
+            },
+            output_actions=[],
+        )
+        flow_config = FlowConfig(
+            flow_id=flow_id,
+            name="PT output",
+            entry="main",
+            nodes={
+                "main": {
+                    "type": "llm_node",
+                    "prompt": "Кратко ответь.",
+                },
+            },
+            triggers={trigger_id: trigger},
+        )
+        await container.flow_repository.set(flow_config)
+
+        payload = {
+            "update_id": 1,
+            "message": {
+                "message_id": 1,
+                "text": "question",
+                "chat": {"id": 999888777, "type": "private"},
+                "from": {"id": 1, "is_bot": False, "first_name": "T"},
+            },
+        }
+        metadata = {
+            "trigger_id": trigger_id,
+            "trigger_type": "telegram",
+            "triggers": {
+                trigger_id: {
+                    "payload": payload,
+                    "context": {"chat_id": 999888777},
+                }
+            },
+        }
+        server.clear()
+        ctx = mock_context.model_copy(
+            update={"session_id": session_id, "flow_id": flow_id, "channel": "a2a"},
+        )
+        set_context(ctx)
+        result = await process_flow_task(
+            flow_id=flow_id,
+            session_id=session_id,
+            user_id="tg:1",
+            content="question",
+            skill_id="default",
+            channel="a2a",
+            task_id=f"task_{unique_id}",
+            context_id=context_id,
+            metadata=metadata,
+            is_resume=False,
+            context_data=ctx.to_dict(),
+        )
+        assert result.get("status") == "completed"
+        tg_req = server.get_requests("telegram_send_message")
+        assert len(tg_req) == 1
+        assert "pt_bot_tok" in tg_req[0]["token"]
+        assert tg_req[0]["data"]["chat_id"] in (999888777, "999888777")
+        assert "Ответ агента" in tg_req[0]["data"]["text"]
+        set_context(mock_context)
+        await container.flow_repository.delete(flow_id)
+
+    @pytest.mark.asyncio
+    async def test_no_telegram_output_when_post_flow_disabled(
+        self, app, container, unique_id, mock_context, mock_llm_with_queue, notification_server
+    ):
+        from core.context import set_context
+
+        from apps.flows.src.tasks.flow_tasks import process_flow_task
+
+        mock_llm_with_queue(["ok"])
+        server, base_url = notification_server
+        flow_id = f"pt_tg_off_{unique_id}"
+        context_id = f"ctx_of_{unique_id}"
+        session_id = f"{flow_id}:{context_id}"
+        trigger_id = "tg_off"
+
+        trigger = TriggerConfig(
+            trigger_id=trigger_id,
+            name="off",
+            type=TriggerType.TELEGRAM,
+            config={
+                "bot_token": "off_bot_tok",
+                "api_base": f"{base_url}/telegram",
+            },
+            output_mapping={
+                "content": "message.text",
+                "context.chat_id": "message.chat.id",
+            },
+            output_actions=[],
+            post_flow_output_enabled=False,
+        )
+        flow_config = FlowConfig(
+            flow_id=flow_id,
+            name="PT off",
+            entry="main",
+            nodes={"main": {"type": "llm_node", "prompt": "x"}},
+            triggers={trigger_id: trigger},
+        )
+        await container.flow_repository.set(flow_config)
+
+        payload = {
+            "message": {
+                "text": "a",
+                "chat": {"id": 1, "type": "private"},
+                "from": {"id": 1, "is_bot": False, "first_name": "A"},
+            },
+        }
+        metadata = {
+            "trigger_id": trigger_id,
+            "trigger_type": "telegram",
+            "triggers": {
+                trigger_id: {
+                    "payload": payload,
+                    "context": {"chat_id": 1},
+                }
+            },
+        }
+        server.clear()
+        ctx = mock_context.model_copy(
+            update={"session_id": session_id, "flow_id": flow_id, "channel": "a2a"},
+        )
+        set_context(ctx)
+        await process_flow_task(
+            flow_id=flow_id,
+            session_id=session_id,
+            user_id="u1",
+            content="a",
+            context_id=context_id,
+            metadata=metadata,
+            context_data=ctx.to_dict(),
+        )
+        assert len(server.get_requests("telegram_send_message")) == 0
+        set_context(mock_context)
+        await container.flow_repository.delete(flow_id)
+
+
 class TestFullTriggerFlowE2E:
     """
     Полный E2E flow: Telegram webhook → Agent → Output Action → Response.
@@ -2347,20 +2556,20 @@ class TestFullTriggerFlowE2E:
     
     @pytest.mark.asyncio
     async def test_full_telegram_trigger_webhook_to_agent(
-        self, unique_id, container, client, mock_llm_with_queue
+        self, unique_id, container, client, mock_llm_with_queue, notification_server
     ):
         """
         Полный сценарий Telegram webhook -> Agent:
         1. Telegram webhook приходит на /triggers/telegram/{flow_id}/{trigger_id}
         2. Агент выполняется с данными из webhook
         3. Проверяем что агент получил правильный content
-        
-        Примечание: output_actions пока не интегрированы в webhook handler,
-        это отдельная задача.
+        4. После завершения flow выполняется output_action (отправка в тот же чат)
         """
         mock_llm_with_queue([
             "Здравствуйте! Чем могу помочь?",
         ])
+        server, base_url = notification_server
+        server.clear()
         
         flow_id = f"full_flow_e2e_{unique_id}"
         trigger_id = "tg_full"
@@ -2372,11 +2581,12 @@ class TestFullTriggerFlowE2E:
             config={
                 "bot_token": "full_flow_bot_token",
                 "secret_token": "full_flow_secret",
+                "api_base": f"{base_url}/telegram",
             },
             input_mapping={
                 "content": "@trigger:message.text",
-                "variables.chat_id": "@trigger:message.chat.id",
-                "variables.user_id": "@trigger:message.from.id",
+                "context.chat_id": "@trigger:message.chat.id",
+                "context.user_id": "@trigger:message.from.id",
             },
         )
         
@@ -2418,6 +2628,12 @@ class TestFullTriggerFlowE2E:
         # Webhook принят
         data = response.json()
         assert data.get("status") == "ok" or "task_id" in data
+
+        tg_req = server.get_requests("telegram_send_message")
+        assert len(tg_req) >= 1
+        assert "full_flow_bot_token" in tg_req[-1]["token"]
+        assert tg_req[-1]["data"]["chat_id"] in (999888777, "999888777")
+        assert "Здравствуйте" in tg_req[-1]["data"]["text"]
         
         await container.flow_repository.delete(flow_id)
     
@@ -2733,8 +2949,8 @@ class TestFullWebhookToChannelE2E:
             },
             input_mapping={
                 "content": "@trigger:message.text",
-                "variables.chat_id": "@trigger:message.chat.id",
-                "variables.user_id": "@trigger:message.from.id",
+                "context.chat_id": "@trigger:message.chat.id",
+                "context.user_id": "@trigger:message.from.id",
             },
         )
         
@@ -2817,7 +3033,7 @@ class TestFullWebhookToChannelE2E:
         Полный Telegram flow:
         1. Telegram webhook приходит
         2. LlmNode агент
-        3. Mock LLM вызывает reply_telegram tool с chat_id из variables
+        3. Mock LLM вызывает reply_telegram tool (chat_id в args)
         4. TelegramChannelHandler отправляет ответ в тот же чат
         5. Проверяем что Telegram API получил sendMessage
         """
@@ -2850,8 +3066,8 @@ class TestFullWebhookToChannelE2E:
             },
             input_mapping={
                 "content": "@trigger:message.text",
-                "variables.chat_id": "@trigger:message.chat.id",
-                "variables.message_id": "@trigger:message.message_id",
+                "context.chat_id": "@trigger:message.chat.id",
+                "context.message_id": "@trigger:message.message_id",
             },
         )
         
@@ -2863,7 +3079,7 @@ class TestFullWebhookToChannelE2E:
                 "main": {
                     "type": "llm_node",
                     "prompt": """Ты бот в Telegram. Когда получаешь сообщение - отвечай через reply_telegram.
-Chat ID пользователя доступен в state.variables.chat_id.""",
+Chat ID входа лежит в state.triggers.tg_reply_trigger.context.chat_id (и в аргументах tool).""",
                     "tools": [
                         {
                             "tool_id": "reply_telegram",

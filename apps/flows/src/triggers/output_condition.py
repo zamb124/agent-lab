@@ -5,7 +5,7 @@
 - пусто — выполнять;
 - выражение без `==` и `!=` — truthiness через `MappingResolver.resolve_value`;
 - сравнение: `left == right` или `left != right`, где слева — выражение для MappingResolver
-  (например `@state:variables.flag`), справа — литерал (строка в кавычках, true/false, число).
+  (например `@state:triggers.my_id.context.flag`), справа — литерал (строка в кавычках, true/false, число).
 """
 
 from typing import Any, Dict

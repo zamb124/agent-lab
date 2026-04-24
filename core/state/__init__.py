@@ -15,6 +15,7 @@ from core.state.execution_state import (
     PromptHistoryItem,
     State,
 )
+from core.state.trigger_runtime import TriggerRuntimeSnapshot
 from core.state.interrupt import (
     HandoffMode,
     InterruptBody,
@@ -47,5 +48,6 @@ __all__ = [
     "NodeCallInfo",
     "NestedStateData",
     "PromptHistoryItem",
+    "TriggerRuntimeSnapshot",
 ]
 

@@ -23,6 +23,7 @@ import { platformConfirm } from '@platform/lib/components/platform-confirm-modal
 import '@platform/lib/components/platform-icon.js';
 import '@platform/lib/components/glass-spinner.js';
 import { getNodeTypeMeta, getCategoryToken } from '../../constants/node-icons.js';
+import { getTriggerTypeRowVisual } from '../../constants/trigger-types.js';
 import { asArray, asString } from '../../_helpers/flows-resolvers.js';
 
 const NODE_CATEGORY_ORDER = Object.freeze(['core', 'tools', 'integrations', 'channels']);
@@ -109,6 +110,16 @@ export class FlowsNodeTypesSidebar extends PlatformElement {
                 display: flex; align-items: center; gap: var(--space-2);
                 min-width: 0;
                 flex: 1;
+            }
+            .trigger-type-icon-wrap {
+                width: 22px;
+                height: 22px;
+                flex-shrink: 0;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                border-radius: var(--radius-md);
+                box-sizing: border-box;
             }
             .trigger-row-label {
                 overflow: hidden;
@@ -329,10 +340,18 @@ export class FlowsNodeTypesSidebar extends PlatformElement {
                 </div>
                 ${triggerItems.length === 0
                     ? html`<div class="triggers-empty">${this.t('node_types_sidebar.no_triggers')}</div>`
-                    : triggerItems.map((tr) => html`
+                    : triggerItems.map((tr) => {
+                        const tv = getTriggerTypeRowVisual(tr.type);
+                        return html`
                         <div class="trigger-row">
                             <div class="trigger-row-main">
-                                <platform-icon name="bell-ring" size="14"></platform-icon>
+                                <div
+                                    class="trigger-type-icon-wrap"
+                                    style="background:${tv.wrapBg};color:${tv.wrapFg};"
+                                    aria-hidden="true"
+                                >
+                                    <platform-icon name=${tv.icon} size="12"></platform-icon>
+                                </div>
                                 <span class="trigger-row-label">${tr.name || tr.trigger_id}</span>
                             </div>
                             <div class="trigger-row-actions" @click=${(e) => e.stopPropagation()}>
@@ -356,7 +375,8 @@ export class FlowsNodeTypesSidebar extends PlatformElement {
                                 </button>
                             </div>
                         </div>
-                    `)}
+                    `;
+                    })}
             </div>
         `;
     }

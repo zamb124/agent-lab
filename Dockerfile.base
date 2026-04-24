@@ -17,13 +17,17 @@ RUN apt-get update && apt-get install -y \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy only dependency files
-COPY pyproject.toml README.md ./
+COPY pyproject.toml uv.lock README.md ./
 
 # Torch CPU-only (экономит ~2-3 GB по сравнению с CUDA версией)
 RUN --mount=type=cache,target=/root/.cache/uv \
     uv pip install --system torch torchvision \
     --index-url https://download.pytorch.org/whl/cpu
 
-# Core + worker-base зависимости
+# Core + worker-base зависимости (строго по uv.lock)
 RUN --mount=type=cache,target=/root/.cache/uv \
-    uv pip install --system --group core --group worker-base
+    uv export --frozen --no-dev --no-default-groups \
+        --group core --group worker-base \
+        --no-annotate --no-header --no-emit-project \
+        -o /tmp/requirements.txt && \
+    uv pip install --system -r /tmp/requirements.txt

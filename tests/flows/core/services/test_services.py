@@ -202,6 +202,14 @@ class TestFlowsLoader:
                 node_config = await container.node_repository.get(node_id)
                 assert node_config is not None
 
+        if "telegram_demo" in loaded_flows:
+            tg_flow = await container.flow_repository.get("telegram_demo")
+            assert tg_flow is not None
+            assert "tg_react" in tg_flow.triggers
+            assert "tg_echo" in tg_flow.triggers
+            assert tg_flow.triggers["tg_react"].skill_id == "react_skill"
+            assert tg_flow.triggers["tg_echo"].skill_id == "echo_skill"
+
     @pytest.mark.asyncio
     async def test_load_tools_to_db(self, app):
         """load_tools_to_db загружает tools в БД."""

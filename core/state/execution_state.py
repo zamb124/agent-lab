@@ -13,6 +13,7 @@ from pydantic import Field, field_serializer, field_validator, model_validator
 from a2a.types import Message
 from core.models import FlexibleBaseModel
 from core.state.interrupt import InterruptData
+from core.state.trigger_runtime import TriggerRuntimeSnapshot
 
 
 class InterruptPathItem(FlexibleBaseModel):
@@ -199,13 +200,47 @@ class ExecutionState(FlexibleBaseModel):
                     f"Ожидается Message или dict, получен {type(item)}"
                 )
         return result
-    
+
+    @field_validator("triggers", mode="before")
+    @classmethod
+    def validate_triggers(
+        cls, v: Any
+    ) -> Dict[str, TriggerRuntimeSnapshot]:
+        if v is None or v == {}:
+            return {}
+        if not isinstance(v, dict):
+            msg = f"triggers must be a dict, got {type(v).__name__}"
+            raise TypeError(msg)
+        out: Dict[str, TriggerRuntimeSnapshot] = {}
+        for k, item in v.items():
+            if isinstance(item, TriggerRuntimeSnapshot):
+                out[k] = item
+            elif isinstance(item, dict):
+                if "payload" not in item or not isinstance(item.get("payload"), dict):
+                    msg = f"triggers['{k}'] must include 'payload' as a dict"
+                    raise ValueError(msg)
+                ctx = item.get("context", {})
+                if not isinstance(ctx, dict):
+                    msg = f"triggers['{k}'].context must be a dict"
+                    raise TypeError(msg)
+                out[k] = TriggerRuntimeSnapshot(
+                    payload=item["payload"],
+                    context=ctx,
+                )
+            else:
+                msg = f"triggers['{k}'] must be TriggerRuntimeSnapshot or dict, got {type(item).__name__}"
+                raise TypeError(msg)
+        return out
+
     # ========================================================================
     # Переменные и данные
     # ========================================================================
     
     variables: Dict[str, Any] = Field(default_factory=dict, description="Резолвнутые переменные")
-    triggers: Dict[str, Any] = Field(default_factory=dict, description="Данные триггеров {trigger_id: payload}")
+    triggers: Dict[str, TriggerRuntimeSnapshot] = Field(
+        default_factory=dict,
+        description="Снимок по trigger_id: { payload, context } — не смешивать с variables",
+    )
     files: List[Dict[str, Any]] = Field(default_factory=list, description="Прикреплённые файлы")
     
     # ========================================================================

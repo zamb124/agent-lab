@@ -15,10 +15,14 @@ from apps.flows.src.dependencies import ContainerDep
 from apps.flows.src.models import TriggerConfig, TriggerStatus, TriggerType
 from apps.flows.src.models.channel_config import (
     OutputAction,
-    default_output_actions_for_trigger_type,
+    default_output_actions_for_trigger,
 )
-from apps.flows.src.triggers import TriggerRegistry, TriggerValidationError
+from apps.flows.src.triggers import TriggerValidationError
 from apps.flows.src.triggers.handlers.telegram import TelegramTriggerHandler
+from apps.flows.src.triggers.trigger_type_contract import (
+    default_post_flow_output_enabled,
+    effective_output_actions_for_trigger,
+)
 from apps.flows.src.triggers.webhook_inbound import check_webhook_rate_limit, client_ip_allowed
 from core.context import get_context, set_context
 from core.logging import get_logger
@@ -30,12 +34,6 @@ logger = get_logger(__name__)
 _SENSITIVE_TRIGGER_CONFIG_KEYS = frozenset(
     {"bot_token", "secret_token", "imap_password", "password"},
 )
-
-
-def _trigger_response_output_actions(trigger: TriggerConfig) -> List[OutputAction]:
-    if trigger.output_actions:
-        return trigger.output_actions
-    return default_output_actions_for_trigger_type(trigger.type)
 
 
 def _public_trigger_config(config: Dict[str, Any]) -> Dict[str, Any]:
@@ -99,6 +97,14 @@ class TriggerCreateRequest(BaseModel):
         default_factory=list,
         description="Действия отправки ответа в канал после агента",
     )
+    post_flow_output_enabled: Optional[bool] = Field(
+        default=None,
+        description="Включить рассылку после flow; None — дефолт по типу триггера",
+    )
+    skill_id: str = Field(
+        default="default",
+        description="ID skill из flow.skills; default — entry базового flow",
+    )
 
 
 class TriggerUpdateRequest(BaseModel):
@@ -109,6 +115,8 @@ class TriggerUpdateRequest(BaseModel):
     output_mapping: Optional[Dict[str, str]] = None
     input_mapping: Optional[Dict[str, str]] = None
     output_actions: Optional[List[OutputAction]] = None
+    post_flow_output_enabled: Optional[bool] = None
+    skill_id: Optional[str] = None
 
 
 class TriggerResponse(BaseModel):
@@ -121,9 +129,29 @@ class TriggerResponse(BaseModel):
     output_mapping: Dict[str, str]
     input_mapping: Dict[str, str]
     output_actions: List[OutputAction]
+    post_flow_output_enabled: bool
+    skill_id: str
     webhook_url: Optional[str] = None
     status: TriggerStatus
     last_error: Optional[str] = None
+
+
+class TriggerVerifyRequest(BaseModel):
+    """Проверка чернового конфига триггера (без сохранения)."""
+    type: TriggerType = Field(..., description="Тип триггера")
+    config: Dict[str, Any] = Field(default_factory=dict, description="Конфиг как в trigger.config")
+    trigger_id: Optional[str] = Field(
+        default=None,
+        description="Черновой ID триггера (для подсказки пути webhook)",
+    )
+
+
+class TriggerVerifyResponse(BaseModel):
+    """Результат проверки (getMe, cron, схема пути)."""
+    ok: bool
+    metadata: Dict[str, Any] = Field(default_factory=dict)
+    error_code: Optional[str] = None
+    error_message: Optional[str] = None
 
 
 # CRUD endpoints
@@ -145,7 +173,9 @@ async def list_triggers(flow_id: str, container: ContainerDep) -> list[TriggerRe
             config=_public_trigger_config(t.config),
             output_mapping=t.output_mapping,
             input_mapping=t.input_mapping,
-            output_actions=_trigger_response_output_actions(t),
+            output_actions=effective_output_actions_for_trigger(t),
+            post_flow_output_enabled=t.post_flow_output_enabled,
+            skill_id=t.skill_id,
             webhook_url=t.webhook_url,
             status=t.status,
             last_error=t.last_error,
@@ -158,15 +188,15 @@ async def list_triggers(flow_id: str, container: ContainerDep) -> list[TriggerRe
 async def get_trigger(flow_id: str, trigger_id: str, container: ContainerDep) -> TriggerResponse:
     """Получить триггер по ID."""
     flow_config = await container.flow_repository.get(flow_id)
-    
+
     if not flow_config:
         raise HTTPException(status_code=404, detail=f"Flow not found: {flow_id}")
-    
+
     trigger = flow_config.triggers.get(trigger_id)
-    
+
     if not trigger:
         raise HTTPException(status_code=404, detail=f"Trigger not found: {trigger_id}")
-    
+
     return TriggerResponse(
         trigger_id=trigger.trigger_id,
         name=trigger.name,
@@ -175,10 +205,52 @@ async def get_trigger(flow_id: str, trigger_id: str, container: ContainerDep) ->
         config=_public_trigger_config(trigger.config),
         output_mapping=trigger.output_mapping,
         input_mapping=trigger.input_mapping,
-        output_actions=_trigger_response_output_actions(trigger),
+        output_actions=effective_output_actions_for_trigger(trigger),
+        post_flow_output_enabled=trigger.post_flow_output_enabled,
+        skill_id=trigger.skill_id,
         webhook_url=trigger.webhook_url,
         status=trigger.status,
         last_error=trigger.last_error,
+    )
+
+
+@router.post("/flows/{flow_id}/triggers/verify", response_model=TriggerVerifyResponse)
+async def verify_trigger_draft(
+    flow_id: str, request: TriggerVerifyRequest, container: ContainerDep
+) -> TriggerVerifyResponse:
+    """
+    Проверяет черновик конфига: Telegram getMe, валидность cron, подсказки для webhook.
+    """
+    from apps.flows.src.triggers.verify_draft import verify_trigger_draft as run_verify
+
+    flow_config = await container.flow_repository.get(flow_id)
+    if not flow_config:
+        raise HTTPException(status_code=404, detail=f"Flow not found: {flow_id}")
+
+    cfg: Dict[str, Any] = dict(request.config)
+    if request.type == TriggerType.TELEGRAM:
+        raw_token = cfg.get("bot_token")
+        if isinstance(raw_token, str) and raw_token.startswith("@var:"):
+            try:
+                cfg["bot_token"] = await _resolve_config_secret_value(container, raw_token)
+            except HTTPException as e:
+                detail = e.detail
+                msg = detail if isinstance(detail, str) else str(detail)
+                return TriggerVerifyResponse(
+                    ok=False,
+                    metadata={},
+                    error_code="variable_not_found",
+                    error_message=msg,
+                )
+
+    ok, metadata, err_code, err_msg = await run_verify(
+        request.type, cfg, flow_id, request.trigger_id
+    )
+    return TriggerVerifyResponse(
+        ok=ok,
+        metadata=metadata,
+        error_code=err_code,
+        error_message=err_msg,
     )
 
 
@@ -186,20 +258,24 @@ async def get_trigger(flow_id: str, trigger_id: str, container: ContainerDep) ->
 async def create_trigger(flow_id: str, request: TriggerCreateRequest, container: ContainerDep) -> TriggerResponse:
     """Создать новый триггер."""
     flow_config = await container.flow_repository.get(flow_id)
-    
+
     if not flow_config:
         raise HTTPException(status_code=404, detail=f"Flow not found: {flow_id}")
-    
+
     if request.trigger_id in flow_config.triggers:
         raise HTTPException(
             status_code=400,
             detail=f"Trigger already exists: {request.trigger_id}"
         )
-    
-    out_actions = request.output_actions
-    if len(out_actions) == 0:
-        out_actions = default_output_actions_for_trigger_type(request.type)
-    
+
+    post_enabled = request.post_flow_output_enabled
+    if post_enabled is None:
+        post_enabled = default_post_flow_output_enabled(request.type)
+    if post_enabled and len(request.output_actions) == 0:
+        out_actions = default_output_actions_for_trigger(request.trigger_id, request.type)
+    else:
+        out_actions = list(request.output_actions)
+
     trigger = TriggerConfig(
         trigger_id=request.trigger_id,
         name=request.name,
@@ -209,28 +285,30 @@ async def create_trigger(flow_id: str, request: TriggerCreateRequest, container:
         output_mapping=request.output_mapping,
         input_mapping=request.input_mapping,
         output_actions=out_actions,
+        post_flow_output_enabled=post_enabled,
+        skill_id=request.skill_id,
     )
-    
+
     # Сохраняем старый конфиг для sync
     old_config = await container.flow_repository.get(flow_id)
-    
+
     # Добавляем триггер в конфиг
     flow_config.triggers[request.trigger_id] = trigger
-    
+
     # Синхронизируем триггеры
     flow_config = await container.trigger_registry.sync_triggers(
         flow_id=flow_id,
         old_config=old_config,
         new_config=flow_config,
     )
-    
+
     # Сохраняем агента
     await container.flow_repository.set(flow_config)
-    
+
     updated_trigger = flow_config.triggers.get(request.trigger_id)
-    
+
     logger.info(f"Trigger created: flow_id={flow_id}, trigger={request.trigger_id}")
-    
+
     return TriggerResponse(
         trigger_id=updated_trigger.trigger_id,
         name=updated_trigger.name,
@@ -239,7 +317,9 @@ async def create_trigger(flow_id: str, request: TriggerCreateRequest, container:
         config=_public_trigger_config(updated_trigger.config),
         output_mapping=updated_trigger.output_mapping,
         input_mapping=updated_trigger.input_mapping,
-        output_actions=_trigger_response_output_actions(updated_trigger),
+        output_actions=effective_output_actions_for_trigger(updated_trigger),
+        post_flow_output_enabled=updated_trigger.post_flow_output_enabled,
+        skill_id=updated_trigger.skill_id,
         webhook_url=updated_trigger.webhook_url,
         status=updated_trigger.status,
         last_error=updated_trigger.last_error,
@@ -255,19 +335,19 @@ async def update_trigger(
 ) -> TriggerResponse:
     """Обновить триггер."""
     old_config = await container.flow_repository.get(flow_id)
-    
+
     if not old_config:
         raise HTTPException(status_code=404, detail=f"Flow not found: {flow_id}")
-    
+
     trigger = old_config.triggers.get(trigger_id)
-    
+
     if not trigger:
         raise HTTPException(status_code=404, detail=f"Trigger not found: {trigger_id}")
-    
+
     # Копируем конфиг для изменений
     flow_config = old_config.model_copy(deep=True)
     trigger = flow_config.triggers[trigger_id]
-    
+
     # Обновляем поля
     if request.name is not None:
         trigger.name = request.name
@@ -281,23 +361,28 @@ async def update_trigger(
         trigger.input_mapping = request.input_mapping
     if request.output_actions is not None:
         trigger.output_actions = request.output_actions
+    if request.post_flow_output_enabled is not None:
+        trigger.post_flow_output_enabled = request.post_flow_output_enabled
+    if request.skill_id is not None:
+        trigger.skill_id = request.skill_id
 
-    flow_config.triggers[trigger_id] = trigger
-    
+    cur = flow_config.triggers[trigger_id]
+    flow_config.triggers[trigger_id] = TriggerConfig.model_validate(cur.model_dump())
+
     # Синхронизируем триггеры
     flow_config = await container.trigger_registry.sync_triggers(
         flow_id=flow_id,
         old_config=old_config,
         new_config=flow_config,
     )
-    
+
     # Сохраняем агента
     await container.flow_repository.set(flow_config)
-    
+
     updated_trigger = flow_config.triggers.get(trigger_id)
-    
+
     logger.info(f"Trigger updated: flow_id={flow_id}, trigger={trigger_id}")
-    
+
     return TriggerResponse(
         trigger_id=updated_trigger.trigger_id,
         name=updated_trigger.name,
@@ -306,7 +391,9 @@ async def update_trigger(
         config=_public_trigger_config(updated_trigger.config),
         output_mapping=updated_trigger.output_mapping,
         input_mapping=updated_trigger.input_mapping,
-        output_actions=_trigger_response_output_actions(updated_trigger),
+        output_actions=effective_output_actions_for_trigger(updated_trigger),
+        post_flow_output_enabled=updated_trigger.post_flow_output_enabled,
+        skill_id=updated_trigger.skill_id,
         webhook_url=updated_trigger.webhook_url,
         status=updated_trigger.status,
         last_error=updated_trigger.last_error,
@@ -317,31 +404,31 @@ async def update_trigger(
 async def delete_trigger(flow_id: str, trigger_id: str, container: ContainerDep) -> Dict[str, str]:
     """Удалить триггер."""
     old_config = await container.flow_repository.get(flow_id)
-    
+
     if not old_config:
         raise HTTPException(status_code=404, detail=f"Flow not found: {flow_id}")
-    
+
     if trigger_id not in old_config.triggers:
         raise HTTPException(status_code=404, detail=f"Trigger not found: {trigger_id}")
-    
+
     # Копируем конфиг
     flow_config = old_config.model_copy(deep=True)
-    
+
     # Удаляем триггер
     del flow_config.triggers[trigger_id]
-    
+
     # Синхронизируем (unregister удаленного)
     flow_config = await container.trigger_registry.sync_triggers(
         flow_id=flow_id,
         old_config=old_config,
         new_config=flow_config,
     )
-    
+
     # Сохраняем агента
     await container.flow_repository.set(flow_config)
-    
+
     logger.info(f"Trigger deleted: flow_id={flow_id}, trigger={trigger_id}")
-    
+
     return {"status": "deleted", "trigger_id": trigger_id}
 
 
@@ -392,40 +479,40 @@ async def telegram_webhook(
                     metadata={**(ctx.metadata if ctx else {}), "inbound": "telegram"},
                 )
             )
-    
+
     if not flow_config:
         logger.warning(f"Telegram webhook: flow not found: {flow_id}")
         raise HTTPException(status_code=404, detail="Flow not found")
-    
+
     trigger = flow_config.triggers.get(trigger_id)
-    
+
     if not trigger:
         logger.warning(f"Telegram webhook: trigger not found: {trigger_id}")
         raise HTTPException(status_code=404, detail="Trigger not found")
-    
+
     if trigger.type != TriggerType.TELEGRAM:
         raise HTTPException(status_code=400, detail="Not a Telegram trigger")
-    
+
     # Верификация secret_token
     telegram_handler = TelegramTriggerHandler(base_url="")
-    
+
     if x_telegram_bot_api_secret_token:
         if not telegram_handler.verify_secret_token(trigger, x_telegram_bot_api_secret_token):
             logger.warning(f"Telegram webhook: invalid secret token: {trigger_id}")
             raise HTTPException(status_code=403, detail="Invalid secret token")
-    
+
     # Парсим Update
     try:
         payload = await request.json()
     except Exception as e:
         logger.error(f"Telegram webhook: failed to parse JSON: {e}")
         raise HTTPException(status_code=400, detail="Invalid JSON")
-    
+
     logger.info(
         f"Telegram webhook received: flow_id={flow_id}, trigger={trigger_id}, "
         f"update_id={payload.get('update_id')}"
     )
-    
+
     # Обрабатываем
     try:
         result = await telegram_handler.handle(flow_id, trigger_id, payload)
@@ -449,18 +536,18 @@ async def generic_webhook(
     Generic webhook endpoint для внешних сервисов.
     """
     flow_config = await container.flow_repository.get(flow_id)
-    
+
     if not flow_config:
         raise HTTPException(status_code=404, detail="Flow not found")
-    
+
     trigger = flow_config.triggers.get(trigger_id)
-    
+
     if not trigger:
         raise HTTPException(status_code=404, detail="Trigger not found")
-    
+
     if trigger.type != TriggerType.WEBHOOK:
         raise HTTPException(status_code=400, detail="Not a webhook trigger")
-    
+
     if not trigger.enabled:
         raise HTTPException(status_code=400, detail="Trigger is disabled")
 
@@ -479,7 +566,7 @@ async def generic_webhook(
             raise HTTPException(status_code=403, detail="Secret required")
         if not secrets.compare_digest(expected, received):
             raise HTTPException(status_code=403, detail="Invalid secret")
-    
+
     try:
         payload = await request.json()
     except json.JSONDecodeError as e:
@@ -519,24 +606,23 @@ async def test_trigger(
     Полезно для отладки input_mapping.
     """
     flow_config = await container.flow_repository.get(flow_id)
-    
+
     if not flow_config:
         raise HTTPException(status_code=404, detail=f"Flow not found: {flow_id}")
-    
+
     trigger = flow_config.triggers.get(trigger_id)
-    
+
     if not trigger:
         raise HTTPException(status_code=404, detail=f"Trigger not found: {trigger_id}")
-    
-    # Тестируем output_mapping
+
     from apps.flows.src.triggers.input_mapper import InputMapper
-    
+
     mapper = InputMapper()
-    mapping = trigger.output_mapping or trigger.input_mapping or {}
+    mapping = {**dict(trigger.input_mapping), **dict(trigger.output_mapping)}
     mapped_data = mapper.map(trigger_id, payload, mapping)
-    
+
     trigger_type_str = trigger.type.value if hasattr(trigger.type, 'value') else str(trigger.type)
-    
+
     return {
         "status": "ok",
         "trigger_id": trigger_id,

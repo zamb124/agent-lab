@@ -24,16 +24,19 @@ WORKDIR /app
 # Stage 2: Builder - установка ВСЕХ зависимостей
 # ============================================
 FROM base-with-core AS builder-all
-COPY pyproject.toml README.md ./
+COPY pyproject.toml uv.lock README.md ./
 RUN --mount=type=cache,target=/root/.cache/uv \
-    uv pip install --system \
+    uv export --frozen --no-dev --no-default-groups \
         --group core \
         --group agents \
         --group worker-base \
         --group rag-worker \
         --group crm \
         --group rag \
-        --group sync
+        --group sync \
+        --no-annotate --no-header --no-emit-project \
+        -o /tmp/requirements.txt && \
+    uv pip install --system -r /tmp/requirements.txt
 
 # ============================================
 # Stage 3: Docs builder (Zensical static site)

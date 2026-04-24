@@ -23,7 +23,7 @@ import { toolsResource, toolsAllOp } from '../events/resources/tools.resource.js
 import { resourcesBundleResource, resourceUpdateOp } from '../events/resources/resources-bundle.resource.js';
 import { mcpServersResource, mcpServerUpdateOp, mcpServerSyncOp, mcpServerTestOp } from '../events/resources/mcp.resource.js';
 import { triggersListOp, triggerGetOp, triggerCreateOp, triggerUpdateOp,
-         triggerRemoveOp, triggerTestOp } from '../events/resources/triggers.resource.js';
+         triggerRemoveOp, triggerVerifyOp, triggerTestOp } from '../events/resources/triggers.resource.js';
 import { variablesResource } from '../events/resources/variables.resource.js';
 import { nodesCatalogResource, nodeCatalogUpdateOp } from '../events/resources/nodes-catalog.resource.js';
 import { sessionsResource, sessionStateOp } from '../events/resources/sessions.resource.js';
@@ -82,6 +82,7 @@ export class FlowsApp extends PlatformApp {
         triggerCreateOp,
         triggerUpdateOp,
         triggerRemoveOp,
+        triggerVerifyOp,
         triggerTestOp,
         variablesResource,
         nodesCatalogResource,

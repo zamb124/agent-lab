@@ -21,12 +21,12 @@ class OutputAction(StrictBaseModel):
     Используется в trigger.output_actions для автоматической отправки
     после выполнения агента.
     
-    Пример:
+    Пример (ответ в тот же чат, chat_id из триггера):
     {
         "channel": "telegram",
         "action": "send_message",
         "mapping": {
-            "recipient": "@state:variables.chat_id",
+            "recipient": "@state:triggers.tg_1.context.chat_id",
             "text": "@state:response"
         },
         "config": {
@@ -69,7 +69,7 @@ class ChannelNodeConfig(StrictBaseModel):
             "parse_mode": "HTML"
         },
         "input_mapping": {
-            "recipient": "@state:variables.chat_id",
+            "recipient": "@state:triggers.my_trigger.context.chat_id",
             "text": "@state:response"
         }
     }
@@ -84,14 +84,17 @@ class ChannelNodeConfig(StrictBaseModel):
     )
 
 
-def default_output_actions_for_trigger_type(trigger_type: TriggerType) -> List[OutputAction]:
+def default_output_actions_for_trigger(
+    trigger_id: str,
+    trigger_type: TriggerType,
+) -> List[OutputAction]:
     if trigger_type == TriggerType.TELEGRAM:
         return [
             OutputAction(
                 channel=ChannelType.TELEGRAM,
                 action="send_message",
                 mapping={
-                    "recipient": "@state:variables.chat_id",
+                    "recipient": f"@state:triggers.{trigger_id}.context.chat_id",
                     "text": "@state:response",
                 },
                 config={"parse_mode": "HTML"},
@@ -105,5 +108,5 @@ __all__ = [
     "OutputAction",
     "ChannelNodeConfig",
     "ChannelType",
-    "default_output_actions_for_trigger_type",
+    "default_output_actions_for_trigger",
 ]

@@ -154,18 +154,18 @@ API `traces` (`task`, `session`, `trace_id`): дерево в `apps/flows/src/ap
                 "bot_token": "@var:telegram_token",
                 "secret_token": "webhook_secret"
             },
-            "input_mapping": {
+            "output_mapping": {
                 "content": "@trigger:message.text",
-                "variables.chat_id": "@trigger:message.chat.id"
+                "context.chat_id": "@trigger:message.chat.id"
             },
             "output_actions": [...]
         }
     }
 
-### input_mapping для триггеров
+### output_mapping / input_mapping для триггеров
 
-- @trigger:path - данные из payload триггера (JSONPath)
-- @const:value - константа
+- Слева: `content` и/или `context.*` (кладётся в `state.triggers[trigger_id].context`), не `variables.*`.
+- @trigger:path — данные из payload триггера; @const:value — константа.
 
 ### output_actions
 
@@ -176,7 +176,7 @@ API `traces` (`task`, `session`, `trace_id`): дерево в `apps/flows/src/ap
             "channel": "telegram",
             "action": "send_message",
             "mapping": {
-                "recipient": "@state:variables.chat_id",
+                "recipient": "@state:triggers.telegram_bot.context.chat_id",
                 "text": "@state:response"
             },
             "config": {"bot_token": "@var:token"},
@@ -238,7 +238,7 @@ Flow может вызывать СВОИ skills как tools.
             "api_base": "https://api.telegram.org"
         },
         "input_mapping": {
-            "recipient": "@state:variables.chat_id",
+            "recipient": "@state:triggers.<trigger_id>.context.chat_id",
             "text": "@state:response"
         }
     }

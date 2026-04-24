@@ -7,13 +7,17 @@ TriggerConfig - конфигурация триггера для запуска 
 Триггеры хранятся в FlowConfig.triggers (не отдельная таблица).
 """
 
+import re
 from typing import Any, Dict, List, Optional
 
-from pydantic import Field
+from pydantic import Field, field_validator, model_validator
 
 from core.models import StrictBaseModel
 from .enums import TriggerStatus, TriggerType
 from .channel_config import OutputAction
+from .trigger_mapping_validators import validate_trigger_state_mapping_keys
+
+_TRIGGER_ID_RE = re.compile(r"^[a-zA-Z0-9_\-]+$")
 
 
 class TriggerConfig(StrictBaseModel):
@@ -34,14 +38,14 @@ class TriggerConfig(StrictBaseModel):
         },
         "output_mapping": {
             "content": "message.text",
-            "variables.chat_id": "message.chat.id"
+            "context.chat_id": "message.chat.id"
         }
     }
     
-    Формат output_mapping: {"путь_в_state": "путь_в_payload"}
+    Формат output_mapping: слева только content и/или context.*; variables.* запрещены.
     """
     
-    trigger_id: str = Field(..., description="Уникальный ID триггера")
+    trigger_id: str = Field(..., description="Уникальный ID триггера (без «.» в id)")
     name: str = Field(..., description="Название триггера")
     type: TriggerType = Field(..., description="Тип триггера")
     enabled: bool = Field(default=True, description="Активен ли триггер")
@@ -70,7 +74,16 @@ class TriggerConfig(StrictBaseModel):
         default_factory=list,
         description="Действия отправки ответа в канал после выполнения агента"
     )
+    post_flow_output_enabled: bool = Field(
+        default=True,
+        description="Выполнять output_actions после завершения flow (без interrupt)",
+    )
     
+    skill_id: str = Field(
+        default="default",
+        description="ID skill из FlowConfig.skills: какой сценарий запускать при срабатывании триггера",
+    )
+
     # Runtime данные (заполняются при регистрации)
     webhook_url: Optional[str] = Field(
         default=None,
@@ -88,6 +101,29 @@ class TriggerConfig(StrictBaseModel):
         default=None,
         description="Последняя ошибка (если status=error)"
     )
+
+    @field_validator("trigger_id")
+    @classmethod
+    def _validate_trigger_id(cls, v: str) -> str:
+        if not v or not str(v).strip():
+            msg = "trigger_id is required"
+            raise ValueError(msg)
+        s = str(v).strip()
+        if "." in s:
+            msg = "trigger_id must not contain '.' (используется в путях @state:triggers.<id>...)"
+            raise ValueError(msg)
+        if not _TRIGGER_ID_RE.match(s):
+            msg = "trigger_id must match [a-zA-Z0-9_-]+"
+            raise ValueError(msg)
+        return s
+
+    @model_validator(mode="after")
+    def _after_validate(self) -> "TriggerConfig":
+        validate_trigger_state_mapping_keys(self.output_mapping, "output_mapping")
+        validate_trigger_state_mapping_keys(self.input_mapping, "input_mapping")
+        if self.type == TriggerType.CRON and self.post_flow_output_enabled:
+            object.__setattr__(self, "post_flow_output_enabled", False)
+        return self
 
 
 # Специфичные конфигурации по типам (для документации и валидации)

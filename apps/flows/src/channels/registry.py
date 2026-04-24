@@ -4,7 +4,7 @@ ChannelRegistry - реестр channel handlers.
 Регистрирует handlers для каждого типа канала.
 """
 
-from typing import Dict, Type
+from typing import Dict, Type, Union
 
 from apps.flows.src.models.enums import ChannelType
 from core.logging import get_logger
@@ -45,12 +45,12 @@ class ChannelRegistry:
         self._handlers[channel_type] = handler_class
         logger.debug(f"Channel handler registered: {channel_type.value}")
     
-    def get(self, channel_type: ChannelType) -> BaseChannelHandler:
+    def get(self, channel_type: Union[ChannelType, str]) -> BaseChannelHandler:
         """
         Возвращает handler для канала.
         
         Args:
-            channel_type: Тип канала
+            channel_type: Тип канала (enum или строка, например \"telegram\")
             
         Returns:
             Экземпляр handler'а (singleton per channel type)
@@ -58,6 +58,9 @@ class ChannelRegistry:
         Raises:
             ValueError: Если канал не зарегистрирован
         """
+        if isinstance(channel_type, str):
+            channel_type = ChannelType(channel_type)
+
         if channel_type in self._instances:
             return self._instances[channel_type]
         
@@ -74,8 +77,10 @@ class ChannelRegistry:
         self._instances[channel_type] = instance
         return instance
     
-    def has(self, channel_type: ChannelType) -> bool:
+    def has(self, channel_type: Union[ChannelType, str]) -> bool:
         """Проверяет зарегистрирован ли канал."""
+        if isinstance(channel_type, str):
+            channel_type = ChannelType(channel_type)
         return channel_type in self._handlers
     
     def list_channels(self) -> list:

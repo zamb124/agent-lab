@@ -38,7 +38,7 @@ from apps.flows.src.container import get_container
 from core.context import Context, User, clear_context, get_context, set_context
 from core.logging import get_logger
 from apps.flows.src.mock import check_mock_permission, resolve_mock_config
-from apps.flows.src.models.flow_config import Edge, SkillConfig
+from apps.flows.src.models.flow_config import Edge, FlowConfig, SkillConfig
 from apps.flows.src.models.enums import MergeMode, NodeType
 from apps.flows.src.services.flow_node_merge import merge_incoming_node_dict_for_persist
 from apps.flows.src.services.flow_validator import FlowValidator, ValidationSeverity
@@ -47,6 +47,7 @@ from apps.flows.src.state.cancellation import CancellationToken, FlowCancelled, 
 from apps.flows.src.state.interrupt_manager import InterruptManager
 from apps.flows.src.streaming import Emitter
 from core.state import ExecutionState
+from core.state.trigger_runtime import TriggerRuntimeSnapshot
 from core.state.interrupt import HandoffMode, OperatorTaskInterrupt, interrupt_to_response_dict
 from apps.idle_worker.tasks.push_notification_tasks import send_task_update
 from core.tracing import get_tracer
@@ -403,6 +404,53 @@ class BaseChannel(ABC):
     
     # === Основной метод выполнения задачи ===
     
+    async def _run_trigger_output_actions_if_applicable(
+        self,
+        params: PreparedTaskParams,
+        state: ExecutionState,
+        flow_config: Optional[FlowConfig],
+    ) -> None:
+        if not params.metadata:
+            return
+        trigger_id = params.metadata.get("trigger_id")
+        if not trigger_id or not isinstance(trigger_id, str):
+            return
+        cfg = flow_config
+        if cfg is None:
+            cfg = await get_container().flow_repository.get(self.flow_id)
+        if cfg is None:
+            return
+        trigger = cfg.triggers.get(trigger_id)
+        if trigger is None:
+            return
+        from apps.flows.src.triggers.executor import OutputActionExecutor
+        from apps.flows.src.triggers.trigger_type_contract import (
+            effective_output_actions_for_trigger,
+        )
+
+        actions = effective_output_actions_for_trigger(trigger)
+        if not actions:
+            return
+        triggers_meta = params.metadata.get("triggers")
+        original_payload: Dict[str, Any] = {}
+        if isinstance(triggers_meta, dict):
+            raw = triggers_meta.get(trigger_id)
+            if isinstance(raw, dict):
+                pl = raw.get("payload")
+                if isinstance(pl, dict):
+                    original_payload = pl
+                else:
+                    msg = "metadata.triggers[trigger_id] must contain 'payload' as dict"
+                    raise ValueError(msg)
+        state_dict = state.model_dump(mode="json")
+        executor = OutputActionExecutor()
+        await executor.execute(
+            output_actions=actions,
+            state=state_dict,
+            trigger_config=trigger.config,
+            original_payload=original_payload,
+        )
+    
     async def process_task(self, params: PreparedTaskParams) -> Dict[str, Any]:
         """
         Обрабатывает запрос через агента.
@@ -527,10 +575,18 @@ class BaseChannel(ABC):
             
             state.variables = {**state.variables, **runtime_flow.variables}
             
-            # Добавляем triggers из metadata
             request_triggers = params.metadata.get("triggers") if params.metadata else None
             if request_triggers:
-                state.triggers = {**state.triggers, **request_triggers}
+                merged: Dict[str, TriggerRuntimeSnapshot] = dict(state.triggers)
+                for tid, snap in request_triggers.items():
+                    if isinstance(snap, TriggerRuntimeSnapshot):
+                        merged[tid] = snap
+                    elif isinstance(snap, dict):
+                        merged[tid] = TriggerRuntimeSnapshot.model_validate(snap)
+                    else:
+                        msg = f"metadata.triggers[{tid!r}] must be dict or TriggerRuntimeSnapshot"
+                        raise TypeError(msg)
+                state.triggers = merged
             
             cfg_ver = (runtime_flow.config or {}).get("version")
             if cfg_ver and not state.flow_config_version:
@@ -631,6 +687,9 @@ class BaseChannel(ABC):
                 await emitter.emit_complete(final_response, has_artifact=has_artifact)
                 await self._send_push_notification(
                     params.task_id, params.context_id, "completed", final_response
+                )
+                await self._run_trigger_output_actions_if_applicable(
+                    params, state, flow_config
                 )
             
             messages_count = len(state.messages)

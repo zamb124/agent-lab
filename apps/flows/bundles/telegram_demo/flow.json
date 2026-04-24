@@ -30,7 +30,7 @@
             "text": {"type": "string"}
           },
           "input_mapping": {
-            "recipient": "@state:variables.chat_id",
+            "recipient": "@state:triggers.tg_react.context.chat_id",
             "text": "@state:text"
           }
         }
@@ -63,7 +63,7 @@
             "bot_token": "@var:bot_token_2"
           },
           "input_mapping": {
-            "recipient": "@state:variables.chat_id",
+            "recipient": "@state:triggers.tg_echo.context.chat_id",
             "text": "@state:echo_text"
           }
         }
@@ -85,7 +85,7 @@
       },
       "output_mapping": {
         "content": "message.text",
-        "variables.chat_id": "message.chat.id"
+        "context.chat_id": "message.chat.id"
       },
       "skill_id": "react_skill"
     },
@@ -99,7 +99,7 @@
       },
       "output_mapping": {
         "content": "message.text",
-        "variables.chat_id": "message.chat.id"
+        "context.chat_id": "message.chat.id"
       },
       "skill_id": "echo_skill"
     }

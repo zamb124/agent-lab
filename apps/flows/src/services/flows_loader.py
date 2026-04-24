@@ -25,7 +25,7 @@ from apps.flows.src.db import NodeRepository, FlowRepository, ToolRepository
 from core.context import get_context
 from core.files import FileReader, ReadOptions, get_default_file_processor
 from core.logging import get_logger
-from apps.flows.src.models import NodeConfig, FlowConfig, ToolReference
+from apps.flows.src.models import NodeConfig, FlowConfig, ToolReference, TriggerConfig
 from apps.flows.src.models.node_config import NodeLLMOverride
 from apps.flows.src.models.tool_reference import CallParameter
 from apps.flows.src.models.enums import ReactToolRole
@@ -236,6 +236,21 @@ class FlowsLoader:
         if evaluation:
             evaluation = {k: v for k, v in evaluation.items() if not k.startswith("_")}
 
+        triggers: Dict[str, TriggerConfig] = {}
+        raw_triggers = raw_config.get("triggers")
+        if raw_triggers is not None:
+            if not isinstance(raw_triggers, dict):
+                msg = "flow.json: поле triggers должно быть объектом {trigger_id: ...}"
+                raise ValueError(msg)
+            for trigger_key, trigger_obj in raw_triggers.items():
+                if not isinstance(trigger_key, str) or not trigger_key.strip():
+                    msg = "flow.json: ключ в triggers должен быть непустой строкой (trigger_id)"
+                    raise ValueError(msg)
+                if not isinstance(trigger_obj, dict):
+                    msg = f"flow.json: triggers['{trigger_key}'] должен быть объектом TriggerConfig"
+                    raise ValueError(msg)
+                triggers[trigger_key] = TriggerConfig.model_validate(trigger_obj)
+
         return FlowConfig(
             flow_id=raw_config.get("flow_id") or raw_config.get("id"),
             name=raw_config.get("name", ""),
@@ -247,6 +262,7 @@ class FlowsLoader:
             variables=raw_config.get("variables", {}),
             skills=skills,
             evaluation=evaluation,
+            triggers=triggers,
             source="file",
         )
 

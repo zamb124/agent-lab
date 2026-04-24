@@ -17,23 +17,29 @@ RUN pip install --no-cache-dir uv
 
 WORKDIR /app
 
-COPY pyproject.toml README.md ./
+COPY pyproject.toml uv.lock README.md ./
 
 RUN --mount=type=cache,target=/root/.cache/uv \
-    uv pip install --system \
+    uv export --frozen --no-default-groups \
         --group core \
         --group agents \
         --group worker-base \
         --group rag \
         --group crm \
         --group sync \
-        --group dev
+        --group dev \
+        --no-annotate --no-header --no-emit-project \
+        -o /tmp/requirements.txt && \
+    uv pip install --system -r /tmp/requirements.txt
 
 # RAG Worker stage для тестов (минимальный образ; сборка: --target rag-worker)
 FROM base-test AS rag-worker
 
 RUN --mount=type=cache,target=/root/.cache/uv \
-    uv pip install --system --group rag-worker
+    uv export --frozen --no-default-groups --only-group rag-worker \
+        --no-annotate --no-header --no-emit-project \
+        -o /tmp/rag-worker-requirements.txt && \
+    uv pip install --system -r /tmp/rag-worker-requirements.txt
 
 COPY core/ ./core/
 COPY apps/rag/ ./apps/rag/

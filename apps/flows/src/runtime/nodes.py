@@ -1043,7 +1043,7 @@ class ChannelNode(BaseNode):
             "parse_mode": "HTML"
         },
         "input_mapping": {
-            "recipient": "@state:variables.chat_id",
+            "recipient": "@state:triggers.my_telegram.context.chat_id",
             "text": "@state:response"
         }
     }

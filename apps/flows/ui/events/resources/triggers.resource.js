@@ -89,6 +89,22 @@ export const triggerRemoveOp = createAsyncOp({
     },
 });
 
+export const triggerVerifyOp = createAsyncOp({
+    name: 'flows/trigger_verify',
+    silent: true,
+    restMirror: { method: 'POST', path: '/flows/api/v1/flows/{flow_id}/triggers/verify' },
+    request: async ({ payload }) => {
+        if (!payload || typeof payload.flow_id !== 'string' || !payload.body) {
+            throw new Error('triggerVerifyOp: { flow_id, body } required');
+        }
+        return httpRequest({
+            method: 'POST',
+            url: `/flows/api/v1/flows/${encodeURIComponent(payload.flow_id)}/triggers/verify`,
+            body: payload.body,
+        });
+    },
+});
+
 export const triggerTestOp = createAsyncOp({
     name: 'flows/trigger_test',
     successToastKey: 'flows:toast.trigger_tested',

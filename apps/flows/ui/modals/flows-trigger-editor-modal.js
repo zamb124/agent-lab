@@ -20,17 +20,11 @@ import { PlatformFormModal } from '@platform/lib/components/glass-form-modal.js'
 import { registerModalKind } from '@platform/lib/utils/modal-registry.js';
 import '@platform/lib/components/platform-icon.js';
 import '@platform/lib/components/platform-switch.js';
-import { asString } from '../_helpers/flows-resolvers.js';
+import '@platform/lib/components/platform-help-hint.js';
+import { asString, isPlainObject } from '../_helpers/flows-resolvers.js';
+import { TRIGGER_TYPES } from '../constants/trigger-types.js';
 
-const TRIGGER_ID_PATTERN = /^[a-z][a-z0-9_]*$/;
-
-const TRIGGER_TYPES = Object.freeze([
-    { id: 'telegram', icon: 'send',     color: '#0088cc', nameKey: 'type_telegram', descKey: 'type_telegram_desc' },
-    { id: 'cron',     icon: 'clock',    color: '#f59e0b', nameKey: 'type_cron',     descKey: 'type_cron_desc' },
-    { id: 'webhook',  icon: 'globe',    color: '#8b5cf6', nameKey: 'type_webhook',  descKey: 'type_webhook_desc' },
-    { id: 'email',    icon: 'mail',     color: '#ea4335', nameKey: 'type_email',    descKey: 'type_email_desc' },
-    { id: 'redis',    icon: 'database', color: '#dc382d', nameKey: 'type_redis',    descKey: 'type_redis_desc' },
-]);
+const TRIGGER_ID_PATTERN = /^[a-zA-Z][a-zA-Z0-9_-]*$/;
 
 const CHANNEL_TYPES = Object.freeze([
     { id: 'telegram', labelKey: 'channel_telegram' },
@@ -52,18 +46,34 @@ function outputChannelTypesForTrigger(triggerType) {
     return [...CHANNEL_TYPES];
 }
 
+/**
+ * Вкладка «Вывод» не показывается для cron: пост-рассылка не используется.
+ * @param {string} typeId
+ * @returns {boolean}
+ */
+function showTriggerOutputTab(typeId) {
+    return typeId.length > 0 && typeId !== 'cron';
+}
+
 const OUTPUT_ACTIONS = Object.freeze([
     { id: 'send_message',  labelKey: 'action_send_message' },
     { id: 'send_photo',    labelKey: 'action_send_photo' },
     { id: 'send_document', labelKey: 'action_send_document' },
 ]);
 
-function defaultTelegramOutputAction() {
+/**
+ * @param {string} [triggerId]
+ */
+function defaultTelegramOutputAction(triggerId) {
+    const tid = String(triggerId || '').trim();
+    const recipient = tid.length > 0
+        ? `@state:triggers.${tid}.context.chat_id`
+        : '';
     return {
         channel: 'telegram',
         action: 'send_message',
         mapping: {
-            recipient: '@state:variables.chat_id',
+            recipient,
             text: '@state:response',
         },
         config: { parse_mode: 'HTML' },
@@ -92,11 +102,12 @@ function _mappingEqual(a, b) {
  * @param {Record<string, string>} a.mapping
  * @param {Record<string, string>} a.config
  * @param {string} a.condition
+ * @param {string} [triggerId]
  */
-function isDefaultTelegramOutputActionForm(a) {
+function isDefaultTelegramOutputActionForm(a, triggerId) {
     if (a.channel !== 'telegram' || a.action !== 'send_message') return false;
     if (String(a.condition).trim().length > 0) return false;
-    const d = defaultTelegramOutputAction();
+    const d = defaultTelegramOutputAction(triggerId);
     if (!_mappingEqual(a.mapping, d.mapping)) return false;
     const c = a.config;
     if (Object.keys(c).length === 0) return true;
@@ -147,8 +158,10 @@ export class FlowsTriggerEditorModal extends PlatformFormModal {
         _outputMapping: { state: true },
         _outputActions: { state: true },
         _outputTelegramExpanded: { state: true },
+        _postFlowOutputEnabled: { state: true },
         _hydrated: { state: true },
         _validationError: { state: true },
+        _verifyHintText: { state: true },
     };
 
     static styles = [
@@ -354,28 +367,93 @@ export class FlowsTriggerEditorModal extends PlatformFormModal {
         this._outputMapping = [];
         this._outputActions = [];
         this._outputTelegramExpanded = false;
+        this._postFlowOutputEnabled = true;
+        this._skillId = 'default';
         this._hydrated = false;
         this._validationError = '';
+        this._verifyHintText = '';
         this._createOp = this.useOp('flows/trigger_create');
         this._updateOp = this.useOp('flows/trigger_update');
         this._listOp = this.useOp('flows/triggers_list');
+        this._verifyOp = this.useOp('flows/trigger_verify');
+        this._editor = this.useOp('flows/editor');
+        this._flowsCat = this.useResource('flows/flows', { autoload: false });
     }
 
     updated(changed) {
         super.updated?.(changed);
+        if (changed.has('flowId') && this.flowId) {
+            this._ensureFlowForSkills();
+        }
         if (this._hydrated) return;
         if (changed.has('trigger') || changed.has('flowId')) {
             this._hydrate();
         }
     }
 
+    _ensureFlowForSkills() {
+        if (!this.flowId) return;
+        const ed = this._editor.state;
+        const fromEditor = isPlainObject(ed.flowConfig) && ed.flowConfig.flow_id === this.flowId;
+        if (fromEditor) return;
+        const cat = this._flowsCat.byId;
+        if (isPlainObject(cat) && isPlainObject(cat[this.flowId])) return;
+        void this._flowsCat.get(this.flowId);
+    }
+
+    _flowConfigForSkillPicker() {
+        if (!this.flowId) return null;
+        const ed = this._editor.state;
+        if (isPlainObject(ed.flowConfig) && ed.flowConfig.flow_id === this.flowId) {
+            return ed.flowConfig;
+        }
+        const row = this._flowsCat.byId[this.flowId];
+        if (isPlainObject(row)) return row;
+        return null;
+    }
+
+    _skillSelectRows() {
+        const out = [
+            { value: 'default', label: this.t('trigger_editor_modal.skill_option_default') },
+        ];
+        const flow = this._flowConfigForSkillPicker();
+        if (!isPlainObject(flow) || !isPlainObject(flow.skills)) {
+            if (!out.some((o) => o.value === this._skillId) && asString(this._skillId).length > 0) {
+                out.push({ value: this._skillId, label: this._skillId });
+            }
+            return out;
+        }
+        for (const [id, sk] of Object.entries(flow.skills)) {
+            if (id === 'default') {
+                continue;
+            }
+            if (typeof id !== 'string' || id.length === 0) {
+                throw new Error('flows-trigger-editor-modal: skills key must be non-empty string');
+            }
+            const title = isPlainObject(sk) && typeof sk.name === 'string' && sk.name.length > 0
+                ? sk.name
+                : id;
+            out.push({ value: id, label: `${title} (${id})` });
+        }
+        if (!out.some((o) => o.value === this._skillId) && asString(this._skillId).length > 0) {
+            out.push({ value: this._skillId, label: this._skillId });
+        }
+        return out;
+    }
+
     _hydrate() {
+        this._verifyHintText = '';
         const t = this.trigger;
         if (t) {
             this._triggerId = t.trigger_id;
             this._name = t.name;
             this._type = t.type;
             this._enabled = Boolean(t.enabled);
+            if (typeof t.skill_id === 'string' && t.skill_id.length > 0) {
+                this._skillId = t.skill_id;
+            } else {
+                this._skillId = 'default';
+            }
             this._config = { ...t.config };
             const mapping = Object.keys(t.output_mapping).length > 0 ? t.output_mapping : t.input_mapping;
             this._outputMapping = Object.entries(mapping).map(([state, payload]) => ({ state, payload }));
@@ -386,24 +464,123 @@ export class FlowsTriggerEditorModal extends PlatformFormModal {
                 config: { ...a.config },
                 condition: a.condition === null ? '' : a.condition,
             }));
+            this._postFlowOutputEnabled = t.post_flow_output_enabled !== false;
         } else {
             this._triggerId = '';
             this._name = '';
             this._type = '';
             this._enabled = true;
+            this._skillId = 'default';
             this._config = {};
             this._outputMapping = [];
             this._outputActions = [];
+            this._postFlowOutputEnabled = true;
         }
-        if (this._type === 'telegram' && this._outputActions.length === 0) {
-            this._outputActions = [defaultTelegramOutputAction()];
+        if (this._type === 'telegram' && this._outputActions.length === 0 && this._postFlowOutputEnabled) {
+            if (this._triggerId.trim().length > 0) {
+                this._outputActions = [defaultTelegramOutputAction(this._triggerId)];
+            }
         }
         this._outputTelegramExpanded = false;
+        if (!showTriggerOutputTab(this._type) && this._activeTab === 'output') {
+            this._activeTab = 'config';
+        }
         this._hydrated = true;
     }
 
     renderHeader() {
         return this.t(this.trigger ? 'trigger_editor_modal.title_edit' : 'trigger_editor_modal.title_create');
+    }
+
+    renderHeaderActions() {
+        return html`
+            <platform-help-hint
+                class="trigger-verify-hint"
+                wide
+                .text=${this._verifyHintText}
+                .label=${this.t('trigger_editor_modal.verify_tooltip_label')}
+            >
+                <button
+                    type="button"
+                    class="header-btn verify-trigger-hint-btn"
+                    ?disabled=${this._verifyOp.busy}
+                    title=${this.t('trigger_editor_modal.verify_btn_title')}
+                    aria-label=${this.t('trigger_editor_modal.verify_btn_title')}
+                    @click=${(e) => {
+            e.stopPropagation();
+            void this._onTriggerVerify();
+        }}
+                >
+                    <platform-icon name="check" size="16"></platform-icon>
+                </button>
+            </platform-help-hint>
+        `;
+    }
+
+    /**
+     * @param {unknown} v
+     * @returns {string}
+     */
+    _stringifyVerifyPayload(v) {
+        if (v !== null && typeof v === 'object') {
+            return JSON.stringify(v, null, 2);
+        }
+        if (typeof v === 'string') {
+            return v;
+        }
+        if (v === null || v === undefined) {
+            return '';
+        }
+        return String(v);
+    }
+
+    _focusVerifyHintButton() {
+        const root = this.shadowRoot;
+        if (!root) {
+            return;
+        }
+        const h = root.querySelector('platform-help-hint.trigger-verify-hint');
+        const b = h?.querySelector('button.verify-trigger-hint-btn');
+        if (b instanceof HTMLElement) {
+            b.focus();
+        }
+    }
+
+    async _onTriggerVerify() {
+        if (typeof this.flowId !== 'string' || this.flowId.length === 0) {
+            this._verifyHintText = this.t('trigger_editor_modal.verify_error_no_flow');
+            this.requestUpdate();
+            await this.updateComplete;
+            this._focusVerifyHintButton();
+            return;
+        }
+        if (typeof this._type !== 'string' || this._type.length === 0) {
+            this._verifyHintText = this.t('trigger_editor_modal.verify_error_no_type');
+            this.requestUpdate();
+            await this.updateComplete;
+            this._focusVerifyHintButton();
+            return;
+        }
+        if (!isPlainObject(this._config)) {
+            throw new Error('flows-trigger-editor-modal: _config must be a plain object');
+        }
+        const body = { type: this._type, config: { ...this._config } };
+        const tid = asString(this._triggerId);
+        if (tid.length > 0) {
+            body.trigger_id = tid;
+        }
+        const r = await this._verifyOp.run({ flow_id: this.flowId, body });
+        if (r === null) {
+            const errMsg = this._verifyOp.error;
+            this._verifyHintText = errMsg && errMsg.length > 0
+                ? this.t('trigger_editor_modal.verify_error_http', { message: errMsg })
+                : this.t('trigger_editor_modal.verify_error_network');
+        } else {
+            this._verifyHintText = this._stringifyVerifyPayload(r);
+        }
+        this.requestUpdate();
+        await this.updateComplete;
+        this._focusVerifyHintButton();
     }
 
     renderBody() {
@@ -415,22 +592,42 @@ export class FlowsTriggerEditorModal extends PlatformFormModal {
                 <button type="button" class="tab ${this._activeTab === 'mapping' ? 'active' : ''}" @click=${() => this._setTab('mapping')}>
                     ${this.t('trigger_editor_modal.tab_mapping')}
                 </button>
+                ${showTriggerOutputTab(this._type)
+        ? html`
                 <button type="button" class="tab ${this._activeTab === 'output' ? 'active' : ''}" @click=${() => this._setTab('output')}>
                     ${this.t('trigger_editor_modal.tab_output')}
                 </button>
+                `
+        : nothing}
             </div>
 
             ${this._validationError ? html`<div class="form-error">${this._validationError}</div>` : ''}
 
             ${this._activeTab === 'config' ? this._renderConfigTab() : ''}
             ${this._activeTab === 'mapping' ? this._renderMappingTab() : ''}
-            ${this._activeTab === 'output' ? this._renderOutputTab() : ''}
+            ${this._activeTab === 'output' && showTriggerOutputTab(this._type) ? this._renderOutputTab() : ''}
         `;
     }
 
     _renderConfigTab() {
         const editing = Boolean(this.trigger);
         return html`
+            <div class="field">
+                <label>${this.t('trigger_editor_modal.field_skill')}</label>
+                <select
+                    .value=${this._skillId}
+                    @change=${(e) => {
+                    this._skillId = e.target.value;
+                    this.isDirty = true;
+                }}
+                >
+                    ${this._skillSelectRows().map(
+        (o) => html`<option value=${o.value}>${o.label}</option>`,
+    )}
+                </select>
+                <span class="hint">${this.t('trigger_editor_modal.hint_skill')}</span>
+            </div>
+
             <div class="field">
                 <label>${this.t('trigger_editor_modal.field_id')}</label>
                 <input
@@ -740,17 +937,55 @@ export class FlowsTriggerEditorModal extends PlatformFormModal {
     }
 
     _renderOutputTab() {
+        if (!showTriggerOutputTab(this._type)) {
+            return nothing;
+        }
         const showGeneralOutputIntro
             = Boolean(this._type)
             && this._type !== 'telegram'
-            && (this._type === 'email' || ['webhook', 'cron', 'redis'].includes(this._type));
+            && (this._type === 'email' || ['webhook', 'redis'].includes(this._type));
         const compactTelegram
-            = this._type === 'telegram'
+            = this._postFlowOutputEnabled
+            && this._type === 'telegram'
             && this._outputActions.length === 1
-            && isDefaultTelegramOutputActionForm(this._outputActions[0])
+            && isDefaultTelegramOutputActionForm(this._outputActions[0], this._triggerId)
             && !this._outputTelegramExpanded;
+        if (!this._postFlowOutputEnabled) {
+            return html`
+                <div class="switch-row" style="align-items: flex-start; gap: var(--space-3);">
+                    <label style="min-width: 0;">
+                        <span class="config-section-title" style="display: block; margin-bottom: var(--space-1);">
+                            ${this.t('trigger_editor_modal.post_flow_output_label')}
+                        </span>
+                        <span class="hint">${this.t('trigger_editor_modal.post_flow_output_hint')}</span>
+                    </label>
+                    <platform-switch
+                        .checked=${this._postFlowOutputEnabled}
+                        @change=${(e) => {
+                            this._postFlowOutputEnabled = e.detail.value;
+                            this.isDirty = true;
+                        }}
+                    ></platform-switch>
+                </div>
+            `;
+        }
         if (compactTelegram) {
             return html`
+                <div class="switch-row" style="align-items: flex-start; gap: var(--space-3); margin-bottom: var(--space-4);">
+                    <label style="min-width: 0;">
+                        <span class="config-section-title" style="display: block; margin-bottom: var(--space-1);">
+                            ${this.t('trigger_editor_modal.post_flow_output_label')}
+                        </span>
+                        <span class="hint">${this.t('trigger_editor_modal.post_flow_output_hint')}</span>
+                    </label>
+                    <platform-switch
+                        .checked=${this._postFlowOutputEnabled}
+                        @change=${(e) => {
+                            this._postFlowOutputEnabled = e.detail.value;
+                            this.isDirty = true;
+                        }}
+                    ></platform-switch>
+                </div>
                 <div class="config-section-title">${this.t('trigger_editor_modal.output_section_title')}</div>
                 <p class="config-intro">${this.t('trigger_editor_modal.output_telegram_auto')}</p>
                 <button
@@ -763,6 +998,21 @@ export class FlowsTriggerEditorModal extends PlatformFormModal {
             `;
         }
         return html`
+            <div class="switch-row" style="align-items: flex-start; gap: var(--space-3); margin-bottom: var(--space-4);">
+                <label style="min-width: 0;">
+                    <span class="config-section-title" style="display: block; margin-bottom: var(--space-1);">
+                        ${this.t('trigger_editor_modal.post_flow_output_label')}
+                    </span>
+                    <span class="hint">${this.t('trigger_editor_modal.post_flow_output_hint')}</span>
+                </label>
+                <platform-switch
+                    .checked=${this._postFlowOutputEnabled}
+                    @change=${(e) => {
+                        this._postFlowOutputEnabled = e.detail.value;
+                        this.isDirty = true;
+                    }}
+                ></platform-switch>
+            </div>
             <div class="config-section-title">${this.t('trigger_editor_modal.output_section_title')}</div>
             ${showGeneralOutputIntro
                 ? html`<p class="config-intro">${this.t('trigger_editor_modal.output_intro')}</p>`
@@ -885,14 +1135,25 @@ export class FlowsTriggerEditorModal extends PlatformFormModal {
     }
 
     _setTab(tab) {
+        if (tab === 'output' && !showTriggerOutputTab(this._type)) {
+            return;
+        }
         this._activeTab = tab;
     }
 
     _selectType(typeId) {
+        this._verifyHintText = '';
         this._type = typeId;
         this._outputTelegramExpanded = false;
-        if (typeId === 'telegram' && this._outputActions.length === 0) {
-            this._outputActions = [defaultTelegramOutputAction()];
+        if (typeId === 'cron') {
+            this._postFlowOutputEnabled = false;
+            if (this._activeTab === 'output') {
+                this._activeTab = 'config';
+            }
+        } else if (this._postFlowOutputEnabled && typeId === 'telegram' && this._outputActions.length === 0) {
+            if (this._triggerId.trim().length > 0) {
+                this._outputActions = [defaultTelegramOutputAction(this._triggerId)];
+            }
         }
         this.isDirty = true;
     }
@@ -931,7 +1192,7 @@ export class FlowsTriggerEditorModal extends PlatformFormModal {
         const defaultChannel = ch[0] ? ch[0].id : 'telegram';
         const next
             = this._type === 'telegram' && defaultChannel === 'telegram'
-                ? defaultTelegramOutputAction()
+                ? defaultTelegramOutputAction(this._triggerId)
                 : { channel: defaultChannel, action: 'send_message', mapping: {}, config: {}, condition: '' };
         this._outputActions = [...this._outputActions, next];
         this._outputTelegramExpanded = true;
@@ -998,6 +1259,9 @@ export class FlowsTriggerEditorModal extends PlatformFormModal {
         if (!this._type) {
             return { type: this.t('trigger_editor_modal.error_type_required') };
         }
+        if (!this._skillId.trim()) {
+            return { skill_id: this.t('trigger_editor_modal.error_skill_required') };
+        }
         return {};
     }
 
@@ -1018,16 +1282,20 @@ export class FlowsTriggerEditorModal extends PlatformFormModal {
             }
         }
 
-        const outputActions = this._outputActions.map((a) => {
-            const c = a.condition.trim();
-            return {
-                channel: a.channel,
-                action: a.action,
-                mapping: a.mapping,
-                config: a.config,
-                condition: c.length > 0 ? c : null,
-            };
-        });
+        const outTab = showTriggerOutputTab(this._type);
+        const postFlow = outTab && this._postFlowOutputEnabled;
+        const outputActions = postFlow
+            ? this._outputActions.map((a) => {
+                const c = a.condition.trim();
+                return {
+                    channel: a.channel,
+                    action: a.action,
+                    mapping: a.mapping,
+                    config: a.config,
+                    condition: c.length > 0 ? c : null,
+                };
+            })
+            : [];
 
         const body = {
             trigger_id: this._triggerId.trim(),
@@ -1037,6 +1305,8 @@ export class FlowsTriggerEditorModal extends PlatformFormModal {
             config: this._config,
             output_mapping: outputMapping,
             output_actions: outputActions,
+            post_flow_output_enabled: postFlow,
+            skill_id: this._skillId.trim(),
         };
 
         if (this.trigger) {
@@ -1049,6 +1319,8 @@ export class FlowsTriggerEditorModal extends PlatformFormModal {
                     config: body.config,
                     output_mapping: body.output_mapping,
                     output_actions: body.output_actions,
+                    post_flow_output_enabled: body.post_flow_output_enabled,
+                    skill_id: body.skill_id,
                 },
             });
         } else {

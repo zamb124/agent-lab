@@ -35,12 +35,12 @@ class TelegramTriggerHandler(BaseTriggerHandler):
         "commands": ["/start", "/help"]
     }
     
-    Input mapping по умолчанию:
+    output_mapping по умолчанию (context — не variables):
     {
         "content": "@trigger:message.text",
-        "variables.chat_id": "@trigger:message.chat.id",
-        "variables.user_id": "@trigger:message.from.id",
-        "variables.username": "@trigger:message.from.username"
+        "context.chat_id": "@trigger:message.chat.id",
+        "context.user_id": "@trigger:message.from.id",
+        "context.username": "@trigger:message.from.username"
     }
     """
     
@@ -271,13 +271,13 @@ class TelegramTriggerHandler(BaseTriggerHandler):
                 raise TriggerValidationError(f"Command not matched: {text}")
     
     def _get_default_mapping(self) -> Dict[str, str]:
-        """Возвращает дефолтный input_mapping для Telegram."""
+        """Дефолтный output_mapping для Telegram (снимок в state.triggers[id].context)."""
         return {
             "content": "@trigger:message.text",
-            "variables.chat_id": "@trigger:message.chat.id",
-            "variables.user_id": "@trigger:message.from.id",
-            "variables.username": "@trigger:message.from.username",
-            "variables.message_id": "@trigger:message.message_id",
+            "context.chat_id": "@trigger:message.chat.id",
+            "context.user_id": "@trigger:message.from.id",
+            "context.username": "@trigger:message.from.username",
+            "context.message_id": "@trigger:message.message_id",
         }
     
     async def _resolve_variable(self, var_ref: str) -> str:

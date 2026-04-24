@@ -64,13 +64,10 @@ class TriggerExecutor:
             f"trigger={trigger_id}, type={trigger_type}"
         )
         
-        # Применяем output_mapping (input_mapping - deprecated alias)
-        mapping = trigger.output_mapping or trigger.input_mapping or {}
+        mapping = {**dict(trigger.input_mapping), **dict(trigger.output_mapping)}
         mapped_data = self._input_mapper.map(trigger_id, payload, mapping)
-        
-        # Извлекаем content, variables и triggers
+
         content = mapped_data.get("content", "")
-        variables = mapped_data.get("variables", {})
         triggers_data = mapped_data.get("triggers", {})
         
         # Формируем IDs
@@ -109,7 +106,6 @@ class TriggerExecutor:
         final_metadata = {
             "trigger_id": trigger_id,
             "trigger_type": trigger_type,
-            "variables": variables,
             "triggers": triggers_data,
             **(metadata or {}),
         }
@@ -119,7 +115,7 @@ class TriggerExecutor:
             session_id=session_id,
             user_id=effective_user_id,
             content=content,
-            skill_id="default",
+            skill_id=trigger.skill_id,
             channel="a2a",  # Используем A2A канал для триггеров
             task_id=task_id,
             context_id=context_id,
@@ -163,8 +159,9 @@ class OutputActionExecutor:
     """
     Выполняет output_actions после завершения агента.
     
-    Вызывается из process_flow_task после успешного выполнения агента.
-    Использует MappingResolver и InputMapper для резолвинга - никакого дублирования.
+    Вызывается из BaseChannel.process_task после успешного run flow без interrupt
+    и без breakpoint, когда в metadata задачи передан trigger_id, триггер включён
+    в конфиге flow и для него разрешён пост-выход (см. effective_output_actions_for_trigger).
     """
     
     def __init__(self):
@@ -228,8 +225,13 @@ class OutputActionExecutor:
                     variables=variables,
                 )
                 
+                ch_label = (
+                    action.channel.value
+                    if hasattr(action.channel, "value")
+                    else str(action.channel)
+                )
                 logger.info(
-                    f"Output action {action.channel.value}:{action.action} executed"
+                    f"Output action {ch_label}:{action.action} executed"
                 )
                 results.append({"action": action.action, "result": result})
                 
