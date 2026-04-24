@@ -101,64 +101,87 @@ async def on_startup(app: FastAPI, container, settings: FlowSettings):
             else:
                 logger.error("Failed to connect to Redis on startup")
                 raise
-    
-    # Создаем системный контекст
-    system_context = Context(
-        user=User(user_id="system", name="System", groups=["admin"]),
-        host="system",
-        session_id="system-startup",
-        channel="system",
-        language=Language.RU,
-        active_company=Company(
-            company_id="system", 
-            name="System", 
-            subdomain="system"
-        ),
-        user_companies=[],
-        trace_id="system:startup",
-    )
-    set_context(system_context)
-    
-    try:
-        # Сначала загружаем tools синхронно (нужны для flows)
-        loaded_tools = await load_tools_to_db(container.tool_repository)
-        logger.info(f"Загружено tools: {loaded_tools}")
-        
-        # В тестах загружаем bundles (flows) в БД синхронно (worker может быть не готов)
-        if is_testing():
+
+    # Загрузка tools + постановка init_company в worker не должны блокировать lifespan:
+    # иначе Uvicorn не слушает порт, пока не отработают БД и TaskIQ (Docker health → unhealthy).
+    if is_testing():
+        system_context = Context(
+            user=User(user_id="system", name="System", groups=["admin"]),
+            host="system",
+            session_id="system-startup",
+            channel="system",
+            language=Language.RU,
+            active_company=Company(
+                company_id="system",
+                name="System",
+                subdomain="system",
+            ),
+            user_companies=[],
+            trace_id="system:startup",
+        )
+        set_context(system_context)
+        try:
+            loaded_tools = await load_tools_to_db(container.tool_repository)
+            logger.info(f"Загружено tools: {loaded_tools}")
             logger.info("Загрузка flows из bundles синхронно (TESTING=true)...")
             from apps.flows.src.services.flows_loader import load_flows_to_db
+
             loaded_flow_ids = await load_flows_to_db(
                 container.flow_repository,
                 container.node_repository,
-                container.tool_repository
+                container.tool_repository,
             )
             logger.info(f"Загружено flows: {loaded_flow_ids}")
             from apps.flows.src.services.operator_demo_queue import ensure_example_hitl_queue
 
             await ensure_example_hitl_queue(container.operator_repository, "system")
-        else:
-            # Фоновая загрузка bundles в company system через TaskIQ (не блокирует старт)
-            from apps.flows.src.tasks.company_init_tasks import init_company_resources
-            
-            task = await init_company_resources.kiq(
-                company_id="system",
-                company_name="System",
-                subdomain="system"
+        except Exception as e:
+            logger.error(f"Ошибка запуска миграции в system: {e}", exc_info=True)
+        finally:
+            clear_context()
+    else:
+
+        async def _tools_and_company_init_background() -> None:
+            system_context = Context(
+                user=User(user_id="system", name="System", groups=["admin"]),
+                host="system",
+                session_id="system-startup",
+                channel="system",
+                language=Language.RU,
+                active_company=Company(
+                    company_id="system",
+                    name="System",
+                    subdomain="system",
+                ),
+                user_companies=[],
+                trace_id="system:startup",
             )
-            
-            logger.info(
-                f"Фоновая инициализация flows для system запущена: task_id={task.task_id}"
-            )
-            logger.info(
-                "Flows из bundles будут доступны после завершения задачи"
-            )
-        
-    except Exception as e:
-        logger.error(f"Ошибка запуска миграции в system: {e}", exc_info=True)
-        # НЕ падаем - миграцию можно запустить вручную
-    finally:
-        clear_context()
+            set_context(system_context)
+            try:
+                loaded_tools = await load_tools_to_db(container.tool_repository)
+                logger.info(f"Загружено tools: {loaded_tools}")
+                from apps.flows.src.tasks.company_init_tasks import init_company_resources
+
+                task = await init_company_resources.kiq(
+                    company_id="system",
+                    company_name="System",
+                    subdomain="system",
+                )
+                logger.info(
+                    "Фоновая инициализация flows для system: task_id=%s",
+                    task.task_id,
+                )
+            except Exception as e:
+                logger.error(
+                    "Ошибка запуска миграции в system: %s",
+                    e,
+                    exc_info=True,
+                )
+            finally:
+                clear_context()
+
+        asyncio.create_task(_tools_and_company_init_background())
+        logger.info("Загрузка tools и init_company_resources запущены в фоне")
 
     # Синхронизация LLM у провайдеров: не блокирует lifespan — иначе HTTP (в т.ч. /health)
     # недоступен, пока не отработают все внешние запросы (несколько провайдеров × ретраи).
