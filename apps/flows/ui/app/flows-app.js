@@ -32,6 +32,7 @@ import {
     nodeTypesOp,
     resourceTypesOp,
     exceptionAbsorbAllowNamesOp,
+    executionLimitsOp,
 } from '../events/resources/metadata.resource.js';
 import { modelsListOp } from '../events/resources/models.resource.js';
 import { providersListOp } from '../events/resources/providers.resource.js';
@@ -103,6 +104,7 @@ export class FlowsApp extends PlatformApp {
         nodeTypesOp,
         resourceTypesOp,
         exceptionAbsorbAllowNamesOp,
+        executionLimitsOp,
         modelsListOp,
         providersListOp,
         codeCompletionsOp,

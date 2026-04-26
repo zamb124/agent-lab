@@ -15,7 +15,10 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 
 from core.models import StrictBaseModel
 from core.urn import extract_id
-from apps.flows.src.constants.execution_limits import get_node_execution_wall_time_cap_seconds
+from apps.flows.src.constants.execution_limits import (
+    get_graph_max_iterations,
+    get_node_execution_wall_time_cap_seconds,
+)
 from .enums import NodeType
 from .exception_absorb_allow import ExceptionAbsorbAllowName
 from .tool_reference import ToolReference
@@ -284,6 +287,13 @@ class NodeConfig(StrictBaseModel):
             "None = только лимит flow"
         ),
     )
+    max_visits_per_run: Optional[int] = Field(
+        default=None,
+        description=(
+            "Максимум заходов в эту ноду за один Flow.run; None — для code действует дефолт платформы, "
+            "для прочих типов отдельного лимита нет (только итерации графа)"
+        ),
+    )
 
     @field_validator("node_timeout_seconds", mode="before")
     @classmethod
@@ -297,5 +307,20 @@ class NodeConfig(StrictBaseModel):
         if iv > cap:
             raise ValueError(
                 f"node_timeout_seconds: максимум {cap}с (node_execution_wall_time_cap_seconds), получено {iv}"
+            )
+        return iv
+
+    @field_validator("max_visits_per_run", mode="before")
+    @classmethod
+    def validate_max_visits_per_run(cls, v: Any) -> Optional[int]:
+        if v is None:
+            return None
+        iv = int(v)
+        if iv < 1:
+            raise ValueError(f"max_visits_per_run: ожидается >= 1, получено {iv}")
+        cap = get_graph_max_iterations()
+        if iv > cap:
+            raise ValueError(
+                f"max_visits_per_run: максимум {cap} (graph_max_iterations), получено {iv}"
             )
         return iv

@@ -757,6 +757,8 @@
     "incoming_policy_all": "Все (all)",
     "node_timeout_seconds": "Лимит времени ноды (с)",
     "node_timeout_hint": "Необязательно. Максимум 3600 с. Пусто — только лимит flow.",
+    "max_visits_per_run": "Макс. заходов в ноду за один run",
+    "max_visits_per_run_hint": "Необязательно. Пусто — для code-ноды дефолт платформы; для остальных типов без отдельного лимита. Верхняя граница совпадает с лимитом итераций графа.",
     "exception_as_response": "Исключение как ответ",
     "exception_as_response_help_label": "Подробнее",
     "exception_as_response_hint": "Писать ошибки в state.execution_exceptions; для LLM-ноды — ещё в сообщения tool",

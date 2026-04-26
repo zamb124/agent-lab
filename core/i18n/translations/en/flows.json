@@ -757,6 +757,8 @@
     "incoming_policy_all": "All",
     "node_timeout_seconds": "Node time limit (s)",
     "node_timeout_hint": "Optional. Max 3600 s. Empty = flow limit only.",
+    "max_visits_per_run": "Max visits per node per run",
+    "max_visits_per_run_hint": "Optional. Empty = platform default for code nodes; other types have no per-node cap. Upper bound matches the graph iteration limit.",
     "exception_as_response": "Exception as response",
     "exception_as_response_help_label": "Details",
     "exception_as_response_hint": "Record errors in state.execution_exceptions; for LLM nodes, also as tool messages",

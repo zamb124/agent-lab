@@ -35,3 +35,11 @@ export const exceptionAbsorbAllowNamesOp = createAsyncOp({
             url: '/flows/api/v1/metadata/exception-absorb-allow-names',
         }),
 });
+
+export const executionLimitsOp = createAsyncOp({
+    name: 'flows/execution_limits',
+    silent: true,
+    restMirror: { method: 'GET', path: '/flows/api/v1/metadata/execution-limits' },
+    request: async () =>
+        httpRequest({ method: 'GET', url: '/flows/api/v1/metadata/execution-limits' }),
+});

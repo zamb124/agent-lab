@@ -77,15 +77,6 @@ class ToolExecutionError(Exception):
         super().__init__(message)
 
 
-class NodeCallLimitError(Exception):
-    """Превышен лимит вызовов ноды."""
-
-    def __init__(self, message: str, limit: int):
-        self.message = message
-        self.limit = limit
-        super().__init__(message)
-
-
 class EdgeConditionError(Exception):
     """
     Сбой при вычислении условия исходящего ребра.

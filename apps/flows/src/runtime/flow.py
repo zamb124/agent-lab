@@ -26,8 +26,8 @@ from apps.flows.src.runtime.exceptions import (
     EdgeConditionError,
     FlowInterrupt,
     BreakpointInterrupt,
-    NodeCallLimitError,
 )
+from apps.flows.src.constants.execution_limits import get_graph_max_iterations
 from apps.flows.src.container import get_container
 from apps.flows.src.state.cancellation import check_cancellation
 from apps.flows.src.state.interrupt_manager import InterruptManager
@@ -51,7 +51,6 @@ from .nodes import BaseNode, create_node
 
 logger = get_logger(__name__)
 
-MAX_ITERATIONS = 100
 MAX_FUNCTION_CALLS = 5
 
 
@@ -272,6 +271,7 @@ class Flow:
             state.current_nodes = [self.entry]
 
         state.variables = {**self.variables, **state.variables}
+        state.node_history = {}
 
         return await self._execute_loop(state)
 
@@ -279,6 +279,7 @@ class Flow:
         """Цикл выполнения."""
         current_nodes = list(state.current_nodes) if state.current_nodes else [self.entry]
         iterations = 0
+        max_graph_iterations = get_graph_max_iterations()
 
         container = get_container()
         emitter = Emitter(container.redis_client, state)
@@ -293,10 +294,10 @@ class Flow:
         async with tracer.flow_span(self.flow_id, self.entry, trace_ctx):
             while current_nodes:
                 iterations += 1
-                if iterations > MAX_ITERATIONS:
+                if iterations > max_graph_iterations:
                     raise FlowInfiniteLoopError(
                         flow_id=self.flow_id,
-                        max_iterations=MAX_ITERATIONS
+                        max_iterations=max_graph_iterations
                     )
 
                 await check_cancellation(state)
@@ -308,8 +309,8 @@ class Flow:
                     
                     node = self.nodes[node_id]
                     node_type = node.config.get("type", "function")
-                    self._check_node_call_limit(state, node_id, node_type)
-                    
+                    self._check_node_call_limit(state, node_id, node)
+
                     # Проверка breakpoint
                     if await self._check_breakpoint(state, node_id, node_type, emitter):
                         return state
@@ -618,16 +619,21 @@ class Flow:
         # Возвращаем True чтобы прервать выполнение
         return True
 
-    def _check_node_call_limit(self, state: ExecutionState, node_id: str, node_type: str) -> None:
-        """Проверяет лимит вызовов ноды."""
+    def _check_node_call_limit(self, state: ExecutionState, node_id: str, node: BaseNode) -> None:
+        """Проверяет лимит заходов в ноду за текущий Flow.run."""
         node_history = state.node_history.get(node_id, {})
         call_count = len(node_history.get("calls", []))
-
-        if node_type == "code" and call_count >= MAX_FUNCTION_CALLS:
-            raise NodeCallLimitError(
-                f"Node '{node_id}' (type={node_type}): превышен лимит {MAX_FUNCTION_CALLS} вызовов",
-                limit=MAX_FUNCTION_CALLS
-            )
+        node_type = node.config.get("type", "function")
+        configured = node.config.get("max_visits_per_run")
+        if configured is None:
+            if node_type == "code":
+                limit = MAX_FUNCTION_CALLS
+            else:
+                return
+        else:
+            limit = int(configured)
+        if call_count >= limit:
+            raise NodeCallLimitError(node_id, limit)
 
     def _record_node_call(self, state: ExecutionState, node_id: str, node_type: str) -> None:
         """Записывает вызов ноды в историю."""

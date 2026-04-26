@@ -22,6 +22,7 @@ import pytest
 from apps.flows.config import get_settings
 from apps.flows.src.constants.execution_limits import (
     get_flow_execution_wall_time_cap_seconds,
+    get_graph_max_iterations,
     get_node_execution_wall_time_cap_seconds,
 )
 from apps.flows.src.models.flow_config import FlowConfig, FlowType
@@ -255,6 +256,20 @@ def test_node_config_rejects_node_timeout_above_service_cap(app, unique_id: str)
             type=NodeType.CODE,
             name="x",
             node_timeout_seconds=cap + 1,
+        )
+
+
+def test_node_config_rejects_max_visits_above_graph_cap(app, unique_id: str) -> None:
+    from apps.flows.src.models.enums import NodeType
+
+    cap = get_graph_max_iterations()
+    with pytest.raises(ValueError, match="max_visits_per_run"):
+        NodeConfig(
+            node_id=f"n_mv_{unique_id}",
+            type=NodeType.CODE,
+            name="x",
+            code="async def run(s):\n    return s",
+            max_visits_per_run=cap + 1,
         )
 
 

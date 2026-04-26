@@ -347,6 +347,7 @@ export class FlowsBaseNodeEditor extends PlatformElement {
         this._fileUpload = this.useOp('flows/file_upload');
         this._nodeExecute = this.useOp('flows/code_execute');
         this._exceptionAbsorbAllowNamesOp = this.useOp('flows/exception_absorb_allow_names');
+        this._executionLimitsOp = this.useOp('flows/execution_limits');
         this._codeExecuteClientId = nextCodeExecuteClientId();
         this._resources = this.useResource('flows/resources', { autoload: true });
         this._nodeRunControlEl = null;
@@ -357,6 +358,7 @@ export class FlowsBaseNodeEditor extends PlatformElement {
     connectedCallback() {
         super.connectedCallback();
         void this._exceptionAbsorbAllowNamesOp.run({});
+        void this._executionLimitsOp.run({});
         queueMicrotask(() => this._placeNodeRunControl());
         requestAnimationFrame(() => this._placeNodeRunControl());
     }
@@ -553,6 +555,35 @@ export class FlowsBaseNodeEditor extends PlatformElement {
         this._emitPatch({ node_timeout_seconds: Math.min(n, 3600) });
     }
 
+    _graphMaxIterationsCap() {
+        const op = this._executionLimitsOp;
+        const raw = op.lastResult;
+        if (raw === null) {
+            return null;
+        }
+        if (typeof raw !== 'object' || raw === null || typeof raw.graph_max_iterations !== 'number') {
+            throw new Error('flows-base-node-editor: execution limits response invalid');
+        }
+        return raw.graph_max_iterations;
+    }
+
+    _onMaxVisitsPerRun(e) {
+        const cap = this._graphMaxIterationsCap();
+        if (cap === null) {
+            return;
+        }
+        const raw = e.target.value.trim();
+        if (raw === '') {
+            this._emitPatch({ max_visits_per_run: null });
+            return;
+        }
+        const n = parseInt(raw, 10);
+        if (!Number.isFinite(n) || n < 1) {
+            return;
+        }
+        this._emitPatch({ max_visits_per_run: Math.min(n, cap) });
+    }
+
     _onExceptionAsResponse(e) {
         const v = e.detail && typeof e.detail === 'object' && 'value' in e.detail ? e.detail.value : undefined;
         if (typeof v !== 'boolean') {
@@ -733,6 +764,7 @@ export class FlowsBaseNodeEditor extends PlatformElement {
         const tags = Array.isArray(cfg?.tags) ? cfg.tags : [];
         const policy = cfg?.incoming_policy === 'all' ? 'all' : 'any';
         const files = Array.isArray(cfg?.files) ? cfg.files : [];
+        const visitsCap = this._graphMaxIterationsCap();
         return html`
             <div class="section">
                 <div class="section-title">${this.t('base_node_editor.section_basic')}</div>
@@ -848,6 +880,28 @@ export class FlowsBaseNodeEditor extends PlatformElement {
                     />
                     <div class="field-hint">${this.t('base_node_editor.node_timeout_hint')}</div>
                 </div>
+                ${visitsCap === null ? html`
+                <div class="field">
+                    <span class="field-label">${this.t('base_node_editor.max_visits_per_run')}</span>
+                    ${typeof this._executionLimitsOp.error === 'string' && this._executionLimitsOp.error.length > 0
+                        ? html`<div class="field-hint">${this._executionLimitsOp.error}</div>`
+                        : html`<glass-spinner></glass-spinner>`}
+                </div>
+                ` : html`
+                <div class="field">
+                    <span class="field-label">${this.t('base_node_editor.max_visits_per_run')}</span>
+                    <input
+                        class="text"
+                        type="number"
+                        min="1"
+                        max="${visitsCap}"
+                        placeholder=""
+                        .value=${typeof cfg?.max_visits_per_run === 'number' ? String(cfg.max_visits_per_run) : ''}
+                        @input=${this._onMaxVisitsPerRun}
+                    />
+                    <div class="field-hint">${this.t('base_node_editor.max_visits_per_run_hint')}</div>
+                </div>
+                `}
                 <div class="field">
                     <div class="exception-response-head">
                         <span class="field-label">${this.t('base_node_editor.exception_as_response')}</span>

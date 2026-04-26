@@ -348,7 +348,10 @@ class ExecutionState(FlexibleBaseModel):
     
     node_history: Dict[str, Dict[str, Any]] = Field(
         default_factory=dict,
-        description="История вызовов нод {node_id: {calls: [...]}}"
+        description=(
+            "История вызовов нод за последний проход Flow.run: {node_id: {type, calls: [...]}}. "
+            "Сбрасывается в начале каждого Flow.run; лимит повторных заходов в code-ноду считается только в этом проходе."
+        ),
     )
     tool_results: Dict[str, Any] = Field(
         default_factory=dict,

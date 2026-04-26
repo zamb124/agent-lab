@@ -31,6 +31,8 @@ ExecutionState - нативный Pydantic объект ВЕЗДЕ в систе
     
     current_nodes: List[str]          # Текущие ноды (для resume)
 
+    node_history: Dict[str, Dict]     # Вызовы нод за последний проход Flow.run; в начале каждого Flow.run очищается (лимит повторных заходов в code-ноду только в этом проходе)
+
     flow_deadline_monotonic: Optional[float]  # дедлайн run на time.monotonic() (старт канала: apply_flow_wall_clock_deadline)
     flow_timeout_effective_seconds: Optional[int]  # сколько секунд задано на этот run (сообщения об ошибке)
 

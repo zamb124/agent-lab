@@ -17,6 +17,13 @@ from apps.flows.src.runtime.nodes import (
 from core.variables import VariableResolver
 
 
+class _PassthroughNonCodeNode(BaseNode):
+    """Нода с типом не code: без дефолтного лимита заходов, только max_visits_per_run или итерации графа."""
+
+    async def _run_impl(self, state, inputs):
+        return {}
+
+
 class TestCodeNode:
     """Тесты CodeNode."""
 
@@ -394,6 +401,133 @@ class TestFlowWithEdges:
                 user_id="test-user",
                 session_id="test-agent:test-context",
             ))
+
+    @pytest.mark.asyncio
+    async def test_flow_node_call_limit_resets_each_run(self):
+        """Лимит вызовов code-ноды считается только в текущем Flow.run, без хвоста node_history."""
+
+        nodes = {
+            "prep": CodeNode("prep", config={
+                "code": """async def execute(args, state):
+    state.ran = True
+    return {"ran": True}"""
+            }),
+        }
+        flow = Flow(
+            flow_id="limit_reset",
+            name="Limit reset",
+            entry="prep",
+            nodes=nodes,
+            edges=[{"from": "prep", "to": None}],
+        )
+        from core.state import ExecutionState
+
+        state = ExecutionState(
+            task_id="test-task",
+            context_id="test-context",
+            user_id="test-user",
+            session_id="test-agent:test-context",
+        )
+        state.current_nodes = ["prep"]
+        state.node_history["prep"] = {
+            "type": "code",
+            "calls": [{"response": None, "validation": None}] * 5,
+        }
+        result = await flow.run(state)
+        assert result.get("ran") is True
+        calls = (result.node_history.get("prep") or {}).get("calls") or []
+        assert len(calls) == 1
+
+    @pytest.mark.asyncio
+    async def test_code_node_respects_max_visits_per_run(self):
+        nodes = {
+            "loop": CodeNode("loop", config={
+                "type": "code",
+                "max_visits_per_run": 3,
+                "code": """async def execute(args, state):
+    return {}""",
+            }),
+        }
+        flow = Flow(
+            flow_id="mvpr",
+            name="mvpr",
+            entry="loop",
+            nodes=nodes,
+            edges=[{"from": "loop", "to": "loop"}],
+        )
+        from core.state import ExecutionState
+        from core.errors import NodeCallLimitError
+
+        with pytest.raises(NodeCallLimitError) as exc_info:
+            await flow.run(
+                ExecutionState(
+                    task_id="test-task",
+                    context_id="test-context",
+                    user_id="test-user",
+                    session_id="test-agent:test-context",
+                )
+            )
+        assert exc_info.value.payload["node_id"] == "loop"
+        assert exc_info.value.payload["limit"] == 3
+
+    @pytest.mark.asyncio
+    async def test_non_code_cycle_hits_flow_iteration_cap_not_node_limit(self):
+        nodes = {
+            "a": _PassthroughNonCodeNode("a", config={"type": "external_api"}),
+            "b": _PassthroughNonCodeNode("b", config={"type": "external_api"}),
+        }
+        flow = Flow(
+            flow_id="ncc",
+            name="ncc",
+            entry="a",
+            nodes=nodes,
+            edges=[
+                {"from": "a", "to": "b"},
+                {"from": "b", "to": "a"},
+            ],
+        )
+        from core.state import ExecutionState
+        from core.errors import FlowInfiniteLoopError
+
+        with pytest.raises(FlowInfiniteLoopError):
+            await flow.run(
+                ExecutionState(
+                    task_id="test-task",
+                    context_id="test-context",
+                    user_id="test-user",
+                    session_id="test-agent:test-context",
+                )
+            )
+
+    @pytest.mark.asyncio
+    async def test_non_code_node_respects_max_visits_per_run(self):
+        nodes = {
+            "nc": _PassthroughNonCodeNode("nc", config={
+                "type": "external_api",
+                "max_visits_per_run": 2,
+            }),
+        }
+        flow = Flow(
+            flow_id="ncmv",
+            name="ncmv",
+            entry="nc",
+            nodes=nodes,
+            edges=[{"from": "nc", "to": "nc"}],
+        )
+        from core.state import ExecutionState
+        from core.errors import NodeCallLimitError
+
+        with pytest.raises(NodeCallLimitError) as exc_info:
+            await flow.run(
+                ExecutionState(
+                    task_id="test-task",
+                    context_id="test-context",
+                    user_id="test-user",
+                    session_id="test-agent:test-context",
+                )
+            )
+        assert exc_info.value.payload["node_id"] == "nc"
+        assert exc_info.value.payload["limit"] == 2
 
     @pytest.mark.asyncio
     async def test_flow_from_config(self):

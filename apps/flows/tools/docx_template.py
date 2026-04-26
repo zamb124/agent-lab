@@ -16,10 +16,8 @@ _FILL_DOCX_DESCRIPTION = """
 Заполняет шаблон Word (.docx) с плейсхолдерами Jinja2 (docxtpl: {{ var }}, вложенные {{ a.b }}, {% if %}…{% else %}…{% endif %}, {% for x in items %}…{% endfor %}, фильтры {{ name|upper }} и т.д.).
 
 Образец шаблона со всеми конструкциями в открытом виде (скачайте, откройте в Word — в тексте видны все теги):
-- HTTP (тот же хост и порт, что у API сервиса flows; путь от корня HTTP-приложения flows, без /flows/api):
-  http://localhost:8001/static/examples/docx_templater_reference.docx
-  (локально при make app порт flows по умолчанию 8001; в проде подставьте свой origin, например из server.flows_service_url в конфиге.)
-- Относительный путь: /static/examples/docx_templater_reference.docx
+- Относительный путь от корня сервиса flows (с тем же origin, что у пользователя): `/static/examples/docx_templater_reference.docx`
+- Полный `https?://...` — только если известен публичный origin (конфиг `server.flows_service_url` / прокси); в ответах пользователю отдавай **каноничный** результат инструмента: поле `url` (путь вида `/flows/api/v1/files/download/{file_id}`) без выдуманного `localhost`.
 - В репозитории платформы: apps/flows/static/examples/docx_templater_reference.docx
 Внутри файла есть готовая строка JSON для variables (раздел «Пример variables») и пояснение про strict.
 

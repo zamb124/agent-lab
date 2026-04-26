@@ -7,6 +7,7 @@ from typing import Any, Dict, List
 
 from fastapi import APIRouter
 
+from apps.flows.config import get_settings
 from apps.flows.src.dependencies import ContainerDep
 from apps.flows.src.models.exception_absorb_allow import list_exception_absorb_allow_values
 
@@ -134,3 +135,10 @@ async def get_exception_absorb_allow_names(container: ContainerDep) -> List[str]
     """Имена классов исключений для whitelist exception_allow_types в редакторе нод."""
     _ = container
     return list_exception_absorb_allow_values()
+
+
+@router.get("/execution-limits")
+async def get_execution_limits(container: ContainerDep) -> Dict[str, int]:
+    """Лимиты исполнения графа для UI (кламп max_visits_per_run и т.п.)."""
+    _ = container
+    return {"graph_max_iterations": get_settings().graph_max_iterations}

@@ -125,7 +125,10 @@ STATE_FIELDS: List[Dict[str, Any]] = [
     {
         "name": "node_history",
         "type": "Dict[str, Dict[str, Any]]",
-        "description": "История вызовов нод `{node_id: {calls: [...]}}`.",
+        "description": (
+            "История вызовов нод за последний проход Flow.run: `{node_id: {type, calls: [...]}}`; "
+            "сбрасывается в начале каждого Flow.run."
+        ),
         "readonly": True,
     },
     {

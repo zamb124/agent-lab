@@ -137,6 +137,14 @@ class FlowSettings(BaseSettings):
             "не больше flow_execution_wall_time_cap_seconds"
         ),
     )
+    graph_max_iterations: int = Field(
+        default=100,
+        ge=1,
+        le=1_000_000,
+        description=(
+            "Максимум итераций внешнего цикла графа за один Flow.run; верхняя граница NodeConfig.max_visits_per_run"
+        ),
+    )
 
     @model_validator(mode="after")
     def _default_flow_timeout_within_cap(self) -> Self:
