@@ -642,7 +642,7 @@ class AmoCRMIntegrationService:
             url = self._next_page_url(payload)
         return count
 
-    async def _phase_batch_hook(
+    def _phase_batch_hook(
         self,
         on_progress: AmoProgressFn,
         stage: str,
