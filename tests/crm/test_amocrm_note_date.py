@@ -61,7 +61,7 @@ async def test_upsert_note_without_note_date_sets_today(
     )
     set_context(ctx)
     try:
-        ent = await upsert_canonical_by_external_ref(
+        ent, created = await upsert_canonical_by_external_ref(
             entity_repo=crm_container.entity_repository,
             namespace=ns,
             company_id="system",
@@ -74,6 +74,7 @@ async def test_upsert_note_without_note_date_sets_today(
             account_key="sub_amocrm",
             note_date=None,
         )
+        assert created is True
         assert ent.note_date is not None
         assert ent.note_date == datetime.now(timezone.utc).date()
     finally:
@@ -112,7 +113,7 @@ async def test_upsert_note_update_backfills_null_note_date(
         )
         await crm_container.entity_repository.create(ent0)
 
-        ent1 = await upsert_canonical_by_external_ref(
+        ent1, created1 = await upsert_canonical_by_external_ref(
             entity_repo=crm_container.entity_repository,
             namespace=ns,
             company_id="system",
@@ -125,6 +126,7 @@ async def test_upsert_note_update_backfills_null_note_date(
             account_key="sub_amocrm",
             note_date=None,
         )
+        assert created1 is False
         assert ent1.entity_id == ent0.entity_id
         assert ent1.note_date is not None
         assert ent1.note_date == datetime.now(timezone.utc).date()

@@ -263,6 +263,17 @@ class BaseContainer:
             company_repository=self.company_repository,
             auth_session_repository=self.auth_session_repository
         )
+
+    @lazy
+    def integration_external_author_service(self):
+        """Сопоставление внешних авторов интеграций с user_id (pre-provision, shared storage)."""
+        from core.identity.integration_external_author import IntegrationExternalAuthorService
+
+        return IntegrationExternalAuthorService(
+            storage=self.shared_storage,
+            user_repository=self.user_repository,
+            company_repository=self.company_repository,
+        )
     
     @lazy
     def variables_service(self):

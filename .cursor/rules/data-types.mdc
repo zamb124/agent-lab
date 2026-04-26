@@ -24,6 +24,7 @@ description: "Core-компоненты типов данных: platform-field,
 | `platform-field-enum.js` | Перечисление (`<select>` / чип) |
 | `platform-field-array.js` | Массив (`<tag-input>` / чипы) |
 | `platform-field-object.js` | JSON-объект (textarea / pre) |
+| `platform-field-external-refs.js` | `attributes.external_refs` — карточки по провайдерам (read-only в форме) |
 
 ## API
 
@@ -44,7 +45,7 @@ description: "Core-компоненты типов данных: platform-field,
 
 | Свойство | Тип | Описание |
 |----------|-----|----------|
-| `type` | `string` | Тип данных: `string`, `text`, `number`, `integer`, `boolean`, `date`, `datetime`, `enum`, `array`, `object` |
+| `type` | `string` | Тип данных: `string`, `text`, `number`, `integer`, `boolean`, `date`, `datetime`, `enum`, `array`, `object`, `external_refs` |
 | `value` | `any` | Типизированное значение |
 | `mode` | `string` | `view` (readonly) или `edit` (ввод) |
 | `label` | `string` | Подпись поля (опционально) |
@@ -73,6 +74,7 @@ Side-effect import: диспетчер автоматически импорти
 - `platform_field.boolean_false` — "Нет" / "No"
 - `platform_field.array_placeholder`
 - `platform_field.object_placeholder`
+- `platform_field.external_refs_*` (empty, record_id, last_seen, account_key, raw_version, readonly)
 
 ## ОБЯЗАТЕЛЬНЫЕ ПРАВИЛА
 

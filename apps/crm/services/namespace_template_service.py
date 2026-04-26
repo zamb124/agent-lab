@@ -151,8 +151,12 @@ class NamespaceTemplateService:
         used_type_ids = await self._entity_repo.list_used_entity_types_by_namespace(namespace_name)
         used_type_ids_set = set(used_type_ids) - cross_namespace_type_ids
 
+        def _type_linked_to_namespace(row: EntityType) -> bool:
+            ns = row.namespace_ids or []
+            return namespace_name in ns or "*" in ns
+
         current_allowed_type_ids = sorted(
-            [item.type_id for item in all_types if namespace_name in (item.namespace_ids or [])]
+            [item.type_id for item in all_types if _type_linked_to_namespace(item)]
         )
 
         locked_type_ids = sorted(used_type_ids_set)

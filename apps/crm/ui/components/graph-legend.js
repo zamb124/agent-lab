@@ -106,9 +106,31 @@ export class CRMGraphLegend extends PlatformElement {
         return result;
     }
 
+    _selectedNodeTitle() {
+        if (typeof this.selectedNodeId !== 'string' || this.selectedNodeId.length === 0) {
+            return '';
+        }
+        const list = Array.isArray(this.nodes) ? this.nodes : [];
+        for (const node of list) {
+            const nodeId = node.entity_id || node.id;
+            if (typeof nodeId !== 'string' || nodeId !== this.selectedNodeId) {
+                continue;
+            }
+            if (typeof node.name === 'string' && node.name.trim().length > 0) {
+                return node.name.trim();
+            }
+            if (typeof node.label === 'string' && node.label.trim().length > 0) {
+                return node.label.trim();
+            }
+            return this.selectedNodeId;
+        }
+        return this.selectedNodeId;
+    }
+
     render() {
         const visibleTypes = this._getVisibleTypes();
         const dash = '\u2014';
+        const nodeLine = this._selectedNodeTitle();
 
         return html`
             <div class="row">
@@ -123,7 +145,7 @@ export class CRMGraphLegend extends PlatformElement {
             </div>
             <div class="row">
                 <span class="hint-pill">${this.canvasHint}</span>
-                <span class="node-pill">${this.t('graph.legend_node_label')}: ${this.selectedNodeId || dash}</span>
+                <span class="node-pill">${this.t('graph.legend_node_label')}: ${nodeLine.length > 0 ? nodeLine : dash}</span>
                 <span class="node-pill">${this.t('graph.legend_edge_label')}: ${this.selectedEdgeId || dash}</span>
             </div>
         `;

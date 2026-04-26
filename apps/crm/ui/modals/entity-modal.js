@@ -641,6 +641,9 @@ export class CRMEntityModal extends PlatformFormModal {
     _onStatusInput(event) { this._editForm.setField('status', event.target.value); }
 
     _onAttrChange(fieldKey, event) {
+        if (fieldKey === 'external_refs') {
+            return;
+        }
         const value = event && event.detail ? event.detail.value : null;
         const form = this._activeForm();
         const draft = form.draft;
@@ -828,10 +831,26 @@ export class CRMEntityModal extends PlatformFormModal {
         return out;
     }
 
-    _fieldType(def) {
+    _fieldType(def, key) {
+        if (typeof key === 'string' && key === 'external_refs') {
+            return 'external_refs';
+        }
         if (!def || typeof def !== 'object') return 'string';
         const t = typeof def.type === 'string' ? def.type.trim() : '';
         return t.length === 0 ? 'string' : t;
+    }
+
+    _inferAttrFieldType(key, value) {
+        if (typeof key === 'string' && key === 'external_refs') {
+            return 'external_refs';
+        }
+        if (value !== null && Array.isArray(value)) {
+            return 'array';
+        }
+        if (value !== null && typeof value === 'object') {
+            return 'object';
+        }
+        return 'string';
     }
     _fieldLabel(key, def) {
         if (def && typeof def.label === 'string' && def.label.length > 0) return def.label;
@@ -857,17 +876,22 @@ export class CRMEntityModal extends PlatformFormModal {
                 }
                 return html`
                     <div class="attrs-grid">
-                        ${attrs.map(([key, value]) => html`
+                        ${attrs.map(([key, value]) => {
+                            const inferred = this._inferAttrFieldType(key, value);
+                            const readOnlyExternal = key === 'external_refs';
+                            return html`
                             <div class="form-row">
                                 <platform-field
-                                    .type=${'string'}
+                                    .type=${inferred}
                                     .value=${value}
                                     mode="edit"
                                     .label=${key}
+                                    ?disabled=${readOnlyExternal}
                                     @change=${(event) => this._onAttrChange(key, event)}
                                 ></platform-field>
                             </div>
-                        `)}
+                        `;
+                        })}
                     </div>
                 `;
             }
@@ -876,8 +900,9 @@ export class CRMEntityModal extends PlatformFormModal {
         return html`
             <div class="attrs-grid">
                 ${schema.map(({ key, def, required }) => {
-                    const fieldType = this._fieldType(def);
+                    const fieldType = this._fieldType(def, key);
                     const value = attributes[key];
+                    const readOnlyExternal = key === 'external_refs';
                     return html`
                         <div class="attr-row">
                             <platform-field
@@ -886,6 +911,7 @@ export class CRMEntityModal extends PlatformFormModal {
                                 mode="edit"
                                 .label=${this._fieldLabel(key, def) + (required ? ' *' : '')}
                                 .config=${this._fieldConfig(def)}
+                                ?disabled=${readOnlyExternal}
                                 @change=${(event) => this._onAttrChange(key, event)}
                             ></platform-field>
                             ${def && typeof def.description === 'string' && def.description.length > 0

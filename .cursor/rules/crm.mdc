@@ -52,7 +52,7 @@ description: "CRM NetWorkle система управления сущностя
 | `note_date` | date? | Дата заметки; у заметок-чанков импорта = UTC сегодня |
 | `assignees` | list[str] | Исполнители |
 | `attachment_ids` | list[str] | Список file_id вложений |
-| `user_id` | str | Кто создал (технический, не «голос») |
+| `user_id` | str | Автор записи в платформе; при **импорте AmoCRM** — platform `user_id` пользователя, сопоставленного с `created_by` и email из `GET /api/v4/users` (не пользователь, запустивший синк). При отсутствии email у пользователя Amo или `created_by` импорт падает с ошибкой. Pre-provision: `IntegrationExternalAuthorService` + ключи `integration_ext_author:*` в shared storage; при первом OAuth с тем же email провайдер привязывается к существующему пользователю (`AuthService._get_or_create_user`). |
 | `source_entity_id` | str? | Заполняется при копировании через access request |
 | `source_company_id` | str? | Компания-источник при копировании |
 | `relevance` | float | Default 1.0 |

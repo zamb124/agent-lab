@@ -88,7 +88,13 @@
         "boolean_true": "Да",
         "boolean_false": "Нет",
         "array_placeholder": "Введите значение и нажмите Enter",
-        "object_placeholder": "JSON объект"
+        "object_placeholder": "JSON объект",
+        "external_refs_empty": "Нет внешних ссылок",
+        "external_refs_record_id": "ID записи",
+        "external_refs_last_seen": "Последняя синхронизация",
+        "external_refs_account_key": "Аккаунт",
+        "external_refs_raw_version": "Версия",
+        "external_refs_readonly": "Поле заполняется интеграциями, редактирование недоступно."
     },
     "user_chip": {
         "unknown": "Неизвестный пользователь",
@@ -141,5 +147,21 @@
         "kind_span": "Span",
         "detail_title": "Детали span",
         "detail_attributes": "Атрибуты (JSON)"
+    },
+    "timezone_picker": {
+        "aria_list": "Список IANA time zones",
+        "empty": "Нет зон по фильтру"
+    },
+    "cron_field": {
+        "preset_every_5m": "Каждые 5 минут",
+        "preset_every_15m": "Каждые 15 минут",
+        "preset_every_30m": "Каждые 30 минут",
+        "preset_hourly": "Каждый час (в :00)",
+        "preset_daily_9": "Каждый день в 09:00",
+        "preset_daily_midnight": "Каждый день в полночь (00:00)",
+        "preset_weekly_mon_9": "По понедельникам в 09:00",
+        "preset_monthly_1_midnight": "1-го числа в полночь",
+        "preset_custom": "Свой cron (5 полей)…",
+        "custom_help": "Пять полей: минута, час, день месяца, месяц, день недели — как в crontab. Точная проверка при сохранении."
     }
 }

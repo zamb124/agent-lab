@@ -332,12 +332,36 @@ class AuthService:
                 raise ValueError(
                     f"Провайдер {provider.value} не вернул email; регистрация нового пользователя невозможна"
                 )
+            existing_list = await self._user_repository.find_all_by_email_ci(
+                user_info.email
+            )
+            if len(existing_list) > 1:
+                raise ValueError(
+                    f"Несколько пользователей с email {user_info.email}: "
+                    f"{', '.join(u.user_id for u in existing_list)}"
+                )
+            if len(existing_list) == 1:
+                user = existing_list[0]
+                user.updated_at = datetime.now(timezone.utc)
+                if user_info.name and not (user.name or "").strip():
+                    user.name = user_info.name
+                if user_info.avatar_url and not user.avatar_url:
+                    user.avatar_url = user_info.avatar_url
+                await self._user_repository.set(user)
+                await self._add_user_provider(user.user_id, provider, user_info)
+                logger.info(
+                    "Провайдер %s привязан к существующему пользователю %s",
+                    provider.value,
+                    user.user_id,
+                )
+                return user
+
             user_id = f"user_{uuid.uuid4().hex[:12]}"
 
             user = User(
                 user_id=user_id,
                 name=user_info.name,
-                emails=[user_info.email] if user_info.email else [],
+                emails=[user_info.email.strip().lower()],
                 avatar_url=user_info.avatar_url,
                 companies={},
                 active_company_id="",

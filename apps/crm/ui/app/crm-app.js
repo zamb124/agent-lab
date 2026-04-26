@@ -20,6 +20,8 @@ import {
     namespaceIntegrationsListOp,
     namespaceIntegrationAuthorizeOp,
     namespaceIntegrationEntitiesSyncOp,
+    namespaceIntegrationAutoSyncOp,
+    namespaceIntegrationAutoNoteAiOp,
     namespaceIntegrationCustomFieldsSyncOp,
 } from '../events/resources/namespace-integrations.resource.js';
 import {
@@ -178,6 +180,8 @@ export class CRMApp extends PlatformApp {
         namespaceIntegrationsListOp,
         namespaceIntegrationAuthorizeOp,
         namespaceIntegrationEntitiesSyncOp,
+        namespaceIntegrationAutoSyncOp,
+        namespaceIntegrationAutoNoteAiOp,
         namespaceIntegrationCustomFieldsSyncOp,
         templatesResource,
         templateUpdateOp,
@@ -305,9 +309,9 @@ export class CRMApp extends PlatformApp {
     }
 
     /**
-     * Сайдбар показывает выбор из localStorage до первого UI_NAMESPACE_SELECT_REQUESTED,
-     * а state.ui.namespace пустой до события UI_NAMESPACE_CHANGED — страницы тогда грузят
-     * сущности/типы как для «Все». Синхронизируем bus с тем же источником, что и select.
+     * Сайдбар читает выбор из localStorage сразу; state.ui.namespace заполняется здесь.
+     * Страницы CRM для API-фильтра используют getEffectiveCrmNamespaceApiFilter (тот же
+     * fallback), чтобы первый запрос после F5 не уходил без namespace.
      */
     _hydrateCrmNamespaceSelection(auth) {
         if (!auth || auth.status !== 'authenticated' || !auth.user) {

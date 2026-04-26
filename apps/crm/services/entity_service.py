@@ -367,6 +367,7 @@ class EntityService:
             "boolean": bool,
             "array": list,
             "object": dict,
+            "external_refs": dict,
         }
         python_type = type_map.get(expected_type)
         if python_type is None:
@@ -386,6 +387,7 @@ class EntityService:
             "datetime": {"$eq", "$ne", "$gt", "$gte", "$lt", "$lte", "$in", "$nin"},
             "array": {"$contains", "$in", "$nin"},
             "object": {"$eq", "$ne"},
+            "external_refs": {"$eq", "$ne"},
         }
 
     @staticmethod
@@ -451,6 +453,10 @@ class EntityService:
             if field_type == "object":
                 if not isinstance(candidate, dict):
                     raise ValueError("Object filter value must be object")
+                return
+            if field_type == "external_refs":
+                if not isinstance(candidate, dict):
+                    raise ValueError("external_refs filter value must be object")
                 return
 
         if operator in {"$in", "$nin"}:
@@ -757,12 +763,16 @@ class EntityService:
             "op": "$eq",
             "value": date_str,
         }
+        eff_type, list_nf, legacy_nf = await self._list_by_cursor_note_family_args("note", None)
         entities, _, _ = await self._entity_repo.list_by_cursor(
-            entity_type="note",
+            entity_type=eff_type,
+            entity_subtype=None,
             namespace=self._normalize_namespace(namespace),
             filters=query_filters,
             filter_field_types={"note_date": "date"},
             limit=1000,
+            list_note_family=list_nf,
+            note_family_legacy_entity_types=legacy_nf,
         )
         return entities
 
@@ -813,6 +823,13 @@ class EntityService:
             if not context or not context.user:
                 raise ValueError("user_id is required (no user in context)")
             user_id = context.user.user_id
+
+        storage_type, storage_subtype = await self._resolve_storage_type_for_note_family(
+            entity_type,
+            entity_subtype,
+        )
+        entity_type = storage_type
+        entity_subtype = storage_subtype
 
         namespace = self._resolve_namespace_for_write(kwargs.get("namespace"))
         kwargs["namespace"] = namespace
@@ -1210,6 +1227,11 @@ class EntityService:
         user_id = self._get_user_id()
         company_id = self._get_company_id()
 
+        eff_entity_type, list_note_family, note_family_legacy = await self._list_by_cursor_note_family_args(
+            entity_type,
+            entity_subtype,
+        )
+
         oversample_factor = 3
         max_iterations = 3
         readable: list[CRMEntity] = []
@@ -1218,13 +1240,15 @@ class EntityService:
 
         for _ in range(max_iterations):
             entities, repo_cursor, repo_has_more = await self._entity_repo.list_by_cursor(
-                entity_type=entity_type,
+                entity_type=eff_entity_type,
                 entity_subtype=entity_subtype,
                 namespace=namespace,
                 filters=filters,
                 filter_field_types=filter_field_types,
                 limit=limit * oversample_factor,
                 cursor=current_cursor,
+                list_note_family=list_note_family,
+                note_family_legacy_entity_types=note_family_legacy,
             )
             filtered = await self._access_control.batch_filter_readable(
                 entities, user_id, company_id,
@@ -2158,6 +2182,21 @@ class EntityService:
             cur = row.parent_type_id
 
         return (leaf_type_id, initial_subtype)
+
+    async def _list_by_cursor_note_family_args(
+        self,
+        entity_type: Optional[str],
+        entity_subtype: Optional[str],
+    ) -> tuple[Optional[str], bool, Optional[list[str]]]:
+        """
+        Для ленты заметок (entity_type=note без subtype) учитываем и канонические строки
+        (entity_type=note), и устаревшие (type_id потомка в колонке entity_type).
+        """
+        if entity_type != "note" or entity_subtype is not None:
+            return entity_type, False, None
+        family = await self._collect_note_family_type_ids()
+        legacy = sorted(t for t in family if t != "note")
+        return None, True, legacy
 
     async def _collect_note_family_type_ids(self) -> set[str]:
         """Возвращает множество type_id, принадлежащих ветке note (включая note и дочерние типы)."""

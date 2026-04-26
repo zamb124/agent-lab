@@ -7,7 +7,7 @@ import json
 import logging
 from typing import Optional
 
-from sqlalchemy import select, cast
+from sqlalchemy import select, cast, text
 from sqlalchemy.dialects.postgresql import JSONB
 
 from core.db.base_repository import BaseRepository
@@ -58,6 +58,29 @@ class UserRepository(BaseRepository[User]):
                 return None
             raw = json.dumps(row) if isinstance(row, dict) else row
             return User.model_validate_json(raw)
+
+    async def find_all_by_email_ci(self, email: str) -> list[User]:
+        """Все пользователи, у которых в emails есть адрес без учёта регистра."""
+        norm = email.strip().lower()
+        if not norm:
+            raise ValueError("email для поиска не может быть пустым")
+        q = text("""
+            SELECT u.value FROM users u
+            WHERE u.key LIKE 'user:%'
+            AND EXISTS (
+                SELECT 1
+                FROM jsonb_array_elements_text(u.value->'emails') AS e(elt)
+                WHERE lower(e.elt) = :norm
+            )
+            ORDER BY u.key
+        """)
+        async with self._storage._get_session() as session:
+            result = await session.execute(q, {"norm": norm})
+            out: list[User] = []
+            for row in result.scalars():
+                raw = json.dumps(row) if isinstance(row, dict) else row
+                out.append(User.model_validate_json(raw))
+            return out
 
     async def search_by_query(self, query: str, limit: int = 20) -> list[User]:
         """Поиск пользователей по email или имени (ILIKE по JSONB полям)."""

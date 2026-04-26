@@ -24,6 +24,7 @@
 import { html, css } from 'lit';
 import { PlatformPage } from '@platform/lib/base/PlatformPage.js';
 import { CoreEvents } from '@platform/lib/events/index.js';
+import { getEffectiveCrmNamespaceApiFilter } from '@platform/lib/utils/platform-namespace.js';
 import { platformConfirm } from '@platform/lib/components/platform-confirm-modal.js';
 import '@platform/lib/components/layout/page-header.js';
 import '@platform/lib/components/platform-icon.js';
@@ -365,15 +366,9 @@ export class CRMNamespaceTasksPage extends PlatformPage {
         this._namespaceSel = this.select((s) => {
             const user = s.auth.user;
             if (!user || typeof user.company_id !== 'string') {
-                return '__all__';
+                return null;
             }
-            const cid = user.company_id;
-            const map = s.ui.namespace.selectionByCompany;
-            const sel = map[cid];
-            if (sel === 'all' || sel === undefined || sel === null) {
-                return '__all__';
-            }
-            return sel;
+            return getEffectiveCrmNamespaceApiFilter(user.company_id, s.ui.namespace.selectionByCompany);
         });
     }
 
@@ -403,7 +398,7 @@ export class CRMNamespaceTasksPage extends PlatformPage {
         const namespace = this._currentNamespace();
         this._lastNamespace = namespace;
         const payload = { limit: 100, offset: 0 };
-        if (typeof namespace === 'string' && namespace.length > 0 && namespace !== '__all__') {
+        if (typeof namespace === 'string' && namespace.length > 0) {
             payload.namespace = namespace;
         }
         if (this._typeFilter.length > 0) {
@@ -587,7 +582,7 @@ export class CRMNamespaceTasksPage extends PlatformPage {
                         ${this._polling
                             ? html`<span class="live-dot" title=${this.t('namespace_tasks_page.live_polling')}></span>`
                             : ''}
-                        ${namespace !== '__all__' ? html`
+                        ${namespace !== null ? html`
                             <button
                                 type="button"
                                 class="reload-btn"
@@ -611,7 +606,7 @@ export class CRMNamespaceTasksPage extends PlatformPage {
                     </div>
                 </div>
                 <div class="mono" style="color: var(--text-tertiary); font-size: var(--text-xs);">
-                    ${namespace === '__all__'
+                    ${namespace === null
                         ? this.t('namespace_tasks_page.namespace_label_all')
                         : this.t('namespace_tasks_page.namespace_label', { namespace })}
                 </div>
@@ -645,7 +640,7 @@ export class CRMNamespaceTasksPage extends PlatformPage {
 
     _renderRow(task) {
         const variant = statusVariant(task.status);
-        const showCancel = ACTIVE_STATUSES.has(task.status) && task.cancel_requested !== true;
+        const showCancel = ACTIVE_STATUSES.has(task.status);
         const showRetry = task.status === 'failed' || task.status === 'cancelled';
         const showRollback = task.task_type === 'knowledge_import' && task.status === 'completed';
         const showReviewComplete = task.task_type === 'knowledge_import' && task.status === 'review_required';

@@ -313,6 +313,9 @@ class EntityRepository(BaseCRMRepository[CRMEntity]):
         limit: int = 100,
         company_id: Optional[str] = None,
         cursor: Optional[str] = None,
+        *,
+        list_note_family: bool = False,
+        note_family_legacy_entity_types: Optional[List[str]] = None,
     ) -> Tuple[List[CRMEntity], Optional[str], bool]:
         """
         Entities c SQL-фильтрами и cursor-пагинацией.
@@ -325,7 +328,18 @@ class EntityRepository(BaseCRMRepository[CRMEntity]):
         async with self._db.session() as session:
             stmt = select(CRMEntity).where(CRMEntity.company_id == cid)
 
-            if entity_type:
+            if list_note_family:
+                legacy = note_family_legacy_entity_types or []
+                if len(legacy) > 0:
+                    stmt = stmt.where(
+                        or_(
+                            CRMEntity.entity_type == "note",
+                            CRMEntity.entity_type.in_(legacy),
+                        )
+                    )
+                else:
+                    stmt = stmt.where(CRMEntity.entity_type == "note")
+            elif entity_type:
                 stmt = stmt.where(CRMEntity.entity_type == entity_type)
             if entity_subtype:
                 stmt = stmt.where(CRMEntity.entity_subtype == entity_subtype)

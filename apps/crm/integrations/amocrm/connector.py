@@ -39,6 +39,9 @@ class AmoCRMConnector:
             entity_type_repository=container.entity_type_repository,
             relationship_repository=container.relationship_repository,
             entity_service=container.entity_service,
+            namespace_repository=container.namespace_repository,
+            task_service=container.task_service,
+            integration_external_author=container.integration_external_author_service,
         )
 
     async def build_authorize_url(
@@ -149,8 +152,25 @@ class AmoCRMConnector:
             service=f"amocrm:{namespace_name}",
         )
         connected = cred is not None
-        return {
+        out: dict[str, Any] = {
             "provider_id": self.provider_id,
             "connected": connected,
             "display": display,
         }
+        if crm_settings is not None:
+            block = crm_settings.integrations.get("amocrm")
+            if isinstance(block, dict):
+                if "auto_sync_enabled" in block:
+                    out["auto_sync_enabled"] = bool(block.get("auto_sync_enabled"))
+                ac = block.get("auto_sync_cron")
+                if isinstance(ac, str) and ac.strip():
+                    out["auto_sync_cron"] = ac.strip()
+                atz = block.get("auto_sync_timezone")
+                if isinstance(atz, str) and atz.strip():
+                    out["auto_sync_timezone"] = atz.strip()
+                sid = block.get("auto_sync_schedule_task_id")
+                if isinstance(sid, str) and sid.strip():
+                    out["auto_sync_schedule_task_id"] = sid.strip()
+                if "auto_note_ai_analyze" in block:
+                    out["auto_note_ai_analyze"] = bool(block.get("auto_note_ai_analyze"))
+        return out

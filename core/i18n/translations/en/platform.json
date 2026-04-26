@@ -88,7 +88,13 @@
         "boolean_true": "Yes",
         "boolean_false": "No",
         "array_placeholder": "Enter a value and press Enter",
-        "object_placeholder": "JSON object"
+        "object_placeholder": "JSON object",
+        "external_refs_empty": "No external links",
+        "external_refs_record_id": "Record ID",
+        "external_refs_last_seen": "Last seen",
+        "external_refs_account_key": "Account",
+        "external_refs_raw_version": "Version",
+        "external_refs_readonly": "Managed by integrations; not editable here."
     },
     "user_chip": {
         "unknown": "Unknown user",
@@ -141,5 +147,21 @@
         "kind_span": "Span",
         "detail_title": "Span details",
         "detail_attributes": "Attributes (JSON)"
+    },
+    "timezone_picker": {
+        "aria_list": "IANA time zones",
+        "empty": "No matching time zones"
+    },
+    "cron_field": {
+        "preset_every_5m": "Every 5 minutes",
+        "preset_every_15m": "Every 15 minutes",
+        "preset_every_30m": "Every 30 minutes",
+        "preset_hourly": "Every hour (at :00)",
+        "preset_daily_9": "Every day at 09:00",
+        "preset_daily_midnight": "Every day at midnight (00:00)",
+        "preset_weekly_mon_9": "Mondays at 09:00",
+        "preset_monthly_1_midnight": "1st of each month at midnight",
+        "preset_custom": "Custom cron (5 fields)…",
+        "custom_help": "Five fields: minute, hour, day of month, month, day of week (crontab). Validated on save."
     }
 }

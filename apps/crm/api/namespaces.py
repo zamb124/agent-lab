@@ -91,6 +91,7 @@ SCHEMA_OPTIONS_RESPONSE = NamespaceTemplateSchemaOptionsResponse(
         NamespaceTemplateSchemaFieldType(type_id="enum", label="Enum", supports_enum_values=True, supports_enum_set=True),
         NamespaceTemplateSchemaFieldType(type_id="array", label="Массив"),
         NamespaceTemplateSchemaFieldType(type_id="object", label="Объект"),
+        NamespaceTemplateSchemaFieldType(type_id="external_refs", label="Внешние ссылки"),
     ],
     enum_sets=[
         NamespaceTemplateSchemaEnumSet(enum_set_id="priority", label="Приоритет", values=["low", "medium", "high", "urgent"]),

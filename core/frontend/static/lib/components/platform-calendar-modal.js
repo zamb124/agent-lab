@@ -5,33 +5,12 @@ import { buttonStyles } from '../styles/shared/button.styles.js';
 import './platform-icon.js';
 import { resolveFileIconKey } from '../utils/file-icons.js';
 import './platform-date-picker.js';
+import './platform-timezone-picker.js';
 import './platform-switch.js';
 import { CALENDAR_EVENTS } from '../events/reducers/calendar.js';
 import { TEAM_EVENTS } from '../events/reducers/team.js';
 import { FILES_EVENTS } from '../events/reducers/files.js';
 import { registerModalKind } from '../utils/modal-registry.js';
-
-const BASE_TIMEZONE_OPTIONS = [
-    'UTC',
-    'Europe/Moscow',
-    'Europe/London',
-    'Europe/Berlin',
-    'Europe/Paris',
-    'Europe/Istanbul',
-    'America/New_York',
-    'America/Chicago',
-    'America/Denver',
-    'America/Los_Angeles',
-    'America/Sao_Paulo',
-    'Asia/Dubai',
-    'Asia/Almaty',
-    'Asia/Kolkata',
-    'Asia/Bangkok',
-    'Asia/Singapore',
-    'Asia/Shanghai',
-    'Asia/Tokyo',
-    'Australia/Sydney',
-];
 
 import { COLOR_PALETTE } from '@platform/lib/utils/color-palette.js';
 
@@ -253,7 +232,6 @@ export class PlatformCalendarModal extends PlatformModal {
         _selectedEventSource: { state: true },
         _selectedEventKind: { state: true },
         _selectedEventNamespace: { state: true },
-        _timezoneOptions: { state: true },
         _attendeeDraft: { state: true },
         _attendeeDropdownOpen: { state: true },
         _eventForm: { state: true },
@@ -1795,6 +1773,11 @@ export class PlatformCalendarModal extends PlatformModal {
                 max-width: 100%;
             }
 
+            .event-compose-tz {
+                flex: 1 1 220px;
+                min-width: 160px;
+            }
+
             .event-compose-divider {
                 height: 1px;
                 background: var(--glass-border-subtle);
@@ -2031,7 +2014,6 @@ export class PlatformCalendarModal extends PlatformModal {
         this._selectedEventSource = 'platform';
         this._selectedEventKind = 'meeting';
         this._selectedEventNamespace = null;
-        this._timezoneOptions = [...BASE_TIMEZONE_OPTIONS];
         this._attendeeDraft = '';
         this._attendeeDropdownOpen = false;
         this._pendingAttachmentUploads = new Map();
@@ -2042,9 +2024,6 @@ export class PlatformCalendarModal extends PlatformModal {
         this._teamMembersSelect = this.select((s) => s.team.members);
         this._localeSelect = this.select((s) => s.i18n.locale);
         const currentTimeZone = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
-        if (!this._timezoneOptions.includes(currentTimeZone)) {
-            this._timezoneOptions = [currentTimeZone, ...this._timezoneOptions];
-        }
         const now = new Date();
         const defaultEnd = addDays(now, 0);
         defaultEnd.setMinutes(defaultEnd.getMinutes() + 30);
@@ -2826,7 +2805,6 @@ export class PlatformCalendarModal extends PlatformModal {
         if (this._dragJustFinished) {
             return;
         }
-        this._ensureTimezoneOption(event.timezone);
         this._selectedEventId = event.event_id;
         this._showDescriptionField = Boolean(event.description);
         this._selectedEventSource = this._sourceKey(event.source);
@@ -2851,16 +2829,6 @@ export class PlatformCalendarModal extends PlatformModal {
         this._attendeeDraft = '';
         this._attendeeDropdownOpen = false;
         this._eventDialogOpen = true;
-    }
-
-    _ensureTimezoneOption(timezone) {
-        if (!timezone) {
-            throw new Error('Timezone is required');
-        }
-        if (this._timezoneOptions.includes(timezone)) {
-            return;
-        }
-        this._timezoneOptions = [timezone, ...this._timezoneOptions];
     }
 
     _ruleToRecurrence(rule) {
@@ -3620,15 +3588,11 @@ export class PlatformCalendarModal extends PlatformModal {
                                     @change=${(e) => this._onEventFormChange('recurrence', e.detail.value ? 'weekly' : 'none')}
                                 ></platform-switch>
                             </div>
-                            <select
-                                class="event-compose-select"
+                            <platform-timezone-picker
+                                class="event-compose-tz"
                                 .value=${this._eventForm.timezone}
-                                @change=${(e) => this._onEventFormChange('timezone', e.target.value)}
-                            >
-                                ${this._timezoneOptions.map((timezone) => html`
-                                    <option value=${timezone}>${timezone}</option>
-                                `)}
-                            </select>
+                                @change=${(e) => this._onEventFormChange('timezone', e.detail.value)}
+                            ></platform-timezone-picker>
                         </div>
                     </div>
                 </div>

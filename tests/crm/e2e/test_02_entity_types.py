@@ -257,6 +257,7 @@ class TestEntityTypes:
         assert payload.get("defaults", {}).get("field_type") == "string"
         assert payload.get("validation_limits", {}).get("max_fields_per_section") == 128
         assert any(item.get("type_id") == "enum" for item in payload["field_types"])
+        assert any(item.get("type_id") == "external_refs" for item in payload["field_types"])
         assert any(item.get("enum_set_id") == "priority" for item in payload["enum_sets"])
 
     @pytest.mark.asyncio

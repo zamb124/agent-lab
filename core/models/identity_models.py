@@ -332,7 +332,11 @@ class NamespaceCRMSettings(BaseModel):
     integrations: Dict[str, Dict[str, Any]] = Field(
         default_factory=dict,
         title="Метаданные интеграций по ключу провайдера",
-        description="Только отображение и подсказки; секреты хранятся в OAuth credentials.",
+        description=(
+            "Только отображение и подсказки; секреты хранятся в OAuth credentials. "
+            "Для автосинка (если поддерживает коннектор): auto_sync_enabled, auto_sync_cron, "
+            "auto_sync_timezone, auto_sync_schedule_task_id, auto_sync_oauth_user_id."
+        ),
     )
 
     @model_validator(mode="before")

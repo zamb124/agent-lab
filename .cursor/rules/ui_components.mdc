@@ -16,7 +16,7 @@ alwaysApply: true
 1. **Presentational** (`glass-button`, `glass-input`, `glass-textarea`,
    `glass-card`, `glass-spinner`, `platform-button`, `platform-switch`,
    `tag-input`, `platform-icon-picker`, `platform-help-hint`,
-   `platform-trace-viewer`, `platform-shell-page`, `layout/*`, `fields/*`):
+   `platform-timezone-picker`, `platform-cron-field`, `platform-trace-viewer`, `platform-shell-page`, `layout/*`, `fields/*`):
    - Не читают state платформы (только `t()` для подписей).
    - Не диспатчат в bus, кроме `CoreEvents.UI_TOAST_SHOW` (через `this.toast(...)`).
    - Локальные DOM-события `this.emit('change', detail)` для родителя
@@ -94,6 +94,18 @@ render() {
 `this.select` возвращает `SelectController`. Чтение — `.value`. Любая смена
 state триггерит `requestUpdate`. `selectController.value` гарантированно
 определено — `initialSlice` reducer'а core всегда отдаёт нужную форму.
+
+## Platform Timezone Picker (IANA, поиск)
+
+**Файл:** `core/frontend/static/lib/components/platform-timezone-picker.js`. Список зон: `core/frontend/static/lib/utils/iana-timezones.js` — `getSortedIanaTimeZones()` (`Intl.supportedValuesOf('timeZone')` при наличии, иначе фиксированный fallback, `UTC` в наборе).
+
+**Назначение:** combobox выбора IANA time zone: фильтр по подстроке без учёта регистра, выбор кликом, значение не из полного списка (сохранённое ранее) остаётся в поле и подмешивается в варианты. События `input` и `change` с `detail.value` — как у `glass-input`. В bus не диспатчит. i18n: `platform`, ключи `timezone_picker.*` в `core/i18n/translations/{ru,en}/platform.json`.
+
+## Platform Cron Field (5 полей)
+
+**Файл:** `core/frontend/static/lib/components/platform-cron-field.js`. Пресеты и нормализация: `core/frontend/static/lib/utils/cron-field.js` (`findMatchingPresetId`, `normalizeCronString`, `validateCronFiveField`).
+
+**Назначение:** выбор расписания через список пресетов (частые сценарии) либо режим «Свой cron» с одной строкой 5 полей. Проп `value` — строка cron; при значении вне таблицы пресетов показывается свой ввод с сохранённым текстом. События `input` и `change` с `detail.value`. Без `dispatch` в bus. i18n: `cron_field.*` в `core/i18n/translations/{ru,en}/platform.json`.
 
 ## Platform Trace Viewer (дерево / timeline spans)
 

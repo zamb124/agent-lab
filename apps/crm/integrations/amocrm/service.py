@@ -21,8 +21,12 @@ from apps.crm.integrations.amocrm.mapping import (
     ENTITY_TYPE_BY_AMO_COLLECTION,
 )
 from apps.crm.integrations.entity_upsert import upsert_canonical_by_external_ref
+from apps.crm.models.api import NoteProcessingConfig
 from apps.crm.services.entity_service import EntityService
+from apps.crm.services.task_service import ActiveTaskExistsError, TaskService
 from core.context import get_context
+from core.identity.integration_external_author import IntegrationExternalAuthorService
+from core.db.repositories.namespace_repository import NamespaceRepository
 from core.http.client import get_httpx_client
 from core.integrations.models import IntegrationProvider
 from core.integrations.oauth_service import OAuthService, OAuthTokenRefreshError
@@ -51,15 +55,38 @@ class AmoCRMIntegrationService:
         entity_type_repository: EntityTypeRepository,
         relationship_repository: RelationshipRepository,
         entity_service: EntityService,
+        namespace_repository: NamespaceRepository,
+        task_service: TaskService,
+        integration_external_author: IntegrationExternalAuthorService,
     ) -> None:
         self._oauth = oauth_service
         self._entity_repo = entity_repository
         self._entity_type_repo = entity_type_repository
         self._relationship_repo = relationship_repository
         self._entity_service = entity_service
+        self._namespace_repo = namespace_repository
+        self._task_service = task_service
+        self._integration_author = integration_external_author
 
     def _service_key(self, namespace_name: str) -> str:
         return f"amocrm:{namespace_name}"
+
+    async def _auto_note_ai_analyze_enabled(
+        self,
+        *,
+        namespace: str,
+        company_id: str,
+    ) -> bool:
+        existing = await self._namespace_repo.get(namespace)
+        if existing is None or existing.company_id != company_id:
+            return False
+        crm = existing.crm_settings
+        if crm is None:
+            return False
+        block = crm.integrations.get("amocrm")
+        if not isinstance(block, dict):
+            return False
+        return bool(block.get("auto_note_ai_analyze"))
 
     def _api_base(self, subdomain: str) -> str:
         s = subdomain.strip().strip("/")
@@ -226,6 +253,60 @@ class AmoCRMIntegrationService:
         return s.replace("[", "(").replace("]", ")")
 
     @staticmethod
+    def _amo_users_directory_from_api(users: list[Any]) -> dict[str, dict[str, str]]:
+        out: dict[str, dict[str, str]] = {}
+        for raw in users:
+            if not isinstance(raw, dict):
+                continue
+            tid = raw.get("id")
+            if tid is None:
+                continue
+            key = str(tid).strip()
+            if not key:
+                continue
+            email_raw = raw.get("email")
+            email = email_raw.strip().lower() if isinstance(email_raw, str) else ""
+            name_raw = raw.get("name") or raw.get("title")
+            name_str = str(name_raw).strip() if name_raw is not None else ""
+            out[key] = {"email": email, "name": name_str}
+        return out
+
+    async def _platform_user_id_for_amo_author(
+        self,
+        *,
+        company_id: str,
+        account_key: str,
+        amo_author_id: Any,
+        amo_users_by_id: dict[str, dict[str, str]],
+    ) -> str:
+        if amo_author_id is None:
+            raise ValueError("AmoCRM: для импорта сущности нужен created_by (id пользователя Amo)")
+        key = str(amo_author_id).strip()
+        if not key:
+            raise ValueError("AmoCRM: пустой created_by")
+        snap = amo_users_by_id.get(key)
+        if snap is None:
+            raise ValueError(
+                f"AmoCRM: пользователь аккаунта id={key} отсутствует в ответе GET /api/v4/users"
+            )
+        email = snap.get("email", "").strip().lower()
+        if not email:
+            raise ValueError(
+                f"AmoCRM: у пользователя id={key} нет email в каталоге аккаунта, импорт без автора невозможен"
+            )
+        display_name = snap.get("name") or None
+        if display_name == "":
+            display_name = None
+        return await self._integration_author.resolve_platform_user_id(
+            company_id=company_id,
+            provider_id=AMO_PROVIDER_ID,
+            account_key=account_key,
+            external_user_id=key,
+            email=email,
+            display_name=display_name,
+        )
+
+    @staticmethod
     def _note_date_from_amo_created_at(created: Any, *, fallback: date) -> date:
         """
         AmoCRM v4 отдаёт created_at как unix-seconds (число); в ответах бывает строка.
@@ -256,8 +337,9 @@ class AmoCRMIntegrationService:
         parent_entity: CRMEntity,
         namespace: str,
         company_id: str,
-        user_id: str,
         account_key: str,
+        amo_users_by_id: dict[str, dict[str, str]],
+        auto_note_ai_analyze: bool,
     ) -> bool:
         nid = raw.get("id")
         if nid is None:
@@ -284,11 +366,17 @@ class AmoCRMIntegrationService:
         nt = raw.get("note_type")
         if nt is not None:
             patch_attrs["amo_note_type"] = nt
-        ent = await upsert_canonical_by_external_ref(
+        note_author_uid = await self._platform_user_id_for_amo_author(
+            company_id=company_id,
+            account_key=account_key,
+            amo_author_id=raw.get("created_by"),
+            amo_users_by_id=amo_users_by_id,
+        )
+        ent, created = await upsert_canonical_by_external_ref(
             entity_repo=self._entity_repo,
             namespace=namespace,
             company_id=company_id,
-            user_id=user_id,
+            user_id=note_author_uid,
             entity_type="note",
             source_id=AMO_PROVIDER_ID,
             record_id=str(nid),
@@ -302,8 +390,19 @@ class AmoCRMIntegrationService:
             note_id=ent.entity_id,
             namespace=namespace,
             context_parent_entity_id=parent_entity.entity_id,
-            user_id=user_id,
+            user_id=note_author_uid,
         )
+        if created and auto_note_ai_analyze:
+            try:
+                await self._task_service.start_note_analyze(
+                    note_id=ent.entity_id,
+                    note_name=ent.name,
+                    namespace=namespace,
+                    mode="analyze",
+                    config=NoteProcessingConfig(),
+                )
+            except ActiveTaskExistsError:
+                pass
         return True
 
     async def _import_notes_for_amo_parent(
@@ -316,10 +415,14 @@ class AmoCRMIntegrationService:
         parent_entity: CRMEntity,
         namespace: str,
         company_id: str,
-        user_id: str,
         account_key: str,
+        amo_users_by_id: dict[str, dict[str, str]],
         stats: dict[str, int],
     ) -> None:
+        auto_note_ai = await self._auto_note_ai_analyze_enabled(
+            namespace=namespace,
+            company_id=company_id,
+        )
         url: str | None = f"{base}/api/v4/{api_segment}/{amo_element_id}/notes?limit=250"
         while url is not None:
             await asyncio.sleep(AMO_RPS_DELAY_SEC)
@@ -330,8 +433,9 @@ class AmoCRMIntegrationService:
                     parent_entity=parent_entity,
                     namespace=namespace,
                     company_id=company_id,
-                    user_id=user_id,
                     account_key=account_key,
+                    amo_users_by_id=amo_users_by_id,
+                    auto_note_ai_analyze=auto_note_ai,
                 )
                 if imported:
                     stats["notes"] = stats.get("notes", 0) + 1
@@ -366,8 +470,8 @@ class AmoCRMIntegrationService:
         access_token: str,
         namespace: str,
         company_id: str,
-        user_id: str,
         account_key: str,
+        amo_users_by_id: dict[str, dict[str, str]],
         stats: dict[str, int],
         on_batch: Optional[Callable[[int], Awaitable[None]]] = None,
     ) -> None:
@@ -438,11 +542,18 @@ class AmoCRMIntegrationService:
                     if isinstance(rt_only, str) and rt_only.strip():
                         attrs["amo_result_text"] = rt_only.strip()
 
-                task_ent = await upsert_canonical_by_external_ref(
+                task_author_uid = await self._platform_user_id_for_amo_author(
+                    company_id=company_id,
+                    account_key=account_key,
+                    amo_author_id=raw.get("created_by"),
+                    amo_users_by_id=amo_users_by_id,
+                )
+
+                task_ent, _ = await upsert_canonical_by_external_ref(
                     entity_repo=self._entity_repo,
                     namespace=namespace,
                     company_id=company_id,
-                    user_id=user_id,
+                    user_id=task_author_uid,
                     entity_type="task",
                     source_id=AMO_PROVIDER_ID,
                     record_id=str(tid),
@@ -575,6 +686,15 @@ class AmoCRMIntegrationService:
             "tasks_skipped_no_parent": 0,
         }
 
+        await asyncio.sleep(AMO_RPS_DELAY_SEC)
+        users_payload_prefetch = await self._get_json(
+            f"{base}/api/v4/{AMO_USERS_PATH}", access_token
+        )
+        users_list_cached = (users_payload_prefetch.get("_embedded") or {}).get("users")
+        if not isinstance(users_list_cached, list):
+            users_list_cached = []
+        amo_users_by_id = self._amo_users_directory_from_api(users_list_cached)
+
         if on_progress is not None:
             await on_progress("contacts", 0)
 
@@ -601,11 +721,17 @@ class AmoCRMIntegrationService:
                 attrs["status_id"] = st
             if pl is not None:
                 attrs["pipeline_id"] = pl
-            lead_ent = await upsert_canonical_by_external_ref(
+            lead_author_uid = await self._platform_user_id_for_amo_author(
+                company_id=cid,
+                account_key=account_key,
+                amo_author_id=raw.get("created_by"),
+                amo_users_by_id=amo_users_by_id,
+            )
+            lead_ent, _ = await upsert_canonical_by_external_ref(
                 entity_repo=self._entity_repo,
                 namespace=ns,
                 company_id=cid,
-                user_id=uid,
+                user_id=lead_author_uid,
                 entity_type=et,
                 source_id=AMO_PROVIDER_ID,
                 record_id=str(rid),
@@ -658,8 +784,8 @@ class AmoCRMIntegrationService:
                 parent_entity=lead_ent,
                 namespace=ns,
                 company_id=cid,
-                user_id=uid,
                 account_key=account_key,
+                amo_users_by_id=amo_users_by_id,
                 stats=stats,
             )
 
@@ -682,11 +808,17 @@ class AmoCRMIntegrationService:
                 attrs["first_name"] = raw.get("first_name")
             if isinstance(raw.get("last_name"), str):
                 attrs["last_name"] = raw.get("last_name")
-            contact_ent = await upsert_canonical_by_external_ref(
+            contact_author_uid = await self._platform_user_id_for_amo_author(
+                company_id=cid,
+                account_key=account_key,
+                amo_author_id=raw.get("created_by"),
+                amo_users_by_id=amo_users_by_id,
+            )
+            contact_ent, _ = await upsert_canonical_by_external_ref(
                 entity_repo=self._entity_repo,
                 namespace=ns,
                 company_id=cid,
-                user_id=uid,
+                user_id=contact_author_uid,
                 entity_type=et,
                 source_id=AMO_PROVIDER_ID,
                 record_id=str(rid),
@@ -722,8 +854,8 @@ class AmoCRMIntegrationService:
                 parent_entity=contact_ent,
                 namespace=ns,
                 company_id=cid,
-                user_id=uid,
                 account_key=account_key,
+                amo_users_by_id=amo_users_by_id,
                 stats=stats,
             )
 
@@ -740,11 +872,17 @@ class AmoCRMIntegrationService:
                 raise ValueError("AmoCRM: в элементе нет id")
             nm = raw.get("name")
             name = str(nm) if isinstance(nm, str) and nm.strip() else f"organization {rid}"
-            org_ent = await upsert_canonical_by_external_ref(
+            org_author_uid = await self._platform_user_id_for_amo_author(
+                company_id=cid,
+                account_key=account_key,
+                amo_author_id=raw.get("created_by"),
+                amo_users_by_id=amo_users_by_id,
+            )
+            org_ent, _ = await upsert_canonical_by_external_ref(
                 entity_repo=self._entity_repo,
                 namespace=ns,
                 company_id=cid,
-                user_id=uid,
+                user_id=org_author_uid,
                 entity_type=et,
                 source_id=AMO_PROVIDER_ID,
                 record_id=str(rid),
@@ -760,8 +898,8 @@ class AmoCRMIntegrationService:
                 parent_entity=org_ent,
                 namespace=ns,
                 company_id=cid,
-                user_id=uid,
                 account_key=account_key,
+                amo_users_by_id=amo_users_by_id,
                 stats=stats,
             )
 
@@ -834,13 +972,8 @@ class AmoCRMIntegrationService:
 
         if on_progress is not None:
             await on_progress("users", 75)
-        await asyncio.sleep(AMO_RPS_DELAY_SEC)
-        users_payload = await self._get_json(f"{base}/api/v4/{AMO_USERS_PATH}", access_token)
-        users = (users_payload.get("_embedded") or {}).get("users")
-        if not isinstance(users, list):
-            users = []
         u_count = 0
-        for raw in users:
+        for raw in users_list_cached:
             if not isinstance(raw, dict):
                 continue
             tid = raw.get("id")
@@ -852,11 +985,17 @@ class AmoCRMIntegrationService:
                 attrs["email"] = str(raw.get("email"))
             if raw.get("is_active") is not None:
                 attrs["is_active"] = bool(raw.get("is_active"))
-            await upsert_canonical_by_external_ref(
+            member_author_uid = await self._platform_user_id_for_amo_author(
+                company_id=company_id,
+                account_key=sub,
+                amo_author_id=tid,
+                amo_users_by_id=amo_users_by_id,
+            )
+            _, _ = await upsert_canonical_by_external_ref(
                 entity_repo=self._entity_repo,
                 namespace=namespace_name,
                 company_id=company_id,
-                user_id=user_id,
+                user_id=member_author_uid,
                 entity_type=AMO_USERS_ENTITY_TYPE_ID,
                 source_id=AMO_PROVIDER_ID,
                 record_id=str(tid),
@@ -881,8 +1020,8 @@ class AmoCRMIntegrationService:
             access_token=access_token,
             namespace=namespace_name,
             company_id=company_id,
-            user_id=user_id,
             account_key=sub,
+            amo_users_by_id=amo_users_by_id,
             stats=stats,
             on_batch=tasks_batch,
         )

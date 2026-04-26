@@ -8,16 +8,19 @@
  * к namespace они привязаны через `entityType.namespace_ids`.
  *
  * Источники данных:
- *   - useResource('crm/namespaces')         — метаданные namespace.
- *   - useOp('crm/namespace_editability')    — статистика и locked_type_ids.
+ *   - useResource('crm/namespaces')         — метаданные namespace (описание и др.).
+ *   - useOp('crm/namespace_editability')    — статистика, locked_type_ids и
+ *     current_allowed_type_ids (канон для карточек и счётчика «разрешено»).
  *   - useResource('crm/entity_types', { autoload: true }) — все типы компании.
  *   - useOp('crm/entity_type_update')       — PUT /entity-types/{id}.
  *   - useOp('crm/template_schema_options')  — опции SchemaFieldBuilder
  *                                             (общие для шаблонов и типов).
- *   - useOp('crm/namespace_update')         — для allowed_type_ids namespace.
+ *   - useOp('crm/namespace_update')         — body.allowed_type_ids: сервис синхронизирует
+ *     entity_type.namespace_ids; после успеха перезапускается editability.
  *
  * Поток:
  *   - На load: get(namespace), editability(namespace), load entity_types.
+ *   - _allowedTypeIds заполняется из ответа editability (current_allowed_type_ids).
  *   - Toggle типа: добавить/удалить из allowed_type_ids → namespace_update.
  *   - Edit / create типа: <crm-entity-type-editor> в той же правой колонке вместо
  *     сетки карточек; кнопка «назад» возвращает к сетке.
@@ -31,6 +34,7 @@ import '@platform/lib/components/layout/page-header.js';
 import '@platform/lib/components/glass-spinner.js';
 import '@platform/lib/components/platform-breadcrumbs.js';
 import '@platform/lib/components/platform-icon.js';
+import '@platform/lib/components/platform-button.js';
 import { platformConfirm } from '@platform/lib/components/platform-confirm-modal.js';
 
 import '../components/entity-type-editor.js';
@@ -315,6 +319,16 @@ export class CRMSpaceDetailPage extends PlatformPage {
             const item = this._namespaces.byId[this.itemId];
             if (item !== undefined) this._hydrateFromNamespace(item);
         });
+        this.useEvent(this._editabilityOp.op.events.SUCCEEDED, (event) => {
+            const result = event && event.payload && event.payload.result;
+            if (!result || typeof result !== 'object') return;
+            if (result.namespace !== this.itemId) return;
+            const ids = result.current_allowed_type_ids;
+            if (!Array.isArray(ids)) {
+                throw new Error('namespace_editability: current_allowed_type_ids must be an array');
+            }
+            this._allowedTypeIds = ids.filter((id) => typeof id === 'string' && id.length > 0);
+        });
         this.useEvent(this._namespaceUpdateOp.op.events.SUCCEEDED, (event) => {
             this._savingMeta = false;
             this._savingAllowed = false;
@@ -377,6 +391,7 @@ export class CRMSpaceDetailPage extends PlatformPage {
         if (typeof this.itemId !== 'string' || this.itemId.length === 0) return;
         if (this._lastRequestedId === this.itemId) return;
         this._lastRequestedId = this.itemId;
+        this._allowedTypeIds = [];
         this._namespaces.get(this.itemId);
         this._editabilityOp.run({ name: this.itemId });
     }
@@ -388,11 +403,6 @@ export class CRMSpaceDetailPage extends PlatformPage {
 
     _hydrateFromNamespace(item) {
         this._description = typeof item.description === 'string' ? item.description : '';
-        this._allowedTypeIds = Array.isArray(item.crm_settings && item.crm_settings.allowed_type_ids)
-            ? [...item.crm_settings.allowed_type_ids]
-            : Array.isArray(item.allowed_type_ids)
-                ? [...item.allowed_type_ids]
-                : [];
     }
 
     _onDescriptionInput(e) { this._description = e.target.value; }
@@ -566,7 +576,17 @@ export class CRMSpaceDetailPage extends PlatformPage {
                 <page-header
                     title=${ns.name}
                     subtitle=${this.t('space_detail_page.subtitle')}
-                ></page-header>
+                >
+                    <platform-button
+                        slot="actions"
+                        variant="secondary"
+                        type="button"
+                        @click=${() => this.navigate('space_integrations', { itemId: this.itemId })}
+                    >
+                        <platform-icon name="integration" size="18"></platform-icon>
+                        ${this.t('space_detail_page.link_integrations')}
+                    </platform-button>
+                </page-header>
             </div>
             <div class="scroll">
                 <div class="layout">
@@ -634,16 +654,6 @@ export class CRMSpaceDetailPage extends PlatformPage {
                         </div>
                     </div>
                 ` : ''}
-
-                <div class="actions-row" style="margin-top: var(--space-2);">
-                    <button
-                        class="btn btn-soft"
-                        type="button"
-                        @click=${() => this.navigate('space_integrations', { itemId: this.itemId })}
-                    >
-                        ${this.t('space_detail_page.link_integrations')}
-                    </button>
-                </div>
             </div>
         `;
     }

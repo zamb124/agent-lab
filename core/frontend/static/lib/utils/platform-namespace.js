@@ -57,6 +57,32 @@ export function getPlatformNamespaceSidebarSelection(companyId) {
 }
 
 /**
+ * Имя пространства для фильтрации CRM API (query/body): null — все пространства.
+ * Если для компании в bus ещё нет ключа (до гидратации в crm-app), берётся тот же
+ * localStorage, что и у CRM-сайдбара — иначе первый запрос после F5 уходит без namespace.
+ *
+ * @param {string} companyId
+ * @param {Record<string, string> | null | undefined} selectionByCompany
+ * @returns {string | null}
+ */
+export function getEffectiveCrmNamespaceApiFilter(companyId, selectionByCompany) {
+    if (typeof companyId !== 'string' || companyId.trim().length === 0) {
+        return null;
+    }
+    const cid = companyId.trim();
+    const map =
+        selectionByCompany && typeof selectionByCompany === 'object' && !Array.isArray(selectionByCompany)
+            ? selectionByCompany
+            : {};
+    if (Object.prototype.hasOwnProperty.call(map, cid)) {
+        const s = map[cid];
+        return s === 'all' ? null : s;
+    }
+    const sidebar = getPlatformNamespaceSidebarSelection(cid);
+    return sidebar === 'all' ? null : sidebar;
+}
+
+/**
  * Сохранить выбор из сайдбара: пустая строка / null — как «Все» в NetWorkle (`__ALL__`).
  *
  * @param {string | null | undefined} companyId

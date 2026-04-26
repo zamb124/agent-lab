@@ -112,6 +112,17 @@ export class CRMGraphCanvas extends PlatformElement {
         ) {
             this._syncGraph();
         }
+        const selectionOrLabelsChanged = (
+            changedProperties.has('selectedNodeId')
+            || changedProperties.has('selectedEdgeId')
+            || changedProperties.has('pathSourceId')
+            || changedProperties.has('pathTargetId')
+            || changedProperties.has('labelMode')
+        );
+        if (selectionOrLabelsChanged && this._graphInstance) {
+            this._graphInstance.nodeThreeObject(this._graphInstance.nodeThreeObject());
+            this._graphInstance.linkThreeObject(this._graphInstance.linkThreeObject());
+        }
         if (changedProperties.has('incidentWeightSubtitleFn') && this._graphInstance) {
             this._graphInstance.nodeThreeObject(this._graphInstance.nodeThreeObject());
         }
@@ -266,16 +277,33 @@ export class CRMGraphCanvas extends PlatformElement {
                 }
                 const THREE = window.THREE;
                 const nodeRelSize = GRAPH_PRESETS[this.graphPreset].nodeRelSize;
-                const radius = Math.cbrt(node.size || 1) * nodeRelSize * 0.5;
+                const baseRadius = Math.cbrt(node.size || 1) * nodeRelSize * 0.5;
+                const isSelected = typeof node.id === 'string' && node.id.length > 0 && node.id === this.selectedNodeId;
+                const selectionScale = isSelected ? 1.2 : 1;
+                const radius = baseRadius * selectionScale;
                 const geometry = new THREE.SphereGeometry(radius, 32, 24);
+                const baseColor = node.color || '#bca8ff';
                 const material = new THREE.MeshStandardMaterial({
-                    color: node.color || '#bca8ff',
-                    roughness: 0.75,
-                    metalness: 0.05,
+                    color: baseColor,
+                    emissive: isSelected ? 0x3d8cff : 0x000000,
+                    emissiveIntensity: isSelected ? 0.65 : 0,
+                    roughness: isSelected ? 0.42 : 0.75,
+                    metalness: isSelected ? 0.12 : 0.05,
                 });
                 const sphere = new THREE.Mesh(geometry, material);
                 const group = new THREE.Group();
                 group.add(sphere);
+                if (isSelected) {
+                    const ringGeom = new THREE.TorusGeometry(radius * 1.08, Math.max(0.35, radius * 0.07), 10, 48);
+                    const ringMat = new THREE.MeshBasicMaterial({
+                        color: 0x6eb6ff,
+                        transparent: true,
+                        opacity: 0.92,
+                    });
+                    const ring = new THREE.Mesh(ringGeom, ringMat);
+                    ring.rotation.x = Math.PI / 2;
+                    group.add(ring);
+                }
                 const labelColor = getComputedStyle(document.documentElement).getPropertyValue('--text-primary').trim() || '#f0f4ff';
                 const subtitleColor = getComputedStyle(document.documentElement).getPropertyValue('--text-secondary').trim() || '#d4dae8';
                 const weightSum = typeof node.incident_weight_sum === 'number' && Number.isFinite(node.incident_weight_sum)

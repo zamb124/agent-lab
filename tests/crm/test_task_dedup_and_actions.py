@@ -556,3 +556,46 @@ class TestNewTaskEndpoints:
         tasks = list_resp.json()["items"]
         task_ids = [t["task_id"] for t in tasks]
         assert task_id in task_ids, f"task_id {task_id} не найден в списке задач"
+
+
+class TestNamespaceIntegrationCancelFinalize:
+    @pytest.mark.asyncio
+    async def test_second_cancel_finalizes_when_cancel_already_requested(
+        self,
+        crm_client: AsyncClient,
+        crm_container,
+        auth_headers_system: dict,
+        unique_id: str,
+        system_user_id: str,
+    ) -> None:
+        """Повторный POST /cancel при зависшем cancel_requested снимает задачу с running."""
+        ns = f"g_{unique_id}"
+        tid = f"ns-stuck-{unique_id}"
+        now = _NOW()
+        task = CRMTask(
+            task_id=tid,
+            task_type="namespace_integration_job",
+            status="running",
+            stage="leads",
+            progress_pct=50,
+            company_id="system",
+            namespace=ns,
+            user_id=system_user_id,
+            data={"provider_id": "amocrm", "job": "entities", "stats": {}},
+            cancel_requested=True,
+            started_at=now,
+            created_at=now,
+            updated_at=now,
+        )
+        await _insert_task(crm_container, task, "system", ns, system_user_id)
+
+        resp = await crm_client.post(
+            f"/crm/api/v1/tasks/{tid}/cancel",
+            headers=auth_headers_system,
+        )
+        assert resp.status_code == 200, resp.text
+        body = resp.json()
+        assert body["status"] == "cancelled"
+        assert body["stage"] == "cancelled"
+        assert body["cancel_requested"] is False
+        assert body["progress_pct"] == 50

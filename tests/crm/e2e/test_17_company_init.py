@@ -55,6 +55,9 @@ class TestCompanyInit:
         assert types_resp.status_code == 200
 
         types = types_resp.json()["items"]
+        assert len(types) == len({t["type_id"] for t in types}), (
+            "Список типов связей не должен содержать дубли type_id (разные company_id в одной выдаче)"
+        )
         types_by_id = {t["type_id"]: t for t in types}
 
         expected_type_ids = [

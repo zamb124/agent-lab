@@ -39,6 +39,7 @@
 import { html, css, nothing } from 'lit';
 import { PlatformPage } from '@platform/lib/base/PlatformPage.js';
 import { CoreEvents } from '@platform/lib/events/contract.js';
+import { getEffectiveCrmNamespaceApiFilter } from '@platform/lib/utils/platform-namespace.js';
 import '@platform/lib/components/glass-spinner.js';
 import '@platform/lib/components/platform-icon.js';
 import '@platform/lib/components/platform-breadcrumbs.js';
@@ -352,12 +353,8 @@ export class CRMGraphPage extends PlatformPage {
 
         this._namespaceSel = this.select((s) => {
             const user = s.auth.user;
-            if (!user || typeof user.company_id !== 'string') return 'all';
-            const cid = user.company_id;
-            const map = s.ui.namespace.selectionByCompany;
-            const sel = map[cid];
-            if (sel === 'all' || sel === undefined) return 'all';
-            return sel;
+            if (!user || typeof user.company_id !== 'string') return null;
+            return getEffectiveCrmNamespaceApiFilter(user.company_id, s.ui.namespace.selectionByCompany);
         });
     }
 
@@ -412,8 +409,7 @@ export class CRMGraphPage extends PlatformPage {
     }
 
     _currentNamespace() {
-        const sel = this._namespaceSel.value;
-        return sel === 'all' ? null : sel;
+        return this._namespaceSel.value;
     }
 
     _reloadAll() {
@@ -1197,7 +1193,7 @@ export class CRMGraphPage extends PlatformPage {
 
                 ${this._graphUi.value.panels.meta ? html`
                     <div class="overlay-meta">
-                        <span class="meta-pill">${this.t('graph_page.meta_mode')} ${this._viewMode}</span>
+                        <span class="meta-pill">${this.t('graph_page.meta_mode')} ${this.t(`graph.view_mode_${this._viewMode}`)}</span>
                         <span class="meta-pill">${this.t('graph_page.meta_depth')} ${this._maxDepth}</span>
                         <span class="meta-pill">${this.t('graph_page.meta_nodes')} ${this._graphNodes.length}</span>
                         <span class="meta-pill">${this.t('graph_page.meta_edges')} ${this._graphEdges.length}</span>

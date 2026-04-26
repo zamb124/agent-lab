@@ -98,8 +98,10 @@ class TestNamespaceEditabilityEmpty:
         assert type_a not in remaining_type_ids
         assert type_b not in remaining_type_ids
         for t in types_resp.json()["items"]:
-            assert "*" in t["namespace_ids"], (
-                f"Тип {t['type_id']} остался в namespace без '*' в namespace_ids"
+            ns_ids = t.get("namespace_ids") or []
+            assert namespace_name in ns_ids or "*" in ns_ids, (
+                f"Тип {t['type_id']}: для листинга по namespace ожидалось "
+                f"{namespace_name!r} или '*' в namespace_ids, получено {ns_ids!r}"
             )
 
     @pytest.mark.asyncio

@@ -18,7 +18,11 @@ import apps.flows.src.tasks.scheduled_tasks  # noqa: F401, E402
 import apps.idle_worker.tasks.llm_models_tasks  # noqa: F401, E402
 import apps.idle_worker.tasks.calendar_sync_tasks  # noqa: F401, E402
 import apps.idle_worker.tasks.span_billing_settlement_tasks  # noqa: F401, E402
+import apps.crm_worker.tasks.scheduled_integration_sync_tasks  # noqa: F401, E402
 
+from apps.crm.scheduled_integration_constants import (
+    SCHEDULED_NAMESPACE_INTEGRATION_UNIFIED_SYNC_TASK_NAME,
+)
 from apps.scheduler.dispatch import create_scheduler, require_tasks_registered_for_scheduler
 
 _FLOWS_SCHEDULER_REQUIRED_TASK_NAMES: tuple[str, ...] = (
@@ -45,9 +49,14 @@ _IDLE_SCHEDULER_REQUIRED_TASK_NAMES: tuple[str, ...] = (
     "span_billing_settlement_tick",
 )
 
+_CRM_SCHEDULER_REQUIRED_TASK_NAMES: tuple[str, ...] = (
+    SCHEDULED_NAMESPACE_INTEGRATION_UNIFIED_SYNC_TASK_NAME,
+)
+
 require_tasks_registered_for_scheduler(
     flows_worker_task_names=_FLOWS_SCHEDULER_REQUIRED_TASK_NAMES,
     idle_queue_task_names=_IDLE_SCHEDULER_REQUIRED_TASK_NAMES,
+    crm_queue_task_names=_CRM_SCHEDULER_REQUIRED_TASK_NAMES,
 )
 
 scheduler = create_scheduler(settings.database.redis_url)

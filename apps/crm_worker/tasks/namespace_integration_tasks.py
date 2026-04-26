@@ -20,6 +20,10 @@ from core.tracing.operation_span import traced_operation
 logger = get_logger(__name__)
 
 
+class NamespaceIntegrationCancelled(Exception):
+    """Прерывание синка: пользователь запросил отмену (cancel_requested в БД)."""
+
+
 def _stats_message(stats: dict[str, int]) -> str:
     parts = [f"{k}={v}" for k, v in sorted(stats.items())]
     return ", ".join(parts) if parts else ""
@@ -33,6 +37,12 @@ def _notification_title(label: str, *, job: str, ok: bool) -> str:
     if ok:
         return f"{label}: импорт сущностей завершён"
     return f"{label}: ошибка импорта сущностей"
+
+
+def _notification_cancelled_title(label: str, *, job: str) -> str:
+    if job == "custom_fields":
+        return f"{label}: синхронизация полей отменена"
+    return f"{label}: импорт сущностей отменён"
 
 
 @broker.task
@@ -62,6 +72,9 @@ async def run_namespace_integration_job(
     provider_id = provider_raw.strip()
     job = str(job_raw)
 
+    if row.status == "cancelled":
+        return {"status": "cancelled", "task_id": task_id}
+
     _set_crm_context(
         company_id,
         row.namespace,
@@ -71,6 +84,42 @@ async def run_namespace_integration_job(
     )
     connector = container.integration_registry.get(provider_id)
     label = connector.worker_short_label()
+
+    async def _complete_cancel_if_requested() -> bool:
+        task_row = await repo.get_for_worker(task_id, company_id)
+        if task_row is None:
+            return False
+        if task_row.status == "cancelled":
+            raise NamespaceIntegrationCancelled()
+        if not task_row.cancel_requested:
+            return False
+        pct = int(task_row.progress_pct)
+        now = datetime.now(timezone.utc)
+        await repo.patch_progress(
+            task_id,
+            company_id,
+            status="cancelled",
+            stage="cancelled",
+            progress_pct=pct,
+            completed_at=now,
+            cancel_requested=False,
+        )
+        title = _notification_cancelled_title(label, job=job)
+        await _notify_task_user(
+            row.user_id,
+            task_id=task_id,
+            task_type="namespace_integration_job",
+            namespace=row.namespace,
+            status="cancelled",
+            stage="cancelled",
+            progress_pct=pct,
+            title=title,
+            message="",
+        )
+        return True
+
+    if await _complete_cancel_if_requested():
+        return {"status": "cancelled", "task_id": task_id}
 
     trace_name = f"crm.worker.namespace_integration.{provider_id}.{job}"
     try:
@@ -87,6 +136,8 @@ async def run_namespace_integration_job(
         ):
 
             async def on_progress(stage: str, pct: int) -> None:
+                if await _complete_cancel_if_requested():
+                    raise NamespaceIntegrationCancelled()
                 await repo.patch_progress(
                     task_id,
                     company_id,
@@ -101,6 +152,10 @@ async def run_namespace_integration_job(
                     row.namespace,
                     on_progress=on_progress,
                 )
+
+        terminal = await repo.get_for_worker(task_id, company_id)
+        if terminal is not None and terminal.status == "cancelled":
+            return {"status": "cancelled", "task_id": task_id}
 
         await repo.patch_progress(
             task_id,
@@ -125,8 +180,13 @@ async def run_namespace_integration_job(
             message=msg,
         )
         return {"status": "completed", "task_id": task_id, "stats": stats}
+    except NamespaceIntegrationCancelled:
+        return {"status": "cancelled", "task_id": task_id}
     except Exception as exc:
         err_text = str(exc)
+        after_exc = await repo.get_for_worker(task_id, company_id)
+        if after_exc is not None and after_exc.status == "cancelled":
+            return {"status": "cancelled", "task_id": task_id}
         logger.exception(
             "namespace_integration_job failed task_id=%s provider=%s job=%s",
             task_id,

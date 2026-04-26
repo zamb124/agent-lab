@@ -34,6 +34,7 @@ import {
     hasGetUserMediaApi,
     pickVoiceMimeType,
 } from '@platform/lib/utils/voice-recording.js';
+import { getEffectiveCrmNamespaceApiFilter } from '@platform/lib/utils/platform-namespace.js';
 import '@platform/lib/components/platform-icon.js';
 import '@platform/lib/components/platform-date-picker.js';
 import '@platform/lib/components/glass-spinner.js';
@@ -724,12 +725,8 @@ export class CRMDailyNotesPage extends PlatformPage {
 
         this._namespaceSelectionSel = this.select((s) => {
             const user = s.auth.user;
-            if (!user || typeof user.company_id !== 'string') return 'all';
-            const cid = user.company_id;
-            const map = s.ui.namespace.selectionByCompany;
-            const selection = map[cid];
-            if (selection === 'all' || selection === undefined) return 'all';
-            return selection;
+            if (!user || typeof user.company_id !== 'string') return null;
+            return getEffectiveCrmNamespaceApiFilter(user.company_id, s.ui.namespace.selectionByCompany);
         });
 
         this._mql = null;
@@ -808,8 +805,7 @@ export class CRMDailyNotesPage extends PlatformPage {
     }
 
     _currentNamespace() {
-        const selection = this._namespaceSelectionSel.value;
-        return selection === 'all' ? null : selection;
+        return this._namespaceSelectionSel.value;
     }
 
     _isPeriod() { return this._dailyNotesUi.value.range.from !== this._dailyNotesUi.value.range.to; }
@@ -1494,7 +1490,7 @@ export class CRMDailyNotesPage extends PlatformPage {
                         labeled
                         selection="range"
                         .value=${{ start: this._dailyNotesUi.value.range.from, end: this._dailyNotesUi.value.range.to }}
-                        @date-change=${this._onDateRangeChange}
+                        @change=${this._onDateRangeChange}
                     ></platform-date-picker>
                     <button
                         class="voice-btn ${this._voiceState === 'recording' ? 'recording' : this._voiceState === 'processing' ? 'processing' : ''}"

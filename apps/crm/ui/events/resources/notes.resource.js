@@ -1,8 +1,9 @@
 /**
- * Notes — заметки CRM. Это сущности с `entity_type === 'note'` (или системным
- * type_id заметки), управляются через `/crm/api/v1/entities`. Здесь — отдельная
- * лента, операции голосового ввода, текстового поиска по заметкам, batch-загрузки
- * карточек связанных entity и AI-анализа черновика.
+ * Notes — заметки CRM. В БД канонически `entity_type === 'note'`, подтип —
+ * `entity_subtype` (type_id из ветки note: meeting, call, …). При создании через API
+ * с `entity_type` = листовой type_id из этой ветки сервис нормализует в note+subtype.
+ * Лента (`entity_type: 'note'` в query) подхватывает и старые строки, где в колонке
+ * `entity_type` ошибочно лежал только листовой type_id.
  *
  * Backend:
  *   PATCH /crm/api/v1/entities/notes/{note_id}/analysis-draft → AIAnalysisDraftStored

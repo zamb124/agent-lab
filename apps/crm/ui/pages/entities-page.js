@@ -27,6 +27,7 @@
 import { html, css, nothing } from 'lit';
 import { PlatformPage } from '@platform/lib/base/PlatformPage.js';
 import { CoreEvents } from '@platform/lib/events/contract.js';
+import { getEffectiveCrmNamespaceApiFilter } from '@platform/lib/utils/platform-namespace.js';
 import { platformConfirm } from '@platform/lib/components/platform-confirm-modal.js';
 import '@platform/lib/components/platform-icon.js';
 import '@platform/lib/components/platform-date-picker.js';
@@ -501,6 +502,42 @@ export class CRMEntitiesPage extends PlatformPage {
                 line-height: 1.3;
             }
 
+            .card-score {
+                display: flex;
+                align-items: center;
+                gap: 6px;
+                height: 16px;
+                position: relative;
+                background: var(--glass-bg-subtle);
+                border-radius: 8px;
+                overflow: hidden;
+                flex-shrink: 0;
+            }
+            .card-score .score-bar {
+                position: absolute;
+                left: 0;
+                top: 0;
+                height: 100%;
+                background: linear-gradient(90deg, #3b82f6, #8b5cf6);
+                opacity: 0.25;
+            }
+            .card-score .score-label {
+                position: relative;
+                z-index: 1;
+                font-size: 10px;
+                font-weight: 600;
+                padding-left: 6px;
+            }
+            .card-score .match-type-badge {
+                position: relative;
+                z-index: 1;
+                font-size: 9px;
+                text-transform: uppercase;
+                color: var(--text-tertiary);
+                margin-left: auto;
+                padding-right: 6px;
+            }
+
             .entity-card-item {
                 border: 1px solid var(--crm-stroke);
                 background: var(--crm-surface);
@@ -534,8 +571,15 @@ export class CRMEntitiesPage extends PlatformPage {
 
             .card-header {
                 display: flex;
-                align-items: center;
+                align-items: flex-start;
                 gap: 10px;
+            }
+            .card-header-main {
+                flex: 1;
+                min-width: 0;
+                display: flex;
+                flex-direction: column;
+                gap: 6px;
             }
             .card-type-icon {
                 width: 36px;
@@ -555,7 +599,6 @@ export class CRMEntitiesPage extends PlatformPage {
                 overflow: hidden;
                 text-overflow: ellipsis;
                 white-space: nowrap;
-                flex: 1;
                 min-width: 0;
             }
             .card-header-end {
@@ -800,12 +843,8 @@ export class CRMEntitiesPage extends PlatformPage {
         this._authSel = this.select((s) => s.auth.user);
         this._namespaceSel = this.select((s) => {
             const user = s.auth.user;
-            if (!user || typeof user.company_id !== 'string') return 'all';
-            const cid = user.company_id;
-            const map = s.ui.namespace.selectionByCompany;
-            const selection = map[cid];
-            if (selection === 'all' || selection === undefined) return 'all';
-            return selection;
+            if (!user || typeof user.company_id !== 'string') return null;
+            return getEffectiveCrmNamespaceApiFilter(user.company_id, s.ui.namespace.selectionByCompany);
         });
     }
 
@@ -882,8 +921,7 @@ export class CRMEntitiesPage extends PlatformPage {
     }
 
     _currentNamespace() {
-        const selection = this._namespaceSel.value;
-        return selection === 'all' ? null : selection;
+        return this._namespaceSel.value;
     }
 
     _buildFilters() {
@@ -1095,6 +1133,15 @@ export class CRMEntitiesPage extends PlatformPage {
         if (!dateString) return '';
         const d = new Date(dateString);
         return d.toLocaleDateString('ru-RU', { day: 'numeric', month: 'short' });
+    }
+
+    _searchScorePercent(entity) {
+        if (!entity || typeof entity.score !== 'number' || !Number.isFinite(entity.score)) {
+            return null;
+        }
+        const raw = entity.score;
+        const pct = raw <= 1 ? raw * 100 : raw;
+        return Math.min(100, Math.max(0, pct));
     }
 
     _getLimitedText(text, maxLength = 140) {
@@ -1499,7 +1546,23 @@ export class CRMEntitiesPage extends PlatformPage {
                     <div class="card-type-icon" style="background: ${bgColor}; color: ${typeConfig.color};">
                         <platform-icon name="${typeConfig.icon}" size="18"></platform-icon>
                     </div>
-                    <h3 class="card-title">${entity.name}</h3>
+                    <div class="card-header-main">
+                        ${(() => {
+                            const pct = this._searchScorePercent(entity);
+                            if (pct === null) return nothing;
+                            const matchLabel = typeof entity.match_type === 'string' && entity.match_type.length > 0
+                                ? entity.match_type
+                                : this._searchMode;
+                            return html`
+                                <div class="card-score" title=${matchLabel}>
+                                    <div class="score-bar" style="width: ${Math.round(pct)}%"></div>
+                                    <span class="score-label">${pct.toFixed(0)}%</span>
+                                    <span class="match-type-badge">${matchLabel}</span>
+                                </div>
+                            `;
+                        })()}
+                        <h3 class="card-title">${entity.name}</h3>
+                    </div>
                     ${showHeaderEnd
                         ? html`
                             <div class="card-header-end">

@@ -26,6 +26,7 @@
 import { html, css, nothing } from 'lit';
 import { PlatformPage } from '@platform/lib/base/PlatformPage.js';
 import { CoreEvents } from '@platform/lib/events/index.js';
+import { getEffectiveCrmNamespaceApiFilter } from '@platform/lib/utils/platform-namespace.js';
 import '@platform/lib/components/layout/page-header.js';
 import '@platform/lib/components/glass-spinner.js';
 import '@platform/lib/components/platform-breadcrumbs.js';
@@ -134,12 +135,8 @@ export class CRMNotePage extends PlatformPage {
 
         this._namespaceSelectionSel = this.select((s) => {
             const user = s.auth.user;
-            if (!user || typeof user.company_id !== 'string') return 'all';
-            const cid = user.company_id;
-            const map = s.ui.namespace.selectionByCompany;
-            const selection = map[cid];
-            if (selection === 'all' || selection === undefined) return 'all';
-            return selection;
+            if (!user || typeof user.company_id !== 'string') return null;
+            return getEffectiveCrmNamespaceApiFilter(user.company_id, s.ui.namespace.selectionByCompany);
         });
     }
 
@@ -351,11 +348,11 @@ export class CRMNotePage extends PlatformPage {
     }
 
     _currentNamespace() {
-        const selection = this._namespaceSelectionSel.value;
-        if (selection === 'all' || selection === null || selection === undefined) {
+        const raw = this._namespaceSelectionSel.value;
+        if (raw === null || raw === undefined) {
             return 'default';
         }
-        return selection;
+        return raw;
     }
 
     _onBackToNotes() {

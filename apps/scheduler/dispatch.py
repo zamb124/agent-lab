@@ -45,6 +45,7 @@ def require_tasks_registered_for_scheduler(
     *,
     flows_worker_task_names: tuple[str, ...],
     idle_queue_task_names: tuple[str, ...],
+    crm_queue_task_names: tuple[str, ...] = (),
 ) -> None:
     """
     Падение процесса taskiq scheduler при старте, если обязательные задачи
@@ -52,20 +53,24 @@ def require_tasks_registered_for_scheduler(
     """
     missing_flows = [n for n in flows_worker_task_names if flows_broker.find_task(n) is None]
     missing_idle = [n for n in idle_queue_task_names if idle_broker.find_task(n) is None]
-    if missing_flows or missing_idle:
+    missing_crm = [n for n in crm_queue_task_names if crm_broker.find_task(n) is None]
+    if missing_flows or missing_idle or missing_crm:
         parts: list[str] = []
         if missing_flows:
             parts.append(f"flows_worker broker: {missing_flows}")
         if missing_idle:
             parts.append(f"idle broker: {missing_idle}")
+        if missing_crm:
+            parts.append(f"crm broker: {missing_crm}")
         raise RuntimeError(
             "TaskIQ scheduler: не зарегистрированы задачи. Добавьте импорт модулей с @broker.task "
             f"в apps/scheduler/scheduler.py. Отсутствуют: {'; '.join(parts)}"
         )
     logger.info(
-        "TaskIQ scheduler: проверка регистрации задач OK (flows_worker=%s, idle=%s)",
+        "TaskIQ scheduler: проверка регистрации задач OK (flows_worker=%s, idle=%s, crm=%s)",
         len(flows_worker_task_names),
         len(idle_queue_task_names),
+        len(crm_queue_task_names),
     )
 
 

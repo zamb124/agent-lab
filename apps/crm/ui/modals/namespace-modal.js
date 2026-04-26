@@ -47,6 +47,15 @@ const SUBJECT_PUBLIC = 'public';
 const SUBJECT_USER = 'user';
 const SUBJECT_COMPANY = 'company';
 
+const CRM_INTEGRATION_ICON_BASE = '/crm/ui/static/assets/integrations';
+
+function crmIntegrationIconHref(providerId) {
+    if (typeof providerId !== 'string' || providerId.length === 0) {
+        throw new Error('crmIntegrationIconHref: providerId required');
+    }
+    return `${CRM_INTEGRATION_ICON_BASE}/${encodeURIComponent(providerId)}.svg`;
+}
+
 const ROLE_VIEWER = 'viewer';
 const ROLE_EDITOR = 'editor';
 const ROLE_ADMIN = 'admin';
@@ -179,11 +188,36 @@ export class CRMNamespaceModal extends PlatformFormModal {
                 font-size: var(--text-sm);
             }
 
-            .footer-actions {
+            .modal-actions {
+                display: none !important;
+            }
+
+            .namespace-integrations {
                 display: flex;
-                gap: var(--space-3);
-                justify-content: flex-end;
-                width: 100%;
+                flex-wrap: wrap;
+                align-items: center;
+                gap: 6px;
+            }
+            .namespace-integration-icon-wrap {
+                width: 28px;
+                height: 28px;
+                border-radius: 50%;
+                overflow: hidden;
+                display: inline-flex;
+                align-items: center;
+                justify-content: center;
+                background: #242428;
+                border: 1px solid rgba(255, 255, 255, 0.12);
+            }
+            .namespace-integration-icon {
+                width: 70%;
+                height: 70%;
+                object-fit: contain;
+                display: block;
+            }
+            .integrations-hint {
+                font-size: var(--text-xs);
+                color: var(--text-tertiary);
             }
 
             .tabs {
@@ -678,6 +712,7 @@ export class CRMNamespaceModal extends PlatformFormModal {
         const description = typeof item.description === 'string' ? item.description : '';
         this._editForm.openForm({ name: this.name, description });
         this._editability.run({ name: this.name });
+        this._namespaces.get(this.name);
     }
 
     _isCreateDraftDirty() {
@@ -717,6 +752,14 @@ export class CRMNamespaceModal extends PlatformFormModal {
         this._activeForm().setField('description', event.target.value);
     }
 
+    _onOpenSpaceSettings() {
+        if (typeof this.name !== 'string' || this.name.length === 0) {
+            throw new Error('CRMNamespaceModal: name required to open space settings');
+        }
+        this.navigate('space', { itemId: this.name });
+        this.close();
+    }
+
     async _performSave() {
         this._activeForm().submit();
     }
@@ -733,6 +776,29 @@ export class CRMNamespaceModal extends PlatformFormModal {
         return this._isCreate()
             ? this.t('namespace_modal.header_create')
             : this.t('namespace_modal.header_edit');
+    }
+
+    renderHeaderActions() {
+        if (this._isCreate()) {
+            return nothing;
+        }
+        if (this._activeTab !== TAB_INFO) {
+            return nothing;
+        }
+        if (typeof this.name !== 'string' || this.name.length === 0) {
+            return nothing;
+        }
+        return html`
+            <button
+                type="button"
+                class="header-btn"
+                title=${this.t('namespace_modal.action_open_space_settings')}
+                aria-label=${this.t('namespace_modal.action_open_space_settings')}
+                @click=${() => this._onOpenSpaceSettings()}
+            >
+                <platform-icon name="arrow-right" size="16"></platform-icon>
+            </button>
+        `;
     }
 
     renderSaveHeaderButton() {
@@ -791,6 +857,61 @@ export class CRMNamespaceModal extends PlatformFormModal {
         if (typeof icon !== 'string') return 'folder';
         const value = icon.trim();
         return value.length === 0 ? 'folder' : value;
+    }
+
+    _namespaceItemForEdit() {
+        if (this._isCreate() || typeof this.name !== 'string' || this.name.length === 0) {
+            return null;
+        }
+        const item = this._namespaces.byId[this.name];
+        return item === undefined ? null : item;
+    }
+
+    _connectedIntegrationBadges(item) {
+        if (!item || !Array.isArray(item.integration_badges)) {
+            return [];
+        }
+        return item.integration_badges.filter(
+            (b) =>
+                b
+                && b.connected === true
+                && typeof b.provider_id === 'string'
+                && b.provider_id.length > 0,
+        );
+    }
+
+    _renderEditIntegrationsRow(item) {
+        const badges = this._connectedIntegrationBadges(item);
+        return html`
+            <div class="form-group">
+                <label class="form-label">${this.t('namespace_modal.label_integrations')}</label>
+                ${badges.length === 0
+                    ? html`<p class="integrations-hint">${this.t('namespace_modal.integrations_empty')}</p>`
+                    : html`
+                        <div
+                            class="namespace-integrations"
+                            aria-label=${this.t('namespace_modal.integrations_aria')}
+                        >
+                            ${badges.map(
+                                (b) => html`
+                                    <span
+                                        class="namespace-integration-icon-wrap"
+                                        title=${b.provider_id}
+                                    >
+                                        <img
+                                            class="namespace-integration-icon"
+                                            src=${crmIntegrationIconHref(b.provider_id)}
+                                            alt=""
+                                            loading="lazy"
+                                            decoding="async"
+                                        />
+                                    </span>
+                                `,
+                            )}
+                        </div>
+                    `}
+            </div>
+        `;
     }
 
     _renderFieldError(field) {
@@ -889,6 +1010,7 @@ export class CRMNamespaceModal extends PlatformFormModal {
 
     _renderEditInfoBody() {
         const draft = this._editForm.draft;
+        const nsItem = this._namespaceItemForEdit();
         return html`
             <form class="form-grid" @submit=${(event) => { event.preventDefault(); this._performSave(); }}>
                 <div class="form-group">
@@ -909,6 +1031,8 @@ export class CRMNamespaceModal extends PlatformFormModal {
                         @input=${this._onDescriptionInput}
                     ></textarea>
                 </div>
+
+                ${nsItem !== null ? this._renderEditIntegrationsRow(nsItem) : nothing}
 
                 <div class="form-group">
                     ${this._renderEditabilityBadge()}
@@ -1117,53 +1241,7 @@ export class CRMNamespaceModal extends PlatformFormModal {
     }
 
     renderFooter() {
-        const isGrantsTab = !this._isCreate() && this._activeTab === TAB_GRANTS;
-        if (isGrantsTab) {
-            return html`
-                <div class="footer-actions">
-                    <button
-                        type="button"
-                        class="btn btn-secondary"
-                        @click=${() => this.close()}
-                    >
-                        ${this.t('namespace_modal.action_close')}
-                    </button>
-                </div>
-            `;
-        }
-        const submitting = this._isCreate() ? this._createForm.submitting : this._update.busy;
-        let disabled;
-        if (this._isCreate()) {
-            const draft = this._createForm.draft;
-            const has_name = typeof draft.name === 'string' && draft.name.trim().length > 0;
-            const has_template = typeof draft.template_id === 'string' && draft.template_id.length > 0;
-            disabled = submitting || !has_name || !has_template;
-        } else {
-            disabled = submitting || !this._editSeedAttempted || !this.isDirty;
-        }
-        return html`
-            <div class="footer-actions">
-                <button
-                    type="button"
-                    class="btn btn-secondary"
-                    @click=${() => this.close()}
-                >
-                    ${this.t('namespace_modal.action_cancel')}
-                </button>
-                <button
-                    type="button"
-                    class="btn btn-primary"
-                    ?disabled=${disabled}
-                    @click=${() => this._performSave()}
-                >
-                    ${submitting
-                        ? this.t('namespace_modal.action_saving')
-                        : this._isCreate()
-                            ? this.t('namespace_modal.action_create')
-                            : this.t('namespace_modal.action_save')}
-                </button>
-            </div>
-        `;
+        return nothing;
     }
 }
 

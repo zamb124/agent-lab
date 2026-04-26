@@ -5,7 +5,7 @@
 """
 
 from typing import List, Optional
-from sqlalchemy import func, select, or_
+from sqlalchemy import and_, func, select
 
 from apps.crm.db.base import CRMDatabase, BaseCRMRepository
 from apps.crm.db.models import RelationshipType
@@ -32,20 +32,13 @@ class RelationshipTypeRepository(BaseCRMRepository[RelationshipType]):
         limit: int = 200,
         offset: int = 0,
     ) -> list[RelationshipType]:
-        """Типы связей, доступные для компании."""
+        """Типы связей, доступные для компании (только строки с company_id из контекста)."""
         company_id = self._get_company_id()
         async with self._db.session() as session:
-            conditions = [RelationshipType.company_id == company_id]
-
-            if include_system:
-                conditions.append(
-                    or_(
-                        RelationshipType.company_id.is_(None),
-                        RelationshipType.is_system == True
-                    )
-                )
-
-            stmt = select(RelationshipType).where(or_(*conditions)).limit(limit).offset(offset)
+            cond = [RelationshipType.company_id == company_id]
+            if not include_system:
+                cond.append(RelationshipType.is_system == False)
+            stmt = select(RelationshipType).where(and_(*cond)).limit(limit).offset(offset)
             result = await session.execute(stmt)
             return list(result.scalars().all())
     
@@ -55,15 +48,10 @@ class RelationshipTypeRepository(BaseCRMRepository[RelationshipType]):
     ) -> int:
         company_id = self._get_company_id()
         async with self._db.session() as session:
-            conditions = [RelationshipType.company_id == company_id]
-            if include_system:
-                conditions.append(
-                    or_(
-                        RelationshipType.company_id.is_(None),
-                        RelationshipType.is_system == True,
-                    )
-                )
-            stmt = select(func.count()).select_from(RelationshipType).where(or_(*conditions))
+            cond = [RelationshipType.company_id == company_id]
+            if not include_system:
+                cond.append(RelationshipType.is_system == False)
+            stmt = select(func.count()).select_from(RelationshipType).where(and_(*cond))
             result = await session.execute(stmt)
             return result.scalar() or 0
 

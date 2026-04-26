@@ -176,7 +176,10 @@
         "search_mode_semantic": "Semantic",
         "view_mode_full": "Full graph",
         "view_mode_incoming": "Incoming",
-        "view_mode_outgoing": "Outgoing"
+        "view_mode_outgoing": "Outgoing",
+        "view_mode_influence": "Influence",
+        "view_mode_related": "Related",
+        "view_mode_path": "Path"
     },
     "errors": {
         "field_limit": "{{section}}: field limit exceeded ({{max}})",
@@ -424,6 +427,10 @@
         "action_save": "Save",
         "action_saving": "Saving…",
         "editability_loading": "Checking constraints…",
+        "label_integrations": "Integrations",
+        "integrations_empty": "No connected integrations",
+        "integrations_aria": "Connected integrations",
+        "action_open_space_settings": "Space settings",
         "entity_count": "Entities in namespace",
         "used_types": "Types used",
         "can_update_types": "Allowed types editable",
@@ -700,7 +707,7 @@
         "voice_search_start": "Voice search",
         "voice_search_stop": "Stop voice search",
         "empty_period": "No notes for the selected period",
-        "empty_period_hints": "Widen the date range, select all namespaces in the sidebar if needed, or use search. Imported notes belong to the integration namespace.",
+        "empty_period_hints": "Widen the date range, select all namespaces in the sidebar if needed, or use search. Imported notes belong to the integration namespace. The diary filters by note date (event day in the source); entity cards show created_at (import time) — for older imported notes, extend the range backward.",
         "analysis_open_draft": "Open AI analysis draft",
         "analysis_run": "AI analysis",
         "analysis_view_applied": "View AI analysis results",
@@ -762,7 +769,21 @@
         "amocrm_fields_task_failed": "AmoCRM fields sync: {message}",
         "amocrm_sync_active_conflict": "An AmoCRM import for this space is already running",
         "amocrm_fields_active_conflict": "AmoCRM fields sync for this space is already running",
-        "amocrm_task_poll_timeout": "Timed out waiting for the AmoCRM task in the UI. Check the Tasks page."
+        "amocrm_task_poll_timeout": "Timed out waiting for the AmoCRM task in the UI. Check the Tasks page.",
+        "auto_sync_title": "Scheduled sync",
+        "auto_sync_hint": "On the platform schedule, the same flow runs as the Synchronize button: entities, then the custom fields catalog. Active AmoCRM OAuth is required for the user who saves these settings.",
+        "auto_sync_toggle": "Enable schedule",
+        "auto_sync_cron_label": "Cron (5 fields)",
+        "auto_sync_cron_placeholder": "0 * * * *",
+        "auto_sync_cron_help": "Minute, hour, day of month, month, day of week — croniter semantics (interpreted in the timezone below).",
+        "auto_sync_tz_label": "Timezone",
+        "auto_sync_tz_placeholder": "UTC",
+        "auto_sync_tz_help": "IANA zone name, e.g. Europe/Moscow or UTC.",
+        "auto_sync_save": "Save schedule",
+        "auto_sync_cron_required": "Enter a cron expression or turn off scheduled sync",
+        "auto_note_ai_title": "AI analysis for new notes",
+        "auto_note_ai_hint": "For each new note imported from AmoCRM during sync, an analysis task is created (analyze-only mode) with default settings.",
+        "auto_note_ai_toggle": "Automatically analyze new notes"
     },
     "graph_page": {
         "hint_browse": "Browse mode",
@@ -857,6 +878,14 @@
             "created": "Grant created",
             "revoke_failed": "Failed to revoke access",
             "revoked": "Access revoked"
+        },
+        "integration_auto_sync": {
+            "saved": "Auto-sync schedule saved",
+            "failed": "Failed to save auto-sync schedule"
+        },
+        "integration_auto_note_ai": {
+            "saved": "Note AI analysis setting saved",
+            "failed": "Failed to save note AI analysis setting"
         },
         "namespace": {
             "create_failed": "Failed to create Namespace",

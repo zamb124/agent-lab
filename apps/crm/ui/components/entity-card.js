@@ -102,6 +102,42 @@ export class CRMEntityCard extends PlatformElement {
             }
             .meta .dot { color: var(--text-tertiary); opacity: 0.4; }
 
+            .search-score {
+                display: flex;
+                align-items: center;
+                gap: 6px;
+                height: 18px;
+                position: relative;
+                background: var(--crm-surface-tint);
+                border-radius: 8px;
+                overflow: hidden;
+                max-width: 220px;
+            }
+            .search-score .score-bar {
+                position: absolute;
+                left: 0;
+                top: 0;
+                height: 100%;
+                background: linear-gradient(90deg, #3b82f6, #8b5cf6);
+                opacity: 0.25;
+            }
+            .search-score .score-label {
+                position: relative;
+                z-index: 1;
+                font-size: 11px;
+                font-weight: 600;
+                padding-left: 8px;
+            }
+            .search-score .match-type-badge {
+                position: relative;
+                z-index: 1;
+                font-size: 9px;
+                text-transform: uppercase;
+                color: var(--text-tertiary);
+                margin-left: auto;
+                padding-right: 8px;
+            }
+
             .status-badge {
                 display: inline-flex;
                 align-items: center;
@@ -303,6 +339,15 @@ export class CRMEntityCard extends PlatformElement {
         this.dispatch('crm/entity_card/related_selected', { entity_id: relatedId }, { source: 'local' });
     }
 
+    _searchScorePercent(entity) {
+        if (!entity || typeof entity.score !== 'number' || !Number.isFinite(entity.score)) {
+            return null;
+        }
+        const raw = entity.score;
+        const pct = raw <= 1 ? raw * 100 : raw;
+        return Math.min(100, Math.max(0, pct));
+    }
+
     _renderAttrs(entity) {
         const attrs = entity.attributes;
         if (!attrs || typeof attrs !== 'object') return nothing;
@@ -378,6 +423,22 @@ export class CRMEntityCard extends PlatformElement {
                                 ? html`<span class="status-badge ${entity.status}">${entity.status}</span>`
                                 : nothing}
                         </div>
+                        ${(() => {
+                            const pct = this._searchScorePercent(entity);
+                            if (pct === null) return nothing;
+                            const matchLabel = typeof entity.match_type === 'string' && entity.match_type.length > 0
+                                ? entity.match_type
+                                : '';
+                            return html`
+                                <div class="search-score" title=${matchLabel.length > 0 ? matchLabel : 'score'}>
+                                    <div class="score-bar" style="width: ${Math.round(pct)}%"></div>
+                                    <span class="score-label">${pct.toFixed(0)}%</span>
+                                    ${matchLabel.length > 0
+                                        ? html`<span class="match-type-badge">${matchLabel}</span>`
+                                        : nothing}
+                                </div>
+                            `;
+                        })()}
                     </div>
                 </div>
 

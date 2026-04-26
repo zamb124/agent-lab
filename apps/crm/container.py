@@ -237,6 +237,17 @@ class CRMContainer(BaseContainer):
 
         return IntegrationRegistry(self)
 
+    @lazy
+    def integration_auto_sync_service(self):
+        from apps.crm.services.integration_auto_sync_service import IntegrationAutoSyncService
+
+        return IntegrationAutoSyncService(
+            namespace_repository=self.namespace_repository,
+            integration_registry=self.integration_registry,
+            oauth_service=self.oauth_service,
+            scheduler_client=self.scheduler_client,
+        )
+
 
 # === Глобальный контейнер ===
 

@@ -9,6 +9,7 @@
 import { html, css, nothing } from 'lit';
 import { PlatformPage } from '@platform/lib/base/PlatformPage.js';
 import { CoreEvents } from '@platform/lib/events/index.js';
+import { getEffectiveCrmNamespaceApiFilter } from '@platform/lib/utils/platform-namespace.js';
 import '@platform/lib/components/platform-icon.js';
 import '@platform/lib/components/glass-spinner.js';
 import '@platform/lib/components/platform-breadcrumbs.js';
@@ -456,12 +457,8 @@ export class CRMTasksPage extends PlatformPage {
 
         this._namespaceSel = this.select((s) => {
             const user = s.auth.user;
-            if (!user || typeof user.company_id !== 'string') return 'all';
-            const cid = user.company_id;
-            const map = s.ui.namespace.selectionByCompany;
-            const sel = map[cid];
-            if (sel === 'all' || sel === undefined) return 'all';
-            return sel;
+            if (!user || typeof user.company_id !== 'string') return null;
+            return getEffectiveCrmNamespaceApiFilter(user.company_id, s.ui.namespace.selectionByCompany);
         });
     }
 
@@ -494,8 +491,7 @@ export class CRMTasksPage extends PlatformPage {
     }
 
     _currentNamespace() {
-        const sel = this._namespaceSel.value;
-        return sel === 'all' ? null : sel;
+        return this._namespaceSel.value;
     }
 
     _loadTasks(options) {

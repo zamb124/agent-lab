@@ -454,6 +454,28 @@ class TaskService:
             raise ValueError("Отменить может только инициатор задачи")
         if row.status in ("completed", "failed", "rolled_back", "cancelled"):
             raise ValueError(f"Задача в статусе {row.status}, отмена недоступна")
+
+        if (
+            row.cancel_requested
+            and row.status in ("pending", "running")
+            and row.task_type == "namespace_integration_job"
+        ):
+            now = datetime.now(timezone.utc)
+            pct = int(row.progress_pct)
+            await self._task_repo.patch_progress(
+                task_id,
+                row.company_id,
+                status="cancelled",
+                stage="cancelled",
+                progress_pct=pct,
+                completed_at=now,
+                cancel_requested=False,
+            )
+            updated = await self._task_repo.get(task_id)
+            if updated is None:
+                raise ValueError(f"Задача не найдена: {task_id}")
+            return updated
+
         await self._task_repo.patch_progress(task_id, row.company_id, cancel_requested=True)
         row.cancel_requested = True
         return row

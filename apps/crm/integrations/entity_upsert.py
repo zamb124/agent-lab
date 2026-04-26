@@ -1,5 +1,6 @@
 """
 Идемпотентный upsert канонической сущности по внешнему ref: (namespace, type, source, record_id).
+Возвращает (сущность, created): created True только при первом создании записи.
 """
 
 from __future__ import annotations
@@ -29,7 +30,7 @@ async def upsert_canonical_by_external_ref(
     description: Optional[str] = None,
     note_date: Optional[date] = None,
     due_date: Optional[date] = None,
-) -> CRMEntity:
+) -> tuple[CRMEntity, bool]:
     rid = str(record_id).strip()
     if not rid:
         raise ValueError("record_id обязателен")
@@ -68,7 +69,8 @@ async def upsert_canonical_by_external_ref(
             ent.note_date = datetime.now(timezone.utc).date()
         if due_date is not None:
             ent.due_date = due_date
-        return await entity_repo.update(ent)
+        updated = await entity_repo.update(ent)
+        return updated, False
 
     initial_attrs = merge_external_refs({}, source_id=source_id, ref=ref)
     for key, value in patch_attributes.items():
@@ -89,4 +91,5 @@ async def upsert_canonical_by_external_ref(
         note_date=effective_note_date,
         due_date=due_date,
     )
-    return await entity_repo.create(ent)
+    created = await entity_repo.create(ent)
+    return created, True

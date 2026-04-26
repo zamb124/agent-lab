@@ -10,6 +10,7 @@ from apps.crm.integrations.amocrm.mapping import AMO_PROVIDER_ID
 from apps.crm.integrations.amocrm.service import AmoCRMIntegrationService
 from apps.crm.integrations.entity_upsert import upsert_canonical_by_external_ref
 from core.context import clear_context, set_context
+from core.identity.system_bootstrap import ensure_system_company_exists
 from core.models.context_models import Context
 from core.models.identity_models import Company, User
 
@@ -31,7 +32,8 @@ async def test_amocrm_import_tasks_upsert_and_relationships(
     )
     set_context(ctx)
     try:
-        await upsert_canonical_by_external_ref(
+        await ensure_system_company_exists(crm_container)
+        _, _ = await upsert_canonical_by_external_ref(
             entity_repo=crm_container.entity_repository,
             namespace=ns,
             company_id="system",
@@ -43,7 +45,7 @@ async def test_amocrm_import_tasks_upsert_and_relationships(
             patch_attributes={},
             account_key="sub_amocrm",
         )
-        await upsert_canonical_by_external_ref(
+        _, _ = await upsert_canonical_by_external_ref(
             entity_repo=crm_container.entity_repository,
             namespace=ns,
             company_id="system",
@@ -62,6 +64,9 @@ async def test_amocrm_import_tasks_upsert_and_relationships(
             entity_type_repository=crm_container.entity_type_repository,
             relationship_repository=crm_container.relationship_repository,
             entity_service=crm_container.entity_service,
+            namespace_repository=crm_container.namespace_repository,
+            task_service=crm_container.task_service,
+            integration_external_author=crm_container.integration_external_author_service,
         )
 
         task_payload: dict = {
@@ -73,6 +78,7 @@ async def test_amocrm_import_tasks_upsert_and_relationships(
             "text": "Позвонить\nвторая строка",
             "complete_till": 1704067200,
             "responsible_user_id": 42,
+            "created_by": 42,
         }
 
         async def fake_get_json(url: str, token: str) -> dict:
@@ -88,13 +94,16 @@ async def test_amocrm_import_tasks_upsert_and_relationships(
             "tasks": 0,
             "tasks_skipped_no_parent": 0,
         }
+        amo_users_by_id = {
+            "42": {"email": f"amo42_{unique_id}@test.local", "name": "Owner user"},
+        }
         await service._import_tasks(
             base="https://example.amocrm.ru",
             access_token="token",
             namespace=ns,
             company_id="system",
-            user_id=system_user_id,
             account_key="sub_amocrm",
+            amo_users_by_id=amo_users_by_id,
             stats=stats,
         )
         assert stats["tasks"] == 1
@@ -110,6 +119,7 @@ async def test_amocrm_import_tasks_upsert_and_relationships(
         )
         assert len(rows) == 1
         ent = rows[0]
+        assert ent.user_id.startswith("user_")
         assert ent.attributes.get("status") == "todo"
         assert ent.attributes.get("amo_task_type_id") == 1
         assert ent.attributes.get("amo_task_type_name") == "Звонок"
@@ -173,6 +183,9 @@ async def test_amocrm_import_tasks_skips_unmapped_parent(
             entity_type_repository=crm_container.entity_type_repository,
             relationship_repository=crm_container.relationship_repository,
             entity_service=crm_container.entity_service,
+            namespace_repository=crm_container.namespace_repository,
+            task_service=crm_container.task_service,
+            integration_external_author=crm_container.integration_external_author_service,
         )
 
         task_payload: dict = {
@@ -199,8 +212,8 @@ async def test_amocrm_import_tasks_skips_unmapped_parent(
             access_token="token",
             namespace=ns,
             company_id="system",
-            user_id=system_user_id,
             account_key="sub_amocrm",
+            amo_users_by_id={},
             stats=stats,
         )
         assert stats["tasks"] == 0

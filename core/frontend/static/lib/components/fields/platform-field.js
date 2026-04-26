@@ -16,6 +16,7 @@ import './platform-field-date.js';
 import './platform-field-enum.js';
 import './platform-field-array.js';
 import './platform-field-object.js';
+import './platform-field-external-refs.js';
 
 const FIELD_TYPE_MAP = {
     string:   'platform-field-string',
@@ -28,6 +29,7 @@ const FIELD_TYPE_MAP = {
     enum:     'platform-field-enum',
     array:    'platform-field-array',
     object:   'platform-field-object',
+    external_refs: 'platform-field-external-refs',
 };
 
 export class PlatformField extends PlatformElement {
@@ -177,6 +179,13 @@ export class PlatformField extends PlatformElement {
                     ?disabled=${this.disabled}
                     @change=${this._onChange}
                 ></platform-field-object>`;
+
+            case 'external_refs':
+                return html`<platform-field-external-refs
+                    .value=${this.value}
+                    .mode=${this.mode}
+                    ?disabled=${this.disabled}
+                ></platform-field-external-refs>`;
 
             default:
                 return html`<platform-field-string

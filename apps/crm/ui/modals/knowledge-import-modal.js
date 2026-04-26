@@ -16,13 +16,13 @@
  *   - хотя бы один источник (файл ИЛИ текст) обязателен.
  *
  * Состояние пространства:
- *   - текущий namespace берётся из state.ui.namespace.selectionByCompany[companyId];
- *     если выбрано 'all', wizard выводит блокирующее предупреждение и не даёт
- *     запустить импорт (не понятно, в какой namespace писать).
+ *   - целевой namespace — getEffectiveCrmNamespaceApiFilter (bus + тот же localStorage,
+ *     что у CRM-сайдбара); при режиме «все пространства» wizard блокирует запуск.
  */
 
 import { html, css } from 'lit';
 import { PlatformModal } from '@platform/lib/components/glass-modal.js';
+import { getEffectiveCrmNamespaceApiFilter } from '@platform/lib/utils/platform-namespace.js';
 import { registerModalKind } from '@platform/lib/utils/modal-registry.js';
 import { resolveFileIconKey } from '@platform/lib/utils/file-icons.js';
 import '@platform/lib/components/platform-icon.js';
@@ -278,11 +278,7 @@ export class CRMKnowledgeImportModal extends PlatformModal {
         this._namespaceSel = this.select((s) => {
             const user = s.auth.user;
             if (!user || typeof user.company_id !== 'string') return null;
-            const cid = user.company_id;
-            const map = s.ui.namespace.selectionByCompany;
-            const sel = map[cid];
-            if (sel === 'all' || sel === undefined || sel === null) return null;
-            return sel;
+            return getEffectiveCrmNamespaceApiFilter(user.company_id, s.ui.namespace.selectionByCompany);
         });
     }
 

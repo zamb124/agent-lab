@@ -4,12 +4,15 @@
  * Маршрут: `/crm/spaces/:itemId/integrations` (parent: `space`).
  */
 
-import { html, css } from 'lit';
+import { html, css, nothing } from 'lit';
 import { PlatformPage } from '@platform/lib/base/PlatformPage.js';
 import '@platform/lib/components/layout/page-header.js';
 import '@platform/lib/components/glass-spinner.js';
 import '@platform/lib/components/platform-breadcrumbs.js';
 import '@platform/lib/components/platform-icon.js';
+import '@platform/lib/components/platform-switch.js';
+import '@platform/lib/components/platform-cron-field.js';
+import '@platform/lib/components/platform-timezone-picker.js';
 
 const PROVIDER_AMOCRM = 'amocrm';
 
@@ -37,6 +40,10 @@ export class CRMSpaceIntegrationsPage extends PlatformPage {
         _manifestItems: { state: true },
         _manifestLoading: { state: true },
         _amoUnifiedSyncBusy: { state: true },
+        _autoSyncEnabled: { state: true },
+        _autoSyncCron: { state: true },
+        _autoSyncTimezone: { state: true },
+        _autoNoteAiAnalyze: { state: true },
     };
 
     static styles = [
@@ -92,6 +99,12 @@ export class CRMSpaceIntegrationsPage extends PlatformPage {
                 border: 1px solid var(--glass-border-subtle);
                 background: var(--glass-solid-medium);
                 color: var(--text-primary);
+            }
+            platform-cron-field,
+            platform-timezone-picker {
+                display: block;
+                width: 100%;
+                box-sizing: border-box;
             }
             .hint {
                 font-size: var(--text-sm);
@@ -158,6 +171,18 @@ export class CRMSpaceIntegrationsPage extends PlatformPage {
                 background: var(--glass-solid-medium);
                 color: var(--text-secondary);
             }
+            .auto-sync-section {
+                margin-top: var(--space-4);
+                padding-top: var(--space-4);
+                border-top: 1px solid var(--glass-border-subtle);
+            }
+            .auto-sync-row {
+                display: flex;
+                flex-wrap: wrap;
+                align-items: center;
+                gap: var(--space-2);
+                margin-bottom: var(--space-3);
+            }
         `,
     ];
 
@@ -169,12 +194,18 @@ export class CRMSpaceIntegrationsPage extends PlatformPage {
         this._manifestLoading = true;
         this._amoUnifiedSyncBusy = false;
         this._lastLoadedId = '';
+        this._autoSyncEnabled = false;
+        this._autoSyncCron = '0 * * * *';
+        this._autoSyncTimezone = 'UTC';
+        this._autoNoteAiAnalyze = false;
 
         this._namespaces = this.useResource('crm/namespaces');
         this._listOp = this.useOp('crm/namespace_integrations_list');
         this._integrationAuthOp = this.useOp('crm/namespace_integration_authorize');
         this._integrationEntitiesSyncOp = this.useOp('crm/namespace_integration_entities_sync');
         this._integrationCustomFieldsSyncOp = this.useOp('crm/namespace_integration_custom_fields_sync');
+        this._integrationAutoSyncOp = this.useOp('crm/namespace_integration_auto_sync');
+        this._integrationAutoNoteAiOp = this.useOp('crm/namespace_integration_auto_note_ai');
         this._taskGetOp = this.useOp('crm/task_get');
     }
 
@@ -223,10 +254,15 @@ export class CRMSpaceIntegrationsPage extends PlatformPage {
             const payload = event && event.payload && event.payload.result;
             const items = payload && Array.isArray(payload.items) ? payload.items : [];
             this._manifestItems = items;
+            const amo = items.find((row) => row && row.provider_id === PROVIDER_AMOCRM);
+            this._applyAutoSyncFieldsFromManifestRow(amo !== undefined ? amo : null);
         });
         this.useEvent(this._listOp.op.events.FAILED, () => {
             this._manifestLoading = false;
             this._manifestItems = [];
+        });
+        this.useEvent(this._integrationAutoNoteAiOp.op.events.FAILED, () => {
+            this._listOp.run({ namespace_name: this.itemId });
         });
         this.useEvent(this._namespaces.resource.events.ITEM_LOADED, (event) => {
             const item = event && event.payload && event.payload.item;
@@ -247,8 +283,30 @@ export class CRMSpaceIntegrationsPage extends PlatformPage {
         if (this._lastLoadedId === this.itemId) return;
         this._lastLoadedId = this.itemId;
         this._manifestLoading = true;
+        this._autoSyncEnabled = false;
+        this._autoSyncCron = '0 * * * *';
+        this._autoSyncTimezone = 'UTC';
+        this._autoNoteAiAnalyze = false;
         this._namespaces.get(this.itemId);
         this._listOp.run({ namespace_name: this.itemId });
+    }
+
+    _applyAutoSyncFieldsFromManifestRow(row) {
+        if (row === null) {
+            return;
+        }
+        if (typeof row.auto_sync_enabled === 'boolean') {
+            this._autoSyncEnabled = row.auto_sync_enabled;
+        }
+        if (typeof row.auto_sync_cron === 'string' && row.auto_sync_cron.length > 0) {
+            this._autoSyncCron = row.auto_sync_cron;
+        }
+        if (typeof row.auto_sync_timezone === 'string' && row.auto_sync_timezone.length > 0) {
+            this._autoSyncTimezone = row.auto_sync_timezone;
+        }
+        if (typeof row.auto_note_ai_analyze === 'boolean') {
+            this._autoNoteAiAnalyze = row.auto_note_ai_analyze;
+        }
     }
 
     _namespace() {
@@ -336,6 +394,62 @@ export class CRMSpaceIntegrationsPage extends PlatformPage {
             return;
         }
         this.toast(failedKey, { type: 'error', vars: { message: outcome.error_message } });
+    }
+
+    _onAutoSyncSwitch(e) {
+        const d = e && e.detail;
+        if (!d || typeof d.value !== 'boolean') {
+            throw new Error('auto-sync switch: ожидался detail.value (boolean)');
+        }
+        this._autoSyncEnabled = d.value;
+    }
+
+    _onAutoCronInput(e) {
+        const d = e && e.detail;
+        if (!d || typeof d.value !== 'string') {
+            throw new Error('auto-sync cron: expected detail.value (string)');
+        }
+        this._autoSyncCron = d.value;
+    }
+
+    _onAutoTzInput(e) {
+        const d = e && e.detail;
+        if (!d || typeof d.value !== 'string') {
+            throw new Error('auto-sync timezone: expected detail.value (string)');
+        }
+        this._autoSyncTimezone = d.value;
+    }
+
+    async _onSaveAutoSync() {
+        const cronRaw = typeof this._autoSyncCron === 'string' ? this._autoSyncCron.trim() : '';
+        const tzRaw = typeof this._autoSyncTimezone === 'string' ? this._autoSyncTimezone.trim() : '';
+        if (this._autoSyncEnabled && cronRaw.length === 0) {
+            this.toast('integrations_page.auto_sync_cron_required', { type: 'error' });
+            return;
+        }
+        await this._integrationAutoSyncOp.run({
+            namespace_name: this.itemId,
+            provider_id: PROVIDER_AMOCRM,
+            auto_sync_enabled: this._autoSyncEnabled,
+            auto_sync_cron: this._autoSyncEnabled ? cronRaw : null,
+            auto_sync_timezone: tzRaw.length > 0 ? tzRaw : 'UTC',
+        });
+        this._namespaces.get(this.itemId);
+        this._listOp.run({ namespace_name: this.itemId });
+    }
+
+    async _onAutoNoteAiSwitch(e) {
+        const d = e && e.detail;
+        if (!d || typeof d.value !== 'boolean') {
+            throw new Error('auto note ai: expected detail.value (boolean)');
+        }
+        await this._integrationAutoNoteAiOp.run({
+            namespace_name: this.itemId,
+            provider_id: PROVIDER_AMOCRM,
+            auto_note_ai_analyze: d.value,
+        });
+        this._namespaces.get(this.itemId);
+        this._listOp.run({ namespace_name: this.itemId });
     }
 
     async _onAmoUnifiedSync() {
@@ -464,6 +578,74 @@ export class CRMSpaceIntegrationsPage extends PlatformPage {
                             ${this.t('integrations_page.amocrm_sync_unified')}
                         </button>
                     </div>
+                    ${connected
+                        ? html`
+                    <div class="auto-sync-section">
+                        <div class="panel-title">
+                            <platform-icon name="clock" size="18"></platform-icon>
+                            ${this.t('integrations_page.auto_sync_title')}
+                        </div>
+                        <p class="hint">${this.t('integrations_page.auto_sync_hint')}</p>
+                        <div class="auto-sync-row">
+                            <platform-switch
+                                .checked=${this._autoSyncEnabled}
+                                ?disabled=${this._integrationAutoSyncOp.busy}
+                                label=${this.t('integrations_page.auto_sync_toggle')}
+                                @change=${this._onAutoSyncSwitch}
+                            ></platform-switch>
+                        </div>
+                        <div class="field">
+                            <label class="field-label">${this.t('integrations_page.auto_sync_cron_label')}</label>
+                            <platform-cron-field
+                                .value=${this._autoSyncCron}
+                                placeholder=${this.t('integrations_page.auto_sync_cron_placeholder')}
+                                ?disabled=${this._integrationAutoSyncOp.busy}
+                                @input=${this._onAutoCronInput}
+                                @change=${this._onAutoCronInput}
+                            ></platform-cron-field>
+                            <p class="hint">${this.t('integrations_page.auto_sync_cron_help')}</p>
+                        </div>
+                        <div class="field">
+                            <label class="field-label">${this.t('integrations_page.auto_sync_tz_label')}</label>
+                            <platform-timezone-picker
+                                placeholder=${this.t('integrations_page.auto_sync_tz_placeholder')}
+                                .value=${this._autoSyncTimezone}
+                                ?disabled=${this._integrationAutoSyncOp.busy}
+                                @input=${this._onAutoTzInput}
+                                @change=${this._onAutoTzInput}
+                            ></platform-timezone-picker>
+                            <p class="hint">${this.t('integrations_page.auto_sync_tz_help')}</p>
+                        </div>
+                        <button
+                            class="btn btn-primary"
+                            type="button"
+                            ?disabled=${this._integrationAutoSyncOp.busy
+                                || this._integrationAuthOp.busy
+                                || this._amoUnifiedSyncBusy}
+                            @click=${this._onSaveAutoSync}
+                        >
+                            ${this.t('integrations_page.auto_sync_save')}
+                        </button>
+                    </div>
+                    <div class="auto-sync-section">
+                        <div class="panel-title">
+                            <platform-icon name="sparkle" size="18"></platform-icon>
+                            ${this.t('integrations_page.auto_note_ai_title')}
+                        </div>
+                        <p class="hint">${this.t('integrations_page.auto_note_ai_hint')}</p>
+                        <div class="auto-sync-row">
+                            <platform-switch
+                                .checked=${this._autoNoteAiAnalyze}
+                                ?disabled=${this._integrationAutoNoteAiOp.busy
+                                    || this._integrationAuthOp.busy
+                                    || this._amoUnifiedSyncBusy}
+                                label=${this.t('integrations_page.auto_note_ai_toggle')}
+                                @change=${this._onAutoNoteAiSwitch}
+                            ></platform-switch>
+                        </div>
+                    </div>
+                        `
+                        : nothing}
                 </div>
                 `}
             </div>

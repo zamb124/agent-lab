@@ -15,6 +15,8 @@
 import { html, css } from 'lit';
 import { PlatformFormModal } from '@platform/lib/components/glass-form-modal.js';
 import { registerModalKind } from '@platform/lib/utils/modal-registry.js';
+import '@platform/lib/components/platform-cron-field.js';
+import '@platform/lib/components/platform-timezone-picker.js';
 
 export class FrontendCreateSchedulerTaskModal extends PlatformFormModal {
     static modalKind = 'frontend.scheduler_task_create';
@@ -155,10 +157,13 @@ export class FrontendCreateSchedulerTaskModal extends PlatformFormModal {
             return html`
                 <div class="form-group">
                     <label class="form-label">${this.t('scheduler_modal.label_cron')}</label>
-                    <input class="form-input" name="cron" .value=${this._cron}
-                        @input=${(e) => { this._cron = e.target.value; }}
+                    <platform-cron-field
+                        name="cron"
+                        .value=${this._cron}
+                        @input=${(e) => { this._cron = e.detail.value; }}
+                        @change=${(e) => { this._cron = e.detail.value; }}
                         placeholder="0 */5 * * *"
-                    />
+                    ></platform-cron-field>
                     ${this.renderFieldError('cron')}
                 </div>
             `;
@@ -222,10 +227,14 @@ export class FrontendCreateSchedulerTaskModal extends PlatformFormModal {
 
                 <div class="form-group">
                     <label class="form-label">timezone</label>
-                    <input class="form-input" name="timezone" .value=${this._timezone}
-                        @input=${(e) => { this._timezone = e.target.value; }}
+                    <platform-timezone-picker
+                        class="form-input"
+                        name="timezone"
+                        .value=${this._timezone}
+                        @input=${(e) => { this._timezone = e.detail.value; }}
+                        @change=${(e) => { this._timezone = e.detail.value; }}
                         placeholder="UTC"
-                    />
+                    ></platform-timezone-picker>
                 </div>
 
                 <div class="form-group">

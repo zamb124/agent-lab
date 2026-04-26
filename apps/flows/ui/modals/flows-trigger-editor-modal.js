@@ -21,6 +21,8 @@ import { registerModalKind } from '@platform/lib/utils/modal-registry.js';
 import '@platform/lib/components/platform-icon.js';
 import '@platform/lib/components/platform-switch.js';
 import '@platform/lib/components/platform-help-hint.js';
+import '@platform/lib/components/platform-cron-field.js';
+import '@platform/lib/components/platform-timezone-picker.js';
 import { asString, isPlainObject } from '../_helpers/flows-resolvers.js';
 import { TRIGGER_TYPES } from '../constants/trigger-types.js';
 
@@ -773,22 +775,22 @@ export class FlowsTriggerEditorModal extends PlatformFormModal {
                 <div class="config-section-title">${this.t('trigger_editor_modal.section_cron')}</div>
                 <div class="field">
                     <label>${this.t('trigger_editor_modal.field_cron')}</label>
-                    <input
-                        type="text"
+                    <platform-cron-field
                         .value=${asString(c.cron)}
                         placeholder=${this.t('trigger_editor_modal.field_cron_placeholder')}
-                        @input=${(e) => this._setConfig('cron', e.target.value)}
-                    />
+                        @input=${(e) => this._setConfig('cron', e.detail.value)}
+                        @change=${(e) => this._setConfig('cron', e.detail.value)}
+                    ></platform-cron-field>
                     <span class="hint">${this.t('trigger_editor_modal.hint_cron')}</span>
                 </div>
                 <div class="field">
                     <label>${this.t('trigger_editor_modal.field_timezone')}</label>
-                    <input
-                        type="text"
+                    <platform-timezone-picker
                         .value=${asString(c.timezone)}
                         placeholder=${this.t('trigger_editor_modal.field_timezone_placeholder')}
-                        @input=${(e) => this._setConfig('timezone', e.target.value)}
-                    />
+                        @input=${(e) => this._setConfig('timezone', e.detail.value)}
+                        @change=${(e) => this._setConfig('timezone', e.detail.value)}
+                    ></platform-timezone-picker>
                 </div>
                 <div class="field">
                     <label>${this.t('trigger_editor_modal.field_initial_content')}</label>
