@@ -66,6 +66,7 @@ import {
 
 import '@platform/lib/components/layout/platform-island.js';
 import '../components/frontend-sidebar.js';
+import '../components/frontend-mobile-app-header.js';
 import '../pages/landing-page.js';
 import '../pages/products/product-agents-page.js';
 import '../pages/products/product-rag-page.js';
@@ -122,6 +123,19 @@ const LANDING_ROUTE_KEYS = new Set([
     'landing',
     'product-agents', 'product-rag', 'product-crm', 'product-sync', 'product-documents',
     'policy', 'terms',
+]);
+
+/** Страницы, где уже есть `<page-header>` — общий мобильный хедер не вставляем. */
+const FRONTEND_ROUTES_WITH_OWN_PAGE_HEADER = new Set([
+    'team',
+    'api-keys',
+    'embed-configs',
+    'billing',
+    'scheduler-tasks',
+    'settings',
+    'lead-requests',
+    'platform-tracing',
+    'platform-billing',
 ]);
 
 export class FrontendApp extends PlatformApp {
@@ -195,22 +209,28 @@ export class FrontendApp extends PlatformApp {
             .console {
                 display: flex;
                 width: 100%;
-                height: 100vh;
+                height: var(--app-vh, 100vh);
                 overflow: hidden;
             }
             .sidebar {
-                height: 100vh;
+                height: var(--app-vh, 100vh);
                 flex-shrink: 0;
                 background: transparent;
             }
             .main {
                 flex: 1;
-                height: 100vh;
-                overflow-y: auto;
+                min-width: 0;
+                height: var(--app-vh, 100vh);
                 display: flex;
+                flex-direction: column;
                 padding: var(--space-4);
+                overflow: hidden;
             }
-            platform-island { flex: 1; min-height: calc(100vh - 2rem); }
+            platform-island {
+                flex: 1;
+                min-height: 0;
+                min-width: 0;
+            }
             @media (max-width: 767px) {
                 .sidebar { position: absolute; width: 0; height: 0; overflow: visible; }
                 .main { padding: 0; }
@@ -310,10 +330,14 @@ export class FrontendApp extends PlatformApp {
             case 'platform-billing':  content = html`<frontend-billing-admin-page></frontend-billing-admin-page>`; break;
             default:                  content = html`<dashboard-page></dashboard-page>`; break;
         }
+        const shellHeader = FRONTEND_ROUTES_WITH_OWN_PAGE_HEADER.has(routeKey)
+            ? ''
+            : html`<frontend-mobile-app-header></frontend-mobile-app-header>`;
         return html`
             <div class="console">
                 <div class="sidebar"><frontend-sidebar></frontend-sidebar></div>
                 <div class="main">
+                    ${shellHeader}
                     <platform-island>${content}</platform-island>
                 </div>
             </div>

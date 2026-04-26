@@ -51,6 +51,7 @@ import { executionUiSlice } from '../events/resources/execution-ui.resource.js';
 import { asObject, asString, isPlainObject } from '../_helpers/flows-resolvers.js';
 import { applyTenantHostRedirectIfNeeded } from '@platform/lib/utils/tenant-host-guard.js';
 import { COMPANIES_EVENTS } from '@platform/lib/events/reducers/companies.js';
+import '@platform/lib/components/layout/platform-island.js';
 
 const FLOWS_ROUTES = [
     { key: 'list',                path: '' },
@@ -140,20 +141,48 @@ export class FlowsApp extends PlatformApp {
         css`
             :host {
                 display: flex;
+                flex-direction: row;
                 width: var(--app-vw, 100vw);
                 height: var(--app-vh, 100vh);
                 overflow: hidden;
                 background: var(--bg-gradient);
             }
-
-            flows-list-page,
+            .sidebar {
+                height: var(--app-vh, 100vh);
+                flex-shrink: 0;
+                background: transparent;
+            }
+            .main {
+                flex: 1;
+                min-width: 0;
+                height: var(--app-vh, 100vh);
+                display: flex;
+                flex-direction: column;
+                padding: var(--space-4);
+                overflow: hidden;
+            }
+            platform-island {
+                flex: 1;
+                min-height: 0;
+                min-width: 0;
+            }
             flow-editor-page,
-            chat-page,
             operator-page {
                 flex: 1;
                 min-width: 0;
                 min-height: 0;
                 height: 100%;
+            }
+            @media (max-width: 767px) {
+                .main {
+                    padding: 0;
+                }
+                .sidebar {
+                    position: absolute;
+                    width: 0;
+                    height: 0;
+                    overflow: visible;
+                }
             }
         `,
     ];
@@ -191,6 +220,40 @@ export class FlowsApp extends PlatformApp {
         });
         this._companiesListSel = this.select((s) => s.companies.list);
         this._companiesLoadingSel = this.select((s) => s.companies.loading);
+        this._flowsMql = null;
+        this._onFlowsMobileMql = null;
+        this._flowsMobile =
+            typeof window !== 'undefined' &&
+            typeof window.matchMedia === 'function' &&
+            window.matchMedia('(max-width: 767px)').matches;
+    }
+
+    connectedCallback() {
+        super.connectedCallback();
+        if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') {
+            return;
+        }
+        this._flowsMql = window.matchMedia('(max-width: 767px)');
+        this._onFlowsMobileMql = () => {
+            const next = this._flowsMql.matches;
+            if (next !== this._flowsMobile) {
+                this._flowsMobile = next;
+                this.requestUpdate();
+            }
+        };
+        this._flowsMql.addEventListener('change', this._onFlowsMobileMql);
+        const next = this._flowsMql.matches;
+        if (next !== this._flowsMobile) {
+            this._flowsMobile = next;
+            this.requestUpdate();
+        }
+    }
+
+    disconnectedCallback() {
+        if (this._flowsMql && this._onFlowsMobileMql) {
+            this._flowsMql.removeEventListener('change', this._onFlowsMobileMql);
+        }
+        super.disconnectedCallback();
     }
 
     updated(changed) {
@@ -227,12 +290,22 @@ export class FlowsApp extends PlatformApp {
             case 'flow_chat_skill':
             case 'flow_chat_session':
                 return html`
-                    <flows-list-page></flows-list-page>
-                    <chat-page
-                        .flowId=${params.flowId}
-                        .skillId=${typeof params.skillId === 'string' && params.skillId.length > 0 ? params.skillId : 'base'}
-                        .sessionId=${asString(params.sessionId)}
-                    ></chat-page>
+                    <div class="sidebar">
+                        <flows-list-page></flows-list-page>
+                    </div>
+                    <div class="main">
+                        <platform-island
+                            padding=${this._flowsMobile ? 'none' : 'md'}
+                            ?safe-bottom=${this._flowsMobile}
+                            ?content-no-scroll=${true}
+                        >
+                            <chat-page
+                                .flowId=${params.flowId}
+                                .skillId=${typeof params.skillId === 'string' && params.skillId.length > 0 ? params.skillId : 'base'}
+                                .sessionId=${asString(params.sessionId)}
+                            ></chat-page>
+                        </platform-island>
+                    </div>
                     ${this._renderLara()}
                 `;
             case 'flow_editor':
@@ -247,8 +320,17 @@ export class FlowsApp extends PlatformApp {
             case 'list':
             default:
                 return html`
-                    <flows-list-page></flows-list-page>
-                    <flows-empty-state></flows-empty-state>
+                    <div class="sidebar">
+                        <flows-list-page></flows-list-page>
+                    </div>
+                    <div class="main">
+                        <platform-island
+                            padding=${this._flowsMobile ? 'none' : 'md'}
+                            ?safe-bottom=${this._flowsMobile}
+                        >
+                            <flows-empty-state></flows-empty-state>
+                        </platform-island>
+                    </div>
                     ${this._renderLara()}
                 `;
         }
@@ -263,7 +345,6 @@ export class FlowsApp extends PlatformApp {
                 skill-id="flows"
                 .flowsBaseUrl=${'/flows'}
                 ?use-credentials=${true}
-                ?show-launcher=${false}
                 .assistantTitle=${'Lara'}
                 .getExtraMetadataVariables=${this._laraEmbedContextVariables}
                 .getContextVariables=${this._laraEmbedContextVariables}

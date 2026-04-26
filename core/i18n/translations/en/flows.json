@@ -326,7 +326,8 @@
     "btn_sessions": "Sessions history",
     "btn_traces": "Traces",
     "btn_editor": "Open editor",
-    "btn_clear": "Clear chat"
+    "btn_clear": "Clear chat",
+    "overflow_aria": "More actions"
   },
   "chat_messages": {
     "empty_title": "Start a conversation",

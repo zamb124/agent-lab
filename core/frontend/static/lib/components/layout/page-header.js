@@ -21,6 +21,11 @@ export class PageHeader extends PlatformElement {
         subtitle: { type: String },
         /** На mobile: "title" — только заголовок; "search" — слот toolbar-search */
         mobileToolbarMode: { type: String },
+        /**
+         * На mobile у `.actions` по умолчанию `overflow-x: auto` (много кнопок).
+         * `visible` — не обрезать по вертикали/вне контейнера (выпадающие меню в slot actions).
+         */
+        actionsOverflow: { type: String, attribute: 'actions-overflow' },
         _isMobile: { state: true },
     };
 
@@ -162,6 +167,10 @@ export class PageHeader extends PlatformElement {
                     scrollbar-width: none;
                 }
 
+                .actions[data-overflow='visible'] {
+                    overflow: visible;
+                }
+
                 .actions::-webkit-scrollbar {
                     display: none;
                 }
@@ -203,6 +212,7 @@ export class PageHeader extends PlatformElement {
         this.title = '';
         this.subtitle = '';
         this.mobileToolbarMode = 'title';
+        this.actionsOverflow = 'auto';
         this._isMobile = false;
         this._resizeObserver = null;
         this._sidebarOpenSel = this.select((s) => s.ui.sidebar.mobileOpen);
@@ -265,7 +275,10 @@ export class PageHeader extends PlatformElement {
                     </button>
                     ${this._renderTitleBlock()}
                 </div>
-                <div class="actions">
+                <div
+                    class="actions"
+                    data-overflow=${this.actionsOverflow === 'visible' ? 'visible' : 'auto'}
+                >
                     <slot name="actions"></slot>
                 </div>
             </div>

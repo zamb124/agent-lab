@@ -18,6 +18,7 @@ export class FlowsEmptyState extends PlatformElement {
                 align-items: center;
                 justify-content: center;
                 padding: var(--space-8);
+                box-sizing: border-box;
                 color: var(--text-secondary);
                 font-size: var(--text-base);
             }

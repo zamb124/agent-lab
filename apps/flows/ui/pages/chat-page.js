@@ -7,9 +7,10 @@
  * слайс `flows/chat` раскладывает в `messagesByContextId[contextId]`.
  */
 
-import { html, css } from 'lit';
+import { html, css, nothing } from 'lit';
 import { PlatformPage } from '@platform/lib/base/PlatformPage.js';
 import '@platform/lib/components/platform-icon.js';
+import '@platform/lib/components/layout/page-header.js';
 import '../components/chat/chat-input.js';
 import '../components/chat/chat-messages.js';
 import { asArray, asString, isPlainObject } from '../_helpers/flows-resolvers.js';
@@ -20,6 +21,8 @@ export class ChatPage extends PlatformPage {
         flowId: { type: String, attribute: 'flow-id' },
         skillId: { type: String, attribute: 'skill-id' },
         sessionId: { type: String, attribute: 'session-id' },
+        _isMobile: { state: true },
+        _overflowOpen: { state: true },
     };
 
     static styles = [
@@ -29,44 +32,28 @@ export class ChatPage extends PlatformPage {
                 flex: 1;
                 min-width: 0;
                 min-height: 0;
+                height: 100%;
                 display: flex;
                 flex-direction: column;
-                background: var(--glass-solid-subtle);
-                border-radius: var(--radius-lg);
-                border: 1px solid var(--border-subtle);
-                margin: var(--space-3);
                 overflow: hidden;
+                background: transparent;
+                box-sizing: border-box;
             }
-            .chat-header {
-                display: flex;
-                align-items: center;
-                justify-content: space-between;
-                padding: var(--space-4) var(--space-6);
-                border-bottom: 1px solid var(--border-subtle);
-                background: var(--glass-tint-subtle);
-            }
-            .chat-title {
-                display: flex;
-                flex-direction: column;
-                gap: 2px;
-                min-width: 0;
-            }
-            .chat-flow-name {
-                font-size: var(--text-lg);
-                font-weight: var(--font-semibold);
-                color: var(--text-primary);
-                white-space: nowrap;
-                overflow: hidden;
-                text-overflow: ellipsis;
-            }
-            .chat-skill {
+            .chat-skill-hint {
+                flex-shrink: 0;
+                padding: 0 var(--space-4) var(--space-2);
                 font-size: var(--text-xs);
                 color: var(--text-tertiary);
             }
-            .chat-actions {
+            .flow-chat-header-actions {
+                position: relative;
                 display: flex;
                 align-items: center;
                 gap: var(--space-2);
+            }
+            .flow-chat-overflow-anchor {
+                position: relative;
+                z-index: 50;
             }
             .action-btn {
                 width: 36px;
@@ -83,6 +70,36 @@ export class ChatPage extends PlatformPage {
             .action-btn:hover {
                 background: var(--glass-solid-medium);
                 color: var(--text-primary);
+            }
+            .action-btn-menu {
+                width: 100%;
+                min-height: 40px;
+                display: flex;
+                align-items: center;
+                gap: var(--space-2);
+                background: transparent;
+                border: none;
+                text-align: left;
+                padding: var(--space-2) var(--space-3);
+                color: var(--text-primary);
+                cursor: pointer;
+                font-size: var(--text-sm);
+            }
+            .action-btn-menu:hover {
+                background: var(--glass-hover, color-mix(in srgb, var(--glass-hover) 35%, transparent));
+            }
+            .menu-flyout {
+                position: absolute;
+                right: 0;
+                top: 100%;
+                margin-top: 4px;
+                min-width: 220px;
+                background: var(--glass-solid-strong);
+                border: 1px solid var(--glass-border, var(--border-subtle));
+                border-radius: var(--radius-md);
+                box-shadow: 0 8px 24px rgba(0, 0, 0, 0.18);
+                padding: var(--space-1) 0;
+                z-index: 40;
             }
             .chat-body {
                 flex: 1;
@@ -104,6 +121,31 @@ export class ChatPage extends PlatformPage {
         this.flowId = '';
         this.skillId = 'base';
         this.sessionId = '';
+        this._isMobile =
+            typeof window !== 'undefined' &&
+            typeof window.matchMedia === 'function' &&
+            window.matchMedia('(max-width: 767px)').matches;
+        this._overflowOpen = false;
+        this._chatMql = null;
+        this._onChatMobileMql = null;
+        this._onDocPointer = (e) => {
+            if (!this._overflowOpen) {
+                return;
+            }
+            const path = e.composedPath();
+            for (const n of path) {
+                if (n === this) {
+                    break;
+                }
+                if (n == null || typeof n !== 'object' || !('classList' in n) || !n.classList) {
+                    continue;
+                }
+                if (n.classList.contains('flow-chat-header-actions')) {
+                    return;
+                }
+            }
+            this._overflowOpen = false;
+        };
         this._chat = this.useResource('flows/chat');
         this._send = this.useOp('flows/chat_send');
         this._cancel = this.useOp('flows/chat_cancel');
@@ -114,10 +156,36 @@ export class ChatPage extends PlatformPage {
     connectedCallback() {
         super.connectedCallback();
         this._initOrLoadSession();
+        if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') {
+            return;
+        }
+        this._chatMql = window.matchMedia('(max-width: 767px)');
+        this._onChatMobileMql = () => {
+            const next = this._chatMql.matches;
+            if (next !== this._isMobile) {
+                this._isMobile = next;
+            }
+        };
+        this._chatMql.addEventListener('change', this._onChatMobileMql);
+        const next = this._chatMql.matches;
+        if (next !== this._isMobile) {
+            this._isMobile = next;
+        }
+        document.addEventListener('pointerdown', this._onDocPointer);
+    }
+
+    disconnectedCallback() {
+        if (this._chatMql && this._onChatMobileMql) {
+            this._chatMql.removeEventListener('change', this._onChatMobileMql);
+        }
+        document.removeEventListener('pointerdown', this._onDocPointer);
+        super.disconnectedCallback();
     }
 
     updated(changed) {
-        if (super.updated) super.updated(changed);
+        if (super.updated) {
+            super.updated(changed);
+        }
         if (changed.has('flowId') || changed.has('sessionId') || changed.has('skillId')) {
             this._initOrLoadSession();
         }
@@ -247,10 +315,12 @@ export class ChatPage extends PlatformPage {
     }
 
     _onClear() {
+        this._overflowOpen = false;
         this._chat.resetSession();
     }
 
     _openEditor() {
+        this._overflowOpen = false;
         if (!this.flowId) return;
         if (this.skillId && this.skillId !== 'base') {
             this.navigate('flow_editor_skill', { flowId: this.flowId, skillId: this.skillId });
@@ -260,10 +330,12 @@ export class ChatPage extends PlatformPage {
     }
 
     _openSessions() {
+        this._overflowOpen = false;
         this.openModal('flows.sessions', { flowId: this.flowId });
     }
 
     _openTriggers() {
+        this._overflowOpen = false;
         if (typeof this.flowId !== 'string' || this.flowId.length === 0) {
             return;
         }
@@ -271,6 +343,7 @@ export class ChatPage extends PlatformPage {
     }
 
     _openTracingModalFromDetail(detail) {
+        this._overflowOpen = false;
         const state = this._chat.state;
         const ctxId = state?.currentContextId;
         if (!ctxId || !this.flowId) {
@@ -296,11 +369,141 @@ export class ChatPage extends PlatformPage {
         this._openTracingModalFromDetail(e.detail);
     }
 
-    _openState() {
-        const state = this._chat.state;
-        const ctxId = state?.currentContextId;
-        if (!ctxId || !this.flowId) return;
-        this.openModal('flows.state', { sessionId: `${this.flowId}:${ctxId}` });
+    _openLara() {
+        this._overflowOpen = false;
+        window.dispatchEvent(
+            new CustomEvent('flows-lara-open', {
+                bubbles: true,
+                composed: true,
+                detail: { open: true },
+            }),
+        );
+    }
+
+    _toggleOverflow(e) {
+        e.stopPropagation();
+        this._overflowOpen = !this._overflowOpen;
+    }
+
+    _renderDesktopActions(hasFlow) {
+        return html`
+            <button
+                type="button"
+                class="action-btn"
+                title=${this.t('editor_header.lara')}
+                aria-label=${this.t('editor_header.lara')}
+                @click=${this._openLara}
+            >
+                <platform-icon name="ai" size="16"></platform-icon>
+            </button>
+            ${hasFlow
+                ? html`
+                    <button
+                        type="button"
+                        class="action-btn"
+                        title=${this.t('flows_sidebar.footer_triggers')}
+                        aria-label=${this.t('flows_sidebar.footer_triggers')}
+                        @click=${this._openTriggers}
+                    >
+                        <platform-icon name="zap" size="16"></platform-icon>
+                    </button>
+                `
+                : nothing}
+            <button
+                type="button"
+                class="action-btn"
+                title=${this.t('platform_chat.btn_sessions')}
+                aria-label=${this.t('platform_chat.btn_sessions')}
+                @click=${this._openSessions}
+            >
+                <platform-icon name="clipboard" size="16"></platform-icon>
+            </button>
+            <button
+                type="button"
+                class="action-btn"
+                title=${this.t('platform_chat.btn_traces')}
+                aria-label=${this.t('platform_chat.btn_traces')}
+                @click=${this._openTracing}
+            >
+                <platform-icon name="chart" size="16"></platform-icon>
+            </button>
+            <button
+                type="button"
+                class="action-btn"
+                title=${this.t('platform_chat.btn_editor')}
+                aria-label=${this.t('platform_chat.btn_editor')}
+                @click=${this._openEditor}
+            >
+                <platform-icon name="edit" size="16"></platform-icon>
+            </button>
+            <button
+                type="button"
+                class="action-btn"
+                title=${this.t('platform_chat.btn_clear')}
+                aria-label=${this.t('platform_chat.btn_clear')}
+                @click=${this._onClear}
+            >
+                <platform-icon name="trash" size="16"></platform-icon>
+            </button>
+        `;
+    }
+
+    _renderMobileActions(hasFlow) {
+        return html`
+            <div class="flow-chat-header-actions" @click=${(e) => e.stopPropagation()}>
+                <button
+                    type="button"
+                    class="action-btn"
+                    title=${this.t('editor_header.lara')}
+                    aria-label=${this.t('editor_header.lara')}
+                    @click=${this._openLara}
+                >
+                    <platform-icon name="ai" size="16"></platform-icon>
+                </button>
+                <div class="flow-chat-overflow-anchor">
+                    <button
+                        type="button"
+                        class="action-btn"
+                        title=${this.t('platform_chat.overflow_aria')}
+                        aria-label=${this.t('platform_chat.overflow_aria')}
+                        aria-expanded=${this._overflowOpen ? 'true' : 'false'}
+                        @click=${this._toggleOverflow}
+                    >
+                        <platform-icon name="more-vertical" size="20"></platform-icon>
+                    </button>
+                    ${this._overflowOpen
+                        ? html`
+                            <div class="menu-flyout" @click=${(e) => e.stopPropagation()}>
+                                ${hasFlow
+                                    ? html`
+                                        <button type="button" class="action-btn-menu" @click=${this._openTriggers}>
+                                            <platform-icon name="zap" size="16"></platform-icon>
+                                            ${this.t('flows_sidebar.footer_triggers')}
+                                        </button>
+                                    `
+                                    : nothing}
+                                <button type="button" class="action-btn-menu" @click=${this._openSessions}>
+                                    <platform-icon name="clipboard" size="16"></platform-icon>
+                                    ${this.t('platform_chat.btn_sessions')}
+                                </button>
+                                <button type="button" class="action-btn-menu" @click=${this._openTracing}>
+                                    <platform-icon name="chart" size="16"></platform-icon>
+                                    ${this.t('platform_chat.btn_traces')}
+                                </button>
+                                <button type="button" class="action-btn-menu" @click=${this._openEditor}>
+                                    <platform-icon name="edit" size="16"></platform-icon>
+                                    ${this.t('platform_chat.btn_editor')}
+                                </button>
+                                <button type="button" class="action-btn-menu" @click=${this._onClear}>
+                                    <platform-icon name="trash" size="16"></platform-icon>
+                                    ${this.t('platform_chat.btn_clear')}
+                                </button>
+                            </div>
+                        `
+                        : nothing}
+                </div>
+            </div>
+        `;
     }
 
     render() {
@@ -313,45 +516,26 @@ export class ChatPage extends PlatformPage {
         } else {
             flowName = this.t('platform_chat.no_flow');
         }
+        const skillLabel = this.skillId === 'base' ? this.t('platform_chat.base_skill') : this.skillId;
+        const hasFlow = typeof this.flowId === 'string' && this.flowId.length > 0;
         const messages = this._currentMessages();
         const runTrace = this._currentRunTrace();
         const streaming = Boolean(this._chat.state?.streaming);
         const currentTaskId = asString(this._chat.state?.currentTaskId);
 
         return html`
-            <div class="chat-header">
-                <div class="chat-title">
-                    <span class="chat-flow-name">${flowName}</span>
-                    <span class="chat-skill">${this.skillId === 'base' ? this.t('platform_chat.base_skill') : this.skillId}</span>
+            <page-header
+                title=${flowName}
+                subtitle=${skillLabel}
+                actions-overflow="visible"
+            >
+                <div slot="actions">
+                    ${this._isMobile
+                        ? this._renderMobileActions(hasFlow)
+                        : html`<div class="flow-chat-header-actions">${this._renderDesktopActions(hasFlow)}</div>`}
                 </div>
-                <div class="chat-actions">
-                    ${typeof this.flowId === 'string' && this.flowId.length > 0
-                        ? html`
-                            <button
-                                type="button"
-                                class="action-btn"
-                                title=${this.t('flows_sidebar.footer_triggers')}
-                                aria-label=${this.t('flows_sidebar.footer_triggers')}
-                                @click=${this._openTriggers}
-                            >
-                                <platform-icon name="zap" size="16"></platform-icon>
-                            </button>
-                        `
-                        : ''}
-                    <button type="button" class="action-btn" title=${this.t('platform_chat.btn_sessions')} @click=${this._openSessions}>
-                        <platform-icon name="clipboard" size="16"></platform-icon>
-                    </button>
-                    <button type="button" class="action-btn" title=${this.t('platform_chat.btn_traces')} @click=${this._openTracing}>
-                        <platform-icon name="chart" size="16"></platform-icon>
-                    </button>
-                    <button type="button" class="action-btn" title=${this.t('platform_chat.btn_editor')} @click=${this._openEditor}>
-                        <platform-icon name="edit" size="16"></platform-icon>
-                    </button>
-                    <button type="button" class="action-btn" title=${this.t('platform_chat.btn_clear')} @click=${this._onClear}>
-                        <platform-icon name="trash" size="16"></platform-icon>
-                    </button>
-                </div>
-            </div>
+            </page-header>
+            ${this._isMobile ? html`<div class="chat-skill-hint">${skillLabel}</div>` : nothing}
             <div class="chat-body">
                 <chat-messages
                     .messages=${messages}

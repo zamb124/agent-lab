@@ -430,6 +430,7 @@ export class CRMApp extends PlatformApp {
                 skill-id="crm"
                 .flowsBaseUrl=${'/flows'}
                 ?use-credentials=${true}
+                .showLauncher=${true}
                 .assistantTitle=${'Lara'}
             ></platform-lara-assistant>
         `;

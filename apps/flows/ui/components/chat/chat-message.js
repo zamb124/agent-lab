@@ -516,6 +516,46 @@ export class ChatMessage extends PlatformElement {
                 color: var(--text-tertiary);
                 font-size: var(--text-xs);
             }
+            
+            @media (max-width: 767px) {
+                .message {
+                    display: block;
+                    position: relative;
+                }
+                
+                .message .avatar {
+                    position: absolute;
+                    top: var(--space-2);
+                    width: 28px;
+                    height: 28px;
+                    z-index: 2;
+                }
+                
+                .message.user .avatar {
+                    right: var(--space-2);
+                }
+                
+                .message.assistant .avatar,
+                .message.operator .avatar,
+                .message.system .avatar {
+                    left: var(--space-2);
+                }
+                
+                .bubble {
+                    max-width: 100%;
+                    width: 100%;
+                }
+                
+                .message.user .content {
+                    padding-right: 40px;
+                }
+                
+                .message.assistant .content,
+                .message.operator .content,
+                .message.system .content {
+                    padding-left: 40px;
+                }
+            }
         `
     ];
 
@@ -564,6 +604,27 @@ export class ChatMessage extends PlatformElement {
         this.runTraceEntries = [];
         this.traceTaskId = '';
         this._runTracePanelOpen = false;
+        this._i18nLocale = this.select((s) => s.i18n.locale);
+    }
+
+    _formatMessageTimestamp(iso) {
+        if (typeof iso !== 'string' || iso.length === 0) {
+            return '';
+        }
+        const ms = Date.parse(iso);
+        if (Number.isNaN(ms)) {
+            return iso;
+        }
+        const locale =
+            this._i18nLocale &&
+            typeof this._i18nLocale.value === 'string' &&
+            this._i18nLocale.value.length > 0
+                ? this._i18nLocale.value
+                : 'ru';
+        return new Intl.DateTimeFormat(locale, {
+            dateStyle: 'short',
+            timeStyle: 'short',
+        }).format(new Date(ms));
     }
 
     willUpdate(changed) {
@@ -1012,7 +1073,9 @@ export class ChatMessage extends PlatformElement {
             return html`
                 <div class="header">
                     <span class="role">${this._getRoleName()}</span>
-                    ${this.timestamp ? html`<span class="timestamp">${this.timestamp}</span>` : ''}
+                    ${this.timestamp
+                        ? html`<span class="timestamp">${this._formatMessageTimestamp(this.timestamp)}</span>`
+                        : ''}
                 </div>
             `;
         }
@@ -1020,7 +1083,9 @@ export class ChatMessage extends PlatformElement {
             <div class="header has-inline-tools">
                 <div class="user-header-meta">
                     <span class="role">${this._getRoleName()}</span>
-                    ${this.timestamp ? html`<span class="timestamp">${this.timestamp}</span>` : ''}
+                    ${this.timestamp
+                        ? html`<span class="timestamp">${this._formatMessageTimestamp(this.timestamp)}</span>`
+                        : ''}
                 </div>
                 <div class="header-actions">
                     <button
@@ -1049,7 +1114,9 @@ export class ChatMessage extends PlatformElement {
         return html`
             <div class="header">
                 <span class="role">${this._getRoleName()}</span>
-                ${this.timestamp ? html`<span class="timestamp">${this.timestamp}</span>` : ''}
+                ${this.timestamp
+                    ? html`<span class="timestamp">${this._formatMessageTimestamp(this.timestamp)}</span>`
+                    : ''}
                 ${this.role === 'assistant' && this.taskId && !this.streaming
                     ? html`
                           <div class="header-actions">

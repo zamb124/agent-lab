@@ -326,7 +326,8 @@
     "btn_sessions": "История сессий",
     "btn_traces": "Трейсы",
     "btn_editor": "Открыть редактор",
-    "btn_clear": "Очистить чат"
+    "btn_clear": "Очистить чат",
+    "overflow_aria": "Дополнительные действия"
   },
   "chat_messages": {
     "empty_title": "Начните диалог",

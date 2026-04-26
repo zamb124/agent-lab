@@ -276,7 +276,9 @@ async def run_knowledge_import_task(
                     for eid in result.created_entity_ids:
                         if eid not in created_entity_ids:
                             created_entity_ids.append(eid)
-                    entities_from_graph += len(result.created_entity_ids)
+                    entities_from_graph += len(result.created_entity_ids) + len(
+                        result.updated_entity_ids
+                    )
                     for rid in result.created_relationship_ids:
                         if rid not in created_relationship_ids:
                             created_relationship_ids.append(rid)

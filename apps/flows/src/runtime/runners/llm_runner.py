@@ -814,7 +814,12 @@ class LlmNodeRunner(BaseLlmNodeRunner):
             for field in USER_TOOL_PARALLEL_STATE_MERGE_FIELDS:
                 value = getattr(state_copy, field, None)
                 if value is not None:
-                    setattr(state, field, value)
+                    if field == "variables" and isinstance(value, dict):
+                        merged_vars = dict(state.variables)
+                        merged_vars.update(value)
+                        state.variables = merged_vars
+                    else:
+                        setattr(state, field, value)
 
             extra_src = getattr(state_copy, "__pydantic_extra__", None) or {}
             for ek, ev in extra_src.items():

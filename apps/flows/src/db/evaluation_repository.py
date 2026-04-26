@@ -135,6 +135,9 @@ class EvaluationRepository:
         """
         Получает последние результаты для агента/skill.
 
+        Сортировка: свежий run (run_date, iteration), внутри прогона — по
+        created_at и id (последний сохранённый результат — первый в списке).
+
         Args:
             flow_id: ID агента
             skill_id: ID skill
@@ -147,7 +150,7 @@ class EvaluationRepository:
             query = text("""
                 SELECT * FROM evaluation_results
                 WHERE flow_id = :flow_id AND skill_id = :skill_id
-                ORDER BY run_date DESC, iteration DESC, test_case_id
+                ORDER BY run_date DESC, iteration DESC, created_at DESC, id DESC
                 LIMIT :limit
             """)
             result = await session.execute(query, {

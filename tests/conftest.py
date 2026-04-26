@@ -601,11 +601,7 @@ def pytest_collection_modifyitems(items: list) -> None:
     маркерам. Наш хук должен выполниться ДО xdist, чтобы маркер уже был виден.
     """
     for item in items:
-        if "test_sync_speech_to_chat_e2e" in item.nodeid:
-            item.add_marker(pytest.mark.xdist_group("sync_livekit_e2e"))
-            if item.get_closest_marker("timeout") is None:
-                item.add_marker(pytest.mark.timeout(180, func_only=True))
-        elif item.get_closest_marker("real_taskiq"):
+        if item.get_closest_marker("real_taskiq"):
             item.add_marker(pytest.mark.xdist_group("real_taskiq"))
             if item.get_closest_marker("timeout") is None:
                 item.add_marker(pytest.mark.timeout(120, func_only=True))

@@ -62,6 +62,16 @@ export class ChatMessages extends PlatformElement {
                 max-width: 300px;
                 line-height: var(--leading-relaxed);
             }
+            
+            @media (max-width: 767px) {
+                :host {
+                    padding: var(--space-3);
+                }
+                
+                .messages-list {
+                    gap: var(--space-4);
+                }
+            }
         `
     ];
 

@@ -35,7 +35,7 @@ export class PlatformLaraAssistant extends LitElement {
         this.embedId = '';
         this.skillId = '';
         this.theme = 'auto';
-        this.showLauncher = true;
+        this.showLauncher = false;
         this.assistantTitle = 'Lara';
         this.locale = 'ru';
         this.useCredentials = false;

@@ -18,6 +18,33 @@ const EVENT_COLOR_KEY = 'event_color';
 const DEFAULT_EVENT_COLOR = 'default';
 const EVENT_COLOR_OPTIONS = COLOR_PALETTE;
 
+const SERVICE_APP_TAG_SELECTORS = [
+    'flows-app',
+    'crm-app',
+    'frontend-app',
+    'rag-app',
+    'sync-app',
+    'office-app',
+    'litserve-app',
+];
+
+/**
+ * Публичные URL календаря вида /{сервис}/api/calendar (см. core/app/factory.py).
+ * Модалка при открытии может портироваться в body, поэтому ищем корневой *-app в document.
+ */
+function serviceBaseUrlForCalendar() {
+    for (const sel of SERVICE_APP_TAG_SELECTORS) {
+        const el = document.querySelector(sel);
+        if (el && el.isConnected && typeof el.getBaseUrl === 'function') {
+            const base = el.getBaseUrl();
+            if (typeof base === 'string' && base.length > 0) {
+                return base;
+            }
+        }
+    }
+    throw new Error('platform-calendar-modal: root service app (getBaseUrl) not found');
+}
+
 function pad2(value) {
     return String(value).padStart(2, '0');
 }
@@ -3261,7 +3288,8 @@ export class PlatformCalendarModal extends PlatformModal {
 
     _startGoogleConnect() {
         const returnPath = `${window.location.pathname}${window.location.search}`;
-        const connectUrl = `/api/calendar/integrations/google/start?return_path=${encodeURIComponent(returnPath)}`;
+        const base = serviceBaseUrlForCalendar();
+        const connectUrl = `${base}/api/calendar/integrations/google/start?return_path=${encodeURIComponent(returnPath)}`;
         window.location.assign(connectUrl);
     }
 
@@ -3826,7 +3854,7 @@ export class PlatformCalendarModal extends PlatformModal {
     _renderYandexIntegration(c, activeIntegration) {
         return html`
             <div class="row">
-                <label class="form-label">${c('yandex_app_password')}: username</label>
+                <label class="form-label">${c('yandex_username_label')}</label>
                 <input
                     class="form-input"
                     .value=${this._integrationForm.username}
@@ -3835,7 +3863,7 @@ export class PlatformCalendarModal extends PlatformModal {
                 />
             </div>
             <div class="row">
-                <label class="form-label">${c('yandex_app_password')}</label>
+                <label class="form-label">${c('yandex_app_password_label')}</label>
                 <input
                     class="form-input"
                     .value=${this._integrationForm.app_password}
@@ -3844,12 +3872,12 @@ export class PlatformCalendarModal extends PlatformModal {
                 />
             </div>
             <div class="row">
-                <label class="form-label">Calendar id</label>
+                <label class="form-label">${c('yandex_calendar_id_label')}</label>
                 <input
                     class="form-input"
                     .value=${this._integrationForm.default_calendar_id}
                     @input=${(e) => this._integrationForm = { ...this._integrationForm, default_calendar_id: e.target.value }}
-                    placeholder="default"
+                    placeholder=${c('yandex_calendar_id_placeholder')}
                 />
             </div>
             <div class="event-compose-switch event-compose-switch--spaced">

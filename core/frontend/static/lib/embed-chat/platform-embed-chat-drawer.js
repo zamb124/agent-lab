@@ -6,9 +6,9 @@ import { nextModalLayerZIndex } from '../utils/modal-z-stack.js';
 import './platform-embed-chat.js';
 
 /**
- * Панель + FAB: только Lit + platform-embed-chat. Без PlatformElement;
- * кнопки шапки и иконка FAB встроены SVG, без внешнего fetch.
- * Переключение: клик по FAB или CustomEvent `humanitec-embed-chat-toggle` на window.
+ * Панель + опциональная FAB: только Lit + platform-embed-chat. Без PlatformElement;
+ * встроенная FAB (`show-launcher`, по умолчанию выкл.) и кнопки шапки — SVG, без внешнего fetch.
+ * Переключение: клик по FAB (если включена) или CustomEvent `humanitec-embed-chat-toggle` / `toggle-event-name` на window.
  * Тема: атрибут theme="light"|"dark"|"auto" (по умолчанию auto — как data-theme на documentElement).
  * Параметры URL страницы: см. embed-chat-url-params.js (embed_theme, embed_lang, embed_width, embed_assistant_name, …).
  * Имя в шапке: атрибут assistant-title или ?embed_assistant_name= / embed_chat_title= (UTF-8).
@@ -329,7 +329,7 @@ export class PlatformEmbedChatDrawer extends LitElement {
         this.locale = '';
         this.open = false;
         this.theme = 'auto';
-        this.showLauncher = true;
+        this.showLauncher = false;
         this.labels = {};
         this.getAuthToken = undefined;
         this.getExtraMetadataVariables = undefined;

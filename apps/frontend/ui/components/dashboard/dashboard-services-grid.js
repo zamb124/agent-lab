@@ -10,6 +10,7 @@
 import { html, css } from 'lit';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
 import './dashboard-service-card.js';
+import './dashboard-service-launcher.js';
 
 const SERVICES = Object.freeze([
     Object.freeze({
@@ -105,10 +106,29 @@ export class DashboardServicesGrid extends PlatformElement {
                 color: var(--text-secondary);
                 font-size: var(--text-sm);
             }
-            .grid {
+            .cards-grid {
                 display: grid;
                 grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
                 gap: var(--space-5);
+            }
+            .launchers {
+                display: none;
+            }
+            @media (max-width: 767px) {
+                .header { margin-bottom: var(--space-3); }
+                .title { font-size: var(--text-xl); }
+                .subtitle {
+                    margin-top: var(--space-1);
+                    font-size: var(--text-xs);
+                    line-height: 1.35;
+                }
+                .cards-grid { display: none; }
+                .launchers {
+                    display: grid;
+                    grid-template-columns: repeat(3, 1fr);
+                    gap: var(--space-3);
+                    row-gap: var(--space-4);
+                }
             }
         `,
     ];
@@ -163,6 +183,46 @@ export class DashboardServicesGrid extends PlatformElement {
         return this.t(metricKey, { count: result.total });
     }
 
+    _serviceTiles(statusResult, activeCompanyId) {
+        return SERVICES.map((svc, idx) => {
+            const health = this._healthForService(statusResult, svc.healthName, activeCompanyId);
+            const litserveLocked = svc.svcId === 'litserve' && activeCompanyId !== 'system';
+            return html`
+                <dashboard-service-card
+                    svc-id=${svc.svcId}
+                    name-key=${svc.nameKey}
+                    description-key=${svc.descriptionKey}
+                    logo-src=${svc.logoSrc}
+                    href=${svc.href}
+                    brand-from=${svc.brandFrom}
+                    brand-to=${svc.brandTo}
+                    metric-value=${this._metricValue(idx, svc.metricKey, svc.svcId, activeCompanyId)}
+                    health-state=${health.state}
+                    latency-ms=${health.latencyMs}
+                    ?disabled=${litserveLocked}
+                ></dashboard-service-card>
+            `;
+        });
+    }
+
+    _serviceLaunchers(statusResult, activeCompanyId) {
+        return SERVICES.map((svc) => {
+            const health = this._healthForService(statusResult, svc.healthName, activeCompanyId);
+            const litserveLocked = svc.svcId === 'litserve' && activeCompanyId !== 'system';
+            return html`
+                <dashboard-service-launcher
+                    name-key=${svc.nameKey}
+                    logo-src=${svc.logoSrc}
+                    href=${svc.href}
+                    brand-from=${svc.brandFrom}
+                    brand-to=${svc.brandTo}
+                    health-state=${health.state}
+                    ?disabled=${litserveLocked}
+                ></dashboard-service-launcher>
+            `;
+        });
+    }
+
     render() {
         const statusResult = this._status.lastResult;
         const activeCompanyId = this._activeCompanyId.value;
@@ -171,26 +231,11 @@ export class DashboardServicesGrid extends PlatformElement {
                 <h2 class="title">${this.t('console_home.services_title')}</h2>
                 <div class="subtitle">${this.t('console_home.services_subtitle')}</div>
             </div>
-            <div class="grid">
-                ${SERVICES.map((svc, idx) => {
-                    const health = this._healthForService(statusResult, svc.healthName, activeCompanyId);
-                    const litserveLocked = svc.svcId === 'litserve' && activeCompanyId !== 'system';
-                    return html`
-                        <dashboard-service-card
-                            svc-id=${svc.svcId}
-                            name-key=${svc.nameKey}
-                            description-key=${svc.descriptionKey}
-                            logo-src=${svc.logoSrc}
-                            href=${svc.href}
-                            brand-from=${svc.brandFrom}
-                            brand-to=${svc.brandTo}
-                            metric-value=${this._metricValue(idx, svc.metricKey, svc.svcId, activeCompanyId)}
-                            health-state=${health.state}
-                            latency-ms=${health.latencyMs}
-                            ?disabled=${litserveLocked}
-                        ></dashboard-service-card>
-                    `;
-                })}
+            <div class="cards-grid">
+                ${this._serviceTiles(statusResult, activeCompanyId)}
+            </div>
+            <div class="launchers">
+                ${this._serviceLaunchers(statusResult, activeCompanyId)}
             </div>
         `;
     }

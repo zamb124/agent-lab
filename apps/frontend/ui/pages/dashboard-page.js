@@ -16,18 +16,36 @@ export class DashboardPage extends PlatformPage {
     static styles = [
         PlatformPage.styles,
         css`
-            :host { display: block; padding: var(--space-4); }
+            :host {
+                display: flex;
+                flex-direction: column;
+                padding: var(--space-4);
+            }
             section { margin-bottom: var(--space-8); }
             section:last-child { margin-bottom: 0; }
+            @media (min-width: 768px) {
+                .section--hero { order: 1; }
+                .section--stats { order: 2; }
+                .section--services { order: 3; }
+                .section--quick { order: 4; }
+            }
+            @media (max-width: 767px) {
+                :host { padding: var(--space-3); }
+                section { margin-bottom: var(--space-6); }
+                .section--services { order: 1; }
+                .section--hero { order: 2; }
+                .section--stats { order: 3; }
+                .section--quick { order: 4; }
+            }
         `,
     ];
 
     render() {
         return html`
-            <section><dashboard-hero></dashboard-hero></section>
-            <section><dashboard-stat-strip></dashboard-stat-strip></section>
-            <section><dashboard-services-grid></dashboard-services-grid></section>
-            <section><dashboard-quick-actions></dashboard-quick-actions></section>
+            <section class="section--hero"><dashboard-hero></dashboard-hero></section>
+            <section class="section--stats"><dashboard-stat-strip></dashboard-stat-strip></section>
+            <section class="section--services"><dashboard-services-grid></dashboard-services-grid></section>
+            <section class="section--quick"><dashboard-quick-actions></dashboard-quick-actions></section>
         `;
     }
 }
