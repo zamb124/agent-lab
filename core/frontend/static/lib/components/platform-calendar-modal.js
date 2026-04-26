@@ -744,6 +744,58 @@ export class PlatformCalendarModal extends PlatformModal {
                 transform: translateY(-50%);
             }
 
+            .day-empty-hint {
+                position: absolute;
+                left: 8px;
+                right: 8px;
+                top: 12px;
+                z-index: 1;
+                text-align: center;
+                font-size: var(--text-sm);
+                color: var(--text-tertiary);
+                pointer-events: none;
+            }
+
+            :host([open]) .modal .modal-header--calendar-compact {
+                display: flex;
+                flex-wrap: nowrap;
+                align-items: center;
+                gap: 6px;
+            }
+
+            :host([open]) .modal .modal-header--calendar-compact .calendar-modal-title {
+                flex: 0 1 auto;
+                min-width: 0;
+                font-size: var(--text-base, 16px);
+            }
+
+            :host([open]) .modal .modal-header--calendar-compact .calendar-header-date-nav {
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                gap: 4px;
+                flex: 1 1 auto;
+                min-width: 0;
+            }
+
+            :host([open]) .modal .modal-header--calendar-compact .calendar-header-date-nav .period-date-btn {
+                max-width: min(160px, 46vw);
+                padding: 6px 10px;
+                font-size: var(--text-xs, 12px);
+            }
+
+            :host([open]) .modal .modal-header--calendar-compact .calendar-header-date-nav .btn-icon {
+                width: 30px;
+                height: 30px;
+                min-width: 30px;
+                min-height: 30px;
+            }
+
+            :host([open]) .modal .modal-header--calendar-compact .header-buttons {
+                flex: 0 0 auto;
+                margin-left: auto;
+            }
+
             .week-grid {
                 display: flex;
                 flex-direction: column;
@@ -2689,39 +2741,40 @@ export class PlatformCalendarModal extends PlatformModal {
                     </div>
                 ` : ''}
                 <div class="day-timeline-scroll">
-                    ${events.length === 0 ? html`<div class="hint" style="padding: var(--space-3);">${this._calT('events_empty')}</div>` : html`
-                        <div class="day-timeline-body">
-                            <div class="day-time-col">
-                                ${hours.map((h) => html`
-                                    <div class="day-time-label">${pad2(h)}:00</div>
+                    <div class="day-timeline-body">
+                        <div class="day-time-col">
+                            ${hours.map((h) => html`
+                                <div class="day-time-label">${pad2(h)}:00</div>
+                            `)}
+                        </div>
+                        <div class="day-tracks">
+                            <div class="day-tracks-lines">
+                                ${hours.map(() => html`<div class="day-hour-slot"></div>`)}
+                            </div>
+                            <div class="day-events-layer">
+                                ${events.length === 0
+                                    ? html`<div class="day-empty-hint">${this._calT('events_empty')}</div>`
+                                    : ''}
+                                ${showNow && nowTop !== null ? html`
+                                    <div class="day-now-line" style=${`top:${nowTop}px`}></div>
+                                ` : ''}
+                                ${layoutTimed.map(({ event, top, height, colorKey, visibleStartMs }) => html`
+                                    <button
+                                        type="button"
+                                        class="day-event-block event-chip"
+                                        data-color=${colorKey}
+                                        ?data-dragging=${this._dragEvent?.event_id === event.event_id}
+                                        style=${`top:${top}px;height:${height}px;touch-action:none`}
+                                        @click=${() => this._fillFormFromEvent(event)}
+                                        @pointerdown=${(e) => this._onDragStart(event, e)}
+                                    >
+                                        <span class="event-chip-time">${this._formatWallClockFromMs(visibleStartMs)}</span>
+                                        <span class="event-chip-title">${event.title}</span>
+                                    </button>
                                 `)}
                             </div>
-                            <div class="day-tracks">
-                                <div class="day-tracks-lines">
-                                    ${hours.map(() => html`<div class="day-hour-slot"></div>`)}
-                                </div>
-                                <div class="day-events-layer">
-                                    ${showNow && nowTop !== null ? html`
-                                        <div class="day-now-line" style=${`top:${nowTop}px`}></div>
-                                    ` : ''}
-                                    ${layoutTimed.map(({ event, top, height, colorKey, visibleStartMs }) => html`
-                                        <button
-                                            type="button"
-                                            class="day-event-block event-chip"
-                                            data-color=${colorKey}
-                                            ?data-dragging=${this._dragEvent?.event_id === event.event_id}
-                                            style=${`top:${top}px;height:${height}px;touch-action:none`}
-                                            @click=${() => this._fillFormFromEvent(event)}
-                                            @pointerdown=${(e) => this._onDragStart(event, e)}
-                                        >
-                                            <span class="event-chip-time">${this._formatWallClockFromMs(visibleStartMs)}</span>
-                                            <span class="event-chip-title">${event.title}</span>
-                                        </button>
-                                    `)}
-                                </div>
-                            </div>
                         </div>
-                    `}
+                    </div>
                 </div>
             </div>
         `;
@@ -3893,38 +3946,161 @@ export class PlatformCalendarModal extends PlatformModal {
         return this._renderWeekGrid();
     }
 
+    _renderIntegrationsMenuBlock(v, headerStyle = false) {
+        const btnClass = headerStyle ? 'header-btn' : 'btn-icon';
+        const iconSize = headerStyle ? '16' : '20';
+        return html`
+            <div class="integrations-menu-anchor">
+                <button
+                    class=${btnClass}
+                    type="button"
+                    @click=${() => { this._integrationsMenuOpen = !this._integrationsMenuOpen; }}
+                    title=${v('integrations_menu')}
+                >
+                    <platform-icon name="more-vert" size=${iconSize}></platform-icon>
+                </button>
+                ${this._integrationsMenuOpen ? html`
+                    <div class="integrations-dropdown" @click=${(e) => e.stopPropagation()}>
+                        <button class="dropdown-item" type="button" @click=${() => this._openIntegrationModal('google')}>
+                            <platform-icon name="google" size="16" colored></platform-icon>
+                            <span>${v('integration_google')}</span>
+                        </button>
+                        <button class="dropdown-item" type="button" @click=${() => this._openIntegrationModal('yandex')}>
+                            <platform-icon name="yandex" size="16" colored></platform-icon>
+                            <span>${v('integration_yandex')}</span>
+                        </button>
+                    </div>
+                ` : ''}
+            </div>
+        `;
+    }
+
+    _renderCompactHeaderDateNav(v) {
+        return html`
+            <div class="calendar-header-date-nav">
+                <button class="btn-icon" type="button" @click=${() => { void this._movePeriod(-1); }} aria-label=${v('sheet_prev_day')}>
+                    <platform-icon name="chevron-left" size="16"></platform-icon>
+                </button>
+                <button class="period-date-btn" type="button" @click=${() => this._openDateSheet()} title=${v('pick_date_title')}>
+                    ${this._compactPeriodLabel()}
+                </button>
+                <button class="btn-icon" type="button" @click=${() => { void this._movePeriod(1); }} aria-label=${v('sheet_next_day')}>
+                    <platform-icon name="chevron-right" size="16"></platform-icon>
+                </button>
+            </div>
+        `;
+    }
+
+    render() {
+        if (!this.open || !this._isCompactLayout) {
+            return super.render();
+        }
+        const modalClasses = [
+            'modal',
+            this.size,
+            this._isFullscreen ? 'fullscreen' : '',
+            this._isDragging ? 'dragging' : '',
+            this.open && this._panelEnterActive ? 'panel-enter-active' : '',
+        ].filter(Boolean).join(' ');
+
+        const tm = (key) => (this.t(key) || key);
+        const v = (key) => this._calT(key);
+
+        return html`
+            <div class="modal-svg-hidden" aria-hidden="true">
+                <svg width="0" height="0">
+                    <defs>
+                        <filter id="liquidGlassFilter" x="-10%" y="-10%" width="120%" height="120%">
+                            <feTurbulence
+                                type="fractalNoise"
+                                baseFrequency="0.012 0.012"
+                                numOctaves="3"
+                                seed="15"
+                                result="noise"
+                            />
+                            <feDisplacementMap
+                                in="SourceGraphic"
+                                in2="noise"
+                                scale="6"
+                                xChannelSelector="R"
+                                yChannelSelector="G"
+                            />
+                        </filter>
+                    </defs>
+                </svg>
+            </div>
+
+            <div class="modal-overlay" @click=${this._handleOverlayClick}>
+                <div class="modal-scrim" aria-hidden="true" @click=${() => this.close()}></div>
+                <div
+                    class="${modalClasses}"
+                    style="${this._getModalStyle()}"
+                    @animationend=${this._handlePanelEnterAnimationEnd}
+                    @click=${(e) => e.stopPropagation()}
+                >
+                    <div class="modal-header modal-header--calendar-compact" @mousedown=${this._handleMouseDown}>
+                        <h2 class="modal-title calendar-modal-title">${this.title}</h2>
+                        ${this._renderCompactHeaderDateNav(v)}
+                        <div class="header-buttons">
+                            ${this._renderIntegrationsMenuBlock(v, true)}
+                            ${this.renderSaveHeaderButton()}
+                            <button
+                                class="header-btn fullscreen-btn"
+                                @click=${this.toggleFullscreen}
+                                title="${this._isFullscreen ? tm('modal.fullscreen_exit') : tm('modal.fullscreen_enter')}"
+                            >
+                                <platform-icon
+                                    name="${this._isFullscreen ? 'minimize' : 'maximize'}"
+                                    size="16"
+                                ></platform-icon>
+                            </button>
+                            ${this.hideHeaderClose
+                                ? ''
+                                : html`
+                                      <button
+                                          class="header-btn"
+                                          @click=${() => this.close()}
+                                          title=${tm('modal.close')}
+                                      >
+                                          <platform-icon name="close" size="16"></platform-icon>
+                                      </button>
+                                  `}
+                        </div>
+                    </div>
+
+                    <div class="modal-content">
+                        ${this.renderBody()}
+                    </div>
+
+                    <div class="modal-actions">
+                        ${this.renderFooter()}
+                    </div>
+                </div>
+            </div>
+        `;
+    }
+
     renderBody() {
         const v = (key) => this._calT(key);
         const compact = this._isCompactLayout;
         return html`
             <div class="calendar-shell">
                 <section class="calendar-main">
-                    <div class="toolbar ${compact ? 'toolbar--compact' : ''}">
+                    ${!compact ? html`
+                    <div class="toolbar">
                         <div class="toolbar-left">
-                            ${compact ? html`
-                                <button class="btn-icon" type="button" @click=${() => { void this._movePeriod(-1); }} aria-label=${v('sheet_prev_day')}>
-                                    <platform-icon name="chevron-left" size="16"></platform-icon>
-                                </button>
-                                <button class="period-date-btn" type="button" @click=${() => this._openDateSheet()} title=${v('pick_date_title')}>
-                                    ${this._compactPeriodLabel()}
-                                </button>
-                                <button class="btn-icon" type="button" @click=${() => { void this._movePeriod(1); }} aria-label=${v('sheet_next_day')}>
-                                    <platform-icon name="chevron-right" size="16"></platform-icon>
-                                </button>
-                            ` : html`
-                                <div class="title">${this._periodLabel()}</div>
-                                <button class="btn-icon" type="button" @click=${() => { void this._movePeriod(-1); }}>
-                                    <platform-icon name="chevron-left" size="16"></platform-icon>
-                                </button>
-                                <button class="btn-icon" type="button" @click=${() => { void this._movePeriod(1); }}>
-                                    <platform-icon name="chevron-right" size="16"></platform-icon>
-                                </button>
-                                <div class="view-segment">
-                                    <button class=${this._view === 'day' ? 'active' : ''} type="button" @click=${() => this._onViewChange('day')}>${v('view_day')}</button>
-                                    <button class=${this._view === 'week' ? 'active' : ''} type="button" @click=${() => this._onViewChange('week')}>${v('view_week')}</button>
-                                    <button class=${this._view === 'month' ? 'active' : ''} type="button" @click=${() => this._onViewChange('month')}>${v('view_month')}</button>
-                                </div>
-                            `}
+                            <div class="title">${this._periodLabel()}</div>
+                            <button class="btn-icon" type="button" @click=${() => { void this._movePeriod(-1); }}>
+                                <platform-icon name="chevron-left" size="16"></platform-icon>
+                            </button>
+                            <button class="btn-icon" type="button" @click=${() => { void this._movePeriod(1); }}>
+                                <platform-icon name="chevron-right" size="16"></platform-icon>
+                            </button>
+                            <div class="view-segment">
+                                <button class=${this._view === 'day' ? 'active' : ''} type="button" @click=${() => this._onViewChange('day')}>${v('view_day')}</button>
+                                <button class=${this._view === 'week' ? 'active' : ''} type="button" @click=${() => this._onViewChange('week')}>${v('view_week')}</button>
+                                <button class=${this._view === 'month' ? 'active' : ''} type="button" @click=${() => this._onViewChange('month')}>${v('view_month')}</button>
+                            </div>
                         </div>
                         <div class="toolbar-right">
                             <button
@@ -3936,25 +4112,10 @@ export class PlatformCalendarModal extends PlatformModal {
                             >
                                 <platform-icon name="plus" size="20"></platform-icon>
                             </button>
-                            <div class="integrations-menu-anchor">
-                                <button class="btn-icon" type="button" @click=${() => { this._integrationsMenuOpen = !this._integrationsMenuOpen; }} title=${v('integrations_menu')}>
-                                    <platform-icon name="more-vert" size="20"></platform-icon>
-                                </button>
-                                ${this._integrationsMenuOpen ? html`
-                                    <div class="integrations-dropdown" @click=${(e) => e.stopPropagation()}>
-                                        <button class="dropdown-item" type="button" @click=${() => this._openIntegrationModal('google')}>
-                                            <platform-icon name="google" size="16" colored></platform-icon>
-                                            <span>${v('integration_google')}</span>
-                                        </button>
-                                        <button class="dropdown-item" type="button" @click=${() => this._openIntegrationModal('yandex')}>
-                                            <platform-icon name="yandex" size="16" colored></platform-icon>
-                                            <span>${v('integration_yandex')}</span>
-                                        </button>
-                                    </div>
-                                ` : ''}
-                            </div>
+                            ${this._renderIntegrationsMenuBlock(v, false)}
                         </div>
                     </div>
+                    ` : ''}
                     <div class="calendar-panel ${this._view === 'day' ? 'calendar-panel--day' : ''}">
                         ${this._renderCalendarPanel()}
                     </div>

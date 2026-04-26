@@ -347,6 +347,33 @@ export class CRMNamespaceTasksPage extends PlatformPage {
                 0%, 100% { opacity: 0.6; }
                 50%      { opacity: 1; }
             }
+
+            .page-subtitle-mobile {
+                display: none;
+            }
+
+            @media (max-width: 767px) {
+                :host {
+                    padding: 0;
+                    box-sizing: border-box;
+                }
+                .breadcrumbs-wrap {
+                    padding-left: max(var(--space-2), env(safe-area-inset-left, 0px));
+                    padding-right: max(var(--space-2), env(safe-area-inset-right, 0px));
+                }
+                .page-subtitle-mobile {
+                    display: block;
+                    flex-shrink: 0;
+                    margin: 0 max(var(--space-2), env(safe-area-inset-right, 0px)) var(--space-2) max(var(--space-2), env(safe-area-inset-left, 0px));
+                    font-size: var(--text-sm);
+                    color: var(--text-secondary);
+                    line-height: 1.4;
+                }
+                .scroll {
+                    padding-left: max(var(--space-2), env(safe-area-inset-left, 0px));
+                    padding-right: max(var(--space-2), env(safe-area-inset-right, 0px));
+                }
+            }
         `,
     ];
 
@@ -557,6 +584,7 @@ export class CRMNamespaceTasksPage extends PlatformPage {
                 title=${this.t('namespace_tasks_page.title')}
                 subtitle=${this.t('namespace_tasks_page.subtitle')}
             ></page-header>
+            <p class="page-subtitle-mobile">${this.t('namespace_tasks_page.subtitle')}</p>
             <div class="scroll">
                 ${this._renderTasksPanel(tasks, loading, namespace)}
             </div>

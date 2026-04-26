@@ -238,6 +238,43 @@ export class CRMAccessRequestsPage extends PlatformPage {
                 border-color: #e11d48;
             }
             .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+            .page-subtitle-mobile {
+                display: none;
+            }
+
+            @media (max-width: 767px) {
+                :host {
+                    padding: 0;
+                    box-sizing: border-box;
+                }
+                .breadcrumbs-wrap {
+                    padding-left: max(var(--space-2), env(safe-area-inset-left, 0px));
+                    padding-right: max(var(--space-2), env(safe-area-inset-right, 0px));
+                }
+                .header-wrap {
+                    padding-left: max(var(--space-2), env(safe-area-inset-left, 0px));
+                    padding-right: max(var(--space-2), env(safe-area-inset-right, 0px));
+                }
+                .page-subtitle-mobile {
+                    display: block;
+                    flex-shrink: 0;
+                    margin: 0 0 var(--space-2);
+                    padding-left: max(var(--space-2), env(safe-area-inset-left, 0px));
+                    padding-right: max(var(--space-2), env(safe-area-inset-right, 0px));
+                    font-size: var(--text-sm);
+                    color: var(--text-secondary);
+                    line-height: 1.4;
+                }
+                .filters {
+                    padding-left: max(var(--space-2), env(safe-area-inset-left, 0px));
+                    padding-right: max(var(--space-2), env(safe-area-inset-right, 0px));
+                }
+                .body {
+                    padding-left: max(var(--space-2), env(safe-area-inset-left, 0px));
+                    padding-right: max(var(--space-2), env(safe-area-inset-right, 0px));
+                }
+            }
         `,
     ];
 
@@ -295,6 +332,7 @@ export class CRMAccessRequestsPage extends PlatformPage {
                     subtitle=${this.t('access_requests_page.subtitle')}
                 ></page-header>
             </div>
+            <p class="page-subtitle-mobile">${this.t('access_requests_page.subtitle')}</p>
             <div class="filters">
                 ${STATUSES.map((status) => html`
                     <button

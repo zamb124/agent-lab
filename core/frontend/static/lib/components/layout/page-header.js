@@ -6,9 +6,9 @@
  *     <button slot="actions">Кнопка</button>
  * </page-header>
  *
- * На узких экранах: одна строка, заголовок без переноса (ellipsis). Режим
- * mobileToolbarMode="search" заменяет блок заголовка на слот toolbar-search
- * (поле поиска и т.п. между бургером и actions).
+ * На узких экранах: одна строка в липкой полосе — только заголовок (ellipsis),
+ * без subtitle (длинный текст выносится в тело страницы). Режим
+ * mobileToolbarMode="search" заменяет блок заголовка на слот toolbar-search.
  */
 import { html, css } from 'lit';
 import { PlatformElement } from '../../platform-element/index.js';
@@ -19,7 +19,7 @@ export class PageHeader extends PlatformElement {
     static properties = {
         title: { type: String },
         subtitle: { type: String },
-        /** На mobile: "title" — заголовок и subtitle; "search" — слот toolbar-search */
+        /** На mobile: "title" — только заголовок; "search" — слот toolbar-search */
         mobileToolbarMode: { type: String },
         _isMobile: { state: true },
     };
@@ -175,7 +175,9 @@ export class PageHeader extends PlatformElement {
                 .toolbar-search-host ::slotted(*) {
                     flex: 1 1 0%;
                     min-width: 0;
-                    display: flex;
+                    min-height: 44px;
+                    display: grid;
+                    grid-template-columns: auto minmax(0, 1fr);
                     align-items: center;
                     gap: var(--space-2);
                     box-sizing: border-box;
@@ -237,10 +239,11 @@ export class PageHeader extends PlatformElement {
                 </div>
             `;
         }
+        const showSubtitle = Boolean(this.subtitle) && !(this._isMobile && this.mobileToolbarMode === 'title');
         return html`
             <div class="title-section">
                 <h1 class="title">${this.title}</h1>
-                ${this.subtitle ? html`<p class="subtitle">${this.subtitle}</p>` : ''}
+                ${showSubtitle ? html`<p class="subtitle">${this.subtitle}</p>` : ''}
             </div>
         `;
     }

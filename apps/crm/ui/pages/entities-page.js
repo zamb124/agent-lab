@@ -784,7 +784,7 @@ export class CRMEntitiesPage extends PlatformPage {
 
             .mobile-toolbar-search-row {
                 display: flex;
-                align-items: flex-start;
+                align-items: center;
                 gap: var(--space-2);
                 width: 100%;
                 min-width: 0;
@@ -799,18 +799,6 @@ export class CRMEntitiesPage extends PlatformPage {
             .mobile-header-search-box .search-input {
                 min-width: 0;
                 flex: 1;
-            }
-
-            .mobile-entities-search-field {
-                display: flex;
-                flex-direction: column;
-                gap: var(--space-1);
-                flex: 1;
-                min-width: 0;
-            }
-
-            .mobile-header-search-modes {
-                align-self: flex-start;
             }
 
             .mobile-tabs { display: none; }
@@ -1393,36 +1381,20 @@ export class CRMEntitiesPage extends PlatformPage {
                         >
                             <platform-icon name="close" size="16"></platform-icon>
                         </button>
-                        <div
-                            class="mobile-entities-search-field"
-                            style="flex:1;min-width:0;display:flex;flex-direction:column;gap:var(--space-1)"
+                        <label
+                            class="search-box mobile-header-search-box"
+                            style="display:flex;align-items:center;gap:var(--space-2);flex:1;min-width:0;width:100%;box-sizing:border-box"
                         >
-                            <label
-                                class="search-box mobile-header-search-box"
-                                style="display:flex;align-items:center;gap:var(--space-2);flex:1;min-width:0;width:100%;box-sizing:border-box"
-                            >
-                                <platform-icon name="search" size="14"></platform-icon>
-                                <input
-                                    class="search-input"
-                                    type="text"
-                                    style="flex:1;min-width:0;width:100%;box-sizing:border-box"
-                                    placeholder=${this.t('entities.search_placeholder')}
-                                    .value=${this._query}
-                                    @input=${this._onSearchInput}
-                                />
-                            </label>
-                            ${this._query.trim().length > 0 ? html`
-                                <div class="search-mode-toggle mobile-header-search-modes">
-                                    ${SEARCH_MODES.map((mode) => html`
-                                        <button
-                                            type="button"
-                                            class="search-mode-btn ${this._searchMode === mode ? 'active' : ''}"
-                                            @click=${(e) => { e.preventDefault(); this._onSearchModeChange(mode); }}
-                                        >${this.t(`entities.search_modes.${mode}`)}</button>
-                                    `)}
-                                </div>
-                            ` : nothing}
-                        </div>
+                            <platform-icon name="search" size="14"></platform-icon>
+                            <input
+                                class="search-input"
+                                type="text"
+                                style="flex:1;min-width:0;width:100%;box-sizing:border-box"
+                                placeholder=${this.t('entities.search_placeholder')}
+                                .value=${this._query}
+                                @input=${this._onSearchInput}
+                            />
+                        </label>
                     </div>
                     <div slot="actions">
                         <button
