@@ -141,7 +141,7 @@
         "token_request_format": "json",
         "client_id": "",
         "client_secret": "",
-        "enabled": false
+        "enabled": true
       },
       "apple": {
         "client_id": "app.humanitec.ru",
