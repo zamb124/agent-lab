@@ -38,7 +38,7 @@ uv run python mobile/screens/generate_app_store_screenshots.py
 
 ## Результат
 
-В **`generated/`** создаются подпапки с именами вида `iphone_ipad_1242x2688`, `watch_ultra3_422x514`, `mac_1280x800` и т.д. Внутри — **`01.png`**, **`02.png`**, … точных размеров под требования Apple.
+В **`generated/`** создаются подпапки с именами вида `iphone_ipad_1242x2688`, `watch_ultra3_422x514`, `mac_1280x800`, `play_phone_1080x1920`, `asset_400x272` и т.д. Внутри — **`01.png`**, **`02.png`**, … точных размеров. Подпапка **`asset_400x272`** — кадры **400×272** из тех же исходников, что и iPhone/iPad (обрезка по центру, как у остальных).
 
 Масштабирование: **обрезка по центру** (`ImageOps.fit`) до нужного разрешения, без искажения пропорций. RGBA приводится к RGB на белом фоне.
 
@@ -59,4 +59,4 @@ uv run python mobile/screens/generate_app_store_screenshots.py
 
 ## Размеры (справочно)
 
-Соответствуют актуальным подсказкам в App Store Connect для iPhone, iPad 12.9"/13", Apple Watch (Ultra 3, Series 11/9/6/3), **Mac** (четыре допустимых размера) и **Google Play** (Phone / 7" Tablet / 10" Tablet, портрет + ландшафт).
+Соответствуют актуальным подсказкам в App Store Connect для iPhone, iPad 12.9"/13", Apple Watch (Ultra 3, Series 11/9/6/3), **Mac** (четыре допустимых размера) и **Google Play** (Phone / 7" Tablet / 10" Tablet, портрет + ландшафт). Дополнительно: **400×272** → каталог `generated/asset_400x272/`.

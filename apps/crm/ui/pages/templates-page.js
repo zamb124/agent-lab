@@ -2,9 +2,9 @@
  * CRMTemplatesPage — управление шаблонами пространств CRM (CRUD + типы).
  *
  * Левая колонка — список шаблонов и inline-форма создания нового. Правая —
- * метаданные выбранного шаблона, его типы сущностей и форма upsert/edit
- * типа со встроенным `crm-schema-field-builder` для секций
- * `required_fields` и `optional_fields`.
+ * метаданные выбранного шаблона; блок «Типы в шаблоне» и форма типа
+ * в одной колонке: при редактировании/создании типа сетка карточек заменяется
+ * на `crm-entity-type-editor` (как на `space-detail-page`).
  *
  * Состояние:
  *  - useResource('crm/templates', { autoload: true }) — список + get/create/remove.
@@ -22,11 +22,12 @@ import { html, css } from 'lit';
 import { PlatformPage } from '@platform/lib/base/PlatformPage.js';
 import '@platform/lib/components/layout/page-header.js';
 import '@platform/lib/components/platform-icon.js';
-import '@platform/lib/components/platform-switch.js';
+import '@platform/lib/components/platform-icon-picker.js';
 import '@platform/lib/components/platform-breadcrumbs.js';
+import { listAvailableUiIcons } from '@platform/lib/utils/file-icons.js';
 import { platformConfirm } from '@platform/lib/components/platform-confirm-modal.js';
 
-import '../components/schema-field-builder.js';
+import '../components/entity-type-editor.js';
 import {
     normalizeSchemaRows,
     buildSchemaFromRows,
@@ -65,6 +66,8 @@ const DEFAULT_NEW_TEMPLATE_DRAFT = Object.freeze({
     icon: 'folder',
 });
 
+const TEMPLATE_UI_ICON_NAMES = Object.freeze(listAvailableUiIcons());
+
 export class CRMTemplatesPage extends PlatformPage {
     static i18nNamespace = 'crm';
 
@@ -74,6 +77,7 @@ export class CRMTemplatesPage extends PlatformPage {
         _newDraft: { state: true },
         _typeDraft: { state: true },
         _editingTypeId: { state: true },
+        _typeFormOpen: { state: true },
         _metaDraft: { state: true },
         _schemaOptions: { state: true },
     };
@@ -108,6 +112,12 @@ export class CRMTemplatesPage extends PlatformPage {
                 gap: var(--space-3);
                 grid-template-columns: minmax(280px, 360px) minmax(0, 1fr);
                 align-items: start;
+            }
+            .right-column {
+                display: flex;
+                flex-direction: column;
+                gap: var(--space-3);
+                min-width: 0;
             }
 
             .panel {
@@ -262,25 +272,6 @@ export class CRMTemplatesPage extends PlatformPage {
                 box-shadow: 0 0 0 1px var(--accent);
             }
 
-            .icon-row {
-                display: grid;
-                grid-template-columns: 40px minmax(0, 1fr);
-                gap: var(--space-2);
-                align-items: center;
-            }
-
-            .icon-preview {
-                width: 36px;
-                height: 36px;
-                border-radius: var(--radius-md);
-                border: 1px solid var(--glass-border-subtle);
-                background: var(--glass-solid-medium);
-                display: flex;
-                align-items: center;
-                justify-content: center;
-                color: var(--text-secondary);
-            }
-
             .grid-2 {
                 display: grid;
                 gap: var(--space-3);
@@ -380,88 +371,18 @@ export class CRMTemplatesPage extends PlatformPage {
                 gap: var(--space-1);
             }
 
-            .schema-grid {
-                display: grid;
-                gap: var(--space-3);
-                grid-template-columns: 1fr 1fr;
-            }
-
-            .schema-section {
-                border: 1px solid var(--glass-border-subtle);
-                border-radius: var(--radius-md);
-                background: var(--glass-solid-medium);
-                padding: var(--space-3);
-                display: flex;
-                flex-direction: column;
-                gap: var(--space-2);
-            }
-
-            .namespace-pills {
-                display: flex;
-                gap: var(--space-2);
-                flex-wrap: wrap;
-            }
-
-            .ns-pill {
+            .panel-title .panel-back {
+                flex-shrink: 0;
+                padding: var(--space-1);
+                min-width: 36px;
+                min-height: 36px;
                 display: inline-flex;
                 align-items: center;
-                gap: var(--space-2);
-                border: 1px solid var(--glass-border-subtle);
-                border-radius: var(--radius-full);
-                background: var(--glass-solid-medium);
-                color: var(--text-primary);
-                padding: 4px var(--space-2);
-                font-size: var(--text-xs);
-                cursor: pointer;
-                font: inherit;
-            }
-
-            .ns-pill.active {
-                border-color: var(--accent);
-                background: rgba(59, 130, 246, 0.18);
-            }
-
-            details {
-                border: 1px solid var(--glass-border-subtle);
-                border-radius: var(--radius-md);
-                background: var(--glass-solid-medium);
-                padding: var(--space-3);
-            }
-
-            details > summary {
-                cursor: pointer;
-                color: var(--text-primary);
-                font-size: var(--text-sm);
-                font-weight: var(--font-semibold);
-                margin-bottom: var(--space-2);
-            }
-
-            .preview {
-                border: 1px solid var(--glass-border-subtle);
-                border-radius: var(--radius-md);
-                background: var(--glass-solid-subtle);
-                color: var(--text-secondary);
-                font-size: var(--text-xs);
-                padding: var(--space-2);
-                max-height: 200px;
-                overflow: auto;
-                white-space: pre-wrap;
-                word-break: break-word;
-                font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace);
-            }
-
-            .flags-row {
-                display: flex;
-                gap: var(--space-3);
-                flex-wrap: wrap;
+                justify-content: center;
             }
 
             @media (max-width: 980px) {
                 .layout {
-                    grid-template-columns: 1fr;
-                }
-
-                .schema-grid {
                     grid-template-columns: 1fr;
                 }
             }
@@ -475,6 +396,7 @@ export class CRMTemplatesPage extends PlatformPage {
         this._newDraft = { ...DEFAULT_NEW_TEMPLATE_DRAFT };
         this._typeDraft = makeTypeDraft();
         this._editingTypeId = '';
+        this._typeFormOpen = false;
         this._metaDraft = null;
         this._schemaOptions = null;
         this._creatingTemplate = false;
@@ -521,6 +443,7 @@ export class CRMTemplatesPage extends PlatformPage {
                 this._metaDraft = null;
                 this._typeDraft = makeTypeDraft();
                 this._editingTypeId = '';
+                this._typeFormOpen = false;
             }
             this._deletingTemplate = false;
         });
@@ -547,6 +470,7 @@ export class CRMTemplatesPage extends PlatformPage {
         });
         this.useEvent(this._upsertTypeOp.op.events.SUCCEEDED, () => {
             this._savingType = false;
+            this._typeFormOpen = false;
             this._typeDraft = makeTypeDraft();
             this._editingTypeId = '';
             if (this._selectedTemplateId) {
@@ -557,6 +481,9 @@ export class CRMTemplatesPage extends PlatformPage {
             this._savingType = false;
         });
         this.useEvent(this._deleteTypeOp.op.events.SUCCEEDED, () => {
+            this._typeFormOpen = false;
+            this._typeDraft = makeTypeDraft();
+            this._editingTypeId = '';
             if (this._selectedTemplateId) {
                 this._templates.get(this._selectedTemplateId);
             }
@@ -579,6 +506,7 @@ export class CRMTemplatesPage extends PlatformPage {
             throw new Error('CRMTemplatesPage._selectTemplate: templateId required');
         }
         this._selectedTemplateId = templateId;
+        this._typeFormOpen = false;
         this._typeDraft = makeTypeDraft();
         this._editingTypeId = '';
         const cached = this._templates.byId[templateId];
@@ -656,6 +584,24 @@ export class CRMTemplatesPage extends PlatformPage {
         this._metaDraft = { ...this._metaDraft, [field]: value };
     }
 
+    _metaIconPickerIcons(current) {
+        const cur = typeof current === 'string' ? current.trim() : '';
+        if (cur.length > 0 && !TEMPLATE_UI_ICON_NAMES.includes(cur)) {
+            return [cur, ...TEMPLATE_UI_ICON_NAMES];
+        }
+        return TEMPLATE_UI_ICON_NAMES;
+    }
+
+    _onMetaIconChange(event) {
+        const v = event && event.detail && event.detail.value;
+        this._updateMetaField('icon', typeof v === 'string' ? v : '');
+    }
+
+    _onNewTemplateIconChange(event) {
+        const v = event && event.detail && event.detail.value;
+        this._updateNewDraft('icon', typeof v === 'string' ? v : '');
+    }
+
     _onSaveMeta() {
         if (!this._selectedTemplateId || !this._metaDraft) {
             throw new Error('CRMTemplatesPage._onSaveMeta: template not selected');
@@ -676,10 +622,6 @@ export class CRMTemplatesPage extends PlatformPage {
         });
     }
 
-    _updateTypeDraft(field, value) {
-        this._typeDraft = { ...this._typeDraft, [field]: value };
-    }
-
     _setSchemaRows(section, rows) {
         if (section !== 'required_fields_rows' && section !== 'optional_fields_rows') {
             throw new Error(`CRMTemplatesPage._setSchemaRows: unknown section "${section}"`);
@@ -697,7 +639,38 @@ export class CRMTemplatesPage extends PlatformPage {
         const next = enabled
             ? [...new Set([...current, namespaceName])]
             : current.filter((item) => item !== namespaceName);
-        this._updateTypeDraft('namespace_ids', next);
+        this._typeDraft = { ...this._typeDraft, namespace_ids: next };
+    }
+
+    _onTypeDraftChanged(event) {
+        const next = event && event.detail && event.detail.typeDraft;
+        if (!next) {
+            return;
+        }
+        this._typeDraft = next;
+    }
+
+    _onSchemaRowsFromEditor(event) {
+        const detail = event && event.detail;
+        if (!detail
+            || (detail.section !== 'required_fields_rows' && detail.section !== 'optional_fields_rows')) {
+            return;
+        }
+        this._setSchemaRows(detail.section, detail.rows);
+    }
+
+    _onNamespaceToggledFromEditor(event) {
+        const detail = event && event.detail;
+        if (!detail || typeof detail.namespaceName !== 'string' || detail.namespaceName.length === 0) {
+            return;
+        }
+        this._toggleTypeNamespace(detail.namespaceName, detail.enabled === true);
+    }
+
+    _openNewTypeForm() {
+        this._editingTypeId = '';
+        this._typeDraft = makeTypeDraft();
+        this._typeFormOpen = true;
     }
 
     _editType(item) {
@@ -705,6 +678,7 @@ export class CRMTemplatesPage extends PlatformPage {
             throw new Error('CRMTemplatesPage._editType: item.type_id required');
         }
         this._editingTypeId = item.type_id;
+        this._typeFormOpen = true;
         this._typeDraft = {
             type_id: item.type_id,
             name: item.name || '',
@@ -723,6 +697,7 @@ export class CRMTemplatesPage extends PlatformPage {
     }
 
     _resetTypeDraft() {
+        this._typeFormOpen = false;
         this._typeDraft = makeTypeDraft();
         this._editingTypeId = '';
     }
@@ -735,17 +710,6 @@ export class CRMTemplatesPage extends PlatformPage {
                 .filter((item) => typeof item === 'string' && item.length > 0)
             : [];
         return [...new Set(['note', 'task', ...fromTemplate])];
-    }
-
-    _getSchemaPreview(sectionKey, sectionLabel) {
-        try {
-            const rows = Array.isArray(this._typeDraft[sectionKey]) ? this._typeDraft[sectionKey] : [];
-            const schema = buildSchemaFromRows(rows, sectionLabel, this._schemaOptions, (k, v) => this.t(k, v));
-            return JSON.stringify(schema, null, 2);
-        } catch (error) {
-            const msg = error instanceof Error ? error.message : String(error);
-            return this.t('errors.preview_prefix', { message: msg });
-        }
     }
 
     _onUpsertType() {
@@ -837,7 +801,6 @@ export class CRMTemplatesPage extends PlatformPage {
             ? this._templates.byId[this._selectedTemplateId]
             : null;
         const types = selectedDetail && Array.isArray(selectedDetail.types) ? selectedDetail.types : [];
-        const schemaReady = this._schemaOptions && Array.isArray(this._schemaOptions.field_types);
         return html`
             <div class="breadcrumbs-wrap">
                 <platform-breadcrumbs></platform-breadcrumbs>
@@ -849,7 +812,7 @@ export class CRMTemplatesPage extends PlatformPage {
             <div class="scroll">
                 <div class="layout">
                     ${this._renderLeftPanel(templates)}
-                    ${this._renderRightPanel(selectedDetail, types, schemaReady)}
+                    ${this._renderRightPanel(selectedDetail, types)}
                 </div>
             </div>
         `;
@@ -917,21 +880,16 @@ export class CRMTemplatesPage extends PlatformPage {
                         @input=${(e) => this._updateNewDraft('description', e.target.value)}
                     ></textarea>
                 </div>
-                <div class="field">
-                    <label class="field-label">${this.t('templates_page.label_icon')}</label>
-                    <div class="icon-row">
-                        <div class="icon-preview">
-                            <platform-icon name=${this._resolveIcon(this._newDraft.icon)} size="18"></platform-icon>
-                        </div>
-                        <input
-                            class="input mono"
+                    <div class="field">
+                        <label class="field-label">${this.t('templates_page.label_icon')}</label>
+                        <platform-icon-picker
                             .value=${this._newDraft.icon}
-                            placeholder=${this.t('templates_page.ph_icon')}
+                            .icons=${this._metaIconPickerIcons(this._newDraft.icon)}
+                            placeholder=${this.t('templates_page.icon_picker_placeholder')}
                             ?disabled=${this._creatingTemplate}
-                            @input=${(e) => this._updateNewDraft('icon', e.target.value)}
-                        />
+                            @change=${this._onNewTemplateIconChange}
+                        ></platform-icon-picker>
                     </div>
-                </div>
                 <div class="actions-row">
                     <button
                         type="submit"
@@ -975,25 +933,32 @@ export class CRMTemplatesPage extends PlatformPage {
         `;
     }
 
-    _renderRightPanel(detail, types, schemaReady) {
+    _renderRightPanel(detail, types) {
         if (!this._selectedTemplateId) {
             return html`
-                <div class="panel">
-                    <div class="empty">${this.t('templates_page.no_template_selected')}</div>
+                <div class="right-column">
+                    <div class="panel">
+                        <div class="empty">${this.t('templates_page.no_template_selected')}</div>
+                    </div>
                 </div>
             `;
         }
         if (!detail || !this._metaDraft) {
             return html`
-                <div class="panel">
-                    <div class="empty">${this.t('templates_page.loading_detail')}</div>
+                <div class="right-column">
+                    <div class="panel">
+                        <div class="empty">${this.t('templates_page.loading_detail')}</div>
+                    </div>
                 </div>
             `;
         }
         return html`
-            ${this._renderMetaPanel(detail)}
-            ${this._renderTypesListPanel(types)}
-            ${this._renderTypeFormPanel(schemaReady)}
+            <div class="right-column">
+                ${this._renderMetaPanel(detail)}
+                ${this._typeFormOpen
+                    ? this._renderTypeFormPanel()
+                    : this._renderTypesListPanel(types)}
+            </div>
         `;
     }
 
@@ -1019,18 +984,13 @@ export class CRMTemplatesPage extends PlatformPage {
                     </div>
                     <div class="field">
                         <label class="field-label">${this.t('templates_page.label_icon')}</label>
-                        <div class="icon-row">
-                            <div class="icon-preview">
-                                <platform-icon name=${this._resolveIcon(this._metaDraft.icon)} size="18"></platform-icon>
-                            </div>
-                            <input
-                                class="input mono"
-                                .value=${this._metaDraft.icon}
-                                placeholder=${this.t('templates_page.ph_icon')}
-                                ?disabled=${this._savingMeta || this._deletingTemplate}
-                                @input=${(e) => this._updateMetaField('icon', e.target.value)}
-                            />
-                        </div>
+                        <platform-icon-picker
+                            .value=${this._metaDraft.icon}
+                            .icons=${this._metaIconPickerIcons(this._metaDraft.icon)}
+                            placeholder=${this.t('templates_page.icon_picker_placeholder')}
+                            ?disabled=${this._savingMeta || this._deletingTemplate}
+                            @change=${this._onMetaIconChange}
+                        ></platform-icon-picker>
                     </div>
                 </div>
                 <div class="field">
@@ -1074,7 +1034,16 @@ export class CRMTemplatesPage extends PlatformPage {
                         <platform-icon name="list" size="18"></platform-icon>
                         ${this.t('templates_page.types_section')}
                     </span>
-                    <span class="chip">${this.t('templates_page.types_count', { count: String(types.length) })}</span>
+                    <span class="actions-row" style="flex-wrap: nowrap; align-items: center;">
+                        <span class="chip">${this.t('templates_page.types_count', { count: String(types.length) })}</span>
+                        <button
+                            class="btn btn-soft"
+                            type="button"
+                            @click=${this._openNewTypeForm}
+                        >
+                            ${this.t('templates_page.action_new_type')}
+                        </button>
+                    </span>
                 </div>
                 ${types.length > 0 ? html`
                     <div class="types-grid">
@@ -1122,19 +1091,25 @@ export class CRMTemplatesPage extends PlatformPage {
         `;
     }
 
-    _renderTypeFormPanel(schemaReady) {
-        const namespaces = this._namespaces.items;
-        const editing = this._editingTypeId.length > 0;
+    _renderTypeFormPanel() {
+        const namespaces = Array.isArray(this._namespaces.items) ? this._namespaces.items : [];
         return html`
             <div class="panel">
                 <div class="panel-header">
                     <span class="panel-title">
-                        <platform-icon name="plus" size="18"></platform-icon>
-                        ${editing
-                            ? this.t('templates_page.type_form_edit_title', { type_id: this._editingTypeId })
-                            : this.t('templates_page.type_form_create_title')}
+                        <button
+                            class="btn btn-soft panel-back"
+                            type="button"
+                            title=${this.t('templates_page.back_to_types')}
+                            aria-label=${this.t('templates_page.back_to_types')}
+                            @click=${this._resetTypeDraft}
+                        >
+                            <platform-icon name="chevron-left" size="18"></platform-icon>
+                        </button>
+                        <platform-icon name="list" size="18"></platform-icon>
+                        ${this.t('templates_page.types_section')}
                     </span>
-                    ${editing ? html`
+                    <span class="actions-row" style="flex-wrap: nowrap; align-items: center;">
                         <button
                             class="btn btn-soft"
                             type="button"
@@ -1142,178 +1117,23 @@ export class CRMTemplatesPage extends PlatformPage {
                         >
                             ${this.t('templates_page.btn_cancel')}
                         </button>
-                    ` : ''}
+                    </span>
                 </div>
-                ${!schemaReady ? html`<div class="empty">${this.t('templates_page.loading_schema')}</div>` : ''}
-                <div class="grid-2">
-                    <div class="field">
-                        <label class="field-label">${this.t('templates_page.field_type_id')}</label>
-                        <input
-                            class="input mono"
-                            .value=${this._typeDraft.type_id}
-                            ?disabled=${editing}
-                            @input=${(e) => this._updateTypeDraft('type_id', e.target.value)}
-                        />
-                    </div>
-                    <div class="field">
-                        <label class="field-label">${this.t('templates_page.field_type_name')}</label>
-                        <input
-                            class="input"
-                            .value=${this._typeDraft.name}
-                            @input=${(e) => this._updateTypeDraft('name', e.target.value)}
-                        />
-                    </div>
-                    <div class="field">
-                        <label class="field-label">${this.t('templates_page.field_parent')}</label>
-                        <select
-                            class="select mono"
-                            .value=${this._typeDraft.parent_type_id}
-                            @change=${(e) => this._updateTypeDraft('parent_type_id', e.target.value)}
-                        >
-                            <option value="">${this.t('templates_page.field_parent_none')}</option>
-                            ${this._getParentTypeOptions().map((typeId) => html`
-                                <option value=${typeId} ?selected=${typeId === this._typeDraft.parent_type_id}>${typeId}</option>
-                            `)}
-                        </select>
-                    </div>
-                    <div class="field">
-                        <label class="field-label">${this.t('templates_page.field_icon')}</label>
-                        <div class="icon-row">
-                            <div class="icon-preview">
-                                <platform-icon name=${this._resolveIcon(this._typeDraft.icon)} size="18"></platform-icon>
-                            </div>
-                            <input
-                                class="input mono"
-                                .value=${this._typeDraft.icon}
-                                placeholder=${this.t('templates_page.ph_icon')}
-                                @input=${(e) => this._updateTypeDraft('icon', e.target.value)}
-                            />
-                        </div>
-                    </div>
-                    <div class="field">
-                        <label class="field-label">${this.t('templates_page.field_color')}</label>
-                        <input
-                            class="input"
-                            .value=${this._typeDraft.color}
-                            placeholder=${this.t('templates_page.ph_color')}
-                            @input=${(e) => this._updateTypeDraft('color', e.target.value)}
-                        />
-                    </div>
-                    <div class="field">
-                        <label class="field-label">${this.t('templates_page.field_weight')}</label>
-                        <input
-                            type="number"
-                            step="0.1"
-                            min="0"
-                            class="input mono"
-                            .value=${this._typeDraft.weight_coefficient}
-                            @input=${(e) => this._updateTypeDraft('weight_coefficient', e.target.value)}
-                        />
-                    </div>
-                    <div class="field">
-                        <label class="field-label">${this.t('templates_page.field_flags')}</label>
-                        <div class="flags-row">
-                            <platform-switch
-                                size="sm"
-                                label=${this.t('templates_page.field_is_event')}
-                                .checked=${this._typeDraft.is_event}
-                                @change=${(e) => this._updateTypeDraft('is_event', Boolean(e.detail.value))}
-                            ></platform-switch>
-                            <platform-switch
-                                size="sm"
-                                label=${this.t('templates_page.field_check_duplicates')}
-                                .checked=${this._typeDraft.check_duplicates}
-                                @change=${(e) => this._updateTypeDraft('check_duplicates', Boolean(e.detail.value))}
-                            ></platform-switch>
-                        </div>
-                    </div>
-                    <div class="field">
-                        <label class="field-label">${this.t('templates_page.field_description')}</label>
-                        <textarea
-                            class="textarea"
-                            .value=${this._typeDraft.description}
-                            @input=${(e) => this._updateTypeDraft('description', e.target.value)}
-                        ></textarea>
-                    </div>
-                    <div class="field">
-                        <label class="field-label">${this.t('templates_page.field_prompt')}</label>
-                        <textarea
-                            class="textarea"
-                            .value=${this._typeDraft.prompt}
-                            @input=${(e) => this._updateTypeDraft('prompt', e.target.value)}
-                        ></textarea>
-                    </div>
-                    <div class="field">
-                        <label class="field-label">${this.t('templates_page.field_namespaces')}</label>
-                        ${namespaces.length > 0 ? html`
-                            <div class="namespace-pills">
-                                ${namespaces.map((ns) => {
-                                    const checked = this._typeDraft.namespace_ids.includes(ns.name);
-                                    return html`
-                                        <button
-                                            type="button"
-                                            class="ns-pill ${checked ? 'active' : ''}"
-                                            @click=${() => this._toggleTypeNamespace(ns.name, !checked)}
-                                        >
-                                            ${ns.name}
-                                        </button>
-                                    `;
-                                })}
-                            </div>
-                        ` : html`<div class="hint">${this.t('templates_page.no_namespaces')}</div>`}
-                    </div>
-                </div>
-                <div class="schema-grid">
-                    ${this._renderSchemaSection('required_fields_rows', schemaReady,
-                        this.t('templates_page.required_fields_title'),
-                        this.t('templates_page.required_fields_hint'))}
-                    ${this._renderSchemaSection('optional_fields_rows', schemaReady,
-                        this.t('templates_page.optional_fields_title'),
-                        this.t('templates_page.optional_fields_hint'))}
-                </div>
-                <details>
-                    <summary>${this.t('templates_page.json_preview')}</summary>
-                    <div class="grid-2">
-                        <div class="field">
-                            <label class="field-label">${this.t('templates_page.preview_required')}</label>
-                            <pre class="preview">${this._getSchemaPreview('required_fields_rows', this.t('schema_sections.required_fields'))}</pre>
-                        </div>
-                        <div class="field">
-                            <label class="field-label">${this.t('templates_page.preview_optional')}</label>
-                            <pre class="preview">${this._getSchemaPreview('optional_fields_rows', this.t('schema_sections.optional_fields'))}</pre>
-                        </div>
-                    </div>
-                </details>
-                <div class="actions-row">
-                    <button
-                        class="btn btn-primary"
-                        type="button"
-                        ?disabled=${!schemaReady || this._savingType}
-                        @click=${this._onUpsertType}
-                    >
-                        ${this._savingType
-                            ? this.t('templates_page.btn_saving')
-                            : (editing
-                                ? this.t('templates_page.save_type_changes')
-                                : this.t('templates_page.save_type'))}
-                    </button>
-                </div>
-            </div>
-        `;
-    }
-
-    _renderSchemaSection(sectionKey, schemaReady, title, hint) {
-        return html`
-            <div class="schema-section">
-                <div class="panel-title">${title}</div>
-                <div class="hint">${hint}</div>
-                ${schemaReady ? html`
-                    <crm-schema-field-builder
-                        .rows=${this._typeDraft[sectionKey]}
-                        .schemaOptions=${this._schemaOptions}
-                        @rows-changed=${(e) => this._setSchemaRows(sectionKey, e.detail.rows)}
-                    ></crm-schema-field-builder>
-                ` : html`<div class="empty">${this.t('templates_page.loading_schema')}</div>`}
+                <crm-entity-type-editor
+                    .typeDraft=${this._typeDraft}
+                    .schemaOptions=${this._schemaOptions}
+                    .namespaces=${namespaces}
+                    .parentTypeOptions=${this._getParentTypeOptions()}
+                    editingTypeId=${this._editingTypeId}
+                    ?savingType=${this._savingType}
+                    ?showNamespaces=${true}
+                    .compactChrome=${true}
+                    @draft-changed=${this._onTypeDraftChanged}
+                    @schema-rows-changed=${this._onSchemaRowsFromEditor}
+                    @namespace-toggled=${this._onNamespaceToggledFromEditor}
+                    @cancel=${this._resetTypeDraft}
+                    @submit=${this._onUpsertType}
+                ></crm-entity-type-editor>
             </div>
         `;
     }

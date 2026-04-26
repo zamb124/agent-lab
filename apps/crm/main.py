@@ -12,19 +12,23 @@ from fastapi import FastAPI, HTTPException
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
-from core.app import create_service_app
-from core.config import get_settings
-from core.context import set_context, clear_context
-from core.models.context_models import Context
-from core.models.identity_models import User, Company
+from apps.crm.api.router import router as api_router
 from apps.crm.config import CRMSettings
 from apps.crm.container import get_crm_container
+from core.app import create_service_app
+from core.config import get_settings
+from core.context import clear_context, get_context, set_context
+from core.models.context_models import Context
+from core.models.identity_models import Company, User
 
 logger = logging.getLogger(__name__)
 
 
 async def on_startup(app: FastAPI, container, settings):
     """Кастомная логика при старте"""
+    from core.integrations.models import IntegrationCredential
+    from core.integrations.oauth_service import set_oauth_credential_saved_hook
+
     set_context(Context(
         user=User(user_id="system", name="System"),
         active_company=Company(company_id="system", name="System"),
@@ -36,9 +40,27 @@ async def on_startup(app: FastAPI, container, settings):
     finally:
         clear_context()
 
+    async def _on_oauth_credential_saved(credential: IntegrationCredential) -> None:
+        prev = get_context()
+        set_context(
+            Context(
+                user=User(user_id=credential.user_id, name="OAuth"),
+                active_company=Company(
+                    company_id=credential.company_id,
+                    name="OAuth",
+                ),
+                channel="integration_oauth",
+            )
+        )
+        try:
+            await container.integration_registry.dispatch_credential_saved(credential)
+        finally:
+            if prev is not None:
+                set_context(prev)
+            else:
+                clear_context()
 
-# Импорт роутера
-from apps.crm.api.router import router as api_router
+    set_oauth_credential_saved_hook(_on_oauth_credential_saved)
 
 
 def create_app() -> FastAPI:
@@ -97,7 +119,7 @@ async def serve_crm_ui(path: str = ""):
         or path.startswith("ui/vendor/")
     ):
         raise HTTPException(status_code=404, detail="Not found")
-    
+
     ui_file = Path(__file__).parent / "ui" / "index.html"
     if not ui_file.exists():
         raise HTTPException(status_code=404, detail="CRM UI not found")
@@ -106,9 +128,9 @@ async def serve_crm_ui(path: str = ""):
 
 if __name__ == "__main__":
     import uvicorn
-    
+
     settings = get_settings()
-    
+
     uvicorn.run(
         "apps.crm.main:app",
         host=settings.server.host,

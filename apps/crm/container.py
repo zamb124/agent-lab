@@ -231,6 +231,12 @@ class CRMContainer(BaseContainer):
             entity_repo=self.entity_repository,
         )
 
+    @lazy
+    def integration_registry(self):
+        from apps.crm.integrations.registry import IntegrationRegistry
+
+        return IntegrationRegistry(self)
+
 
 # === Глобальный контейнер ===
 

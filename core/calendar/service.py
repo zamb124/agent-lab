@@ -421,7 +421,7 @@ class CalendarService:
         )
 
     async def complete_google_oauth(self, state: str, code: str) -> str:
-        credential, return_path, _ = await self._oauth_service.complete_oauth(
+        credential, return_path, _, _ = await self._oauth_service.complete_oauth(
             state_token=state,
             code=code,
         )

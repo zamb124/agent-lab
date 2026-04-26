@@ -11,8 +11,9 @@
  * в localStorage и эмитит `UI_NAMESPACE_CHANGED` + `UI_DOCUMENTS_RELOAD_REQUESTED`,
  * на которые подписаны страницы.
  *
- * Навигация: две nav-секции — Notes/Entities/Graph и ORGANIZATION с
- * Tasks/AI Analysis/Settings. Подсветка активного по `state.router.routeKey`.
+ * Навигация: две nav-секции — Notes/Entities/Tasks/Graph и ORGANIZATION с
+ * Access requests / AI Analysis / Settings. Подсветка активного по
+ * `state.router.routeKey`.
  */
 
 import { html, css } from 'lit';
@@ -32,11 +33,11 @@ import '@platform/lib/components/platform-notification-manager.js';
 const PRIMARY_NAV = [
     { route: 'notes',    icon: 'list',     label_key: 'sidebar.nav.notes' },
     { route: 'entities', icon: 'database', label_key: 'sidebar.nav.entities' },
+    { route: 'tasks',    icon: 'check',    label_key: 'sidebar.nav.tasks' },
     { route: 'graph',    icon: 'share',    label_key: 'sidebar.nav.graph' },
 ];
 
 const ORG_NAV = [
-    { route: 'tasks',              icon: 'check',    label_key: 'sidebar.nav.tasks' },
     { route: 'access_requests',    icon: 'lock',     label_key: 'sidebar.nav.access_requests' },
     { route: 'namespace_imports',  icon: 'ai',       label_key: 'sidebar.nav.ai_analysis' },
     { route: 'settings',           icon: 'settings', label_key: 'sidebar.nav.settings' },

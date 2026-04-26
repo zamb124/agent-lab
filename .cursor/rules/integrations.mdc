@@ -29,6 +29,8 @@ result = await task.wait_result(timeout=30)
 - `execute_tool` - выполнение tool
 - `execute_inline_code` - SafeEval для inline кода
 
+**CRM (`crm_worker`):** тяжёлые шаги интеграций namespace (`run_namespace_integration_job`, тип `namespace_integration_job`, см. флаги коннектора в `apps/crm/integrations/protocol.py`) не блокируют HTTP: при `entities_sync_runs_in_worker` / `custom_fields_sync_runs_in_worker` API отдаёт 202 и `TaskResponse`, прогресс в `crm_tasks`.
+
 **Отложенные задачи:**
 ```python
 from datetime import datetime, timezone, timedelta
@@ -187,7 +189,7 @@ external_flow = await container.flow_discovery.register_agent(
 | `core/integrations/models.py` | `IntegrationProvider`, `IntegrationCredential`, `OAuthProviderConfig` |
 | `core/integrations/repository.py` | `IntegrationCredentialRepository` — CRUD для `integration_credentials` (shared БД) |
 | `core/integrations/oauth_service.py` | `OAuthService` — `build_auth_url`, `complete_oauth`, `refresh_token`, `get_valid_token` |
-| `core/api/integrations.py` | OAuth callback: `GET /{server.name}/api/v1/integrations/oauth/callback` (flows: `/flows/api/v1/...`); дефолтный `redirect_uri` в `OAuthService.build_auth_url` совпадает с этим путём |
+| `core/api/integrations.py` | OAuth callback: `GET /{server.name}/api/v1/integrations/oauth/callback` (flows: `/flows/api/v1/...`); дефолтный `redirect_uri` в `OAuthService.build_auth_url` совпадает с этим путём; после успеха редирект на `post_auth_redirect_origin` + `return_path`, если в state был допустимый `return_origin` при старте (`core.utils.domain.is_allowed_integration_return_origin`), иначе на `platform_public_base_url` + `return_path` |
 
 ### Приоритет credentials в тулах
 

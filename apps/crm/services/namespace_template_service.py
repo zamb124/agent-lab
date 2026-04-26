@@ -5,6 +5,7 @@ from typing import Any, Optional
 from core.context import get_context
 from core.models.identity_models import Namespace
 
+from apps.crm.constants_graph import NOTE_FAMILY_ENTITY_TYPE_IDS
 from apps.crm.db.models import EntityType
 from apps.crm.db.repositories.entity_repository import EntityRepository
 from apps.crm.db.repositories.entity_type_repository import EntityTypeRepository
@@ -188,7 +189,7 @@ class NamespaceTemplateService:
         if allowed_type_ids is not None:
             editability = await self.get_namespace_editability(namespace_name)
             locked_type_ids = set(editability["locked_type_ids"])
-            requested_set = set(allowed_type_ids)
+            requested_set = set(allowed_type_ids) | set(NOTE_FAMILY_ENTITY_TYPE_IDS)
             missing_locked = locked_type_ids - requested_set
             if missing_locked:
                 raise ValueError(

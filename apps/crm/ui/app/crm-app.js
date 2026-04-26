@@ -17,6 +17,12 @@ import {
     namespaceEditForm,
 } from '../events/resources/namespaces.resource.js';
 import {
+    namespaceIntegrationsListOp,
+    namespaceIntegrationAuthorizeOp,
+    namespaceIntegrationEntitiesSyncOp,
+    namespaceIntegrationCustomFieldsSyncOp,
+} from '../events/resources/namespace-integrations.resource.js';
+import {
     templatesResource,
     templateUpdateOp,
     templateSchemaOptionsOp,
@@ -62,6 +68,7 @@ import {
 } from '../events/resources/relationships.resource.js';
 import {
     tasksResource,
+    taskGetOp,
     taskCreatedEntitiesOp,
     taskKnowledgeImportStartOp,
     taskDailySummaryStartOp,
@@ -112,6 +119,7 @@ import '../pages/entity-detail-page.js';
 import '../pages/access-requests-page.js';
 import '../pages/spaces-page.js';
 import '../pages/space-detail-page.js';
+import '../pages/space-integrations-page.js';
 
 import '../modals/namespace-modal.js';
 import '../modals/entity-modal.js';
@@ -127,6 +135,9 @@ import { graphUiSlice } from '../events/resources/graph-ui.resource.js';
 import { dailyNotesUiSlice } from '../events/resources/daily-notes-ui.resource.js';
 import { createCrmPersistEffect } from '../events/crm-persist.effect.js';
 import { applyTenantHostRedirectIfNeeded } from '@platform/lib/utils/tenant-host-guard.js';
+import { getPlatformBus } from '@platform/lib/events/bus-singleton.js';
+import { CoreEvents } from '@platform/lib/events/contract.js';
+import { getPlatformNamespaceSidebarSelection } from '@platform/lib/utils/platform-namespace.js';
 import { COMPANIES_EVENTS } from '@platform/lib/events/reducers/companies.js';
 
 import '@platform/lib/components/layout/platform-island.js';
@@ -143,6 +154,7 @@ const CRM_ROUTES = [
     { key: 'access_requests',     path: 'access-requests' },
     { key: 'spaces',              path: 'spaces',             parent: 'settings' },
     { key: 'space',               path: 'spaces/:itemId',     parent: 'spaces' },
+    { key: 'space_integrations',  path: 'spaces/:itemId/integrations', parent: 'space' },
     { key: 'templates',           path: 'templates',          parent: 'settings' },
     { key: 'namespace_imports',   path: 'namespace_imports',  parent: 'settings' },
     { key: 'relationship_types',  path: 'relationship_types', parent: 'settings' },
@@ -163,6 +175,10 @@ export class CRMApp extends PlatformApp {
         namespaceEditabilityOp,
         namespaceCreateForm,
         namespaceEditForm,
+        namespaceIntegrationsListOp,
+        namespaceIntegrationAuthorizeOp,
+        namespaceIntegrationEntitiesSyncOp,
+        namespaceIntegrationCustomFieldsSyncOp,
         templatesResource,
         templateUpdateOp,
         templateSchemaOptionsOp,
@@ -196,6 +212,7 @@ export class CRMApp extends PlatformApp {
         relationshipsListResource,
         relationshipShortestPathOp,
         tasksResource,
+        taskGetOp,
         taskCreatedEntitiesOp,
         taskKnowledgeImportStartOp,
         taskDailySummaryStartOp,
@@ -284,6 +301,34 @@ export class CRMApp extends PlatformApp {
             this._companiesLoadingSel.value,
             { loadCompanies: () => this.dispatch(COMPANIES_EVENTS.LOAD_REQUESTED, null) },
         );
+        this._hydrateCrmNamespaceSelection(auth);
+    }
+
+    /**
+     * Сайдбар показывает выбор из localStorage до первого UI_NAMESPACE_SELECT_REQUESTED,
+     * а state.ui.namespace пустой до события UI_NAMESPACE_CHANGED — страницы тогда грузят
+     * сущности/типы как для «Все». Синхронизируем bus с тем же источником, что и select.
+     */
+    _hydrateCrmNamespaceSelection(auth) {
+        if (!auth || auth.status !== 'authenticated' || !auth.user) {
+            return;
+        }
+        const cid = auth.user.company_id;
+        if (typeof cid !== 'string' || cid.trim().length === 0) {
+            return;
+        }
+        const trimmed = cid.trim();
+        const bus = getPlatformBus();
+        const map = bus.getState().ui.namespace.selectionByCompany;
+        if (Object.prototype.hasOwnProperty.call(map, trimmed)) {
+            return;
+        }
+        const selection = getPlatformNamespaceSidebarSelection(trimmed);
+        this.dispatch(
+            CoreEvents.UI_NAMESPACE_CHANGED,
+            { company_id: trimmed, selection },
+            { source: 'local' },
+        );
     }
 
     renderRoute(routeKey, params) {
@@ -299,6 +344,7 @@ export class CRMApp extends PlatformApp {
             case 'access_requests':     content = html`<crm-access-requests-page></crm-access-requests-page>`; break;
             case 'spaces':              content = html`<crm-spaces-page></crm-spaces-page>`; break;
             case 'space':               content = html`<crm-space-detail-page .itemId=${params.itemId}></crm-space-detail-page>`; break;
+            case 'space_integrations':  content = html`<crm-space-integrations-page .itemId=${params.itemId}></crm-space-integrations-page>`; break;
             case 'templates':           content = html`<crm-templates-page></crm-templates-page>`; break;
             case 'namespace_imports':   content = html`<crm-namespace-tasks-page></crm-namespace-tasks-page>`; break;
             case 'relationship_types':  content = html`<crm-relationship-types-page></crm-relationship-types-page>`; break;

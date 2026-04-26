@@ -8,6 +8,7 @@ from core.utils.domain import (
     get_cookie_domain,
     get_host_with_port,
     get_protocol,
+    is_allowed_integration_return_origin,
     is_local,
     split_host_port,
 )
@@ -65,3 +66,17 @@ def test_extract_subdomain_on_ip() -> None:
 
 def test_unknown_hostname_still_primary_domain() -> None:
     assert extract_base_domain("custom.internal:8002") == "humanitec.ru"
+
+
+def test_is_allowed_integration_return_origin_lvh_subdomain() -> None:
+    pub = "http://lvh.me:8002"
+    assert is_allowed_integration_return_origin("http://system.lvh.me:8002", pub) is True
+    assert is_allowed_integration_return_origin("http://lvh.me:8002", pub) is True
+    assert is_allowed_integration_return_origin("https://system.lvh.me:8002", pub) is False
+    assert is_allowed_integration_return_origin("http://evil.com:8002", pub) is False
+
+
+def test_is_allowed_integration_return_origin_humanitec() -> None:
+    pub = "https://humanitec.ru"
+    assert is_allowed_integration_return_origin("https://acme.humanitec.ru", pub) is True
+    assert is_allowed_integration_return_origin("https://other.ru", pub) is False

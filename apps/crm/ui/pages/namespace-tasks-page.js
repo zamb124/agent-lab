@@ -38,6 +38,10 @@ const TASK_TYPE_FILTERS = Object.freeze([
     Object.freeze({ id: 'note_analyze', labelKey: 'namespace_tasks_page.filter_note_analyze' }),
     Object.freeze({ id: 'daily_summary', labelKey: 'namespace_tasks_page.filter_daily_summary' }),
     Object.freeze({ id: 'period_summary', labelKey: 'namespace_tasks_page.filter_period_summary' }),
+    Object.freeze({
+        id: 'namespace_integration_job',
+        labelKey: 'namespace_tasks_page.filter_namespace_integration_job',
+    }),
 ]);
 
 const ACTIVE_STATUSES = new Set(['pending', 'running']);
@@ -496,9 +500,28 @@ export class CRMNamespaceTasksPage extends PlatformPage {
         this._reviewCompleteOp.run({ task_id: task.task_id });
     }
 
-    _typeLabel(taskType) {
+    _typeLabel(task) {
+        if (!task || typeof task !== 'object') {
+            return this.t('namespace_tasks_page.type_unknown');
+        }
+        const taskType = task.task_type;
         if (typeof taskType !== 'string' || taskType.length === 0) {
             return this.t('namespace_tasks_page.type_unknown');
+        }
+        if (taskType === 'namespace_integration_job') {
+            const data = task.data;
+            if (!data || typeof data !== 'object') {
+                return this.t('namespace_tasks_page.type_unknown');
+            }
+            const job = data.job;
+            const providerId = data.provider_id;
+            const pid = typeof providerId === 'string' ? providerId : '';
+            if (job === 'custom_fields') {
+                return this.t('namespace_tasks_page.type_integration_custom_fields', {
+                    provider_id: pid,
+                });
+            }
+            return this.t('namespace_tasks_page.type_integration_entities', { provider_id: pid });
         }
         const key = TYPE_LABEL_KEYS[taskType];
         if (typeof key !== 'string') {
@@ -631,7 +654,7 @@ export class CRMNamespaceTasksPage extends PlatformPage {
             <tr>
                 <td class="mono">${formatDateTime(task.created_at)}</td>
                 <td>
-                    <div>${this._typeLabel(task.task_type)}</div>
+                    <div>${this._typeLabel(task)}</div>
                     <div class="mono" style="color: var(--text-tertiary);">${task.task_id}</div>
                 </td>
                 <td>

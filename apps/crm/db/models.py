@@ -584,10 +584,11 @@ class NamespaceTemplateType(Base):
 
 class CRMTask(Base):
     """
-    Единый журнал фоновых задач CRM: импорт знаний, анализ заметок и др.
+    Единый журнал фоновых задач CRM: импорт знаний, анализ заметок, AmoCRM и др.
 
     Типо-специфичные поля хранятся в data JSONB.
-    task_type: 'knowledge_import' | 'note_analyze'
+    task_type: 'knowledge_import' | 'note_analyze' | 'daily_summary' | 'period_summary'
+      | 'namespace_integration_job'
     """
 
     __tablename__ = "crm_tasks"

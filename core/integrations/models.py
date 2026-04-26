@@ -16,6 +16,7 @@ from core.models.base import StrictBaseModel
 class IntegrationProvider(StrEnum):
     GOOGLE = "google"
     YANDEX = "yandex"
+    AMOCRM = "amocrm"
 
 
 class IntegrationCredential(StrictBaseModel):
@@ -57,3 +58,4 @@ class OAuthProviderConfig(StrictBaseModel):
     client_secret: str
     auth_url: str
     token_url: str
+    token_request_format: str = "form"

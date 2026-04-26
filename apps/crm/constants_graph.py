@@ -10,5 +10,7 @@ PLATFORM_NAMESPACE_ATTR = "platform_namespace"
 
 CONTACT_ENTITY_TYPE = "contact"
 MEMBER_ENTITY_TYPE = "member"
+
+NOTE_FAMILY_ENTITY_TYPE_IDS: frozenset[str] = frozenset({"note", "meeting", "call"})
 COMPANY_ENTITY_TYPE = "company"
 NAMESPACE_ENTITY_TYPE = "namespace"

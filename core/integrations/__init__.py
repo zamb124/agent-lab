@@ -10,7 +10,8 @@ from core.integrations.models import (
     IntegrationProvider,
     OAuthProviderConfig,
 )
-from core.integrations.oauth_service import OAuthService
+from core.integrations.oauth_service import OAuthService, set_oauth_credential_saved_hook
+from core.integrations.providers.amocrm import parse_amocrm_subdomain_from_referer
 from core.integrations.repository import IntegrationCredentialRepository
 
 __all__ = [
@@ -19,4 +20,6 @@ __all__ = [
     "IntegrationProvider",
     "OAuthProviderConfig",
     "OAuthService",
+    "parse_amocrm_subdomain_from_referer",
+    "set_oauth_credential_saved_hook",
 ]

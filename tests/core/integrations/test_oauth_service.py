@@ -17,6 +17,7 @@ import pytest
 
 from core.integrations.models import IntegrationCredential, IntegrationProvider, OAuthProviderConfig
 from core.integrations.oauth_service import OAuthService, OAuthTokenRefreshError
+from core.integrations.providers.amocrm import parse_amocrm_subdomain_from_referer
 from core.integrations.repository import IntegrationCredentialRepository
 
 
@@ -411,7 +412,7 @@ class TestOAuthService:
             lambda **kw: _fake_http_factory([token_resp], **kw),
         )
 
-        credential, return_path, flow_ctx = await oauth_service.complete_oauth(
+        credential, return_path, flow_ctx, post_origin = await oauth_service.complete_oauth(
             state_token=state_token,
             code="auth-code-xyz",
         )
@@ -422,6 +423,7 @@ class TestOAuthService:
         assert credential.service == "docs"
         assert return_path == "/chat"
         assert flow_ctx is None
+        assert post_origin is None
 
         loaded = await credential_repository.get_by_user_provider_service(
             company_id=f"company-{unique_id}",
@@ -465,10 +467,52 @@ class TestOAuthService:
             lambda **kw: _fake_http_factory([token_resp], **kw),
         )
 
-        _, _, flow_ctx_out = await oauth_service.complete_oauth(
+        _, _, flow_ctx_out, post_o = await oauth_service.complete_oauth(
             state_token=state_token, code="code",
         )
         assert flow_ctx_out == flow_ctx_input
+        assert post_o is None
+
+    @pytest.mark.asyncio
+    async def test_complete_oauth_post_auth_redirect_origin(
+        self,
+        oauth_service: OAuthService,
+        fake_storage: FakeStorage,
+        unique_id: str,
+        monkeypatch,
+    ) -> None:
+        from core.config import get_settings
+
+        _patch_auth_config(monkeypatch)
+        settings = get_settings()
+        monkeypatch.setattr(settings.server, "platform_public_base_url", "http://lvh.me:8002")
+
+        state_payload = {
+            "provider": "google",
+            "service": "docs",
+            "user_id": f"user-{unique_id}",
+            "company_id": f"company-{unique_id}",
+            "redirect_uri": "http://localhost/callback",
+            "return_path": "/crm/spaces/x/integrations",
+            "scopes": "",
+            "post_auth_redirect_origin": "http://system.lvh.me:8002",
+        }
+        state_token = f"state-po-{unique_id}"
+        await fake_storage.set(
+            key=f"integration_oauth_state:{state_token}",
+            value=json.dumps(state_payload),
+        )
+
+        token_resp = _make_token_response()
+        monkeypatch.setattr(
+            "core.integrations.oauth_service.get_httpx_client",
+            lambda **kw: _fake_http_factory([token_resp], **kw),
+        )
+
+        _, _, _, post_origin = await oauth_service.complete_oauth(
+            state_token=state_token, code="code",
+        )
+        assert post_origin == "http://system.lvh.me:8002"
 
     @pytest.mark.asyncio
     async def test_complete_oauth_expired_state(
@@ -680,3 +724,16 @@ class TestOAuthService:
         )
         assert result is not None
         assert result.access_token == "fresh-access"
+
+
+class TestAmoRefererParse:
+    def test_parse_subdomain_amocrm_ru(self) -> None:
+        assert parse_amocrm_subdomain_from_referer("foo.amocrm.ru") == "foo"
+        assert parse_amocrm_subdomain_from_referer("https://bar.amocrm.ru") == "bar"
+
+    def test_parse_subdomain_kommo(self) -> None:
+        assert parse_amocrm_subdomain_from_referer("https://acc.kommo.com") == "acc"
+
+    def test_parse_none_empty(self) -> None:
+        assert parse_amocrm_subdomain_from_referer(None) is None
+        assert parse_amocrm_subdomain_from_referer("") is None

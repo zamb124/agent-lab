@@ -8,7 +8,8 @@
 - mobile/screens/source_mac/    — Mac App Store
 - mobile/screens/source_play/   — отдельный набор для Google Play (если нужен), иначе используется source/
 
-Результат: mobile/screens/generated/<имя_набора>/01.png, 02.png, ...
+Результат: mobile/screens/generated/<имя_набора>/01.png, 02.png, …
+В т.ч. `asset_400x272` — 400×272 px из тех же исходников, что iPhone/iPad.
 """
 
 from __future__ import annotations
@@ -59,6 +60,11 @@ PLAY_TARGETS: list[tuple[int, int, str]] = [
     (1920, 1200, "play_tablet7_1920x1200"),
     (1600, 2560, "play_tablet10_1600x2560"),
     (2560, 1600, "play_tablet10_2560x1600"),
+]
+
+# Дополнительные фиксированные размеры (те же исходники, что для iPhone/iPad).
+EXTRA_FIXED_TARGETS: list[tuple[int, int, str]] = [
+    (400, 272, "asset_400x272"),
 ]
 
 ASC_SCREENSHOT_MAX = 10
@@ -237,6 +243,7 @@ def main() -> None:
     out_root.mkdir(parents=True, exist_ok=True)
 
     _generate_for_targets(phone_tablet, PHONE_TABLET_TARGETS, out_root, "iPhone/iPad")
+    _generate_for_targets(phone_tablet, EXTRA_FIXED_TARGETS, out_root, "Extra")
     _generate_for_targets(watch_list, WATCH_TARGETS, out_root, "Watch")
     _generate_for_targets(mac_list, MAC_TARGETS, out_root, "Mac")
     _generate_for_targets(

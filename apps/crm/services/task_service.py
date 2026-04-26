@@ -1,7 +1,8 @@
 """
 Единый сервис задач CRM: создание, получение, обновление статусов.
 
-Покрывает оба типа задач: knowledge_import и note_analyze.
+Типы задач: knowledge_import, note_analyze, daily_summary, period_summary,
+namespace_integration_job.
 """
 
 from __future__ import annotations
@@ -37,18 +38,26 @@ MAX_SOURCE_FILES_PER_IMPORT = 80
 ALL_NAMESPACES_TASK_KEY = "__all_namespaces__"
 
 KnowledgeImportMode = Literal["notes_only", "graph"]
+NamespaceIntegrationJobKind = Literal["entities", "custom_fields"]
 
 
 class ActiveTaskExistsError(ValueError):
     """Бросается при попытке стартовать задачу, для которой уже есть активная (pending/running)."""
 
-    def __init__(self, task_type: str, existing_task_id: str) -> None:
+    def __init__(
+        self,
+        task_type: str,
+        existing_task_id: str,
+        *,
+        dedup: dict[str, str] | None = None,
+    ) -> None:
         super().__init__(
             f"Задача типа '{task_type}' уже выполняется (task_id={existing_task_id}). "
             "Дождитесь завершения или отмените текущую задачу."
         )
         self.task_type = task_type
         self.existing_task_id = existing_task_id
+        self.dedup = dict(dedup) if dedup else {}
 
 
 def _normalize_import_file_ids(
@@ -129,7 +138,11 @@ class TaskService:
             task_type, data_key_values, namespace, self._get_company_id()
         )
         if existing is not None:
-            raise ActiveTaskExistsError(task_type, existing.task_id)
+            raise ActiveTaskExistsError(
+                task_type,
+                existing.task_id,
+                dedup=data_key_values,
+            )
 
     # ── Knowledge Import ──────────────────────────────────────────────────────
 
@@ -245,6 +258,84 @@ class TaskService:
         row.status = "running"
         row.stage = "reading_source"
         row.progress_pct = 10
+        row.started_at = datetime.now(timezone.utc)
+        row.taskiq_task_id = taskiq_id
+        return row
+
+    # ── Интеграции namespace (фоновые джобы по коннектору) ─────────────────────
+
+    async def start_namespace_integration_job(
+        self,
+        *,
+        namespace: str,
+        provider_id: str,
+        job: NamespaceIntegrationJobKind,
+    ) -> CRMTask:
+        ns = namespace.strip()
+        pid = provider_id.strip()
+        if not pid:
+            raise ValueError("provider_id обязателен")
+        if job not in ("entities", "custom_fields"):
+            raise ValueError(f"Неизвестный job интеграции: {job}")
+        await self._entity_service._ensure_namespace_exists(ns)
+        await self._assert_no_active_task(
+            "namespace_integration_job",
+            {"provider_id": pid, "job": job},
+            ns,
+        )
+        task_id = str(uuid.uuid4())
+        row = CRMTask(
+            task_id=task_id,
+            task_type="namespace_integration_job",
+            status="pending",
+            stage="pending",
+            progress_pct=0,
+            company_id=self._get_company_id(),
+            namespace=ns,
+            user_id=self._get_user_id(),
+            data={"provider_id": pid, "job": job, "stats": {}},
+        )
+        await self._task_repo.create(row)
+
+        from apps.crm_worker.tasks.namespace_integration_tasks import (
+            run_namespace_integration_job,
+        )
+
+        ctx = get_context()
+        if ctx is None:
+            raise ValueError("Для старта фоновой задачи интеграции нужен контекст запроса")
+        try:
+            task = await run_namespace_integration_job.kiq(
+                task_id=task_id,
+                company_id=row.company_id,
+                auth_token=self._auth_token_from_context(),
+                interface_language=ctx.language.value,
+            )
+            taskiq_id = str(task.task_id)
+        except Exception as exc:
+            await self._task_repo.patch_progress(
+                task_id,
+                row.company_id,
+                status="failed",
+                stage="failed",
+                progress_pct=0,
+                completed_at=datetime.now(timezone.utc),
+                error_message=str(exc),
+            )
+            raise
+
+        await self._task_repo.patch_progress(
+            task_id,
+            row.company_id,
+            status="running",
+            stage="running",
+            progress_pct=0,
+            started_at=datetime.now(timezone.utc),
+            taskiq_task_id=taskiq_id,
+        )
+        row.status = "running"
+        row.stage = "running"
+        row.progress_pct = 0
         row.started_at = datetime.now(timezone.utc)
         row.taskiq_task_id = taskiq_id
         return row
@@ -614,6 +705,8 @@ class TaskService:
                 return await self._retry_daily_summary(old)
             case "period_summary":
                 return await self._retry_period_summary(old)
+            case "namespace_integration_job":
+                return await self._retry_namespace_integration_job(old)
             case _:
                 raise ValueError(f"Перезапуск для типа '{old.task_type}' не поддерживается")
 
@@ -670,4 +763,19 @@ class TaskService:
             date_from=date_from,
             date_to=date_to,
             reason="retry",
+        )
+
+    async def _retry_namespace_integration_job(self, old: CRMTask) -> CRMTask:
+        data = old.data
+        provider_raw = data.get("provider_id")
+        job_raw = data.get("job")
+        if not isinstance(provider_raw, str) or not provider_raw.strip():
+            raise ValueError("Нет provider_id в данных задачи интеграции")
+        if job_raw not in ("entities", "custom_fields"):
+            raise ValueError("Нет корректного job в данных задачи интеграции")
+        job: NamespaceIntegrationJobKind = job_raw
+        return await self.start_namespace_integration_job(
+            namespace=old.namespace,
+            provider_id=provider_raw.strip(),
+            job=job,
         )

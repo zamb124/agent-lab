@@ -19,7 +19,8 @@
  * Поток:
  *   - На load: get(namespace), editability(namespace), load entity_types.
  *   - Toggle типа: добавить/удалить из allowed_type_ids → namespace_update.
- *   - Edit типа: отдельный <crm-entity-type-editor>; submit → entity_type_update.
+ *   - Edit / create типа: <crm-entity-type-editor> в той же правой колонке вместо
+ *     сетки карточек; кнопка «назад» возвращает к сетке.
  *   - Create нового типа: entityTypesResource.create + после CREATED —
  *     если ещё не в allowed → namespace_update с расширенным списком.
  */
@@ -73,6 +74,7 @@ export class CRMSpaceDetailPage extends PlatformPage {
         _allowedTypeIds: { state: true },
         _typeDraft: { state: true },
         _editingTypeId: { state: true },
+        _typeFormOpen: { state: true },
         _schemaOptions: { state: true },
         _savingMeta: { state: true },
         _savingAllowed: { state: true },
@@ -261,6 +263,15 @@ export class CRMSpaceDetailPage extends PlatformPage {
                 color: var(--text-tertiary);
                 font-size: var(--text-sm);
             }
+            .panel-title .panel-back {
+                flex-shrink: 0;
+                padding: var(--space-1);
+                min-width: 36px;
+                min-height: 36px;
+                display: inline-flex;
+                align-items: center;
+                justify-content: center;
+            }
         `,
     ];
 
@@ -271,6 +282,7 @@ export class CRMSpaceDetailPage extends PlatformPage {
         this._allowedTypeIds = [];
         this._typeDraft = makeTypeDraft();
         this._editingTypeId = '';
+        this._typeFormOpen = false;
         this._schemaOptions = null;
         this._savingMeta = false;
         this._savingAllowed = false;
@@ -319,6 +331,7 @@ export class CRMSpaceDetailPage extends PlatformPage {
         });
         this.useEvent(this._entityTypeUpdateOp.op.events.SUCCEEDED, () => {
             this._savingType = false;
+            this._typeFormOpen = false;
             this._typeDraft = makeTypeDraft();
             this._editingTypeId = '';
             this._entityTypes.load(null);
@@ -328,6 +341,7 @@ export class CRMSpaceDetailPage extends PlatformPage {
         });
         this.useEvent(this._entityTypes.resource.events.CREATED, (event) => {
             this._creatingType = false;
+            this._typeFormOpen = false;
             this._typeDraft = makeTypeDraft();
             this._editingTypeId = '';
             const item = event && event.payload && event.payload.item;
@@ -347,6 +361,18 @@ export class CRMSpaceDetailPage extends PlatformPage {
     }
 
     willUpdate(changed) {
+        if (changed.has('itemId')) {
+            if (
+                typeof this.itemId === 'string'
+                && this.itemId.length > 0
+                && this._lastRequestedId.length > 0
+                && this._lastRequestedId !== this.itemId
+            ) {
+                this._typeFormOpen = false;
+                this._typeDraft = makeTypeDraft();
+                this._editingTypeId = '';
+            }
+        }
         if (!changed.has('itemId')) return;
         if (typeof this.itemId !== 'string' || this.itemId.length === 0) return;
         if (this._lastRequestedId === this.itemId) return;
@@ -392,11 +418,18 @@ export class CRMSpaceDetailPage extends PlatformPage {
         });
     }
 
+    _openNewTypeForm() {
+        this._editingTypeId = '';
+        this._typeDraft = makeTypeDraft();
+        this._typeFormOpen = true;
+    }
+
     _editType(item) {
         if (!item || typeof item.type_id !== 'string') {
             throw new Error('CRMSpaceDetailPage._editType: item.type_id required');
         }
         this._editingTypeId = item.type_id;
+        this._typeFormOpen = true;
         this._typeDraft = {
             type_id: item.type_id,
             name: item.name || '',
@@ -415,6 +448,7 @@ export class CRMSpaceDetailPage extends PlatformPage {
     }
 
     _onResetTypeDraft() {
+        this._typeFormOpen = false;
         this._typeDraft = makeTypeDraft();
         this._editingTypeId = '';
     }
@@ -600,16 +634,26 @@ export class CRMSpaceDetailPage extends PlatformPage {
                         </div>
                     </div>
                 ` : ''}
+
+                <div class="actions-row" style="margin-top: var(--space-2);">
+                    <button
+                        class="btn btn-soft"
+                        type="button"
+                        @click=${() => this.navigate('space_integrations', { itemId: this.itemId })}
+                    >
+                        ${this.t('space_detail_page.link_integrations')}
+                    </button>
+                </div>
             </div>
         `;
     }
 
     _renderRightPanel() {
         const items = Array.isArray(this._entityTypes.items) ? this._entityTypes.items : [];
-        return html`
-            ${this._renderTypesListPanel(items)}
-            ${this._renderTypeFormPanel(items)}
-        `;
+        if (this._typeFormOpen) {
+            return this._renderTypeFormPanel();
+        }
+        return this._renderTypesListPanel(items);
     }
 
     _renderTypesListPanel(allTypes) {
@@ -620,11 +664,20 @@ export class CRMSpaceDetailPage extends PlatformPage {
                         <platform-icon name="list" size="18"></platform-icon>
                         ${this.t('space_detail_page.types_section')}
                     </span>
-                    <span class="hint">
-                        ${this.t('space_detail_page.allowed_count', {
-                            allowed: String(this._allowedTypeIds.length),
-                            total: String(allTypes.length),
-                        })}
+                    <span class="actions-row" style="flex-wrap: nowrap; align-items: center;">
+                        <span class="hint">
+                            ${this.t('space_detail_page.allowed_count', {
+                                allowed: String(this._allowedTypeIds.length),
+                                total: String(allTypes.length),
+                            })}
+                        </span>
+                        <button
+                            class="btn btn-soft"
+                            type="button"
+                            @click=${this._openNewTypeForm}
+                        >
+                            ${this.t('space_detail_page.action_new_type')}
+                        </button>
                     </span>
                 </div>
                 ${allTypes.length === 0
@@ -687,19 +740,46 @@ export class CRMSpaceDetailPage extends PlatformPage {
     _renderTypeFormPanel() {
         const namespaces = Array.isArray(this._namespaces.items) ? this._namespaces.items : [];
         return html`
-            <crm-entity-type-editor
-                .typeDraft=${this._typeDraft}
-                .schemaOptions=${this._schemaOptions}
-                .namespaces=${namespaces}
-                .parentTypeOptions=${this._getParentTypeOptions()}
-                editingTypeId=${this._editingTypeId}
-                ?savingType=${this._savingType || this._creatingType}
-                ?showNamespaces=${false}
-                @draft-changed=${this._onTypeDraftChanged}
-                @schema-rows-changed=${this._onSchemaRowsChanged}
-                @cancel=${this._onResetTypeDraft}
-                @submit=${this._onSubmitType}
-            ></crm-entity-type-editor>
+            <div class="panel">
+                <div class="panel-header">
+                    <span class="panel-title">
+                        <button
+                            class="btn btn-soft panel-back"
+                            type="button"
+                            title=${this.t('space_detail_page.back_to_types')}
+                            aria-label=${this.t('space_detail_page.back_to_types')}
+                            @click=${this._onResetTypeDraft}
+                        >
+                            <platform-icon name="chevron-left" size="18"></platform-icon>
+                        </button>
+                        <platform-icon name="list" size="18"></platform-icon>
+                        ${this.t('space_detail_page.types_section')}
+                    </span>
+                    <span class="actions-row" style="flex-wrap: nowrap; align-items: center;">
+                        <button
+                            class="btn btn-soft"
+                            type="button"
+                            @click=${this._onResetTypeDraft}
+                        >
+                            ${this.t('templates_page.btn_cancel')}
+                        </button>
+                    </span>
+                </div>
+                <crm-entity-type-editor
+                    .typeDraft=${this._typeDraft}
+                    .schemaOptions=${this._schemaOptions}
+                    .namespaces=${namespaces}
+                    .parentTypeOptions=${this._getParentTypeOptions()}
+                    editingTypeId=${this._editingTypeId}
+                    ?savingType=${this._savingType || this._creatingType}
+                    ?showNamespaces=${false}
+                    .compactChrome=${true}
+                    @draft-changed=${this._onTypeDraftChanged}
+                    @schema-rows-changed=${this._onSchemaRowsChanged}
+                    @cancel=${this._onResetTypeDraft}
+                    @submit=${this._onSubmitType}
+                ></crm-entity-type-editor>
+            </div>
         `;
     }
 }

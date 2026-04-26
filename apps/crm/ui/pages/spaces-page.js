@@ -13,7 +13,7 @@
  *   - «Открыть» → setPlatformNamespaceSelection + navigate('notes').
  */
 
-import { html, css } from 'lit';
+import { html, css, nothing } from 'lit';
 import { PlatformPage } from '@platform/lib/base/PlatformPage.js';
 import { setPlatformNamespaceSelection } from '@platform/lib/utils/platform-namespace.js';
 import '@platform/lib/components/layout/page-header.js';
@@ -22,6 +22,16 @@ import '@platform/lib/components/platform-breadcrumbs.js';
 import '@platform/lib/components/platform-icon.js';
 
 const NAMESPACES_NAME = 'crm/namespaces';
+
+const CRM_INTEGRATION_ICON_BASE = '/crm/ui/static/assets/integrations';
+
+/** URL круглой иконки провайдера; файл обязателен: assets/integrations/{provider_id}.svg */
+function crmIntegrationIconHref(providerId) {
+    if (typeof providerId !== 'string' || providerId.length === 0) {
+        throw new Error('crmIntegrationIconHref: providerId required');
+    }
+    return `${CRM_INTEGRATION_ICON_BASE}/${encodeURIComponent(providerId)}.svg`;
+}
 
 export class CRMSpacesPage extends PlatformPage {
     static i18nNamespace = 'crm';
@@ -88,6 +98,12 @@ export class CRMSpacesPage extends PlatformPage {
                 border-radius: var(--radius-lg);
                 background: var(--crm-surface);
             }
+            .card-header {
+                display: flex;
+                align-items: flex-start;
+                justify-content: space-between;
+                gap: var(--space-2);
+            }
             .card-title {
                 display: inline-flex;
                 align-items: center;
@@ -96,6 +112,32 @@ export class CRMSpacesPage extends PlatformPage {
                 font-weight: 600;
                 color: var(--text-primary);
                 margin: 0;
+                flex: 1;
+                min-width: 0;
+            }
+            .card-integrations {
+                display: flex;
+                flex-wrap: wrap;
+                justify-content: flex-end;
+                gap: 6px;
+                flex-shrink: 0;
+            }
+            .integration-icon-wrap {
+                width: 32px;
+                height: 32px;
+                border-radius: 50%;
+                overflow: hidden;
+                display: inline-flex;
+                align-items: center;
+                justify-content: center;
+                background: #242428;
+                border: 1px solid rgba(255, 255, 255, 0.12);
+            }
+            .integration-icon {
+                width: 70%;
+                height: 70%;
+                object-fit: contain;
+                display: block;
             }
             .card-name {
                 font-family: var(--font-mono);
@@ -164,6 +206,20 @@ export class CRMSpacesPage extends PlatformPage {
         this.navigate('notes');
     }
 
+    _connectedIntegrationBadges(ns) {
+        const raw = ns.integration_badges;
+        if (!Array.isArray(raw)) {
+            return [];
+        }
+        return raw.filter(
+            (b) =>
+                b
+                && b.connected === true
+                && typeof b.provider_id === 'string'
+                && b.provider_id.length > 0,
+        );
+    }
+
     render() {
         const items = this._namespaces.items;
         const loading = this._namespaces.loading && items.length === 0;
@@ -206,12 +262,37 @@ export class CRMSpacesPage extends PlatformPage {
         const description = typeof ns.description === 'string' && ns.description.length > 0
             ? ns.description
             : '';
+        const badges = this._connectedIntegrationBadges(ns);
         return html`
             <article class="card">
-                <h3 class="card-title">
-                    <platform-icon name="folder" size="14"></platform-icon>
-                    <span class="card-name">${ns.name}</span>
-                </h3>
+                <div class="card-header">
+                    <h3 class="card-title">
+                        <platform-icon name="folder" size="14"></platform-icon>
+                        <span class="card-name">${ns.name}</span>
+                    </h3>
+                    ${badges.length > 0
+                        ? html`
+                            <div
+                                class="card-integrations"
+                                aria-label=${this.t('spaces_page.integrations_connected')}
+                            >
+                                ${badges.map(
+                                    (b) => html`
+                                        <span class="integration-icon-wrap" title=${b.provider_id}>
+                                            <img
+                                                class="integration-icon"
+                                                src=${crmIntegrationIconHref(b.provider_id)}
+                                                alt=""
+                                                loading="lazy"
+                                                decoding="async"
+                                            />
+                                        </span>
+                                    `,
+                                )}
+                            </div>
+                        `
+                        : nothing}
+                </div>
                 ${description.length > 0
                     ? html`<p class="card-description">${description}</p>`
                     : html`<p class="card-description card-empty-description">${this.t('spaces_page.empty_description')}</p>`}

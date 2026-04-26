@@ -16,6 +16,8 @@
  *   - showNamespaces: boolean (true для templates-page; false для space-detail
  *                     где namespace задан контекстом и редактируется одним
  *                     toggle снаружи)
+ *   - compactChrome: boolean — без внешней .panel и без верхнего panel-header
+ *     (шапка рисует родитель, напр. `space-detail-page`).
  *
  * События (через emit):
  *   - draft-changed: { typeDraft }
@@ -43,6 +45,7 @@ export class CRMEntityTypeEditor extends PlatformElement {
         editingTypeId: { type: String },
         savingType: { type: Boolean },
         showNamespaces: { type: Boolean },
+        compactChrome: { type: Boolean, attribute: 'compact-chrome' },
     };
 
     static styles = [
@@ -55,6 +58,12 @@ export class CRMEntityTypeEditor extends PlatformElement {
                 border: 1px solid var(--glass-border-subtle);
                 border-radius: var(--radius-xl);
                 padding: var(--space-4);
+                display: flex;
+                flex-direction: column;
+                gap: var(--space-3);
+                min-width: 0;
+            }
+            .root-compact {
                 display: flex;
                 flex-direction: column;
                 gap: var(--space-3);
@@ -263,23 +272,29 @@ export class CRMEntityTypeEditor extends PlatformElement {
         const editing = typeof this.editingTypeId === 'string' && this.editingTypeId.length > 0;
         const schemaReady = this.schemaOptions !== null
             && Array.isArray(this.schemaOptions.field_types);
+        const compact = this.compactChrome === true;
+        const rootClass = compact ? 'root-compact' : 'panel';
         return html`
-            <div class="panel">
-                <div class="panel-header">
-                    <span class="panel-title">
-                        <platform-icon name="plus" size="18"></platform-icon>
+            <div class=${rootClass}>
+                ${compact
+                    ? ''
+                    : html`
+                    <div class="panel-header">
+                        <span class="panel-title">
+                            <platform-icon name="plus" size="18"></platform-icon>
+                            ${editing
+                                ? this.t('templates_page.type_form_edit_title', { type_id: this.editingTypeId })
+                                : this.t('templates_page.type_form_create_title')}
+                        </span>
                         ${editing
-                            ? this.t('templates_page.type_form_edit_title', { type_id: this.editingTypeId })
-                            : this.t('templates_page.type_form_create_title')}
-                    </span>
-                    ${editing
-                        ? html`
+                            ? html`
                             <button class="btn btn-soft" type="button" @click=${() => this.emit('cancel')}>
                                 ${this.t('templates_page.btn_cancel')}
                             </button>
                         `
-                        : ''}
-                </div>
+                            : ''}
+                    </div>
+                `}
                 ${!schemaReady ? html`<div class="empty">${this.t('templates_page.loading_schema')}</div>` : ''}
                 <div class="grid-2">
                     <div class="field">

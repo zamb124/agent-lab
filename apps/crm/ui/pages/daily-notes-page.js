@@ -575,9 +575,20 @@ export class CRMDailyNotesPage extends PlatformPage {
                 border-radius: var(--radius-xl);
                 min-height: 200px;
                 display: flex;
+                flex-direction: column;
                 align-items: center;
                 justify-content: center;
+                gap: var(--space-3);
+                padding: var(--space-6);
+                text-align: center;
                 color: var(--text-tertiary);
+            }
+
+            .empty-hint {
+                font-size: var(--text-sm);
+                color: var(--text-tertiary);
+                max-width: 36rem;
+                line-height: 1.45;
             }
 
             .summary-fab { display: none; }
@@ -1513,7 +1524,10 @@ export class CRMDailyNotesPage extends PlatformPage {
                         ${loading && filteredNotes.length === 0 ? html`
                             <div class="empty"><glass-spinner size="40"></glass-spinner></div>
                         ` : filteredNotes.length === 0 ? html`
-                            <div class="empty">${this.t('daily_notes_page.empty_period')}</div>
+                            <div class="empty">
+                                <div>${this.t('daily_notes_page.empty_period')}</div>
+                                <div class="empty-hint">${this.t('daily_notes_page.empty_period_hints')}</div>
+                            </div>
                         ` : html`
                             <div class="cards-grid">
                                 ${filteredNotes.map((note) => this._renderNoteCard(note))}

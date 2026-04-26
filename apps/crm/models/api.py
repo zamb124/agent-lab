@@ -362,7 +362,17 @@ class NamespaceCreateRequest(BaseModel):
     """Создание namespace из шаблона."""
     name: str = Field(..., description="Имя namespace")
     description: Optional[str] = Field(default=None, description="Описание namespace")
-    template_id: str = Field(..., description="ID шаблона: sales | development | hr")
+    template_id: str = Field(
+        ...,
+        description="ID шаблона: sales | development | hr | amocrm | ...",
+    )
+
+
+class NamespaceIntegrationBadge(BaseModel):
+    """Статус подключения интеграции в пространстве (для UI)."""
+
+    provider_id: str
+    connected: bool
 
 
 class NamespaceResponse(BaseModel):
@@ -372,6 +382,7 @@ class NamespaceResponse(BaseModel):
     description: Optional[str] = None
     is_default: bool = False
     crm_settings: Optional[NamespaceCRMSettings] = None
+    integration_badges: List[NamespaceIntegrationBadge] = Field(default_factory=list)
 
 
 class NamespaceUpdateRequest(BaseModel):

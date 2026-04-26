@@ -40,6 +40,7 @@ from apps.crm.db.models import Relationship
 from apps.crm.constants_graph import (
     COMPANY_ENTITY_TYPE,
     IN_CONTEXT_RELATIONSHIP_TYPE,
+    NOTE_FAMILY_ENTITY_TYPE_IDS,
     NOTE_VOICE_RELATIONSHIP_TYPE,
     PLATFORM_COMPANY_ID_ATTR,
     PLATFORM_USER_ID_ATTR,
@@ -65,10 +66,17 @@ import json
 logger = get_logger(__name__)
 from core.config import get_settings
 from apps.crm.config import get_crm_settings
-from apps.crm.taskiq_analyze_errors import format_mentioned_entity_short_description_error
 from core.utils.chunked_async import map_reduce_tree, run_chunked_map
 
 _ANALYZE_ENTITY_DESCRIPTION_MIN_LEN = 12
+
+_RESOLVED_NOTE_NEIGHBOR_REL_TYPES: frozenset[str] = frozenset({
+    "linked",
+    "mentions",
+    IN_CONTEXT_RELATIONSHIP_TYPE,
+    NOTE_VOICE_RELATIONSHIP_TYPE,
+})
+
 SUMMARY_ALL_NAMESPACES_TASK_KEY = "__all_namespaces__"
 _DAILY_SUMMARY_CARD_SNIPPET_MAX = 500
 
@@ -300,6 +308,8 @@ class EntityService:
         namespace: str,
         entity_subtype: Optional[str] = None,
     ) -> None:
+        if entity_type in NOTE_FAMILY_ENTITY_TYPE_IDS:
+            return
         entity_type_model = await self._entity_type_repo.get_by_type_id(entity_type)
         if entity_type_model is None:
             raise ValueError(f"Entity type not found: {entity_type}")
@@ -308,6 +318,8 @@ class EntityService:
             raise ValueError(f"Entity type '{entity_type}' is not allowed in namespace '{namespace}'")
 
         if entity_subtype:
+            if entity_subtype in NOTE_FAMILY_ENTITY_TYPE_IDS:
+                return
             subtype_model = await self._entity_type_repo.get_by_type_id(entity_subtype)
             if subtype_model is None:
                 raise ValueError(f"Entity subtype not found: {entity_subtype}")
@@ -474,7 +486,11 @@ class EntityService:
             if entity_type_model is None:
                 raise ValueError(f"Entity type not found: {type_id}")
             allowed_namespaces = entity_type_model.namespace_ids or []
-            if "*" not in allowed_namespaces and namespace not in allowed_namespaces:
+            if (
+                type_id not in NOTE_FAMILY_ENTITY_TYPE_IDS
+                and "*" not in allowed_namespaces
+                and namespace not in allowed_namespaces
+            ):
                 raise ValueError(f"Entity type '{type_id}' is not allowed in namespace '{namespace}'")
             field_specs = self._collect_entity_type_field_specs(entity_type_model)
         operator_matrix = self._build_filter_operator_matrix()
@@ -648,6 +664,92 @@ class EntityService:
                 updated_at=now,
             )
             await self._relationship_repo.create(ctx_row)
+
+    async def apply_imported_note_graph_links(
+        self,
+        *,
+        note_id: str,
+        namespace: str,
+        context_parent_entity_id: str,
+        user_id: str,
+    ) -> None:
+        ns = self._resolve_namespace_for_write(namespace)
+        company_id = self._get_company_id()
+        note = await self._entity_repo.get(note_id)
+        if note is None:
+            raise ValueError(f"Заметка не найдена: {note_id}")
+        mention_ids = self.extract_linked_entity_ids_from_description(note.description or "")
+        await self._sync_note_mention_links(note_id, mention_ids, ns)
+        resolved_voice = await self._resolve_voice_entity_id_for_note(
+            namespace=ns,
+            user_id=user_id,
+            company_id=company_id,
+            voice_entity_id=None,
+            voice_entity_in_payload=False,
+        )
+        await self._sync_note_graph_edges(
+            note_id=note_id,
+            namespace=ns,
+            user_id=user_id,
+            resolved_voice_id=resolved_voice,
+            resolved_context_id=context_parent_entity_id,
+        )
+
+    async def resolved_entity_ids_for_note(self, note_id: str) -> list[str]:
+        note = await self._entity_repo.get(note_id)
+        if note is None:
+            raise ValueError(f"Заметка не найдена: {note_id}")
+        from_text = self.extract_linked_entity_ids_from_description(note.description or "")
+        rels = await self._relationship_repo.get_by_entity(note_id)
+        from_edges: list[str] = []
+        for rel in rels:
+            if rel.source_entity_id != note_id:
+                continue
+            if rel.relationship_type not in _RESOLVED_NOTE_NEIGHBOR_REL_TYPES:
+                continue
+            from_edges.append(rel.target_entity_id)
+        seen: set[str] = {note_id}
+        out: list[str] = []
+        for eid in from_text + from_edges:
+            if eid in seen:
+                continue
+            seen.add(eid)
+            out.append(eid)
+        return out
+
+    def _synthetic_entity_description_for_analyze(self, row: CRMEntity) -> str:
+        parts: list[str] = []
+        nm = (row.name or "").strip()
+        if nm:
+            parts.append(nm)
+        parts.append(f"type={row.entity_type}")
+        attrs = row.attributes or {}
+        for key in (
+            "email",
+            "phone",
+            "stage",
+            "source",
+            "first_name",
+            "last_name",
+            "display_name",
+            "price",
+        ):
+            v = attrs.get(key)
+            if v is None:
+                continue
+            s = str(v).strip()
+            if s:
+                parts.append(f"{key}={s}")
+        return " ".join(parts)
+
+    def _effective_description_for_analyze_inject(self, row: CRMEntity) -> str:
+        raw = row.description if isinstance(row.description, str) else ""
+        if len(raw.strip()) >= _ANALYZE_ENTITY_DESCRIPTION_MIN_LEN:
+            return raw.strip()
+        syn = self._synthetic_entity_description_for_analyze(row).strip()
+        if len(syn) >= _ANALYZE_ENTITY_DESCRIPTION_MIN_LEN:
+            return syn
+        return f"{syn} id={row.entity_id}"
 
     async def _list_notes_for_date(self, date_str: str, namespace: Optional[str] = None) -> List[CRMEntity]:
         query_filters: dict[str, Any] = {
@@ -2156,7 +2258,7 @@ class EntityService:
                     "entity_id": member_entity.entity_id,
                     "name": member_entity.name,
                     "type": "member",
-                    "description": member_entity.attributes.get("description", ""),
+                    "description": self._effective_description_for_analyze_inject(member_entity),
                 })
                 _known_entity_rows.append(member_entity)
 
@@ -2172,9 +2274,26 @@ class EntityService:
                     "entity_id": ce.entity_id,
                     "name": ce.name,
                     "type": "company",
-                    "description": ce.attributes.get("description", ""),
+                    "description": self._effective_description_for_analyze_inject(ce),
                 })
                 _known_entity_rows.append(ce)
+
+        resolved_for_note: list[str] = []
+        if note_id:
+            resolved_for_note = await self.resolved_entity_ids_for_note(note_id)
+            for eid in resolved_for_note:
+                if any(ke.get("entity_id") == eid for ke in known_entities):
+                    continue
+                row = await self._entity_repo.get(eid)
+                if row is None:
+                    continue
+                known_entities.append({
+                    "entity_id": row.entity_id,
+                    "name": row.name,
+                    "type": row.entity_type,
+                    "description": self._effective_description_for_analyze_inject(row),
+                })
+                _known_entity_rows.append(row)
 
         prefix_parts: list[str] = []
         anchor_types = [et for et in entity_types if et.is_context_anchor]
@@ -2201,9 +2320,13 @@ class EntityService:
 
         if progress_cb:
             await progress_cb("processing_results", 70, "Обработка результатов")
+        mentioned_only = (
+            list(request.mentioned_entity_ids) if request.mentioned_entity_ids else None
+        )
+
         await self._inject_mentioned_entities_into_analyze_state(
             state,
-            request.mentioned_entity_ids,
+            mentioned_only,
             namespace,
         )
 
@@ -2374,17 +2497,7 @@ class EntityService:
             if k in occupied:
                 continue
             occupied.add(k)
-            desc = row.description
-            if not isinstance(desc, str) or len(desc.strip()) < _ANALYZE_ENTITY_DESCRIPTION_MIN_LEN:
-                display_name = (row.name or "").strip() or mid
-                raise ValueError(
-                    format_mentioned_entity_short_description_error(
-                        entity_id=mid,
-                        entity_name=display_name,
-                        entity_type=row.entity_type,
-                        min_len=_ANALYZE_ENTITY_DESCRIPTION_MIN_LEN,
-                    )
-                )
+            desc = self._effective_description_for_analyze_inject(row)
             payload = {
                 "entity_type": row.entity_type,
                 "name": row.name,
@@ -2436,7 +2549,7 @@ class EntityService:
             payload = {
                 "entity_type": row.entity_type,
                 "name": row.name,
-                "description": row.description or row.name,
+                "description": self._effective_description_for_analyze_inject(row),
                 "attributes": dict(row.attributes or {}),
                 "entity_subtype": row.entity_subtype,
             }

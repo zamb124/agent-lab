@@ -13,6 +13,19 @@
 import { createAsyncOp } from '@platform/lib/events/index.js';
 import { httpRequest } from '@platform/lib/events/http.js';
 
+function _entityIdFromPayload(payload) {
+    if (!payload || typeof payload !== 'object') {
+        return '';
+    }
+    if (typeof payload.entityId === 'string' && payload.entityId.length > 0) {
+        return payload.entityId;
+    }
+    if (typeof payload.entity_id === 'string' && payload.entity_id.length > 0) {
+        return payload.entity_id;
+    }
+    return '';
+}
+
 function _buildQuery(params) {
     const url = new URLSearchParams();
     Object.keys(params).forEach((key) => {
@@ -56,14 +69,15 @@ export const influenceGraphOp = createAsyncOp({
     silent: true,
     restMirror: { method: 'GET', path: '/crm/api/v1/entities/:entity_id/influence-graph' },
     request: async ({ payload }) => {
-        if (!payload || typeof payload.entityId !== 'string' || payload.entityId.length === 0) {
-            throw new Error('influenceGraphOp: payload.entityId required');
+        const entityId = _entityIdFromPayload(payload);
+        if (!entityId) {
+            throw new Error('influenceGraphOp: payload.entityId or payload.entity_id required');
         }
         const params = (payload.params && typeof payload.params === 'object') ? payload.params : {};
         const qs = _buildQuery(params);
         return await httpRequest({
             method: 'GET',
-            url: `/crm/api/v1/entities/${encodeURIComponent(payload.entityId)}/influence-graph${qs}`,
+            url: `/crm/api/v1/entities/${encodeURIComponent(entityId)}/influence-graph${qs}`,
         });
     },
 });
@@ -73,14 +87,15 @@ export const relatedEntitiesOp = createAsyncOp({
     silent: true,
     restMirror: { method: 'GET', path: '/crm/api/v1/entities/:entity_id/related' },
     request: async ({ payload }) => {
-        if (!payload || typeof payload.entityId !== 'string' || payload.entityId.length === 0) {
-            throw new Error('relatedEntitiesOp: payload.entityId required');
+        const entityId = _entityIdFromPayload(payload);
+        if (!entityId) {
+            throw new Error('relatedEntitiesOp: payload.entityId or payload.entity_id required');
         }
         const params = (payload.params && typeof payload.params === 'object') ? payload.params : {};
         const qs = _buildQuery(params);
         return await httpRequest({
             method: 'GET',
-            url: `/crm/api/v1/entities/${encodeURIComponent(payload.entityId)}/related${qs}`,
+            url: `/crm/api/v1/entities/${encodeURIComponent(entityId)}/related${qs}`,
         });
     },
 });
@@ -90,14 +105,15 @@ export const entityRelationshipsOp = createAsyncOp({
     silent: true,
     restMirror: { method: 'GET', path: '/crm/api/v1/entities/:entity_id/relationships' },
     request: async ({ payload }) => {
-        if (!payload || typeof payload.entityId !== 'string' || payload.entityId.length === 0) {
-            throw new Error('entityRelationshipsOp: payload.entityId required');
+        const entityId = _entityIdFromPayload(payload);
+        if (!entityId) {
+            throw new Error('entityRelationshipsOp: payload.entityId or payload.entity_id required');
         }
         const params = (payload.params && typeof payload.params === 'object') ? payload.params : {};
         const qs = _buildQuery(params);
         return await httpRequest({
             method: 'GET',
-            url: `/crm/api/v1/entities/${encodeURIComponent(payload.entityId)}/relationships${qs}`,
+            url: `/crm/api/v1/entities/${encodeURIComponent(entityId)}/relationships${qs}`,
         });
     },
 });

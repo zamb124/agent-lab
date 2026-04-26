@@ -4,7 +4,7 @@
 
 from datetime import datetime, timezone
 from typing import Optional, Dict, Any, List, Literal
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, model_validator
 from enum import Enum
 
 from core.fields import Field
@@ -318,7 +318,7 @@ class AuthRequest(BaseModel):
 
 
 class NamespaceCRMSettings(BaseModel):
-    """Настройки CRM для namespace (заметки: голос, контекст)."""
+    """Настройки CRM для namespace (заметки: голос, контекст, метаданные интеграций)."""
 
     show_note_voice_ui: bool = Field(default=True, title="Показывать выбор голоса")
     default_note_voice: Literal["self", "none", "last"] = Field(
@@ -329,6 +329,28 @@ class NamespaceCRMSettings(BaseModel):
         default=None,
         title="Якорь контекста по умолчанию",
     )
+    integrations: Dict[str, Dict[str, Any]] = Field(
+        default_factory=dict,
+        title="Метаданные интеграций по ключу провайдера",
+        description="Только отображение и подсказки; секреты хранятся в OAuth credentials.",
+    )
+
+    @model_validator(mode="before")
+    @classmethod
+    def _migrate_amocrm_subdomain_into_integrations(cls, data: Any) -> Any:
+        if not isinstance(data, dict):
+            return data
+        migrated = dict(data)
+        legacy = migrated.pop("amocrm_subdomain", None)
+        integ = dict(migrated.get("integrations") or {})
+        if legacy is not None and isinstance(legacy, str) and legacy.strip():
+            amo = dict(integ.get("amocrm") or {})
+            cur = amo.get("subdomain")
+            if not (isinstance(cur, str) and cur.strip()):
+                amo["subdomain"] = legacy.strip()
+            integ["amocrm"] = amo
+        migrated["integrations"] = integ
+        return migrated
 
 
 class NamespaceSyncSettings(BaseModel):

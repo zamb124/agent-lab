@@ -5,12 +5,15 @@ from typing import List
 
 from fastapi import APIRouter, HTTPException, Query
 
+from core.context import get_context
 from core.logging import get_logger
+from core.models.identity_models import Namespace, NamespaceCRMSettings
 from core.pagination import OffsetPage
 from apps.crm.dependencies import ContainerDep
 from apps.crm.models.api import (
     NamespaceCreateRequest,
     NamespaceEditabilityResponse,
+    NamespaceIntegrationBadge,
     NamespaceResponse,
     NamespaceTemplateCreateRequest,
     NamespaceTemplateDetailsResponse,
@@ -28,6 +31,53 @@ from apps.crm.models.api import (
 logger = get_logger(__name__)
 
 router = APIRouter(prefix="/namespaces", tags=["CRM Namespaces"])
+
+
+async def _namespace_integration_badges(
+    container: ContainerDep,
+    *,
+    namespace_name: str,
+    company_id: str,
+    user_id: str,
+    crm_settings: NamespaceCRMSettings | None,
+) -> list[NamespaceIntegrationBadge]:
+    manifest = await container.integration_registry.build_manifest(
+        namespace_name=namespace_name,
+        company_id=company_id,
+        user_id=user_id,
+        crm_settings=crm_settings,
+    )
+    return [
+        NamespaceIntegrationBadge(
+            provider_id=str(row["provider_id"]),
+            connected=bool(row.get("connected")),
+        )
+        for row in manifest
+    ]
+
+
+async def _namespace_response(
+    container: ContainerDep,
+    ns: Namespace,
+) -> NamespaceResponse:
+    ctx = get_context()
+    badges: list[NamespaceIntegrationBadge] = []
+    if ctx is not None and ctx.user is not None and ctx.active_company is not None:
+        badges = await _namespace_integration_badges(
+            container,
+            namespace_name=ns.name,
+            company_id=ns.company_id,
+            user_id=ctx.user.user_id,
+            crm_settings=ns.crm_settings,
+        )
+    return NamespaceResponse(
+        name=ns.name,
+        company_id=ns.company_id,
+        description=ns.description,
+        is_default=ns.is_default,
+        crm_settings=ns.crm_settings,
+        integration_badges=badges,
+    )
 
 SCHEMA_OPTIONS_RESPONSE = NamespaceTemplateSchemaOptionsResponse(
     field_types=[
@@ -101,17 +151,11 @@ async def list_namespaces(
         namespace_repo.list(limit=limit, offset=offset),
         namespace_repo.count_all(),
     )
+    responses = await asyncio.gather(
+        *[_namespace_response(container, ns) for ns in namespaces],
+    )
     return OffsetPage[NamespaceResponse](
-        items=[
-            NamespaceResponse(
-                name=ns.name,
-                company_id=ns.company_id,
-                description=ns.description,
-                is_default=ns.is_default,
-                crm_settings=ns.crm_settings,
-            )
-            for ns in namespaces
-        ],
+        items=list(responses),
         total=total,
         limit=limit,
         offset=offset,
@@ -350,13 +394,7 @@ async def create_namespace(
         raise HTTPException(status_code=status_code, detail=detail) from error
 
     logger.info(f"Создан namespace {request.name}")
-    return NamespaceResponse(
-        name=namespace.name,
-        company_id=namespace.company_id,
-        description=namespace.description,
-        is_default=namespace.is_default,
-        crm_settings=namespace.crm_settings,
-    )
+    return await _namespace_response(container, namespace)
 
 
 @router.get("/{namespace_name}/editability", response_model=NamespaceEditabilityResponse)
@@ -429,10 +467,4 @@ async def update_namespace(
         await container.namespace_repository.set(ns)
         updated_namespace = ns
 
-    return NamespaceResponse(
-        name=updated_namespace.name,
-        company_id=updated_namespace.company_id,
-        description=updated_namespace.description,
-        is_default=updated_namespace.is_default,
-        crm_settings=updated_namespace.crm_settings,
-    )
+    return await _namespace_response(container, updated_namespace)

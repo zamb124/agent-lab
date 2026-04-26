@@ -141,6 +141,35 @@ class EntityRepository(BaseCRMRepository[CRMEntity]):
             result = await session.execute(stmt)
             return list(result.scalars().all())
 
+    async def find_by_external_ref(
+        self,
+        *,
+        company_id: str,
+        namespace: str,
+        entity_type: str,
+        source_id: str,
+        record_id: str,
+    ) -> List[CRMEntity]:
+        """Поиск по attributes.external_refs[source_id].record_id в пределах company и namespace."""
+        cid = company_id
+        ns = namespace
+        sid = source_id
+        rid = str(record_id).strip()
+        if not rid:
+            return []
+        if not sid.strip():
+            return []
+        record_path = CRMEntity.attributes["external_refs"][sid]["record_id"]
+        async with self._db.session() as session:
+            stmt = select(CRMEntity).where(
+                CRMEntity.company_id == cid,
+                CRMEntity.namespace == ns,
+                CRMEntity.entity_type == entity_type,
+                record_path.astext == rid,
+            )
+            result = await session.execute(stmt)
+            return list(result.scalars().all())
+
     # -- CRUD --
 
     async def create(self, entity: CRMEntity) -> CRMEntity:

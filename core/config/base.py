@@ -20,7 +20,6 @@ from core.config.models import (
     TelegramConfig,
     WhatsAppConfig,
     NanoBananaConfig,
-    AmoCRMConfig,
     ProxyConfig,
     PaymentProvidersConfig,
     ProviderLitserveConfig,
@@ -66,7 +65,6 @@ class BaseSettings(PydanticBaseSettings):
     telegram: TelegramConfig = Field(default_factory=TelegramConfig)
     whatsapp: WhatsAppConfig = Field(default_factory=WhatsAppConfig)
     nano_banana: NanoBananaConfig = Field(default_factory=NanoBananaConfig)
-    amocrm: AmoCRMConfig = Field(default_factory=AmoCRMConfig)
     proxy: ProxyConfig = Field(default_factory=ProxyConfig)
     payment_providers: PaymentProvidersConfig = Field(default_factory=PaymentProvidersConfig)
     rag: RAGConfig = Field(default_factory=RAGConfig)

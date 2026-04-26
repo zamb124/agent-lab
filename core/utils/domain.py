@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import ipaddress
 from typing import Optional
+from urllib.parse import urlparse
 
 PRIMARY_DOMAIN = "humanitec.ru"
 SUPPORTED_DOMAINS = ["humanitec.ru", "agents-lab.ru"]
@@ -128,6 +129,50 @@ def is_supported_domain(host: str) -> bool:
     if _ip_dev_base(base) is not None:
         return True
     return False
+
+
+def _default_port_for_scheme(scheme: str) -> str:
+    return "443" if scheme == "https" else "80"
+
+
+def _hosts_same_tenant_cluster(o_host: str, p_host: str) -> bool:
+    """Один кластер тенантов: apex, поддомен того же base, localhost/*.localhost, один и тот же dev-IP."""
+    if o_host == p_host:
+        return True
+    base = extract_base_domain(p_host)
+    if base == "localhost":
+        return o_host == "localhost" or o_host.endswith(".localhost")
+    if _ip_dev_base(base) is not None:
+        return o_host == p_host
+    if o_host.endswith(f".{base}") and len(o_host) > len(base) + 1:
+        return extract_base_domain(o_host) == base
+    return False
+
+
+def is_allowed_integration_return_origin(origin: str, platform_public_base_url: str | None) -> bool:
+    """
+    Разрешённый origin браузера после OAuth: тот же scheme и порт, хост в том же тенант-кластере,
+    что и server.platform_public_base_url. Исключает open-redirect на чужие хосты.
+    """
+    if not origin or not str(origin).strip():
+        return False
+    if not platform_public_base_url or not str(platform_public_base_url).strip():
+        return False
+    o = urlparse(str(origin).strip())
+    p = urlparse(str(platform_public_base_url).strip())
+    if o.scheme not in ("http", "https") or p.scheme not in ("http", "https"):
+        return False
+    if o.scheme != p.scheme:
+        return False
+    o_host, o_port = split_host_port(o.netloc)
+    p_host, p_port = split_host_port(p.netloc)
+    if not o_host or not p_host:
+        return False
+    o_effective = o_port if o_port else _default_port_for_scheme(o.scheme)
+    p_effective = p_port if p_port else _default_port_for_scheme(p.scheme)
+    if o_effective != p_effective:
+        return False
+    return _hosts_same_tenant_cluster(o_host, p_host)
 
 
 def get_protocol(host: str) -> str:

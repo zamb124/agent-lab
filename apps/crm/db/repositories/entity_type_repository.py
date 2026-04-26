@@ -5,10 +5,12 @@
 ВСЕ типы с company_id (ОБЯЗАТЕЛЬНО)!
 """
 
-from typing import List, Optional
-from sqlalchemy import func, select, update as sa_update, or_
+from typing import Any, Optional
 
-from apps.crm.db.base import CRMDatabase, BaseCRMRepository
+from sqlalchemy import func, or_, select
+from sqlalchemy import update as sa_update
+
+from apps.crm.db.base import BaseCRMRepository
 from apps.crm.db.models import EntityType
 from core.logging import get_logger
 
@@ -17,15 +19,15 @@ logger = get_logger(__name__)
 
 class EntityTypeRepository(BaseCRMRepository[EntityType]):
     """Репозиторий для типов сущностей"""
-    
+
     @property
     def model_class(self) -> type[EntityType]:
         return EntityType
-    
+
     @property
     def id_field(self) -> str:
         return "type_id"
-    
+
     async def get_all_for_company(
         self,
         include_system: bool = True,
@@ -94,7 +96,7 @@ class EntityTypeRepository(BaseCRMRepository[EntityType]):
     ) -> list[EntityType]:
         """Возвращает типы, разрешенные в конкретном namespace."""
         return await self.get_all_for_company(namespace=namespace, limit=limit, offset=offset)
-    
+
     async def update_metadata(
         self,
         type_id: str,
@@ -113,6 +115,34 @@ class EntityTypeRepository(BaseCRMRepository[EntityType]):
                 .values(**fields)
             )
             await session.execute(stmt)
+            await session.commit()
+
+    async def merge_optional_fields_if_absent(
+        self,
+        type_id: str,
+        *,
+        company_id: str,
+        extra: dict[str, Any],
+    ) -> None:
+        """Дописывает ключи в optional_fields только если такого ключа ещё нет."""
+        if not extra:
+            return
+        async with self._db.session() as session:
+            stmt = select(EntityType).where(
+                EntityType.type_id == type_id,
+                EntityType.company_id == company_id,
+            )
+            result = await session.execute(stmt)
+            entity_type = result.scalar_one_or_none()
+            if entity_type is None:
+                raise ValueError(
+                    f"EntityType '{type_id}' not found for company '{company_id}'"
+                )
+            current = dict(entity_type.optional_fields or {})
+            for key, value in extra.items():
+                if key not in current:
+                    current[key] = value
+            entity_type.optional_fields = current
             await session.commit()
 
     async def update_color(self, type_id: str, color: str) -> None:
@@ -223,12 +253,12 @@ class EntityTypeRepository(BaseCRMRepository[EntityType]):
     ) -> EntityType:
         """
         Создает кастомный тип для компании.
-        
+
         Системные типы создавать нельзя!
         """
         if type_data.is_system:
             raise ValueError("Cannot create system type through this method")
-        
+
         type_data.company_id = company_id
         return await self.create(type_data)
 

@@ -36,6 +36,7 @@ class AuthProviderConfig(BaseModel):
     userinfo_url: str = ""
     scope: str = "openid profile email"
     enabled: bool = True
+    token_request_format: str = "form"
     apple_team_id: Optional[str] = None
     apple_key_id: Optional[str] = None
     apple_private_key: Optional[str] = None
@@ -239,12 +240,6 @@ class NanoBananaConfig(BaseModel):
     enabled: bool = False
     model_name: str = "google/gemini-2.5-flash-preview-image"
     timeout: int = 60
-
-
-class AmoCRMConfig(BaseModel):
-    """Конфигурация AmoCRM интеграции"""
-
-    access_token: Optional[str] = None
 
 
 class ProxyConfig(BaseModel):

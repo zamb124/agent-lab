@@ -4,6 +4,13 @@
 При создании компании эти шаблоны копируются с company_id новой компании.
 """
 
+from apps.crm.integrations.amocrm.type_extensions import (
+    CONTACT_AMO_OPTIONAL_FIELDS,
+    LEAD_AMO_OPTIONAL_FIELDS,
+    MEMBER_AMO_OPTIONAL_FIELDS,
+    TASK_AMO_OPTIONAL_FIELDS,
+)
+
 SYSTEM_ENTITY_TYPE_TEMPLATES = [
     {
         "type_id": "note",
@@ -184,6 +191,7 @@ COMMON_NAMESPACE_ANCHOR_TYPES = [
         "optional_fields": {
             "name": {"type": "string", "label": "Название"},
             "industry": {"type": "string", "label": "Отрасль"},
+            "legal_name": {"type": "string", "label": "Юридическое название"},
         },
         "icon": "database",
         "color": "#455A64",
@@ -722,6 +730,69 @@ NAMESPACE_TEMPLATE_SEEDS = [
                 "color": "#00897B",
                 "is_event": True,
                 "check_duplicates": False,
+                "is_context_anchor": False,
+            },
+        ]
+        + COMMON_NAMESPACE_ANCHOR_TYPES,
+    },
+    {
+        "template_id": "amocrm",
+        "name": "AmoCRM",
+        "description": "Сущности по модели amo REST API v4: сделки, контакты, компании, пользователи аккаунта, задачи; синхронизация из amo.",
+        "icon": "chart",
+        "types": [
+            {
+                "type_id": "lead",
+                "name": "Лид",
+                "description": "Лид воронки; импорт из AmoCRM v4 /api/v4/leads. Идемпотентность — attributes.external_refs.amocrm.record_id.",
+                "prompt": "Извлекай потенциальных клиентов и стадию квалификации; для записей из amo — сумму, status_id, pipeline_id.",
+                "required_fields": {},
+                "optional_fields": dict(LEAD_AMO_OPTIONAL_FIELDS),
+                "icon": "target-lock",
+                "color": "#7E57C2",
+                "is_event": False,
+                "check_duplicates": True,
+                "is_context_anchor": True,
+            },
+            {
+                "type_id": "contact",
+                "name": "Контакт",
+                "description": "Человек или контактная запись",
+                "prompt": "Извлекай персону, роль и контекст взаимодействия.",
+                "required_fields": {},
+                "optional_fields": dict(CONTACT_AMO_OPTIONAL_FIELDS),
+                "icon": "user",
+                "color": "#546E7A",
+                "is_event": False,
+                "check_duplicates": True,
+                "is_context_anchor": False,
+                "is_voice_target": True,
+            },
+            {
+                "type_id": "member",
+                "name": "Участник",
+                "description": "Пользователь платформы — участник компании",
+                "prompt": "Участник компании — пользователь платформы. Может быть автором заметок и голосом.",
+                "required_fields": {},
+                "optional_fields": dict(MEMBER_AMO_OPTIONAL_FIELDS),
+                "icon": "user-shield",
+                "color": "#1E88E5",
+                "is_event": False,
+                "check_duplicates": True,
+                "is_context_anchor": False,
+                "is_voice_target": True,
+            },
+            {
+                "type_id": "task",
+                "name": "Задача",
+                "description": "Задача AmoCRM; импорт из GET /api/v4/tasks. Идемпотентность — attributes.external_refs.amocrm.record_id.",
+                "prompt": "Извлекай действия с дедлайном; для записей из amo — статус выполнения и тип задачи.",
+                "required_fields": {},
+                "optional_fields": dict(TASK_AMO_OPTIONAL_FIELDS),
+                "icon": "checklist",
+                "color": "#FF9800",
+                "is_event": False,
+                "check_duplicates": True,
                 "is_context_anchor": False,
             },
         ]

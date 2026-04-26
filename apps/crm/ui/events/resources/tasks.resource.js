@@ -4,7 +4,7 @@
  *
  * Backend (`/crm/api/v1/tasks`):
  *   GET  /                                → OffsetPage[TaskResponse]
- *   GET  /{task_id}                       → TaskResponse
+ *   GET  /{task_id}                       → TaskResponse (`taskGetOp`)
  *   GET  /{task_id}/created-entities      → TaskCreatedEntitiesResponse
  *   POST /knowledge-import                → TaskResponse (start)
  *   POST /note-analyze                    → TaskResponse (start)
@@ -21,6 +21,21 @@ import {
     createAsyncOp,
 } from '@platform/lib/events/index.js';
 import { httpRequest } from '@platform/lib/events/http.js';
+
+export const taskGetOp = createAsyncOp({
+    name: 'crm/task_get',
+    silent: true,
+    restMirror: { method: 'GET', path: '/crm/api/v1/tasks/:task_id' },
+    request: async ({ payload }) => {
+        if (!payload || typeof payload.task_id !== 'string') {
+            throw new Error('taskGetOp: payload.task_id required');
+        }
+        return await httpRequest({
+            method: 'GET',
+            url: `/crm/api/v1/tasks/${encodeURIComponent(payload.task_id)}`,
+        });
+    },
+});
 
 export const tasksResource = createResourceCollection({
     name: 'crm/tasks',

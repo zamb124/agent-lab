@@ -31,15 +31,15 @@ def _to_response(row) -> TaskResponse:
 
 
 def _active_task_conflict(exc: ActiveTaskExistsError) -> HTTPException:
-    return HTTPException(
-        status_code=409,
-        detail={
-            "code": "active_task_exists",
-            "message": str(exc),
-            "task_type": exc.task_type,
-            "task_id": exc.existing_task_id,
-        },
-    )
+    detail: dict = {
+        "code": "active_task_exists",
+        "message": str(exc),
+        "task_type": exc.task_type,
+        "task_id": exc.existing_task_id,
+    }
+    if exc.dedup:
+        detail["dedup"] = exc.dedup
+    return HTTPException(status_code=409, detail=detail)
 
 
 @router.post("/knowledge-import", status_code=202, response_model=TaskResponse)

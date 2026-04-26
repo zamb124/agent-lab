@@ -15,6 +15,7 @@ import httpx
 from fastapi import APIRouter, HTTPException, Query, Request
 from starlette.responses import HTMLResponse, RedirectResponse
 
+from core.config import get_settings
 from core.context import get_context
 from core.integrations.models import CredentialInfo, IntegrationProvider
 from core.logging import get_logger
@@ -91,6 +92,7 @@ async def oauth_callback(
     state: Optional[str] = Query(default=None),
     code: Optional[str] = Query(default=None),
     error: Optional[str] = Query(default=None),
+    referer: Optional[str] = Query(default=None),
 ) -> HTMLResponse | RedirectResponse:
     """
     Универсальный OAuth callback.
@@ -108,9 +110,10 @@ async def oauth_callback(
 
     oauth_service = request.app.state.container.oauth_service
     try:
-        credential, return_path, flow_context = await oauth_service.complete_oauth(
+        credential, return_path, flow_context, post_auth_redirect_origin = await oauth_service.complete_oauth(
             state_token=state,
             code=code,
+            referer=referer,
         )
     except ValueError as exc:
         logger.warning("OAuth complete_oauth ValueError: %s", exc)
@@ -121,6 +124,19 @@ async def oauth_callback(
 
     if flow_context is not None:
         await _resume_flow(flow_context, credential.provider, credential.service)
+        return HTMLResponse(
+            content=_success_page(credential.provider, credential.service),
+            status_code=200,
+        )
+
+    settings = get_settings()
+    public_base = settings.server.platform_public_base_url
+    if public_base and public_base.strip() and isinstance(return_path, str) and return_path.startswith(
+        "/"
+    ):
+        origin = post_auth_redirect_origin if post_auth_redirect_origin else public_base.rstrip("/")
+        target = f"{origin}{return_path}"
+        return RedirectResponse(url=target, status_code=302)
 
     return HTMLResponse(
         content=_success_page(credential.provider, credential.service),

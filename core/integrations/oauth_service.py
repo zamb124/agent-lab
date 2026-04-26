@@ -16,10 +16,16 @@ from uuid import uuid4
 
 from core.config import get_settings
 from core.http.client import get_httpx_client
+from core.utils.domain import is_allowed_integration_return_origin
 from core.integrations.models import (
     IntegrationCredential,
     IntegrationProvider,
     OAuthProviderConfig,
+)
+from core.integrations.providers.amocrm import (
+    build_amocrm_auth_query,
+    interpolate_subdomain_in_url,
+    parse_amocrm_subdomain_from_referer,
 )
 from core.logging import get_logger
 
@@ -32,6 +38,17 @@ logger = get_logger(__name__)
 OAUTH_STATE_TTL = 600
 OAUTH_STATE_PREFIX = "integration_oauth_state"
 TOKEN_EXPIRY_BUFFER = timedelta(minutes=2)
+
+_oauth_credential_saved_hook: Any = None
+
+
+def set_oauth_credential_saved_hook(hook: Any) -> None:
+    """
+    Опциональный async-callback после успешного upsert credential в complete_oauth.
+    Сервисы (например CRM) диспатчат сохранение в реестр интеграций.
+    """
+    global _oauth_credential_saved_hook
+    _oauth_credential_saved_hook = hook
 
 
 def _public_service_origin(service_base_url: str) -> str:
@@ -65,9 +82,17 @@ class OAuthService:
         self._repository = repository
         self._storage = storage
 
-    def get_provider_config(self, provider: IntegrationProvider | str) -> OAuthProviderConfig:
+    def get_provider_config(
+        self,
+        provider: IntegrationProvider | str,
+        *,
+        amocrm_subdomain: str | None = None,
+    ) -> OAuthProviderConfig:
         settings = get_settings()
         provider_key = provider.value if hasattr(provider, "value") else str(provider)
+        p_enum: IntegrationProvider = (
+            provider if isinstance(provider, IntegrationProvider) else IntegrationProvider(provider_key)
+        )
         auth_provider = settings.auth.providers.get(provider_key)
         if auth_provider is None or not auth_provider.enabled:
             raise ValueError(f"OAuth provider '{provider_key}' is disabled or not configured")
@@ -79,12 +104,22 @@ class OAuthService:
             raise ValueError(f"OAuth provider '{provider_key}': auth_url is required")
         if not auth_provider.token_url:
             raise ValueError(f"OAuth provider '{provider_key}': token_url is required")
+
+        auth_url = auth_provider.auth_url
+        token_url = auth_provider.token_url
+        if "{subdomain}" in auth_url or "{subdomain}" in token_url:
+            if not amocrm_subdomain or not str(amocrm_subdomain).strip():
+                raise ValueError("OAuth amocrm: amocrm_subdomain обязателен (поддомен аккаунта amo).")
+            auth_url = interpolate_subdomain_in_url(auth_url, str(amocrm_subdomain))
+            token_url = interpolate_subdomain_in_url(token_url, str(amocrm_subdomain))
+
         return OAuthProviderConfig(
-            provider=provider,
+            provider=p_enum,
             client_id=auth_provider.client_id,
             client_secret=auth_provider.client_secret,
-            auth_url=auth_provider.auth_url,
-            token_url=auth_provider.token_url,
+            auth_url=auth_url,
+            token_url=token_url,
+            token_request_format=getattr(auth_provider, "token_request_format", None) or "form",
         )
 
     async def build_auth_url(
@@ -98,12 +133,19 @@ class OAuthService:
         redirect_uri: str | None = None,
         return_path: str = "/",
         flow_context: dict[str, Any] | None = None,
+        amocrm_subdomain: str | None = None,
+        return_origin: str | None = None,
     ) -> str:
         """
         Генерирует OAuth authorization URL.
 
         State сохраняется в PostgreSQL Storage (force_global, TTL 600s).
         Если redirect_uri не указан, используется дефолтный callback интеграций.
+
+        amocrm_subdomain: поддомен amo (без .amocrm.ru) — обязателен для provider amocrm.
+
+        return_origin: фактический origin вкладки (например http://system.lvh.me:8002) для редиректа
+        после успешного OAuth; должен быть в том же тенант-кластере, что и platform_public_base_url.
 
         flow_context (если передан) содержит идентификаторы flow-сессии
         (flow_id, session_id, task_id, context_id, skill_id, channel, context_data)
@@ -112,7 +154,10 @@ class OAuthService:
         if not return_path.startswith("/") or return_path.startswith("//"):
             raise ValueError("return_path must start with single '/'")
 
-        oauth_config = self.get_provider_config(provider)
+        oauth_config = self.get_provider_config(
+            provider,
+            amocrm_subdomain=amocrm_subdomain,
+        )
 
         if redirect_uri is None:
             settings = get_settings()
@@ -136,6 +181,16 @@ class OAuthService:
             "scopes": " ".join(scopes),
             "created_at": datetime.now(timezone.utc).isoformat(),
         }
+        if amocrm_subdomain is not None and str(amocrm_subdomain).strip() != "":
+            state_payload["amocrm_subdomain"] = str(amocrm_subdomain).strip()
+        if return_origin is not None and str(return_origin).strip():
+            settings = get_settings()
+            ro = str(return_origin).strip().rstrip("/")
+            if not is_allowed_integration_return_origin(ro, settings.server.platform_public_base_url):
+                raise ValueError(
+                    "return_origin не из того же origin-кластера, что server.platform_public_base_url"
+                )
+            state_payload["post_auth_redirect_origin"] = ro
         if flow_context is not None:
             state_payload["flow_context"] = flow_context
         await self._storage.set(
@@ -144,18 +199,24 @@ class OAuthService:
             ttl=OAUTH_STATE_TTL,
             force_global=True,
         )
-        query = urlencode(
-            {
-                "client_id": oauth_config.client_id,
-                "redirect_uri": redirect_uri,
-                "response_type": "code",
-                "scope": " ".join(scopes),
-                "state": state_token,
-                "access_type": "offline",
-                "prompt": "consent",
-                "include_granted_scopes": "true",
-            }
-        )
+        if oauth_config.provider == IntegrationProvider.AMOCRM:
+            query = build_amocrm_auth_query(
+                client_id=oauth_config.client_id,
+                state_token=state_token,
+            )
+        else:
+            query = urlencode(
+                {
+                    "client_id": oauth_config.client_id,
+                    "redirect_uri": redirect_uri,
+                    "response_type": "code",
+                    "scope": " ".join(scopes),
+                    "state": state_token,
+                    "access_type": "offline",
+                    "prompt": "consent",
+                    "include_granted_scopes": "true",
+                }
+            )
         logger.info(
             "OAuth auth URL built: provider=%s service=%s user=%s company=%s",
             provider.value, service, user_id, company_id,
@@ -167,13 +228,15 @@ class OAuthService:
         *,
         state_token: str,
         code: str,
-    ) -> tuple[IntegrationCredential, str, dict[str, Any] | None]:
+        referer: str | None = None,
+    ) -> tuple[IntegrationCredential, str, dict[str, Any] | None, str | None]:
         """
         Обменивает authorization code на токены и сохраняет credential.
 
         Returns:
-            (credential, return_path, flow_context)
+            (credential, return_path, flow_context, post_auth_redirect_origin)
             flow_context — None если OAuth инициирован без привязки к flow.
+            post_auth_redirect_origin — origin для финального редиректа или None.
         """
         state_key = f"{OAUTH_STATE_PREFIX}:{state_token}"
         raw_state = await self._storage.get(key=state_key, force_global=True)
@@ -209,19 +272,46 @@ class OAuthService:
         flow_context_raw = state_payload.get("flow_context")
         flow_context = flow_context_raw if isinstance(flow_context_raw, dict) else None
 
-        oauth_config = self.get_provider_config(provider)
+        amocrm_subdomain_raw = state_payload.get("amocrm_subdomain")
+        amocrm_subdomain: str | None = (
+            str(amocrm_subdomain_raw).strip()
+            if isinstance(amocrm_subdomain_raw, str) and amocrm_subdomain_raw.strip()
+            else None
+        )
+        if provider == IntegrationProvider.AMOCRM and amocrm_subdomain is None:
+            ref_sub = parse_amocrm_subdomain_from_referer(referer)
+            if ref_sub is not None:
+                amocrm_subdomain = ref_sub
+
+        oauth_config = self.get_provider_config(
+            provider,
+            amocrm_subdomain=amocrm_subdomain,
+        )
         async with get_httpx_client(timeout=30.0) as client:
-            token_response = await client.post(
-                oauth_config.token_url,
-                data={
-                    "grant_type": "authorization_code",
-                    "code": code,
-                    "redirect_uri": redirect_uri,
-                    "client_id": oauth_config.client_id,
-                    "client_secret": oauth_config.client_secret,
-                },
-                headers={"Content-Type": "application/x-www-form-urlencoded"},
-            )
+            if oauth_config.token_request_format == "json":
+                token_response = await client.post(
+                    oauth_config.token_url,
+                    json={
+                        "grant_type": "authorization_code",
+                        "code": code,
+                        "redirect_uri": redirect_uri,
+                        "client_id": oauth_config.client_id,
+                        "client_secret": oauth_config.client_secret,
+                    },
+                    headers={"Content-Type": "application/json"},
+                )
+            else:
+                token_response = await client.post(
+                    oauth_config.token_url,
+                    data={
+                        "grant_type": "authorization_code",
+                        "code": code,
+                        "redirect_uri": redirect_uri,
+                        "client_id": oauth_config.client_id,
+                        "client_secret": oauth_config.client_secret,
+                    },
+                    headers={"Content-Type": "application/x-www-form-urlencoded"},
+                )
             if token_response.status_code >= 400:
                 logger.error(
                     "OAuth token exchange failed: provider=%s service=%s status=%d body=%s",
@@ -247,6 +337,12 @@ class OAuthService:
         token_type = token_payload.get("token_type")
 
         now = datetime.now(timezone.utc)
+        metadata: dict[str, Any] = {}
+        if provider == IntegrationProvider.AMOCRM:
+            if not amocrm_subdomain:
+                raise ValueError("OAuth amocrm: в state отсутствует amocrm_subdomain")
+            metadata["amocrm_subdomain"] = amocrm_subdomain
+
         credential = IntegrationCredential(
             credential_id=uuid4().hex,
             company_id=company_id,
@@ -258,7 +354,7 @@ class OAuthService:
             expires_at=expires_at,
             scope=scope if isinstance(scope, str) else scopes if scopes else None,
             token_type=token_type if isinstance(token_type, str) else "Bearer",
-            metadata={},
+            metadata=metadata,
             created_at=now,
             updated_at=now,
         )
@@ -270,10 +366,11 @@ class OAuthService:
             service=service,
         )
         if existing:
+            merged_meta = {**existing.metadata, **metadata}
             credential = credential.model_copy(
                 update={
                     "credential_id": existing.credential_id,
-                    "metadata": existing.metadata,
+                    "metadata": merged_meta,
                     "created_at": existing.created_at,
                 }
             )
@@ -283,7 +380,17 @@ class OAuthService:
             "OAuth credential saved: provider=%s service=%s user=%s company=%s",
             provider.value, service, user_id, company_id,
         )
-        return credential, return_path, flow_context
+        if _oauth_credential_saved_hook is not None:
+            await _oauth_credential_saved_hook(credential)
+
+        post_auth_redirect_origin: str | None = None
+        post_raw = state_payload.get("post_auth_redirect_origin")
+        if isinstance(post_raw, str) and post_raw.strip():
+            ro = post_raw.strip().rstrip("/")
+            if is_allowed_integration_return_origin(ro, get_settings().server.platform_public_base_url):
+                post_auth_redirect_origin = ro
+
+        return credential, return_path, flow_context, post_auth_redirect_origin
 
     async def refresh_token(
         self,
@@ -311,18 +418,40 @@ class OAuthService:
                 f"service={credential.service}, user={credential.user_id}"
             )
 
-        oauth_config = self.get_provider_config(credential.provider)
+        amocrm_sub: str | None = None
+        if credential.provider == IntegrationProvider.AMOCRM:
+            sub_raw = credential.metadata.get("amocrm_subdomain")
+            if not isinstance(sub_raw, str) or not sub_raw.strip():
+                raise RuntimeError("amocrm: в credential.metadata нет amocrm_subdomain")
+            amocrm_sub = sub_raw.strip()
+
+        oauth_config = self.get_provider_config(
+            credential.provider,
+            amocrm_subdomain=amocrm_sub,
+        )
         async with get_httpx_client(timeout=30.0) as client:
-            response = await client.post(
-                oauth_config.token_url,
-                data={
-                    "grant_type": "refresh_token",
-                    "refresh_token": credential.refresh_token,
-                    "client_id": oauth_config.client_id,
-                    "client_secret": oauth_config.client_secret,
-                },
-                headers={"Content-Type": "application/x-www-form-urlencoded"},
-            )
+            if oauth_config.token_request_format == "json":
+                response = await client.post(
+                    oauth_config.token_url,
+                    json={
+                        "grant_type": "refresh_token",
+                        "refresh_token": credential.refresh_token,
+                        "client_id": oauth_config.client_id,
+                        "client_secret": oauth_config.client_secret,
+                    },
+                    headers={"Content-Type": "application/json"},
+                )
+            else:
+                response = await client.post(
+                    oauth_config.token_url,
+                    data={
+                        "grant_type": "refresh_token",
+                        "refresh_token": credential.refresh_token,
+                        "client_id": oauth_config.client_id,
+                        "client_secret": oauth_config.client_secret,
+                    },
+                    headers={"Content-Type": "application/x-www-form-urlencoded"},
+                )
 
         if response.status_code >= 400:
             payload = {}

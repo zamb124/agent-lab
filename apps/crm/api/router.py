@@ -18,6 +18,7 @@ from apps.crm.api.grants import router as grants_router
 from apps.crm.api.graph import router as graph_router
 from apps.crm.api.tasks import router as tasks_router
 from apps.crm.api.workspace import router as workspace_router
+from apps.crm.api.namespace_integrations import router as namespace_integrations_router
 
 router = APIRouter()
 
@@ -33,4 +34,5 @@ router.include_router(grants_router)
 router.include_router(graph_router)
 router.include_router(tasks_router)
 router.include_router(workspace_router)
+router.include_router(namespace_integrations_router)
 
