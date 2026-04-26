@@ -149,6 +149,8 @@ ROUTE_RULES: List[RouteRule] = [
     RouteRule("/api/health", auth_required=False, context_type="anonymous"),
     RouteRule("/frontend/health", auth_required=False, context_type="anonymous"),
     RouteRule("/api/platform/file-types", auth_required=False, context_type="anonymous"),
+    # Browser Runtime control-plane (Playwright/CDP). Технический сервис, auth делается на уровне внешнего контура.
+    RouteRule("/browser/api/v1/control/*", auth_required=False, context_type="anonymous"),
     
     # Документация
     RouteRule("/docs*", auth_required=False, context_type="anonymous"),

@@ -28,6 +28,7 @@ Python 3.13+, FastAPI, PostgreSQL (pgvector), Redis, TaskIQ, UV, Lit 3, нати
 | sync_worker | — | TaskIQ worker realtime команд sync |
 | idle_worker | — | TaskIQ worker фоновых idle-задач (calendar/model sync и др.) |
 | scheduler | 8006 | Scheduler control-plane API + TaskIQ scheduler process |
+| browser | 8009 | Browser Runtime v1: Playwright + CDP (Lightpanda / Chromium), процесс **`apps/browser`** |
 | provider_litserve | 8014 | LitServe: локальные эмбеддинги и реранк (`scripts/run.py provider-litserve`, модуль `apps.provider_litserve.main`) |
 
 ## ОБЯЗАТЕЛЬНО: Новое = правка рулов

@@ -8,6 +8,7 @@
     "rag_service_url": "http://localhost:8004",
     "sync_service_url": "http://localhost:8005",
     "office_service_url": "http://localhost:8008",
+    "browser_service_url": "http://localhost:8009",
     "provider_litserve_service_url": "http://127.0.0.1:8014",
     "platform_public_base_url": "https://humanitec.ru",
     "document_server_dev_upstream_url": "http://localhost:8088"
@@ -498,6 +499,28 @@
       },
       "auth": {
         "permissions_enabled": false
+      }
+    },
+    "browser": {
+      "service_name": "browser",
+      "server": {
+        "name": "browser",
+        "host": "0.0.0.0",
+        "port": 8009,
+        "debug": true
+      },
+      "auth": {
+        "permissions_enabled": false
+      },
+      "browser": {
+        "default_endpoint_key": "default",
+        "cdp_url": "",
+        "cdp_endpoints": {},
+        "artifacts_dir": "artifacts/browser_runtime",
+        "default_page_ttl_sec": 3600,
+        "warm_idle_sec": 300,
+        "init_scripts_version": "v1",
+        "control_backend": "playwright"
       }
     }
   },

@@ -13,6 +13,7 @@
     python scripts/run.py flows_worker # Запуск TaskIQ flows_worker
     python scripts/run.py scheduler   # Запуск TaskIQ scheduler
     python scripts/run.py scheduler-api  # Запуск scheduler API
+    python scripts/run.py browser       # Browser Runtime (Playwright + CDP)
     python scripts/run.py rag_worker  # Запуск RAG worker
     python scripts/run.py sync_worker # Запуск Sync worker
     python scripts/run.py crm_worker  # Запуск CRM worker
@@ -74,6 +75,11 @@ SERVICES = {
         "type": "uvicorn",
         "app": "apps.app_runtime_targets:scheduler_app",
         "port": "8006",
+    },
+    "browser": {
+        "type": "uvicorn",
+        "app": "apps.app_runtime_targets:browser_app",
+        "port": "8009",
     },
     "provider_litserve": {
         "type": "module",
