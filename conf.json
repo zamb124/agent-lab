@@ -324,6 +324,9 @@
           "site_name": "Humanitec"
         }
       },
+      "flow_execution_wall_time_cap_seconds": 3600,
+      "node_execution_wall_time_cap_seconds": 3600,
+      "default_flow_timeout_seconds": 600,
       "external_flows": {
         "flows": [],
         "health_check_interval": 60

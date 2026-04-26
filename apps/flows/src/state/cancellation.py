@@ -10,10 +10,14 @@ CancellationToken проверяет Redis-ключ cancel:{task_id}.
 
 import time
 from contextvars import ContextVar
-from typing import Optional
+from typing import TYPE_CHECKING, Optional
 
 from core.clients import RedisClient
 from core.logging import get_logger
+from core.errors import FlowWallClockTimeoutError
+
+if TYPE_CHECKING:
+    from core.state import ExecutionState
 
 logger = get_logger(__name__)
 
@@ -83,14 +87,25 @@ def get_cancellation_token() -> Optional[CancellationToken]:
     return _cancellation_token_var.get()
 
 
-async def check_cancellation() -> None:
+async def check_cancellation(state: Optional["ExecutionState"] = None) -> None:
     """
-    Проверяет был ли flow отменен.
+    Проверяет: wall-clock дедлайн run flow, затем отмена по Redis.
 
     Вызывается из _execute_loop, _react_loop и _call_llm.
-    Бросает FlowCancelled если задача отменена.
-    Если токен не установлен — ничего не делает (обычный запуск без отмены).
+    Бросает FlowWallClockTimeoutError или FlowCancelled.
+    Если токен не установлен — отмена по Redis не проверяется.
     """
+    if state is not None and state.flow_deadline_monotonic is not None:
+        if time.monotonic() >= state.flow_deadline_monotonic:
+            ts = state.flow_timeout_effective_seconds
+            if ts is None:
+                from apps.flows.config import get_settings
+
+                ts = get_settings().default_flow_timeout_seconds
+            raise FlowWallClockTimeoutError(
+                flow_id=state.session_flow_id,
+                timeout_seconds=int(ts),
+            )
     token = get_cancellation_token()
     if token is None:
         return

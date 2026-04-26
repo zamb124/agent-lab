@@ -25,7 +25,8 @@ from typing import TYPE_CHECKING, Any, Dict, List, Optional, Union
 
 from a2a.types import Message, Part, Role, TextPart
 
-from apps.flows.src.runtime.exceptions import FlowInterrupt
+from apps.flows.src.runtime.exceptions import BreakpointInterrupt, FlowInterrupt
+from apps.flows.src.runtime.exception_policy import node_exception_policy, should_absorb_exception
 from apps.flows.src.runtime.runners import LlmNodeRunner
 from apps.flows.src.clients.external_api_client import ExternalAPIClient
 from core.clients.llm import get_llm
@@ -37,11 +38,19 @@ from apps.flows.src.models.enums import NodeType
 from apps.flows.src.models.operator_schemas import OperatorTaskStatus
 from apps.flows.src.models.external_api import ExternalAPIConfig, ParameterSchema
 from core.context import get_context as get_request_context
-from core.state import ExecutionState, parse_interrupt_body_from_external_dict
+from core.state import (
+    ExecutionExceptionRecord,
+    ExecutionState,
+    parse_interrupt_body_from_external_dict,
+)
+from core.state.mutation_policy import (
+    forbid_frozen_update_key,
+    should_skip_field_on_user_returned_state_copy,
+)
 from core.state.interrupt import HandoffMode, OperatorTaskInterrupt
 from apps.flows.src.state.interrupt_manager import InterruptManager
 from core.logging import get_logger
-from core.errors import ResourceNotFoundError
+from core.errors import NodeWallClockTimeoutError, ResourceNotFoundError
 from core.tracing.operation_span import traced_operation
 
 if TYPE_CHECKING:
@@ -266,12 +275,49 @@ class BaseNode(ABC):
             state_before = state.model_dump(exclude_none=False)
         
         inputs = self._resolve_inputs(state)
-        
-        result = await self._run_impl(state, inputs)
-        
+
+        node_timeout = self.config.get("node_timeout_seconds")
+        nto: Optional[int] = None
+        try:
+            if node_timeout is not None:
+                nto = int(node_timeout)
+                result = await asyncio.wait_for(
+                    self._run_impl(state, inputs),
+                    timeout=float(nto),
+                )
+            else:
+                result = await self._run_impl(state, inputs)
+        except asyncio.TimeoutError as e:
+            if nto is None:
+                raise
+            raise NodeWallClockTimeoutError(self.node_id, nto) from e
+        except (FlowInterrupt, BreakpointInterrupt):
+            raise
+        except asyncio.CancelledError:
+            raise
+        except (SystemExit, KeyboardInterrupt):
+            raise
+        except Exception as e:
+            enabled, allow_types = node_exception_policy(self.config)
+            if not should_absorb_exception(e, enabled=enabled, allow_types=allow_types):
+                raise
+            state.execution_exceptions.append(
+                ExecutionExceptionRecord(
+                    node_id=self.node_id,
+                    source="node_run",
+                    exception_type=type(e).__name__,
+                    message=str(e),
+                )
+            )
+            result = {
+                "error": True,
+                "error_type": type(e).__name__,
+                "message": str(e),
+            }
+
         if result is not None:
             if isinstance(result, ExecutionState):
-                self._copy_state_back(result, state)
+                self._copy_state_back(result, state, full_trust=False)
             else:
                 self._apply_output_mapping(state, result)
         
@@ -296,9 +342,11 @@ class BaseNode(ABC):
             if self.output_mapping:
                 for result_key, state_field in self.output_mapping.items():
                     if result_key in result:
+                        forbid_frozen_update_key(state_field, reason="output_mapping")
                         setattr(state, state_field, result[result_key])
             else:
                 for key, value in result.items():
+                    forbid_frozen_update_key(key, reason="output_mapping")
                     setattr(state, key, value)
         else:
             setattr(state, "result", result)
@@ -359,16 +407,30 @@ class BaseNode(ABC):
         """
         pass
 
-    def _copy_state_back(self, source: ExecutionState, target: ExecutionState) -> None:
-        """Копирует все изменения из source обратно в target."""
+    def _copy_state_back(
+        self,
+        source: ExecutionState,
+        target: ExecutionState,
+        *,
+        full_trust: bool = True,
+    ) -> None:
+        """Копирует изменения из source в target. full_trust=False — не переносить системные поля."""
         for field_name in ExecutionState.model_fields:
+            if not full_trust and should_skip_field_on_user_returned_state_copy(field_name):
+                continue
             if hasattr(source, field_name):
                 setattr(target, field_name, getattr(source, field_name))
-        
-        if hasattr(source, '__pydantic_extra__') and source.__pydantic_extra__:
-            if not hasattr(target, '__pydantic_extra__') or target.__pydantic_extra__ is None:
+
+        if hasattr(source, "__pydantic_extra__") and source.__pydantic_extra__:
+            if not hasattr(target, "__pydantic_extra__") or target.__pydantic_extra__ is None:
                 target.__pydantic_extra__ = {}
-            target.__pydantic_extra__.update(source.__pydantic_extra__)
+            if full_trust:
+                target.__pydantic_extra__.update(source.__pydantic_extra__)
+            else:
+                for ek, ev in source.__pydantic_extra__.items():
+                    if should_skip_field_on_user_returned_state_copy(ek):
+                        continue
+                    target.__pydantic_extra__[ek] = ev
 
     def _prepare_state(self, state: ExecutionState, inputs: Dict[str, Any]) -> ExecutionState:
         """
@@ -625,7 +687,16 @@ class LlmNode(BaseNode):
         structured_output = self.config.get("structured_output", False) if self.config else False
         output_schema = self.config.get("output_schema") if self.config else None
         messages_filter = self.config.get("messages_filter", "all") if self.config else "all"
-            
+
+        exc_response = False
+        exc_allow: list = []
+        if self.config:
+            if "exception_as_response" in self.config:
+                exc_response = bool(self.config["exception_as_response"])
+            raw_allow = self.config.get("exception_allow_types")
+            if raw_allow is not None:
+                exc_allow = raw_allow
+
         return NodeConfig(
             node_id=self.node_id,
             type=NodeType.LLM_NODE,
@@ -637,6 +708,8 @@ class LlmNode(BaseNode):
             structured_output=structured_output,
             output_schema=output_schema,
             messages_filter=messages_filter,
+            exception_as_response=exc_response,
+            exception_allow_types=exc_allow,
         )
 
     async def _load_tools(self, state: Optional[ExecutionState] = None) -> List[Any]:
@@ -818,8 +891,8 @@ class FlowNode(BaseNode):
             self._nested_flow = await container.flow_factory.get_flow(self.flow_id, self.skill_id)
 
         result = await self._nested_flow.run(nested_state)
-        self._copy_state_back(result, state)
-        
+        self._copy_state_back(result, state, full_trust=False)
+
         return state.response
 
 

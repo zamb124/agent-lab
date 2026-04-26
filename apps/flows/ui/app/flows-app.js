@@ -28,7 +28,11 @@ import { variablesResource } from '../events/resources/variables.resource.js';
 import { nodesCatalogResource, nodeCatalogUpdateOp } from '../events/resources/nodes-catalog.resource.js';
 import { sessionsResource, sessionStateOp } from '../events/resources/sessions.resource.js';
 import { tracesBySessionOp, tracesByTaskOp, tracesByTraceOp } from '../events/resources/traces.resource.js';
-import { nodeTypesOp, resourceTypesOp } from '../events/resources/metadata.resource.js';
+import {
+    nodeTypesOp,
+    resourceTypesOp,
+    exceptionAbsorbAllowNamesOp,
+} from '../events/resources/metadata.resource.js';
 import { modelsListOp } from '../events/resources/models.resource.js';
 import { providersListOp } from '../events/resources/providers.resource.js';
 import { codeCompletionsOp, codeDocumentationOp, codeTemplatesOp,
@@ -97,6 +101,7 @@ export class FlowsApp extends PlatformApp {
         tracesByTraceOp,
         nodeTypesOp,
         resourceTypesOp,
+        exceptionAbsorbAllowNamesOp,
         modelsListOp,
         providersListOp,
         codeCompletionsOp,

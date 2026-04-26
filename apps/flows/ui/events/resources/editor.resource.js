@@ -286,6 +286,7 @@ export const editorResource = createAsyncOp({
         ACTIVE_TOOL_SET: 'active_tool_set',
         MODE_SET: 'mode_set',
         NAME_SET: 'name_set',
+        FLOW_CONFIG_PATCHED: 'flow_config_patched',
         PUBLISHED_AT_SET: 'published_at_set',
         DIRTY_SET: 'dirty_set',
         SAVING_SET: 'saving_set',
@@ -322,6 +323,7 @@ export const editorResource = createAsyncOp({
         setActiveTool: 'active_tool_set',
         setMode: 'mode_set',
         setName: 'name_set',
+        patchFlowConfig: 'flow_config_patched',
         setPublishedAt: 'published_at_set',
         setDirty: 'dirty_set',
         setSaving: 'saving_set',
@@ -500,6 +502,16 @@ export const editorResource = createAsyncOp({
             return {
                 ...state,
                 flowConfig: { ...state.flowConfig, name },
+                isDirty: true,
+            };
+        }
+
+        if (t === 'flows/editor/flow_config_patched') {
+            const patch = p.patch;
+            if (!state.flowConfig || !patch || typeof patch !== 'object') return state;
+            return {
+                ...state,
+                flowConfig: { ...state.flowConfig, ...patch },
                 isDirty: true,
             };
         }

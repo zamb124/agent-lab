@@ -26,6 +26,7 @@ import { operatorQueuesResource } from '../../../../apps/flows/ui/events/resourc
 import { promptRenderOp } from '../../../../apps/flows/ui/events/resources/prompts.resource.js';
 import { variablesResource } from '../../../../apps/flows/ui/events/resources/variables.resource.js';
 import { toolsResource } from '../../../../apps/flows/ui/events/resources/tools.resource.js';
+import { exceptionAbsorbAllowNamesOp } from '../../../../apps/flows/ui/events/resources/metadata.resource.js';
 
 import '../../../../apps/flows/ui/components/nodes/flows-base-node-editor.js';
 import '../../../../apps/flows/ui/components/nodes/flows-llm-node-editor.js';
@@ -52,6 +53,7 @@ const FACTORIES = [
     promptRenderOp,
     variablesResource,
     toolsResource,
+    exceptionAbsorbAllowNamesOp,
 ];
 
 function bootstrap() {

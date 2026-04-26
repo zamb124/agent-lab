@@ -17,6 +17,7 @@ from apps.flows.src.runtime.exceptions import FlowInterrupt
 from apps.flows.src.runtime.message_metadata import MESSAGE_SOURCE_EVAL
 from apps.flows.src.utils import extract_json_from_response
 from core.errors import SafeEvalError
+from core.state.mutation_policy import forbid_frozen_update_key
 
 if TYPE_CHECKING:
     from core.state import ExecutionState
@@ -61,6 +62,7 @@ def merge_state(base: 'ExecutionState | dict', updates: dict) -> 'ExecutionState
         if not isinstance(updates, dict):
             raise SafeEvalError("updates must be a dict")
         for key, value in updates.items():
+            forbid_frozen_update_key(key, reason="merge")
             if key == "prompt_history" and value is not None:
                 value = ExecutionState._normalize_prompt_history(value)
             setattr(base, key, value)
@@ -73,6 +75,7 @@ def merge_state(base: 'ExecutionState | dict', updates: dict) -> 'ExecutionState
 
     result = copy.deepcopy(base)
     for key, value in updates.items():
+        forbid_frozen_update_key(key, reason="merge")
         if isinstance(value, dict) and isinstance(result.get(key), dict):
             result[key] = merge_state(result[key], value)
         else:
@@ -128,6 +131,7 @@ def set_nested(data: 'ExecutionState | dict', path: str, value: Any) -> 'Executi
     keys = path.split(".")
     
     if isinstance(data, ExecutionState):
+        forbid_frozen_update_key(keys[0], reason="merge")
         if len(keys) == 1:
             setattr(data, keys[0], value)
         else:
@@ -141,6 +145,7 @@ def set_nested(data: 'ExecutionState | dict', path: str, value: Any) -> 'Executi
             current[keys[-1]] = value
         return data
     elif isinstance(data, dict):
+        forbid_frozen_update_key(keys[0], reason="merge")
         current = data
         for key in keys[:-1]:
             if key not in current:

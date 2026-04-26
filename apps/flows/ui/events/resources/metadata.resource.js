@@ -21,3 +21,17 @@ export const resourceTypesOp = createAsyncOp({
     restMirror: { method: 'GET', path: '/flows/api/v1/metadata/resource-types' },
     request: async () => httpRequest({ method: 'GET', url: '/flows/api/v1/metadata/resource-types' }),
 });
+
+export const exceptionAbsorbAllowNamesOp = createAsyncOp({
+    name: 'flows/exception_absorb_allow_names',
+    silent: true,
+    restMirror: {
+        method: 'GET',
+        path: '/flows/api/v1/metadata/exception-absorb-allow-names',
+    },
+    request: async () =>
+        httpRequest({
+            method: 'GET',
+            url: '/flows/api/v1/metadata/exception-absorb-allow-names',
+        }),
+});

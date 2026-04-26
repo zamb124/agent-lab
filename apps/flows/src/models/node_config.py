@@ -15,7 +15,9 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 
 from core.models import StrictBaseModel
 from core.urn import extract_id
+from apps.flows.src.constants.execution_limits import get_node_execution_wall_time_cap_seconds
 from .enums import NodeType
+from .exception_absorb_allow import ExceptionAbsorbAllowName
 from .tool_reference import ToolReference
 from .resource import ResourceReference
 
@@ -260,3 +262,40 @@ class NodeConfig(StrictBaseModel):
         default=None,
         description="Поля доступные для редактирования в UI. None = все поля доступны"
     )
+
+    exception_as_response: bool = Field(
+        default=False,
+        description=(
+            "Исключения при выполнении ноды или её tools (llm_node) записывать в state.execution_exceptions "
+            "и не рвать граф; для llm_node ошибка tool попадает ещё в messages как результат вызова"
+        ),
+    )
+    exception_allow_types: List[ExceptionAbsorbAllowName] = Field(
+        default_factory=list,
+        description=(
+            "Whitelist имён классов исключений (ExceptionAbsorbAllowName). Пустой список при "
+            "exception_as_response=True означает любое исключение; иначе только перечисленные типы"
+        ),
+    )
+    node_timeout_seconds: Optional[int] = Field(
+        default=None,
+        description=(
+            "Wall-clock лимит ноды (сек), верх — node_execution_wall_time_cap_seconds; "
+            "None = только лимит flow"
+        ),
+    )
+
+    @field_validator("node_timeout_seconds", mode="before")
+    @classmethod
+    def validate_node_timeout_seconds(cls, v: Any) -> Optional[int]:
+        if v is None:
+            return None
+        iv = int(v)
+        if iv < 1:
+            raise ValueError(f"node_timeout_seconds: ожидается >= 1, получено {iv}")
+        cap = get_node_execution_wall_time_cap_seconds()
+        if iv > cap:
+            raise ValueError(
+                f"node_timeout_seconds: максимум {cap}с (node_execution_wall_time_cap_seconds), получено {iv}"
+            )
+        return iv

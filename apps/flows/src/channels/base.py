@@ -44,6 +44,7 @@ from apps.flows.src.services.flow_node_merge import merge_incoming_node_dict_for
 from apps.flows.src.services.flow_validator import FlowValidator, ValidationSeverity
 from apps.flows.src.state import collect_flow_node_files, create_initial_state
 from apps.flows.src.state.cancellation import CancellationToken, FlowCancelled, set_cancellation_token
+from apps.flows.src.state.flow_deadline import apply_flow_wall_clock_deadline
 from apps.flows.src.state.interrupt_manager import InterruptManager
 from apps.flows.src.streaming import Emitter
 from core.state import ExecutionState
@@ -641,6 +642,12 @@ class BaseChannel(ABC):
 
             if params.is_resume and state.interrupt:
                 state.content = params.content
+
+            if flow_config is not None and flow_config.timeout is not None:
+                _flow_t = int(flow_config.timeout)
+            else:
+                _flow_t = int(get_settings().default_flow_timeout_seconds)
+            apply_flow_wall_clock_deadline(state, _flow_t)
 
             cancellation_token = CancellationToken(effective_task_id, container.redis_client)
             set_cancellation_token(cancellation_token)

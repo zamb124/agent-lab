@@ -350,6 +350,38 @@ class FlowPrematureCompletionError(FlowExecutionError):
         )
 
 
+class FlowWallClockTimeoutError(FlowExecutionError):
+    """
+    Превышен wall-clock лимит выполнения flow (дедлайн в ExecutionState).
+    """
+
+    code = "FLOW_WALL_CLOCK_TIMEOUT"
+    message = "Превышен лимит времени выполнения flow"
+
+    def __init__(self, flow_id: str, timeout_seconds: int, **kwargs: Any) -> None:
+        super().__init__(
+            message=f"Flow '{flow_id}': превышен лимит времени выполнения ({timeout_seconds}с)",
+            payload={"flow_id": flow_id, "timeout_seconds": timeout_seconds},
+            **kwargs,
+        )
+
+
+class NodeWallClockTimeoutError(FlowExecutionError):
+    """
+    Превышен wall-clock лимит выполнения одной ноды.
+    """
+
+    code = "NODE_WALL_CLOCK_TIMEOUT"
+    message = "Превышен лимит времени выполнения ноды"
+
+    def __init__(self, node_id: str, timeout_seconds: int, **kwargs: Any) -> None:
+        super().__init__(
+            message=f"Нода '{node_id}': превышен лимит времени выполнения ({timeout_seconds}с)",
+            payload={"node_id": node_id, "timeout_seconds": timeout_seconds},
+            **kwargs,
+        )
+
+
 class SafeEvalError(ExecutionError):
     """
     Ошибка безопасного выполнения кода.
@@ -357,6 +389,40 @@ class SafeEvalError(ExecutionError):
     
     code = "SAFE_EVAL_ERROR"
     message = "Ошибка безопасного выполнения кода"
+
+
+class FrozenStateFieldError(SafeEvalError):
+    """
+    Попытка изменить системное поле ExecutionState из кода ноды или tool.
+    """
+
+    code = "FROZEN_STATE_FIELD"
+
+    def __init__(
+        self,
+        field: str,
+        *,
+        reason: str = "assign",
+        **kwargs: Any,
+    ) -> None:
+        base = (
+            f"Поле '{field}' зарезервировано платформой (лимиты выполнения, история, "
+            "идентификаторы сессии). Его нельзя менять из кода ноды или tool. "
+            "Используйте variables, result, response или произвольные поля вне системного списка."
+        )
+        if reason == "in_place_mutation":
+            msg = f"{base} Обнаружено изменение содержимого поля (in-place)."
+        elif reason == "output_mapping":
+            msg = f"{base} Уберите ключ из возвращаемого dict или скорректируйте output_mapping."
+        elif reason == "merge":
+            msg = f"{base} Уберите ключ из merge_state или вложенного пути set_nested."
+        else:
+            msg = base
+        super().__init__(
+            message=msg,
+            payload={"field": field, "reason": reason},
+            **kwargs,
+        )
 
 
 class ExternalAPIError(ExecutionError):
@@ -525,7 +591,10 @@ __all__ = [
     "NodeCallLimitError",
     "FlowInfiniteLoopError",
     "FlowPrematureCompletionError",
+    "FlowWallClockTimeoutError",
+    "NodeWallClockTimeoutError",
     "SafeEvalError",
+    "FrozenStateFieldError",
     "ExternalAPIError",
     "TimeoutError",
     "MaxRetriesExceededError",

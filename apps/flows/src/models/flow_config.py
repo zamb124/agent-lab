@@ -22,6 +22,7 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator, field_valida
 
 from core.models import StrictBaseModel
 from core.urn import extract_id
+from apps.flows.src.constants.execution_limits import get_flow_execution_wall_time_cap_seconds
 from .enums import MergeMode, TestTargetType
 from .resource import ResourceReference
 from .trigger_config import TriggerConfig
@@ -427,6 +428,19 @@ class FlowConfig(StrictBaseModel):
         if isinstance(v, str):
             return [v]
         return v
+
+    @field_validator("timeout", mode="before")
+    @classmethod
+    def validate_flow_timeout_seconds(cls, v: Any) -> Optional[int]:
+        if v is None:
+            return None
+        iv = int(v)
+        if iv < 1:
+            raise ValueError(f"timeout: ожидается >= 1, получено {iv}")
+        cap = get_flow_execution_wall_time_cap_seconds()
+        if iv > cap:
+            raise ValueError(f"timeout: максимум {cap}с (flow_execution_wall_time_cap_seconds), получено {iv}")
+        return iv
     
     # Опциональные/технические поля
     version: str = Field(default="", description="Версия flow (timestamp)")
@@ -488,7 +502,10 @@ class FlowConfig(StrictBaseModel):
         default_factory=lambda: {"a2a": {}}, description="Каналы"
     )
     store: Dict[str, Any] = Field(default_factory=dict, description="Начальные данные")
-    timeout: Optional[int] = Field(default=None, description="Таймаут в секундах")
+    timeout: Optional[int] = Field(
+        default=None,
+        description="Wall-clock лимит одного run flow (сек), верх снимается с flow_execution_wall_time_cap_seconds; None = default_flow_timeout_seconds",
+    )
     max_retries: int = Field(default=0, description="Максимум повторов")
     source: str = Field(default="manual", description="Источник создания")
     created_at: Optional[datetime] = Field(default=None)

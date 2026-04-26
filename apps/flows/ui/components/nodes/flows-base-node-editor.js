@@ -11,7 +11,7 @@
  *
  * Эмитит наружу:
  *   - change { nodeId, patch } — patch с top-level полями NodeConfig
- *     (name/description/tags/incoming_policy/files/resources). Type-specific
+ *     (name/description/tags/incoming_policy/exception_as_response/exception_allow_types/files/resources). Type-specific
  *     патчи приходят через slot='settings' (дочерний редактор сам диспатчит
  *     change на хосте).
  *   - rename-node { oldId, newId }
@@ -21,7 +21,10 @@ import { html, css } from 'lit';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
 import { resolveFileIconKey } from '@platform/lib/utils/file-icons.js';
 import '@platform/lib/components/glass-button.js';
+import '@platform/lib/components/glass-spinner.js';
 import '@platform/lib/components/platform-icon.js';
+import '@platform/lib/components/platform-switch.js';
+import '@platform/lib/components/platform-help-hint.js';
 import '../editors/flows-state-mapping-editor.js';
 import '../editors/flows-tag-input.js';
 import '../editors/flows-json-field-editor.js';
@@ -154,6 +157,20 @@ export class FlowsBaseNodeEditor extends PlatformElement {
                 font-size: var(--text-sm);
                 color: var(--text-secondary);
                 font-weight: var(--font-medium);
+            }
+            .field-hint {
+                font-size: var(--text-xs);
+                color: var(--text-tertiary);
+                line-height: 1.4;
+            }
+            .exception-response-head {
+                display: flex;
+                align-items: center;
+                flex-wrap: wrap;
+                gap: var(--space-2);
+            }
+            .exception-response-head platform-switch {
+                margin-left: auto;
             }
             input.text, select.policy, input.id-edit {
                 padding: var(--space-2);
@@ -329,6 +346,7 @@ export class FlowsBaseNodeEditor extends PlatformElement {
         this._stateDraft = null;
         this._fileUpload = this.useOp('flows/file_upload');
         this._nodeExecute = this.useOp('flows/code_execute');
+        this._exceptionAbsorbAllowNamesOp = this.useOp('flows/exception_absorb_allow_names');
         this._codeExecuteClientId = nextCodeExecuteClientId();
         this._resources = this.useResource('flows/resources', { autoload: true });
         this._nodeRunControlEl = null;
@@ -338,6 +356,7 @@ export class FlowsBaseNodeEditor extends PlatformElement {
 
     connectedCallback() {
         super.connectedCallback();
+        void this._exceptionAbsorbAllowNamesOp.run({});
         queueMicrotask(() => this._placeNodeRunControl());
         requestAnimationFrame(() => this._placeNodeRunControl());
     }
@@ -519,6 +538,75 @@ export class FlowsBaseNodeEditor extends PlatformElement {
     _onPolicy(e) {
         const v = e.target.value === 'all' ? 'all' : 'any';
         this._emitPatch({ incoming_policy: v });
+    }
+
+    _onNodeTimeout(e) {
+        const raw = e.target.value.trim();
+        if (raw === '') {
+            this._emitPatch({ node_timeout_seconds: null });
+            return;
+        }
+        const n = parseInt(raw, 10);
+        if (!Number.isFinite(n) || n < 1) {
+            return;
+        }
+        this._emitPatch({ node_timeout_seconds: Math.min(n, 3600) });
+    }
+
+    _onExceptionAsResponse(e) {
+        const v = e.detail && typeof e.detail === 'object' && 'value' in e.detail ? e.detail.value : undefined;
+        if (typeof v !== 'boolean') {
+            throw new Error('flows-base-node-editor: platform-switch must emit detail.value boolean');
+        }
+        if (v) {
+            this._emitPatch({ exception_as_response: true });
+            return;
+        }
+        this._emitPatch({ exception_as_response: false, exception_allow_types: [] });
+    }
+
+    _exceptionAbsorbAllowNamesList() {
+        const op = this._exceptionAbsorbAllowNamesOp;
+        const raw = op.lastResult;
+        if (raw === null) {
+            return null;
+        }
+        if (!Array.isArray(raw)) {
+            throw new Error('flows-base-node-editor: exception-absorb-allow-names response must be an array');
+        }
+        if (raw.length === 0) {
+            throw new Error('flows-base-node-editor: exception-absorb-allow-names must be non-empty');
+        }
+        for (let i = 0; i < raw.length; i++) {
+            if (typeof raw[i] !== 'string') {
+                throw new Error('flows-base-node-editor: exception-absorb-allow-names item must be a string');
+            }
+        }
+        return raw;
+    }
+
+    _renderExceptionAllowTypesControls(cfg) {
+        const op = this._exceptionAbsorbAllowNamesOp;
+        const allowNames = this._exceptionAbsorbAllowNamesList();
+        if (allowNames === null) {
+            if (typeof op.error === 'string' && op.error.length > 0) {
+                return html`<div class="field-hint">${op.error}</div>`;
+            }
+            return html`<glass-spinner></glass-spinner>`;
+        }
+        return html`
+            <flows-tag-input
+                .tags=${Array.isArray(cfg?.exception_allow_types) ? cfg.exception_allow_types : []}
+                .allowedValues=${allowNames}
+                placeholder=${this.t('base_node_editor.exception_allow_types_placeholder')}
+                @change=${this._onExceptionAllowTypes}
+            ></flows-tag-input>
+        `;
+    }
+
+    _onExceptionAllowTypes(e) {
+        const types = Array.isArray(e.detail?.tags) ? e.detail.tags : [];
+        this._emitPatch({ exception_allow_types: types });
     }
     _onMapping(field, e) {
         const mapping = e.detail?.mapping;
@@ -747,6 +835,40 @@ export class FlowsBaseNodeEditor extends PlatformElement {
                         <option value="all" ?selected=${policy === 'all'}>${this.t('base_node_editor.incoming_policy_all')}</option>
                     </select>
                 </div>
+                <div class="field">
+                    <span class="field-label">${this.t('base_node_editor.node_timeout_seconds')}</span>
+                    <input
+                        class="text"
+                        type="number"
+                        min="1"
+                        max="3600"
+                        placeholder=""
+                        .value=${typeof cfg?.node_timeout_seconds === 'number' ? String(cfg.node_timeout_seconds) : ''}
+                        @input=${this._onNodeTimeout}
+                    />
+                    <div class="field-hint">${this.t('base_node_editor.node_timeout_hint')}</div>
+                </div>
+                <div class="field">
+                    <div class="exception-response-head">
+                        <span class="field-label">${this.t('base_node_editor.exception_as_response')}</span>
+                        <platform-help-hint
+                            label=${this.t('base_node_editor.exception_as_response_help_label')}
+                            text=${this.t('base_node_editor.exception_as_response_hint')}
+                        ></platform-help-hint>
+                        <platform-switch
+                            size="sm"
+                            ?checked=${cfg?.exception_as_response === true}
+                            @change=${this._onExceptionAsResponse}
+                        ></platform-switch>
+                    </div>
+                </div>
+                ${cfg?.exception_as_response === true ? html`
+                <div class="field">
+                    <span class="field-label">${this.t('base_node_editor.exception_allow_types')}</span>
+                    ${this._renderExceptionAllowTypesControls(cfg)}
+                    <div class="field-hint">${this.t('base_node_editor.exception_allow_types_hint')}</div>
+                </div>
+                ` : ''}
             </div>
         `;
     }

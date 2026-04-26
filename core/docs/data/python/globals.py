@@ -12,11 +12,13 @@ GLOBALS: List[Dict[str, Any]] = [
         "type": "ExecutionState",
         "doc": (
             "Состояние выполнения `run(state)`; доступ как к dict: `state['content']`, `state.get('key')`.\n\n"
-            "- **`task_id`**, **`context_id`**, **`user_id`**, **`session_id`** — обязательные системные поля\n"
+            "- **`task_id`**, **`context_id`**, **`user_id`**, **`session_id`** — обязательные системные поля (не менять из кода ноды/tool)\n"
             "- **`content`** — вход пользователя; **`response`** — ответ агента; **`result`** — результат ноды/tool\n"
             "- **`messages`** — `List[Message]`; **`files`** — список вложений `{name, path, mime_type, ...}`\n"
-            "- **`user_groups`**, **`variables`**, **`current_nodes`** — группы, переменные flow, активные ноды\n"
-            "- дополнительные поля через присваивание; сериализация: `state.model_dump()`"
+            "- **`user_groups`**, **`variables`**, **`current_nodes`** — группы, переменные flow, активные ноды (только чтение для `user_groups`/`current_nodes` из user-кода)\n"
+            "- **`flow_deadline_monotonic`**, **`flow_timeout_effective_seconds`** — дедлайн wall-clock одного run flow (системные, не трогать из кода)\n"
+            "- заморозка полей: `core/state/mutation_policy.py` (`FROZEN_STATE_FIELDS`); нарушение — `FrozenStateFieldError`\n"
+            "- дополнительные поля через присваивание (вне заморозки); сериализация: `state.model_dump()`"
         ),
         "perspectives": ["editor", "flow", "tool", "node"],
         "tags": ["core", "data"],

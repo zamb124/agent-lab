@@ -17,6 +17,20 @@ from core.errors import SafeEvalError
 from core.inline_python_eval_policy import FORBIDDEN_INLINE_DUNDER_ATTRIBUTES
 
 
+def _ast_expr_is_constant_truthy(test: ast.expr) -> bool:
+    if isinstance(test, ast.Constant):
+        return bool(test.value)
+    return False
+
+
+def _forbid_constant_truthy_while_loops(tree: ast.AST) -> None:
+    for node in ast.walk(tree):
+        if isinstance(node, ast.While) and _ast_expr_is_constant_truthy(node.test):
+            raise SafeEvalError(
+                "Запрещён цикл while с постоянным истинным условием (например while True, while 1)"
+            )
+
+
 def _normalize_inline_source(
     code: str,
     strip_platform_imports: bool,
@@ -36,6 +50,7 @@ def _validate_code(code: str, namespace_keys: frozenset[str]) -> None:
         raise SafeEvalError(f"Syntax error: {e}") from e
 
     validate_import_nodes(tree, namespace_keys)
+    _forbid_constant_truthy_while_loops(tree)
 
     for node in ast.walk(tree):
         if isinstance(node, ast.Attribute):

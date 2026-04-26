@@ -32,6 +32,7 @@ from apps.flows.src.container import get_container
 from apps.flows.src.state.cancellation import check_cancellation
 from apps.flows.src.state.interrupt_manager import InterruptManager
 from core.state import ExecutionState
+from core.state.mutation_policy import should_skip_field_on_user_returned_state_copy
 from core.state.interrupt import OperatorTaskInterrupt
 from apps.flows.src.streaming import Emitter
 from apps.flows.src.streaming.ui_events import emit_pending_ui_events
@@ -298,7 +299,7 @@ class Flow:
                         max_iterations=MAX_ITERATIONS
                     )
 
-                await check_cancellation()
+                await check_cancellation(state)
 
                 # Валидация и подготовка нод
                 for node_id in current_nodes:
@@ -407,11 +408,16 @@ class Flow:
         """Мержит результаты нод. messages - extend, остальное - кто последний."""
         merged = original_state.model_copy(deep=True)
         original_msg_count = len(original_state.messages)
+        original_exc_count = len(original_state.execution_exceptions)
 
         for result in results:
             # messages - добавляем новые
             new_messages = result.messages[original_msg_count:]
             merged.messages.extend(new_messages)
+
+            if result.execution_exceptions:
+                new_excs = result.execution_exceptions[original_exc_count:]
+                merged.execution_exceptions.extend(new_excs)
 
             # nested_states - мержим напрямую (без сериализации)
             if result.nested_states:
@@ -419,7 +425,14 @@ class Flow:
 
             # Остальные поля — из атрибутов result, чтобы сохранять типы (например List[PromptHistoryItem])
             for field in ExecutionState.model_fields:
-                if field in ("messages", "nested_states", "join_arrived_preds"):
+                if field in (
+                    "messages",
+                    "nested_states",
+                    "join_arrived_preds",
+                    "execution_exceptions",
+                ):
+                    continue
+                if should_skip_field_on_user_returned_state_copy(field):
                     continue
                 value = getattr(result, field)
                 if value is not None:
@@ -430,6 +443,8 @@ class Flow:
 
             extra = getattr(result, "__pydantic_extra__", None) or {}
             for key, value in extra.items():
+                if should_skip_field_on_user_returned_state_copy(key):
+                    continue
                 setattr(merged, key, value)
 
         self._merge_join_arrived_preds(merged, results)

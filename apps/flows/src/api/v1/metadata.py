@@ -8,6 +8,7 @@ from typing import Any, Dict, List
 from fastapi import APIRouter
 
 from apps.flows.src.dependencies import ContainerDep
+from apps.flows.src.models.exception_absorb_allow import list_exception_absorb_allow_values
 
 router = APIRouter(tags=["metadata"])
 
@@ -126,3 +127,10 @@ async def get_resource_types(container: ContainerDep) -> List[Dict[str, Any]]:
     """Список типов ресурсов (Code/RAG/Files/Prompt/LLM/Secret/HTTP/Cache)."""
     _ = container
     return _RESOURCE_TYPES
+
+
+@router.get("/exception-absorb-allow-names")
+async def get_exception_absorb_allow_names(container: ContainerDep) -> List[str]:
+    """Имена классов исключений для whitelist exception_allow_types в редакторе нод."""
+    _ = container
+    return list_exception_absorb_allow_values()

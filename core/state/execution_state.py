@@ -7,12 +7,13 @@ Zero-Guess: все системные поля явно типизированы
 
 from __future__ import annotations
 
-from typing import Any, Dict, List, Optional
-from pydantic import Field, field_serializer, field_validator, model_validator
+from typing import Any, Dict, List, Literal, Optional
+from pydantic import Field, field_serializer, field_validator
 
 from a2a.types import Message
 from core.models import FlexibleBaseModel
 from core.state.interrupt import InterruptData
+from core.state.mutation_policy import guard_setattr_if_user_code
 from core.state.trigger_runtime import TriggerRuntimeSnapshot
 
 
@@ -30,6 +31,20 @@ class NodeCallInfo(FlexibleBaseModel):
     response: Any = Field(default=None, description="Ответ ноды")
     validation: Optional[Dict[str, Any]] = Field(default=None, description="Данные валидации")
     timestamp: Optional[str] = Field(default=None, description="Время вызова")
+
+
+class ExecutionExceptionRecord(FlexibleBaseModel):
+    """Запись об исключении, обработанном как ответ (режим exception_as_response)."""
+
+    node_id: str = Field(..., description="Нода, в контексте которой произошло исключение")
+    source: Literal["node_run", "tool"] = Field(
+        ...,
+        description="node_run — падение _run_impl; tool — ошибка вызова инструмента в llm_node",
+    )
+    exception_type: str = Field(..., description="Имя класса исключения (type(exc).__name__)")
+    message: str = Field(..., description="Текст исключения")
+    tool_name: Optional[str] = Field(default=None, description="Имя tool при source=tool")
+    tool_call_id: Optional[str] = Field(default=None, description="ID tool_call при source=tool")
 
 
 class PromptHistoryItem(FlexibleBaseModel):
@@ -201,6 +216,24 @@ class ExecutionState(FlexibleBaseModel):
                 )
         return result
 
+    @field_validator("execution_exceptions", mode="before")
+    @classmethod
+    def validate_execution_exceptions(cls, v: Any) -> List[ExecutionExceptionRecord]:
+        if not v:
+            return []
+        result: List[ExecutionExceptionRecord] = []
+        for idx, item in enumerate(v):
+            if isinstance(item, ExecutionExceptionRecord):
+                result.append(item)
+            elif isinstance(item, dict):
+                result.append(ExecutionExceptionRecord.model_validate(item))
+            else:
+                raise ValueError(
+                    f"execution_exceptions[{idx}]: ожидается ExecutionExceptionRecord или dict, "
+                    f"получен {type(item)}"
+                )
+        return result
+
     @field_validator("triggers", mode="before")
     @classmethod
     def validate_triggers(
@@ -280,6 +313,10 @@ class ExecutionState(FlexibleBaseModel):
         Перехватывает прямое присваивание атрибутов.
         Нормализует dict -> типизированные модели при присваивании.
         """
+        if name.startswith("__pydantic"):
+            super().__setattr__(name, value)
+            return
+        guard_setattr_if_user_code(name)
         if name == "interrupt" and value is not None and isinstance(value, dict):
             value = InterruptData.model_validate(value)
         if name == "prompt_history" and value is not None:
@@ -316,6 +353,10 @@ class ExecutionState(FlexibleBaseModel):
     tool_results: Dict[str, Any] = Field(
         default_factory=dict,
         description="Результаты выполнения tools {tool_id: result}"
+    )
+    execution_exceptions: List[ExecutionExceptionRecord] = Field(
+        default_factory=list,
+        description="Реестр исключений, обработанных как ответ (exception_as_response на ноде)",
     )
     nested_states: Dict[str, NestedStateData] = Field(
         default_factory=dict,
@@ -370,6 +411,18 @@ class ExecutionState(FlexibleBaseModel):
         description=(
             "AND-join (incoming_policy=all): target_node_id -> предки, уже пришедшие в текущем цикле ожидания"
         ),
+    )
+
+    flow_deadline_monotonic: Optional[float] = Field(
+        default=None,
+        description=(
+            "Дедлайн одного вызова run flow: time.monotonic() <= flow_deadline_monotonic; "
+            "None — wall-clock лимит не задан для этой сессии"
+        ),
+    )
+    flow_timeout_effective_seconds: Optional[int] = Field(
+        default=None,
+        description="Секунд wall-clock, заданных на этот run (для ошибок и отладки)",
     )
     
     # ========================================================================
@@ -487,5 +540,14 @@ class ExecutionState(FlexibleBaseModel):
 # Короткий алиас для удобства
 State = ExecutionState
 
-__all__ = ["ExecutionState", "State", "InterruptData", "InterruptPathItem", "NodeCallInfo", "NestedStateData", "PromptHistoryItem"]
+__all__ = [
+    "ExecutionState",
+    "State",
+    "InterruptData",
+    "InterruptPathItem",
+    "NodeCallInfo",
+    "NestedStateData",
+    "PromptHistoryItem",
+    "ExecutionExceptionRecord",
+]
 

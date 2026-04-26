@@ -31,6 +31,9 @@ ExecutionState - нативный Pydantic объект ВЕЗДЕ в систе
     
     current_nodes: List[str]          # Текущие ноды (для resume)
 
+    flow_deadline_monotonic: Optional[float]  # дедлайн run на time.monotonic() (старт канала: apply_flow_wall_clock_deadline)
+    flow_timeout_effective_seconds: Optional[int]  # сколько секунд задано на этот run (сообщения об ошибке)
+
 ## interrupt
 
 - `state.interrupt: Optional[InterruptData]` — типизированное прерывание (HITL).
@@ -60,7 +63,7 @@ ExecutionState - нативный Pydantic объект ВЕЗДЕ в систе
 
 ## Динамические поля
 
-Ноды могут записывать любые поля:
+Ноды могут записывать поля **вне системного замораживания** и ожидаемые доменные поля (`variables`, `result`, `response`, `tool_results`, `files`, произвольные extra-поля):
 
     def execute(args, state):
         state.my_custom_field = "value"
@@ -71,14 +74,23 @@ ExecutionState - нативный Pydantic объект ВЕЗДЕ в систе
 
     value = state.my_custom_field
 
+## Системные поля и user-код (CodeNode / inline tool)
+
+Запрещено менять из тела кода ноды или inline tool (прямое присваивание, `merge_state` / `set_nested` с этими ключами, ключи в возвращаемом dict без `output_mapping` на безопасные поля): идентификаторы и привязка сессии (`task_id`, `context_id`, `user_id`, `session_id`, `flow_config_version`, `skill_id`), лимиты (`flow_deadline_monotonic`, `flow_timeout_effective_seconds`), управление графом (`current_nodes`, `join_arrived_preds`), HITL (`interrupt`, `interrupt_path`, `hitl_handoff_correlation_id`), аудит и отладка (`node_history`, `execution_exceptions`, `prompt_history`, `reasoning_history`, `pending_reasoning`, `breakpoints`, `breakpoint_hit`, `breakpoint_state`, `mock`, `triggers`, `scheduled_tasks`, `nested_states`, `user_groups`).
+
+Каноничный список: `core/state/mutation_policy.py` (`FROZEN_STATE_FIELDS`). Исключение: `FrozenStateFieldError` (`core.errors`).
+
+HITL для пользователя — через `ask_user` / `InterruptManager`, не через прямую запись в `interrupt`.
+
 ## Merge при параллельном выполнении
 
 Когда tools/ноды выполняются параллельно:
 
 - messages → extend (все добавляются)
 - tool_results → merge (dict.update)
-- поля из `ExecutionState.model_fields` (кроме messages/nested_states) → last wins
-- дополнительные поля (`__pydantic_extra__`, runtime keys) → при merge параллельных нод во `Flow` переносятся в общий state по каждому результату (разные ключи из веток сохраняются)
+- из результатов **параллельных LLM-tools** в родительский state переносятся только разрешённые поля и extra без системных ключей (`USER_TOOL_PARALLEL_STATE_MERGE_FIELDS`, фильтр по `FROZEN_STATE_FIELDS` в `llm_runner`)
+- при merge параллельных **нод** во `Flow` системные поля из веток не перезаписывают значения в объединённом state (кроме специально обрабатываемых блоков: messages, `nested_states`, `execution_exceptions`, `join_arrived_preds`)
+- дополнительные поля (`__pydantic_extra__`) → в Flow merge без ключей из `FROZEN_STATE_FIELDS`
 
 ## current_nodes
 

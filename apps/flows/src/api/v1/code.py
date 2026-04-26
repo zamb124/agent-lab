@@ -591,6 +591,7 @@ def _compute_diff(old: Dict[str, Any], new: Dict[str, Any], path: str = "") -> L
         "breakpoints", "scheduled_tasks", "reasoning_history",
         "pending_reasoning", "breakpoint_hit", "breakpoint_state", "interrupt",
         "join_arrived_preds", "hitl_handoff_correlation_id",
+        "flow_deadline_monotonic", "flow_timeout_effective_seconds",
     }
     all_keys = set(old.keys()) | set(new.keys())
 
@@ -710,6 +711,7 @@ async def execute_code(container: ContainerDep, request: ExecuteRequest) -> Exec
         input_state_normalized.setdefault("interrupt_path", [])
         input_state_normalized.setdefault("node_history", {})
         input_state_normalized.setdefault("tool_results", {})
+        input_state_normalized.setdefault("execution_exceptions", [])
         input_state_normalized.setdefault("nested_states", {})
         input_state_normalized.setdefault("reasoning_history", [])
         input_state_normalized.setdefault("breakpoints", {})

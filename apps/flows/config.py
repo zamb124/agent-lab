@@ -13,6 +13,9 @@ from core.config.models import LLMConfig, PushConfig as CorePushConfig, S3Config
 
 FLOWS_PUBLIC_API_PREFIX = "/flows/api/v1"
 
+# Потолок wall-clock (сек) для настроек: выше нельзя ни в conf.json, ни в ENV.
+_FLOWS_WALL_TIME_HARD_MAX_SECONDS: int = 3600
+
 
 class ExternalFlowConfig(BaseModel):
     """Внешний flow (A2A endpoint) для подключения при старте."""
@@ -111,6 +114,38 @@ class FlowSettings(BaseSettings):
         default=True,
         description="Включает dynamic CORS для /flows/api/v1/embed/{embed_id} по EmbedConfig.allowed_origins",
     )
+    flow_execution_wall_time_cap_seconds: int = Field(
+        default=3600,
+        ge=1,
+        le=_FLOWS_WALL_TIME_HARD_MAX_SECONDS,
+        description=(
+            "Верхняя граница таймаута run flow (и clamp для state): FlowConfig.timeout и дедлайн run не больше этого"
+        ),
+    )
+    node_execution_wall_time_cap_seconds: int = Field(
+        default=3600,
+        ge=1,
+        le=_FLOWS_WALL_TIME_HARD_MAX_SECONDS,
+        description="Верхняя граница node_timeout_seconds у нод",
+    )
+    default_flow_timeout_seconds: int = Field(
+        default=600,
+        ge=1,
+        le=_FLOWS_WALL_TIME_HARD_MAX_SECONDS,
+        description=(
+            "Wall-clock лимит выполнения одного run flow (сек), если в FlowConfig.timeout не задано; "
+            "не больше flow_execution_wall_time_cap_seconds"
+        ),
+    )
+
+    @model_validator(mode="after")
+    def _default_flow_timeout_within_cap(self) -> Self:
+        if self.default_flow_timeout_seconds > self.flow_execution_wall_time_cap_seconds:
+            raise ValueError(
+                "default_flow_timeout_seconds не больше flow_execution_wall_time_cap_seconds: "
+                f"{self.default_flow_timeout_seconds} > {self.flow_execution_wall_time_cap_seconds}"
+            )
+        return self
 
     @model_validator(mode="after")
     def _public_http_prefix_must_be_flows(self) -> Self:

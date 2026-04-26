@@ -11,6 +11,11 @@ from apps.flows.src.eval.compiler import PythonCompiler
 from apps.flows.src.eval.namespace import PythonNamespaceBuilder
 from apps.flows.src.runners.base import BaseCodeRunner
 from core.errors import SafeEvalError
+from core.state.mutation_policy import (
+    assert_frozen_fields_unchanged,
+    snapshot_frozen_fields,
+    user_code_state_mutation_guard,
+)
 
 if TYPE_CHECKING:
     from core.state import ExecutionState
@@ -40,6 +45,22 @@ class PythonCodeRunner(BaseCodeRunner):
             base_tool_class=base_tool_class,
         )
         self.compiler = PythonCompiler(namespace_builder=self.namespace_builder)
+
+    def _snapshot_frozen_if_state(self, state: Optional["ExecutionState"]) -> Optional[dict]:
+        from core.state import ExecutionState as ES
+
+        if state is None or not isinstance(state, ES):
+            return None
+        return snapshot_frozen_fields(state)
+
+    def _assert_frozen_if_needed(
+        self, state: Optional["ExecutionState"], snap: Optional[dict]
+    ) -> None:
+        from core.state import ExecutionState as ES
+
+        if snap is None or state is None or not isinstance(state, ES):
+            return
+        assert_frozen_fields_unchanged(state, snap)
     
     async def execute(
         self, 
@@ -59,9 +80,14 @@ class PythonCodeRunner(BaseCodeRunner):
             Результат выполнения
         """
         func = self.compiler.compile(code, func_name, auto_find=True)
-        if inspect.iscoroutinefunction(func):
-            return await func(state)
-        return func(state)
+        snap = self._snapshot_frozen_if_state(state)
+        with user_code_state_mutation_guard():
+            if inspect.iscoroutinefunction(func):
+                result = await func(state)
+            else:
+                result = func(state)
+        self._assert_frozen_if_needed(state, snap)
+        return result
     
     async def execute_tool(
         self,
@@ -90,33 +116,35 @@ class PythonCodeRunner(BaseCodeRunner):
 
         target, is_class = self.compiler.compile_tool(code)
         
-        if is_class:
-            # Класс BaseTool
-            tool_instance = target()
-            return await tool_instance.run(args, state)
-        
-        # Функция
-        func = target
-        sig = inspect.signature(func)
-        params = list(sig.parameters.keys())
-        
-        # Если первый параметр - "args", передаём dict целиком
-        if params and params[0] == "args":
-            call_kwargs = {"args": args}
-            if "state" in params:
-                call_kwargs["state"] = state
-            if inspect.iscoroutinefunction(func):
-                return await func(**call_kwargs)
-            return func(**call_kwargs)
-        
-        # Иначе распаковываем args в именованные параметры
-        kwargs = dict(args)
-        if "state" in params:
-            kwargs["state"] = state
-        
-        if inspect.iscoroutinefunction(func):
-            return await func(**kwargs)
-        return func(**kwargs)
+        snap = self._snapshot_frozen_if_state(state)
+        with user_code_state_mutation_guard():
+            if is_class:
+                tool_instance = target()
+                result = await tool_instance.run(args, state)
+            else:
+                func = target
+                sig = inspect.signature(func)
+                params = list(sig.parameters.keys())
+
+                if params and params[0] == "args":
+                    call_kwargs = {"args": args}
+                    if "state" in params:
+                        call_kwargs["state"] = state
+                    if inspect.iscoroutinefunction(func):
+                        result = await func(**call_kwargs)
+                    else:
+                        result = func(**call_kwargs)
+                else:
+                    kwargs = dict(args)
+                    if "state" in params:
+                        kwargs["state"] = state
+
+                    if inspect.iscoroutinefunction(func):
+                        result = await func(**kwargs)
+                    else:
+                        result = func(**kwargs)
+        self._assert_frozen_if_needed(state, snap)
+        return result
     
     def validate(self, code: str) -> Tuple[bool, Optional[str]]:
         """

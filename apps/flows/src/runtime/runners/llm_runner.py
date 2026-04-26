@@ -20,6 +20,7 @@ from apps.flows.src.runtime.a2a_messages import (
     build_tool_result_message as new_tool_result_message,
     build_user_message as new_user_message,
 )
+from apps.flows.src.runtime.exception_policy import should_absorb_exception
 from apps.flows.src.runtime.exceptions import FlowInterrupt
 from apps.flows.src.state.cancellation import check_cancellation
 from apps.flows.src.runtime.llm_override_params import (
@@ -35,7 +36,8 @@ from core.logging import get_logger
 from apps.flows.src.models import ReactLoopMode
 from apps.flows.src.models.enums import NodeType
 from apps.flows.src.state.interrupt_manager import InterruptManager
-from core.state import ExecutionState, InterruptPathItem, PromptHistoryItem
+from core.state import ExecutionExceptionRecord, ExecutionState, InterruptPathItem, PromptHistoryItem
+from core.state.mutation_policy import FROZEN_STATE_FIELDS, USER_TOOL_PARALLEL_STATE_MERGE_FIELDS
 from apps.flows.src.streaming import Emitter, BaseEmitter
 from apps.flows.src.streaming.ui_events import emit_pending_ui_events
 from core.tracing import TraceContext, get_tracer
@@ -92,6 +94,36 @@ class LlmNodeRunner(BaseLlmNodeRunner):
         if not self.node_config:
             raise ValueError("LlmNodeRunner.node_config required for message tagging")
         return self.node_config.node_id
+
+    def _exception_policy_from_node_config(self) -> tuple[bool, list[str]]:
+        if not self.node_config:
+            return False, []
+        names = [x.value for x in self.node_config.exception_allow_types]
+        return (self.node_config.exception_as_response, names)
+
+    def _record_tool_exception(
+        self,
+        state: ExecutionState,
+        tool_name: str,
+        tool_call_id: str,
+        exc: BaseException,
+    ) -> None:
+        state.execution_exceptions.append(
+            ExecutionExceptionRecord(
+                node_id=self._source_node_id(),
+                source="tool",
+                exception_type=type(exc).__name__,
+                message=str(exc),
+                tool_name=tool_name,
+                tool_call_id=tool_call_id,
+            )
+        )
+
+    @staticmethod
+    def _format_tool_error_content(tool_name: str, exc: BaseException) -> str:
+        return (
+            f"Ошибка инструмента '{tool_name}': {type(exc).__name__}: {exc}"
+        )
 
     def _messages_for_llm_context(self, state: ExecutionState) -> List[Message]:
         if self.llm_node is not None:
@@ -344,7 +376,7 @@ class LlmNodeRunner(BaseLlmNodeRunner):
                 while iteration < max_iterations:
                     iteration += 1
 
-                    await check_cancellation()
+                    await check_cancellation(state)
 
                     logger.debug(f"[llm_node:{llm_node_label}] ReAct iteration {iteration} (streaming)")
 
@@ -385,6 +417,7 @@ class LlmNodeRunner(BaseLlmNodeRunner):
                                 context_id,
                                 task_id,
                                 response_format,
+                                state,
                             ):
                                 should_yield = True
                                 
@@ -690,7 +723,8 @@ class LlmNodeRunner(BaseLlmNodeRunner):
         tools: Optional[List[Dict[str, Any]]],
         context_id: str,
         task_id: str,
-        response_format: Optional[Dict[str, Any]] = None,
+        response_format: Optional[Dict[str, Any]],
+        state: ExecutionState,
     ) -> AsyncGenerator[StreamEvent, None]:
         """Вызывает LLM - ТОЛЬКО STREAM."""
         async for event in llm.stream(
@@ -702,7 +736,7 @@ class LlmNodeRunner(BaseLlmNodeRunner):
             max_tokens=max_tok,
             **stream_kw,
         ):
-            await check_cancellation()
+            await check_cancellation(state)
             yield event
 
     async def _execute_tools_parallel(
@@ -749,8 +783,26 @@ class LlmNodeRunner(BaseLlmNodeRunner):
             if isinstance(result, Exception):
                 if isinstance(result, FlowInterrupt):
                     raise result
+                if isinstance(result, ToolExecutionError):
+                    raise result
+                enabled, allow_types = self._exception_policy_from_node_config()
+                if should_absorb_exception(
+                    result, enabled=enabled, allow_types=allow_types
+                ):
+                    self._record_tool_exception(
+                        state, tool_name, tool_call_id, result
+                    )
+                    tool_results.append(
+                        {
+                            "tool_call_id": tool_call_id,
+                            "content": self._format_tool_error_content(
+                                tool_name, result
+                            ),
+                        }
+                    )
+                    continue
                 logger.error(f"Tool {tool_name} failed: {result}")
-                raise ToolExecutionError(f"Tool {tool_name} failed: {result}", error=result)
+                raise ToolExecutionError(tool_name, result)
             
             # Мержим state: messages extend, остальное перезаписываем
             new_messages = state_copy.messages[original_msg_count:]
@@ -758,15 +810,19 @@ class LlmNodeRunner(BaseLlmNodeRunner):
             
             # tool_results - мержим (не перезаписываем!)
             state.tool_results.update(state_copy.tool_results)
-            
-            # Все поля (включая динамические) - перезаписываем
-            state_dict = state_copy.model_dump(exclude_none=False)
-            for field, value in state_dict.items():
-                if field in ("messages", "tool_results"):
-                    continue  # Уже обработали
+
+            for field in USER_TOOL_PARALLEL_STATE_MERGE_FIELDS:
+                value = getattr(state_copy, field, None)
                 if value is not None:
                     setattr(state, field, value)
-            
+
+            extra_src = getattr(state_copy, "__pydantic_extra__", None) or {}
+            for ek, ev in extra_src.items():
+                if ek in FROZEN_STATE_FIELDS:
+                    continue
+                if ev is not None:
+                    setattr(state, ek, ev)
+
             tool_results.extend(result)
         
         return tool_results
@@ -785,10 +841,25 @@ class LlmNodeRunner(BaseLlmNodeRunner):
         
         tool = self._resolve_tool_by_call_name(tool_name)
         if not tool:
-            raise ToolExecutionError(
-                f"Tool '{tool_name}' not found. Flow must be fully inline with all tools loaded.",
-                error=None
+            not_found = RuntimeError(
+                "Tool not found. Flow must be fully inline with all tools loaded."
             )
+            enabled, allow_types = self._exception_policy_from_node_config()
+            if should_absorb_exception(
+                not_found, enabled=enabled, allow_types=allow_types
+            ):
+                self._record_tool_exception(
+                    state, tool_name, tool_call_id, not_found
+                )
+                return [
+                    {
+                        "tool_call_id": tool_call_id,
+                        "content": self._format_tool_error_content(
+                            tool_name, not_found
+                        ),
+                    }
+                ]
+            raise ToolExecutionError(tool_name, not_found)
         tool_name = tool.name
         
         nested_flow_tool = hasattr(tool, "flow_id")
@@ -819,7 +890,20 @@ class LlmNodeRunner(BaseLlmNodeRunner):
                 tool_duration = (time.time() - tool_start) * 1000
                 tracer.record_tool_result(tool_span, None, tool_duration, error=str(e))
                 logger.error(f"Tool {tool_name} failed: {e}")
-                raise ToolExecutionError(f"Tool {tool_name} failed: {e}", error=e)
+                enabled, allow_types = self._exception_policy_from_node_config()
+                if should_absorb_exception(e, enabled=enabled, allow_types=allow_types):
+                    self._record_tool_exception(
+                        state, tool_name, tool_call_id, e
+                    )
+                    return [
+                        {
+                            "tool_call_id": tool_call_id,
+                            "content": self._format_tool_error_content(
+                                tool_name, e
+                            ),
+                        }
+                    ]
+                raise ToolExecutionError(tool_name, e)
 
     async def _render_prompt(self, state: ExecutionState) -> str:
         """Рендерит промпт с переменными и сохраняет в историю."""
