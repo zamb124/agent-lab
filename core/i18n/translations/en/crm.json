@@ -712,7 +712,10 @@
         "analysis_run": "AI analysis",
         "analysis_view_applied": "View AI analysis results",
         "analysis_stage_fallback": "Analysis in progress...",
-        "add_note_creating": "Creating note..."
+        "add_note_creating": "Creating note...",
+        "mobile_header_date_range": "Select date range",
+        "mobile_header_search": "Search",
+        "mobile_header_close_search": "Close search"
     },
     "spaces_page": {
         "title": "Namespaces",

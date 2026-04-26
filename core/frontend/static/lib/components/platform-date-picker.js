@@ -531,6 +531,26 @@ export class PlatformDatePicker extends PlatformElement {
     }
 
     updated(changedProperties) {
+        if (changedProperties.has('open')) {
+            if (this.open) {
+                if (!this._portalHost) {
+                    const anchorDate = this._singleDate ?? this._rangeStart ?? this._rangeEnd ?? new Date();
+                    this._viewYear = anchorDate.getFullYear();
+                    this._viewMonth = anchorDate.getMonth();
+                    this._focusedDateIso = formatIsoDate(anchorDate);
+                    this._ensurePortal();
+                    this._bindScrollResize();
+                }
+                this.updateComplete.then(() => {
+                    this._renderPortalPopup();
+                    this._positionPopup();
+                });
+                return;
+            }
+            this._unbindScrollResize();
+            this._removePortal();
+            return;
+        }
         if (!this.open) return;
         this._renderPortalPopup();
         this._positionPopup();

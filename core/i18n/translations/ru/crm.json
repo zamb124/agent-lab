@@ -712,7 +712,10 @@
         "analysis_run": "AI анализ",
         "analysis_view_applied": "Просмотреть результаты AI анализа",
         "analysis_stage_fallback": "Идет анализ...",
-        "add_note_creating": "Создается заметка..."
+        "add_note_creating": "Создается заметка...",
+        "mobile_header_date_range": "Выбрать период",
+        "mobile_header_search": "Поиск",
+        "mobile_header_close_search": "Закрыть поиск"
     },
     "spaces_page": {
         "title": "Пространства",

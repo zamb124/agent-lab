@@ -1,10 +1,14 @@
 /**
  * PageHeader - унифицированный хедер страницы с бургер-меню на мобильных
- * 
+ *
  * Использование:
  * <page-header title="Заголовок" subtitle="Подзаголовок">
  *     <button slot="actions">Кнопка</button>
  * </page-header>
+ *
+ * На узких экранах: одна строка, заголовок без переноса (ellipsis). Режим
+ * mobileToolbarMode="search" заменяет блок заголовка на слот toolbar-search
+ * (поле поиска и т.п. между бургером и actions).
  */
 import { html, css } from 'lit';
 import { PlatformElement } from '../../platform-element/index.js';
@@ -15,6 +19,8 @@ export class PageHeader extends PlatformElement {
     static properties = {
         title: { type: String },
         subtitle: { type: String },
+        /** На mobile: "title" — заголовок и subtitle; "search" — слот toolbar-search */
+        mobileToolbarMode: { type: String },
         _isMobile: { state: true },
     };
 
@@ -50,6 +56,13 @@ export class PageHeader extends PlatformElement {
                 min-width: 0;
             }
 
+            .toolbar-search-host {
+                flex: 1;
+                min-width: 0;
+                display: flex;
+                align-items: center;
+            }
+
             .title {
                 font-size: var(--text-3xl);
                 font-weight: var(--font-bold);
@@ -81,7 +94,7 @@ export class PageHeader extends PlatformElement {
                     top: 0;
                     z-index: 30;
                     margin: 0 0 var(--space-4);
-                    padding: max(var(--space-2), var(--platform-safe-top)) 0 var(--space-3);
+                    padding: max(var(--space-2), var(--platform-safe-top)) var(--space-2) var(--space-3);
                     background: var(--glass-solid-strong);
                     backdrop-filter: blur(var(--glass-blur-medium));
                     -webkit-backdrop-filter: blur(var(--glass-blur-medium));
@@ -90,13 +103,22 @@ export class PageHeader extends PlatformElement {
                 }
 
                 .header {
-                    flex-wrap: wrap;
+                    align-items: center;
+                    flex-wrap: nowrap;
+                    min-height: 44px;
+                    gap: var(--space-2);
+                }
+
+                .header-left {
+                    align-items: center;
+                    min-width: 0;
                 }
 
                 .menu-btn {
                     display: flex;
                     width: 36px;
                     height: 36px;
+                    margin-left: var(--space-1);
                     align-items: center;
                     justify-content: center;
                     border-radius: var(--radius-lg);
@@ -124,11 +146,21 @@ export class PageHeader extends PlatformElement {
 
                 .title {
                     font-size: var(--text-2xl);
+                    white-space: nowrap;
+                    overflow: hidden;
+                    text-overflow: ellipsis;
                 }
 
                 .actions {
-                    width: 100%;
-                    margin-top: var(--space-3);
+                    max-width: 55%;
+                    overflow-x: auto;
+                    flex-shrink: 0;
+                    -webkit-overflow-scrolling: touch;
+                    scrollbar-width: none;
+                }
+
+                .actions::-webkit-scrollbar {
+                    display: none;
                 }
             }
 
@@ -143,13 +175,14 @@ export class PageHeader extends PlatformElement {
                 border-color: rgba(0, 0, 0, 0.1);
                 box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
             }
-        `
+        `,
     ];
 
     constructor() {
         super();
         this.title = '';
         this.subtitle = '';
+        this.mobileToolbarMode = 'title';
         this._isMobile = false;
         this._resizeObserver = null;
         this._sidebarOpenSel = this.select((s) => s.ui.sidebar.mobileOpen);
@@ -178,6 +211,22 @@ export class PageHeader extends PlatformElement {
         this.dispatch(CoreEvents.UI_SIDEBAR_OPEN_REQUESTED, null);
     }
 
+    _renderTitleBlock() {
+        if (this._isMobile && this.mobileToolbarMode === 'search') {
+            return html`
+                <div class="toolbar-search-host">
+                    <slot name="toolbar-search"></slot>
+                </div>
+            `;
+        }
+        return html`
+            <div class="title-section">
+                <h1 class="title">${this.title}</h1>
+                ${this.subtitle ? html`<p class="subtitle">${this.subtitle}</p>` : ''}
+            </div>
+        `;
+    }
+
     render() {
         const sidebarOpen = !!(this._sidebarOpenSel && this._sidebarOpenSel.value);
         const showMenu = this._isMobile && !sidebarOpen;
@@ -186,17 +235,14 @@ export class PageHeader extends PlatformElement {
             <div class="header-wrap">
             <div class="header">
                 <div class="header-left">
-                    <button 
-                        class="menu-btn ${showMenu ? '' : 'hidden'}" 
-                        @click=${this._openSidebar} 
+                    <button
+                        class="menu-btn ${showMenu ? '' : 'hidden'}"
+                        @click=${this._openSidebar}
                         title="Открыть меню"
                     >
                         <platform-icon name="menu" size="20"></platform-icon>
                     </button>
-                    <div class="title-section">
-                        <h1 class="title">${this.title}</h1>
-                        ${this.subtitle ? html`<p class="subtitle">${this.subtitle}</p>` : ''}
-                    </div>
+                    ${this._renderTitleBlock()}
                 </div>
                 <div class="actions">
                     <slot name="actions"></slot>

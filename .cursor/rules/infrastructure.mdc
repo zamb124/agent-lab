@@ -97,6 +97,8 @@ make stats
 
 **APNs (нативный iOS):** `team_id`, `key_id`, `bundle_id`, `use_sandbox` — в **`conf.json`** на сервере (`push.*` и/или `auth.providers.apple` для team/key при переиспользовании ключа Sign in with Apple). В compose опционально **`PUSH__APNS_PRIVATE_KEY`**, если нужен отдельный `.p8` только для push; иначе достаточно **`AUTH_APPLE_PRIVATE_KEY`** (тот же PEM, если у ключа в кабинете Apple включены и Sign in with Apple, и APNs). Секрет `PUSH__APNS_PRIVATE_KEY` в GitHub — только при отдельном ключе для пушей.
 
+**AmoCRM (OAuth интеграция CRM):** в GitHub Secrets **`AUTH_AMOCRM_CLIENT_ID`**, **`AUTH_AMOCRM_CLIENT_SECRET`**; в `docker-compose-prod.yaml` они мапятся в **`AUTH__PROVIDERS__AMOCRM__*`** (как Yandex/Google). `auth_url` / `token_url` / `enabled` — в **`conf.json`**, попадающем на сервер из репозитория при деплое; для прода включите **`auth.providers.amocrm.enabled`**, если в шаблоне выключено.
+
 **Существующий volume Postgres** со старой схемой (одна БД вместо `platform_*`) требует ручной миграции данных или нового volume — не автоматизировано в workflow.
 
 ### Postgres `unhealthy` при деплое

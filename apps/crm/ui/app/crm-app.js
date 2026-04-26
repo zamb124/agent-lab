@@ -357,7 +357,9 @@ export class CRMApp extends PlatformApp {
         return html`
             <div class="sidebar"><crm-sidebar></crm-sidebar></div>
             <div class="main">
-                <crm-mobile-app-header></crm-mobile-app-header>
+                ${routeKey === 'notes'
+                    ? ''
+                    : html`<crm-mobile-app-header></crm-mobile-app-header>`}
                 <platform-island>${content}</platform-island>
             </div>
             <platform-lara-assistant

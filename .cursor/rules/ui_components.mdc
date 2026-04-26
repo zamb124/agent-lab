@@ -360,6 +360,15 @@ namespace `platform`, секции `user_chip` и `user_info_modal`.
   `dispatch(UI_SIDEBAR_OPEN_REQUESTED)` и берёт `mobileOpen` из
   `state.ui.sidebar.mobileOpen`.
 
+### Мобильный `page-header` (≤767px)
+
+Файл: `core/frontend/static/lib/components/layout/page-header.js`.
+
+- Одна строка хедера: бургер, блок заголовка и `slot="actions"` без переноса действий на вторую строку; выравнивание по вертикали по центру; у бургера небольшой отступ слева; у `.title` без переноса строк (`ellipsis`).
+- Свойство `mobileToolbarMode`: `'title'` (по умолчанию) или `'search'`. В режиме `search` вместо заголовка и subtitle показывается именованный слот `toolbar-search` (поле поиска и т.п.) между бургером и действиями.
+- При переполнении иконок в `actions` допустим горизонтальный скролл у контейнера действий.
+- Для списковых экранов с несколькими иконками рекомендуемый порядок в разметке слота `actions` слева направо: сводка, период/даты, создание (`+`), поиск.
+
 ### Breadcrumbs
 
 - `platform-breadcrumbs` слушает `CoreEvents.ROUTER_ROUTE_CHANGED` и читает

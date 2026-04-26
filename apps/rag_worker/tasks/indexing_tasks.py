@@ -7,12 +7,35 @@ from typing import Any, Dict
 from apps.rag.container import get_rag_container
 from apps.rag_worker.broker import broker
 from core.config import get_settings
+from core.context import Context, clear_context, set_context
 from core.logging import get_logger
+from core.models.identity_models import Company, User
 from core.rag.upload_profile_binding import UploadProfileBinding
 from core.tracing import attributes as trace_attributes
 from core.tracing.operation_span import traced_operation
 
 logger = get_logger(__name__)
+
+
+def _embedding_context_for_rag_worker(
+    *,
+    company_id: str,
+    user_id: str,
+    namespace_id: str,
+) -> Context:
+    cid = str(company_id).strip()
+    uid = str(user_id).strip()
+    ns = str(namespace_id).strip() or "default"
+    if not cid:
+        raise ValueError("company_id обязателен для контекста эмбеддингов в RAG worker")
+    if not uid:
+        raise ValueError("user_id обязателен для контекста эмбеддингов в RAG worker")
+    return Context(
+        user=User(user_id=uid, name="RAG worker"),
+        active_company=Company(company_id=cid, name=cid),
+        channel="rag_worker",
+        active_namespace=ns,
+    )
 
 
 @broker.task(retry_on_error=True, max_retries=3, queue_name="rag")
@@ -44,60 +67,70 @@ async def index_rag_document_s3_task(
     if not trace_user_id or str(trace_user_id).strip() == "":
         raise ValueError("metadata.uploaded_by_user_id обязателен для rag.worker.index.upload_s3.")
 
-    async with traced_operation(
-        "rag.worker.index.upload_s3",
-        event_type="rag.ingest",
-        operation_category="rag_ingest",
-        resource_type="rag.namespace",
-        resource_id=namespace_id,
-        extra_attributes={
-            trace_attributes.ATTR_TENANT_COMPANY_ID: str(trace_company_id).strip(),
-            trace_attributes.ATTR_USER_ID: str(trace_user_id).strip(),
-            trace_attributes.ATTR_RAG_STAGE: "upload_from_s3",
-            "platform.rag.document_name": document_name,
-            "platform.rag.s3_key": s3_key,
-        },
-    ):
-        settings = get_settings()
-        binding = UploadProfileBinding(config=settings.rag.document_indexing)
+    set_context(
+        _embedding_context_for_rag_worker(
+            company_id=str(trace_company_id).strip(),
+            user_id=str(trace_user_id).strip(),
+            namespace_id=namespace_id,
+        )
+    )
+    try:
+        async with traced_operation(
+            "rag.worker.index.upload_s3",
+            event_type="rag.ingest",
+            operation_category="rag_ingest",
+            resource_type="rag.namespace",
+            resource_id=namespace_id,
+            extra_attributes={
+                trace_attributes.ATTR_TENANT_COMPANY_ID: str(trace_company_id).strip(),
+                trace_attributes.ATTR_USER_ID: str(trace_user_id).strip(),
+                trace_attributes.ATTR_RAG_STAGE: "upload_from_s3",
+                "platform.rag.document_name": document_name,
+                "platform.rag.s3_key": s3_key,
+            },
+        ):
+            settings = get_settings()
+            binding = UploadProfileBinding(config=settings.rag.document_indexing)
 
-        await status_repo.try_mark_processing(document_id)
+            await status_repo.try_mark_processing(document_id)
 
-        provider = container.rag_provider
-        meta = dict(metadata)
+            provider = container.rag_provider
+            meta = dict(metadata)
 
-        try:
-            document = await provider.upload_document_from_s3(
-                namespace_id=namespace_id,
-                s3_key=s3_key,
-                document_name=document_name,
-                metadata=meta,
-                upload_profile=binding,
+            try:
+                document = await provider.upload_document_from_s3(
+                    namespace_id=namespace_id,
+                    s3_key=s3_key,
+                    document_name=document_name,
+                    metadata=meta,
+                    upload_profile=binding,
+                )
+            except Exception as e:
+                await status_repo.record_indexing_failed(document_id, str(e))
+                raise
+
+            chunks = int(document.metadata.get("total_chunks") or 0)
+            runtime = document.metadata.get("indexing_runtime")
+            await status_repo.record_indexing_done(
+                document_id,
+                chunks,
+                indexing_runtime=runtime if isinstance(runtime, dict) else None,
             )
-        except Exception as e:
-            await status_repo.record_indexing_failed(document_id, str(e))
-            raise
 
-        chunks = int(document.metadata.get("total_chunks") or 0)
-        runtime = document.metadata.get("indexing_runtime")
-        await status_repo.record_indexing_done(
-            document_id,
-            chunks,
-            indexing_runtime=runtime if isinstance(runtime, dict) else None,
-        )
+            logger.info(
+                "RAG Worker: документ %s проиндексирован, document_id=%s",
+                document_name,
+                document.document_id,
+            )
 
-        logger.info(
-            "RAG Worker: документ %s проиндексирован, document_id=%s",
-            document_name,
-            document.document_id,
-        )
-
-        return {
-            "document_id": document.document_id,
-            "document_name": document_name,
-            "namespace": namespace_id,
-            "status": "completed",
-        }
+            return {
+                "document_id": document.document_id,
+                "document_name": document_name,
+                "namespace": namespace_id,
+                "status": "completed",
+            }
+    finally:
+        clear_context()
 
 
 @broker.task(retry_on_error=True, max_retries=3, queue_name="rag")
@@ -185,51 +218,61 @@ async def process_document_upload(
     if not trace_user_id or str(trace_user_id).strip() == "":
         raise ValueError("metadata.uploaded_by_user_id обязателен для rag.worker.ingest.full.")
 
-    async with traced_operation(
-        "rag.worker.ingest.full",
-        event_type="rag.ingest",
-        operation_category="rag_ingest",
-        resource_type="rag.document",
-        resource_id=document_id,
-        extra_attributes={
-            trace_attributes.ATTR_TENANT_COMPANY_ID: str(trace_company_id).strip(),
-            trace_attributes.ATTR_USER_ID: str(trace_user_id).strip(),
-            trace_attributes.ATTR_RAG_DOCUMENT_ID: document_id,
-            trace_attributes.ATTR_RAG_STAGE: "upload_parse_index",
-            "platform.rag.namespace_id": namespace_id,
-            "platform.rag.file_bytes": len(file_data),
-        },
-    ):
-        provider = container.rag_provider
-
-        s3_key, bucket = await provider._upload_bytes_to_s3(file_data, namespace_id, document_name)
-        logger.info(f"RAG Worker: файл загружен в S3: {s3_key}")
-
-        settings = get_settings()
-        binding = UploadProfileBinding(config=settings.rag.document_indexing)
-
-        document = await provider.upload_document_from_s3(
+    set_context(
+        _embedding_context_for_rag_worker(
+            company_id=str(trace_company_id).strip(),
+            user_id=str(trace_user_id).strip(),
             namespace_id=namespace_id,
-            s3_key=s3_key,
-            document_name=document_name,
-            metadata={**metadata, "document_id": document_id},
-            upload_profile=binding,
         )
-        logger.info(f"RAG Worker: документ проиндексирован: {document.document_id}")
+    )
+    try:
+        async with traced_operation(
+            "rag.worker.ingest.full",
+            event_type="rag.ingest",
+            operation_category="rag_ingest",
+            resource_type="rag.document",
+            resource_id=document_id,
+            extra_attributes={
+                trace_attributes.ATTR_TENANT_COMPANY_ID: str(trace_company_id).strip(),
+                trace_attributes.ATTR_USER_ID: str(trace_user_id).strip(),
+                trace_attributes.ATTR_RAG_DOCUMENT_ID: document_id,
+                trace_attributes.ATTR_RAG_STAGE: "upload_parse_index",
+                "platform.rag.namespace_id": namespace_id,
+                "platform.rag.file_bytes": len(file_data),
+            },
+        ):
+            provider = container.rag_provider
 
-        chunks_count = document.metadata.get("total_chunks")
-        await status_repo.update_status(
-            document_id,
-            "completed",
-            s3_key=s3_key,
-            s3_bucket=bucket,
-            chunks_count=chunks_count,
-        )
-        logger.info(f"RAG Worker: документ {document_id} обработан")
+            s3_key, bucket = await provider._upload_bytes_to_s3(file_data, namespace_id, document_name)
+            logger.info(f"RAG Worker: файл загружен в S3: {s3_key}")
 
-        return {
-            "document_id": document_id,
-            "status": "completed",
-            "s3_key": s3_key,
-            "chunks_count": chunks_count,
-        }
+            settings = get_settings()
+            binding = UploadProfileBinding(config=settings.rag.document_indexing)
+
+            document = await provider.upload_document_from_s3(
+                namespace_id=namespace_id,
+                s3_key=s3_key,
+                document_name=document_name,
+                metadata={**metadata, "document_id": document_id},
+                upload_profile=binding,
+            )
+            logger.info(f"RAG Worker: документ проиндексирован: {document.document_id}")
+
+            chunks_count = document.metadata.get("total_chunks")
+            await status_repo.update_status(
+                document_id,
+                "completed",
+                s3_key=s3_key,
+                s3_bucket=bucket,
+                chunks_count=chunks_count,
+            )
+            logger.info(f"RAG Worker: документ {document_id} обработан")
+
+            return {
+                "document_id": document_id,
+                "status": "completed",
+                "s3_key": s3_key,
+                "chunks_count": chunks_count,
+            }
+    finally:
+        clear_context()

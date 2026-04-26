@@ -33,6 +33,9 @@ x-common-env: &common-env
   AUTH__PROVIDERS__GOOGLE__CLIENT_SECRET: ${AUTH_GOOGLE_CLIENT_SECRET}
   AUTH__PROVIDERS__GITHUB__CLIENT_ID: ${AUTH_GITHUB_CLIENT_ID}
   AUTH__PROVIDERS__GITHUB__CLIENT_SECRET: ${AUTH_GITHUB_CLIENT_SECRET}
+  # AmoCRM OAuth (CRM): client_id/secret из GitHub Secrets деплоя; enabled и URL — в conf.json (см. auth.providers.amocrm).
+  AUTH__PROVIDERS__AMOCRM__CLIENT_ID: ${AUTH_AMOCRM_CLIENT_ID:-}
+  AUTH__PROVIDERS__AMOCRM__CLIENT_SECRET: ${AUTH_AMOCRM_CLIENT_SECRET:-}
   # Sign in with Apple: client_id / team_id / key_id — в conf.json на сервере; секрет — только ключ .p8
   AUTH__PROVIDERS__APPLE__APPLE_PRIVATE_KEY: ${AUTH_APPLE_PRIVATE_KEY:-}
   # Демо-вход: auth.demo.login_enabled в conf.json; пароль только из секрета деплоя (не коммитить).

@@ -1,5 +1,6 @@
 """
-Сервис для генерации embeddings через OpenRouter и другие совместимые API.
+Сервис для генерации embeddings через OpenAI-совместимый POST .../embeddings
+(OpenRouter, локальный provider_litserve и др.).
 
 Поддерживает fallback между моделями одной размерности.
 Биллинг: span'ы с billing_pending_settlement — фоновая джоба settlement.
@@ -191,10 +192,11 @@ class EmbeddingService:
                     self._active_dimension = len(result[0]) if result else None
                 return result
         
-        # Все модели недоступны
+        # Все модели недоступны (endpoint тот же OpenAI-совместимый формат: OpenRouter или LitServe).
         raise ValueError(
             f"All embedding models failed: {self.models}. "
-            "Check API key and model availability."
+            f"Embeddings URL: {self.api_url}. "
+            "Проверьте доступность сервиса, модель и ключ (если провайдер его требует)."
         )
     
     async def generate_embedding(self, text: str) -> List[float]:
