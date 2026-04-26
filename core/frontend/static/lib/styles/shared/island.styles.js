@@ -123,8 +123,10 @@ export const islandStyles = css`
         }
 
         .island-content {
-            padding: var(--space-4);
-            padding-bottom: max(var(--space-4), var(--platform-safe-bottom));
+            padding: var(--space-2);
+            padding-left: max(var(--space-2), env(safe-area-inset-left, 0px));
+            padding-right: max(var(--space-2), env(safe-area-inset-right, 0px));
+            padding-bottom: max(var(--space-2), var(--platform-safe-bottom));
             display: flex;
             flex-direction: column;
         }
@@ -138,13 +140,24 @@ export const islandStyles = css`
         }
 
         :host([padding="sm"]) .island-content {
+            padding: var(--space-1);
+            padding-left: max(var(--space-1), env(safe-area-inset-left, 0px));
+            padding-right: max(var(--space-1), env(safe-area-inset-right, 0px));
+            padding-bottom: max(var(--space-1), var(--platform-safe-bottom));
+        }
+
+        :host([padding="md"]) .island-content {
             padding: var(--space-2);
+            padding-left: max(var(--space-2), env(safe-area-inset-left, 0px));
+            padding-right: max(var(--space-2), env(safe-area-inset-right, 0px));
             padding-bottom: max(var(--space-2), var(--platform-safe-bottom));
         }
 
         :host([padding="lg"]) .island-content {
-            padding: var(--space-8);
-            padding-bottom: max(var(--space-8), var(--platform-safe-bottom));
+            padding: var(--space-4);
+            padding-left: max(var(--space-4), env(safe-area-inset-left, 0px));
+            padding-right: max(var(--space-4), env(safe-area-inset-right, 0px));
+            padding-bottom: max(var(--space-4), var(--platform-safe-bottom));
         }
     }
 

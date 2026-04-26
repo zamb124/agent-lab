@@ -39,6 +39,7 @@ export class CRMTasksPage extends PlatformPage {
         _dndInsert: { state: true },
         _dndSourceStatus: { state: true },
         _boardBusy: { state: true },
+        _mobileHeaderSearch: { state: true },
     };
 
     static styles = [
@@ -390,15 +391,72 @@ export class CRMTasksPage extends PlatformPage {
                 text-align: center;
             }
 
+            .tasks-mobile-header-wrap {
+                display: none;
+            }
+
+            .mobile-header-icon-btn {
+                width: 32px;
+                height: 32px;
+                flex-shrink: 0;
+                display: inline-flex;
+                align-items: center;
+                justify-content: center;
+                border-radius: var(--radius-md);
+                border: 1px solid var(--glass-border-medium);
+                background: var(--glass-solid-strong);
+                color: var(--text-primary);
+                cursor: pointer;
+                box-shadow: var(--glass-shadow-subtle);
+                padding: 0;
+            }
+            .mobile-header-icon-btn:hover {
+                background: var(--glass-solid-medium);
+            }
+            .mobile-header-icon-btn.active {
+                border-color: var(--accent);
+                color: var(--accent);
+            }
+
+            .mobile-toolbar-search-row {
+                display: flex;
+                align-items: center;
+                gap: var(--space-2);
+                width: 100%;
+                min-width: 0;
+            }
+
+            .mobile-header-search-box {
+                flex: 1;
+                min-width: 0;
+                min-height: 40px;
+            }
+
+            .mobile-header-search-box .search-input {
+                min-width: 0;
+                flex: 1;
+            }
+
             @media (max-width: 1023px) {
                 .board { grid-template-columns: 1fr; }
             }
 
             @media (max-width: 767px) {
-                .title, .cta-btn { display: none; }
-                .top-row { margin-bottom: var(--space-2); }
-                .search-box { display: none; }
-                .toolbar-actions { display: none; }
+                :host {
+                    padding: 0;
+                    box-sizing: border-box;
+                }
+                .tasks-mobile-header-wrap {
+                    display: block;
+                }
+                .page-toolbar {
+                    padding-left: max(var(--space-2), env(safe-area-inset-left, 0px));
+                    padding-right: max(var(--space-2), env(safe-area-inset-right, 0px));
+                    box-sizing: border-box;
+                }
+                .top-row {
+                    display: none;
+                }
 
                 .status-tabs {
                     gap: 6px;
@@ -414,7 +472,7 @@ export class CRMTasksPage extends PlatformPage {
 
                 .board {
                     grid-template-columns: 1fr;
-                    padding: 0 var(--space-3);
+                    padding: 0 max(var(--space-2), env(safe-area-inset-right, 0px)) 0 max(var(--space-2), env(safe-area-inset-left, 0px));
                     gap: 0;
                 }
 
@@ -447,6 +505,7 @@ export class CRMTasksPage extends PlatformPage {
         this._dndInsert = null;
         this._dndSourceStatus = null;
         this._boardBusy = false;
+        this._mobileHeaderSearch = false;
         this._suppressTaskClick = false;
         this._mql = null;
         this._onMqlChange = null;
@@ -725,6 +784,77 @@ export class CRMTasksPage extends PlatformPage {
         this._openTask(task.entity_id);
     }
 
+    _toggleMobileHeaderSearch() {
+        this._mobileHeaderSearch = !this._mobileHeaderSearch;
+    }
+
+    _closeMobileHeaderSearch() {
+        this._mobileHeaderSearch = false;
+    }
+
+    _renderMobileTasksHeader() {
+        return html`
+            <div class="tasks-mobile-header-wrap">
+                <page-header
+                    title=${this.t('tasks.title')}
+                    subtitle=""
+                    .mobileToolbarMode=${this._mobileHeaderSearch ? 'search' : 'title'}
+                >
+                    <div slot="toolbar-search" class="mobile-toolbar-search-row">
+                        <button
+                            type="button"
+                            class="mobile-header-icon-btn"
+                            @click=${this._closeMobileHeaderSearch}
+                            title=${this.t('daily_notes_page.mobile_header_close_search')}
+                        >
+                            <platform-icon name="close" size="16"></platform-icon>
+                        </button>
+                        <label
+                            class="search-box mobile-header-search-box"
+                            style="display:flex;align-items:center;gap:var(--space-2);flex:1;min-width:0;width:100%;box-sizing:border-box"
+                        >
+                            <platform-icon name="search" size="14"></platform-icon>
+                            <input
+                                class="search-input"
+                                type="text"
+                                style="flex:1;min-width:0;width:100%;box-sizing:border-box"
+                                placeholder=${this.t('search.placeholder')}
+                                .value=${this._filter}
+                                @input=${this._onSearchInput}
+                            />
+                        </label>
+                    </div>
+                    <div slot="actions">
+                        <button
+                            type="button"
+                            class="mobile-header-icon-btn"
+                            @click=${() => this._loadTasks()}
+                            title=${this.t('refresh', {}, 'common')}
+                        >
+                            <platform-icon name="refresh" size="18"></platform-icon>
+                        </button>
+                        <button
+                            type="button"
+                            class="mobile-header-icon-btn"
+                            @click=${this._createTask}
+                            title=${this.t('create', {}, 'common')}
+                        >
+                            <platform-icon name="plus" size="18"></platform-icon>
+                        </button>
+                        <button
+                            type="button"
+                            class="mobile-header-icon-btn ${this._mobileHeaderSearch ? 'active' : ''}"
+                            @click=${this._toggleMobileHeaderSearch}
+                            title=${this.t('daily_notes_page.mobile_header_search')}
+                        >
+                            <platform-icon name="search" size="18"></platform-icon>
+                        </button>
+                    </div>
+                </page-header>
+            </div>
+        `;
+    }
+
     render() {
         const taskStatuses = this._statusColumns();
         const tasks = this._filteredTasks();
@@ -735,6 +865,7 @@ export class CRMTasksPage extends PlatformPage {
         };
 
         return html`
+            ${this._isMobile ? this._renderMobileTasksHeader() : nothing}
             <div class="page-toolbar">
                 <platform-breadcrumbs></platform-breadcrumbs>
                 <div class="top-row">

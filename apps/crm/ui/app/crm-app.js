@@ -162,6 +162,26 @@ const CRM_ROUTES = [
     { key: 'relationship_types',  path: 'relationship_types', parent: 'settings' },
 ];
 
+/**
+ * Маршруты, где страница уже рендерит свой `<page-header>` (бургер + заголовок).
+ * Общий `crm-mobile-app-header` для них отключаем — иначе шапка дублируется.
+ * На мобилке `platform-island` без горизонтального padding, как у notes/entities.
+ */
+const CRM_ROUTES_WITH_OWN_PAGE_HEADER = new Set([
+    'notes',
+    'entities',
+    'tasks',
+    'settings',
+    'access_requests',
+    'spaces',
+    'space',
+    'space_integrations',
+    'templates',
+    'namespace_imports',
+    'relationship_types',
+    'entity',
+]);
+
 export class CRMApp extends PlatformApp {
     static defaultI18nNamespace = 'crm';
 
@@ -169,6 +189,40 @@ export class CRMApp extends PlatformApp {
         super();
         this._companiesListSel = this.select((s) => s.companies.list);
         this._companiesLoadingSel = this.select((s) => s.companies.loading);
+        this._crmMql = null;
+        this._onCrmMobileMql = null;
+        this._crmMobile =
+            typeof window !== 'undefined' &&
+            typeof window.matchMedia === 'function' &&
+            window.matchMedia('(max-width: 767px)').matches;
+    }
+
+    connectedCallback() {
+        super.connectedCallback();
+        if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') {
+            return;
+        }
+        this._crmMql = window.matchMedia('(max-width: 767px)');
+        this._onCrmMobileMql = () => {
+            const next = this._crmMql.matches;
+            if (next !== this._crmMobile) {
+                this._crmMobile = next;
+                this.requestUpdate();
+            }
+        };
+        this._crmMql.addEventListener('change', this._onCrmMobileMql);
+        const next = this._crmMql.matches;
+        if (next !== this._crmMobile) {
+            this._crmMobile = next;
+            this.requestUpdate();
+        }
+    }
+
+    disconnectedCallback() {
+        if (this._crmMql && this._onCrmMobileMql) {
+            this._crmMql.removeEventListener('change', this._onCrmMobileMql);
+        }
+        super.disconnectedCallback();
     }
 
     static factories = [
@@ -354,13 +408,20 @@ export class CRMApp extends PlatformApp {
             case 'relationship_types':  content = html`<crm-relationship-types-page></crm-relationship-types-page>`; break;
             default:                    content = html`<crm-daily-notes-page></crm-daily-notes-page>`; break;
         }
+        const mobileIslandFullBleed =
+            typeof routeKey === 'string'
+            && CRM_ROUTES_WITH_OWN_PAGE_HEADER.has(routeKey)
+            && this._crmMobile;
         return html`
             <div class="sidebar"><crm-sidebar></crm-sidebar></div>
             <div class="main">
-                ${routeKey === 'notes'
+                ${CRM_ROUTES_WITH_OWN_PAGE_HEADER.has(routeKey)
                     ? ''
                     : html`<crm-mobile-app-header></crm-mobile-app-header>`}
-                <platform-island>${content}</platform-island>
+                <platform-island
+                    padding=${mobileIslandFullBleed ? 'none' : 'md'}
+                    ?safe-bottom=${mobileIslandFullBleed}
+                >${content}</platform-island>
             </div>
             <platform-lara-assistant
                 toggle-event-name="crm-lara-open"

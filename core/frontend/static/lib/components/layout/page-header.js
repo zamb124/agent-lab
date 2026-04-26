@@ -86,15 +86,18 @@ export class PageHeader extends PlatformElement {
 
             @media (max-width: 767px) {
                 :host {
-                    margin-bottom: var(--space-4);
+                    margin-bottom: var(--space-2);
                 }
 
                 .header-wrap {
                     position: sticky;
                     top: 0;
                     z-index: 30;
-                    margin: 0 0 var(--space-4);
-                    padding: max(var(--space-2), var(--platform-safe-top)) var(--space-2) var(--space-3);
+                    margin: 0 0 var(--space-2);
+                    padding: max(var(--space-1), var(--platform-safe-top))
+                        max(var(--space-1), env(safe-area-inset-right, 0px))
+                        var(--space-2)
+                        max(var(--space-1), env(safe-area-inset-left, 0px));
                     background: var(--glass-solid-strong);
                     backdrop-filter: blur(var(--glass-blur-medium));
                     -webkit-backdrop-filter: blur(var(--glass-blur-medium));
@@ -106,7 +109,7 @@ export class PageHeader extends PlatformElement {
                     align-items: center;
                     flex-wrap: nowrap;
                     min-height: 44px;
-                    gap: var(--space-2);
+                    gap: var(--space-1);
                 }
 
                 .header-left {
@@ -118,7 +121,7 @@ export class PageHeader extends PlatformElement {
                     display: flex;
                     width: 36px;
                     height: 36px;
-                    margin-left: var(--space-1);
+                    margin-left: 0;
                     align-items: center;
                     justify-content: center;
                     border-radius: var(--radius-lg);
@@ -145,14 +148,14 @@ export class PageHeader extends PlatformElement {
                 }
 
                 .title {
-                    font-size: var(--text-2xl);
+                    font-size: var(--text-xl);
                     white-space: nowrap;
                     overflow: hidden;
                     text-overflow: ellipsis;
                 }
 
                 .actions {
-                    max-width: 55%;
+                    gap: var(--space-1);
                     overflow-x: auto;
                     flex-shrink: 0;
                     -webkit-overflow-scrolling: touch;
@@ -161,6 +164,21 @@ export class PageHeader extends PlatformElement {
 
                 .actions::-webkit-scrollbar {
                     display: none;
+                }
+
+                /* Слот между бургером и actions: без display:contents у <slot> flex-элемент
+                   часто получает нулевую ширину — поле поиска не видно. */
+                .toolbar-search-host slot {
+                    display: contents;
+                }
+
+                .toolbar-search-host ::slotted(*) {
+                    flex: 1 1 0%;
+                    min-width: 0;
+                    display: flex;
+                    align-items: center;
+                    gap: var(--space-2);
+                    box-sizing: border-box;
                 }
             }
 

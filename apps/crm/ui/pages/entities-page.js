@@ -33,6 +33,7 @@ import '@platform/lib/components/platform-icon.js';
 import '@platform/lib/components/platform-date-picker.js';
 import '@platform/lib/components/platform-breadcrumbs.js';
 import '@platform/lib/components/glass-spinner.js';
+import '@platform/lib/components/layout/page-header.js';
 import '../components/entity-card.js';
 
 const MERGE_DRAG_MIME = 'application/x-crm-entity-merge';
@@ -61,6 +62,7 @@ export class CRMEntitiesPage extends PlatformPage {
         _showBulkStatusMenu: { state: true },
         _mergeDragSourceId: { state: true },
         _mergeDropHoverId: { state: true },
+        _mobileHeaderSearch: { state: true },
     };
 
     static styles = [
@@ -753,6 +755,64 @@ export class CRMEntitiesPage extends PlatformPage {
                 overflow: hidden;
             }
 
+            .entities-mobile-header-wrap {
+                display: none;
+            }
+
+            .mobile-header-icon-btn {
+                width: 32px;
+                height: 32px;
+                flex-shrink: 0;
+                display: inline-flex;
+                align-items: center;
+                justify-content: center;
+                border-radius: var(--radius-md);
+                border: 1px solid var(--glass-border-medium);
+                background: var(--glass-solid-strong);
+                color: var(--text-primary);
+                cursor: pointer;
+                box-shadow: var(--glass-shadow-subtle);
+                padding: 0;
+            }
+            .mobile-header-icon-btn:hover {
+                background: var(--glass-solid-medium);
+            }
+            .mobile-header-icon-btn.active {
+                border-color: var(--accent);
+                color: var(--accent);
+            }
+
+            .mobile-toolbar-search-row {
+                display: flex;
+                align-items: flex-start;
+                gap: var(--space-2);
+                width: 100%;
+                min-width: 0;
+            }
+
+            .mobile-header-search-box {
+                flex: 1;
+                min-width: 0;
+                min-height: 40px;
+            }
+
+            .mobile-header-search-box .search-input {
+                min-width: 0;
+                flex: 1;
+            }
+
+            .mobile-entities-search-field {
+                display: flex;
+                flex-direction: column;
+                gap: var(--space-1);
+                flex: 1;
+                min-width: 0;
+            }
+
+            .mobile-header-search-modes {
+                align-self: flex-start;
+            }
+
             .mobile-tabs { display: none; }
 
             @media (max-width: 1279px) {
@@ -760,11 +820,35 @@ export class CRMEntitiesPage extends PlatformPage {
             }
 
             @media (max-width: 767px) {
+                :host {
+                    padding: 0;
+                    box-sizing: border-box;
+                }
+                .entities-mobile-header-wrap {
+                    display: block;
+                }
+                .breadcrumbs-wrap {
+                    padding-left: max(var(--space-2), env(safe-area-inset-left, 0px));
+                    padding-right: max(var(--space-2), env(safe-area-inset-right, 0px));
+                    box-sizing: border-box;
+                }
+                .merge-dnd-hint {
+                    padding-left: max(var(--space-2), env(safe-area-inset-left, 0px));
+                    padding-right: max(var(--space-2), env(safe-area-inset-right, 0px));
+                    box-sizing: border-box;
+                }
+                .layout {
+                    padding-left: max(var(--space-2), env(safe-area-inset-left, 0px));
+                    padding-right: max(var(--space-2), env(safe-area-inset-right, 0px));
+                    padding-bottom: max(var(--space-2), var(--platform-safe-bottom));
+                    box-sizing: border-box;
+                }
                 .mobile-tabs {
                     display: flex;
                     gap: var(--space-2);
-                    padding: var(--space-2) var(--space-3);
+                    padding: var(--space-2) max(var(--space-2), env(safe-area-inset-right, 0px)) var(--space-2) max(var(--space-2), env(safe-area-inset-left, 0px));
                     flex-shrink: 0;
+                    box-sizing: border-box;
                 }
                 .mobile-tab {
                     flex: 1;
@@ -787,7 +871,10 @@ export class CRMEntitiesPage extends PlatformPage {
                     color: var(--text-primary);
                 }
                 .mobile-tab:disabled { opacity: 0.4; cursor: default; }
-                .page-toolbar { padding: var(--space-2) var(--space-3); }
+                .page-toolbar {
+                    padding: var(--space-2) max(var(--space-2), env(safe-area-inset-right, 0px)) var(--space-2) max(var(--space-2), env(safe-area-inset-left, 0px));
+                    box-sizing: border-box;
+                }
                 .section-label { display: none; }
                 .title { display: none; }
                 .top-row { flex-direction: column; gap: var(--space-2); }
@@ -801,7 +888,7 @@ export class CRMEntitiesPage extends PlatformPage {
                 .list-panel, .detail-panel { display: none; }
                 .list-panel.mobile-active { display: flex; flex: 1; min-height: 0; }
                 .detail-panel.mobile-active { display: flex; flex: 1; min-height: 0; overflow-y: auto; }
-                .cards-scroll { padding: var(--space-2) var(--space-3); }
+                .cards-scroll { padding: var(--space-2) 0; }
                 .cards-grid { grid-template-columns: 1fr; gap: var(--space-2); }
                 .entity-card-item { padding: 14px; min-height: 0; gap: 8px; border-radius: 12px; }
             }
@@ -827,6 +914,7 @@ export class CRMEntitiesPage extends PlatformPage {
         this._showBulkStatusMenu = false;
         this._mergeDragSourceId = '';
         this._mergeDropHoverId = '';
+        this._mobileHeaderSearch = false;
         this._entitiesMergeFirstId = '';
         this._debounceTimer = null;
         this._scrollObserver = null;
@@ -1280,6 +1368,93 @@ export class CRMEntitiesPage extends PlatformPage {
         this._openMergeModal(sid, tid);
     }
 
+    _toggleMobileHeaderSearch() {
+        this._mobileHeaderSearch = !this._mobileHeaderSearch;
+    }
+
+    _closeMobileHeaderSearch() {
+        this._mobileHeaderSearch = false;
+    }
+
+    _renderMobileEntitiesHeader() {
+        return html`
+            <div class="entities-mobile-header-wrap">
+                <page-header
+                    title=${this.t('entities.title')}
+                    subtitle=""
+                    .mobileToolbarMode=${this._mobileHeaderSearch ? 'search' : 'title'}
+                >
+                    <div slot="toolbar-search" class="mobile-toolbar-search-row">
+                        <button
+                            type="button"
+                            class="mobile-header-icon-btn"
+                            @click=${this._closeMobileHeaderSearch}
+                            title=${this.t('daily_notes_page.mobile_header_close_search')}
+                        >
+                            <platform-icon name="close" size="16"></platform-icon>
+                        </button>
+                        <div
+                            class="mobile-entities-search-field"
+                            style="flex:1;min-width:0;display:flex;flex-direction:column;gap:var(--space-1)"
+                        >
+                            <label
+                                class="search-box mobile-header-search-box"
+                                style="display:flex;align-items:center;gap:var(--space-2);flex:1;min-width:0;width:100%;box-sizing:border-box"
+                            >
+                                <platform-icon name="search" size="14"></platform-icon>
+                                <input
+                                    class="search-input"
+                                    type="text"
+                                    style="flex:1;min-width:0;width:100%;box-sizing:border-box"
+                                    placeholder=${this.t('entities.search_placeholder')}
+                                    .value=${this._query}
+                                    @input=${this._onSearchInput}
+                                />
+                            </label>
+                            ${this._query.trim().length > 0 ? html`
+                                <div class="search-mode-toggle mobile-header-search-modes">
+                                    ${SEARCH_MODES.map((mode) => html`
+                                        <button
+                                            type="button"
+                                            class="search-mode-btn ${this._searchMode === mode ? 'active' : ''}"
+                                            @click=${(e) => { e.preventDefault(); this._onSearchModeChange(mode); }}
+                                        >${this.t(`entities.search_modes.${mode}`)}</button>
+                                    `)}
+                                </div>
+                            ` : nothing}
+                        </div>
+                    </div>
+                    <div slot="actions">
+                        <button
+                            type="button"
+                            class="mobile-header-icon-btn ${this._showFiltersPanel || this._hasExpandedFilters() ? 'active' : ''}"
+                            title=${this.t('entity_filters.panel_title')}
+                            @click=${() => { this._showFiltersPanel = !this._showFiltersPanel; }}
+                        >
+                            <platform-icon name="adjustment" size="18"></platform-icon>
+                        </button>
+                        <button
+                            type="button"
+                            class="mobile-header-icon-btn"
+                            @click=${this._onCreateEntity}
+                            title=${this.t('create', {}, 'common')}
+                        >
+                            <platform-icon name="plus" size="18"></platform-icon>
+                        </button>
+                        <button
+                            type="button"
+                            class="mobile-header-icon-btn ${this._mobileHeaderSearch ? 'active' : ''}"
+                            @click=${this._toggleMobileHeaderSearch}
+                            title=${this.t('daily_notes_page.mobile_header_search')}
+                        >
+                            <platform-icon name="search" size="18"></platform-icon>
+                        </button>
+                    </div>
+                </page-header>
+            </div>
+        `;
+    }
+
     _onEntityListClick(entityId, event) {
         if (event.shiftKey) {
             if (!this._entitiesMergeFirstId) {
@@ -1661,6 +1836,7 @@ export class CRMEntitiesPage extends PlatformPage {
         const selectedEntity = this._selectedEntity();
 
         return html`
+            ${this._isMobile ? this._renderMobileEntitiesHeader() : nothing}
             <div class="breadcrumbs-wrap">
                 <platform-breadcrumbs></platform-breadcrumbs>
             </div>

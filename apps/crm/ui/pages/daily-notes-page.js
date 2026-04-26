@@ -27,7 +27,6 @@
  */
 
 import { html, css } from 'lit';
-import { createRef, ref } from 'lit/directives/ref.js';
 import { PlatformPage } from '@platform/lib/base/PlatformPage.js';
 import { CoreEvents } from '@platform/lib/events/index.js';
 import {
@@ -602,13 +601,13 @@ export class CRMDailyNotesPage extends PlatformPage {
             }
 
             .mobile-header-icon-btn {
-                width: 36px;
-                height: 36px;
+                width: 32px;
+                height: 32px;
                 flex-shrink: 0;
                 display: inline-flex;
                 align-items: center;
                 justify-content: center;
-                border-radius: var(--radius-lg);
+                border-radius: var(--radius-md);
                 border: 1px solid var(--glass-border-medium);
                 background: var(--glass-solid-strong);
                 color: var(--text-primary);
@@ -627,6 +626,18 @@ export class CRMDailyNotesPage extends PlatformPage {
                 border-color: var(--accent);
                 color: var(--accent);
             }
+            .mobile-header-icon-btn.mobile-header-summary-btn {
+                border: none;
+                background: var(--crm-summary-title-gradient);
+                color: var(--text-inverse);
+                box-shadow: 0 2px 8px rgba(153, 166, 249, 0.35);
+            }
+            .mobile-header-icon-btn.mobile-header-summary-btn:hover {
+                filter: brightness(1.06);
+            }
+            .mobile-header-icon-btn.mobile-header-summary-btn platform-icon {
+                color: var(--text-inverse);
+            }
             .mobile-toolbar-search-row {
                 display: flex;
                 align-items: center;
@@ -638,6 +649,10 @@ export class CRMDailyNotesPage extends PlatformPage {
                 flex: 1;
                 min-width: 0;
                 min-height: 40px;
+            }
+            .mobile-header-search-box .search-input {
+                min-width: 0;
+                flex: 1;
             }
             .crm-mobile-date-picker-anchor {
                 position: fixed;
@@ -663,10 +678,18 @@ export class CRMDailyNotesPage extends PlatformPage {
             }
 
             @media (max-width: 767px) {
-                :host { padding: var(--space-2) var(--space-3) 0; }
+                :host { padding: 0; }
                 .daily-notes-mobile-header-wrap { display: block; }
                 .section-label, .top-row { display: none; }
+                .layout {
+                    padding-left: max(var(--space-2), env(safe-area-inset-left, 0px));
+                    padding-right: max(var(--space-2), env(safe-area-inset-right, 0px));
+                    padding-bottom: max(var(--space-2), var(--platform-safe-bottom));
+                    box-sizing: border-box;
+                }
+                .cards-scroll { padding-right: var(--space-1); }
                 .cards-grid { grid-template-columns: 1fr; gap: var(--space-3); }
+                .empty { padding: var(--space-4); }
                 .summary-panel { display: none; }
                 .summary-overlay {
                     position: fixed; inset: 0;
@@ -676,7 +699,7 @@ export class CRMDailyNotesPage extends PlatformPage {
                     display: flex;
                     align-items: flex-end;
                     justify-content: center;
-                    padding: var(--space-3);
+                    padding: var(--space-2);
                 }
                 .summary-overlay .summary-panel {
                     display: flex;
@@ -754,7 +777,6 @@ export class CRMDailyNotesPage extends PlatformPage {
         this._searchLoading = false;
         this._creatingNote = false;
         this._mobileHeaderSearch = false;
-        this._mobileDatePickerRef = createRef();
         this._isMobile = typeof window !== 'undefined' && window.innerWidth <= 767;
 
         this._notes = this.useCursorList('crm/notes_list');
@@ -995,7 +1017,14 @@ export class CRMDailyNotesPage extends PlatformPage {
     _onSearchInput(event) {
         this._query = event.target.value;
         if (this._debounceTimer) clearTimeout(this._debounceTimer);
-        if (this._query.trim().length === 0) {
+        const trimmed = this._query.trim();
+        if (trimmed.length === 0) {
+            this._searchResults = [];
+            this._searchLoading = false;
+            return;
+        }
+        const minLen = this._isMobile ? 2 : 1;
+        if (trimmed.length < minLen) {
             this._searchResults = [];
             this._searchLoading = false;
             return;
@@ -1205,8 +1234,14 @@ export class CRMDailyNotesPage extends PlatformPage {
     }
 
     _filteredNotes() {
-        if (this._query.trim().length > 0) return this._searchResults;
-        return this._notes.items;
+        const q = this._query.trim();
+        if (q.length === 0) {
+            return this._notes.items;
+        }
+        if (this._isMobile && q.length < 2) {
+            return this._notes.items;
+        }
+        return this._searchResults;
     }
 
     _summaryResult() {
@@ -1487,12 +1522,16 @@ export class CRMDailyNotesPage extends PlatformPage {
         `;
     }
 
-    _renderSearchBoxInner() {
+    _renderSearchBoxInner(includeSearchModeToggle = true) {
+        const toolbarInputStyle = includeSearchModeToggle
+            ? undefined
+            : 'flex:1;min-width:0;width:100%;box-sizing:border-box';
         return html`
             <platform-icon name="search" size="14"></platform-icon>
             <input
                 class="search-input"
                 type="text"
+                style=${toolbarInputStyle}
                 placeholder=${this.t('search.placeholder')}
                 .value=${this._query}
                 @input=${this._onSearchInput}
@@ -1511,7 +1550,7 @@ export class CRMDailyNotesPage extends PlatformPage {
                     size="14"
                 ></platform-icon>
             </button>
-            ${this._query.trim().length > 0 ? html`
+            ${includeSearchModeToggle && this._query.trim().length > 0 ? html`
                 <div class="search-mode-toggle">
                     ${SEARCH_MODES.map((mode) => html`
                         <button
@@ -1527,7 +1566,7 @@ export class CRMDailyNotesPage extends PlatformPage {
 
     async _openMobileDateRange() {
         await this.updateComplete;
-        const el = this._mobileDatePickerRef.value;
+        const el = this.renderRoot.querySelector('platform-date-picker.crm-mobile-date-picker-anchor');
         if (!el) {
             throw new Error('Mobile date picker is not mounted');
         }
@@ -1557,20 +1596,23 @@ export class CRMDailyNotesPage extends PlatformPage {
                             @click=${this._closeMobileHeaderSearch}
                             title=${this.t('daily_notes_page.mobile_header_close_search')}
                         >
-                            <platform-icon name="close" size="18"></platform-icon>
+                            <platform-icon name="close" size="16"></platform-icon>
                         </button>
-                        <label class="search-box mobile-header-search-box">
-                            ${this._renderSearchBoxInner()}
+                        <label
+                            class="search-box mobile-header-search-box"
+                            style="display:flex;align-items:center;gap:var(--space-2);flex:1;min-width:0;width:100%;box-sizing:border-box"
+                        >
+                            ${this._renderSearchBoxInner(false)}
                         </label>
                     </div>
                     <div slot="actions">
                         <button
                             type="button"
-                            class="mobile-header-icon-btn"
+                            class="mobile-header-icon-btn mobile-header-summary-btn"
                             @click=${() => { this._summaryOpen = true; }}
                             title=${this.t('daily_notes_page.summary_fab_open')}
                         >
-                            <platform-icon name="ai" size="20" colored></platform-icon>
+                            <platform-icon name="refresh" size="18"></platform-icon>
                         </button>
                         <button
                             type="button"
@@ -1578,7 +1620,7 @@ export class CRMDailyNotesPage extends PlatformPage {
                             @click=${this._openMobileDateRange}
                             title=${this.t('daily_notes_page.mobile_header_date_range')}
                         >
-                            <platform-icon name="calendar" size="20"></platform-icon>
+                            <platform-icon name="calendar" size="18"></platform-icon>
                         </button>
                         <button
                             type="button"
@@ -1588,8 +1630,8 @@ export class CRMDailyNotesPage extends PlatformPage {
                             title=${this.t('daily_notes_page.add_note')}
                         >
                             ${this._creatingNote
-                                ? html`<glass-spinner size="18"></glass-spinner>`
-                                : html`<platform-icon name="plus" size="22"></platform-icon>`}
+                                ? html`<glass-spinner size="16"></glass-spinner>`
+                                : html`<platform-icon name="plus" size="18"></platform-icon>`}
                         </button>
                         <button
                             type="button"
@@ -1597,12 +1639,11 @@ export class CRMDailyNotesPage extends PlatformPage {
                             @click=${this._toggleMobileHeaderSearch}
                             title=${this.t('daily_notes_page.mobile_header_search')}
                         >
-                            <platform-icon name="search" size="20"></platform-icon>
+                            <platform-icon name="search" size="18"></platform-icon>
                         </button>
                     </div>
                 </page-header>
                 <platform-date-picker
-                    ${ref(this._mobileDatePickerRef)}
                     class="crm-mobile-date-picker-anchor"
                     selection="range"
                     .value=${{ start: this._dailyNotesUi.value.range.from, end: this._dailyNotesUi.value.range.to }}
