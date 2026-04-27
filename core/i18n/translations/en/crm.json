@@ -426,6 +426,7 @@
         "action_create": "Create namespace",
         "action_save": "Save",
         "action_saving": "Saving…",
+        "creating_progress": "Creating namespace…",
         "editability_loading": "Checking constraints…",
         "label_integrations": "Integrations",
         "integrations_empty": "No connected integrations",

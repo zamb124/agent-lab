@@ -41,7 +41,13 @@ def _set_crm_context(
     user_id: Optional[str] = None,
     interface_language: Optional[str] = None,
 ) -> None:
-    normalized_namespace = namespace or "default"
+    if namespace is None:
+        normalized_namespace = ""
+    else:
+        s = str(namespace).strip()
+        if not s:
+            raise ValueError("namespace: пустая строка недопустима, передайте None если контекст без пространства")
+        normalized_namespace = s
     resolved_user_id = user_id or "crm-worker"
     lang = Language(interface_language) if interface_language is not None else Language.RU
     context = Context(

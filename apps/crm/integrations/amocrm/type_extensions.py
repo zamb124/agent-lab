@@ -1,7 +1,7 @@
 """
 Дополнения optional_fields канонических типов при подключении AmoCRM к namespace.
 
-Один источник правды для merge при OAuth и для шаблона amocrm в system_templates.
+Один источник правды для merge optional_fields при подготовке namespace интеграцией (OAuth / ensure_namespace_ready).
 """
 
 from __future__ import annotations

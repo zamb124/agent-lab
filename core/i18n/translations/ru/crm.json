@@ -426,6 +426,7 @@
         "action_create": "Создать пространство",
         "action_save": "Сохранить",
         "action_saving": "Сохраняем…",
+        "creating_progress": "Создаём пространство…",
         "editability_loading": "Проверяем ограничения…",
         "label_integrations": "Интеграции",
         "integrations_empty": "Нет подключённых интеграций",

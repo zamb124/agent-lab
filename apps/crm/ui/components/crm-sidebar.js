@@ -218,6 +218,7 @@ export class CRMSidebar extends PlatformElement {
         this.mobileOpen = false;
         this._routeKeySel = this.select((s) => s.router.routeKey);
         this._authSel = this.select((s) => s.auth.user);
+        this._namespaceSelectionByCompany = this.select((s) => s.ui.namespace.selectionByCompany);
         this._namespaces = this.useResource('crm/namespaces', { autoload: true });
     }
 
@@ -271,8 +272,15 @@ export class CRMSidebar extends PlatformElement {
     render() {
         const user = this._authSel.value;
         const companyId = user && typeof user.company_id === 'string' ? user.company_id : null;
-        const sidebarSelection = companyId ? getPlatformNamespaceSidebarSelection(companyId) : 'all';
-        const selectValue = sidebarSelection === 'all' ? '' : sidebarSelection;
+        const map = this._namespaceSelectionByCompany.value;
+        let resolved;
+        if (companyId && Object.prototype.hasOwnProperty.call(map, companyId)) {
+            const entry = map[companyId];
+            resolved = entry === 'all' ? 'all' : entry;
+        } else {
+            resolved = companyId ? getPlatformNamespaceSidebarSelection(companyId) : 'all';
+        }
+        const selectValue = resolved === 'all' ? '' : resolved;
         const items = this._namespaces.items;
 
         return html`

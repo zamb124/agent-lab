@@ -9,6 +9,7 @@ from apps.crm.db.models import CRMEntity
 from apps.crm.db.models import AccessGrant
 from apps.crm.db.repositories.access_grant_repository import AccessGrantRepository
 from apps.crm.db.repositories.entity_type_repository import EntityTypeRepository
+from core.context import get_context
 from core.logging import get_logger
 
 logger = get_logger(__name__)
@@ -37,10 +38,10 @@ class AccessControlService:
         if user_id and entity.user_id == user_id:
             return True
 
-        # 2. Same company + same namespace
+        # 2. Та же компания и явный рабочий namespace запроса (Context.active_namespace / заголовок).
         if user_id and company_id == entity.company_id:
-            user_ns = await self._get_user_namespace(user_id)
-            if user_ns == entity.namespace:
+            user_ns = await self._get_request_namespace()
+            if user_ns is not None and user_ns == entity.namespace:
                 return True
 
         # 3. AccessGrants для ENTITY (company_id ресурса — владелец гранта)
@@ -81,10 +82,10 @@ class AccessControlService:
         if entity.user_id == user_id:
             return True
         
-        # Same namespace
+        # Тот же namespace, что в контексте запроса (без подстановок).
         if company_id == entity.company_id:
-            user_ns = await self._get_user_namespace(user_id)
-            if user_ns == entity.namespace:
+            user_ns = await self._get_request_namespace()
+            if user_ns is not None and user_ns == entity.namespace:
                 return True
         
         # Grants с ролью editor/admin
@@ -163,10 +164,9 @@ class AccessControlService:
         if user_id and entity.user_id == user_id:
             return True
         
-        # Same company + namespace
         if company_id and company_id == entity.company_id:
-            user_ns = await self._get_user_namespace(user_id)
-            if user_ns == entity.namespace:
+            user_ns = await self._get_request_namespace()
+            if user_ns is not None and user_ns == entity.namespace:
                 return True
         
         # Гранты с ролью (НЕ публичные)
@@ -238,6 +238,8 @@ class AccessControlService:
         entities: List[CRMEntity],
         user_id: Optional[str],
         company_id: Optional[str],
+        *,
+        query_namespace: Optional[str] = None,
     ) -> List[CRMEntity]:
         """
         Batch фильтрация сущностей по правам доступа с проставлением access_level.
@@ -248,18 +250,34 @@ class AccessControlService:
         if not entities:
             return []
 
-        user_ns = await self._get_user_namespace(user_id) if user_id else None
+        user_ns = await self._get_request_namespace() if user_id else None
         now = datetime.now(timezone.utc)
 
         needs_grant_check: List[CRMEntity] = []
         readable: List[CRMEntity] = []
 
+        qns = (query_namespace or "").strip()
         for entity in entities:
             if user_id and entity.user_id == user_id:
                 entity.access_level = "owner"
                 readable.append(entity)
                 continue
-            if user_id and company_id == entity.company_id and user_ns == entity.namespace:
+            if (
+                user_id
+                and company_id
+                and qns
+                and company_id == entity.company_id
+                and entity.namespace == qns
+            ):
+                entity.access_level = "owner"
+                readable.append(entity)
+                continue
+            if (
+                user_id
+                and company_id == entity.company_id
+                and user_ns is not None
+                and user_ns == entity.namespace
+            ):
                 entity.access_level = "owner"
                 readable.append(entity)
                 continue
@@ -332,8 +350,17 @@ class AccessControlService:
             return company_id == grant.target_company_id
         return False
 
-    async def _get_user_namespace(self, user_id: Optional[str]) -> str:
-        """Получить namespace пользователя (по умолчанию 'default')"""
-        # TODO: из UserProfile
-        return "default"
+    async def _get_request_namespace(self) -> Optional[str]:
+        """
+        Namespace текущего запроса из Context (в т.ч. X-Platform-Namespace, воркер задаёт из задачи).
+
+        Если в контексте не задано — None (не подставляем имена пространств).
+        """
+        ctx = get_context()
+        if ctx is None:
+            return None
+        raw = (ctx.active_namespace or "").strip()
+        if not raw:
+            return None
+        return raw
 

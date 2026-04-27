@@ -450,6 +450,30 @@ export class CRMNamespaceModal extends PlatformFormModal {
                 justify-content: flex-end;
                 gap: var(--space-2);
             }
+
+            .create-body-wrap {
+                position: relative;
+                min-height: 120px;
+            }
+            .create-busy-overlay {
+                position: absolute;
+                inset: 0;
+                z-index: 2;
+                display: flex;
+                flex-direction: column;
+                align-items: center;
+                justify-content: center;
+                gap: var(--space-3);
+                padding: var(--space-4);
+                border-radius: var(--radius-md);
+                background: color-mix(in srgb, var(--crm-surface) 86%, var(--text-primary) 14%);
+                pointer-events: all;
+            }
+            .create-busy-label {
+                font-size: var(--text-sm);
+                color: var(--text-secondary);
+                text-align: center;
+            }
         `,
     ];
 
@@ -537,6 +561,11 @@ export class CRMNamespaceModal extends PlatformFormModal {
     }
 
     _isCreate() { return this.mode === MODE_CREATE; }
+
+    _isCreateOperationBusy() {
+        if (!this._isCreate()) return false;
+        return this._createForm.submitting || this._namespaces.createInFlight;
+    }
 
     _onPickTab(tab) {
         if (tab !== TAB_INFO && tab !== TAB_GRANTS) return;
@@ -950,6 +979,28 @@ export class CRMNamespaceModal extends PlatformFormModal {
     }
 
     _renderCreateBody() {
+        const busy = this._isCreateOperationBusy();
+        return html`
+            <div class="create-body-wrap">
+                ${this._renderCreateFormInner()}
+                ${busy
+                    ? html`
+                        <div
+                            class="create-busy-overlay"
+                            role="status"
+                            aria-live="polite"
+                            aria-busy="true"
+                        >
+                            <glass-spinner size="lg"></glass-spinner>
+                            <span class="create-busy-label">${this.t('namespace_modal.creating_progress')}</span>
+                        </div>
+                    `
+                    : nothing}
+            </div>
+        `;
+    }
+
+    _renderCreateFormInner() {
         const draft = this._createForm.draft;
         return html`
             <form class="form-grid" @submit=${(event) => { event.preventDefault(); this._performSave(); }}>

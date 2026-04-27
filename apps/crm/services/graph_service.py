@@ -224,7 +224,11 @@ class GraphService:
             current_wave = next_wave
         
         nodes = await self._apply_access_control(
-            entities_dict, entity_levels, user_id, company_id
+            entities_dict,
+            entity_levels,
+            user_id,
+            company_id,
+            query_namespace=namespace,
         )
         edges = self._build_edges(list(edges_dict.values()), direction_map)
         filtered_count = sum(1 for node in nodes if not node.access)
@@ -270,7 +274,10 @@ class GraphService:
 
         seed_entities = await self._entity_repo.get_by_ids(entity_ids)
         readable_seeds = await self._access_control.batch_filter_readable(
-            seed_entities, user_id, company_id
+            seed_entities,
+            user_id,
+            company_id,
+            query_namespace=namespace,
         )
         readable_seeds_by_id = {e.entity_id: e for e in readable_seeds}
 
@@ -335,7 +342,13 @@ class GraphService:
 
             current_wave = next_wave
 
-        nodes = await self._apply_access_control(entities_dict, entity_levels, user_id, company_id)
+        nodes = await self._apply_access_control(
+            entities_dict,
+            entity_levels,
+            user_id,
+            company_id,
+            query_namespace=namespace,
+        )
         edges = self._build_edges(list(edges_dict.values()), direction_map)
         filtered_count = sum(1 for node in nodes if not node.access)
 
@@ -514,7 +527,11 @@ class GraphService:
         entity_levels = {eid: 1 for eid in neighbors_dict}
         
         all_nodes = await self._apply_access_control(
-            neighbors_dict, entity_levels, user_id, company_id
+            neighbors_dict,
+            entity_levels,
+            user_id,
+            company_id,
+            query_namespace=namespace,
         )
         
         nodes_by_id = {node.entity_id: node for node in all_nodes}
@@ -588,11 +605,16 @@ class GraphService:
         entities_dict: Dict[str, CRMEntity],
         entity_levels: Dict[str, int],
         user_id: Optional[str],
-        company_id: Optional[str]
+        company_id: Optional[str],
+        *,
+        query_namespace: Optional[str] = None,
     ) -> List[GraphNode]:
         """Применяет access control к entities, возвращая placeholder для скрытых."""
         readable = await self._access_control.batch_filter_readable(
-            list(entities_dict.values()), user_id, company_id
+            list(entities_dict.values()),
+            user_id,
+            company_id,
+            query_namespace=query_namespace,
         )
         readable_ids: Set[str] = {e.entity_id for e in readable}
 

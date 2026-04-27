@@ -1,8 +1,8 @@
 """
 Соответствие коллекций AmoCRM API v4 каноническим type_id в NetWorkle.
 
-type_id задаются шаблоном пространства (см. system_templates template_id amocrm);
-коннектор только маппит endpoint провайдера на эти идентификаторы.
+Канонические type_id (lead, contact, organization, member, task) согласованы с универсальными шаблонами пространств;
+коннектор маппит endpoint провайдера на эти идентификаторы.
 """
 
 from __future__ import annotations

@@ -13,9 +13,12 @@ from a2a.types import (
     Part,
     Role,
     TaskArtifactUpdateEvent,
+    TaskState,
+    TaskStatus,
     TaskStatusUpdateEvent,
     TextPart,
 )
+from a2a.utils.message import get_message_text, new_agent_text_message
 
 from apps.flows.src.channels.a2a import _build_task_from_events
 from core.clients.llm import MockLLM, setup_mock_responses
@@ -123,6 +126,42 @@ class TestReasoningArtifactsInBuildTask:
 
         reasoning_text = "".join(p.root.text for p in reasoning_artifact.parts if hasattr(p.root, "text"))
         assert reasoning_text == "Thinking..."
+
+    @pytest.mark.asyncio
+    async def test_failed_status_preserves_error_message_with_reasoning_artifact(self, app):
+        """При failed и артефакте reasoning текст ошибки остаётся в status.message (для A2A-клиента)."""
+        task_id = str(uuid.uuid4())
+        context_id = str(uuid.uuid4())
+        input_message = _msg("Test question")
+
+        events = [
+            TaskArtifactUpdateEvent(
+                contextId=context_id,
+                taskId=task_id,
+                artifact=Artifact(
+                    artifactId=str(uuid.uuid4()),
+                    name="reasoning",
+                    parts=[Part(root=TextPart(text="partial stream"))],
+                ),
+                append=True,
+                last_chunk=False,
+            ),
+            TaskStatusUpdateEvent(
+                contextId=context_id,
+                taskId=task_id,
+                status=TaskStatus(
+                    state=TaskState.failed,
+                    message=new_agent_text_message("httpx.ReadTimeout"),
+                ),
+                final=True,
+            ),
+        ]
+
+        task = await _build_task_from_events(events, task_id, context_id, input_message, flow_id="test_flow")
+
+        assert task.status.state == TaskState.failed
+        assert task.status.message is not None
+        assert "ReadTimeout" in get_message_text(task.status.message)
 
 
 class TestMockLLMReasoning:

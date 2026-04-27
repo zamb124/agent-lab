@@ -8,6 +8,7 @@ import pytest
 from aiohttp import web
 
 from core.clients import A2AClient, A2AClientError
+from core.clients.a2a_client import _extract_task_status_message
 
 from tests.fixtures.aiohttp_ephemeral import tcp_site_assigned_port
 
@@ -159,3 +160,32 @@ class TestA2AClient:
         result = await client.get_agent_card(f"{mock_agent_server}/")
 
         assert result["name"] == "Test Agent"
+
+    def test_extract_task_status_message_nested_parts(self):
+        """Текст ошибки из вложенного A2A message (parts/root), как в JSON-RPC result."""
+        status = {
+            "state": "failed",
+            "message": {
+                "parts": [
+                    {"root": {"text": "httpx.ReadTimeout"}},
+                ],
+            },
+        }
+        assert _extract_task_status_message(status) == "httpx.ReadTimeout"
+
+    def test_parse_a2a_response_failed_uses_nested_message(self):
+        client = A2AClient()
+        raw = {
+            "result": {
+                "status": {
+                    "state": "failed",
+                    "message": {
+                        "parts": [
+                            {"root": {"text": "stream stalled"}},
+                        ],
+                    },
+                },
+            },
+        }
+        with pytest.raises(A2AClientError, match="stream stalled"):
+            client._parse_a2a_response(raw)

@@ -173,9 +173,18 @@ async def _build_task_from_events(
             agent_message = agent_message.model_copy(update={"task_id": task_id})
         history.append(agent_message)
 
-    # Когда есть artifacts (response/reasoning), не дублируем ответ в status.message
-    # Исключение: input_required - там message содержит вопрос к пользователю
-    if artifacts and final_status.message and final_status.state != TaskState.input_required:
+    # Когда есть artifacts (response/reasoning), не дублируем ответ в status.message.
+    # Сохраняем message для input_required (вопрос), failed/canceled (текст ошибки для клиента).
+    if (
+        artifacts
+        and final_status.message
+        and final_status.state
+        not in (
+            TaskState.input_required,
+            TaskState.failed,
+            TaskState.canceled,
+        )
+    ):
         timestamp = final_status.timestamp or datetime.now(timezone.utc).isoformat()
         final_status = TaskStatus(
             state=final_status.state,

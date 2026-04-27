@@ -1251,7 +1251,10 @@ class EntityService:
                 note_family_legacy_entity_types=note_family_legacy,
             )
             filtered = await self._access_control.batch_filter_readable(
-                entities, user_id, company_id,
+                entities,
+                user_id,
+                company_id,
+                query_namespace=namespace,
             )
             readable.extend(filtered)
             db_has_more = repo_has_more
@@ -1535,7 +1538,9 @@ class EntityService:
         entities = [entity for entity, _ in results]
         user_id = self._get_user_id()
         company_id = self._get_company_id()
-        readable = await self._access_control.batch_filter_readable(entities, user_id, company_id)
+        readable = await self._access_control.batch_filter_readable(
+            entities, user_id, company_id, query_namespace=namespace
+        )
         readable_ids = {e.entity_id for e in readable}
         return [(e, score) for e, score in results if e.entity_id in readable_ids]
 
@@ -1562,7 +1567,9 @@ class EntityService:
         entities = [entity for entity, _, _ in results]
         user_id = self._get_user_id()
         company_id = self._get_company_id()
-        readable = await self._access_control.batch_filter_readable(entities, user_id, company_id)
+        readable = await self._access_control.batch_filter_readable(
+            entities, user_id, company_id, query_namespace=namespace
+        )
         readable_ids = {e.entity_id for e in readable}
         return [(e, score, mt) for e, score, mt in results if e.entity_id in readable_ids]
 
@@ -1589,7 +1596,9 @@ class EntityService:
         entities = [entity for entity, _ in results]
         user_id = self._get_user_id()
         company_id = self._get_company_id()
-        readable = await self._access_control.batch_filter_readable(entities, user_id, company_id)
+        readable = await self._access_control.batch_filter_readable(
+            entities, user_id, company_id, query_namespace=namespace
+        )
         readable_ids = {e.entity_id for e in readable}
         return [(e, score) for e, score in results if e.entity_id in readable_ids]
 
@@ -1634,7 +1643,9 @@ class EntityService:
 
         user_id = self._get_user_id()
         company_id = self._get_company_id()
-        entities = await self._access_control.batch_filter_readable(entities, user_id, company_id)
+        entities = await self._access_control.batch_filter_readable(
+            entities, user_id, company_id, query_namespace=namespace
+        )
 
         matched = [
             entity for entity in entities

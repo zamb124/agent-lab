@@ -17,6 +17,38 @@ from core.logging import get_logger
 logger = get_logger(__name__)
 
 
+def _extract_task_status_message(status_obj: Dict[str, Any]) -> Optional[str]:
+    """Текст из A2A TaskStatus.message (строка или объект с parts)."""
+    if not isinstance(status_obj, dict):
+        return None
+    raw = status_obj.get("message")
+    if raw is None:
+        return None
+    if isinstance(raw, str):
+        stripped = raw.strip()
+        return stripped if stripped else None
+    if isinstance(raw, dict):
+        parts = raw.get("parts")
+        if not isinstance(parts, list):
+            return None
+        texts: list[str] = []
+        for part in parts:
+            if not isinstance(part, dict):
+                continue
+            root = part.get("root")
+            if isinstance(root, dict):
+                text = root.get("text")
+                if isinstance(text, str) and text:
+                    texts.append(text)
+                continue
+            text = part.get("text")
+            if isinstance(text, str) and text:
+                texts.append(text)
+        joined = "".join(texts).strip()
+        return joined if joined else None
+    return None
+
+
 class A2AClientError(Exception):
     """Ошибка A2A клиента."""
 
@@ -182,7 +214,11 @@ class A2AClient:
         status = status_obj.get("state", "completed") if isinstance(status_obj, dict) else "completed"
 
         if status == "failed":
-            error_msg = status_obj.get("message") if isinstance(status_obj, dict) else None
+            error_msg = (
+                _extract_task_status_message(status_obj)
+                if isinstance(status_obj, dict)
+                else None
+            )
             raise A2AClientError(f"A2A task failed: {error_msg or 'unknown error'}")
 
         # Извлекаем текст из artifacts
