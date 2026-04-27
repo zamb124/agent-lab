@@ -118,6 +118,7 @@ UI-типы из `CoreEvents` (диспатчить **только** через 
 | `this.setLocale(locale)`           | `I18N_LOCALE_REQUESTED` |
 | `this.setTheme(name)`              | `THEME_SET_REQUESTED` |
 | `this.switchCompany(companyId)`    | `AUTH_COMPANY_SWITCH_REQUESTED` |
+| `this.startOAuth(provider, { returnPath?, plan? })` | `auth/oauth/start_requested` |
 
 Прямой `dispatch(CoreEvents.UI_*|ROUTER_*|AUTH_*|I18N_*|THEME_*|COMPANIES_*)`
 в `apps/<svc>/ui/{pages,modals,components}/**` — **запрещён**, проверяет

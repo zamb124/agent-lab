@@ -71,6 +71,7 @@ reducer фабрики.
 | `this.setLocale(locale)`               | `I18N_LOCALE_REQUESTED` |
 | `this.setTheme(name)`                  | `THEME_SET_REQUESTED` |
 | `this.switchCompany(companyId)`        | `AUTH_COMPANY_SWITCH_REQUESTED` |
+| `this.startOAuth(provider, { returnPath?, plan? })` | `auth/oauth/start_requested` (редирект на провайдера) |
 | `this.emit(name, detail?)`             | DOM-событие parent←child через slot/composed (только для composition внутри одного компонента; не cross-app) |
 
 Каждый метод бросает `Error` при отсутствии обязательных аргументов или

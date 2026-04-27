@@ -258,6 +258,14 @@
         "err_save_failed": "Failed to save settings"
     },
     "join_page": {
+        "session_checking": "Checking session…",
+        "needs_auth_title": "Sign in to accept the invitation",
+        "needs_auth_subtitle": "Choose a sign-in method. After you authenticate you will return here to join the team.",
+        "login_yandex": "Continue with Yandex",
+        "login_google": "Continue with Google",
+        "login_github": "Continue with GitHub",
+        "login_apple": "Continue with Apple",
+        "oauth_failed": "Could not start sign-in. Please try again.",
         "no_token_text": "The invite link has no code.",
         "title": "Join the company",
         "text": "Click the button below to accept the invitation.",

@@ -103,12 +103,9 @@ export class AuthModal extends PlatformModal {
         if (this.loading) return;
         this.loading = true;
         this.error = '';
-        const rp = (typeof this.returnPath === 'string' && this.returnPath !== '') ? this.returnPath : null;
-        this.dispatch(CoreAuthEvents.OAUTH_START_REQUESTED, {
-            provider,
-            return_path: rp,
-            plan: this.plan || null,
-        });
+        const returnPath = (typeof this.returnPath === 'string' && this.returnPath !== '') ? this.returnPath : undefined;
+        const plan = (typeof this.plan === 'string' && this.plan !== '') ? this.plan : undefined;
+        this.startOAuth(provider, { returnPath, plan });
     }
 
     _handleDemoSubmit(e) {

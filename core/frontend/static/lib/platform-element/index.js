@@ -29,6 +29,7 @@
  *   this.setLocale(locale)                              — I18N_LOCALE_REQUESTED
  *   this.setTheme(name)                                 — THEME_SET_REQUESTED
  *   this.switchCompany(company_id)                      — AUTH_COMPANY_SWITCH_REQUESTED
+ *   this.startOAuth(provider, { returnPath?, plan? })   — auth/oauth/start_requested
  */
 
 import { LitElement } from 'lit';
@@ -39,7 +40,7 @@ import { formStyles } from '../styles/shared/form.styles.js';
 import { buttonStyles, iconButtonStyles } from '../styles/shared/button.styles.js';
 import { getPlatformBus } from '../events/bus-singleton.js';
 import { SelectController } from '../events/select-controller.js';
-import { CoreEvents, assertEventType, translate } from '../events/index.js';
+import { CoreEvents, CoreAuthEvents, assertEventType, translate } from '../events/index.js';
 import { getFactory } from '../events/factory-registry.js';
 import { getDefaultI18nNamespace } from '../utils/i18n-namespace.js';
 import {
@@ -282,6 +283,34 @@ export class PlatformElement extends LitElement {
             throw new Error('PlatformElement.switchCompany: company_id required (non-empty string)');
         }
         this.dispatch(CoreEvents.AUTH_COMPANY_SWITCH_REQUESTED, { company_id });
+    }
+
+    /**
+     * Старт OAuth: редирект на провайдера. Тело события совпадает с auth-modal.
+     * @param {string} provider — yandex | google | github | apple
+     * @param {{ returnPath?: string, plan?: string } | undefined} options
+     */
+    startOAuth(provider, options) {
+        if (typeof provider !== 'string' || provider.length === 0) {
+            throw new Error('PlatformElement.startOAuth: provider required (non-empty string)');
+        }
+        if (options !== undefined && (options === null || typeof options !== 'object')) {
+            throw new Error('PlatformElement.startOAuth: options must be a plain object or omitted');
+        }
+        const opts = options || {};
+        let return_path = null;
+        if (typeof opts.returnPath === 'string' && opts.returnPath.length > 0) {
+            return_path = opts.returnPath;
+        }
+        let plan = null;
+        if (typeof opts.plan === 'string' && opts.plan.length > 0) {
+            plan = opts.plan;
+        }
+        this.dispatch(CoreAuthEvents.OAUTH_START_REQUESTED, {
+            provider,
+            return_path,
+            plan,
+        });
     }
 
     async loadStyles(path) {
