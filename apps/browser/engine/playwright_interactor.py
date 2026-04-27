@@ -96,7 +96,22 @@ class PlaywrightBrowserInteractor:
         browser = await self._pool.acquire_browser(req.endpoint_key, cdp_url)
         storage_state: Optional[dict[str, Any]] = None
         if req.restore_state_key is not None:
-            raise ValueError("restore_state_key не поддерживается текущей моделью контекста")
+            blob = self._store.get(req.restore_state_key)
+            if blob.proxy_policy != req.context_signature.proxy_policy:
+                raise ValueError("restore_state_key не совместим: proxy_policy отличается")
+            if blob.anti_bot_tier != req.context_signature.anti_bot_tier:
+                raise ValueError("restore_state_key не совместим: anti_bot_tier отличается")
+            if blob.locale != req.context_signature.locale:
+                raise ValueError("restore_state_key не совместим: locale отличается")
+            if blob.timezone_id != req.context_signature.timezone_id:
+                raise ValueError("restore_state_key не совместим: timezone_id отличается")
+            if blob.user_agent != req.context_signature.user_agent:
+                raise ValueError("restore_state_key не совместим: user_agent отличается")
+            if blob.page_mode != req.context_signature.page_mode:
+                raise ValueError("restore_state_key не совместим: page_mode отличается")
+            if blob.permissions_fingerprint != req.context_signature.permissions_fingerprint:
+                raise ValueError("restore_state_key не совместим: permissions_fingerprint отличается")
+            storage_state = self._store.storage_state_for_new_context(req.restore_state_key)
         _context, page, cold_start = await self._leases.lease_page(
             browser,
             req.endpoint_key,
@@ -107,6 +122,14 @@ class PlaywrightBrowserInteractor:
             page_ttl_sec=self._settings.default_page_ttl_sec,
             warm_idle_sec=self._settings.warm_idle_sec,
         )
+        if req.restore_state_key is not None:
+            url = self._store.current_url(req.restore_state_key)
+            await page.goto(
+                url,
+                wait_until="domcontentloaded",
+                timeout=req.timeout_ms,
+            )
+            await self._apply_session_storage(page, req.restore_state_key)
         return BrowserAcquireResult(
             page=page,
             context=page.context,
@@ -274,10 +297,14 @@ class PlaywrightBrowserInteractor:
         if len(pages) == 0:
             raise RuntimeError("Нет страниц в контексте для сохранения состояния")
         page = pages[0]
+        sig = getattr(context, "_browser_runtime_signature", None)
+        if sig is None:
+            raise RuntimeError("Context не содержит _browser_runtime_signature для сохранения состояния")
         return await self._store.capture_from(
             context,
             page,
             shared_storage_key=shared_storage_key,
+            context_signature=sig,
             last_snapshot_ref=None,
         )
 
@@ -298,6 +325,20 @@ class PlaywrightBrowserInteractor:
                 }""",
                 entries,
             )
+
+    async def _apply_session_storage(self, page: Any, state_key: str) -> None:
+        origin = origin_from_url(page.url)
+        entries = self._store.session_storage_for_origin(state_key, origin)
+        if len(entries) == 0:
+            return
+        await page.evaluate(
+            """(entries) => {
+                for (const [k, v] of Object.entries(entries)) {
+                    sessionStorage.setItem(k, v);
+                }
+            }""",
+            entries,
+        )
 
     async def release(self, page: Any) -> None:
         await self._leases.release_page(

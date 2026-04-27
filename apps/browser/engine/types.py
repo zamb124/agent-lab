@@ -192,7 +192,17 @@ class SessionStateBlob:
     shared_storage_key: str
     storage_state: dict[str, Any]
     session_storage_by_origin: dict[str, dict[str, str]]
+    current_url: str
+    proxy_policy: str
+    anti_bot_tier: str
+    locale: str
+    timezone_id: str
+    user_agent: Optional[str]
+    page_mode: PageMode
+    permissions_fingerprint: str
     last_snapshot_ref: Optional[str]
+    pause_ttl_soft_sec: Optional[int] = None
+    pause_ttl_hard_sec: Optional[int] = None
 
 
 @dataclass

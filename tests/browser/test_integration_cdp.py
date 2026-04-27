@@ -160,13 +160,26 @@ async def test_save_restore_roundtrip() -> None:
             out = await facade.control_adapter.navigate(page0, fr)
             assert out.status_code == 200
             assert "example.com" in out.final_url
+            await page0.evaluate(
+                """() => {
+                    localStorage.setItem("rt_local_key", "rt_local_value");
+                    sessionStorage.setItem("rt_sess_key", "rt_sess_value");
+                    return true;
+                }"""
+            )
             state_key = await facade.interactor.save_state(res.context, "bucket-test")
         finally:
             await facade.interactor.release(res.page)
 
-        # restore_state_key в текущей модели контекста отключён (zero-guess: без скрытого реюза storage_state).
-        with pytest.raises(ValueError, match="restore_state_key не поддерживается"):
-            await facade.interactor.acquire(
-                _acquire_req(session_id=f"{session_id}-b", restore_key=state_key)
-            )
+        res2 = await facade.interactor.acquire(
+            _acquire_req(session_id=f"{session_id}-b", restore_key=state_key)
+        )
+        try:
+            page1 = res2.context.pages[0]
+            got_local = await page1.evaluate("""() => localStorage.getItem("rt_local_key")""")
+            got_sess = await page1.evaluate("""() => sessionStorage.getItem("rt_sess_key")""")
+            assert got_local == "rt_local_value"
+            assert got_sess == "rt_sess_value"
+        finally:
+            await facade.interactor.release(res2.page)
         await facade.stop()

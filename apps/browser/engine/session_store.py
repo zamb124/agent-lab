@@ -8,7 +8,7 @@ import secrets
 from typing import Any, Optional
 from urllib.parse import urlparse
 
-from apps.browser.engine.types import SessionStateBlob
+from apps.browser.engine.types import ContextSignature, SessionStateBlob
 
 
 class SessionStateStore:
@@ -61,10 +61,15 @@ class SessionStateStore:
         page: Any,
         *,
         shared_storage_key: str,
+        context_signature: ContextSignature,
         last_snapshot_ref: Optional[str],
     ) -> str:
+        current_url = str(getattr(page, "url", "") or "")
+        if current_url.startswith("about:"):
+            raise ValueError("Нельзя сохранить состояние: current_url должен быть реальным URL, не about:*")
+        _ = origin_from_url(current_url)
         storage_state = await context.storage_state()
-        origin = origin_from_url(page.url)
+        origin = origin_from_url(current_url)
         session_storage_dump: dict[str, str] = await page.evaluate(
             """() => {
                 const out = {};
@@ -78,11 +83,19 @@ class SessionStateStore:
                 return out;
             }"""
         )
-        by_origin: dict[str, dict[str, str]] = {origin: session_storage_dump}
+        by_origin: dict[str, dict[str, str]] = {origin: dict(session_storage_dump)}
         blob = SessionStateBlob(
             shared_storage_key=shared_storage_key,
             storage_state=storage_state,
             session_storage_by_origin=by_origin,
+            current_url=current_url,
+            proxy_policy=context_signature.proxy_policy,
+            anti_bot_tier=context_signature.anti_bot_tier,
+            locale=context_signature.locale,
+            timezone_id=context_signature.timezone_id,
+            user_agent=context_signature.user_agent,
+            page_mode=context_signature.page_mode,
+            permissions_fingerprint=context_signature.permissions_fingerprint,
             last_snapshot_ref=last_snapshot_ref,
         )
         return self.put(blob)
@@ -93,9 +106,39 @@ class SessionStateStore:
 
     def session_storage_for_origin(self, state_key: str, origin: str) -> dict[str, str]:
         blob = self.get(state_key)
-        if origin not in blob.session_storage_by_origin:
+        entries = blob.session_storage_by_origin.get(origin)
+        if entries is None:
             return {}
-        return dict(blob.session_storage_by_origin[origin])
+        return dict(entries)
+
+    def current_url(self, state_key: str) -> str:
+        blob = self.get(state_key)
+        if not isinstance(blob.current_url, str) or not blob.current_url:
+            raise RuntimeError("SessionStateBlob.current_url должен быть непустой строкой")
+        return blob.current_url
+
+    def context_signature_for_restore(self, state_key: str) -> ContextSignature:
+        blob = self.get(state_key)
+        if blob.pause_ttl_hard_sec is not None or blob.pause_ttl_soft_sec is not None:
+            soft = blob.pause_ttl_soft_sec
+            hard = blob.pause_ttl_hard_sec
+            if soft is None or hard is None:
+                raise ValueError("pause_ttl_soft_sec и pause_ttl_hard_sec должны быть заданы вместе")
+            if not isinstance(soft, int) or not isinstance(hard, int) or soft <= 0 or hard <= 0:
+                raise ValueError("pause_ttl_soft_sec и pause_ttl_hard_sec должны быть int > 0")
+            if soft > hard:
+                raise ValueError("pause_ttl_soft_sec должен быть <= pause_ttl_hard_sec")
+        return ContextSignature(
+            proxy_policy=blob.proxy_policy,
+            shared_storage_key=blob.shared_storage_key,
+            anti_bot_tier=blob.anti_bot_tier,
+            stealth_init_version="v1",
+            locale=blob.locale,
+            timezone_id=blob.timezone_id,
+            user_agent=blob.user_agent,
+            page_mode=blob.page_mode,
+            permissions_fingerprint=blob.permissions_fingerprint,
+        )
 
 
 def origin_from_url(url: str) -> str:

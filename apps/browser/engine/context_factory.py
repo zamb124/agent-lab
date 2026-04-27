@@ -105,12 +105,22 @@ class ContextFactory:
         storage_state: Optional[dict[str, Any]],
     ) -> Any:
         async with self._lock:
+            kwargs: dict[str, Any] = {
+                "locale": signature.locale,
+                "timezone_id": signature.timezone_id,
+            }
+            proxy = self._proxy_config(signature.proxy_policy)
+            if proxy is not None:
+                kwargs["proxy"] = proxy
+            if signature.user_agent is not None:
+                kwargs["user_agent"] = signature.user_agent
             if storage_state is not None:
-                raise ValueError("storage_state не поддерживается в текущей модели контекста")
-            contexts = getattr(browser, "contexts", None)
-            if not isinstance(contexts, list) or len(contexts) == 0:
-                raise RuntimeError("Движок не предоставляет browser.contexts")
-            context = contexts[0]
+                kwargs["storage_state"] = storage_state
+
+            new_context = getattr(browser, "new_context", None)
+            if not callable(new_context):
+                raise RuntimeError("Движок не поддерживает browser.new_context(...)")
+            context = await new_context(**kwargs)
             try:
                 setattr(context, "_browser_runtime_shared_context", True)
             except Exception:
@@ -136,4 +146,4 @@ class ContextFactory:
         await _safe_page_close(page)
 
     async def close_context(self, context: Any) -> None:
-        return
+        await _safe_context_close(context)
