@@ -202,6 +202,8 @@
         "call_boundary_join_title": "Call in progress — join",
         "call_boundary_ended": "Call ended",
         "transcribe_meeting": "Transcribe meeting",
+        "toast_transcribe_call_queued": "Meeting summary queued — it will appear in the chat when ready.",
+        "toast_transcribe_call_failed": "Could not start meeting summary.",
         "transcribe_video": "Transcribe",
         "transcribe_processing": "Transcribing…",
         "err_call_id_transcribe": "call_id is required on the message to transcribe the meeting.",

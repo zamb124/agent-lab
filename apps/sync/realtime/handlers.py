@@ -16,7 +16,7 @@ from uuid import uuid4
 from livekit.api.twirp_client import TwirpError, TwirpErrorCode
 
 from apps.sync.channel_lane_preview import lane_preview_from_content_row
-from apps.sync.channel_read_helpers import channel_read_entity_minimal
+from apps.sync.channel_read_helpers import channel_read_entity_minimal, channel_read_from_entity
 from apps.sync.db.models import (
     SyncCallRecording,
     SyncChannel,
@@ -529,6 +529,25 @@ def _channel_read_entity(entity: SyncChannel) -> ChannelRead:
     return channel_read_entity_minimal(entity)
 
 
+async def _channel_read_for_viewer(
+    entity: SyncChannel,
+    *,
+    viewer_user_id: str,
+    company_id: str,
+    channels: ChannelRepository,
+    user_repository: UserRepository,
+) -> ChannelRead:
+    """ChannelRead для ответа create/list: direct с заполненным peer."""
+    return await channel_read_from_entity(
+        entity,
+        viewer_user_id=viewer_user_id,
+        channel_repository=channels,
+        user_repository=user_repository,
+        company_id=company_id,
+        lane_summary=None,
+    )
+
+
 async def _update_channel(
     channel_id: str,
     body: ChannelUpdate,
@@ -564,6 +583,29 @@ async def _update_channel(
     return _channel_read_entity(entity)
 
 
+async def _find_existing_direct_for_pair(
+    *,
+    user_a: str,
+    user_b: str,
+    namespace: str,
+    company_id: str,
+    channels: ChannelRepository,
+) -> SyncChannel | None:
+    """Один личный чат с собеседником в рамках namespace (без дублей create)."""
+    candidates = await channels.list_channels_where_both_members(
+        user_a, user_b, company_id=company_id
+    )
+    for ch in candidates:
+        if ch.type != ChannelType.DIRECT.value:
+            continue
+        if ch.namespace != namespace:
+            continue
+        member_ids = await channels.list_member_user_ids(ch.channel_id, company_id=company_id)
+        if len(member_ids) == 2:
+            return ch
+    return None
+
+
 async def _create_channel(
     body,
     *,
@@ -571,12 +613,16 @@ async def _create_channel(
     company_id: str,
     channels: ChannelRepository,
     namespaces: NamespaceRepository,
-) -> ChannelRead:
+    user_repository: UserRepository,
+) -> tuple[ChannelRead, bool]:
     """Создаёт канал, привязанный к платформенному `namespace`.
 
     Дефолты STT (`transcribe_voice_messages`, `speech_to_chat_enabled`)
     берутся из `Namespace.sync_settings`; на канале можно перекрыть точечно
     через `body.transcribe_voice_messages` / `body.speech_to_chat_enabled`.
+
+    Возвращает (ChannelRead, created_new). Для direct с тем же собеседником
+    и namespace возвращается существующий канал с created_new=False (без дублей).
     """
     if body.type == ChannelType.TOPIC:
         if body.namespace is None or body.namespace == "":
@@ -617,6 +663,25 @@ async def _create_channel(
     if body.speech_to_chat_enabled is not None:
         speech_to_chat = body.speech_to_chat_enabled
 
+    if body.type == ChannelType.DIRECT:
+        peer_id = body.member_ids[0]
+        existing = await _find_existing_direct_for_pair(
+            user_a=actor_user_id,
+            user_b=peer_id,
+            namespace=namespace,
+            company_id=company_id,
+            channels=channels,
+        )
+        if existing is not None:
+            read = await _channel_read_for_viewer(
+                existing,
+                viewer_user_id=actor_user_id,
+                company_id=company_id,
+                channels=channels,
+                user_repository=user_repository,
+            )
+            return read, False
+
     channel_id = uuid4().hex
     entity = SyncChannel(
         channel_id=channel_id,
@@ -638,7 +703,14 @@ async def _create_channel(
         for member_id in body.member_ids:
             await channels.add_member_if_missing(channel_id, member_id, "member", company_id)
 
-    return _channel_read_entity(entity)
+    read = await _channel_read_for_viewer(
+        entity,
+        viewer_user_id=actor_user_id,
+        company_id=company_id,
+        channels=channels,
+        user_repository=user_repository,
+    )
+    return read, True
 
 
 async def _send_message(

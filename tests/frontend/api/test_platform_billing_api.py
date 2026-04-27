@@ -281,6 +281,8 @@ async def test_platform_billing_companies_overview_system(frontend_client_system
     assert "balance" in first
     assert "tariff_plan" in first
     assert "monthly_budget" in first
+    assert isinstance(first.get("name"), str) and len(first["name"]) > 0
+    assert first.get("subdomain") is not None
 
 
 @pytest.mark.asyncio

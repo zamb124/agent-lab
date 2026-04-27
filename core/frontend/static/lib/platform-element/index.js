@@ -51,8 +51,8 @@ import {
     FacetsController,
     SliceController,
 } from '../base/use-resource.js';
-
-const PLATFORM_MOBILE_VIEWPORT_CONTENT = 'width=device-width, initial-scale=1.0, maximum-scale=1.0, minimum-scale=1.0, user-scalable=no, viewport-fit=cover';
+import { PLATFORM_MOBILE_VIEWPORT_CONTENT } from '../utils/platform-viewport-meta.js';
+import { isStandaloneOrNativeAppShell } from '../utils/native-app-shell.js';
 const ZOOM_BLOCKED_KEYBOARD_KEYS = new Set(['+', '-', '=', '_', '0']);
 const ZOOM_BLOCKED_KEYBOARD_CODES = new Set(['NumpadAdd', 'NumpadSubtract', 'Digit0', 'Equal', 'Minus']);
 
@@ -343,7 +343,7 @@ export class PlatformElement extends LitElement {
 
     static _registerStandaloneNoZoomGuard() {
         if (PlatformElement._standaloneNoZoomGuardRegistered) return;
-        if (!PlatformElement._isStandalonePwaMode()) return;
+        if (!isStandaloneOrNativeAppShell()) return;
 
         const viewportElement = document.querySelector('meta[name="viewport"]');
         if (!viewportElement) {
@@ -360,12 +360,5 @@ export class PlatformElement extends LitElement {
         window.addEventListener('keydown', preventKeyboardZoom);
 
         PlatformElement._standaloneNoZoomGuardRegistered = true;
-    }
-
-    static _isStandalonePwaMode() {
-        const mediaQuery = window.matchMedia('(display-mode: standalone)');
-        const isStandaloneDisplayMode = Boolean(mediaQuery && mediaQuery.matches);
-        const isStandaloneIosMode = window.navigator.standalone === true;
-        return isStandaloneDisplayMode || isStandaloneIosMode;
     }
 }

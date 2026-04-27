@@ -44,6 +44,7 @@ _FRONTEND_DEV_CORS_ORIGIN_REGEX = (
 INDEXABLE_PUBLIC_PATHS: tuple[str, ...] = (
     "/",
     "/documentation/",
+    "/support",
     "/products/agents",
     "/products/rag",
     "/products/crm",
@@ -81,15 +82,19 @@ def _build_sitemap_xml(base_url: str) -> str:
             return "0.80"
         if path == "/documentation/":
             return "0.70"
+        if path == "/support":
+            return "0.65"
         return "0.50"
 
     urls_xml = "\n".join(
-        (
-            "  <url>",
-            f"    <loc>{base_url}{path}</loc>",
-            "    <changefreq>weekly</changefreq>",
-            f"    <priority>{_priority_for_path(path)}</priority>",
-            "  </url>",
+        "\n".join(
+            (
+                "  <url>",
+                f"    <loc>{base_url}{path}</loc>",
+                "    <changefreq>weekly</changefreq>",
+                f"    <priority>{_priority_for_path(path)}</priority>",
+                "  </url>",
+            )
         )
         for path in INDEXABLE_PUBLIC_PATHS
     )
@@ -116,7 +121,8 @@ def _build_llms_txt(base_url: str) -> str:
         f"- Product CRM: {base_url}/products/crm\n"
         f"- Product Sync: {base_url}/products/sync\n"
         f"- Product Documents: {base_url}/products/documents\n"
-        f"- Product Documentation: {base_url}/documentation/\n\n"
+        f"- Product Documentation: {base_url}/documentation/\n"
+        f"- Support: {base_url}/support\n\n"
         "## Optional\n"
         f"- Service health endpoint (technical): {base_url}/health\n"
     )

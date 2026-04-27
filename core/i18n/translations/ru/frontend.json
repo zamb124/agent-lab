@@ -195,7 +195,7 @@
         "col_email": "Email",
         "col_role": "Роль",
         "col_actions": "Действия",
-        "copy_invite": "+ Скопировать ссылку-приглашение",
+        "copy_invite": "Приглашение",
         "empty_title": "Нет участников",
         "empty_description": "Скопируйте ссылку-приглашение и отправьте коллеге",
         "remove": "Удалить",
@@ -204,7 +204,11 @@
         "toast_invite_generated": "Ссылка-приглашение скопирована",
         "err_invite": "Не удалось создать приглашение",
         "toast_member_removed": "Участник удалён",
-        "toast_role_updated": "Роль обновлена"
+        "toast_role_updated": "Роль обновлена",
+        "filter_all": "Все",
+        "filter_empty": "Нет участников с выбранной ролью",
+        "toast_invite_copied": "Ссылка скопирована",
+        "err_clipboard": "Не удалось скопировать"
     },
     "team_roles": {
         "owner": "Владелец",
@@ -308,7 +312,23 @@
         "success_title": "API ключ создан!",
         "warning_lead": "Важно:",
         "toast_created": "Ключ создан",
-        "err_create_failed": "Не удалось создать ключ"
+        "err_create_failed": "Не удалось создать ключ",
+        "toast_key_copied": "Ключ скопирован в буфер",
+        "err_copy_failed": "Не удалось скопировать",
+        "scope_agents_read_name": "Агенты: чтение",
+        "scope_agents_read_desc": "Просмотр и запуск flows, без изменения конфигурации",
+        "scope_agents_write_name": "Агенты: запись",
+        "scope_agents_write_desc": "Создание и изменение flows, skills и связанных настроек",
+        "scope_crm_read_name": "CRM: чтение",
+        "scope_crm_read_desc": "Просмотр сущностей, графа и связанных данных",
+        "scope_crm_write_name": "CRM: запись",
+        "scope_crm_write_desc": "Создание и изменение сущностей, грантов и настроек CRM",
+        "scope_rag_read_name": "RAG: чтение",
+        "scope_rag_read_desc": "Чтение документов и поиск по коллекциям",
+        "scope_rag_write_name": "RAG: запись",
+        "scope_rag_write_desc": "Загрузка и изменение документов, пересчёт эмбеддингов",
+        "scope_billing_read_name": "Биллинг: чтение",
+        "scope_billing_read_desc": "Просмотр использования и тарифных данных (только чтение)"
     },
     "api_key_edit_modal": {
         "header": "Переименовать API ключ",
@@ -464,5 +484,25 @@
         "cancel": "Отмена",
         "submit": "Перейти к оплате",
         "submitting": "Создание платежа..."
+    },
+    "support_page": {
+        "title": "Поддержка",
+        "lede": "Напишите нам на почту или заполните форму: откроется почтовый клиент с готовым письмом на адрес поддержки.",
+        "email_section_title": "Почта",
+        "form_section_title": "Быстрое обращение",
+        "field_reply_email": "Email для ответа",
+        "field_subject": "Тема",
+        "field_message": "Сообщение",
+        "required_mark": "*",
+        "required_aria": "обязательное поле",
+        "submit": "Открыть почту и отправить",
+        "note_mailto": "Сообщение не отправляется через сервер: откроется приложение «Почта» или выбранный на устройстве почтовый клиент.",
+        "doc_link": "Документация",
+        "err_subject": "Укажите тему.",
+        "err_message": "Введите сообщение.",
+        "err_reply_email": "Введите корректный email или оставьте поле пустым.",
+        "err_too_long": "Сообщение слишком длинное для открытия через mailto — сократите текст.",
+        "status_opening": "Открываю почту…",
+        "mail_line_contact": "Контакт для ответа: {{email}}"
     }
 }

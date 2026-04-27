@@ -1,6 +1,8 @@
 """
 Единое значение meta viewport для веб-UI платформы (мобильные: без pinch/double-tap zoom).
-Статические index.html дублируют эту строку в атрибуте content — при смене править и их.
+Та же строка, что `PLATFORM_MOBILE_VIEWPORT_CONTENT` в
+`core/frontend/static/lib/utils/platform-viewport-meta.js`; статические `apps/*/ui/index.html`
+дублируют content — при смене править все три.
 """
 
 PLATFORM_MOBILE_VIEWPORT_CONTENT: str = (

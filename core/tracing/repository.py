@@ -14,6 +14,7 @@ from sqlalchemy import Boolean, and_, cast, func, or_, select
 from sqlalchemy.dialects.postgresql import insert
 
 from core.logging import get_logger
+
 from . import attributes as trace_attr
 
 if TYPE_CHECKING:
@@ -544,6 +545,26 @@ class SpanRepository:
             result = await session.execute(stmt)
             return [row[0] for row in result.all() if row[0] is not None]
 
+    async def admin_list_distinct_company_ids_in_spans(self, *, max_ids: int = 5000) -> List[str]:
+        """
+        Список distinct company_id, для которых есть spans, для пересечения
+        с каталогом компаний (поиск по name/subdomain, не только по id в трейсах).
+        """
+        from core.db.models import Spans
+
+        if max_ids < 1 or max_ids > 50_000:
+            raise ValueError("max_ids должен быть от 1 до 50000")
+        async with self._storage._get_session() as session:
+            stmt = (
+                select(Spans.company_id)
+                .where(Spans.company_id.isnot(None))
+                .distinct()
+                .order_by(Spans.company_id.asc())
+                .limit(max_ids)
+            )
+            result = await session.execute(stmt)
+            return [row[0] for row in result.all() if row[0] is not None]
+
     async def admin_facet_distinct_user_ids(
         self,
         *,
@@ -568,6 +589,33 @@ class SpanRepository:
             if frag is not None:
                 stmt = stmt.where(_admin_ilike(Spans.user_id, frag))
             stmt = stmt.distinct().order_by(Spans.user_id.asc()).limit(limit)
+            result = await session.execute(stmt)
+            return [row[0] for row in result.all() if row[0] is not None]
+
+    async def admin_list_distinct_user_ids_in_spans(
+        self,
+        *,
+        max_ids: int = 5000,
+        company_id: Optional[str] = None,
+        namespace: Optional[str] = None,
+    ) -> List[str]:
+        """
+        Список distinct user_id, для которых есть spans (с опциональным сужением),
+        для пересечения с каталогом пользователей (поиск по email/имени).
+        """
+        from core.db.models import Spans
+
+        if max_ids < 1 or max_ids > 50_000:
+            raise ValueError("max_ids должен быть от 1 до 50000")
+        scope_co = _admin_facet_scope_company(company_id)
+        scope_ns = _admin_facet_scope_namespace(namespace)
+        async with self._storage._get_session() as session:
+            stmt = select(Spans.user_id).where(Spans.user_id.isnot(None))
+            if scope_co is not None:
+                stmt = stmt.where(Spans.company_id == scope_co)
+            if scope_ns is not None:
+                stmt = stmt.where(Spans.namespace == scope_ns)
+            stmt = stmt.distinct().order_by(Spans.user_id.asc()).limit(max_ids)
             result = await session.execute(stmt)
             return [row[0] for row in result.all() if row[0] is not None]
 

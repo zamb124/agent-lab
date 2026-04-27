@@ -87,6 +87,22 @@ export class SyncMessageBubble extends PlatformElement {
             align-items: flex-end;
         }
         :host([data-own]) .row { justify-content: flex-end; }
+        .row.row-call-boundary {
+            box-sizing: border-box;
+            width: 100%;
+            max-width: 100%;
+            display: block;
+            text-align: center;
+        }
+        .row.row-call-boundary > .call-boundary {
+            text-align: start;
+        }
+        :host([data-only-call-boundary]) {
+            display: block;
+            width: 100%;
+            max-width: 100%;
+            box-sizing: border-box;
+        }
         .avatar-slot {
             width: 32px;
             flex-shrink: 0;
@@ -418,13 +434,16 @@ export class SyncMessageBubble extends PlatformElement {
         }
         .call-boundary {
             display: inline-flex;
+            flex-wrap: wrap;
             align-items: center;
+            justify-content: center;
             gap: var(--space-2);
             font-size: var(--text-xs);
             color: var(--text-secondary);
             padding: var(--space-1) var(--space-3);
             background: var(--glass-hover);
             border-radius: 999px;
+            max-width: 100%;
         }
         .call-join-btn {
             padding: 2px 10px;
@@ -456,7 +475,26 @@ export class SyncMessageBubble extends PlatformElement {
             cursor: pointer;
             font-size: var(--text-xs);
         }
-        :host([data-own]) .transcribe-btn { color: white; border-color: rgba(255,255,255,0.6); }
+        :host([data-own]) .bubble .transcribe-btn {
+            color: var(--text-inverse, #fff);
+            border-color: rgba(255, 255, 255, 0.6);
+        }
+        .call-boundary .transcribe-call-a-btn {
+            box-sizing: border-box;
+            min-width: 28px;
+            min-height: 28px;
+            padding: 2px 6px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .call-boundary .transcribe-a-glyph {
+            font-size: var(--text-sm);
+            font-weight: 800;
+            line-height: 1;
+            letter-spacing: -0.02em;
+            color: var(--text-primary);
+        }
         .quick-reactions {
             display: none;
             position: absolute;
@@ -521,6 +559,10 @@ export class SyncMessageBubble extends PlatformElement {
         if (changed.has('message') || changed.has('myUserId')) {
             const own = !!(this.message && this.message.sender && this.message.sender.user_id === this.myUserId);
             this.toggleAttribute('data-own', own);
+            const onlyCallBoundary = this._isCallBoundaryOnlyRow(
+                this.message && this.message.contents,
+            );
+            this.toggleAttribute('data-only-call-boundary', onlyCallBoundary);
             const showAvatar = !own && (this.position === 'first' || this.position === 'single');
             this.toggleAttribute('data-show-avatar', showAvatar);
             const sender = this.message && this.message.sender;
@@ -632,9 +674,9 @@ export class SyncMessageBubble extends PlatformElement {
 
     _onTranscribeCall(callId) {
         if (typeof callId !== 'string' || callId === '') return;
+        if (!this.message || typeof this.message.channel_id !== 'string') return;
         this._transcribeCall.run({
             channel_id: this.message.channel_id,
-            message_id: this.message.message_id,
             call_id: callId,
         });
     }
@@ -812,21 +854,23 @@ export class SyncMessageBubble extends PlatformElement {
                         <button class="call-join-btn" @click=${() => this._onJoinCall(callId)} title=${this.t('bubble.call_boundary_join_title')}>
                             ${this.t('bubble.call_boundary_join')}
                         </button>
-                        <button class="transcribe-btn" @click=${() => this._onTranscribeCall(callId)}>
-                            ${this.t('bubble.transcribe_meeting')}
-                        </button>
                     ` : ''}
                 </div>
             `;
         }
+        const showTranscribe = data ? data.has_recording !== false : true;
         return html`
             <div class="call-boundary">
                 <platform-icon name="phone-off" size="14"></platform-icon>
                 ${this.t('bubble.call_boundary_ended')}
-                ${typeof callId === 'string' ? html`
-                    <button class="transcribe-btn" @click=${() => this._onTranscribeCall(callId)}>
-                        ${this.t('bubble.transcribe_meeting')}
-                    </button>
+                ${typeof callId === 'string' && showTranscribe ? html`
+                    <button
+                        type="button"
+                        class="transcribe-btn transcribe-call-a-btn"
+                        title=${this.t('bubble.transcribe_meeting')}
+                        aria-label=${this.t('bubble.transcribe_meeting')}
+                        @click=${() => this._onTranscribeCall(callId)}
+                    ><span class="transcribe-a-glyph" aria-hidden="true">A</span></button>
                 ` : ''}
             </div>
         `;
@@ -1013,6 +1057,45 @@ export class SyncMessageBubble extends PlatformElement {
         return html`<div class="meta">${pinned}${edited}<span>${time}</span>${this._renderStatus()}</div>`;
     }
 
+    _stringContentType(c) {
+        if (c == null || typeof c !== 'object') return null;
+        const t = c.type;
+        if (typeof t !== 'string') return null;
+        const s = t.trim();
+        return s === '' ? null : s;
+    }
+
+    /**
+     * Блоки для решения, «только call/boundary» это или нет: пустые text/plain
+     * (часто приезжают с бэка вторым slot) не считаем содержимым.
+     */
+    _relevantContentBlocks(raw) {
+        if (!Array.isArray(raw)) return [];
+        const out = [];
+        for (const c of raw) {
+            if (c == null || typeof c !== 'object') continue;
+            const st = this._stringContentType(c);
+            if (st == null) continue;
+            if (st === 'text/plain') {
+                const data = c.data;
+                if (data && typeof data === 'object' && 'body' in data) {
+                    const b = data.body;
+                    if (b == null) continue;
+                    if (typeof b === 'string' && b.trim() === '') continue;
+                } else {
+                    continue;
+                }
+            }
+            out.push(c);
+        }
+        return out;
+    }
+
+    _isCallBoundaryOnlyRow(contents) {
+        const rel = this._relevantContentBlocks(contents);
+        return rel.length > 0 && rel.every((c) => this._stringContentType(c) === 'call/boundary');
+    }
+
     _renderAvatar() {
         const sender = this.message && this.message.sender;
         if (!sender || typeof sender.user_id !== 'string') return html`<span class="avatar"></span>`;
@@ -1037,11 +1120,18 @@ export class SyncMessageBubble extends PlatformElement {
         const sender = this.message.sender;
         const senderId = sender && sender.user_id;
         const isOwn = senderId === this.myUserId;
-        const contents = Array.isArray(this.message.contents) ? this.message.contents : [];
-        const onlyBoundary = contents.length === 1 && contents[0].type === 'call/boundary';
-        if (onlyBoundary) {
-            return html`<div class="row" style="justify-content: center;">${this._renderContent(contents[0])}</div>`;
+        const relevant = this._relevantContentBlocks(this.message.contents);
+        const onlyCallBoundaryLayout =
+            relevant.length > 0
+            && relevant.every((c) => this._stringContentType(c) === 'call/boundary');
+        if (onlyCallBoundaryLayout) {
+            return html`
+                <div class="row row-call-boundary">
+                    ${relevant.map((c) => this._renderContent(c))}
+                </div>
+            `;
         }
+        const contents = Array.isArray(this.message.contents) ? this.message.contents : [];
         const slice = this._chatUi.value;
         const selectionMode = slice && slice.selectionMode === true;
         const selected = slice && Array.isArray(slice.selectedMessageIds)

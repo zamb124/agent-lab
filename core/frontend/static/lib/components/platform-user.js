@@ -629,7 +629,7 @@ export class PlatformUser extends PlatformElement {
                 background: var(--accent-gradient);
                 color: white;
                 font-weight: var(--font-bold);
-                font-size: var(--text-sm);
+                font-size: var(--text-base);
                 box-shadow: 0 4px 12px rgba(16, 185, 129, 0.25);
                 overflow: hidden;
             }
@@ -652,7 +652,7 @@ export class PlatformUser extends PlatformElement {
                 flex-direction: column;
             }
             .user-name {
-                font-size: var(--text-sm);
+                font-size: var(--text-base);
                 font-weight: var(--font-semibold);
                 color: var(--text-primary);
                 white-space: nowrap;
@@ -660,7 +660,7 @@ export class PlatformUser extends PlatformElement {
                 text-overflow: ellipsis;
             }
             .user-email {
-                font-size: var(--text-xs);
+                font-size: var(--text-sm);
                 color: var(--text-tertiary);
                 white-space: nowrap;
                 overflow: hidden;
@@ -708,7 +708,7 @@ export class PlatformUser extends PlatformElement {
                 background: transparent;
                 border: none;
                 cursor: pointer;
-                font-size: var(--text-sm);
+                font-size: var(--text-base);
                 color: var(--text-primary);
                 text-align: left;
             }
@@ -795,12 +795,12 @@ export class PlatformUser extends PlatformElement {
             .app-logo { width: 20px; height: 20px; object-fit: contain; }
             .app-go-icon { color: var(--text-tertiary); }
             .app-card-name {
-                font-size: var(--text-sm);
+                font-size: var(--text-base);
                 font-weight: var(--font-semibold);
                 color: var(--text-primary);
             }
             .app-card-description {
-                font-size: var(--text-xs);
+                font-size: var(--text-sm);
                 color: var(--text-secondary);
                 line-height: 1.4;
             }
@@ -824,7 +824,7 @@ export class PlatformUser extends PlatformElement {
                 border: 1px solid transparent;
                 border-radius: var(--radius-md);
                 cursor: pointer;
-                font-size: var(--text-sm);
+                font-size: var(--text-base);
                 color: var(--text-primary);
             }
             .company-item:hover {
@@ -850,7 +850,7 @@ export class PlatformUser extends PlatformElement {
                 align-items: center;
                 gap: var(--space-3);
                 padding: var(--space-2) var(--space-3);
-                font-size: var(--text-sm);
+                font-size: var(--text-base);
                 color: var(--text-primary);
             }
             .lang-switcher { display: inline-flex; align-items: center; gap: 2px; }
@@ -861,7 +861,7 @@ export class PlatformUser extends PlatformElement {
                 color: var(--text-tertiary);
                 cursor: pointer;
                 border-radius: var(--radius-sm);
-                font-size: var(--text-sm);
+                font-size: var(--text-base);
             }
             .lang-option.active { color: var(--accent); font-weight: var(--font-semibold); }
             .lang-separator { color: var(--text-tertiary); }

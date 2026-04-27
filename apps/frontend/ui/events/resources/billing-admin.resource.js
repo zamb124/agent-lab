@@ -31,6 +31,30 @@ import { CoreEvents } from '@platform/lib/events/contract.js';
 const BASE_BILLING = '/frontend/api/platform-billing';
 const BASE_COMPANIES = '/frontend/api/companies';
 
+const _COMPANY_OVERVIEW_REQUIRED_KEYS = Object.freeze([
+    'company_id',
+    'name',
+    'status',
+    'tariff_plan',
+    'balance',
+    'monthly_budget',
+    'current_month_spent',
+]);
+
+function _assertCompanyOverviewItemsShape(items) {
+    for (let i = 0; i < items.length; i += 1) {
+        const row = items[i];
+        if (!row || typeof row !== 'object') {
+            throw new Error(`companies_billing_overview: items[${i}] must be an object`);
+        }
+        for (const k of _COMPANY_OVERVIEW_REQUIRED_KEYS) {
+            if (!Object.prototype.hasOwnProperty.call(row, k)) {
+                throw new Error(`companies_billing_overview: items[${i}] missing "${k}"`);
+            }
+        }
+    }
+}
+
 function _toastError(ctx, key) {
     ctx.dispatch(
         CoreEvents.UI_TOAST_SHOW,
@@ -61,7 +85,9 @@ export const companiesOverviewLoadOp = createAsyncOp({
             url: `${BASE_BILLING}/companies-billing-overview`,
             query: { limit: PAGE_SIZE, offset },
         });
-        return { items: Array.isArray(data.items) ? data.items : [], has_more: !!data.has_more, offset, append };
+        const items = Array.isArray(data.items) ? data.items : [];
+        _assertCompanyOverviewItemsShape(items);
+        return { items, has_more: !!data.has_more, offset, append };
     },
     extraInitial: {
         items: [],

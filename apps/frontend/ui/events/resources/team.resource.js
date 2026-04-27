@@ -5,10 +5,8 @@
  *   - teamMembersResource (createResourceCollection): список участников,
  *     обновление ролей, удаление участника. Создание участника отсутствует —
  *     приглашения идут через `inviteGenerateOp`.
- *   - inviteGenerateOp (createAsyncOp): генерация одноразовой invite-ссылки.
- *     Сгенерированные ссылки хранятся в slice как `links: { [role]: link }`,
- *     чтобы UI мог показать конкретную ссылку для выбранной роли без
- *     собственного локального состояния.
+ *   - inviteGenerateOp (createAsyncOp, silent): генерация invite-ссылки;
+ *     slice `links: { [role]: link }` кэширует ссылку для повторного копирования.
  *
  * Backend:
  *   GET    /frontend/api/team/members           → { items: TeamMember[] }
@@ -36,8 +34,7 @@ export const teamMembersResource = createResourceCollection({
 
 export const inviteGenerateOp = createAsyncOp({
     name: 'frontend/team_invite',
-    successToastKey: 'frontend:team_page.toast_invite_generated',
-    errorToastKey: 'frontend:team_page.err_invite',
+    silent: true,
     restMirror: { method: 'POST', path: '/frontend/api/invites/generate' },
     request: async ({ payload }) => {
         const role = payload && payload.role;

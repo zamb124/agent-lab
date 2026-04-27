@@ -98,8 +98,19 @@ export class FrontendBillingAdminPage extends PlatformPage {
             .hint { color: var(--text-tertiary); font-size: var(--text-xs); margin-bottom: var(--space-3); }
 
             table { width: 100%; border-collapse: collapse; }
-            th, td { padding: var(--space-2) var(--space-3); border-bottom: 1px solid var(--glass-border-subtle); text-align: left; font-size: var(--text-sm); }
-            th { color: var(--text-tertiary); font-size: var(--text-xs); text-transform: uppercase; letter-spacing: 0.05em; }
+            th, td {
+                padding: var(--space-2) var(--space-3);
+                border-bottom: 1px solid var(--glass-border-subtle);
+                text-align: left;
+                font-size: var(--text-sm);
+                color: var(--text-primary);
+            }
+            th {
+                color: var(--text-tertiary);
+                font-size: var(--text-xs);
+                text-transform: uppercase;
+                letter-spacing: 0.05em;
+            }
             td.mono { font-family: var(--font-mono); color: var(--text-secondary); }
 
             .row-input {

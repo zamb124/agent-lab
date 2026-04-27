@@ -10,7 +10,10 @@ import '../components/sync-channel-picker.js';
 export class SyncShellPage extends PlatformPage {
     static styles = css`
         :host {
-            display: block;
+            display: flex;
+            flex-direction: column;
+            flex: 1;
+            min-height: 0;
             height: 100%;
         }
     `;

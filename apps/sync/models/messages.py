@@ -108,6 +108,10 @@ class CallBoundaryContent(BaseModel):
 
     call_id: str = Field(description="Идентификатор звонка.")
     phase: Literal["started", "ended"] = Field(description="Фаза сессии.")
+    has_recording: bool = Field(
+        default=True,
+        description="Для phase=ended: есть успешно завершённая серверная запись (status uploaded).",
+    )
 
 
 class CallTranscriptEntry(BaseModel):

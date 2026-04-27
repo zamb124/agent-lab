@@ -6,7 +6,8 @@
  *   select syncPresence                — typing preview, online dot для DM.
  *   select syncCallUi.activeCallChannels — pill «Войти» (как баннер свёрнутого звонка).
  *
- * Действия: navigate('channel', { channelId }); иконка типа (user / users); шестерёнка:
+ * Действия: navigate('channel', { channelId }), при открытой моб. панели — closeMobile;
+ * иконка типа (user / users); шестерёнка:
  * группы — sync.channel_edit, личные — platform.user_info.
  */
 
@@ -312,9 +313,17 @@ export class SyncChannelRow extends PlatformElement {
         this._avatarImgFailed = true;
     }
 
+    _closeSidebarMobile() {
+        const shell = this.closest('platform-service-sidebar');
+        if (shell && typeof shell.closeMobile === 'function') {
+            shell.closeMobile();
+        }
+    }
+
     _onClick() {
         if (!this.channel) return;
         this.navigate('channel', { channelId: this.channel.id });
+        this._closeSidebarMobile();
     }
 
     _onJoinCall(callInfo, e) {
@@ -342,6 +351,7 @@ export class SyncChannelRow extends PlatformElement {
             });
         }
         this.navigate('channel', { channelId: this.channel.id });
+        this._closeSidebarMobile();
     }
 
     _onGear(e) {

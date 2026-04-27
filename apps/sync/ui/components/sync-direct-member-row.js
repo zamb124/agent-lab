@@ -1,8 +1,9 @@
 /**
  * sync-direct-member-row — строка участника компании в DM-секции sidebar.
  *
- * Click: ищет direct-канал в state.syncChannels.items; если есть — navigate;
- * иначе создаёт через useResource('sync/channels').create({type:'direct', member_ids}).
+ * Click: ищет direct в списке; если есть — navigate и закрытие моб. сайдбара;
+ * иначе create; после sync/channels/created с тем же peer — navigate.
+ * Дубликаты direct на сервере не создаются (идемпотентный create).
  *
  * Отображает аватар (или цветные инициалы), имя, presence subtitle (online /
  * last seen) и пульсирующий зелёный dot online.
@@ -24,15 +25,21 @@ export class SyncDirectMemberRow extends PlatformElement {
 
     static styles = css`
         :host {
+            display: block;
+            position: relative;
+        }
+        .row-inner {
             display: flex;
             align-items: center;
             gap: var(--space-2);
             padding: var(--space-1) var(--space-2);
             border-radius: var(--radius-sm);
             cursor: pointer;
-            position: relative;
+            box-sizing: border-box;
         }
-        :host(:hover) { background: var(--glass-hover); }
+        .row-inner:hover {
+            background: var(--glass-hover);
+        }
         .avatar {
             width: 32px;
             height: 32px;
@@ -87,13 +94,12 @@ export class SyncDirectMemberRow extends PlatformElement {
         }
 
         @media (min-width: 768px) {
-            :host-context(platform-service-sidebar[collapsed]) {
+            :host-context(platform-service-sidebar[collapsed]) .row-inner {
                 justify-content: center;
                 width: 100%;
                 max-width: 100%;
                 margin: 0 0 var(--space-1) 0;
                 padding: var(--space-2);
-                box-sizing: border-box;
             }
             :host-context(platform-service-sidebar[collapsed]) .text {
                 display: none;
@@ -110,8 +116,37 @@ export class SyncDirectMemberRow extends PlatformElement {
         this.member = null;
         this._avatarImgFailed = false;
         this._avatarMemberSig = '';
+        this._pendingOpenDmPeerId = null;
         this._channels = this.useResource('sync/channels');
         this._presenceSel = this.select((s) => s.syncPresence);
+        this.useEvent('sync/channels/created', (e) => this._onChannelsCreated(e));
+        this.useEvent('sync/channels/create_failed', () => {
+            this._pendingOpenDmPeerId = null;
+        });
+    }
+
+    _closeSidebarMobile() {
+        const shell = this.closest('platform-service-sidebar');
+        if (shell && typeof shell.closeMobile === 'function') {
+            shell.closeMobile();
+        }
+    }
+
+    _onChannelsCreated(e) {
+        if (this._pendingOpenDmPeerId === null) return;
+        const p = e.payload;
+        if (!p || typeof p !== 'object') return;
+        const item = p.item;
+        if (!item || typeof item !== 'object') return;
+        if (item.type !== 'direct') return;
+        const peer = item.peer;
+        const peerId = peer && typeof peer.user_id === 'string' ? peer.user_id : '';
+        if (peerId === '' || peerId !== this._pendingOpenDmPeerId) return;
+        this._pendingOpenDmPeerId = null;
+        const id = item.id;
+        if (typeof id !== 'string' || id === '') return;
+        this.navigate('channel', { channelId: id });
+        this._closeSidebarMobile();
     }
 
     updated(changed) {
@@ -141,8 +176,10 @@ export class SyncDirectMemberRow extends PlatformElement {
         const existing = this._findDirectChannel();
         if (existing) {
             this.navigate('channel', { channelId: existing.id });
+            this._closeSidebarMobile();
             return;
         }
+        this._pendingOpenDmPeerId = this.member.user_id;
         this._channels.create({ type: 'direct', member_ids: [this.member.user_id] });
     }
 
@@ -165,15 +202,17 @@ export class SyncDirectMemberRow extends PlatformElement {
         const userPresence = presenceByUserId ? presenceByUserId[this.member.user_id] : null;
         const subtitle = getPeerPresenceSubtitle(presenceByUserId, this.member.user_id, (k, v) => this.t(k, v));
         return html`
-            <span style="position: relative;">
-                ${this._renderAvatar()}
-                ${userPresence && userPresence.online
-                    ? html`<span class="presence-dot" title=${this.t('sidebar.row_online')}></span>`
-                    : ''}
-            </span>
-            <div class="text" @click=${this._onClick}>
-                <div class="name">${resolveDisplayName(this.member)}</div>
-                ${subtitle ? html`<div class="subtitle">${subtitle}</div>` : ''}
+            <div class="row-inner" @click=${this._onClick}>
+                <span style="position: relative;">
+                    ${this._renderAvatar()}
+                    ${userPresence && userPresence.online
+                        ? html`<span class="presence-dot" title=${this.t('sidebar.row_online')}></span>`
+                        : ''}
+                </span>
+                <div class="text">
+                    <div class="name">${resolveDisplayName(this.member)}</div>
+                    ${subtitle ? html`<div class="subtitle">${subtitle}</div>` : ''}
+                </div>
             </div>
         `;
     }

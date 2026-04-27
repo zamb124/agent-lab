@@ -74,6 +74,7 @@ import '../pages/products/product-crm-page.js';
 import '../pages/products/product-sync-page.js';
 import '../pages/products/product-documents-page.js';
 import '../pages/legal-page.js';
+import '../pages/support-page.js';
 import '../pages/login-page.js';
 import '../pages/join-page.js';
 import '../pages/select-company-page.js';
@@ -97,6 +98,7 @@ const FRONTEND_ROUTES = [
     { key: 'product-documents', path: 'products/documents' },
     { key: 'policy',            path: 'policy' },
     { key: 'terms',             path: 'terms' },
+    { key: 'support',           path: 'support' },
     { key: 'login',             path: 'login' },
     { key: 'join',              path: 'join' },
     { key: 'select-company',    path: 'select-company' },
@@ -115,14 +117,14 @@ const FRONTEND_ROUTES = [
 const PUBLIC_ROUTE_KEYS = new Set([
     'landing',
     'product-agents', 'product-rag', 'product-crm', 'product-sync', 'product-documents',
-    'policy', 'terms',
+    'policy', 'terms', 'support',
     'login', 'join', 'select-company',
 ]);
 
 const LANDING_ROUTE_KEYS = new Set([
     'landing',
     'product-agents', 'product-rag', 'product-crm', 'product-sync', 'product-documents',
-    'policy', 'terms',
+    'policy', 'terms', 'support',
 ]);
 
 /** Страницы, где уже есть `<page-header>` — общий мобильный хедер не вставляем. */
@@ -308,6 +310,7 @@ export class FrontendApp extends PlatformApp {
             case 'product-documents':  return html`<product-documents-page></product-documents-page>`;
             case 'policy':             return html`<legal-page kind="policy"></legal-page>`;
             case 'terms':              return html`<legal-page kind="terms"></legal-page>`;
+            case 'support':            return html`<support-page></support-page>`;
             case 'login':              return html`<login-page></login-page>`;
             case 'join':               return html`<join-page></join-page>`;
             case 'select-company':     return html`<select-company-page></select-company-page>`;

@@ -284,6 +284,12 @@ async def test_call_hangup_by_last_participant_writes_call_boundary_ended(
     ]
     assert len(ended_boundaries) == 1
     assert ended_boundaries[0]["call_id"] == call["call_id"]
+    ended_boundary = next(
+        c
+        for c in ended_boundaries[0]["contents"]
+        if c["type"] == "call/boundary" and c["data"]["phase"] == "ended"
+    )
+    assert ended_boundary["data"]["has_recording"] is False
 
 
 @pytest.mark.asyncio

@@ -202,6 +202,8 @@
         "call_boundary_join_title": "Идёт звонок — войти",
         "call_boundary_ended": "Звонок завершён",
         "transcribe_meeting": "Транскрибировать митинг",
+        "toast_transcribe_call_queued": "Сводка по митингу поставлена в очередь — сообщение появится в чате, когда будет готово.",
+        "toast_transcribe_call_failed": "Не удалось запустить сводку по митингу.",
         "transcribe_video": "Транскрибировать",
         "transcribe_processing": "Идёт расшифровка…",
         "err_call_id_transcribe": "Для расшифровки митинга нужен call_id у сообщения.",

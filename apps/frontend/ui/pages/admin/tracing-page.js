@@ -146,8 +146,9 @@ export class FrontendTracingPage extends PlatformPage {
 
             .drawer-backdrop {
                 position: fixed; inset: 0;
-                background: rgba(0, 0, 0, 0.5);
+                background: transparent;
                 z-index: 100;
+                cursor: default;
             }
             .drawer {
                 position: fixed; top: 0; right: 0; bottom: 0;
@@ -430,7 +431,10 @@ export class FrontendTracingPage extends PlatformPage {
         if (!trace && !loading && !error) return null;
         const tree = trace && trace.tree ? trace.tree : [];
         return html`
-            <div class="drawer-backdrop" @click=${() => this._close()}></div>
+            <div
+                class="drawer-backdrop"
+                @click=${(e) => { if (e.target === e.currentTarget) this._close(); }}
+            ></div>
             <div class="drawer">
                 <div class="drawer-header">
                     <div>
@@ -467,7 +471,7 @@ export class FrontendTracingPage extends PlatformPage {
 
     _close() {
         this._traceDrawerSpan = null;
-        this._trace.closeTrace();
+        this._trace.closeTrace(null);
     }
 
     render() {

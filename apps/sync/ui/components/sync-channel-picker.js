@@ -22,6 +22,7 @@ import { html, css } from 'lit';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
 import { getPlatformNamespaceSidebarSelection } from '@platform/lib/utils/platform-namespace.js';
 import '@platform/lib/components/glass-card.js';
+import './sync-chat-header.js';
 import { resolveAvatarImageSrc } from '@platform/lib/utils/placeholder-avatar.js';
 import { channelDisplayTitle } from './_helpers/sync-channel-display.js';
 import { syncChannelPlaceholderCollection } from '../_helpers/sync-channel-placeholder-collection.js';
@@ -34,20 +35,20 @@ export class SyncChannelPicker extends PlatformElement {
 
     static styles = css`
         :host {
-            display: block;
-            padding: var(--space-6);
-            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+            flex: 1;
+            min-height: 0;
             height: 100%;
             box-sizing: border-box;
+            overflow: hidden;
         }
-        .header {
-            margin-bottom: var(--space-5);
-        }
-        h2 {
-            margin: 0;
-            font-size: var(--text-2xl);
-            font-weight: var(--font-bold);
-            color: var(--text-primary);
+        .body {
+            flex: 1;
+            min-height: 0;
+            overflow-y: auto;
+            padding: var(--space-6);
+            box-sizing: border-box;
         }
         .filters {
             display: flex;
@@ -211,30 +212,37 @@ export class SyncChannelPicker extends PlatformElement {
         const headerTitle = activeNsItem
             ? activeNsItem.name
             : this.t('channel_picker.title');
+        const listSubtitle = activeNs === 'all'
+            ? this.t('sidebar.all_namespaces')
+            : activeNs;
         return html`
-            <div class="header">
-                <h2>${headerTitle}</h2>
-            </div>
-            <div class="filters">
-                ${activeNs === 'all'
-                    ? html`<span class="filter active">${this.t('sidebar.all_namespaces')}</span>`
-                    : html`<span class="filter active">${activeNs}</span>`}
-            </div>
-            ${filtered.length === 0 ? html`
-                <div class="empty">${this.t('channel_picker.empty')}</div>
-            ` : html`
-                <div class="grid">
-                    ${filtered.map((c) => html`
-                        <glass-card class="tile" @click=${() => this.navigate('channel', { channelId: c.id })}>
-                            <div class="tile-head">
-                                ${this._renderTileAvatar(c)}
-                                <h3 class="tile-title">${channelDisplayTitle(c)}</h3>
-                            </div>
-                            <p class="tile-preview">${typeof c.last_message_preview === 'string' ? c.last_message_preview : ''}</p>
-                        </glass-card>
-                    `)}
+            <sync-chat-header
+                header-mode="list"
+                .listTitle=${headerTitle}
+                .listSubtitle=${listSubtitle}
+            ></sync-chat-header>
+            <div class="body">
+                <div class="filters">
+                    ${activeNs === 'all'
+                        ? html`<span class="filter active">${this.t('sidebar.all_namespaces')}</span>`
+                        : html`<span class="filter active">${activeNs}</span>`}
                 </div>
-            `}
+                ${filtered.length === 0 ? html`
+                    <div class="empty">${this.t('channel_picker.empty')}</div>
+                ` : html`
+                    <div class="grid">
+                        ${filtered.map((c) => html`
+                            <glass-card class="tile" @click=${() => this.navigate('channel', { channelId: c.id })}>
+                                <div class="tile-head">
+                                    ${this._renderTileAvatar(c)}
+                                    <h3 class="tile-title">${channelDisplayTitle(c)}</h3>
+                                </div>
+                                <p class="tile-preview">${typeof c.last_message_preview === 'string' ? c.last_message_preview : ''}</p>
+                            </glass-card>
+                        `)}
+                    </div>
+                `}
+            </div>
         `;
     }
 }

@@ -108,6 +108,26 @@ export class AuthModal extends PlatformModal {
         this.startOAuth(provider, { returnPath, plan });
     }
 
+    _openSupport() {
+        this.close();
+        this.navigate('support');
+    }
+
+    renderHeaderActions() {
+        const label = this.t('auth.support_link_aria');
+        return html`
+            <button
+                type="button"
+                class="header-btn"
+                title=${label}
+                aria-label=${label}
+                @click=${this._openSupport}
+            >
+                <platform-icon name="help" size="16"></platform-icon>
+            </button>
+        `;
+    }
+
     _handleDemoSubmit(e) {
         e.preventDefault();
         if (this.loading) return;

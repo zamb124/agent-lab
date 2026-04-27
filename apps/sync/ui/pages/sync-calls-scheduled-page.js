@@ -3,12 +3,28 @@ import { PlatformPage } from '@platform/lib/base/PlatformPage.js';
 import { resolveNonEmptyString } from '../_helpers/sync-id-resolvers.js';
 import '@platform/lib/components/glass-card.js';
 import '@platform/lib/components/platform-button.js';
+import '../components/sync-chat-header.js';
 
 export class SyncCallsScheduledPage extends PlatformPage {
     static styles = css`
-        :host { display: block; padding: var(--space-4); }
-        .header { display: flex; align-items: center; gap: var(--space-3); margin-bottom: var(--space-3); }
-        h2 { margin: 0; flex: 1; }
+        :host {
+            display: flex;
+            flex-direction: column;
+            flex: 1;
+            min-height: 0;
+            height: 100%;
+        }
+        .body {
+            flex: 1;
+            min-height: 0;
+            overflow-y: auto;
+            padding: var(--space-4);
+        }
+        .actions-row {
+            display: flex;
+            justify-content: flex-end;
+            margin-bottom: var(--space-3);
+        }
         ul { list-style: none; padding: 0; margin: 0; }
         .item {
             display: flex;
@@ -37,22 +53,28 @@ export class SyncCallsScheduledPage extends PlatformPage {
 
     render() {
         return html`
-            <div class="header">
-                <h2>${this.t('calls_scheduled.title')}</h2>
-                <platform-button variant="primary" @click=${this._onCreate}>${this.t('calls_scheduled.action_create')}</platform-button>
+            <sync-chat-header
+                header-mode="list"
+                .listTitle=${this.t('calls_scheduled.title')}
+                .listSubtitle=${''}
+            ></sync-chat-header>
+            <div class="body">
+                <div class="actions-row">
+                    <platform-button variant="primary" @click=${this._onCreate}>${this.t('calls_scheduled.action_create')}</platform-button>
+                </div>
+                ${this._links.items.length === 0 ? html`
+                    <p style="color: var(--text-secondary);">${this.t('calls_scheduled.empty')}</p>
+                ` : html`
+                    <ul>
+                        ${this._links.items.map((link) => html`
+                            <li class="item" @click=${() => this._onEdit(link.link_token)}>
+                                <span>${resolveNonEmptyString(link.title, link.link_token)}</span>
+                                <span class="meta">${link.scheduled_at ? new Date(link.scheduled_at).toLocaleString() : ''}</span>
+                            </li>
+                        `)}
+                    </ul>
+                `}
             </div>
-            ${this._links.items.length === 0 ? html`
-                <p style="color: var(--text-secondary);">${this.t('calls_scheduled.empty')}</p>
-            ` : html`
-                <ul>
-                    ${this._links.items.map((link) => html`
-                        <li class="item" @click=${() => this._onEdit(link.link_token)}>
-                            <span>${resolveNonEmptyString(link.title, link.link_token)}</span>
-                            <span class="meta">${link.scheduled_at ? new Date(link.scheduled_at).toLocaleString() : ''}</span>
-                        </li>
-                    `)}
-                </ul>
-            `}
         `;
     }
 }

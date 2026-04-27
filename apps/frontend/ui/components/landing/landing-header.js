@@ -12,6 +12,7 @@ const INTERNAL_HREF_TO_ROUTE = Object.freeze({
     '/products/crm':       'product-crm',
     '/products/sync':      'product-sync',
     '/products/documents': 'product-documents',
+    '/support':            'support',
     '/dashboard':          'dashboard',
 });
 
@@ -671,6 +672,7 @@ export class LandingHeader extends PlatformElement {
                         </div>
                     </div>
                     <a href="/documentation" class="nav-link">${h('docs')}</a>
+                    <a href="/support" class="nav-link" @click=${this._handleNavClick}>${h('support')}</a>
                 </nav>
                 
                 <div class="header-actions">
@@ -745,6 +747,7 @@ export class LandingHeader extends PlatformElement {
                 </div>
                 
                 <a href="/documentation" class="nav-link" @click=${this._handleNavClick}>${h('docs')}</a>
+                <a href="/support" class="nav-link" @click=${this._handleNavClick}>${h('support')}</a>
                 ${this.isAuthenticated
                     ? html`<a href="/dashboard" class="dashboard-btn" @click=${this._handleNavClick}>${h('dashboard')}</a>`
                     : html`<button class="login-btn" @click=${() => { this._closeMobileMenu(); this._handleLoginClick(); }}>${h('login')}</button>`

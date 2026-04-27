@@ -384,23 +384,25 @@ async def op_channels_create(
     container: SyncContainer,
 ) -> ChannelRead:
     company_id = resolve_company_id(user)
-    channel = await _create_channel(
+    channel, created_new = await _create_channel(
         payload,
         actor_user_id=user.user_id,
         company_id=company_id,
         channels=container.channel_repository,
         namespaces=container.namespace_repository,
+        user_repository=container.user_repository,
     )
-    recipients = await _channel_recipient_user_ids(
-        container.channel_repository, channel.id, company_id
-    )
-    await publish_realtime_events(
-        [
-            event_channel_created(
-                channel, company_id=company_id, recipient_user_ids=recipients
-            ),
-        ]
-    )
+    if created_new:
+        recipients = await _channel_recipient_user_ids(
+            container.channel_repository, channel.id, company_id
+        )
+        await publish_realtime_events(
+            [
+                event_channel_created(
+                    channel, company_id=company_id, recipient_user_ids=recipients
+                ),
+            ]
+        )
     return channel
 
 
@@ -1508,13 +1510,24 @@ async def _post_call_boundary_message_op(
 ) -> MessageRead:
     from apps.sync.models.messages import CallBoundaryContent
 
+    if phase == "ended":
+        recordings = await container.call_recording_repository.list_for_call(
+            call_id, company_id
+        )
+        has_recording = any(r.status == "uploaded" for r in recordings)
+        boundary_data = CallBoundaryContent(
+            call_id=call_id, phase=phase, has_recording=has_recording
+        )
+    else:
+        boundary_data = CallBoundaryContent(call_id=call_id, phase=phase)
+
     body = MessageCreate(
         thread_id=None,
         parent_message_id=None,
         contents=[
             MessageContentModel(
                 type=MessageContentType.CALL_BOUNDARY,
-                data=CallBoundaryContent(call_id=call_id, phase=phase),
+                data=boundary_data,
                 order=0,
             )
         ],

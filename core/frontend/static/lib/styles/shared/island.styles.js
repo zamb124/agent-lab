@@ -164,6 +164,14 @@ export const islandStyles = css`
     :host([content-no-scroll]) .island-content {
         overflow: hidden;
         overflow-y: hidden;
+        display: flex;
+        flex-direction: column;
+    }
+
+    :host([content-no-scroll]) .island-content ::slotted(*) {
+        flex: 1;
+        min-height: 0;
+        min-width: 0;
     }
 
     /* ========== LOADING STATE ========== */

@@ -1,8 +1,7 @@
 /**
- * sync-chat-header — шапка чата:
- *   - аватар канала (или DM-собеседник через platform-user-chip),
- *   - название + подзаголовок (typing / online / last seen / channel meta),
- *   - кнопки call / threads / more,
+ * sync-chat-header — шапка чата и единая шапка экранов Sync:
+ *   - `header-mode="channel"` (по умолчанию): аватар, заголовок, подзаголовок, звонок/настройки/⋯
+ *   - `header-mode="list"`: тот же ряд (меню, иконка, title/subtitle), без действий канала — список каналов, встречи, настройки
  *   - баннер активного звонка (свёрнутого) — открывает overlay.
  *
  * Источники: useResource('sync/channels'), select syncPresence, syncCallUi.
@@ -24,6 +23,13 @@ import { syncChannelPlaceholderCollection } from '../_helpers/sync-channel-place
 
 export class SyncChatHeader extends PlatformElement {
     static properties = {
+        /**
+         * `channel` — шапка диалога (телефон, настройки, …).
+         * `list` — те же отступы и меню, без действий канала: список каналов, встречи, настройки.
+         */
+        headerMode: { type: String, reflect: true, attribute: 'header-mode' },
+        listTitle: { type: String, attribute: 'list-title' },
+        listSubtitle: { type: String, attribute: 'list-subtitle' },
         channelId: { type: String },
         _menuOpen: { state: true },
         _headerAvatarFailed: { state: true },
@@ -40,8 +46,8 @@ export class SyncChatHeader extends PlatformElement {
             backdrop-filter: blur(12px);
             -webkit-backdrop-filter: blur(12px);
             min-height: 72px;
-            position: sticky;
-            top: 0;
+            flex-shrink: 0;
+            position: relative;
             z-index: 10;
         }
         :host([data-call-banner]) {
@@ -237,10 +243,23 @@ export class SyncChatHeader extends PlatformElement {
         }
         .ws-dot.connected { background: #22c55e; }
         .ws-dot.connecting { background: #eab308; }
+        .avatar.list-mark {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            color: var(--accent);
+            cursor: default;
+        }
+        .avatar.list-mark platform-icon {
+            display: block;
+        }
     `;
 
     constructor() {
         super();
+        this.headerMode = 'channel';
+        this.listTitle = '';
+        this.listSubtitle = '';
         this.channelId = '';
         this._menuOpen = false;
         this._headerAvatarFailed = false;
@@ -300,6 +319,26 @@ export class SyncChatHeader extends PlatformElement {
 
     _onMenuClick() {
         this.openSidebar();
+    }
+
+    _renderListChrome(title, subtitle) {
+        if (typeof title !== 'string' || title === '') {
+            throw new Error('sync-chat-header: list chrome title required');
+        }
+        const sub = typeof subtitle === 'string' && subtitle !== '' ? subtitle : '';
+        return html`
+            <button class="menu-btn" @click=${this._onMenuClick} title=${this.t('chat_header.menu')}>
+                <platform-icon name="menu" size="20"></platform-icon>
+            </button>
+            <span class="avatar list-mark" aria-hidden="true">
+                <platform-icon name="chat" size="22"></platform-icon>
+            </span>
+            <div class="text">
+                <div class="title">${title}</div>
+                ${sub !== '' ? html`<div class="subtitle">${sub}</div>` : ''}
+            </div>
+            <div class="actions"></div>
+        `;
     }
 
     async _onInviteCall() {
@@ -410,9 +449,17 @@ export class SyncChatHeader extends PlatformElement {
     }
 
     render() {
+        if (this.headerMode === 'list') {
+            if (typeof this.listTitle !== 'string' || this.listTitle === '') {
+                throw new Error('sync-chat-header: list mode requires listTitle');
+            }
+            const st =
+                typeof this.listSubtitle === 'string' && this.listSubtitle !== '' ? this.listSubtitle : '';
+            return this._renderListChrome(this.listTitle, st);
+        }
         const channel = this._channel();
         if (!channel) {
-            return html`<div class="text"><div class="title">${this.channelId}</div></div>`;
+            return this._renderListChrome(this.t('sidebar.loading'), '');
         }
         const presence = this._presenceSel.value;
         const typingByChannel = presence && presence.typingByChannel ? presence.typingByChannel : null;

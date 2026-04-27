@@ -89,6 +89,32 @@ async def test_op_channels_create_direct_with_peer(
         container=op_container,
     )
     assert direct.type == ChannelType.DIRECT
+    assert direct.peer is not None
+    assert direct.peer.user_id == op_user2.user_id
+    assert isinstance(direct.peer.display_name, str) and direct.peer.display_name != ''
+
+
+@pytest.mark.asyncio
+async def test_op_channels_create_direct_second_call_reuses_same_channel(
+    op_user: User,
+    op_user2: User,
+    op_container: SyncContainer,
+    op_context: None,
+    sync_auth_token_user2: str,
+    unique_id: str,
+) -> None:
+    _ = sync_auth_token_user2
+    _ = unique_id
+    create_direct = ChannelCreate(
+        type=ChannelType.DIRECT,
+        member_ids=[op_user2.user_id],
+        is_private=True,
+    )
+    first = await op_channels_create(create_direct, user=op_user, container=op_container)
+    second = await op_channels_create(create_direct, user=op_user, container=op_container)
+    assert first.id == second.id
+    assert first.type == ChannelType.DIRECT
+    assert second.type == ChannelType.DIRECT
 
 
 @pytest.mark.asyncio

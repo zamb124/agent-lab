@@ -106,6 +106,10 @@ ROUTE_RULES: List[RouteRule] = [
     RouteRule("/", auth_required=False, context_type="anonymous"),
     RouteRule("/policy", auth_required=False, context_type="anonymous"),
     RouteRule("/terms", auth_required=False, context_type="anonymous"),
+    RouteRule("/support", auth_required=False, context_type="anonymous"),
+    RouteRule("/support/", auth_required=False, context_type="anonymous"),
+    RouteRule("/frontend/support", auth_required=False, context_type="anonymous"),
+    RouteRule("/frontend/support/", auth_required=False, context_type="anonymous"),
     # Страница входа (redirect после истечения сессии: redirectToAuth() на apex-домене)
     RouteRule("/login", auth_required=False, context_type="anonymous"),
     RouteRule("/frontend/login", auth_required=False, context_type="anonymous"),
@@ -149,6 +153,12 @@ ROUTE_RULES: List[RouteRule] = [
     RouteRule("/frontend/api/public/legal", auth_required=False, context_type="anonymous"),
     RouteRule("/api/health", auth_required=False, context_type="anonymous"),
     RouteRule("/frontend/health", auth_required=False, context_type="anonymous"),
+    RouteRule("/sitemap.xml", auth_required=False, context_type="anonymous"),
+    RouteRule("/frontend/sitemap.xml", auth_required=False, context_type="anonymous"),
+    RouteRule("/robots.txt", auth_required=False, context_type="anonymous"),
+    RouteRule("/frontend/robots.txt", auth_required=False, context_type="anonymous"),
+    RouteRule("/llms.txt", auth_required=False, context_type="anonymous"),
+    RouteRule("/frontend/llms.txt", auth_required=False, context_type="anonymous"),
     RouteRule("/api/platform/file-types", auth_required=False, context_type="anonymous"),
     # Browser Runtime control-plane (Playwright/CDP). Технический сервис, auth делается на уровне внешнего контура.
     RouteRule("/browser/api/v1/control/*", auth_required=False, context_type="anonymous"),

@@ -45,6 +45,8 @@ export class SyncMessageList extends PlatformElement {
             flex: 1;
             min-height: 0;
             overflow-y: auto;
+            overscroll-behavior: contain;
+            touch-action: pan-y;
             padding: var(--space-6) var(--space-8);
             display: flex;
             flex-direction: column;

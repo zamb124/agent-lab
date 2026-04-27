@@ -108,6 +108,44 @@ async def test_admin_facet_distinct_company_ids(container, unique_id: str):
 
 
 @pytest.mark.asyncio
+async def test_admin_list_distinct_company_ids_in_spans(container, unique_id: str):
+    repo = container.span_repository
+    base = datetime.now(timezone.utc)
+    cid = f"list_in_spans_{unique_id}"
+    await repo.save_span(
+        _row(
+            span_id=f"{unique_id}_lis",
+            trace_id=f"{unique_id}_tlis",
+            service_name=f"svc_{unique_id}",
+            operation_name="z",
+            start_time=base,
+            company_id=cid,
+        )
+    )
+    out = await repo.admin_list_distinct_company_ids_in_spans(max_ids=100)
+    assert cid in out
+
+
+@pytest.mark.asyncio
+async def test_admin_list_distinct_user_ids_in_spans(container, unique_id: str):
+    repo = container.span_repository
+    base = datetime.now(timezone.utc)
+    uid = f"list_users_{unique_id}"
+    await repo.save_span(
+        _row(
+            span_id=f"{unique_id}_uins",
+            trace_id=f"{unique_id}_tuins",
+            service_name=f"svc_{unique_id}",
+            operation_name="z",
+            start_time=base,
+            user_id=uid,
+        )
+    )
+    out = await repo.admin_list_distinct_user_ids_in_spans(max_ids=100)
+    assert uid in out
+
+
+@pytest.mark.asyncio
 async def test_admin_facet_distinct_user_ids_scoped_by_company(container, unique_id: str):
     repo = container.span_repository
     base = datetime.now(timezone.utc)

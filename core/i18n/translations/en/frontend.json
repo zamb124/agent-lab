@@ -195,7 +195,7 @@
         "col_email": "Email",
         "col_role": "Role",
         "col_actions": "Actions",
-        "copy_invite": "+ Copy invite link",
+        "copy_invite": "Invitation",
         "empty_title": "No members yet",
         "empty_description": "Copy the invite link and send it to a teammate",
         "remove": "Remove",
@@ -204,7 +204,11 @@
         "toast_invite_generated": "Invite link copied",
         "err_invite": "Failed to create invite",
         "toast_member_removed": "Member removed",
-        "toast_role_updated": "Role updated"
+        "toast_role_updated": "Role updated",
+        "filter_all": "All",
+        "filter_empty": "No members with this role",
+        "toast_invite_copied": "Link copied",
+        "err_clipboard": "Could not copy"
     },
     "team_roles": {
         "owner": "Owner",
@@ -308,7 +312,23 @@
         "success_title": "API key created!",
         "warning_lead": "Important:",
         "toast_created": "Key created",
-        "err_create_failed": "Failed to create key"
+        "err_create_failed": "Failed to create key",
+        "toast_key_copied": "Key copied to clipboard",
+        "err_copy_failed": "Could not copy",
+        "scope_agents_read_name": "Agents: read",
+        "scope_agents_read_desc": "View and run flows without changing configuration",
+        "scope_agents_write_name": "Agents: write",
+        "scope_agents_write_desc": "Create and edit flows, skills, and related settings",
+        "scope_crm_read_name": "CRM: read",
+        "scope_crm_read_desc": "View entities, graph, and related data",
+        "scope_crm_write_name": "CRM: write",
+        "scope_crm_write_desc": "Create and edit entities, grants, and CRM settings",
+        "scope_rag_read_name": "RAG: read",
+        "scope_rag_read_desc": "Read documents and search collections",
+        "scope_rag_write_name": "RAG: write",
+        "scope_rag_write_desc": "Upload and update documents, recompute embeddings",
+        "scope_billing_read_name": "Billing: read",
+        "scope_billing_read_desc": "View usage and billing data (read only)"
     },
     "api_key_edit_modal": {
         "header": "Rename API key",
@@ -464,5 +484,25 @@
         "cancel": "Cancel",
         "submit": "Proceed to payment",
         "submitting": "Creating payment..."
+    },
+    "support_page": {
+        "title": "Support",
+        "lede": "Email us or use the form below: your mail app will open with a message addressed to our support inbox.",
+        "email_section_title": "Email",
+        "form_section_title": "Quick message",
+        "field_reply_email": "Your email for replies",
+        "field_subject": "Subject",
+        "field_message": "Message",
+        "required_mark": "*",
+        "required_aria": "required",
+        "submit": "Open mail app and send",
+        "note_mailto": "Nothing is sent through our servers: your system mail app (or default client) will open.",
+        "doc_link": "Documentation",
+        "err_subject": "Please enter a subject.",
+        "err_message": "Please enter a message.",
+        "err_reply_email": "Enter a valid email or leave the field empty.",
+        "err_too_long": "The message is too long for a mailto link — shorten the text.",
+        "status_opening": "Opening your mail app…",
+        "mail_line_contact": "Reply-To contact: {{email}}"
     }
 }

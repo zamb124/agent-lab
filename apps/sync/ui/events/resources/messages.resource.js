@@ -224,7 +224,8 @@ export const messagesTranscribeCallOp = createAsyncOp({
     name: 'sync/messages_transcribe_call',
     transport: 'ws',
     wsTimeoutMs: 10_000,
-    silent: true,
+    successToastKey: 'sync:bubble.toast_transcribe_call_queued',
+    errorToastKey: 'sync:bubble.toast_transcribe_call_failed',
     commandType: 'sync/messages/transcribe_call_requested',
     restMirror: { method: 'POST', path: '/sync/api/v1/channels/:channel_id/calls/:call_id/transcribe' },
 });

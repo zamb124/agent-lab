@@ -239,6 +239,83 @@ async def test_platform_tracing_facet_users_scoped_by_company(
 
 
 @pytest.mark.asyncio
+async def test_platform_tracing_facet_users_finds_by_email_and_label(
+    frontend_client_system,
+    frontend_container,
+    unique_id: str,
+) -> None:
+    from core.models.identity_models import User
+
+    local_part = f"tracemail-{unique_id}"
+    email = f"{local_part}@facet.test"
+    uid = f"u_no_user_token_{unique_id}"
+    user = User(
+        user_id=uid,
+        name=f"Facet By Mail {unique_id}",
+        emails=[email],
+    )
+    await frontend_container.user_repository.set(user)
+    repo = frontend_container.span_repository
+    base = datetime.now(timezone.utc)
+    await repo.save_span(
+        _span_payload(
+            span_id=f"{unique_id}_em",
+            trace_id=f"{unique_id}_tem",
+            service_name=f"svc_{unique_id}",
+            operation_name="em",
+            start_time=base,
+        ) | {"user_id": uid},
+    )
+    r = await frontend_client_system.get(
+        "/frontend/api/platform-tracing/facets/users",
+        params={"q": local_part, "limit": 20},
+    )
+    assert r.status_code == 200
+    items = r.json()["items"]
+    found = next((x for x in items if x["value"] == uid), None)
+    assert found is not None
+    assert "·" in found["label"] or "@" in found["label"]
+
+
+@pytest.mark.asyncio
+async def test_platform_tracing_spans_resolve_user_id_query_email(
+    frontend_client_system,
+    frontend_container,
+    unique_id: str,
+) -> None:
+    from core.models.identity_models import User
+
+    email = f"spanres-{unique_id}@u.test"
+    uid = f"u_spanres_{unique_id}"
+    await frontend_container.user_repository.set(
+        User(
+            user_id=uid,
+            name="Span Res User",
+            emails=[email],
+        )
+    )
+    repo = frontend_container.span_repository
+    base = datetime.now(timezone.utc)
+    sid = f"{unique_id}_uresem"
+    await repo.save_span(
+        _span_payload(
+            span_id=sid,
+            trace_id=f"{unique_id}_turesem",
+            service_name="svc3",
+            operation_name="op3",
+            start_time=base,
+        ) | {"user_id": uid},
+    )
+    r = await frontend_client_system.get(
+        "/frontend/api/platform-tracing/spans",
+        params={"user_id_query": email, "limit": 20},
+    )
+    assert r.status_code == 200
+    ids = {x["span_id"] for x in r.json()["items"]}
+    assert sid in ids
+
+
+@pytest.mark.asyncio
 async def test_platform_tracing_spans_namespace_and_service_query(
     frontend_client_system,
     frontend_container,
@@ -274,3 +351,86 @@ async def test_platform_tracing_spans_namespace_and_service_query(
     assert r2.status_code == 200
     ids2 = {x["span_id"] for x in r2.json()["items"]}
     assert f"{unique_id}_nq" in ids2
+
+
+@pytest.mark.asyncio
+async def test_platform_tracing_facet_companies_by_subdomain(
+    frontend_client_system,
+    frontend_container,
+    unique_id: str,
+) -> None:
+    from core.models.identity_models import Company, TariffPlan
+
+    repo = frontend_container.span_repository
+    cid = f"co_subfacet_{unique_id}"
+    sub = f"subfacet-{unique_id}"
+    co = Company(
+        company_id=cid,
+        name=f"NameSub {unique_id}",
+        subdomain=sub,
+        members={},
+        status="active",
+        tariff_plan=TariffPlan.FREE,
+    )
+    await frontend_container.company_repository.set(co)
+
+    base = datetime.now(timezone.utc)
+    await repo.save_span(
+        _span_payload(
+            span_id=f"{unique_id}_sub",
+            trace_id=f"{unique_id}_tsub",
+            service_name="svc",
+            operation_name="op",
+            start_time=base,
+            company_id=cid,
+        )
+    )
+    r = await frontend_client_system.get(
+        "/frontend/api/platform-tracing/facets/companies",
+        params={"q": sub, "limit": 20},
+    )
+    assert r.status_code == 200
+    values = {x["value"] for x in r.json()["items"]}
+    assert cid in values
+
+
+@pytest.mark.asyncio
+async def test_platform_tracing_spans_resolve_company_id_query_subdomain(
+    frontend_client_system,
+    frontend_container,
+    unique_id: str,
+) -> None:
+    from core.models.identity_models import Company, TariffPlan
+
+    repo = frontend_container.span_repository
+    cid = f"co_sresolve_{unique_id}"
+    sub = f"sres-{unique_id}"
+    co = Company(
+        company_id=cid,
+        name=f"Res Co {unique_id}",
+        subdomain=sub,
+        members={},
+        status="active",
+        tariff_plan=TariffPlan.FREE,
+    )
+    await frontend_container.company_repository.set(co)
+
+    base = datetime.now(timezone.utc)
+    sid = f"{unique_id}_sp_res"
+    await repo.save_span(
+        _span_payload(
+            span_id=sid,
+            trace_id=f"{unique_id}_tres",
+            service_name="svc2",
+            operation_name="op2",
+            start_time=base,
+            company_id=cid,
+        )
+    )
+    r = await frontend_client_system.get(
+        "/frontend/api/platform-tracing/spans",
+        params={"company_id_query": sub, "limit": 20},
+    )
+    assert r.status_code == 200
+    ids = {x["span_id"] for x in r.json()["items"]}
+    assert sid in ids
